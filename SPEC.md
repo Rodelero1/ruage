@@ -294,11 +294,11 @@ before a test that was watched failing.
 | # | Step | Produces | Exit criterion |
 |---|---|---|---|
 | 0 | Evidence base | This file | Hashes, counts, recipes recorded |
-| 1 | Data layer: inflate + parse | **done** — `build/converted/*.json` for both dats, units included (§3.6) | 19/32 civs, 866/1,402 units per civ, techs/effects/sprites/tasks all parse; two implementations agree |
+| 1 | Data layer: inflate + parse | **done** — `build/converted/*.json` for both dats, units included (§3.6) | 19 (x1) / 32 (x2) civs; units 672 of 866 slots (x1) and 1,166 of 1,402 (x2); techs/effects/sprites/tasks all parse; two implementations agree |
 | 2 | Knowledge harvest | **done** — `docs/mechanics/` (6 files + index), every fact tagged `known` / `inferred` / `unknown` | 12 unknowns registered (U1–U12): 5 now resolved, 2 new (U11 farming rate, U12 tick rate) |
 | 2b | Oracle harness: `VER 9.4` save reader | **partial, stopped** — `build/tools/save.py` inflates all 13 saves and reads player names where framing is clean (5/13) | Not met and deprioritised: no public spec, no second implementation to validate against, resources/units/tick not located. Rationale in `docs/oracle.md` |
 | 3 | Decision gate | Answer D1 + D2, write acceptance thresholds into this file | "Done" is a number someone can check |
-| 4 | Rust workspace skeleton | **in progress** — `crates/fixed` (9 tests: exact decimal → i64, checked add/sub/mul, half-away-from-zero division) and `crates/data` (9 tests: strict TOML, unknown/missing key rejection, `-1.0` sentinel). `sim` crate and headless runner not started | Partly met: `cargo test` = 18 green, zero warnings, and the real `config/sim.toml` loads through the schema. The tick loop and state hash are the next tests |
+| 4 | Rust workspace skeleton | **in progress** — `crates/fixed` (10 tests: exact decimal → i64, checked add/sub/mul, overflow is an error not a panic, half-away-from-zero division) and `crates/data` (15 tests + a corpus sweep: strict TOML, schema gate, two decimal grains, per-tick exactness, determinism invariants enforced). `sim` crate and headless runner not started | Partly met: `cargo test` = **26 green**, `cargo clippy --all-targets -- -D warnings` clean, `cargo fmt --check` clean, and the real `config/sim.toml` loads through the schema. The tick loop and state hash are the next tests |
 | 5 | Vertical slice | Arabia, 1 civ, 1 opponent: villager gathers → house → barracks → spearman → fights | Counters and build times within tolerance of step 2; 10-minute game completes headless |
 | 6 | Gap closure | Backlog ordered by `unknown × gameplay impact`; reverse-engineer **one** subsystem | Pathfinding **or** combat resolution lands with evidence — not both half-done |
 | 7 | RE tooling, only now | JDK 21 + Ghidra in user space, `npx rea-agents@6.7.0`, headless `-Xmx2g` | One step-6 question answered by walking xrefs from §3.4 |
@@ -463,6 +463,28 @@ and watched failing. Proof that the rewrite preserved behaviour: stripping comme
 all four generated files are **byte-identical in data** to what the old script produced
 (units 22,158 / techs 5,609 / effects 3,194 / civs 194 data lines).
 
+### Second application (2026-10-23) — adversarial review
+
+The review attacked the claims rather than re-reading them, and found four defects the suite
+could not see. All were fixed test-first; the failing run is quoted for each.
+
+| Behaviour | Test | The RED run showed |
+|---|---|---|
+| The scale must give exact *per-tick* displacement, not merely representable decimals | `scale_must_give_exact_per_tick_displacement`, `tick_rate_and_scale_must_agree` | `assertion left == right failed: scale 10000 loses 0.737: expected Invalid, got Ok(10000)` and `60 Hz with scale 20000 must be refused` |
+| Both decimal grains are required, bounded, and ordered | `decimal_grains_are_required_and_bounded` | `unknown field 'per_tick_decimals'` after the field was added to the fixture |
+| Contradictory config is refused, not accepted | `schema_version_must_be_supported`, `determinism_invariants_are_rules_not_switches`, `zero_valued_sizes_are_refused` | `floats_in_sim_state = true` loaded as `Ok`, `schema = 99` loaded as `Ok` |
+| A 40-digit literal is an error, not a panic (and not a silent wrap in release) | `overflowing_literal_is_an_error_not_a_panic` | `panicked at crates/fixed/src/lib.rs:114` |
+
+The corpus sweep (`crates/data/tests/corpus.rs`) is the one test that would have caught all of
+the above at once, and it earned its keep immediately: its first run **falsified the review's
+own hypothesis** — `unit 110 work_rate = 0.0111 is 11.1 scale units per tick, not a whole
+number`. The dat is not uniformly 3 dp. That produced the two-grain split (D10) rather than
+one number that was quietly wrong for two buildings.
+
+`cargo clippy -- -D warnings` was also red before this session (two `should_implement_trait`
+errors on `add`/`sub`); §12 claimed "zero warnings", which was true of `cargo test` only. The
+gate now passes with `--all-targets`.
+
 ### Reporting
 
 Each cycle's report to the owner names the test, states that it was seen failing, and shows
@@ -475,16 +497,17 @@ should say so rather than claim otherwise.
 
 | Path | Status | Purpose |
 |---|---|---|
-| `SPEC.md` | current, v0.14 | Entry point — this file |
+| `SPEC.md` | current, v0.15 | Entry point — this file |
 | `docs/age2hd.md` | historical, **superseded by §4** | 2026-10-23 handoff from the previous session |
 | `docs/hermes.container` | reference | Host container definition |
 | `docs/parse-notes.md` | current | Step 1 record: toolchain, reproduce commands, parse counts, cross-validation, per-civ unit model, caveats, licences |
 | `tools/` | current | **D7** — test-first tooling: `genconfig/` (dat → config) + 17 pytest tests |
 | `config/` | current | **D6** — gamedata TOML (generated) + behaviour configs + `overrides.toml`; see `docs/config.md` |
 | `docs/config.md` | current | Config layer: precedence, strict loading, provenance tags, regeneration, staleness check, D4 caveat |
-| `crates/fixed`, `crates/data` | current | Engine skeleton: fixed-point arithmetic + strict config loader, 18 tests |
+| `crates/fixed`, `crates/data` | current | Engine skeleton: fixed-point arithmetic + strict config loader, 26 tests |
+| `crates/data/tests/corpus.rs` | current | Whole-corpus sweep: every value in `config/gamedata/` is exactly representable, and every speed is a whole number of scale units per tick. Skips when the generated data is absent |
 | `docs/licensing.md` | current | **D8** — repo hygiene: what is never committed, legal basis, enforcement |
-| `.githooks/pre-commit` | current | Refuses commits containing game data or extracted values |
+| `.githooks/pre-commit` | current | Refuses commits containing game data or extracted values **at known paths**. It matches paths and extensions, not content: a CSV of unit stats under `config/` commits cleanly (verified 2026-10-23) |
 | `docs/sources.md` | current | Every outside source used, what for, trust level, and the version caveat (wiki = DE, dat = 5.7) |
 | `docs/oracle.md` | current | The oracle: 13 saves found, raw DEFLATE, `VER 9.4`; what snapshots can/can't answer; D1 recommendation |
 | `docs/mechanics/*.md` | current | 6 subsystem files + `README.md` (tag legend, index, unknown registry U1–U12) |
@@ -511,4 +534,5 @@ should say so rather than claim otherwise.
 | 2026-10-23 | v0.11 — **D7: TDD is mandatory** (§11). Iron Law, recorded-RED requirement, scope = engine crates + shipped tooling (probes exempt), behaviour-based coverage with no % gate, plus the eight project-specific tests that must precede their code (config strictness, override precedence, manifest staleness, fixed-point exactness, determinism hash, damage formula, effects interpreter). |
 | 2026-10-23 | v0.12 — `gen_config.py` **deleted and rewritten test-first** as `tools/genconfig/` (17 tests, each seen failing first: float formatting, sub-precision guard, string escaping, name decoding, unit/tech/effect/civ records, all four renderers, manifest, CLI, and a real-dat integration test). Output verified byte-identical in data to the deleted script. SPEC §2 layout now includes `config/` and `tools/`. |
 | 2026-10-23 | v0.13 — **D8: no game data in version control** (EU compliance). `git init` + `.gitignore` + tested pre-commit hook; 35 files / 328 KB committed, zero game data staged. Added `docs/licensing.md` (legal basis: Software Directive Art. 6 interoperability, Database Directive Art. 7 substantial extraction) and the project skill `age2hd-engine-conventions` so future sessions get the invariants and dat traps without re-discovery. |
-| 2026-10-23 | v0.14 — **step 4 started, test-first.** `crates/fixed` (9 tests) and `crates/data` (9 tests), 18 green, zero warnings. Every cycle showed a real RED. Two domain rules fell out and are now enforced: **D9** — the fixed-point domain is simulation state only (load-time constants such as pathing weights stay f64), and the scale must divide a power of ten, so 20000 loads and 3 is rejected. |
+| 2026-10-23 | v0.15 — **adversarial review, four defects fixed test-first.** The scale guard was arithmetically inverted (`10^k % scale == 0` accepted 1, 2, 4, 5, 8 and rejected 300); it is replaced by two derived rules (D10). `Fixed::parse` accumulated digits unchecked, so a long literal panicked in debug and would have wrapped in release — now `OutOfRange`. The loader accepted contradictory config (`schema = 99`, `floats_in_sim_state = true`, `max_entities = 0`, one RNG stream, 60 Hz with a 20 kHz scale); each is now a hard error. `cargo clippy -D warnings` was red and is now clean with `--all-targets`. New `crates/data/tests/corpus.rs` sweeps the whole generated corpus and immediately falsified the review's own three-decimal hypothesis (`work_rate = 0.0111` on two buildings) — hence two grains, not one. 26 tests green. Unfixed and recorded: gather/drop-site data is not in the generated config (step 5 blocker), the pre-commit hook is path-based only, and `docs/config.md` described a manifest staleness check that does not exist. |
+| 2026-10-23 | v0.14 — **step 4 started, test-first.** `crates/fixed` (9 tests) and `crates/data` (9 tests), 18 green. Every cycle showed a real RED. Two domain rules fell out and are now enforced: **D9** — the fixed-point domain is simulation state only (load-time constants such as pathing weights stay f64), and the scale must divide a power of ten, so 20000 loads and 3 is rejected. *(The second clause was wrong and is superseded by D10 — see v0.15.)* |

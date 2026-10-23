@@ -12,11 +12,26 @@ tick_rate_hz = 20
 # from this — change it and re-baseline all tests.
 
 fixed_point_scale = 20000
-# 1/20000 of a tile. Verified: at 20 Hz, every one of the 56 distinct dat speeds maps to an
-# exact integer displacement per tick (0.8 -> 800, 0.96 -> 960, 1.35 -> 1350, 1.54 -> 1540,
-# 8.8 -> 8800). This is the SMALLEST scale that does so, so no unit ever accumulates
-# rounding error. Max displacement 8,800 per tick; a 480-tile position is 9.6e6, well inside i32.
-# If tick_rate_hz changes to 60, the equivalent exact scale is 60000.
+# 1/20000 of a tile — derived, not chosen. The loader enforces two rules:
+#   scale % 10^dat_value_decimals == 0                     (no value is ever rounded)
+#   scale % (tick_rate_hz x 10^per_tick_decimals) == 0     (no motion ever drifts)
+# At 20 Hz and thousandths the second rule gives exactly 20000, and it is the SMALLEST such
+# scale: 0.8 -> 800 per tick, 0.96 -> 960, 1.35 -> 1350, 1.54 -> 1540, 8.8 -> 8800,
+# 0.737 -> 737. Recomputed independently over all 56 nonzero dat speeds.
+# Change tick_rate_hz and this must change with it (60 Hz needs 60000); the loader refuses the
+# stale pairing rather than run with per-tick drift.
+# Position headroom is not a constraint: positions are i64, so 480 tiles is 9.6e6 of 9.2e18.
+
+dat_value_decimals = 4
+# PROVENANCE: measured. The finest grain anywhere in the dat is `work_rate = 0.0111` on units
+# 110 (TDWS) and 1021 (FEITO) — 4 places, so 10^4 must divide the scale. Everything else is
+# 2 dp or coarser, and speeds are at most 3 dp (0.737).
+
+per_tick_decimals = 3
+# PROVENANCE: measured. The finest grain among quantities integrated every tick is the speed
+# 0.737 (unit 1136, 3 dp), so tick_rate x 10^3 = 20000 must divide the scale. This is the
+# value that makes 10000 insufficient. Both grains are checked against the whole generated
+# corpus by crates/data/tests/corpus.rs, which fails if a dat value ever needs more places.
 
 max_entities = 4096
 state_hash_interval_ticks = 20

@@ -109,12 +109,19 @@ impl Fixed {
             });
         }
 
+        // Accumulated with checked arithmetic: a long literal is refused by type. The
+        // unchecked form panicked in debug and, worse, wrapped in release — returning a
+        // plausible wrong number, which is the one failure mode this crate exists to
+        // abolish.
         let mut numerator: i128 = 0;
-        for b in int_part.bytes() {
-            numerator = numerator * 10 + i128::from(b - b'0');
-        }
-        for b in frac_part.bytes() {
-            numerator = numerator * 10 + i128::from(b - b'0');
+        for b in int_part.bytes().chain(frac_part.bytes()) {
+            numerator = numerator
+                .checked_mul(10)
+                .and_then(|n| n.checked_add(i128::from(b - b'0')))
+                .ok_or(FixedError::OutOfRange {
+                    text: text.to_owned(),
+                    scale,
+                })?;
         }
         if negative {
             numerator = -numerator;
@@ -156,14 +163,14 @@ impl Fixed {
             })
     }
 
-    pub fn add(self, other: Self) -> Result<Self, FixedError> {
+    pub fn checked_add(self, other: Self) -> Result<Self, FixedError> {
         self.0
             .checked_add(other.0)
             .map(Fixed)
             .ok_or(FixedError::Overflow)
     }
 
-    pub fn sub(self, other: Self) -> Result<Self, FixedError> {
+    pub fn checked_sub(self, other: Self) -> Result<Self, FixedError> {
         self.0
             .checked_sub(other.0)
             .map(Fixed)
@@ -171,7 +178,7 @@ impl Fixed {
     }
 
     /// Multiply two fixed values, renormalising to `scale`. Rounds half away from zero.
-    pub fn mul(self, other: Self, scale: i64) -> Result<Self, FixedError> {
+    pub fn checked_mul(self, other: Self, scale: i64) -> Result<Self, FixedError> {
         if scale <= 0 {
             return Err(FixedError::OutOfRange {
                 text: format!("scale {scale}"),
@@ -282,28 +289,56 @@ mod tests {
     fn multiply_is_exact_for_dat_values() {
         // 1.35 * 1.35 = 1.8225
         let a = Fixed::parse("1.35", S).unwrap();
-        assert_eq!(a.mul(a, S).unwrap().raw(), 36_450);
+        assert_eq!(a.checked_mul(a, S).unwrap().raw(), 36_450);
         // 0.4 * 250 = 100
         let rate = Fixed::parse("0.4", S).unwrap();
         assert_eq!(
-            rate.mul(Fixed::parse("250", S).unwrap(), S).unwrap().raw(),
+            rate.checked_mul(Fixed::parse("250", S).unwrap(), S)
+                .unwrap()
+                .raw(),
             2_000_000
         );
     }
 
     #[test]
     fn overflow_is_an_error_not_a_wrap() {
-        assert!(Fixed::from_raw(i64::MAX).add(Fixed::from_raw(1)).is_err());
-        assert!(Fixed::from_raw(i64::MIN).sub(Fixed::from_raw(1)).is_err());
+        assert!(
+            Fixed::from_raw(i64::MAX)
+                .checked_add(Fixed::from_raw(1))
+                .is_err()
+        );
+        assert!(
+            Fixed::from_raw(i64::MIN)
+                .checked_sub(Fixed::from_raw(1))
+                .is_err()
+        );
         let big = Fixed::from_raw(i64::MAX / 2);
-        assert!(big.mul(big, S).is_err());
+        assert!(big.checked_mul(big, S).is_err());
+    }
+
+    #[test]
+    fn overflowing_literal_is_an_error_not_a_panic() {
+        // A long literal must be refused by type, not by unwinding the thread. In release
+        // the unchecked accumulator would wrap instead and hand back a plausible number.
+        for text in [
+            "9".repeat(40),
+            "1".to_string() + &"0".repeat(300), // what f64 Display makes of 1e300
+            "0.".to_string() + &"0".repeat(38) + "1",
+        ] {
+            let got = Fixed::parse(&text, S);
+            assert!(
+                matches!(got, Err(FixedError::OutOfRange { .. })),
+                "expected OutOfRange for a 40+ digit literal, got {:?}",
+                got.map(|f| f.raw())
+            );
+        }
     }
 
     #[test]
     fn addition_and_subtraction_round_trip() {
         let a = Fixed::parse("1.35", S).unwrap();
         let b = Fixed::parse("0.4", S).unwrap();
-        assert_eq!(a.add(b).unwrap().raw(), 35_000);
-        assert_eq!(a.add(b).unwrap().sub(b).unwrap(), a);
+        assert_eq!(a.checked_add(b).unwrap().raw(), 35_000);
+        assert_eq!(a.checked_add(b).unwrap().checked_sub(b).unwrap(), a);
     }
 }

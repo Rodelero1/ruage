@@ -69,9 +69,51 @@ The generator is **test-first** (D7, SPEC §11): 17 tests in `tools/tests/`, run
 `cd tools && uv run --with pytest pytest`. The suite includes a real-dat integration test that
 asserts 1,166 units, knight 100 HP / 1.35 speed / 2-2 armour, and effect 195 carrying floats.
 
-`config/MANIFEST.toml` records the dat's sha256, byte size, per-file sha256s and counts. A
-startup check compares the manifest's source hash against the dat on disk: if the game has
-patched, the config is **stale** and the engine says so instead of quietly using old numbers.
+`config/MANIFEST.toml` records the dat's sha256, byte size, per-file sha256s and counts.
+
+**Planned, not implemented (corrected 2026-10-23).** A startup check is supposed to compare the
+manifest's source hash against the dat on disk, so a patched game produces a "config is stale"
+error instead of quietly reusing old numbers. Nothing reads the manifest today — `genconfig`
+writes it and no code consumes it, and `crates/data` loads only `sim.toml`. The earlier text
+here described that check in the present tense, which was wrong. SPEC §11 already lists
+"manifest staleness" as a test that must precede its code.
+
+## Scope of strict loading (corrected 2026-10-23)
+
+Only `sim.toml` has a Rust loader so far. `combat.toml`, `economy.toml`, `movement.toml` and
+`overrides.toml` are hand-written with no schema, no loader and no test — the "strict loading"
+rule is enforced for one file out of five, and `overrides.toml`'s path syntax is documented but
+unimplemented. Do not read a green `cargo test` as "the config layer is complete".
+
+## The two decimal grains (D10)
+
+`sim.toml` declares what the data needs, and the loader refuses a scale that cannot meet it:
+
+| key | value | what it means |
+|---|---|---|
+| `dat_value_decimals` | 4 | finest grain anywhere in the dat — `work_rate = 0.0111` on units 110 (TDWS) and 1021 (FEITO) |
+| `per_tick_decimals` | 3 | finest grain among quantities integrated every tick — speed `0.737` |
+
+Rules: `scale % 10^dat_value_decimals == 0` (no value is rounded on the way into state) and
+`scale % (tick_rate_hz × 10^per_tick_decimals) == 0` (no per-tick displacement drifts). At 20 Hz
+that gives exactly 20000 for the second rule, and 20000 also satisfies the first.
+
+`crates/data/tests/corpus.rs` sweeps every speed, work_rate and los in the generated data and
+fails if either declaration is too small. If a future dat introduces a value with more places,
+that test says so by name instead of the engine rounding silently.
+
+## Known gap before step 5 (gathering)
+
+`economy.toml` says `rate_from = "dat"` and `drop_sites_from = "dat_variant"`, but the generated
+`units.toml` carries neither a task→variant mapping nor any drop-site field. The gather rates do
+exist — as separate villager-variant units (VMLUM 123 = 0.39, VMGLD 579 = 0.38, VMMIN 124 = 0.36,
+VMSHE 592 = 0.33, VMFOR 120 = 0.31, VMHUN 122 = 0.41, VMFIS 56 = 0.43) — keyed by unit id with
+nothing saying which variant a given task selects.
+
+Note the trap: `VMBAS` (83) emits `work_rate = 1.0`, which is its *build* task, not a gather
+rate. Wiring `unit.work_rate` straight into gathering would run 2.5× too fast. Drop sites
+(562 lumber camp, 584 mining camp) are per-unit data the parser exposes and the generator drops.
+This has to be settled before the vertical slice, not during it.
 
 ## Verified so far
 
