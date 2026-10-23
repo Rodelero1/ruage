@@ -31,6 +31,11 @@ Individual game *facts* (knight has 100 HP, DBA is +20% wood) are not copyrighta
 themselves. A systematic extraction of the whole database is a different proposition, which is
 why the line is drawn at "generated files stay local".
 
+## Repository
+
+`https://github.com/Rodelero1/ruage.git` — **private**. Pushed 2026-10-23: 35 files, 175,185 bytes
+of blobs, zero derived game data (verified against the remote tree, not just the ignore rules).
+
 ## What is in the repository
 
 | In git | Why it is ours |
