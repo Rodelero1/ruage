@@ -6,7 +6,7 @@ this tree is either source data or supporting documentation.
 
 | | |
 |---|---|
-| Spec version | 0.12 |
+| Spec version | 0.13 |
 | Last updated | 2026-10-23 |
 | Decision status | **D2 answered (file-based oracle); D1 recommendation made — see §6** |
 | Historical handoff | [`docs/age2hd.md`](docs/age2hd.md) — read it *through* the errata in §4 |
@@ -471,18 +471,20 @@ should say so rather than claim otherwise.
 
 | Path | Status | Purpose |
 |---|---|---|
-| `SPEC.md` | current, v0.12 | Entry point — this file |
+| `SPEC.md` | current, v0.13 | Entry point — this file |
 | `docs/age2hd.md` | historical, **superseded by §4** | 2026-10-23 handoff from the previous session |
 | `docs/hermes.container` | reference | Host container definition |
 | `docs/parse-notes.md` | current | Step 1 record: toolchain, reproduce commands, parse counts, cross-validation, per-civ unit model, caveats, licences |
 | `tools/` | current | **D7** — test-first tooling: `genconfig/` (dat → config) + 17 pytest tests |
 | `config/` | current | **D6** — gamedata TOML (generated) + behaviour configs + `overrides.toml`; see `docs/config.md` |
 | `docs/config.md` | current | Config layer: precedence, strict loading, provenance tags, regeneration, staleness check, D4 caveat |
+| `docs/licensing.md` | current | **D8** — repo hygiene: what is never committed, legal basis, enforcement |
+| `.githooks/pre-commit` | current | Refuses commits containing game data or extracted values |
 | `docs/sources.md` | current | Every outside source used, what for, trust level, and the version caveat (wiki = DE, dat = 5.7) |
 | `docs/oracle.md` | current | The oracle: 13 saves found, raw DEFLATE, `VER 9.4`; what snapshots can/can't answer; D1 recommendation |
 | `docs/mechanics/*.md` | current | 6 subsystem files + `README.md` (tag legend, index, unknown registry U1–U12) |
 | `docs/formats/*.md` | planned | dat / slp / dld / rms / per — what our parser assumes |
-| `docs/decisions.md` | current | D1–D7 with rationale: D5 = dat authoritative, D6 = config layer, D7 = mandatory TDD |
+| `docs/decisions.md` | current | D1–D8 with rationale: D5 dat authoritative, D6 config layer, D7 mandatory TDD, D8 no game data in git |
 | `build/` | throwaway | Inflated dats, converted JSON, Ghidra projects |
 
 ---
@@ -503,3 +505,4 @@ should say so rather than claim otherwise.
 | 2026-10-23 | v0.10 — **D6: nothing numeric is hardcoded.** `config/gamedata/*.toml` generated from the dat (1,166 units / 801 techs / 798 effects / 32 civs, 574 KB total) + hand-written `sim/combat/economy/movement.toml` + path-keyed `overrides.toml`. Strict loading. All files parse; 0 mismatches vs the JSON pipeline. Also: found that unit arrays have **1,402 slots but 1,166 populated ids**; and settled the fixed-point scale at **20,000** (all 56 dat speeds exact at 20 Hz). |
 | 2026-10-23 | v0.11 — **D7: TDD is mandatory** (§11). Iron Law, recorded-RED requirement, scope = engine crates + shipped tooling (probes exempt), behaviour-based coverage with no % gate, plus the eight project-specific tests that must precede their code (config strictness, override precedence, manifest staleness, fixed-point exactness, determinism hash, damage formula, effects interpreter). |
 | 2026-10-23 | v0.12 — `gen_config.py` **deleted and rewritten test-first** as `tools/genconfig/` (17 tests, each seen failing first: float formatting, sub-precision guard, string escaping, name decoding, unit/tech/effect/civ records, all four renderers, manifest, CLI, and a real-dat integration test). Output verified byte-identical in data to the deleted script. SPEC §2 layout now includes `config/` and `tools/`. |
+| 2026-10-23 | v0.13 — **D8: no game data in version control** (EU compliance). `git init` + `.gitignore` + tested pre-commit hook; 35 files / 328 KB committed, zero game data staged. Added `docs/licensing.md` (legal basis: Software Directive Art. 6 interoperability, Database Directive Art. 7 substantial extraction) and the project skill `age2hd-engine-conventions` so future sessions get the invariants and dat traps without re-discovery. |
