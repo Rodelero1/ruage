@@ -1,0 +1,51 @@
+# Economy. HAND-WRITTEN — safe to edit; never regenerated.
+# Base rates and tech multipliers come from gamedata/ (unit work_rate, effect type 5 with
+# c=13). Only what the dat does not settle lives here.
+
+schema = 1
+
+[farm]
+rate = 0.4
+# PROVENANCE: dat — FARM.task_info.work_rate (unit id 50). Fixed by decision D5.
+# Mechanism unresolved: the farmer villager (id 259) carries 0.530, the farm building 0.400.
+# Construction-speed reading was tested and falsified (HOUS has work_rate 0.0 and builds in 25 s).
+# Settle with two saves 60 s apart: food delta / (farmers * 60).
+# Range if wrong: 0.319 published, 0.530 raw villager.
+
+use_villager_rate = false
+# While true, the farmer variant's own work_rate is ignored in favour of `rate` above.
+# Flip to true to test the 0.530 reading without editing any code.
+
+[farm.depletion]
+food_per_farm = 250
+# PROVENANCE: published. Not a dat field found so far.
+
+[gather]
+rate_from = "dat"
+# Per-task-variant work_rate: VMLUM 0.390, VMGLD 0.380, VMMIN 0.360, VMSHE 0.330,
+# VMFOR 0.310, VMHUN 0.410 (carry 35), VMFIS 0.430. Validated against published values
+# in docs/mechanics/economy.md.
+
+carry_from = "dat"
+drop_sites_from = "dat_variant"
+# Lookup must use the TASK VARIANT, not the base villager: the lumberjack lists the lumber
+# camp (562), the miner the mining camp (584). Base VMBAS lists only TC + mill.
+
+[build]
+hp_per_second_per_villager = -1.0
+# PROVENANCE: unknown. The villager's build task (action 110) has work_value1 = 1.0 but no
+# HP/second is derivable from the dat. -1 = unresolved; engine must refuse to construct.
+
+repair_hp_per_second = -1.0
+# PROVENANCE: unknown. Same shape as build.
+
+[decay]
+enabled = true
+rate_from = "dat"
+# unit.resource_decay_rate exists per unit; semantics unverified.
+
+[population]
+cap_default = 200
+house_population = 5
+# PROVENANCE: published. Per-building values are in the dat only indirectly (civ resources
+# array, U8) so they are stated here instead.

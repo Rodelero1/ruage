@@ -1,0 +1,37 @@
+# Combat model. HAND-WRITTEN — safe to edit; never regenerated.
+# Implemented formula (docs/mechanics/combat.md):
+#   damage = max(1, k_elev * sum_i[ max(0, atk_i - arm_i) ] )
+# Unit attack/armour arrays come from gamedata/units.toml; only the constants live here.
+
+schema = 1
+
+[damage]
+minimum = 1
+# PROVENANCE: published (Fandom "Armor class (AoE II)", "Pierce armor", aoe2database).
+# Applied AFTER multipliers, so a 1.25x elevation hit never floors below 1.
+
+armour_missing_sentinel = 10000.0
+# Armour value assumed for a class the target does not list. Large enough that
+# max(0, atk - 10000) = 0, i.e. no damage from that class. Published values: 1000 or 10000.
+
+bonus_resist_default = 0.0
+# k_res. AoC/HD have no bonus-resist units (Sicilians/Bengalis are DE). If 5.7 has any,
+# this becomes per-unit data instead.
+
+[elevation]
+attacker_above = 1.25
+attacker_below = 0.75
+# PROVENANCE: published. 5.7-specific values unverified — the residual of U4.
+
+[attack_timing]
+damage_at_animation_fraction = 0.5
+# PROVENANCE: unknown. Published analysis says melee damage lands at 0% or 50% of the attack
+# animation; ranged releases a projectile. Affects effective DPS slightly, not per-hit damage.
+
+use_reload_from_dat = true
+# interval = unit.reload (seconds). Techs scale the INTERVAL, not the rate: Celts x0.8,
+# Japanese x0.75 (i.e. +25% and +33% rate).
+
+[buildings]
+can_attack = true
+# Towers/TCs carry attack arrays in the dat; nothing special needed beyond normal combat.

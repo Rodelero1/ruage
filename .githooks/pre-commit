@@ -1,0 +1,19 @@
+#!/bin/sh
+# Refuse to commit the game's data or anything derived from it. See docs/licensing.md.
+set -e
+
+staged=$(git diff --cached --name-only)
+bad=$(printf '%s\n' "$staged" | grep -E \
+  '^(Age2HD/|build/|config/gamedata/|config/MANIFEST\.toml)|\.(aoe2spgame|aoe2record|mgz|mgx|slp|drs|wav|mp3|bina|dat)$' \
+  || true)
+
+if [ -n "$bad" ]; then
+    echo "REFUSED: staged paths contain game data or extracted values:" >&2
+    printf '%s\n' "$bad" | sed 's/^/  /' >&2
+    echo "" >&2
+    echo "These are regenerable from the user's own install; they must not be redistributed." >&2
+    echo "Policy: docs/licensing.md.  Unstage with: git restore --staged <path>" >&2
+    exit 1
+fi
+
+exit 0

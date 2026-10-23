@@ -1,0 +1,40 @@
+# Engine knobs. HAND-WRITTEN — safe to edit; never regenerated.
+# Provenance tags: measured | published | dat | unknown | placeholder
+# A value of -1.0 (or "unresolved") means NOT YET DETERMINED. Strict loading means the
+# engine must refuse to start a scenario that needs an unresolved value.
+
+schema = 1
+
+[sim]
+tick_rate_hz = 20
+# PROVENANCE: unknown (U12). AoK-era programmers describe a fixed "game turn"; 20 Hz is the
+# commonly cited value, 60 Hz was measured for combat timing in DE. Every duration derives
+# from this — change it and re-baseline all tests.
+
+fixed_point_scale = 20000
+# 1/20000 of a tile. Verified: at 20 Hz, every one of the 56 distinct dat speeds maps to an
+# exact integer displacement per tick (0.8 -> 800, 0.96 -> 960, 1.35 -> 1350, 1.54 -> 1540,
+# 8.8 -> 8800). This is the SMALLEST scale that does so, so no unit ever accumulates
+# rounding error. Max displacement 8,800 per tick; a 480-tile position is 9.6e6, well inside i32.
+# If tick_rate_hz changes to 60, the equivalent exact scale is 60000.
+
+max_entities = 4096
+state_hash_interval_ticks = 20
+command_apply = "next_tick"      # next_tick | immediate
+
+[determinism]
+# Rules from docs/mechanics/determinism.md. Changing these breaks replay compatibility.
+floats_in_sim_state = false      # the sim uses fixed-point only; floats exist at load only
+iteration_order = "entity_id"    # never hash order
+rng_streams = ["sim", "map"]     # separate streams so map gen cannot perturb combat RNG
+
+[rng]
+algorithm = "pcg32"
+# PROVENANCE: unknown — the original engine's RNG is not published. Any choice here changes
+# every random outcome (accuracy rolls, dispersion, conversion), so it is a G1 tolerance
+# decision, not a fidelity claim.
+seed_source = "explicit"
+
+[paths]
+gamedata = "gamedata"
+overrides = "overrides.toml"

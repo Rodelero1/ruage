@@ -1,0 +1,22 @@
+# Hand-written overrides, layered on top of gamedata/ AFTER loading.
+# This file is NEVER regenerated — edits here survive re-running gen_config.py.
+#
+# Path syntax: "<table>.<id>.<field>" and nested fields with dots.
+# Anything in gamedata/ can be overridden: unit stats, costs, tech times, effect values.
+# Every override is logged at startup with its old and new value, so a diff is always visible.
+#
+# Examples (uncomment to use):
+#
+# "units.50.work_rate"  = 0.32      # farm building rate -> published value (tests U11)
+# "units.259.work_rate" = 0.53      # farmer villager rate
+# "units.38.hp"         = 120       # knight HP
+# "units.83.attacks"    = [[4, 3]]  # replace a whole array
+# "techs.202.costs"     = [[0, 75], [1, 40]]
+# "civs.1.resources.36" = 0.0
+#
+# Arrays are replaced wholesale, never merged — a partial array edit is almost always a bug.
+
+schema = 1
+
+[overrides]
+# (empty — no overrides active)

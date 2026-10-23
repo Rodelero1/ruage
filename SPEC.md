@@ -1,0 +1,505 @@
+# SPEC — AoE2 HD → AI-assisted recreation
+
+**Read this file first, every session.** It is the entry point: current state, verified
+ground truth, corrections to older notes, and the agreed procedure. Everything else in
+this tree is either source data or supporting documentation.
+
+| | |
+|---|---|
+| Spec version | 0.12 |
+| Last updated | 2026-10-23 |
+| Decision status | **D2 answered (file-based oracle); D1 recommendation made — see §6** |
+| Historical handoff | [`docs/age2hd.md`](docs/age2hd.md) — read it *through* the errata in §4 |
+| Ground truth | `Age2HD/` (the game install) — read-only, treat as immutable |
+
+---
+
+## 1. What this project is
+
+Rebuild Age of Empires II HD as an AI-assisted reimplementation that loads the **user's
+own legally purchased copy** of the game files. Assets are never copied, converted for
+redistribution, or committed. The engine reads the install in place.
+
+Two goals were conflated in the previous session's notes. They are not the same project
+and they cost wildly different amounts:
+
+- **G1 — a deterministic engine of our own.** Fixed-point sim, seeded RNG, stable
+  iteration order, headless. Needs no reverse engineering at all.
+- **G2 — behavioral identity with HD 5.7.** Requires an *oracle*: something that says
+  "HD produces X here." There is no such oracle in this container (§5).
+
+G1 is achievable and verifiable. G2 is only meaningful if an oracle exists. §6 asks which
+one v0 is; nothing downstream is safe until that is answered.
+
+---
+
+## 2. Layout (authoritative)
+
+```
+workspace/Age2HD/
+├── SPEC.md                  ← you are here (agent-writable)
+├── docs/                    ← documentation we write
+│   ├── age2hd.md            historical handoff, 2026-10-23 (has known errors, §4)
+│   ├── hermes.container     podman quadlet describing the host container
+│   ├── mechanics/           one file per subsystem, §7
+│   ├── config.md            config layer (D6)
+│   ├── decisions.md         D1–D7
+│   └── sources.md           every outside source, with trust level
+├── config/                  ← the engine's only input (D6)
+│   ├── gamedata/*.toml      GENERATED from the dat — never hand-edited
+│   ├── MANIFEST.toml        GENERATED provenance + per-file sha256
+│   ├── overrides.toml       hand-edited, survives regeneration
+│   └── sim|combat|economy|movement.toml   hand-written behaviour constants
+├── tools/                   ← shipped tooling, TEST-FIRST (D7, §11)
+│   ├── genconfig/           dat → config/gamedata generator
+│   └── tests/               pytest suite
+├── build/                   derived artifacts: inflated dats, converted JSON, probe
+│                            scripts (exempt from D7), Ghidra projects. Never committed.
+└── Age2HD/                  the Steam install — READ ONLY, do not modify
+    ├── AoK HD.exe           main binary
+    ├── resources/_common/dat/       the two .dat files (the crown jewels)
+    ├── resources/_common/drs/       already-extracted loose sprites/sounds
+    ├── resources/_common/slp/       loose sprites
+    ├── resources/_common/ai/        .per / .per2 AI scripts
+    ├── resources/_common/random-map-scripts/   .rms
+    └── resources/en, _packages, Docs, SaveGame, …
+```
+
+Rules: write only to `SPEC.md`, `docs/`, `config/`, `tools/`, `build/`. Never write into
+`Age2HD/`. Anything generated goes in `build/` or `config/gamedata/` and must be
+reproducible from a recipe in this file.
+
+---
+
+## 3. Verified ground truth
+
+Everything in this section was checked against the files in this container on 2026-10-23.
+**Do not re-derive it.** Re-run §9 to confirm nothing has drifted.
+
+### 3.1 Hashes (provenance anchors)
+
+| File | SHA-256 | Size |
+|---|---|---|
+| `Age2HD/AoK HD.exe` | `cbd10d81b93601ffb26773d250b7478969da92d70792a40ae423294202e14650` | 7,521,280 |
+| `resources/_common/dat/empires2_x1_p1.dat` | `28b50786d62cc956679bf56b42b272ec04eb93642268e997484dbc63bb24e6cb` | 926,991 |
+| `resources/_common/dat/empires2_x2_p1.dat` | `21591ac67251d8674635d5634f2d8e9ff80ad90f3c792f9503d60dd658d61058` | 2,260,159 |
+
+### 3.2 The `.dat` files are raw-DEFLATE compressed
+
+This is the single most important operational fact in this document, and it is absent
+from `docs/age2hd.md`.
+
+Raw bytes have entropy 7.99 bits/byte and begin `ec bd 05 78` — no `VER` header. They are
+**raw DEFLATE with no zlib/gzip framing**. Inflate at offset 0 with `wbits=-15`:
+
+```python
+import zlib
+raw = open(path, "rb").read()
+o = zlib.decompressobj(-15)
+out = o.decompress(raw) + o.flush()   # o.eof is True, o.unused_data is empty
+```
+
+| File | compressed | inflated | header |
+|---|---|---|---|
+| `empires2_x1_p1.dat` | 926,991 | 5,634,431 | `VER 5.7` |
+| `empires2_x2_p1.dat` | 2,260,159 | 13,723,696 | `VER 5.7` |
+
+Both inflate cleanly with zero trailing bytes and ratio 0.165. Every other asset in the
+install is plaintext (SLP files start `2.0N ArtDesk 1.00 SLP Writer`), so this is an
+HD-specific quirk — corroborated by the exe, which contains an all-zero section literally
+named `Inf32Dat`.
+
+Consequence: **any dat parser must be fed the inflated stream.** Handing a parser the
+file on disk produces garbage, not an error message.
+
+### 3.3 Binary facts
+
+| Property | Value |
+|---|---|
+| Format | PE32, x86 (`machine 0x14c`), image base `0x400000`, `SizeOfImage 0xa44000` |
+| Sections | 6, file ends exactly at last section (no overlay → **not packed**) |
+| `.text` | 5,943,296 bytes, entropy 6.43 (normal compiler output) |
+| `.rdata` | 1,042,944 · `.data` 144,896 raw / 3,375,172 virtual |
+| `Inf32Dat` | 44,544 bytes, all zero in file — runtime inflation buffer |
+| Build timestamp | 1,534,962,379 → **2018-08-22 18:26 UTC** |
+| Version strings | `VER 5.7`, `VER 9.3`, `VER 9.4` (one binary, three format versions) |
+| Function prologues | ≥13,543 `55 8B EC` (lower bound; tail-calls and `fastcall` are missed) |
+
+**Build-path leak** (`.rdata`) — the most useful single string in the binary:
+
+```
+C:\Users\Jakes_Workstation\Documents\Projects\Age_Of_Empires_2_DE\phoenix\
+    Age2HD_Archive_5.7_with_Hotfix\AoC\Source\Builds\Final\AoK HD.pdb
+```
+
+HD 5.7 was built from the AoE2 **DE** `phoenix` tree. Consequences: `grst/freeage` (the
+DE reimplementation) is primary prior art, not a footnote; DE modding/reversing knowledge
+transfers; and one binary dispatches between three dat format versions (§3.4).
+
+### 3.4 Static-analysis entry points
+
+Dat filename strings and their VAs — cross-reference these instead of analysing the whole
+binary:
+
+| String | Section | VA |
+|---|---|---|
+| `empires2_x1_p1.dat` | `.rdata` | `0x5c9a64` |
+| `empires2_x2_p1.dat` | `.rdata` | `0x5c9afc` |
+| `empires2_x1_p1.dat` | `.data` | `0x6af538` |
+| `empires2_x1_p2.dat` | `.data` | `0x6af5bc` |
+
+### 3.5 Install inventory (fresh counts, `find -iname` from `Age2HD/Age2HD/`)
+
+| Kind | Count | Note |
+|---|---|---|
+| `.slp` sprites | 3,623 | plaintext, `2.0N` header |
+| `.rms` random-map scripts | 122 | their own scripting language |
+| `.per` / `.per2` AI scripts | 74 / 30 | flat fact/action rules, not a general language |
+| `.scx` scenarios | 49 | |
+| `.wav` / `.mp3` | 2,246 / 1,910 | |
+| `.drs` containers | **0** | already extracted to loose files |
+| Civilizations in x2 dat | **31** | all 31 HD civs confirmed by name |
+
+### 3.6 Dat extraction — complete
+
+Both dats parse end to end, units included, into `build/converted/*.json`. Two independent
+implementations agree on every overlapping count, and units-per-civ equals task lists
+exactly (866/866, 1,402/1,402) — an internal consistency check that a field-size error
+would break.
+
+| | x1 | x2 |
+|---|---|---|
+| civs (incl. Gaia) | 19 | 32 |
+| **units per civ** | 866 slots / **672 populated** | **1,402 slots / 1,166 populated** |
+| techs | 460 | 801 |
+| effects | 514 | 798 |
+| sprites | 7,367 | 11,175 |
+| task lists | 866 slots (271 populated) | 1,402 slots (412 populated) |
+| terrains | 42 | 100 |
+| JSON | 54.3 MB | 137.3 MB |
+
+**Data-model finding: units are stored per civilisation**, not in one global table
+(866 × 19, 1,402 × 32). The engine should load one civ as canonical and apply per-civ
+overrides. Civ 0 is Gaia; names are internal (`British`, not Britons) and display names
+live in the language tables, not the dat.
+
+Method, caveats, spot checks and licences: `docs/parse-notes.md`. Raw parse output:
+`build/parse-2026-10-23.txt`.
+
+---
+
+## 4. Errata for `docs/age2hd.md`
+
+The historical handoff is useful for narrative and has correct hashes, but eight claims
+are wrong or stale. Read it, then apply these:
+
+| # | Claim in `docs/age2hd.md` | Reality |
+|---|---|---|
+| 1 | Phase 1 = "parse `empires2_x1_p1.dat` → JSON" | Files are raw-DEFLATE; inflate first (§3.2) |
+| 2 | "DRS archives → loose files" is a task | 0 `.drs` files exist; already loose (§3.5) |
+| 3 | "27 civs w/ expansions" | 31 (§3.5) |
+| 4 | Link timestamp 2018-08-27 | 2018-08-22 18:26 UTC (§3.3) |
+| 5 | "1,564 mp3" | 1,910 (§3.5) |
+| 6 | REA "~278k stars" | 369.9k stars / 92.6k forks as of 2026-10-23 — and see §5.3 |
+| 7 | "REA compresses the RE bottleneck to weeks" | Unverified assumption, not a finding (§5.3) |
+| 8 | "Phase 1 reference: openage `convert/`, reimplement in Python" | Wrong reference — use §5.2 |
+
+Also: the doc's environment section is **correct** and should be trusted over what `free`
+and `nproc` report (§8). Its ownership note (`nobody:nogroup`) is real and still applies
+to `docs/`.
+
+---
+
+## 5. What the plan was getting wrong
+
+### 5.1 No oracle, so "bit-exact" is unfalsifiable
+
+`docs/age2hd.md` targets "deterministic lockstep sim (bit-exact multiplayer/replays)" but
+never names an oracle. The exe can be read here but never run: no Wine, no Windows, no
+Steam. HD's own replays are not an oracle either — they desync across patch versions and
+there is no stepping debugger.
+
+Without an oracle, Phase 2 ("write a behavior spec with evidence citations") cannot be
+wrong, which means it cannot be trusted. Every claim would be pseudocode plus community
+folklore.
+
+### 5.2 Phase 1 is already written, and in Rust
+
+The doc points at openage's `convert/` and proposes reimplementing it in Python. The
+actual state of the art:
+
+| Tool | Language | Use |
+|---|---|---|
+| `SiegeEngineers/genie-rs` | Rust | dat / drs / slp read+write — same language as our engine |
+| `Tapsa/genieutils` | C++ | canonical reference implementation |
+| `hszemi/genieutils-py`, `Alians713/GenieDatParser`, `HSZemi/aoe2dat` | Python/C#/Go | dat parsing/editing |
+| `KSneijders/AoE2ScenarioParser` | Python | `.scx` scenarios |
+| `rehan-remade/universal-modder` | Python | documents `.sld` + dat structure |
+| `SiegeEngineers/aoc-dev-resources` | — | index of all of the above |
+
+Rebuilding this is weeks of duplicate work producing a worse artifact.
+
+### 5.3 REA is a tool, not an accelerator
+
+REA is an MCP front-end that lets an agent drive Ghidra/Hopper/IDA. It inherits their
+decompilation quality; it does not improve it. Its star count (369.9k, up from 278k in
+the old notes) is not evidence that the approach works, and the repo is six months old
+(initial commit 2026-04-14, then `betterBinaryMCP`). Budget for it as "a convenient way
+to query Ghidra from a session", not as a phase-shrinking breakthrough.
+
+Hard constraint that follows: `.text` is 5.94 MB with ≥13.5k functions on 2 cores and
+4 GiB. Full auto-analysis is hours; decompiling the binary is not something any session
+does. Method must be **question-driven and xref-anchored** (§3.4).
+
+### 5.4 No vertical slice
+
+The old plan was data → unbounded spec → engine. Nothing runs until the end. That is
+openage's shape, and the doc cites openage as its own cautionary tale.
+
+---
+
+## 6. Open decisions (blocking)
+
+| # | Question | Why it blocks |
+|---|---|---|
+| **D1** | Is v0 **G1** (own deterministic engine, behavior "close enough" to published values) or **G2** (behaviorally identical to HD 5.7, needs an oracle)? | Sets every acceptance criterion, and whether the RE phase is bounded |
+| **D2** | ~~Is there a machine that can run HD, usable as an oracle?~~ **Answered 2026-10-23 — a driven game is not needed.** The install already holds 13 `.aoe2spgame` saves; they are raw DEFLATE (`VER 9.4`) and inflate to 4.5–11 MB of world state. Snapshots answer U1/U2/U4/U5/U6 and partly U8/U10; they cannot answer U7 (pathing). Details: `docs/oracle.md` |
+| **D3** | Content scope: 31 civs eventually with v0 on one civ / AoK-only, full 31 immediately, or AoK 13 only? | Sets the data model's generality requirement |
+| **D4** | Private personal use, publishable engine with internal spec, or publishable including spec? | Whether the RE-derived spec is a deliverable, and how strict clean-room hygiene must be |
+
+**D1 recommendation, on the evidence in `docs/oracle.md`: G1.** A snapshot oracle can hold a
+reimplementation to "the numbers agree"; it cannot hold one to "the trajectory is identical"
+without per-tick instrumentation we do not have. G1 with snapshot validation is measurable;
+G2 is not.
+
+**D5 (2026-10-23): the dat outranks community documentation for every numeric value.**
+Applied first to the farming rate (U11): effective 0.400, the farm building's own rate capping
+the villager's 0.530. Full reasoning and the cheap re-measurement: `docs/decisions.md`.
+
+Unanswered decisions are recorded here, not silently assumed. If a session needs to move
+before D1/D3/D4 are answered, it may do only work that is identical under every branch:
+steps 1, 2 and the save-game reader.
+
+---
+
+## 7. Procedure
+
+From step 4 onward every step is executed **test-first** — see §11. No production code exists
+before a test that was watched failing.
+
+| # | Step | Produces | Exit criterion |
+|---|---|---|---|
+| 0 | Evidence base | This file | Hashes, counts, recipes recorded |
+| 1 | Data layer: inflate + parse | **done** — `build/converted/*.json` for both dats, units included (§3.6) | 19/32 civs, 866/1,402 units per civ, techs/effects/sprites/tasks all parse; two implementations agree |
+| 2 | Knowledge harvest | **done** — `docs/mechanics/` (6 files + index), every fact tagged `known` / `inferred` / `unknown` | 12 unknowns registered (U1–U12): 5 now resolved, 2 new (U11 farming rate, U12 tick rate) |
+| 2b | Oracle harness: `VER 9.4` save reader | **partial, stopped** — `build/tools/save.py` inflates all 13 saves and reads player names where framing is clean (5/13) | Not met and deprioritised: no public spec, no second implementation to validate against, resources/units/tick not located. Rationale in `docs/oracle.md` |
+| 3 | Decision gate | Answer D1 + D2, write acceptance thresholds into this file | "Done" is a number someone can check |
+| 4 | Rust workspace skeleton | `sim` crate (pure, fixed-point, seeded RNG, no render deps), `data` crate (loads step 1 JSON), headless runner | `cargo test` ticks an empty map; same seed → identical state hash |
+| 5 | Vertical slice | Arabia, 1 civ, 1 opponent: villager gathers → house → barracks → spearman → fights | Counters and build times within tolerance of step 2; 10-minute game completes headless |
+| 6 | Gap closure | Backlog ordered by `unknown × gameplay impact`; reverse-engineer **one** subsystem | Pathfinding **or** combat resolution lands with evidence — not both half-done |
+| 7 | RE tooling, only now | JDK 21 + Ghidra in user space, `npx rea-agents@6.7.0`, headless `-Xmx2g` | One step-6 question answered by walking xrefs from §3.4 |
+| 8 | Persist | Updated SPEC.md, `docs/`, commit-worthy `build/` recipes | A new session resumes from files alone |
+
+Steps 1–2 are hours and retire most of the old Phase 1 and a chunk of Phase 2: gather
+rates, tech costs, unit stats and civ bonuses are either in the dat or in published
+community tables. Reverse-engineering those spends a 2-core/4 GiB decompiler budget on
+facts that are already written down.
+
+Step 5 before step 6 is deliberate — a running bad game says which unknowns matter.
+
+---
+
+## 8. Environment
+
+| | |
+|---|---|
+| Container | rootless podman quadlet, `docs/hermes.container`, image `nousresearch/hermes-agent:stable` |
+| cgroup limits | **4 GiB RAM (`memory.max=4294967296`), 2.0 CPUs (`cpu.max=200000/100000`)** |
+| User | `hermes` uid/gid 10000 — **no sudo, no root**, `apt` present but unusable |
+| Toolchain | Node 26.7.0, npm 12.0.2, Python 3.14.7, `python3 -m pip` 26.2.1, git, objdump, gcc/g++/make/cmake |
+| Installed by us (user-space) | **uv 0.13.5 + uvx** at `~/.local/bin` (was *not* in the image despite expectation); **Rust 1.99.1 + cargo** at `/opt/data/tools/{cargo,rustup}` |
+| Missing | java, Ghidra, Boost, LZ4 headers, `file`, `7z`, `unzip`, `jq`, Wine, Steam |
+| Disk | 865 GB free on `/opt/data` |
+| Scratch | `/opt/data/cache/scratch` — pruned after 24 h idle, never keep anything there |
+
+`uv`, `cargo` and `rustc` are **not on the default `PATH`** (`HOME` is `/opt/data/home`).
+Every session that needs them must start with:
+
+```bash
+export PATH="$HOME/.local/bin:/opt/data/tools/cargo/bin:$PATH"
+```
+
+**Do not trust `free` or `nproc`.** They report the *host* (15 GiB / 6 cores) because the
+cgroup limits are applied by podman, not visible to those tools. The 4 GiB / 2 CPU limits
+are real and are why Ghidra runs at `-Xmx2g`.
+
+**Permission gotcha — currently blocking `docs/`:** directories created on the host and
+dropped through the bind mount arrive as `nobody:nogroup 755`, so the agent can read but
+not create files in them. `docs/` is in this state. One-time fix from the host:
+
+```bash
+chown -R 10000:10000 ~/apps/hermes/workspace/Age2HD/docs   # or chmod -R g+w
+```
+
+`Age2HD/Age2HD/` is deliberately left read-only — that is a feature, not a bug: it stops
+a session from mutating source data.
+
+Nothing may be installed into this container as a side effect of analysis; user-space
+portables go under `/opt/data/tools`.
+
+---
+
+## 9. Sanity check
+
+Run this at session start. Any mismatch means the tree changed and §3 is stale.
+
+```bash
+cd /opt/data/workspace/Age2HD
+sha256sum Age2HD/"AoK HD.exe" \
+          Age2HD/resources/_common/dat/empires2_x1_p1.dat \
+          Age2HD/resources/_common/dat/empires2_x2_p1.dat
+python3 -c "import zlib;d=open('Age2HD/resources/_common/dat/empires2_x1_p1.dat','rb').read();o=zlib.decompressobj(-15);print(o.decompress(d)[:8],len(d))"
+find Age2HD -iname '*.slp' | wc -l   # expect 3623
+```
+
+Expected: the three hashes in §3.1, `b'VER 5.7' 926991`, and `3623`.
+
+---
+
+## 10. Guardrails
+
+- The user owns the game. Analysis and a personal-use engine are fine.
+- Never copy, commit, publish, or convert-for-distribution any game asset — no `.dat`,
+  `.slp`, `.drs`, sound, or `.exe`. Ship engine + converters + instructions that point at
+  the user's own install.
+- Derived data lives in `build/` and is regenerated by recipe, never checked in.
+- The RE-derived spec (`docs/mechanics/`) stays strictly separate from engine code
+  regardless of D4, so the clean-room boundary is cheap to enforce later if the answer
+  changes.
+- Batch heavy work; persist intermediates; 4 GiB and 2 cores are the real budget.
+
+---
+
+## 11. Test-first development (non-negotiable)
+
+Every line of shipped code starts with a failing test. No exceptions without the project
+owner saying so in writing.
+
+### The Iron Law
+
+```
+NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
+```
+
+Code written before its test is deleted, not kept "as reference" and not "adapted". If it
+exists without a test, it cannot be trusted, and unverified code is worse than missing code.
+
+### Scope — D7
+
+| Must be test-first | Exempt |
+|---|---|
+| Rust engine crates (`sim`, `data`, `config`) | Throwaway analysis probes in `build/tools/` (`save-explore.py`, `introspect.py`, one-off dat queries) |
+| Shipped tooling that produces artefacts (`gen_config.py`) | Generated output (`config/gamedata/*.toml`) — verified by tests, not written by hand |
+| Anything that touches the dat loader, the config loader, or the sim loop | Documentation and `docs/**` |
+
+The exemption is for *exploration*, not for shipping: when a probe's logic graduates into the
+engine, it is deleted and re-implemented test-first.
+
+### The cycle
+
+1. **RED** — write one minimal test for one behaviour. Name it after the behaviour, not the
+   function (`pike_vs_knight_deals_bonus_damage`, not `test_damage_2`).
+2. **Verify RED — mandatory.** Run it and watch it fail *for the right reason* (feature
+   missing, not a typo or an import error). The failing run is recorded in the session:
+   command, test name, failure message. No recorded failure, no GREEN step.
+3. **GREEN** — the simplest code that passes. Hardcoding a return value is allowed here;
+   scope creep is not. No extra features, no unrelated refactors.
+4. **Verify GREEN — mandatory.** The specific test passes, then the whole suite passes with
+   clean output.
+5. **REFACTOR** — remove duplication, improve names, keep tests green the entire time. No new
+   behaviour.
+6. Repeat. One behaviour per cycle.
+
+**Vertical slices only.** Never write a pile of tests and then a pile of implementation
+(horizontal slicing). Each test is written knowing what the previous cycle just taught us
+about the interface.
+
+### Coverage — D7
+
+Behaviour-based, with no percentage target. The gate is "every behaviour has a test that was
+seen failing", not "90% of lines executed". A line-coverage number can be raised without
+testing a single behaviour, so it is not the gate.
+
+### Project-specific tests that must exist before the corresponding code
+
+| Behaviour | Test |
+|---|---|
+| Config loading is strict | unknown key → startup error; missing required key → error; `-1.0` sentinel → refuses if used |
+| Dat values reach the engine | knight loads 100 HP / 2/2 armour / 60F 75G from `config/gamedata/units.toml` |
+| Override precedence | `overrides.toml` beats `gamedata/`; regeneration does not clobber it |
+| Manifest staleness | dat hash differs from `MANIFEST.toml` → startup refuses with a stale-config error |
+| Fixed-point exactness | all 56 distinct dat speeds produce integer displacement per tick at scale 20000 |
+| Determinism | two runs, same seed, same commands → identical state hash at tick N |
+| Damage formula | pike vs knight matches the published calculation, including the floor at 1 |
+| Effects interpreter | Wheelbarrow's type-5 commands multiply speed by 1.1 and carry by 1.25 |
+
+### Red flags — if any of these happen, stop and start the cycle over
+
+- Code before test; test written after the implementation
+- Test passed the first time it ran (it is testing existing behaviour — fix the test)
+- Cannot explain why the test failed
+- "I'll add the test later", "it's too simple to test", "I already checked it manually"
+- Keeping generated-then-abandoned code "for reference"
+
+### First application (2026-10-23)
+
+The untested generator (`build/tools/gen_config.py`, written before D7 existed) was
+**deleted** and rewritten from scratch as `tools/genconfig/` — 17 tests, each written first
+and watched failing. Proof that the rewrite preserved behaviour: stripping comment lines,
+all four generated files are **byte-identical in data** to what the old script produced
+(units 22,158 / techs 5,609 / effects 3,194 / civs 194 data lines).
+
+### Reporting
+
+Each cycle's report to the owner names the test, states that it was seen failing, and shows
+the command that proved it. A session that cannot show a failing run has not done TDD, and
+should say so rather than claim otherwise.
+
+---
+
+## 12. Document index
+
+| Path | Status | Purpose |
+|---|---|---|
+| `SPEC.md` | current, v0.12 | Entry point — this file |
+| `docs/age2hd.md` | historical, **superseded by §4** | 2026-10-23 handoff from the previous session |
+| `docs/hermes.container` | reference | Host container definition |
+| `docs/parse-notes.md` | current | Step 1 record: toolchain, reproduce commands, parse counts, cross-validation, per-civ unit model, caveats, licences |
+| `tools/` | current | **D7** — test-first tooling: `genconfig/` (dat → config) + 17 pytest tests |
+| `config/` | current | **D6** — gamedata TOML (generated) + behaviour configs + `overrides.toml`; see `docs/config.md` |
+| `docs/config.md` | current | Config layer: precedence, strict loading, provenance tags, regeneration, staleness check, D4 caveat |
+| `docs/sources.md` | current | Every outside source used, what for, trust level, and the version caveat (wiki = DE, dat = 5.7) |
+| `docs/oracle.md` | current | The oracle: 13 saves found, raw DEFLATE, `VER 9.4`; what snapshots can/can't answer; D1 recommendation |
+| `docs/mechanics/*.md` | current | 6 subsystem files + `README.md` (tag legend, index, unknown registry U1–U12) |
+| `docs/formats/*.md` | planned | dat / slp / dld / rms / per — what our parser assumes |
+| `docs/decisions.md` | current | D1–D7 with rationale: D5 = dat authoritative, D6 = config layer, D7 = mandatory TDD |
+| `build/` | throwaway | Inflated dats, converted JSON, Ghidra projects |
+
+---
+
+## 13. Changelog
+
+| Date | Change |
+|---|---|
+| 2026-10-23 | v0.1 — created. Absorbs and corrects `docs/age2hd.md`; records the DEFLATE discovery, the 31-civ count, the phoenix/DE build-path leak, and the dat-loader xrefs |
+| 2026-10-23 | v0.2 — step 1 partial: both dats parse to EOF via `genie-dat` (§3.6). Unit table is not covered by that crate; unit/building reader is the remaining step-1 work. `genie-rs` is GPL-3.0 (D4 impact) |
+| 2026-10-23 | v0.3 — **step 1 complete.** `GenieDatParser` covers units: 866/1,402 units per civ, cross-validated against `genie-dat`. Data-model finding: units are per-civisation, not global. `build/converted/*.json` written. Environment: uv was **not** present and was installed; Rust toolchain added |
+| 2026-10-23 | v0.4 — **step 2 complete.** `docs/mechanics/` written: units, combat, economy, techs/effects, world/rms, determinism, plus an index with 10 registered unknowns (U1–U10). Decoded by known-value cross-check: attack/armour class 3/4, effect types 4 (attribute), 5 (multiplier), 3 (unit upgrade). Reported Double-Bit Axe's +20% wood multiplier as *missing* from effect 193 — **this was wrong, see v0.7** (tech 200 is Bodkin Arrow; DBA is tech 202) |
+| 2026-10-23 | v0.5 — **D2 answered, without needing a driven game.** 13 `.aoe2spgame` saves already in the install inflate (raw DEFLATE, `VER 9.4`, 4.5–11 MB) → snapshot oracle. Added step 2b (save reader), `docs/oracle.md`, and the recommendation that D1 = G1, since snapshots validate numbers but not trajectories |
+| 2026-10-23 | v0.6 — step 2b attempted and **stopped deliberately.** All 13 saves inflate and the version string + name-record convention are proven (5/13 yield names), but the layout is not uniform and there is no public spec or second implementation to validate against. Save parsing is not on the G1 critical path; U1/U4/U6 should come from published community tables instead |
+| 2026-10-23 | v0.7 — **numbers harvested.** U4 (damage formula) and U6 (reload semantics) resolved from published sources; **U1 resolved from the dat**: gather rates are `work_rate` per villager task variant, tech multipliers are `c=13` type-5 commands (DBA = tech 202, effect 195, ×1.2). Corrected the earlier "DBA multiplier missing" error (tech 200 is Bodkin Arrow). New unknowns: U11 farming-rate discrepancy, U12 tick rate. Added `docs/sources.md`. |
+| 2026-10-23 | v0.8 — **D5 recorded: dat is authoritative for all numbers.** U11 farming resolved by decision as 0.400 (farm building rate caps the villager's 0.530; `work_value1=1.0` everywhere, so no hidden scaling). Rule added: the farm rate loads from `FARM.task_info.work_rate` as one named constant. New `docs/decisions.md` (D1–D5). |
+| 2026-10-23 | v0.9 — U11 value fixed at **0.400** (farm building `work_rate`) under D5; the "farm work_rate = construction speed" reading was **tested and falsified** (`HOUS` has `work_rate=0.0`, build time is a separate `creation_info` field, farms build faster than houses). Mechanism still open: `FTRAP` carries 1.0, so containers are not uniform. |
+| 2026-10-23 | v0.10 — **D6: nothing numeric is hardcoded.** `config/gamedata/*.toml` generated from the dat (1,166 units / 801 techs / 798 effects / 32 civs, 574 KB total) + hand-written `sim/combat/economy/movement.toml` + path-keyed `overrides.toml`. Strict loading. All files parse; 0 mismatches vs the JSON pipeline. Also: found that unit arrays have **1,402 slots but 1,166 populated ids**; and settled the fixed-point scale at **20,000** (all 56 dat speeds exact at 20 Hz). |
+| 2026-10-23 | v0.11 — **D7: TDD is mandatory** (§11). Iron Law, recorded-RED requirement, scope = engine crates + shipped tooling (probes exempt), behaviour-based coverage with no % gate, plus the eight project-specific tests that must precede their code (config strictness, override precedence, manifest staleness, fixed-point exactness, determinism hash, damage formula, effects interpreter). |
+| 2026-10-23 | v0.12 — `gen_config.py` **deleted and rewritten test-first** as `tools/genconfig/` (17 tests, each seen failing first: float formatting, sub-precision guard, string escaping, name decoding, unit/tech/effect/civ records, all four renderers, manifest, CLI, and a real-dat integration test). Output verified byte-identical in data to the deleted script. SPEC §2 layout now includes `config/` and `tools/`. |

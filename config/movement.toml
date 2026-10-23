@@ -1,0 +1,39 @@
+# Movement, pathing, collision. HAND-WRITTEN — safe to edit; never regenerated.
+
+schema = 1
+
+[tiles]
+world_units_per_tile = -1.0
+# PROVENANCE: unknown (U5). Dat speeds read as tiles/second (knight 1.35), but the engine's
+# internal world scale is not published. -1 = unresolved; only needed once rendering or
+# sub-tile collision is implemented.
+
+[turn]
+rate_from = "dat"
+# unit.movement_info.rotation_speed / rotation_radius exist per unit.
+
+[pathing]
+algorithm = "astar"
+# PROVENANCE: unknown (U7). The original's algorithm and tie-breaking are not published.
+# Divergence here changes arrival times and therefore every fight — this is a G2 blocker,
+# tolerable under G1.
+
+heuristic = "octile"
+diagonal_allowed = true
+cost_straight = 1.0
+cost_diagonal = 1.41421356
+max_iterations = 100000
+# Weights are placeholders with no provenance. Do not tune them to match observations
+# without recording the observation — an untraceable magic constant is exactly what this
+# config layer exists to prevent.
+
+[collision]
+radius_from = "dat"
+# unit.radius_x / radius_y. Presence of a radius is not proof the original uses it for
+# collision; unverified.
+push_apart = true
+overlap_tolerance = 0.05
+
+[formation]
+spacing_multiplier = 1.0
+# PROVENANCE: placeholder. Formation geometry is not in the dat.

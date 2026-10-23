@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# NOTHING DERIVED FROM THE GAME FILES GOES INTO GIT.
+#
+# Policy (see docs/licensing.md): decompilation and reverse engineering are done
+# as a lawful user for interoperability (EU Software Directive 2009/24/EC Art. 6).
+# The *results* stay on this machine. Committing extracted game data would
+# redistribute it, which that exception does not cover — and a systematic
+# extraction of the dat may additionally attract the sui generis database right
+# (Directive 96/9/EC).
+#
+# Everything below is regenerateable from the user's own install.
+# ---------------------------------------------------------------------------
+
+# The game itself — never tracked, ever.
+/Age2HD/
+
+# Generated game data: 1,166 units, 801 techs, 798 effects, 32 civs of extracted
+# values. Reproduce with: cd tools && uv run python -m genconfig <dat> ../config
+/config/gamedata/
+
+# Derived artefacts: inflated dats, converted JSON dumps, probe output, Ghidra
+# projects. 200+ MB of extracted content.
+/build/
+
+# Save games and recorded games are the player's own content; they may also embed
+# map/unit state. Keep them local.
+*.aoe2spgame
+*.aoe2record
+*.mgz
+*.mgx
+
+# Manifests carry hashes/counts of the excluded data. Harmless, but pointless
+# without the files they describe, and it names the user's install.
+/config/MANIFEST.toml
+
+# Tooling virtualenvs and caches
+tools/.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editor / OS noise
+.DS_Store
+*.swp

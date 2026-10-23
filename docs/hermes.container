@@ -1,0 +1,39 @@
+[Unit]
+Description=Hermes Agent Gateway + Dashboard
+After=network-online.target
+#Requires=hermes.network
+
+[Container]
+ContainerName=hermes
+Image=docker.io/nousresearch/hermes-agent:stable
+Exec=gateway run
+Memory=4G
+PodmanArgs=--cpus 2.0
+Network=podman
+#Network=hermes.network
+IP=10.88.0.202
+
+Volume=%h/apps/hermes:/opt/data:Z
+PublishPort=9119:9119
+PublishPort=8642:8642
+Environment=HERMES_DASHBOARD=1
+Environment=HERMES_DASHBOARD_HOST=0.0.0.0
+EnvironmentFile=%h/apps/hermes/hermes.env
+#MemoryMax=4G
+#Cpus=2.0
+
+Label=homepage.group=Services
+Label=homepage.name="Hermes Agent"
+Label=homepage.icon=sh-hermes-agent-light
+Label=homepage.href=http://192.168.60.139:9119
+Label=homepage.description="Hermes"
+Label=homepage.statusStyle=dot
+Label=homepage.weight=1
+Label=homepage.showStats=false
+
+[Service]
+Restart=always
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target
