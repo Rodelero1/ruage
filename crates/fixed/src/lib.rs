@@ -30,6 +30,11 @@ pub enum FixedError {
         text: String,
     },
     Overflow,
+    /// Division that does not land on a whole `1/scale` unit. Never rounded.
+    Inexact {
+        value: i64,
+        divisor: i64,
+    },
 }
 
 impl fmt::Display for FixedError {
@@ -45,6 +50,10 @@ impl fmt::Display for FixedError {
             }
             FixedError::Malformed { text } => write!(f, "{text:?} is not a decimal number"),
             FixedError::Overflow => write!(f, "fixed-point arithmetic overflowed i64"),
+            FixedError::Inexact { value, divisor } => write!(
+                f,
+                "{value} / {divisor} is not a whole number of scale units; refusing to round"
+            ),
         }
     }
 }
@@ -192,6 +201,27 @@ impl Fixed {
             .map_err(|_| FixedError::Overflow)
     }
 
+    /// Divide by an integer, refusing to round.
+    ///
+    /// The per-tick displacement of every unit is `speed / tick_rate`, and the scale invariant
+    /// guarantees that is exact. This is the API the sim uses, so a config that violated the
+    /// invariant would be an error rather than silently drifted movement.
+    pub fn div_exact(self, divisor: i64) -> Result<Self, FixedError> {
+        if divisor <= 0 {
+            return Err(FixedError::OutOfRange {
+                text: format!("divisor {divisor}"),
+                scale: divisor,
+            });
+        }
+        if self.0 % divisor != 0 {
+            return Err(FixedError::Inexact {
+                value: self.0,
+                divisor,
+            });
+        }
+        Ok(Fixed(self.0 / divisor))
+    }
+
     /// Divide by an integer, rounding half away from zero. `divisor` must be positive.
     pub fn div_int(self, divisor: i64) -> Self {
         assert!(divisor > 0, "divisor must be positive, got {divisor}");
@@ -332,6 +362,25 @@ mod tests {
                 got.map(|f| f.raw())
             );
         }
+    }
+
+    #[test]
+    fn exact_division_refuses_to_round() {
+        // The invariant says speed / tick_rate is always exact. That is a claim about the data;
+        // the sim must not silently absorb a violation of it.
+        let speed = Fixed::parse("1.35", S).unwrap(); // 27000
+        assert_eq!(speed.div_exact(20).unwrap().raw(), 1_350);
+
+        let odd = Fixed::from_raw(27_001);
+        assert!(
+            matches!(odd.div_exact(20), Err(FixedError::Inexact { .. })),
+            "27001 / 20 is not representable and must not be rounded"
+        );
+
+        assert!(matches!(
+            Fixed::from_raw(1).div_exact(0),
+            Err(FixedError::OutOfRange { .. })
+        ));
     }
 
     #[test]

@@ -62,6 +62,14 @@ name = "ruage-fixed"
 version = "0.1.0"
 
 [[package]]
+name = "ruage-sim"
+version = "0.1.0"
+dependencies = [
+ "ruage-data",
+ "ruage-fixed",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
