@@ -1,0 +1,15 @@
+[workspace]
+resolver = "3"
+members = ["crates/fixed", "crates/data"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Rodelero1/ruage"
+
+[profile.release]
+# Determinism does not depend on this, but a stable codegen setting makes
+# benchmark comparisons meaningful across machines.
+codegen-units = 1
+lto = "thin"

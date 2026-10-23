@@ -6,7 +6,7 @@ this tree is either source data or supporting documentation.
 
 | | |
 |---|---|
-| Spec version | 0.13 |
+| Spec version | 0.14 |
 | Last updated | 2026-10-23 |
 | Decision status | **D2 answered (file-based oracle); D1 recommendation made — see §6** |
 | Historical handoff | [`docs/age2hd.md`](docs/age2hd.md) — read it *through* the errata in §4 |
@@ -50,6 +50,10 @@ workspace/Age2HD/
 │   ├── MANIFEST.toml        GENERATED provenance + per-file sha256
 │   ├── overrides.toml       hand-edited, survives regeneration
 │   └── sim|combat|economy|movement.toml   hand-written behaviour constants
+├── Cargo.toml               Rust workspace (D9)
+├── crates/
+│   ├── fixed/               ruage-fixed — exact decimal → i64 fixed point, checked ops
+│   └── data/                ruage-data — strict config loading, -1.0 sentinel
 ├── tools/                   ← shipped tooling, TEST-FIRST (D7, §11)
 │   ├── genconfig/           dat → config/gamedata generator
 │   └── tests/               pytest suite
@@ -294,7 +298,7 @@ before a test that was watched failing.
 | 2 | Knowledge harvest | **done** — `docs/mechanics/` (6 files + index), every fact tagged `known` / `inferred` / `unknown` | 12 unknowns registered (U1–U12): 5 now resolved, 2 new (U11 farming rate, U12 tick rate) |
 | 2b | Oracle harness: `VER 9.4` save reader | **partial, stopped** — `build/tools/save.py` inflates all 13 saves and reads player names where framing is clean (5/13) | Not met and deprioritised: no public spec, no second implementation to validate against, resources/units/tick not located. Rationale in `docs/oracle.md` |
 | 3 | Decision gate | Answer D1 + D2, write acceptance thresholds into this file | "Done" is a number someone can check |
-| 4 | Rust workspace skeleton | `sim` crate (pure, fixed-point, seeded RNG, no render deps), `data` crate (loads step 1 JSON), headless runner | `cargo test` ticks an empty map; same seed → identical state hash |
+| 4 | Rust workspace skeleton | **in progress** — `crates/fixed` (9 tests: exact decimal → i64, checked add/sub/mul, half-away-from-zero division) and `crates/data` (9 tests: strict TOML, unknown/missing key rejection, `-1.0` sentinel). `sim` crate and headless runner not started | Partly met: `cargo test` = 18 green, zero warnings, and the real `config/sim.toml` loads through the schema. The tick loop and state hash are the next tests |
 | 5 | Vertical slice | Arabia, 1 civ, 1 opponent: villager gathers → house → barracks → spearman → fights | Counters and build times within tolerance of step 2; 10-minute game completes headless |
 | 6 | Gap closure | Backlog ordered by `unknown × gameplay impact`; reverse-engineer **one** subsystem | Pathfinding **or** combat resolution lands with evidence — not both half-done |
 | 7 | RE tooling, only now | JDK 21 + Ghidra in user space, `npx rea-agents@6.7.0`, headless `-Xmx2g` | One step-6 question answered by walking xrefs from §3.4 |
@@ -471,13 +475,14 @@ should say so rather than claim otherwise.
 
 | Path | Status | Purpose |
 |---|---|---|
-| `SPEC.md` | current, v0.13 | Entry point — this file |
+| `SPEC.md` | current, v0.14 | Entry point — this file |
 | `docs/age2hd.md` | historical, **superseded by §4** | 2026-10-23 handoff from the previous session |
 | `docs/hermes.container` | reference | Host container definition |
 | `docs/parse-notes.md` | current | Step 1 record: toolchain, reproduce commands, parse counts, cross-validation, per-civ unit model, caveats, licences |
 | `tools/` | current | **D7** — test-first tooling: `genconfig/` (dat → config) + 17 pytest tests |
 | `config/` | current | **D6** — gamedata TOML (generated) + behaviour configs + `overrides.toml`; see `docs/config.md` |
 | `docs/config.md` | current | Config layer: precedence, strict loading, provenance tags, regeneration, staleness check, D4 caveat |
+| `crates/fixed`, `crates/data` | current | Engine skeleton: fixed-point arithmetic + strict config loader, 18 tests |
 | `docs/licensing.md` | current | **D8** — repo hygiene: what is never committed, legal basis, enforcement |
 | `.githooks/pre-commit` | current | Refuses commits containing game data or extracted values |
 | `docs/sources.md` | current | Every outside source used, what for, trust level, and the version caveat (wiki = DE, dat = 5.7) |
@@ -506,3 +511,4 @@ should say so rather than claim otherwise.
 | 2026-10-23 | v0.11 — **D7: TDD is mandatory** (§11). Iron Law, recorded-RED requirement, scope = engine crates + shipped tooling (probes exempt), behaviour-based coverage with no % gate, plus the eight project-specific tests that must precede their code (config strictness, override precedence, manifest staleness, fixed-point exactness, determinism hash, damage formula, effects interpreter). |
 | 2026-10-23 | v0.12 — `gen_config.py` **deleted and rewritten test-first** as `tools/genconfig/` (17 tests, each seen failing first: float formatting, sub-precision guard, string escaping, name decoding, unit/tech/effect/civ records, all four renderers, manifest, CLI, and a real-dat integration test). Output verified byte-identical in data to the deleted script. SPEC §2 layout now includes `config/` and `tools/`. |
 | 2026-10-23 | v0.13 — **D8: no game data in version control** (EU compliance). `git init` + `.gitignore` + tested pre-commit hook; 35 files / 328 KB committed, zero game data staged. Added `docs/licensing.md` (legal basis: Software Directive Art. 6 interoperability, Database Directive Art. 7 substantial extraction) and the project skill `age2hd-engine-conventions` so future sessions get the invariants and dat traps without re-discovery. |
+| 2026-10-23 | v0.14 — **step 4 started, test-first.** `crates/fixed` (9 tests) and `crates/data` (9 tests), 18 green, zero warnings. Every cycle showed a real RED. Two domain rules fell out and are now enforced: **D9** — the fixed-point domain is simulation state only (load-time constants such as pathing weights stay f64), and the scale must divide a power of ten, so 20000 loads and 3 is rejected. |

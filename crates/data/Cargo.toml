@@ -1,0 +1,12 @@
+[package]
+name = "ruage-data"
+description = "Strict config loading. Unknown keys, missing keys and unresolved values are hard errors."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ruage-fixed = { path = "../fixed" }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
