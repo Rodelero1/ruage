@@ -102,18 +102,24 @@ that gives exactly 20000 for the second rule, and 20000 also satisfies the first
 fails if either declaration is too small. If a future dat introduces a value with more places,
 that test says so by name instead of the engine rounding silently.
 
-## Known gap before step 5 (gathering)
+## Gathering data (settled 2026-10-23, D11)
 
-`economy.toml` says `rate_from = "dat"` and `drop_sites_from = "dat_variant"`, but the generated
-`units.toml` carries neither a task→variant mapping nor any drop-site field. The gather rates do
-exist — as separate villager-variant units (VMLUM 123 = 0.39, VMGLD 579 = 0.38, VMMIN 124 = 0.36,
-VMSHE 592 = 0.33, VMFOR 120 = 0.31, VMHUN 122 = 0.41, VMFIS 56 = 0.43) — keyed by unit id with
-nothing saying which variant a given task selects.
+The gap recorded by the adversarial review is closed on the data side:
 
-Note the trap: `VMBAS` (83) emits `work_rate = 1.0`, which is its *build* task, not a gather
-rate. Wiring `unit.work_rate` straight into gathering would run 2.5× too fast. Drop sites
-(562 lumber camp, 584 mining camp) are per-unit data the parser exposes and the generator drops.
-This has to be settled before the vertical slice, not during it.
+- `gamedata/units.toml` now carries **`drop_sites`** per unit, read from
+  `task_info.drop_site_unit_ids`. Measured: the lumberjack (VMLUM 123) drops at the town
+  centre + lumber camp (109, 562); the miner (124) and gold miner (579) at 109 + mining camp
+  (584); forage/hunt/fish/herd at 109 + mill (68). The base villager (83) lists 109 + mill,
+  which is exactly why a base-villager lookup gives the wrong answer for wood.
+- `economy.toml` carries the **task → variant** table (D6: the dat cannot supply it at
+  VER 5.7.2, so code must not either). Rates are not duplicated there; they are read from
+  `gamedata/` by variant id.
+- `tools/tests/test_config_consistency.py` guards the join: every named id must exist, be a
+  `VM*` variant, have a plausible gather rate, and list a drop site — and the base villager
+  must never appear.
+
+Still open: nothing in Rust reads `economy.toml` yet (see "Scope of strict loading" above), so
+the table is data waiting for its loader, which is the first job of the gathering code.
 
 ## Verified so far
 

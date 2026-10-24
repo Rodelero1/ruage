@@ -31,13 +31,37 @@ drop_sites_from = "dat_variant"
 # Lookup must use the TASK VARIANT, not the base villager: the lumberjack lists the lumber
 # camp (562), the miner the mining camp (584). Base VMBAS lists only TC + mill.
 
+[gather.variant]
+# Which villager VARIANT a task switches to (D11). The dat cannot supply this mapping at
+# VER 5.7.2 — GenieDatParser raises VersionError on the per-task list — so it is stated here,
+# because D6 forbids stating it in code. Rates, carry and drop sites are NOT repeated below:
+# they come from gamedata/units.toml for the variant id named here.
+#
+#   task    id    unit    rate   drop sites
+wood     = 123   # VMLUM 0.390  SMIL 562
+gold     = 579   # VMGLD 0.380  MINE 584
+stone    = 124   # VMMIN 0.360  MINE 584
+forage   = 120   # VMFOR 0.310  MILL 68
+hunt     = 122   # VMHUN 0.410  MILL 68 (carry 35)
+fish     = 56    # VMFIS 0.430  MILL 68
+herd     = 592   # VMSHE 0.330  MILL 68
+farm     = 259   # VMFAR 0.530  capped at 0.400 by the farm building (D5)
+build    = 118   # VMBLD 1.000  the build task: a rate of 1.0 that is NOT a gather rate
+repair   = 156   # VMREP 12.5   the repair task, likewise not a gather rate
+#
+# The base villager (VMBAS 83) is deliberately absent: its work_rate is 1.0, the build task's,
+# and using it as a gather rate would make every villager gather 2.5x too fast.
+
 [build]
 hp_per_second_per_villager = -1.0
 # PROVENANCE: unknown. The villager's build task (action 110) has work_value1 = 1.0 but no
 # HP/second is derivable from the dat. -1 = unresolved; engine must refuse to construct.
 
 repair_hp_per_second = -1.0
-# PROVENANCE: unknown. Same shape as build.
+# PROVENANCE: unknown, with a dat CANDIDATE: the repair variant VMREP (id 156) carries
+# work_rate = 12.5. If that is HP/second it is the answer; the semantics are unverified, so the
+# sentinel stays and the engine still refuses. Testing it is one scenario: damage a building,
+# repair it for 60 s, divide HP restored by villager-seconds.
 
 [decay]
 enabled = true
