@@ -32,6 +32,7 @@ behaviour constants are separate keys that never collide with data keys.
 | `combat.toml` | min damage, elevation, sentinels, attack-timing fraction | Constants the dat does not contain. |
 | `economy.toml` | farm rate, build/repair rates, pop values, decay | Constants the dat does not settle. |
 | `movement.toml` | tile scale, pathing weights, collision, formation | Unknowns (U5, U7) that must be visible, not buried. |
+| `map.toml` | the authored 64×64 slice map (D15): terrain rows, resource nodes, town centres | Our own content, not extracted data, mirrored point-for-point so neither side is favoured. |
 
 ## Rules
 
@@ -80,11 +81,17 @@ here described that check in the present tense, which was wrong. SPEC §11 alrea
 
 ## Scope of strict loading (corrected 2026-10-23)
 
-**Updated 2026-10-23:** `sim.toml` and `economy.toml` now have strict Rust loaders
-(`crates/data/src/{lib,economy}.rs`, 7 economy tests written first). `combat.toml`,
+**Updated 2026-10-23:** `sim.toml`, `economy.toml` and `map.toml` have strict Rust loaders
+(`crates/data/src/{lib,economy,map}.rs`); every loader's tests were written first. `combat.toml`,
 `movement.toml` and `overrides.toml` still have no schema and no loader, and `overrides.toml`'s
-path syntax remains documented but unimplemented. So the rule is enforced for two files out of
-five — do not read a green `cargo test` as "the config layer is complete".
+path syntax remains documented but unimplemented — so the rule is enforced for three files of six.
+Do not read a green `cargo test` as "the config layer is complete".
+
+The map loader enforces the invariants an author can get wrong: a row must be exactly `width`
+characters, terrain characters are `G` or `F` only, every resource tile is on the map, **wood
+must stand on forest and everything else on open ground** (which is what stops "a tree you can
+walk through" or "gold inside the trees"), and both players need exactly one town centre on open
+ground.
 
 **Known limits of the economy loader**, both deliberate:
 

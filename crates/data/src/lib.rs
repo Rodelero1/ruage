@@ -15,9 +15,11 @@ use ruage_fixed::Fixed;
 use serde::Deserialize;
 
 mod economy;
+mod map;
 pub use economy::{
     Build, Decay, Economy, Farm, Gather, Population, load_economy_file, load_economy_str,
 };
+pub use map::{Map, ResourceKind, ResourceNode, Terrain, TownCentre, load_map_file, load_map_str};
 
 /// Values that enter simulation state are fixed-point. `-1.0` marks "unknown".
 #[derive(Debug, Clone, Copy, PartialEq)]
