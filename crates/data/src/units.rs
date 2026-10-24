@@ -1,0 +1,234 @@
+//! The generated unit table (`config/gamedata/units.toml`, D6/D8).
+//!
+//! Values that enter simulation state stay [`MaybeFixed`] until something resolves them at the
+//! engine scale, so the `-1.0` sentinel survives all the way to the code that needs the number.
+//! The map is keyed by unit id and iterated in id order — determinism is a property of the table,
+//! not of the caller.
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use serde::Deserialize;
+
+use crate::{ConfigError, MaybeFixed, SUPPORTED_SCHEMA};
+
+#[derive(Debug, Clone)]
+pub struct Unit {
+    pub id: u32,
+    pub name: String,
+    /// \-1 for 236 of the 1,166 units (buildings and scenery carry no class).
+    pub class: i16,
+    pub hp: i32,
+    pub los: MaybeFixed,
+    pub speed: MaybeFixed,
+    pub carry: u16,
+    pub work_rate: MaybeFixed,
+    pub drop_sites: Vec<u32>,
+    pub garrison: u16,
+    pub radius: [MaybeFixed; 3],
+    pub costs: Vec<(u8, u16)>,
+    /// Class id and amount. The class can be -1, which is how the dat says "no armour".
+    pub attacks: Vec<(i16, i16)>,
+    pub armours: Vec<(i16, i16)>,
+    pub range: MaybeFixed,
+    pub reload: MaybeFixed,
+    pub accuracy: u16,
+    /// \-1 on four units, meaning "not trainable" rather than "trained instantly".
+    pub train_time: i32,
+    pub base_id: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct Units {
+    pub civ: u32,
+    pub civ_name: String,
+    /// Every populated id, in id order.
+    pub units: BTreeMap<u32, Unit>,
+}
+
+impl Units {
+    pub fn unit(&self, id: u32) -> Option<&Unit> {
+        self.units.get(&id)
+    }
+}
+
+// --- wire format --------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawUnits {
+    schema: u32,
+    kind: String,
+    civ: u32,
+    civ_name: String,
+    #[serde(default)]
+    unit: Vec<RawUnit>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawUnit {
+    id: u32,
+    name: String,
+    class: i16,
+    hp: i32,
+    los: f64,
+    speed: f64,
+    carry: u16,
+    work_rate: f64,
+    #[serde(default)]
+    drop_sites: Vec<u32>,
+    garrison: u16,
+    radius: [f64; 3],
+    #[serde(default)]
+    costs: Vec<[i64; 2]>,
+    #[serde(default)]
+    attacks: Vec<[i64; 2]>,
+    #[serde(default)]
+    armours: Vec<[i64; 2]>,
+    range: f64,
+    reload: f64,
+    accuracy: u16,
+    train_time: i32,
+    base_id: i32,
+}
+
+fn invalid(path: &str, key: String, detail: impl Into<String>) -> ConfigError {
+    ConfigError::Invalid {
+        key: format!("{path}: {key}"),
+        detail: detail.into(),
+    }
+}
+
+fn pairs(
+    path: &str,
+    id: u32,
+    field: &str,
+    rows: &[[i64; 2]],
+) -> Result<Vec<(i16, i16)>, ConfigError> {
+    rows.iter()
+        .map(|row| {
+            // -1 is a real class id in this data ("no armour"), so the key is signed too.
+            let key = i16::try_from(row[0]).map_err(|_| {
+                invalid(
+                    path,
+                    format!("units[{id}].{field}"),
+                    format!("{} does not fit an i16 class id", row[0]),
+                )
+            })?;
+            let amount = i16::try_from(row[1]).map_err(|_| {
+                invalid(
+                    path,
+                    format!("units[{id}].{field}"),
+                    format!("{} does not fit an i16", row[1]),
+                )
+            })?;
+            Ok((key, amount))
+        })
+        .collect()
+}
+
+pub fn load_units_str(text: &str, path: &str) -> Result<Units, ConfigError> {
+    let raw: RawUnits = toml::from_str(text).map_err(|err| ConfigError::Parse {
+        path: path.to_owned(),
+        detail: err.to_string(),
+    })?;
+
+    if raw.schema != SUPPORTED_SCHEMA {
+        return Err(invalid(
+            path,
+            "schema".to_owned(),
+            format!("{} is not this engine's schema", raw.schema),
+        ));
+    }
+    if raw.kind != "units" {
+        return Err(invalid(
+            path,
+            "kind".to_owned(),
+            format!("{:?} is not \"units\"", raw.kind),
+        ));
+    }
+    if raw.civ == 0 {
+        return Err(invalid(
+            path,
+            "civ".to_owned(),
+            "0 is Gaia; the canonical table must be a playable civ (D3)",
+        ));
+    }
+    if raw.unit.is_empty() {
+        return Err(invalid(path, "unit".to_owned(), "the table has no units"));
+    }
+
+    let mut units = BTreeMap::new();
+    for r in raw.unit {
+        let costs = r
+            .costs
+            .iter()
+            .map(|c| {
+                let resource = u8::try_from(c[0]).map_err(|_| {
+                    invalid(
+                        path,
+                        format!("units[{}].costs", r.id),
+                        format!("{} is not a resource id", c[0]),
+                    )
+                })?;
+                let quantity = u16::try_from(c[1]).map_err(|_| {
+                    invalid(
+                        path,
+                        format!("units[{}].costs", r.id),
+                        format!("{} does not fit a u16", c[1]),
+                    )
+                })?;
+                Ok((resource, quantity))
+            })
+            .collect::<Result<Vec<_>, ConfigError>>()?;
+
+        let unit = Unit {
+            id: r.id,
+            name: r.name,
+            class: r.class,
+            hp: r.hp,
+            los: MaybeFixed::from_f64(r.los),
+            speed: MaybeFixed::from_f64(r.speed),
+            carry: r.carry,
+            work_rate: MaybeFixed::from_f64(r.work_rate),
+            drop_sites: r.drop_sites,
+            garrison: r.garrison,
+            radius: [
+                MaybeFixed::from_f64(r.radius[0]),
+                MaybeFixed::from_f64(r.radius[1]),
+                MaybeFixed::from_f64(r.radius[2]),
+            ],
+            costs,
+            attacks: pairs(path, r.id, "attacks", &r.attacks)?,
+            armours: pairs(path, r.id, "armours", &r.armours)?,
+            range: MaybeFixed::from_f64(r.range),
+            reload: MaybeFixed::from_f64(r.reload),
+            accuracy: r.accuracy,
+            train_time: r.train_time,
+            base_id: r.base_id,
+        };
+
+        if units.insert(unit.id, unit).is_some() {
+            return Err(invalid(
+                path,
+                format!("units[{}]", r.id),
+                "duplicate id: the table's contents would depend on parse order",
+            ));
+        }
+    }
+
+    Ok(Units {
+        civ: raw.civ,
+        civ_name: raw.civ_name,
+        units,
+    })
+}
+
+pub fn load_units_file(path: &Path) -> Result<Units, ConfigError> {
+    let text = std::fs::read_to_string(path).map_err(|err| ConfigError::Io {
+        path: path.display().to_string(),
+        detail: err.to_string(),
+    })?;
+    load_units_str(&text, &path.display().to_string())
+}

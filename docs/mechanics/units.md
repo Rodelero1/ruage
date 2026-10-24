@@ -116,6 +116,23 @@ So the task → variant mapping is **derivable from the dat**, and the hand-writ
 `economy.toml` should become a cross-check rather than the source. Every gathering task carries
 `work_value1 = 1.0`, confirming that no hidden scaling sits in the task record.
 
+## Negative sentinels in the unit table (measured 2026-10-23)
+
+The generated table contains `-1` in places a naive type would call unsigned. The Rust loader's
+field types follow the data, not the other way round:
+
+| field | units with -1 | meaning |
+|---|---|---|
+| `class` | **236** of 1,166 (buildings, scenery) | no class; the range is -1..61 |
+| `hp` | 4 | no hit points as a unit concept (terrain/scenery placeholders) |
+| `train_time` | 4 (e.g. 888 "Llama building") | not trainable — **not** "trained instantly" |
+| `armours` class id | at least one record (428) | "no armour of that class" |
+
+Also worth knowing for costs: a unit's `costs` list can carry a third pair, `[4, n]`, where
+resource **4 is population headroom**, not a resource. The knight is `[[0,60],[3,75],[4,1]]`:
+60 food, 75 gold, 1 population. A cost table that only looks at ids 0–3 silently drops the
+population cost.
+
 ## Open
 
 - **U3** — class id → semantic name for all classes.

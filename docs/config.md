@@ -81,10 +81,11 @@ here described that check in the present tense, which was wrong. SPEC §11 alrea
 
 ## Scope of strict loading (corrected 2026-10-23)
 
-**Updated 2026-10-23:** `sim.toml`, `economy.toml` and `map.toml` have strict Rust loaders
+**Updated 2026-10-23:** `sim.toml`, `economy.toml`, `map.toml` and `gamedata/units.toml` have
+strict Rust loaders
 (`crates/data/src/{lib,economy,map}.rs`); every loader's tests were written first. `combat.toml`,
 `movement.toml` and `overrides.toml` still have no schema and no loader, and `overrides.toml`'s
-path syntax remains documented but unimplemented — so the rule is enforced for three files of six.
+path syntax remains documented but unimplemented — so the rule is enforced for four files of six.
 Do not read a green `cargo test` as "the config layer is complete".
 
 The map loader enforces the invariants an author can get wrong: a row must be exactly `width`
