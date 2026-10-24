@@ -150,6 +150,28 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         ));
     }
 
+    // One variant per task, and no unset ids: a shared id makes one variant serve two
+    // resources, and a zero means the field was never filled in.
+    let mut claimed: BTreeMap<u32, &String> = BTreeMap::new();
+    for (task, id) in &raw.gather.variant {
+        if *id == 0 {
+            return Err(invalid(
+                path,
+                "gather.variant",
+                format!("{task} = 0: unit id zero is not a villager; the field looks unset"),
+            ));
+        }
+        if let Some(other) = claimed.insert(*id, task) {
+            return Err(invalid(
+                path,
+                "gather.variant",
+                format!(
+                    "{task} and {other} both name variant {id}; the mapping must be one-to-one"
+                ),
+            ));
+        }
+    }
+
     if raw.gather.variant.is_empty() {
         return Err(invalid(
             path,

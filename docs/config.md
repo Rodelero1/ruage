@@ -80,10 +80,21 @@ here described that check in the present tense, which was wrong. SPEC §11 alrea
 
 ## Scope of strict loading (corrected 2026-10-23)
 
-Only `sim.toml` has a Rust loader so far. `combat.toml`, `economy.toml`, `movement.toml` and
-`overrides.toml` are hand-written with no schema, no loader and no test — the "strict loading"
-rule is enforced for one file out of five, and `overrides.toml`'s path syntax is documented but
-unimplemented. Do not read a green `cargo test` as "the config layer is complete".
+**Updated 2026-10-23:** `sim.toml` and `economy.toml` now have strict Rust loaders
+(`crates/data/src/{lib,economy}.rs`, 7 economy tests written first). `combat.toml`,
+`movement.toml` and `overrides.toml` still have no schema and no loader, and `overrides.toml`'s
+path syntax remains documented but unimplemented. So the rule is enforced for two files out of
+five — do not read a green `cargo test` as "the config layer is complete".
+
+**Known limits of the economy loader**, both deliberate:
+
+- It cannot enforce "the base villager is never a gather variant": that needs unit-id knowledge,
+  so the guard lives in `tools/tests/test_config_consistency.py`, which cross-checks against the
+  generated data. The loader enforces only what it can see — one-to-one ids, no zero, non-empty.
+- `rate_from`, `carry_from` and `drop_sites_from` are free-text selectors today, so a typo
+  (`"dta"`) loads fine. They become enums with the code that reads them, not before — a closed
+  enum for a field nothing consumes would be the speculative kind of strictness (Karpathy rule 2)
+  rather than the kind that catches a real error.
 
 ## The two decimal grains (D10)
 

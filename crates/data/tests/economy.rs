@@ -112,6 +112,32 @@ fn an_empty_variant_table_contradicts_rate_from_dat() {
 }
 
 #[test]
+fn two_tasks_cannot_share_one_variant() {
+    // wood = 123 and gold = 123 would make one variant serve two resources; whichever the
+    // lookup loses, the gather rate is wrong, and nothing downstream would notice.
+    let bad = GOOD.replace("gold = 579", "gold = 123");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("a duplicated variant id must be refused")
+        .to_string();
+    assert!(err.contains("gather.variant"), "got: {err}");
+    assert!(
+        err.contains("123"),
+        "the error should name the id, got: {err}"
+    );
+}
+
+#[test]
+fn a_zero_variant_id_is_refused() {
+    // Unit id 0 exists in the dat (OLD-ACADEMY) but is never a villager; a 0 here means the
+    // field was left unset.
+    let bad = GOOD.replace("gold = 579", "gold = 0");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("a zero variant id must be refused")
+        .to_string();
+    assert!(err.contains("gather.variant"), "got: {err}");
+}
+
+#[test]
 fn the_schema_is_checked() {
     let bad = GOOD.replace("schema = 1", "schema = 7");
     let err = load_economy_str(&bad, "economy.toml")
