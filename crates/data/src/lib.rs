@@ -14,6 +14,11 @@ use std::path::Path;
 use ruage_fixed::Fixed;
 use serde::Deserialize;
 
+mod economy;
+pub use economy::{
+    Build, Decay, Economy, Farm, Gather, Population, load_economy_file, load_economy_str,
+};
+
 /// Values that enter simulation state are fixed-point. `-1.0` marks "unknown".
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MaybeFixed(Option<f64>);
@@ -170,7 +175,7 @@ const UNRESOLVED_SENTINEL: f64 = -1.0;
 
 /// The only config schema this engine understands. Anything else is a silent behaviour
 /// change waiting to happen, so it is refused rather than best-effort parsed.
-const SUPPORTED_SCHEMA: u32 = 1;
+pub(crate) const SUPPORTED_SCHEMA: u32 = 1;
 
 /// Two rules, both derived from config, both measured against the corpus
 /// (`crates/data/tests/corpus.rs`):

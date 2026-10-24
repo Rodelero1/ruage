@@ -1,0 +1,133 @@
+//! The economy config loader (D6): rates the dat does not settle, plus the task→variant table
+//! from D11. Written before the implementation (D7).
+
+use std::path::PathBuf;
+
+use ruage_data::{load_economy_file, load_economy_str};
+
+fn repo(rel: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(rel)
+}
+
+const GOOD: &str = r#"
+schema = 1
+[farm]
+rate = 0.4
+use_villager_rate = false
+[farm.depletion]
+food_per_farm = 250
+[gather]
+rate_from = "dat"
+carry_from = "dat"
+drop_sites_from = "dat_variant"
+[gather.variant]
+wood = 123
+gold = 579
+[build]
+hp_per_second_per_villager = -1.0
+repair_hp_per_second = -1.0
+[decay]
+enabled = true
+rate_from = "dat"
+[population]
+cap_default = 200
+house_population = 5
+"#;
+
+#[test]
+fn the_real_economy_toml_loads_and_resolves_its_rates() {
+    let economy = load_economy_file(&repo("config/economy.toml")).expect("economy.toml must load");
+
+    // 0.4 at scale 20000 is 8000 units, exactly — the D5 farm rate.
+    assert_eq!(
+        economy
+            .farm
+            .rate
+            .resolve(20_000, "farm.rate")
+            .expect("farm rate resolves")
+            .raw(),
+        8_000
+    );
+    assert!(!economy.farm.use_villager_rate);
+    assert_eq!(economy.farm.food_per_farm, 250);
+    assert_eq!(economy.population.cap_default, 200);
+    assert_eq!(economy.population.house_population, 5);
+
+    // The task→variant table (D11): ten tasks, and wood is the lumberjack variant.
+    assert_eq!(
+        economy.gather.variant.len(),
+        10,
+        "ten tasks in economy.toml"
+    );
+    assert_eq!(economy.gather.variant.get("wood"), Some(&123));
+    assert_eq!(economy.gather.variant.get("farm"), Some(&259));
+    assert!(
+        !economy.gather.variant.values().any(|&id| id == 83),
+        "the base villager (83) must never be a gather source"
+    );
+}
+
+#[test]
+fn an_unresolved_rate_names_its_key() {
+    let economy = load_economy_str(GOOD, "economy.toml").expect("fixture loads");
+    let err = economy
+        .build
+        .hp_per_second_per_villager
+        .resolve(20_000, "build.hp_per_second_per_villager")
+        .expect_err("the sentinel must not resolve")
+        .to_string();
+    assert!(err.contains("hp_per_second_per_villager"), "got: {err}");
+    assert!(err.contains("unresolved"), "got: {err}");
+}
+
+#[test]
+fn an_unknown_key_is_rejected() {
+    let bad = GOOD.replace("house_population = 5", "house_population = 5\nbogus = 1");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("unknown keys must be refused")
+        .to_string();
+    assert!(err.contains("bogus"), "got: {err}");
+}
+
+#[test]
+fn a_missing_key_is_rejected() {
+    let bad = GOOD.replace("cap_default = 200\n", "");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("missing keys must be refused")
+        .to_string();
+    assert!(err.contains("cap_default"), "got: {err}");
+}
+
+#[test]
+fn an_empty_variant_table_contradicts_rate_from_dat() {
+    // D11: if the rates come from the dat by variant, a table with no variants is a config that
+    // says one thing and means another.
+    let bad = GOOD.replace("wood = 123\ngold = 579\n", "");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("an empty gather.variant table must be refused")
+        .to_string();
+    assert!(err.contains("gather.variant"), "got: {err}");
+}
+
+#[test]
+fn the_schema_is_checked() {
+    let bad = GOOD.replace("schema = 1", "schema = 7");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("an unknown schema must be refused")
+        .to_string();
+    assert!(err.contains("schema"), "got: {err}");
+}
+
+#[test]
+fn a_negative_farm_rate_is_refused() {
+    // -1.0 means unresolved everywhere else; a *farm rate* of -1.0 is not a sentinel we honour
+    // here, because -1 is never a plausible rate and silently treating it as "unknown" would
+    // hide a typo.
+    let bad = GOOD.replace("rate = 0.4", "rate = -1.0");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("a negative farm rate must be refused")
+        .to_string();
+    assert!(err.contains("farm.rate"), "got: {err}");
+}

@@ -72,6 +72,25 @@ Cheapest to most expensive:
 - The real obstacle was never the OS. It was believing the oracle had to be *driven*; it only
   has to be *sampled*.
 
+## Recorded games carry sync records (found 2026-10-23)
+
+`librematch/AoE-Kaitai` publishes Kaitai Struct definitions for DE files, and its `aoe2record.ksy`
+covers the recorded-game **body — "actions, syncs, chat, post-game data"** — for DE save versions
+12.97 to 68.9. That matters here for one reason: **a recording contains periodic sync records**,
+the closest thing to a per-tick oracle that exists in a file.
+
+Two caveats before anyone gets excited:
+
+- It is **DE-only**, and this install holds **zero** `.aoe2record` files (measured with `find`), so
+  it cannot be used yet. One recording made on the Windows machine would test it.
+- Whether HD 5.7 recordings carry the same sync section is untested. If they do, a recorded game
+  becomes a genuine (if coarse) trajectory oracle — cheap to obtain, unlike a driven game.
+
+Worth noting as a technique rather than a data source: a `.ksy` is a *readable format spec* that
+generates parsers for C#, Python, Java, JS, Go and Rust. For our own future readers
+(`.aoe2spgame` in step 2b, `.scx` per D15), writing definitions is far cheaper than hand-rolling a
+parser, and it produces the documentation for free.
+
 ## Recommendation for D1
 
 Choose **G1 (own deterministic engine)**.
