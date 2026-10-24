@@ -63,6 +63,28 @@ Implication: to answer "how long does this unit take in *this* building", the si
 consult the building, not the unit. If the same unit is trainable in two buildings with
 different times, the dat allows both.
 
+## Per-civ differentiation is not in the unit table (measured 2026-10-23)
+
+The units are stored per civilisation (1,402 slots × 32), which invites the assumption that each
+civ needs a delta layer. Measured: it does not. Comparing every populated unit of all 31 non-Gaia
+civs against civ 1 (British) gives **five differing rows in total**:
+
+| civ | unit | civ 1 | that civ |
+|---|---|---|---|
+| Khmer (28) | 70 (house) and 463–465 (drop sites) | `carry` 100, `work_rate` 0.0 | `carry` 0, `work_rate` 1.0 |
+| Celts (13) | 444 | absent | present (1950 hp, speed 0.825) |
+
+Everything else — hp, speed, costs, attacks, armours, range, reload — is byte-for-byte the same
+table repeated. Civ identity therefore lives elsewhere:
+
+- `civ.tech_tree_effect_id` — 31 distinct effects; each is a list of **type-102** commands whose
+  `d` is the id of a *disabled* tech. British disables 31, Goths 38. This is the tech tree.
+- `civ.team_bonus_effect_id`, `civ.unique_unit_effect_ids` (the latter unreadable through
+  GenieDatParser at `VER 5.7.2`), and the 211-value `resources` array (U8).
+
+Consequence for D3: making a second civ playable costs a disable-list join, not a data-model
+change. The expensive part of civ support is U8 and unique units, not the unit table.
+
 ## Open
 
 - **U3** — class id → semantic name for all classes.
