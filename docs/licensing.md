@@ -103,10 +103,13 @@ tools/genconfig  ──imports──▶  GenieDatParser (GPL-3.0, Divy1211)
 - **The GPL covers the program, not its output.** The generated TOML is not GPL-licensed — it is
   derived game data, restricted by D8 instead, which is a different and stricter rule.
 - **Consequence.** Publishing the engine cannot be affected by this licence; only the packaging
-  of `tools/` is a question. Three ways, in order of cost: (a) ship `tools/` as a separate
-  GPL-3.0 component and document "install the parser yourself" — the engine is untouched;
-  (b) keep `tools/` private and let a clone bring its own data producer; (c) write our own
-  reader, which removes the dependency entirely.
+  of `tools/` is a question. **Decided (D12):** the generator moves to its own repository,
+  GPL-3.0, together with a fork of the parser if we have to modify it — and we probably will,
+  since `VER 5.7.2` already raises `VersionError` for the per-task list and cannot read
+  `unique_unit_effect_ids` or `name2`. Forking a GPL library is permitted and stays GPL, so the
+  licence boundary becomes a repository boundary instead of a directory convention. The
+  remaining alternatives, if that ever proves wrong: keep the generator private, or write our
+  own reader (which would also remove the dependency entirely).
 
 ## Enforcement
 
