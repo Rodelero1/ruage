@@ -84,6 +84,30 @@ ours to publish, the data is not ours to distribute.
 its repository for exactly this reason, and ships an engine that reads the user's own
 installation. We follow the same separation.
 
+## Where the GPL actually reaches (corrected 2026-10-23)
+
+The dat parser is a **build-time tool**, not a component of the game, and the dependency edge is
+short:
+
+```
+tools/genconfig  ──imports──▶  GenieDatParser (GPL-3.0, Divy1211)
+        │
+        └──writes──▶  config/gamedata/*.toml  ──read by──▶  crates/* (MIT/Apache)
+```
+
+- **The engine links nothing.** `grep -r GenieDatParser crates/` returns nothing. At runtime the
+  engine reads TOML; the parser never runs during gameplay.
+- **The parser is not openage's converter.** It is `Divy1211/GenieDatParser`, a standalone
+  Python library for reading and writing AoE2 `.dat` files. openage has its own `convert/`
+  module, which SPEC §5.2 explicitly rejects as a reference.
+- **The GPL covers the program, not its output.** The generated TOML is not GPL-licensed — it is
+  derived game data, restricted by D8 instead, which is a different and stricter rule.
+- **Consequence.** Publishing the engine cannot be affected by this licence; only the packaging
+  of `tools/` is a question. Three ways, in order of cost: (a) ship `tools/` as a separate
+  GPL-3.0 component and document "install the parser yourself" — the engine is untouched;
+  (b) keep `tools/` private and let a clone bring its own data producer; (c) write our own
+  reader, which removes the dependency entirely.
+
 ## Enforcement
 
 `.gitignore` is the mechanism, and it is reviewed whenever a new artefact type appears. A
