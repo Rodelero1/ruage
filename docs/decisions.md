@@ -33,6 +33,30 @@ dat cannot supply". It can: each variant's gathering task declares its `resource
 hand-written table in `economy.toml` becomes a cross-check. `genconfig` should emit the task lists
 before step 5 rather than after.
 
+| **D13** | 2026-10-23 | **Adopt `librematch/genie`'s format crates inside the tooling repository; do not relicense the engine, and do not port their engine core.** Concretely: `genie-dat` (read/write `.dat`), `genie-rec` (recorded games), `genie-save` (saves), `genie-scx`, `genie-drs` — all GPL-3.0 — are candidates for the generator/tooling repo that D12 already puts outside the engine. The engine keeps MIT/Apache and the TOML boundary (D6). Their `genie-core` is AGPL-3.0, is a port of **DE build 158041**, and keeps f32 arithmetic to match it — a reference for our step 6 module map, not a drop-in. | Surveyed 2026-10-23. `genie-dat` is already one of the two implementations that cross-validated our step 1, so the adoption risk is low. `genie-save` could revive the 13-save oracle that step 2b abandoned as unparseable. Taking format crates costs GPL-3.0 only in the tooling repo; taking `genie-core` would mean AGPL-3.0 *and* a DE target we are not building. | Tooling repo gains a real reader instead of a Python parser plus a fork question; engine unchanged. Revisit only if we decide to read the dat at runtime and drop D6 — that would force the engine to GPL-3.0. |
+
+## Prior art: `librematch/genie` (surveyed 2026-10-23)
+
+A deterministic Rust reimplementation of the **DE** engine, created **2026-10-15**, pushed the day
+of this survey, one visible author plus agent-assisted commits, 7 stars, 0 open issues. It is much
+further along than that age suggests, because `genie-core` is not written to a spec — its own
+module documentation says it "reproduces build 158041 **bit for bit**", keeps "the game's f32 sums
+and products, each rounded on its own (no fused multiply-add)", and mirrors "the decompiled
+routines' math names, formulas, flag fields and parameters, assignment order". Its subsystems are
+the game's: `abilities, attack, best_target, build, checkpoint, damage, delete, diplomacy, effect,
+explore, facing, farm_queue, garrison, gather, gather_search, ghost, group, …`.
+
+Three things follow for us:
+
+1. **G2 is not hypothetical.** A peer project is doing the thing we priced and rejected, with an
+   oracle harness (`genie-oracle`) and per-tick comparison against a running game. If the owner
+   ever reopens G1, this repo is the worked example — and note it contradicts D9: under G2 you must
+   keep f32 and the game's instruction-level conversions. Fixed-point is only right under G1.
+2. **Their evidence is unverified by anyone but its author.** Nine days old, 7 stars, no external
+   review. "Runs to 8000 clean" is a claim in a commit message, not a measurement we made.
+3. **What we should take is the file-format work, not the simulation.** `genie-dat` already appears
+   in our own step-1 cross-validation, and `genie-save` is the parser we gave up on.
+
 ## D7 applied: the generator rewrite
 
 `build/tools/gen_config.py` existed before D7 and had no tests. Rather than grandfather it,
