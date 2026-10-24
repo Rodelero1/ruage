@@ -352,9 +352,35 @@ before a test that was watched failing.
 | 3 | Decision gate | **done** — D1 = G1 (2026-10-23), D2 = file-based oracle, thresholds written into §6.1 | "Done" is a number someone can check |
 | 4 | Rust workspace skeleton | **in progress** — `crates/fixed` (11 tests), `crates/data` (15 + corpus sweep), `crates/sim` (10 library tests + 6 subprocess tests for `ruage-headless`). Headless runner **done**: `ruage-headless --config … --seed … --ticks … --speed … --hp …` | Nearly met: `cargo test` = **43 green**, `cargo clippy --all-targets -- -D warnings` clean, `cargo fmt --check` clean. Remaining: a golden-hash regression test once the entity model stops changing |
 | 5 | Vertical slice | Arabia, 1 civ, 1 opponent: villager gathers → house → barracks → spearman → fights | Counters and build times within tolerance of step 2; 10-minute game completes headless |
-| 6 | Gap closure | Backlog ordered by `unknown × gameplay impact`; reverse-engineer **one** subsystem | Pathfinding **or** combat resolution lands with evidence — not both half-done |
+| 6 | Gap closure | Backlog in §7.1, ordered by `unknown × gameplay impact`; reverse-engineer **one** subsystem | Pathfinding **or** combat resolution lands with evidence — not both half-done |
 | 7 | RE tooling, only now | JDK 21 + Ghidra in user space, `npx rea-agents@6.7.0`, headless `-Xmx2g` | One step-6 question answered by walking xrefs from §3.4 |
 | 8 | Persist | Updated SPEC.md, `docs/`, commit-worthy `build/` recipes | A new session resumes from files alone |
+
+### 7.1 Step-6 backlog, from the game's own subsystem split
+
+Taken from `librematch/genie`'s `genie-core` module list (a port of DE build 158041, so the split
+is the engine's, not a guess). Their names are kept so a reader can map back. Their list continues
+past the names visible here.
+
+| Subsystem | What it is here | State / blocker |
+|---|---|---|
+| `gather`, `gather_search` | villager task targeting, resource search radius, drop-off routing | data now available (task lists, drop sites, D11); sim work outstanding — **blocks step 5** |
+| `build` | construction progress | blocked on `hp_per_second_per_villager`, still `-1.0` (economy.toml) |
+| `farm_queue` | farm reseeding queue | food economy; after build |
+| `attack`, `damage`, `best_target` | hit resolution and target selection | formula known (`docs/mechanics/combat.md`); **ordering and simultaneity are not** |
+| `effect` | tech-effects interpreter | types 4/5/3 decoded; 0/2/6/101–103 open (U2) |
+| `group` | formations and group movement | arrival times depend on it; tolerance band in §6.1 |
+| `facing`, `fly` | orientation, projectiles | ties to SLP frame rates; no renderer yet |
+| `garrison` | units inside buildings and rams | after combat |
+| `artifact` | relics | after garrison |
+| `abilities` | unit special abilities | DE-heavy; the 5.7 subset is unmeasured — candidate U15 |
+| `explore` | scouting / fog | probably irrelevant headless |
+| `diplomacy` | stances | trivial |
+| `delete` | entity removal (deaths) | needed as soon as combat lands |
+| `game_status` | win/lose | end of the slice |
+| `checkpoint` | state snapshot | we already have `state_hash` |
+| `ai_kinds` | AI behaviour kinds | our slice uses scripted commands, not AI |
+| `fmath` | their f32 emulation | **deliberately not adopted** — fixed point replaces it (D9), which is only valid under G1 |
 
 Steps 1–2 are hours and retire most of the old Phase 1 and a chunk of Phase 2: gather
 rates, tech costs, unit stats and civ bonuses are either in the dat or in published
@@ -562,7 +588,7 @@ should say so rather than claim otherwise.
 
 | Path | Status | Purpose |
 |---|---|---|
-| `SPEC.md` | current, v0.27 | Entry point — this file |
+| `SPEC.md` | current, v0.28 | Entry point — this file |
 | `docs/age2hd.md` | historical, **superseded by §4** | 2026-10-23 handoff from the previous session |
 | `docs/hermes.container` | reference | Host container definition |
 | `docs/parse-notes.md` | current | Step 1 record: toolchain, reproduce commands, parse counts, cross-validation, per-civ unit model, caveats, licences |
@@ -600,6 +626,7 @@ should say so rather than claim otherwise.
 | 2026-10-23 | v0.11 — **D7: TDD is mandatory** (§11). Iron Law, recorded-RED requirement, scope = engine crates + shipped tooling (probes exempt), behaviour-based coverage with no % gate, plus the eight project-specific tests that must precede their code (config strictness, override precedence, manifest staleness, fixed-point exactness, determinism hash, damage formula, effects interpreter). |
 | 2026-10-23 | v0.12 — `gen_config.py` **deleted and rewritten test-first** as `tools/genconfig/` (17 tests, each seen failing first: float formatting, sub-precision guard, string escaping, name decoding, unit/tech/effect/civ records, all four renderers, manifest, CLI, and a real-dat integration test). Output verified byte-identical in data to the deleted script. SPEC §2 layout now includes `config/` and `tools/`. |
 | 2026-10-23 | v0.13 — **D8: no game data in version control** (EU compliance). `git init` + `.gitignore` + tested pre-commit hook; 35 files / 328 KB committed, zero game data staged. Added `docs/licensing.md` (legal basis: Software Directive Art. 6 interoperability, Database Directive Art. 7 substantial extraction) and the project skill `age2hd-engine-conventions` so future sessions get the invariants and dat traps without re-discovery. |
+| 2026-10-23 | v0.28 — **D14: stay on HD/G1, borrow narrowly, watch the field.** Adopt only the format crates (D13), never their engine core; rebuild the step-6 backlog from the game's own subsystem split (§7.1, 16 subsystems taken from `genie-core`'s module list, each with its current blocker — including `fmath`, whose f32 emulation we deliberately do not adopt because fixed point replaces it under G1). Offer HD-specific findings upstream. Prior art reviewed periodically and recorded. |
 | 2026-10-23 | v0.27 — **prior art: `librematch/genie` is doing G2, and it works.** Survived the survey rather than dismissing it: the project is nine days old, pushed the day of the survey, and `genie-core`'s own module docs state it "reproduces build 158041 **bit for bit**", keeping the game's f32 arithmetic and instruction-level conversions, with a module list taken from the game's subsystems (`gather, gather_search, farm_queue, attack, damage, best_target, garrison, ghost, group …`). So G2 is demonstrated as feasible by a peer with an oracle — and it contradicts D9: under G2 you keep f32, which is exactly why fixed-point is right only under G1. Their evidence is unaudited (7 stars, one visible author). **D13: adopt their GPL-3.0 format crates in the tooling repo** (`genie-dat` already cross-validated our step 1; `genie-save` could revive the abandoned 13-save oracle; `genie-rec` for recordings) while the engine stays MIT/Apache on the TOML boundary. Their module list also becomes a step-6 roadmap. |
 | 2026-10-23 | v0.26 — **U12: nobody has published the tick rate, and openage deliberately doesn't have one.** Verified: openage's time subsystem is a millisecond clock on its own thread driving an event queue (50 ms cap, 1 ms floor), so they sidestep fixed ticks entirely; `librematch/genie` is the closest analogue — deterministic Rust, aimed at exact DE replay, ships a `genie-oracle` — and is the best place to ask, since it has the same problem. The Ensemble "1500 Archers" paper documents the AoE1 turn model but its turn length wasn't extractable here. §6.1 bands are now stated in **milliseconds as well as ticks**, because if the true rate is 60 Hz every "1 tick" band silently tightens 3×. Also recorded: a wrong-but-consistent tick rate cannot desync two clients of our engine — desync needs *disagreement* between them, or accumulated drift from a scale/tick mismatch, which `div_exact` refuses. |
 | 2026-10-23 | v0.25 — **correction: the per-task data was never missing.** `dat.unit_data.tasks` exposes 412 populated per-unit task lists at `VER 5.7.2`; the `VersionError` came from `unit.task_info.tasks`, which is gated to AoK and DE only. Each villager variant declares its gathering `resource_in` (1 wood, 2 stone, 3 gold, 0 food, 15/16/17 pseudo — U14), so the task → variant mapping is **derivable**, and `economy.toml`'s hand-written table becomes a cross-check (D11 amended). Separately, `unique_unit_effect_ids` and `name2` are **DE-5.9-only fields**, absent from 5.7.2 — the parser was right to refuse, and no fork would help, so D12's "fork is likely" is withdrawn while the separate repo stands. Lesson recorded: a version-gated accessor is not evidence of absent data. |
