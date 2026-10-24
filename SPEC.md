@@ -345,7 +345,7 @@ before a test that was watched failing.
 | 2 | Knowledge harvest | **done** — `docs/mechanics/` (6 files + index), every fact tagged `known` / `inferred` / `unknown` | 12 unknowns registered (U1–U12): 5 now resolved, 2 new (U11 farming rate, U12 tick rate) |
 | 2b | Oracle harness: `VER 9.4` save reader | **partial, stopped** — `build/tools/save.py` inflates all 13 saves and reads player names where framing is clean (5/13) | Not met and deprioritised: no public spec, no second implementation to validate against, resources/units/tick not located. Rationale in `docs/oracle.md` |
 | 3 | Decision gate | **done** — D1 = G1 (2026-10-23), D2 = file-based oracle, thresholds written into §6.1 | "Done" is a number someone can check |
-| 4 | Rust workspace skeleton | **in progress** — `crates/fixed` (11 tests: exact decimal → i64, checked add/sub/mul, overflow is an error not a panic, `div_exact` refuses to round), `crates/data` (15 tests + corpus sweep: strict TOML, schema gate, two decimal grains, determinism invariants enforced), `crates/sim` (10 tests: tick advance, exact per-tick movement, id iteration order, state hash order-independence and change detection, replay determinism, separate RNG streams, command timing from config, `max_entities`). Headless runner not started | Nearly met: `cargo test` = **37 green**, `cargo clippy --all-targets -- -D warnings` clean, `cargo fmt --check` clean, real `config/sim.toml` loads. Remaining: a headless driver binary, and a golden-hash regression test once the entity model stops changing |
+| 4 | Rust workspace skeleton | **in progress** — `crates/fixed` (11 tests), `crates/data` (15 + corpus sweep), `crates/sim` (10 library tests + 6 subprocess tests for `ruage-headless`). Headless runner **done**: `ruage-headless --config … --seed … --ticks … --speed … --hp …` | Nearly met: `cargo test` = **43 green**, `cargo clippy --all-targets -- -D warnings` clean, `cargo fmt --check` clean. Remaining: a golden-hash regression test once the entity model stops changing |
 | 5 | Vertical slice | Arabia, 1 civ, 1 opponent: villager gathers → house → barracks → spearman → fights | Counters and build times within tolerance of step 2; 10-minute game completes headless |
 | 6 | Gap closure | Backlog ordered by `unknown × gameplay impact`; reverse-engineer **one** subsystem | Pathfinding **or** combat resolution lands with evidence — not both half-done |
 | 7 | RE tooling, only now | JDK 21 + Ghidra in user space, `npx rea-agents@6.7.0`, headless `-Xmx2g` | One step-6 question answered by walking xrefs from §3.4 |
@@ -532,6 +532,19 @@ one number that was quietly wrong for two buildings.
 errors on `add`/`sub`); §12 claimed "zero warnings", which was true of `cargo test` only. The
 gate now passes with `--all-targets`.
 
+### Standing process after every change (owner, 2026-10-23)
+
+Two steps are now mandatory at the end of every change, before the next one starts:
+
+1. **Compact.** Update `SPEC.md` (step status, changelog row, version), `docs/` and any index so
+   that a new session can resume from the files alone — no reliance on this conversation.
+2. **Adversarial review.** Attack the change as if it were someone else's: verify the claims
+   against real output, look for the failure the tests do not cover, and report what is wrong
+   even when it is our own number. Then fix what it finds, test-first, and record the finding.
+
+Both exist because this project's only durable memory is its files, and because a claim that has
+not been attacked is a claim that has not been checked.
+
 ### Reporting
 
 Each cycle's report to the owner names the test, states that it was seen failing, and shows
@@ -544,7 +557,7 @@ should say so rather than claim otherwise.
 
 | Path | Status | Purpose |
 |---|---|---|
-| `SPEC.md` | current, v0.21 | Entry point — this file |
+| `SPEC.md` | current, v0.22 | Entry point — this file |
 | `docs/age2hd.md` | historical, **superseded by §4** | 2026-10-23 handoff from the previous session |
 | `docs/hermes.container` | reference | Host container definition |
 | `docs/parse-notes.md` | current | Step 1 record: toolchain, reproduce commands, parse counts, cross-validation, per-civ unit model, caveats, licences |
@@ -582,6 +595,7 @@ should say so rather than claim otherwise.
 | 2026-10-23 | v0.11 — **D7: TDD is mandatory** (§11). Iron Law, recorded-RED requirement, scope = engine crates + shipped tooling (probes exempt), behaviour-based coverage with no % gate, plus the eight project-specific tests that must precede their code (config strictness, override precedence, manifest staleness, fixed-point exactness, determinism hash, damage formula, effects interpreter). |
 | 2026-10-23 | v0.12 — `gen_config.py` **deleted and rewritten test-first** as `tools/genconfig/` (17 tests, each seen failing first: float formatting, sub-precision guard, string escaping, name decoding, unit/tech/effect/civ records, all four renderers, manifest, CLI, and a real-dat integration test). Output verified byte-identical in data to the deleted script. SPEC §2 layout now includes `config/` and `tools/`. |
 | 2026-10-23 | v0.13 — **D8: no game data in version control** (EU compliance). `git init` + `.gitignore` + tested pre-commit hook; 35 files / 328 KB committed, zero game data staged. Added `docs/licensing.md` (legal basis: Software Directive Art. 6 interoperability, Database Directive Art. 7 substantial extraction) and the project skill `age2hd-engine-conventions` so future sessions get the invariants and dat traps without re-discovery. |
+| 2026-10-23 | v0.22 — **standing process: compact, then adversarial review after every change** (§11). Adversarial review of v0.21 found four things, all fixed test-first: (1) the runner invented game values — a default `--speed 1.35` and a hardcoded `hp = 100`, both D6 violations; speed and hp are now required, with 3 new subprocess tests seen failing first (`--speed is required`, `--ticks is repeated`, `--help` exits 0). (2) Unknown, valueless and repeated flags were silently ignored — a run of 10 ticks could be reported as 10,000; all are errors now. (3) `test_config_consistency` built a name→id dict while 180 units are called RESERVED and 56 are unnamed; it now asserts the name is unique. (4) The test total was misreported in v0.21's session (claimed 38, actual 40; now 43) — recorded because a self-report that is off by two is a self-report that cannot be trusted unchecked. Verified alongside: 46 units carry drop sites, with no dangling ids and no duplicates. Accepted and documented: `--ticks` is unbounded. |
 | 2026-10-23 | v0.21 — **D4 answered: B (publish engine + tooling, keep the spec internal).** Condition from the owner: a stranger with their own install must be able to clone, build and run. `ruage-headless` now exists and is tested **as a subprocess** (3 tests): `--config config/sim.toml --seed 7 --ticks 100 --speed 1.35` prints `tick=100 hash=bdd1d648344fcb6d x=135000`; the same command twice is byte-identical; a sub-precision speed is refused (`1.41421356 needs more precision than scale 20000`) rather than rounded. Building and running need no game data. §6.2 records the checklist and the one blocking gap: `tools/genconfig` imports **GPL-3.0** `GenieDatParser`, so a public clone cannot produce `config/gamedata/` — the owner's condition is met for build+run, not yet for a complete game, until either our own dat reader exists or `tools/` is licensed GPL-3.0. |
 | 2026-10-23 | v0.20 — **D11 landed on the data side: drop sites are emitted and the task→variant table exists.** `genconfig` now emits `drop_sites` per unit (test-first: two new pytest tests, both seen failing). Measured from the real dat: lumberjack 123 → 109 + **562** (lumber camp), miner 124 and gold miner 579 → 109 + **584** (mining camp), forage/hunt/fish/herd → 109 + 68 (mill), base villager 83 → 109 + mill only (the trap). `economy.toml` gained the 10-row task→variant table with rates left to `gamedata/`, and `tools/tests/test_config_consistency.py` guards the join (id exists, is a `VM*` variant, plausible rate, has a drop site, base villager absent). 21 pytest tests green. Side finding: the repair variant VMREP (156) carries `work_rate = 12.5` — a dat candidate for the unresolved `repair_hp_per_second`, recorded as a candidate only, sentinel kept. |
 | 2026-10-23 | v0.19 — **D3 answered: one civ (British) first.** British is dat civ index 1 (0 is Gaia), so the name is incidental; the loader must not hardcode it. Step 5's scope is British vs British. With U13 measured the same day, adding the next civ later costs a type-102 disable-list join, not a data-model change. |
