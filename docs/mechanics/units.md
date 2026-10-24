@@ -85,6 +85,37 @@ table repeated. Civ identity therefore lives elsewhere:
 Consequence for D3: making a second civ playable costs a disable-list join, not a data-model
 change. The expensive part of civ support is U8 and unique units, not the unit table.
 
+### The per-task lists are readable (corrected 2026-10-23)
+
+An earlier note said the parser cannot read per-task data at `VER 5.7.2`. That was wrong: the
+*accessor* `unit.task_info.tasks` is gated to AoK (3.7–4.5) and DE (7.2+) only, which is what
+raises `VersionError`. The data itself is at the file level:
+
+```python
+d = DatFile.from_file("empires2_x2_p1.dat")
+tasks = d.unit_data.tasks        # 1,402 slots, 412 populated — matches §3.6's "412 task lists"
+tasks[83]                        # the base villager: 18 tasks
+```
+
+Each `UnitTask` carries `task_type, id, action_type, resource_in, resource_out, work_value1,
+work_range` (no version gates on those fields). Measured for the villager variants:
+
+| unit | gathering task | action_type | resource_in |
+|---|---|---|---|
+| VMLUM 123 | wood | 110 | 1 |
+| VMMIN 124 | stone | 5 / 110 | 2 |
+| VMGLD 579 | gold | 5 / 110 | 3 |
+| VMSHE 592 | herd | 110 | 0 |
+| VMHUN 122 | hunt | 110 | 15 |
+| VMFOR 120 | forage | 5 | 16 |
+| VMFIS 56 | fish | 5 | 17 |
+| VMBLD 118 | build | 101 | — |
+| VMREP 156 | repair | 106 | — |
+
+So the task → variant mapping is **derivable from the dat**, and the hand-written table in
+`economy.toml` should become a cross-check rather than the source. Every gathering task carries
+`work_value1 = 1.0`, confirming that no hidden scaling sits in the task record.
+
 ## Open
 
 - **U3** — class id → semantic name for all classes.
