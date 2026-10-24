@@ -9,3 +9,7 @@ repository.workspace = true
 [dependencies]
 ruage-fixed = { path = "../fixed" }
 ruage-data = { path = "../data" }
+
+[[bin]]
+name = "ruage-headless"
+path = "src/bin/headless.rs"

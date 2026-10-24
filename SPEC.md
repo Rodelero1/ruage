@@ -269,7 +269,7 @@ openage's shape, and the doc cites openage as its own cautionary tale.
 | **D1** | ~~G1 or G2?~~ **Answered 2026-10-23 — G1.** "Generally similar behaviour, sensibly attainable." G2 was priced and rejected: no per-tick oracle exists here, the original's sim is x87 float, and a bit-exact copy would be a derivative work rather than an engine. G1+ (a per-subsystem exactness budget) was considered and **not** adopted | Sets every acceptance criterion, and whether the RE phase is bounded |
 | **D2** | ~~Is there a machine that can run HD, usable as an oracle?~~ **Answered 2026-10-23 — a driven game is not needed.** The install already holds 13 `.aoe2spgame` saves; they are raw DEFLATE (`VER 9.4`) and inflate to 4.5–11 MB of world state. Snapshots answer U1/U2/U4/U5/U6 and partly U8/U10; they cannot answer U7 (pathing). Details: `docs/oracle.md` |
 | **D3** | ~~Content scope~~ **Answered 2026-10-23 — one civ (British) first, others later.** British is dat civ index 1 (0 is Gaia), not a preference. A second civ costs a type-102 disable-list join, not a per-civ unit delta layer (U13: 5 differing unit rows across all 31 civs) | Sets the data model's generality requirement |
-| **D4** | Private personal use, publishable engine with internal spec, or publishable including spec? | Whether the RE-derived spec is a deliverable, and how strict clean-room hygiene must be |
+| **D4** | ~~Private / publishable engine / publishable both~~ **Answered 2026-10-23 — B: publish engine + tooling, keep spec and mechanics internal.** Condition: a stranger with their own install must be able to clone, build and run it. Checklist and blocking gap in §6.2 | Whether the RE-derived spec is a deliverable, and how strict clean-room hygiene must be |
 
 **D1 recommendation, on the evidence in `docs/oracle.md`: G1.** A snapshot oracle can hold a
 reimplementation to "the numbers agree"; it cannot hold one to "the trajectory is identical"
@@ -311,6 +311,25 @@ step 5; they are deliberately loose, because G1 does not claim the original's tr
 
 A scenario that misses a tolerance is a **bug with a recorded reproduction**, not a licence to
 widen the band. Widening one requires a row here with the evidence.
+
+### 6.2 Publishability checklist (D4 = B)
+
+The owner's condition is concrete: **clone → build → run, with only the user's own game install.**
+Measured against the tree on 2026-10-23:
+
+| Requirement | State |
+|---|---|
+| `cargo build` from a clean clone | **works** — building needs no game data at all |
+| Run a world without game data | **works** — `ruage-headless --config config/sim.toml --seed 7 --ticks 100` prints tick, state hash and exact position; the config it needs is tracked |
+| Determinism visible from outside | **works** — the same invocation twice is byte-identical (tested as a subprocess, not just as a library call) |
+| Produce `config/gamedata/` from the user's own install | **BLOCKED** — `tools/genconfig` imports `GenieDatParser` (**GPL-3.0**) from a hardcoded path. A public clone has no way to generate the data, so the game runs only with the speed/scale part of config; units, techs and effects cannot exist. Two ways out: (a) write our own dat reader — already committed to in D4's "own reader at runtime" note, and the honest clean-room answer; (b) ship the dependency and licence `tools/` GPL-3.0. |
+| Licence split | todo — `crates/` MIT/Apache today, `tools/` must become GPL-3.0 if the parser stays a dependency |
+| No engine-code references to internal docs | todo — code comments cite `docs/mechanics/`, which will not ship |
+| Content check in CI | todo — the pre-commit hook is path-based and contributors will not have it installed |
+| README / quickstart | todo |
+
+**The blocking item is the dat reader.** Option B is therefore not "publish today" but "publish once
+the reader exists", unless the owner prefers the GPL-dependency shortcut.
 
 ---
 
@@ -525,7 +544,7 @@ should say so rather than claim otherwise.
 
 | Path | Status | Purpose |
 |---|---|---|
-| `SPEC.md` | current, v0.20 | Entry point — this file |
+| `SPEC.md` | current, v0.21 | Entry point — this file |
 | `docs/age2hd.md` | historical, **superseded by §4** | 2026-10-23 handoff from the previous session |
 | `docs/hermes.container` | reference | Host container definition |
 | `docs/parse-notes.md` | current | Step 1 record: toolchain, reproduce commands, parse counts, cross-validation, per-civ unit model, caveats, licences |
@@ -563,6 +582,7 @@ should say so rather than claim otherwise.
 | 2026-10-23 | v0.11 — **D7: TDD is mandatory** (§11). Iron Law, recorded-RED requirement, scope = engine crates + shipped tooling (probes exempt), behaviour-based coverage with no % gate, plus the eight project-specific tests that must precede their code (config strictness, override precedence, manifest staleness, fixed-point exactness, determinism hash, damage formula, effects interpreter). |
 | 2026-10-23 | v0.12 — `gen_config.py` **deleted and rewritten test-first** as `tools/genconfig/` (17 tests, each seen failing first: float formatting, sub-precision guard, string escaping, name decoding, unit/tech/effect/civ records, all four renderers, manifest, CLI, and a real-dat integration test). Output verified byte-identical in data to the deleted script. SPEC §2 layout now includes `config/` and `tools/`. |
 | 2026-10-23 | v0.13 — **D8: no game data in version control** (EU compliance). `git init` + `.gitignore` + tested pre-commit hook; 35 files / 328 KB committed, zero game data staged. Added `docs/licensing.md` (legal basis: Software Directive Art. 6 interoperability, Database Directive Art. 7 substantial extraction) and the project skill `age2hd-engine-conventions` so future sessions get the invariants and dat traps without re-discovery. |
+| 2026-10-23 | v0.21 — **D4 answered: B (publish engine + tooling, keep the spec internal).** Condition from the owner: a stranger with their own install must be able to clone, build and run. `ruage-headless` now exists and is tested **as a subprocess** (3 tests): `--config config/sim.toml --seed 7 --ticks 100 --speed 1.35` prints `tick=100 hash=bdd1d648344fcb6d x=135000`; the same command twice is byte-identical; a sub-precision speed is refused (`1.41421356 needs more precision than scale 20000`) rather than rounded. Building and running need no game data. §6.2 records the checklist and the one blocking gap: `tools/genconfig` imports **GPL-3.0** `GenieDatParser`, so a public clone cannot produce `config/gamedata/` — the owner's condition is met for build+run, not yet for a complete game, until either our own dat reader exists or `tools/` is licensed GPL-3.0. |
 | 2026-10-23 | v0.20 — **D11 landed on the data side: drop sites are emitted and the task→variant table exists.** `genconfig` now emits `drop_sites` per unit (test-first: two new pytest tests, both seen failing). Measured from the real dat: lumberjack 123 → 109 + **562** (lumber camp), miner 124 and gold miner 579 → 109 + **584** (mining camp), forage/hunt/fish/herd → 109 + 68 (mill), base villager 83 → 109 + mill only (the trap). `economy.toml` gained the 10-row task→variant table with rates left to `gamedata/`, and `tools/tests/test_config_consistency.py` guards the join (id exists, is a `VM*` variant, plausible rate, has a drop site, base villager absent). 21 pytest tests green. Side finding: the repair variant VMREP (156) carries `work_rate = 12.5` — a dat candidate for the unresolved `repair_hp_per_second`, recorded as a candidate only, sentinel kept. |
 | 2026-10-23 | v0.19 — **D3 answered: one civ (British) first.** British is dat civ index 1 (0 is Gaia), so the name is incidental; the loader must not hardcode it. Step 5's scope is British vs British. With U13 measured the same day, adding the next civ later costs a type-102 disable-list join, not a data-model change. |
 | 2026-10-23 | v0.18 — **measured: civ differentiation is not in the unit table.** All 31 non-Gaia civs match civ 1 in 5 rows out of ~36,000 (Khmer zeroes `carry`/sets `work_rate` 1.0 on houses and drop sites; Celts have one extra unit). Civ identity is `tech_tree_effect_id` — a **type-102 disable list** (British 31 entries, Goths 38) — plus `team_bonus_effect_id`, the unreadable `unique_unit_effect_ids`, and the U8 resource array. New U13. The earlier assumption that a second civ needs a per-civ unit delta layer was therefore wrong, and is corrected in `docs/mechanics/units.md`. D11 records the gathering-data shape: `genconfig` emits drop sites, `economy.toml` carries the task→variant table. |
