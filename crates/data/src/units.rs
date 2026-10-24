@@ -218,6 +218,20 @@ pub fn load_units_str(text: &str, path: &str) -> Result<Units, ConfigError> {
         }
     }
 
+    // A drop site is a building the villager walks to. A dangling id is a villager who can carry
+    // wood forever and never deposit it - visible ten minutes into a game, not at startup.
+    for unit in units.values() {
+        for site in &unit.drop_sites {
+            if !units.contains_key(site) {
+                return Err(invalid(
+                    path,
+                    format!("units[{}].drop_sites", unit.id),
+                    format!("{site} is not a unit in this table"),
+                ));
+            }
+        }
+    }
+
     Ok(Units {
         civ: raw.civ,
         civ_name: raw.civ_name,

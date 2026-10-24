@@ -84,9 +84,25 @@ fn the_real_unit_table_loads_and_answers_known_values() {
         "VMBAS work_rate is 1.0 - the trap D11 exists to prevent"
     );
 
-    // The lumberjack variant carries its drop site (D11).
+    // The lumberjack variant carries its drop site (D11), and every drop site resolves - the
+    // loader enforces that, so this test doubles as proof it holds for the generated table.
     let lumberjack = units.unit(123).expect("VMLUM exists");
     assert!(lumberjack.drop_sites.contains(&562), "lumber camp");
+    let carriers = units
+        .units
+        .values()
+        .filter(|u| !u.drop_sites.is_empty())
+        .count();
+    assert_eq!(carriers, 46, "46 units carry drop sites");
+    for unit in units.units.values() {
+        for site in &unit.drop_sites {
+            assert!(
+                units.unit(*site).is_some(),
+                "unit {} names missing drop site {site}",
+                unit.id
+            );
+        }
+    }
 }
 
 #[test]
@@ -102,6 +118,21 @@ fn a_unit_record_carries_everything_the_sim_needs() {
         36_000
     );
     assert!(knight.drop_sites.is_empty());
+}
+
+#[test]
+fn a_drop_site_that_is_not_in_the_table_is_refused() {
+    // A drop site is a building the villager walks to and deposits in. A dangling id is a
+    // villager who can carry wood forever and never deposit it - the kind of bug that shows up
+    // ten minutes into a game rather than at startup.
+    let bad = GOOD.replace("drop_sites = []", "drop_sites = [562]");
+    let err = load_units_str(&bad, "units.toml")
+        .expect_err("a dangling drop site must be refused")
+        .to_string();
+    assert!(
+        err.contains("562"),
+        "the error should name the id, got: {err}"
+    );
 }
 
 #[test]
