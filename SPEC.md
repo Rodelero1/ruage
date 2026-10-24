@@ -304,10 +304,15 @@ step 5; they are deliberately loose, because G1 does not claim the original's tr
 | Measure | Threshold | Why this number |
 |---|---|---|
 | Villager gather rate over 60 s | within 5% of the dat rate | travel and turn-around vary; the rate itself is dat-exact |
-| Building completion time | within 1 tick (50 ms) of `creation_info` | build time is data; the tick phase is not |
+| Building completion time | within 1 tick = **50 ms at 20 Hz** of `creation_info` | build time is data; the tick phase is not |
 | Time to kill, equal-supply mirror fights | within 10% of the hand-computed value from dat stats + damage formula | attack/reload phase offsets are unpublished |
-| Unit arrival time over open ground | within 2 ticks | path smoothing and waypoint snapping are unpublished |
+| Unit arrival time over ground | within 2 ticks = **100 ms at 20 Hz** | path smoothing and waypoint snapping are unpublished |
 | Population / resource accounting | exact at every tick | bookkeeping, not behaviour |
+
+**Why the ms column exists.** U12 is unproven: 20 Hz is an assumption. If the original turns out to
+run at 60 Hz, every "1 tick" band above silently becomes 16.7 ms and the tolerances tighten by 3×
+without anyone deciding to tighten them. Bands are therefore stated in both units, and a session
+that changes `tick_rate_hz` must restate the ms column rather than inherit it.
 
 A scenario that misses a tolerance is a **bug with a recorded reproduction**, not a licence to
 widen the band. Widening one requires a row here with the evidence.
@@ -557,7 +562,7 @@ should say so rather than claim otherwise.
 
 | Path | Status | Purpose |
 |---|---|---|
-| `SPEC.md` | current, v0.25 | Entry point — this file |
+| `SPEC.md` | current, v0.26 | Entry point — this file |
 | `docs/age2hd.md` | historical, **superseded by §4** | 2026-10-23 handoff from the previous session |
 | `docs/hermes.container` | reference | Host container definition |
 | `docs/parse-notes.md` | current | Step 1 record: toolchain, reproduce commands, parse counts, cross-validation, per-civ unit model, caveats, licences |
@@ -595,6 +600,7 @@ should say so rather than claim otherwise.
 | 2026-10-23 | v0.11 — **D7: TDD is mandatory** (§11). Iron Law, recorded-RED requirement, scope = engine crates + shipped tooling (probes exempt), behaviour-based coverage with no % gate, plus the eight project-specific tests that must precede their code (config strictness, override precedence, manifest staleness, fixed-point exactness, determinism hash, damage formula, effects interpreter). |
 | 2026-10-23 | v0.12 — `gen_config.py` **deleted and rewritten test-first** as `tools/genconfig/` (17 tests, each seen failing first: float formatting, sub-precision guard, string escaping, name decoding, unit/tech/effect/civ records, all four renderers, manifest, CLI, and a real-dat integration test). Output verified byte-identical in data to the deleted script. SPEC §2 layout now includes `config/` and `tools/`. |
 | 2026-10-23 | v0.13 — **D8: no game data in version control** (EU compliance). `git init` + `.gitignore` + tested pre-commit hook; 35 files / 328 KB committed, zero game data staged. Added `docs/licensing.md` (legal basis: Software Directive Art. 6 interoperability, Database Directive Art. 7 substantial extraction) and the project skill `age2hd-engine-conventions` so future sessions get the invariants and dat traps without re-discovery. |
+| 2026-10-23 | v0.26 — **U12: nobody has published the tick rate, and openage deliberately doesn't have one.** Verified: openage's time subsystem is a millisecond clock on its own thread driving an event queue (50 ms cap, 1 ms floor), so they sidestep fixed ticks entirely; `librematch/genie` is the closest analogue — deterministic Rust, aimed at exact DE replay, ships a `genie-oracle` — and is the best place to ask, since it has the same problem. The Ensemble "1500 Archers" paper documents the AoE1 turn model but its turn length wasn't extractable here. §6.1 bands are now stated in **milliseconds as well as ticks**, because if the true rate is 60 Hz every "1 tick" band silently tightens 3×. Also recorded: a wrong-but-consistent tick rate cannot desync two clients of our engine — desync needs *disagreement* between them, or accumulated drift from a scale/tick mismatch, which `div_exact` refuses. |
 | 2026-10-23 | v0.25 — **correction: the per-task data was never missing.** `dat.unit_data.tasks` exposes 412 populated per-unit task lists at `VER 5.7.2`; the `VersionError` came from `unit.task_info.tasks`, which is gated to AoK and DE only. Each villager variant declares its gathering `resource_in` (1 wood, 2 stone, 3 gold, 0 food, 15/16/17 pseudo — U14), so the task → variant mapping is **derivable**, and `economy.toml`'s hand-written table becomes a cross-check (D11 amended). Separately, `unique_unit_effect_ids` and `name2` are **DE-5.9-only fields**, absent from 5.7.2 — the parser was right to refuse, and no fork would help, so D12's "fork is likely" is withdrawn while the separate repo stands. Lesson recorded: a version-gated accessor is not evidence of absent data. |
 | 2026-10-23 | v0.24 — **D12: the generator moves to its own repository**, with a fork of the GPL-3.0 parser if we need to patch it — and we probably will, since `VER 5.7.2` already raises `VersionError` on the per-task list and cannot read `unique_unit_effect_ids` or `name2` (the gaps U13 and D11 hit). Forking GPL code is permitted and stays GPL, so the licence boundary becomes a repo boundary. This repo stays MIT/Apache pure Rust. Publish-time step, not a change today. |
 | 2026-10-23 | v0.23 — **correction: the GPL does not reach the engine.** §6.2 framed the missing generator as a licence blocker; it is a packaging question. Verified: `crates/` contains zero references to the parser, the engine reads TOML at runtime only, and the parser is `Divy1211/GenieDatParser` (GPL-3.0, a build-time dat miner) — **not** openage's converter, which SPEC §5.2 rejects. The dependency edge is `tools/genconfig → parser`, so the engine's MIT/Apache status is unaffected and the generated TOML is not GPL-encumbered (it is derived game data, governed by D8). `docs/licensing.md` now records the edge, the provenance and the three packaging options. |
