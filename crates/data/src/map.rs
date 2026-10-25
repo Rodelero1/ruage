@@ -38,7 +38,59 @@ impl ResourceKind {
         }
     }
 
+    /// The dat's own resource id for this kind. A format fact of the file, not a game value:
+    /// the cost arrays in `units.toml` use these ids (`[[1, 25]]` is 25 wood), and 4 means
+    /// population, which is not a stockpiled resource.
+    pub fn dat_id(self) -> u8 {
+        match self {
+            ResourceKind::Food => 0,
+            ResourceKind::Wood => 1,
+            ResourceKind::Stone => 2,
+            ResourceKind::Gold => 3,
+        }
+    }
+
+    /// The kind for a dat resource id, or `None` for ids that are not stockpiled resources
+    /// (4 is population; pseudo-resources appear in task data, not costs).
+    pub fn from_dat_id(id: u8) -> Option<Self> {
+        match id {
+            0 => Some(ResourceKind::Food),
+            1 => Some(ResourceKind::Wood),
+            2 => Some(ResourceKind::Stone),
+            3 => Some(ResourceKind::Gold),
+            _ => None,
+        }
+    }
+
     pub const COUNT: usize = 4;
+}
+
+#[cfg(test)]
+mod id_tests {
+    use super::ResourceKind;
+
+    /// Two mappings live on the same type and must never be folded into one: `index` is the slot
+    /// in a stockpile row, `dat_id` is the dat's own numbering. Wood is slot 0 and dat id 1, so a
+    /// "simplification" that unifies them would silently deposit wood into the food slot.
+    #[test]
+    fn the_stockpile_order_and_the_dat_ids_disagree() {
+        assert_eq!(ResourceKind::Wood.index(), 0);
+        assert_eq!(ResourceKind::Wood.dat_id(), 1);
+        assert_eq!(ResourceKind::Food.index(), 1);
+        assert_eq!(ResourceKind::Food.dat_id(), 0);
+        for kind in [
+            ResourceKind::Wood,
+            ResourceKind::Food,
+            ResourceKind::Gold,
+            ResourceKind::Stone,
+        ] {
+            assert_eq!(
+                ResourceKind::from_dat_id(kind.dat_id()),
+                Some(kind),
+                "dat ids must round-trip"
+            );
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

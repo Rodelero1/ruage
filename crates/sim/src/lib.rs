@@ -57,10 +57,32 @@ pub struct Entity {
     pub amount: Fixed,
     /// What the unit is doing. Buildings and nodes are always idle.
     pub task: Task,
+    /// Present while a building is going up. Progress is counted in ticks worked, so a
+    /// construction finishes exactly at its build time even when HP/second is not a whole number.
+    pub construction: Option<Construction>,
     /// What the unit is carrying, in fixed point; whole resources are taken on deposit.
     pub carry: Fixed,
     /// The villager variant currently in use (the task's unit id), if any.
     pub variant: Option<u32>,
+}
+
+/// A build order that passed every check: what it costs, how long it takes, whose money it is.
+struct BuildPlan {
+    total_ticks: u32,
+    max_hp: i32,
+    costs: Vec<(u8, u16)>,
+    player: u8,
+}
+
+/// A building under construction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Construction {
+    /// Builder-ticks contributed so far. Counts only while somebody is actually working.
+    pub progress_ticks: u32,
+    /// Builder-ticks needed: `create_time x tick_rate`.
+    pub total_ticks: u32,
+    /// The finished hit points, so progress can be turned into HP for display and combat.
+    pub max_hp: i32,
 }
 
 /// Unit work in progress. A state machine small enough to hash and to explain: walking to a node
@@ -69,6 +91,8 @@ pub struct Entity {
 pub enum Task {
     #[default]
     Idle,
+    /// Putting up a building at `site`.
+    Build { site: EntityId },
     Gather {
         node: EntityId,
         /// Resource per tick, resolved from the variant's `work_rate` at the engine scale.
@@ -93,6 +117,12 @@ pub enum Command {
     /// Take from a resource node. The rate, the capacity and the variant come from the tables,
     /// not from the command: a replay must not be able to name its own numbers.
     Gather { villager: EntityId, node: EntityId },
+    /// Put up a building at a tile. Cost and duration come from the unit table.
+    Build {
+        villager: EntityId,
+        unit: u32,
+        at: (u16, u16),
+    },
     Spawn {
         id: EntityId,
         player: u8,
@@ -150,6 +180,24 @@ pub enum SimError {
         from: (u16, u16),
         to: (u16, u16),
     },
+    /// The player cannot pay for the order.
+    NotEnough {
+        kind: ResourceKind,
+        need: u32,
+        have: u32,
+    },
+    /// Something already stands on the chosen tile.
+    SiteOccupied {
+        tile: (u16, u16),
+    },
+    /// The chosen tile is not open ground.
+    SiteBlocked {
+        tile: (u16, u16),
+    },
+    /// The chosen unit is not a building (it can move, or it has no creation time).
+    NotABuilding {
+        unit: u32,
+    },
 }
 
 impl fmt::Display for SimError {
@@ -194,6 +242,25 @@ impl fmt::Display for SimError {
                 "no walkable route from {:?} to {:?}: the target is walled off",
                 from, to
             ),
+            SimError::NotEnough { kind, need, have } => {
+                write!(f, "not enough {kind:?}: {need} needed, {have} in the bank")
+            }
+            SimError::SiteOccupied { tile } => {
+                write!(f, "something already stands at {:?}", tile)
+            }
+            SimError::SiteBlocked { tile } => {
+                write!(
+                    f,
+                    "{:?} is not open ground: a building cannot go there",
+                    tile
+                )
+            }
+            SimError::NotABuilding { unit } => {
+                write!(
+                    f,
+                    "unit {unit} is not a building: it has no build time or it moves"
+                )
+            }
         }
     }
 }
@@ -401,6 +468,9 @@ impl World {
                     self.plan_path(position, target.position)?;
                 }
             }
+            Command::Build { villager, unit, at } => {
+                self.check_build(*villager, *unit, *at)?;
+            }
             Command::Spawn { .. } => {}
         }
         Ok(())
@@ -507,6 +577,7 @@ impl World {
                 hp: town_centre.hp,
                 amount: Fixed::ZERO,
                 task: Task::Idle,
+                construction: None,
                 carry: Fixed::ZERO,
                 variant: None,
             })?;
@@ -527,6 +598,7 @@ impl World {
                     hp: villager.hp,
                     amount: Fixed::ZERO,
                     task: Task::Idle,
+                    construction: None,
                     carry: Fixed::ZERO,
                     variant: None,
                 })?;
@@ -548,6 +620,7 @@ impl World {
                 hp: 0,
                 amount: Fixed::from_raw(i64::from(node.amount) * self.scale),
                 task: Task::Idle,
+                construction: None,
                 carry: Fixed::ZERO,
                 variant: None,
             })?;
@@ -677,6 +750,150 @@ impl World {
         rate_per_tick.raw().min(room).min(left_in_node).max(0)
     }
 
+    /// One tick of work on a site. Returns true when this tick finished the building. HP is
+    /// derived from progress rather than accumulated, so a mill's 17.14 HP/s cannot drift.
+    fn work_one_tick(&mut self, site: EntityId) -> bool {
+        let Some(building) = self.find_mut(site) else {
+            return false;
+        };
+        let Some(mut construction) = building.construction else {
+            return false;
+        };
+        construction.progress_ticks = construction.progress_ticks.saturating_add(1);
+        let total = construction.total_ticks.max(1);
+        let hp = if construction.progress_ticks >= total {
+            construction.max_hp
+        } else {
+            let scaled = i64::from(construction.max_hp) * i64::from(construction.progress_ticks)
+                / i64::from(total);
+            i32::try_from(scaled).unwrap_or(1).max(1)
+        };
+        building.hp = hp;
+        let done = construction.progress_ticks >= total;
+        building.construction = Some(construction);
+        done
+    }
+
+    /// The checks a build order has to survive: is it a building, can the player pay, is the
+    /// tile free. Returns what the order will cost and how long it will take.
+    fn check_build(
+        &self,
+        villager: EntityId,
+        unit_id: u32,
+        at: (u16, u16),
+    ) -> Result<BuildPlan, SimError> {
+        let units = self.units.as_ref().ok_or(SimError::NoTables)?;
+        let stats = units
+            .unit(unit_id)
+            .ok_or(SimError::MissingUnit { id: unit_id })?;
+        let speed = stats
+            .speed
+            .resolve(self.scale, "speed")
+            .unwrap_or(Fixed::ZERO);
+        if speed.raw() != 0 || stats.train_time <= 0 {
+            return Err(SimError::NotABuilding { unit: unit_id });
+        }
+        let total = u32::try_from(stats.train_time)
+            .ok()
+            .and_then(|seconds| seconds.checked_mul(self.tick_rate_hz))
+            .ok_or(SimError::NotABuilding { unit: unit_id })?;
+        let worker = self
+            .find(villager)
+            .ok_or(SimError::MissingEntity(villager))?;
+
+        for (dat_id, quantity) in &stats.costs {
+            if let Some(kind) = ResourceKind::from_dat_id(*dat_id) {
+                let need = u32::from(*quantity);
+                let have = self.stock(worker.player, kind);
+                if have < need {
+                    return Err(SimError::NotEnough { kind, need, have });
+                }
+            }
+        }
+
+        let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
+        if !walk.contains(at.0, at.1) || walk.blocked(at.0, at.1) {
+            return Err(SimError::SiteBlocked { tile: at });
+        }
+        let position = self.tile(at);
+        if self
+            .entities
+            .iter()
+            .any(|entity| entity.position == position)
+        {
+            return Err(SimError::SiteOccupied { tile: at });
+        }
+        // Reachability is part of "can this order run": paying for a site nobody can walk to would
+        // leave a construction that never progresses and wood the player cannot get back.
+        self.plan_path(worker.position, position)?;
+
+        Ok(BuildPlan {
+            total_ticks: total,
+            max_hp: stats.hp,
+            costs: stats.costs.clone(),
+            player: worker.player,
+        })
+    }
+
+    /// Start a building: check the price, pay it, place the site and send the builder.
+    ///
+    /// "Is this a building?" is answered from the data rather than a hard-coded class list: a
+    /// building has no speed and a positive creation time. A unit with a speed walks; a unit with
+    /// no creation time cannot be put up.
+    fn start_build(
+        &mut self,
+        villager: EntityId,
+        unit_id: u32,
+        at: (u16, u16),
+    ) -> Result<(), SimError> {
+        let BuildPlan {
+            total_ticks,
+            max_hp,
+            costs,
+            player,
+        } = self.check_build(villager, unit_id, at)?;
+
+        // Paid only after every check passed, so a refused order spends nothing.
+        for (dat_id, quantity) in &costs {
+            if let Some(kind) = ResourceKind::from_dat_id(*dat_id) {
+                let slot = &mut self.stock[usize::from(player).wrapping_sub(1)][kind.index()];
+                *slot -= u32::from(*quantity);
+            }
+        }
+
+        let position = self.tile(at);
+        let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
+        self.insert(Entity {
+            id,
+            player,
+            kind: EntityKind::Building,
+            unit: Some(unit_id),
+            position,
+            velocity: (Fixed::ZERO, Fixed::ZERO),
+            hp: 1,
+            amount: Fixed::ZERO,
+            task: Task::Idle,
+            construction: Some(Construction {
+                progress_ticks: 0,
+                total_ticks,
+                max_hp,
+            }),
+            carry: Fixed::ZERO,
+            variant: None,
+        })?;
+
+        let from = self
+            .find(villager)
+            .map(|entity| entity.position)
+            .ok_or(SimError::MissingEntity(villager))?;
+        let route = self.plan_path(from, position)?;
+        self.paths.insert(villager, route);
+        if let Some(worker) = self.find_mut(villager) {
+            worker.task = Task::Build { site: id };
+        }
+        Ok(())
+    }
+
     /// Turn a gather order into resolved state: the variant, the per-tick rate and the capacity
     /// are read from the tables here, once, and stored on the entity. Nothing in the tick loop
     /// looks at a table, and a replay cannot name its own numbers.
@@ -773,10 +990,12 @@ impl World {
                 hp,
                 amount: Fixed::from_raw(i64::from(amount) * self.scale),
                 task: Task::Idle,
+                construction: None,
                 carry: Fixed::ZERO,
                 variant: None,
             }),
             Command::Gather { villager, node } => self.start_gather(villager, node),
+            Command::Build { villager, unit, at } => self.start_build(villager, unit, at),
         }
     }
 
@@ -800,9 +1019,28 @@ impl World {
         let mut finished: Vec<EntityId> = Vec::new();
         let mut switches: Vec<(EntityId, Task)> = Vec::new();
         let mut deposits: Vec<EntityId> = Vec::new();
+        let mut builders: Vec<(EntityId, EntityId)> = Vec::new();
 
         for entity in &self.entities {
             let (dx, dy) = match entity.task {
+                Task::Build { site } => {
+                    let Some(target) = self.find(site).map(|s| s.position) else {
+                        finished.push(entity.id);
+                        continue;
+                    };
+                    let delta = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
+                        SimError::Displacement {
+                            id: entity.id,
+                            detail: err.to_string(),
+                        }
+                    })?;
+                    let next = self.next_waypoint(entity.id).unwrap_or(target);
+                    let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                    if entity.position == target && dx == 0 && dy == 0 {
+                        builders.push((entity.id, site));
+                    }
+                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                }
                 Task::Return { drop, .. } => {
                     let Some(target) = self.find(drop).map(|n| n.position) else {
                         finished.push(entity.id);
@@ -984,6 +1222,20 @@ impl World {
                 };
             }
         }
+        // Construction advances one builder-tick per tick of work, so the finish lands exactly on
+        // `create_time x tick_rate` even where HP per second is not a whole number (a mill is
+        // 600 HP over 35 s).
+        for (builder, site) in builders {
+            if self.work_one_tick(site) {
+                if let Some(building) = self.find_mut(site) {
+                    building.construction = None;
+                }
+                if let Some(entity) = self.find_mut(builder) {
+                    entity.task = Task::Idle;
+                }
+                self.paths.remove(&builder);
+            }
+        }
         for id in finished {
             if let Some(entity) = self.find_mut(id) {
                 entity.task = Task::Idle;
@@ -1076,8 +1328,21 @@ impl World {
             fnv_bytes(&mut hash, &[tag, resource]);
             fnv_bytes(&mut hash, &entity.amount.raw().to_le_bytes());
             fnv_bytes(&mut hash, &entity.carry.raw().to_le_bytes());
+            match entity.construction {
+                Some(construction) => {
+                    fnv_bytes(&mut hash, &[1u8]);
+                    fnv_bytes(&mut hash, &construction.progress_ticks.to_le_bytes());
+                    fnv_bytes(&mut hash, &construction.total_ticks.to_le_bytes());
+                    fnv_bytes(&mut hash, &construction.max_hp.to_le_bytes());
+                }
+                None => fnv_bytes(&mut hash, &[0u8]),
+            }
             match entity.task {
                 Task::Idle => fnv_bytes(&mut hash, &[0u8]),
+                Task::Build { site } => {
+                    fnv_bytes(&mut hash, &[3u8]);
+                    fnv_bytes(&mut hash, &site.0.to_le_bytes());
+                }
                 Task::Return {
                     node,
                     drop,

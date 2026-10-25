@@ -88,10 +88,26 @@ fn the_real_unit_table_loads_and_answers_known_values() {
     // building it is how long one villager takes to build it. These are published build times -
     // house 25 s, barracks 50 s, farm 15 s - which is what makes the field usable as a build time
     // at all. If the generator ever starts emitting something else, this test says so.
-    assert_eq!(units.unit(70).expect("HOUS").train_time, 25, "house build time");
-    assert_eq!(units.unit(12).expect("BRKS").train_time, 50, "barracks build time");
-    assert_eq!(units.unit(50).expect("FARM").train_time, 15, "farm build time");
-    assert_eq!(units.unit(68).expect("MILL").train_time, 35, "mill build time");
+    assert_eq!(
+        units.unit(70).expect("HOUS").train_time,
+        25,
+        "house build time"
+    );
+    assert_eq!(
+        units.unit(12).expect("BRKS").train_time,
+        50,
+        "barracks build time"
+    );
+    assert_eq!(
+        units.unit(50).expect("FARM").train_time,
+        15,
+        "farm build time"
+    );
+    assert_eq!(
+        units.unit(68).expect("MILL").train_time,
+        35,
+        "mill build time"
+    );
 
     // The lumberjack variant carries its drop site (D11), and every drop site resolves - the
     // loader enforces that, so this test doubles as proof it holds for the generated table.
