@@ -169,12 +169,15 @@ fn every_resource_node_becomes_an_entity_carrying_its_amount() {
         "one entity per map node"
     );
 
-    let total = |kind: ruage_data::ResourceKind| -> u32 {
+    // Nodes hold their remaining amount in fixed point, so totals are compared in whole units.
+    let scale = fx.settings.fixed_point_scale;
+    let total = |kind: ruage_data::ResourceKind| -> i64 {
         nodes
             .iter()
             .filter(|e| e.kind == EntityKind::Resource(kind))
-            .map(|e| e.amount)
-            .sum()
+            .map(|e| e.amount.raw())
+            .sum::<i64>()
+            / scale
     };
     // The map says 90 wood tiles at 100, 12 food at 150, 8 gold at 400, 8 stone at 300.
     assert_eq!(total(ruage_data::ResourceKind::Wood), 9_000);
@@ -218,7 +221,11 @@ fn a_node_stands_on_the_tile_the_map_put_it_on() {
             .find(|e| e.position == expected)
             .unwrap_or_else(|| panic!("no entity at the map node ({}, {})", node.x, node.y));
         assert_eq!(entity.kind, EntityKind::Resource(node.kind));
-        assert_eq!(entity.amount, node.amount);
+        assert_eq!(
+            entity.amount.raw(),
+            i64::from(node.amount) * scale,
+            "the node's amount is the map's, in fixed point"
+        );
     }
 }
 

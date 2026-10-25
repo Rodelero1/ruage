@@ -48,13 +48,38 @@ pub struct Entity {
     pub position: (Fixed, Fixed),
     pub velocity: (Fixed, Fixed),
     pub hp: i32,
-    /// What is left in a resource node. Zero for everything that is not a node.
-    pub amount: u32,
+    /// What is left in a resource node, in fixed point so a take can be fractional. Zero for
+    /// everything that is not a node.
+    pub amount: Fixed,
+    /// What the unit is doing. Buildings and nodes are always idle.
+    pub task: Task,
+    /// What the unit is carrying, in fixed point; whole resources are taken on deposit.
+    pub carry: Fixed,
+    /// The villager variant currently in use (the task's unit id), if any.
+    pub variant: Option<u32>,
+}
+
+/// Unit work in progress. A state machine small enough to hash and to explain: walking to a node
+/// and taking from it. Returning to a drop site is the next increment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Task {
+    #[default]
+    Idle,
+    Gather {
+        node: EntityId,
+        /// Resource per tick, resolved from the variant's `work_rate` at the engine scale.
+        rate_per_tick: Fixed,
+        /// The variant's carry, in whole resources.
+        carry_cap: u32,
+    },
 }
 
 /// Inputs to the simulation. A replay is a list of these with the ticks they land on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
+    /// Take from a resource node. The rate, the capacity and the variant come from the tables,
+    /// not from the command: a replay must not be able to name its own numbers.
+    Gather { villager: EntityId, node: EntityId },
     Spawn {
         id: EntityId,
         player: u8,
@@ -91,6 +116,22 @@ pub enum SimError {
     NoSpace {
         player: u8,
     },
+    MissingEntity(EntityId),
+    /// A gather order whose target is not a resource node.
+    NotAResource {
+        id: EntityId,
+    },
+    /// A gather order given to something that is not a unit.
+    NotAUnit {
+        id: EntityId,
+    },
+    /// The world was built without the tables, so it cannot resolve a gather order.
+    NoTables,
+    /// The economy names a task with no variant, or a variant with no usable rate.
+    NoVariant {
+        task: String,
+        detail: String,
+    },
 }
 
 impl fmt::Display for SimError {
@@ -118,6 +159,18 @@ impl fmt::Display for SimError {
                 f,
                 "no free tile next to player {player}'s town centre to place a villager"
             ),
+            SimError::MissingEntity(id) => write!(f, "entity {} does not exist", id.0),
+            SimError::NotAResource { id } => {
+                write!(f, "entity {} is not a resource node", id.0)
+            }
+            SimError::NotAUnit { id } => write!(f, "entity {} is not a unit", id.0),
+            SimError::NoTables => write!(
+                f,
+                "this world has no unit/economy tables, so it cannot resolve a gather order"
+            ),
+            SimError::NoVariant { task, detail } => {
+                write!(f, "gather task {task:?} cannot be resolved: {detail}")
+            }
         }
     }
 }
@@ -171,6 +224,25 @@ fn fnv_bytes(hash: &mut u64, bytes: &[u8]) {
     }
 }
 
+/// One tick of movement from `from` toward `to`, in raw fixed units on each axis.
+///
+/// Each axis is clamped independently, so the unit lands exactly on the target instead of
+/// overshooting and oscillating. This is a straight line with no obstacle test: pathing replaces
+/// it, and until then a villager can walk through a tree.
+fn step_towards(from: (Fixed, Fixed), to: (Fixed, Fixed), delta: i64) -> (i64, i64) {
+    let axis = |from: Fixed, to: Fixed| -> i64 {
+        let gap = to.raw() - from.raw();
+        if gap.abs() <= delta {
+            gap
+        } else if gap > 0 {
+            delta
+        } else {
+            -delta
+        }
+    };
+    (axis(from.0, to.0), axis(from.1, to.1))
+}
+
 /// The nearest free walkable tile around `from`, searched in ring order so the choice is
 /// deterministic and independent of any hash iteration.
 fn free_neighbour(
@@ -207,6 +279,10 @@ pub struct World {
     command_apply: CommandApply,
     entities: Vec<Entity>,
     queue: Vec<Command>,
+    /// Cloned at seed time so a command can be resolved without threading references through the
+    /// tick loop. A replay carries ids, never numbers.
+    units: Option<Units>,
+    economy: Option<Economy>,
     sim_rng: Pcg32,
     map_rng: Pcg32,
 }
@@ -221,6 +297,8 @@ impl World {
             command_apply: settings.command_apply,
             entities: Vec::new(),
             queue: Vec::new(),
+            units: None,
+            economy: None,
             sim_rng: Pcg32::new(seed, SIM_STREAM),
             map_rng: Pcg32::new(seed, MAP_STREAM),
         })
@@ -246,6 +324,41 @@ impl World {
 
     pub fn position(&self, id: EntityId) -> Option<(Fixed, Fixed)> {
         self.find(id).map(|e| e.position)
+    }
+
+    pub fn entity(&self, id: EntityId) -> Option<&Entity> {
+        self.find(id)
+    }
+
+    pub fn carry(&self, id: EntityId) -> Fixed {
+        self.find(id).map(|e| e.carry).unwrap_or(Fixed::ZERO)
+    }
+
+    /// Submit a command, refusing one that cannot be applied *at all* before it is queued. A bad
+    /// order should be an error in the caller's face, not a villager who idles for ten minutes.
+    pub fn submit_checked(&mut self, command: Command) -> Result<(), SimError> {
+        self.validate(&command)?;
+        self.submit(command);
+        Ok(())
+    }
+
+    fn validate(&self, command: &Command) -> Result<(), SimError> {
+        match command {
+            Command::Gather { villager, node } => {
+                let worker = self
+                    .find(*villager)
+                    .ok_or(SimError::MissingEntity(*villager))?;
+                if worker.kind != EntityKind::Unit {
+                    return Err(SimError::NotAUnit { id: *villager });
+                }
+                let target = self.find(*node).ok_or(SimError::MissingEntity(*node))?;
+                if !matches!(target.kind, EntityKind::Resource(_)) {
+                    return Err(SimError::NotAResource { id: *node });
+                }
+            }
+            Command::Spawn { .. } => {}
+        }
+        Ok(())
     }
 
     fn find(&self, id: EntityId) -> Option<&Entity> {
@@ -305,6 +418,8 @@ impl World {
         economy: &Economy,
         units: &Units,
     ) -> Result<(), SimError> {
+        self.units = Some(units.clone());
+        self.economy = Some(economy.clone());
         let tc_stats = economy.start.town_centre;
         let villager_stats = economy.start.villager;
         let town_centre = units
@@ -344,7 +459,10 @@ impl World {
                 position: self.tile(here),
                 velocity: (tc_speed, Fixed::ZERO),
                 hp: town_centre.hp,
-                amount: 0,
+                amount: Fixed::ZERO,
+                task: Task::Idle,
+                carry: Fixed::ZERO,
+                variant: None,
             })?;
             next_id += 1;
 
@@ -361,7 +479,10 @@ impl World {
                     position: self.tile(spot),
                     velocity: (villager_speed, Fixed::ZERO),
                     hp: villager.hp,
-                    amount: 0,
+                    amount: Fixed::ZERO,
+                    task: Task::Idle,
+                    carry: Fixed::ZERO,
+                    variant: None,
                 })?;
                 next_id += 1;
             }
@@ -379,7 +500,10 @@ impl World {
                 position: self.tile((node.x, node.y)),
                 velocity: (Fixed::ZERO, Fixed::ZERO),
                 hp: 0,
-                amount: node.amount,
+                amount: Fixed::from_raw(i64::from(node.amount) * self.scale),
+                task: Task::Idle,
+                carry: Fixed::ZERO,
+                variant: None,
             })?;
             next_id += 1;
         }
@@ -413,6 +537,87 @@ impl World {
         Ok(())
     }
 
+    /// How much a worker takes this tick: the rate, the room left under its cap, and what the
+    /// node still holds - the smallest of the three.
+    fn take_amount(&self, worker: &Entity) -> i64 {
+        let Task::Gather {
+            node,
+            rate_per_tick,
+            carry_cap,
+        } = worker.task
+        else {
+            return 0;
+        };
+        let room = i64::from(carry_cap) * self.scale - worker.carry.raw();
+        // `worker` is the villager; the quantity to bound against belongs to a different entity.
+        let left_in_node = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
+        rate_per_tick.raw().min(room).min(left_in_node).max(0)
+    }
+
+    /// Turn a gather order into resolved state: the variant, the per-tick rate and the capacity
+    /// are read from the tables here, once, and stored on the entity. Nothing in the tick loop
+    /// looks at a table, and a replay cannot name its own numbers.
+    fn start_gather(&mut self, villager: EntityId, node: EntityId) -> Result<(), SimError> {
+        let (variant_id, rate_per_tick, carry_cap) = {
+            let units = self.units.as_ref().ok_or(SimError::NoTables)?;
+            let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
+
+            let kind = match self.find(node).map(|entity| entity.kind) {
+                Some(EntityKind::Resource(kind)) => kind,
+                Some(_) => return Err(SimError::NotAResource { id: node }),
+                None => return Err(SimError::MissingEntity(node)),
+            };
+            let task_name = economy.gather.resource_task.for_kind(kind).to_owned();
+            let variant_id =
+                *economy
+                    .gather
+                    .variant
+                    .get(&task_name)
+                    .ok_or_else(|| SimError::NoVariant {
+                        task: task_name.clone(),
+                        detail: "no such task in [gather.variant]".to_owned(),
+                    })?;
+            let variant = units.unit(variant_id).ok_or_else(|| SimError::NoVariant {
+                task: task_name.clone(),
+                detail: format!("unit {variant_id} is not in the unit table"),
+            })?;
+            if variant.carry == 0 {
+                return Err(SimError::NoVariant {
+                    task: task_name.clone(),
+                    detail: "a variant that cannot carry anything cannot gather".to_owned(),
+                });
+            }
+            let rate = variant
+                .work_rate
+                .resolve(self.scale, "work_rate")
+                .map_err(|err| SimError::NoVariant {
+                    task: task_name.clone(),
+                    detail: err.to_string(),
+                })?;
+            // Exactness is the D10 invariant: a rate that does not split into whole per-tick
+            // amounts would drift, so it is an error rather than a rounded accumulation.
+            let rate_per_tick = rate
+                .div_exact(i64::from(self.tick_rate_hz))
+                .map_err(|err| SimError::NoVariant {
+                    task: task_name.clone(),
+                    detail: err.to_string(),
+                })?;
+            (variant_id, rate_per_tick, u32::from(variant.carry))
+        };
+
+        let worker = self
+            .find_mut(villager)
+            .ok_or(SimError::MissingEntity(villager))?;
+        worker.variant = Some(variant_id);
+        worker.task = Task::Gather {
+            node,
+            rate_per_tick,
+            carry_cap,
+        };
+        worker.carry = Fixed::ZERO;
+        Ok(())
+    }
+
     fn apply(&mut self, command: Command) -> Result<(), SimError> {
         match command {
             Command::Spawn {
@@ -432,8 +637,12 @@ impl World {
                 position,
                 velocity: (speed, Fixed::ZERO),
                 hp,
-                amount,
+                amount: Fixed::from_raw(i64::from(amount) * self.scale),
+                task: Task::Idle,
+                carry: Fixed::ZERO,
+                variant: None,
             }),
+            Command::Gather { villager, node } => self.start_gather(villager, node),
         }
     }
 
@@ -448,27 +657,83 @@ impl World {
         }
 
         let tick_rate = i64::from(self.tick_rate_hz);
+
+        // Decide this tick's work in id order, then apply it. Deciding first keeps the second
+        // pass free of lookups, so an entity cannot be moved *and* read from in the same tick in
+        // an order-dependent way.
         let mut deltas: Vec<(EntityId, Fixed, Fixed)> = Vec::with_capacity(self.entities.len());
+        let mut takes: Vec<(EntityId, i64)> = Vec::new();
+        let mut finished: Vec<EntityId> = Vec::new();
+
         for entity in &self.entities {
-            let dx =
-                entity
-                    .velocity
-                    .0
-                    .div_exact(tick_rate)
-                    .map_err(|err| SimError::Displacement {
-                        id: entity.id,
-                        detail: err.to_string(),
+            let (dx, dy) = match entity.task {
+                Task::Gather { node, .. } => {
+                    let Some(target) = self.find(node).map(|n| n.position) else {
+                        // The node is gone (a later increment may delete emptied nodes).
+                        finished.push(entity.id);
+                        continue;
+                    };
+                    let delta = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
+                        SimError::Displacement {
+                            id: entity.id,
+                            detail: err.to_string(),
+                        }
                     })?;
-            let dy =
-                entity
-                    .velocity
-                    .1
-                    .div_exact(tick_rate)
-                    .map_err(|err| SimError::Displacement {
-                        id: entity.id,
-                        detail: err.to_string(),
+                    let (dx, dy) = step_towards(entity.position, target, delta.raw());
+
+                    // Standing still on the node is what entitles a worker to take from it.
+                    if dx == 0 && dy == 0 {
+                        let take = self.take_amount(entity);
+                        if take > 0 {
+                            takes.push((entity.id, take));
+                        }
+                    }
+                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                }
+                Task::Idle => {
+                    let dx = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
+                        SimError::Displacement {
+                            id: entity.id,
+                            detail: err.to_string(),
+                        }
                     })?;
+                    let dy = entity.velocity.1.div_exact(tick_rate).map_err(|err| {
+                        SimError::Displacement {
+                            id: entity.id,
+                            detail: err.to_string(),
+                        }
+                    })?;
+                    (dx, dy)
+                }
+            };
             deltas.push((entity.id, dx, dy));
+        }
+
+        // Grant takes in id order, each bounded by what the node still holds *at that moment*.
+        // Reading the amount before the loop would let two villagers on a one-wood tree take one
+        // wood each: the node would clamp at zero and the pair would keep two.
+        for (worker, take) in takes {
+            let node = match self.find(worker).map(|e| e.task) {
+                Some(Task::Gather { node, .. }) => node,
+                _ => continue,
+            };
+            let granted = match self.find_mut(node) {
+                Some(target) => {
+                    let available = target.amount.raw();
+                    let granted = take.min(available);
+                    target.amount = Fixed::from_raw(available - granted);
+                    granted
+                }
+                None => 0,
+            };
+            if let Some(entity) = self.find_mut(worker) {
+                entity.carry = Fixed::from_raw(entity.carry.raw() + granted);
+            }
+        }
+        for id in finished {
+            if let Some(entity) = self.find_mut(id) {
+                entity.task = Task::Idle;
+            }
         }
 
         for (id, dx, dy) in deltas {
@@ -514,7 +779,28 @@ impl World {
                 ),
             };
             fnv_bytes(&mut hash, &[tag, resource]);
-            fnv_bytes(&mut hash, &entity.amount.to_le_bytes());
+            fnv_bytes(&mut hash, &entity.amount.raw().to_le_bytes());
+            fnv_bytes(&mut hash, &entity.carry.raw().to_le_bytes());
+            match entity.task {
+                Task::Idle => fnv_bytes(&mut hash, &[0u8]),
+                Task::Gather {
+                    node,
+                    rate_per_tick,
+                    carry_cap,
+                } => {
+                    fnv_bytes(&mut hash, &[1u8]);
+                    fnv_bytes(&mut hash, &node.0.to_le_bytes());
+                    fnv_bytes(&mut hash, &rate_per_tick.raw().to_le_bytes());
+                    fnv_bytes(&mut hash, &carry_cap.to_le_bytes());
+                }
+            }
+            match entity.variant {
+                Some(variant) => {
+                    fnv_bytes(&mut hash, &[1u8]);
+                    fnv_bytes(&mut hash, &variant.to_le_bytes());
+                }
+                None => fnv_bytes(&mut hash, &[0u8]),
+            }
             match entity.unit {
                 Some(unit) => {
                     fnv_bytes(&mut hash, &[1u8]);
