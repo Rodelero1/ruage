@@ -15,9 +15,13 @@
 //! not tunable game values — D6 governs the latter. Everything game-shaped comes from
 //! `ruage_data::Sim`.
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use ruage_data::{CommandApply, Economy, Map, ResourceKind, Sim as Settings, Units};
+
+mod path;
+pub use path::{Walk, find_path};
 use ruage_fixed::Fixed;
 
 /// Stable handle for an entity. Ordered, so iteration by id is just sorting.
@@ -141,6 +145,11 @@ pub enum SimError {
         task: String,
         detail: String,
     },
+    /// There is no walkable route between two tiles.
+    NoPath {
+        from: (u16, u16),
+        to: (u16, u16),
+    },
 }
 
 impl fmt::Display for SimError {
@@ -180,6 +189,11 @@ impl fmt::Display for SimError {
             SimError::NoVariant { task, detail } => {
                 write!(f, "gather task {task:?} cannot be resolved: {detail}")
             }
+            SimError::NoPath { from, to } => write!(
+                f,
+                "no walkable route from {:?} to {:?}: the target is walled off",
+                from, to
+            ),
         }
     }
 }
@@ -294,6 +308,10 @@ pub struct World {
     economy: Option<Economy>,
     /// Per player, per resource. Index is `player - 1`; player 0 has no stockpile.
     stock: [[u32; ResourceKind::COUNT]; 2],
+    /// Terrain, copied once at seed time. Static for a match.
+    walk: Option<Walk>,
+    /// Remaining waypoints per unit, in tiles. Part of state: it decides where the unit goes next.
+    paths: BTreeMap<EntityId, Vec<(u16, u16)>>,
     sim_rng: Pcg32,
     map_rng: Pcg32,
 }
@@ -311,6 +329,8 @@ impl World {
             units: None,
             economy: None,
             stock: [[0; ResourceKind::COUNT]; 2],
+            walk: None,
+            paths: BTreeMap::new(),
             sim_rng: Pcg32::new(seed, SIM_STREAM),
             map_rng: Pcg32::new(seed, MAP_STREAM),
         })
@@ -374,6 +394,11 @@ impl World {
                 let target = self.find(*node).ok_or(SimError::MissingEntity(*node))?;
                 if !matches!(target.kind, EntityKind::Resource(_)) {
                     return Err(SimError::NotAResource { id: *node });
+                }
+                // A walled-off node is refused here rather than discovered ten seconds later by a
+                // villager walking into a wall and giving up.
+                if let Some(position) = self.find(*villager).map(|e| e.position) {
+                    self.plan_path(position, target.position)?;
                 }
             }
             Command::Spawn { .. } => {}
@@ -440,6 +465,7 @@ impl World {
     ) -> Result<(), SimError> {
         self.units = Some(units.clone());
         self.economy = Some(economy.clone());
+        self.walk = Some(Walk::from_map(map));
         let tc_stats = economy.start.town_centre;
         let villager_stats = economy.start.villager;
         let town_centre = units
@@ -605,6 +631,35 @@ impl World {
             .map(|entity| entity.id)
     }
 
+    /// The tile a world position sits on.
+    fn tile_of(&self, position: (Fixed, Fixed)) -> (u16, u16) {
+        (
+            u16::try_from(position.0.raw() / self.scale).unwrap_or(0),
+            u16::try_from(position.1.raw() / self.scale).unwrap_or(0),
+        )
+    }
+
+    /// A route between two positions, or `NoPath` when the target is walled off. Computed from the
+    /// terrain copy taken at seed time; the map is static for a match.
+    fn plan_path(
+        &self,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+    ) -> Result<Vec<(u16, u16)>, SimError> {
+        let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
+        let (start, goal) = (self.tile_of(from), self.tile_of(to));
+        find_path(walk, start, goal).ok_or(SimError::NoPath {
+            from: start,
+            to: goal,
+        })
+    }
+
+    /// The next waypoint of a unit's route, as a world position.
+    fn next_waypoint(&self, id: EntityId) -> Option<(Fixed, Fixed)> {
+        let (x, y) = *self.paths.get(&id)?.first()?;
+        Some(self.tile((x, y)))
+    }
+
     /// How much a worker takes this tick: the rate, the room left under its cap, and what the
     /// node still holds - the smallest of the three.
     fn take_amount(&self, worker: &Entity) -> i64 {
@@ -672,6 +727,17 @@ impl World {
                 })?;
             (variant_id, rate_per_tick, u32::from(variant.carry))
         };
+
+        let from = self
+            .find(villager)
+            .map(|entity| entity.position)
+            .ok_or(SimError::MissingEntity(villager))?;
+        let to = self
+            .find(node)
+            .map(|entity| entity.position)
+            .ok_or(SimError::MissingEntity(node))?;
+        let route = self.plan_path(from, to)?;
+        self.paths.insert(villager, route);
 
         let worker = self
             .find_mut(villager)
@@ -748,8 +814,9 @@ impl World {
                             detail: err.to_string(),
                         }
                     })?;
-                    let (dx, dy) = step_towards(entity.position, target, delta.raw());
-                    if dx == 0 && dy == 0 {
+                    let next = self.next_waypoint(entity.id).unwrap_or(target);
+                    let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                    if dx == 0 && dy == 0 && next == target {
                         deposits.push(entity.id);
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))
@@ -770,10 +837,12 @@ impl World {
                             detail: err.to_string(),
                         }
                     })?;
-                    let (dx, dy) = step_towards(entity.position, target, delta.raw());
+                    let next = self.next_waypoint(entity.id).unwrap_or(target);
+                    let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                    let at_node = entity.position == target;
 
                     // Standing still on the node is what entitles a worker to take from it.
-                    if dx == 0 && dy == 0 {
+                    if at_node && dx == 0 && dy == 0 {
                         let take = self.take_amount(entity);
                         let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
                         if take > 0 {
@@ -842,6 +911,22 @@ impl World {
             }
         }
         for (id, task) in switches {
+            // A worker heading home needs a route to the drop site, not just the final position.
+            if let Task::Return { drop, .. } = task {
+                let ends = (
+                    self.find(id).map(|entity| entity.position),
+                    self.find(drop).map(|entity| entity.position),
+                );
+                let route = match ends {
+                    (Some(from), Some(to)) => self.plan_path(from, to).ok(),
+                    _ => None,
+                };
+                if let Some(route) = route {
+                    self.paths.insert(id, route);
+                }
+            } else {
+                self.paths.remove(&id);
+            }
             if let Some(entity) = self.find_mut(id) {
                 entity.task = task;
             }
@@ -871,6 +956,21 @@ impl World {
             }
             let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
             let scale = self.scale;
+            // Going back to work needs a fresh route from the drop site: without one the villager
+            // walks at the node in a straight line and straight through whatever it went around.
+            if node_left > 0 {
+                let ends = (
+                    self.find(id).map(|entity| entity.position),
+                    self.find(node).map(|entity| entity.position),
+                );
+                let route = match ends {
+                    (Some(here), Some(there)) => self.plan_path(here, there).ok(),
+                    _ => None,
+                };
+                if let Some(route) = route {
+                    self.paths.insert(id, route);
+                }
+            }
             if let Some(entity) = self.find_mut(id) {
                 entity.carry = Fixed::from_raw(raw - whole * scale);
                 entity.task = if node_left > 0 {
@@ -890,6 +990,7 @@ impl World {
             }
         }
 
+        let mut reached: Vec<(EntityId, (Fixed, Fixed))> = Vec::new();
         for (id, dx, dy) in deltas {
             let entity = self
                 .find_mut(id)
@@ -904,6 +1005,33 @@ impl World {
                 .1
                 .checked_add(dy)
                 .map_err(|_| SimError::Overflow(id))?;
+            reached.push((id, entity.position));
+        }
+
+        // A waypoint reached is a waypoint spent. Done after the move, so a unit that lands on it
+        // this tick starts toward the next one on the next tick.
+        let scale = self.scale;
+        let spent: Vec<EntityId> = reached
+            .iter()
+            .filter(|(id, position)| {
+                self.paths
+                    .get(id)
+                    .and_then(|path| path.first())
+                    .map(|&(x, y)| {
+                        *position
+                            == (
+                                Fixed::from_raw(i64::from(x) * scale),
+                                Fixed::from_raw(i64::from(y) * scale),
+                            )
+                    })
+                    .unwrap_or(false)
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for id in spent {
+            if let Some(path) = self.paths.get_mut(&id) {
+                path.remove(0);
+            }
         }
 
         self.tick += 1;
@@ -919,6 +1047,14 @@ impl World {
         for row in &self.stock {
             for value in row {
                 fnv_bytes(&mut hash, &value.to_le_bytes());
+            }
+        }
+        for (id, path) in &self.paths {
+            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+            fnv_bytes(&mut hash, &(path.len() as u32).to_le_bytes());
+            for (x, y) in path {
+                fnv_bytes(&mut hash, &x.to_le_bytes());
+                fnv_bytes(&mut hash, &y.to_le_bytes());
             }
         }
         for entity in &self.entities {
