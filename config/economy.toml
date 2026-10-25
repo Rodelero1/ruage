@@ -28,6 +28,15 @@ rate_from = "dat"
 
 carry_from = "dat"
 drop_sites_from = "dat_variant"
+
+[gather.resource_task]
+# Which gather task a node of each map kind presents. Our map (D15) has berry bushes as its food,
+# so food is foraged; hunting and fishing exist as variants but nothing on this map triggers them.
+# Every value must be a key in [gather.variant] below - the loader refuses a dangling name.
+wood = "wood"
+food = "forage"
+gold = "gold"
+stone = "stone"
 # Lookup must use the TASK VARIANT, not the base villager: the lumberjack lists the lumber
 # camp (562), the miner the mining camp (584). Base VMBAS lists only TC + mill.
 

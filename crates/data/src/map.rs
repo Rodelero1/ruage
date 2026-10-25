@@ -280,6 +280,26 @@ pub fn load_map_str(text: &str, path: &str) -> Result<Map, ConfigError> {
         ));
     }
 
+    // A resource under a town centre is unreachable: the building occupies the tile, and the
+    // map loader alone can see both, so this is the only place the clash can be caught.
+    for node in &resources {
+        if let Some(town) = raw
+            .map
+            .town_centre
+            .iter()
+            .find(|town| town.x == node.x && town.y == node.y)
+        {
+            return Err(invalid(
+                path,
+                "map.resource",
+                format!(
+                    "{:?} at ({}, {}) sits under player {}'s town centre",
+                    node.kind, node.x, node.y, town.player
+                ),
+            ));
+        }
+    }
+
     Ok(Map {
         resources,
         town_centres: raw

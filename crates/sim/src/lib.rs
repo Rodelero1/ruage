@@ -17,7 +17,7 @@
 
 use std::fmt;
 
-use ruage_data::{CommandApply, Economy, Map, Sim as Settings, Units};
+use ruage_data::{CommandApply, Economy, Map, ResourceKind, Sim as Settings, Units};
 use ruage_fixed::Fixed;
 
 /// Stable handle for an entity. Ordered, so iteration by id is just sorting.
@@ -30,6 +30,8 @@ pub struct EntityId(pub u32);
 pub enum EntityKind {
     Building,
     Unit,
+    /// A tree, a berry bush or a mine: a place that holds a quantity and can be worked down.
+    Resource(ResourceKind),
 }
 
 /// The subset of an entity the tick loop touches today. Fixed-point only (D9).
@@ -39,11 +41,15 @@ pub struct Entity {
     /// 1 or 2. Zero is reserved for entities a test spawns with no owner.
     pub player: u8,
     pub kind: EntityKind,
-    /// The dat unit id this entity is an instance of (`config/gamedata/units.toml`).
-    pub unit: u32,
+    /// The dat unit id this entity is an instance of (`config/gamedata/units.toml`). `None` for
+    /// a resource node: **unit 0 is a real dat unit**, so a zero here would read as a genuine id
+    /// and hand a tree the stats of an academy.
+    pub unit: Option<u32>,
     pub position: (Fixed, Fixed),
     pub velocity: (Fixed, Fixed),
     pub hp: i32,
+    /// What is left in a resource node. Zero for everything that is not a node.
+    pub amount: u32,
 }
 
 /// Inputs to the simulation. A replay is a list of these with the ticks they land on.
@@ -53,10 +59,11 @@ pub enum Command {
         id: EntityId,
         player: u8,
         kind: EntityKind,
-        unit: u32,
+        unit: Option<u32>,
         position: (Fixed, Fixed),
         speed: Fixed,
         hp: i32,
+        amount: u32,
     },
 }
 
@@ -279,10 +286,11 @@ impl World {
             id,
             player: 0,
             kind: EntityKind::Unit,
-            unit: 0,
+            unit: None,
             position: (Fixed::ZERO, Fixed::ZERO),
             speed,
             hp,
+            amount: 0,
         })
     }
 
@@ -320,7 +328,10 @@ impl World {
         let mut centres = map.town_centres.clone();
         centres.sort_by_key(|centre| centre.player);
 
-        let mut used = std::collections::BTreeSet::new();
+        // Node tiles are taken before anyone is placed, so a villager never starts inside a
+        // mine or a berry bush. The nodes themselves are inserted after the players for ids.
+        let mut used: std::collections::BTreeSet<(u16, u16)> =
+            map.resources.iter().map(|node| (node.x, node.y)).collect();
         let mut next_id = 1u32;
         for centre in centres {
             let here = (centre.x, centre.y);
@@ -329,10 +340,11 @@ impl World {
                 id: EntityId(next_id),
                 player: centre.player,
                 kind: EntityKind::Building,
-                unit: tc_stats,
+                unit: Some(tc_stats),
                 position: self.tile(here),
                 velocity: (tc_speed, Fixed::ZERO),
                 hp: town_centre.hp,
+                amount: 0,
             })?;
             next_id += 1;
 
@@ -345,13 +357,31 @@ impl World {
                     id: EntityId(next_id),
                     player: centre.player,
                     kind: EntityKind::Unit,
-                    unit: villager_stats,
+                    unit: Some(villager_stats),
                     position: self.tile(spot),
                     velocity: (villager_speed, Fixed::ZERO),
                     hp: villager.hp,
+                    amount: 0,
                 })?;
                 next_id += 1;
             }
+        }
+
+        // Resource nodes are entities too: a villager targets one by id, and the amount has to
+        // live in state because gathering spends it. Map order, not sorted, so two runs agree
+        // for the same file.
+        for node in &map.resources {
+            self.insert(Entity {
+                id: EntityId(next_id),
+                player: 0,
+                kind: EntityKind::Resource(node.kind),
+                unit: None,
+                position: self.tile((node.x, node.y)),
+                velocity: (Fixed::ZERO, Fixed::ZERO),
+                hp: 0,
+                amount: node.amount,
+            })?;
+            next_id += 1;
         }
         Ok(())
     }
@@ -393,6 +423,7 @@ impl World {
                 position,
                 speed,
                 hp,
+                amount,
             } => self.insert(Entity {
                 id,
                 player,
@@ -401,6 +432,7 @@ impl World {
                 position,
                 velocity: (speed, Fixed::ZERO),
                 hp,
+                amount,
             }),
         }
     }
@@ -468,14 +500,28 @@ impl World {
         for entity in &self.entities {
             fnv_bytes(&mut hash, &entity.id.0.to_le_bytes());
             fnv_bytes(&mut hash, &entity.player.to_le_bytes());
-            fnv_bytes(
-                &mut hash,
-                &[match entity.kind {
-                    EntityKind::Building => b'b',
-                    EntityKind::Unit => b'u',
-                }],
-            );
-            fnv_bytes(&mut hash, &entity.unit.to_le_bytes());
+            let (tag, resource) = match entity.kind {
+                EntityKind::Building => (b'b', 0u8),
+                EntityKind::Unit => (b'u', 0),
+                EntityKind::Resource(kind) => (
+                    b'r',
+                    match kind {
+                        ResourceKind::Wood => 1,
+                        ResourceKind::Food => 2,
+                        ResourceKind::Gold => 3,
+                        ResourceKind::Stone => 4,
+                    },
+                ),
+            };
+            fnv_bytes(&mut hash, &[tag, resource]);
+            fnv_bytes(&mut hash, &entity.amount.to_le_bytes());
+            match entity.unit {
+                Some(unit) => {
+                    fnv_bytes(&mut hash, &[1u8]);
+                    fnv_bytes(&mut hash, &unit.to_le_bytes());
+                }
+                None => fnv_bytes(&mut hash, &[0u8]),
+            }
             fnv_bytes(&mut hash, &entity.position.0.raw().to_le_bytes());
             fnv_bytes(&mut hash, &entity.position.1.raw().to_le_bytes());
             fnv_bytes(&mut hash, &entity.velocity.0.raw().to_le_bytes());
@@ -601,10 +647,11 @@ overrides = "overrides.toml"
                 id: EntityId(2),
                 player: 1,
                 kind: EntityKind::Unit,
-                unit: 83,
+                unit: Some(83),
                 position: (Fixed::ZERO, Fixed::ZERO),
                 speed: Fixed::parse("0.8", S).unwrap(),
                 hp: 25,
+                amount: 0,
             });
         }
         let mut hashes = Vec::new();
@@ -650,10 +697,11 @@ overrides = "overrides.toml"
             id: EntityId(1),
             player: 1,
             kind: EntityKind::Unit,
-            unit: 83,
+            unit: Some(83),
             position: (Fixed::ZERO, Fixed::ZERO),
             speed: Fixed::ZERO,
             hp: 10,
+            amount: 0,
         });
         assert!(
             w.entities().is_empty(),
@@ -670,10 +718,11 @@ overrides = "overrides.toml"
             id: EntityId(1),
             player: 1,
             kind: EntityKind::Unit,
-            unit: 83,
+            unit: Some(83),
             position: (Fixed::ZERO, Fixed::ZERO),
             speed: Fixed::ZERO,
             hp: 10,
+            amount: 0,
         });
         assert_eq!(
             w.entities().len(),

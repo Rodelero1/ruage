@@ -139,6 +139,17 @@ fn a_map_needs_a_town_centre_for_each_player() {
 }
 
 #[test]
+fn a_resource_cannot_sit_under_a_town_centre() {
+    // Both are on grass, so nothing else in the loader notices - and a tree inside the town
+    // centre is a villager who can never reach it.
+    let bad = GOOD.replace("tiles = [[0, 0]]", "tiles = [[3, 3]]");
+    let err = load_map_str(&bad, "map.toml")
+        .expect_err("a resource on the town-centre tile must be refused")
+        .to_string();
+    assert!(err.contains("town centre"), "got: {err}");
+}
+
+#[test]
 fn wood_must_stand_on_forest() {
     let bad = GOOD.replace("tiles = [[1, 1], [2, 1]]", "tiles = [[0, 1]]");
     let err = load_map_str(&bad, "map.toml")

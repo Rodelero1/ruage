@@ -25,12 +25,20 @@ drop_sites_from = "dat_variant"
 [gather.variant]
 wood = 123
 gold = 579
+stone = 124
+forage = 120
 [build]
 hp_per_second_per_villager = -1.0
 repair_hp_per_second = -1.0
 [decay]
 enabled = true
 rate_from = "dat"
+[gather.resource_task]
+wood = "wood"
+food = "forage"
+gold = "gold"
+stone = "stone"
+
 [start]
 town_centre = 109
 villager = 83
@@ -148,6 +156,42 @@ fn the_real_economy_names_the_starting_units() {
     assert_eq!(economy.start.town_centre, 109, "RTWC");
     assert_eq!(economy.start.villager, 83, "VMBAS");
     assert_eq!(economy.start.villagers_per_player, 3);
+}
+
+#[test]
+fn the_real_economy_maps_each_resource_kind_to_a_gather_task() {
+    let economy = load_economy_file(&repo("config/economy.toml")).expect("economy.toml loads");
+    assert_eq!(economy.gather.resource_task.wood, "wood");
+    assert_eq!(
+        economy.gather.resource_task.food, "forage",
+        "berries are foraged"
+    );
+    assert_eq!(economy.gather.resource_task.gold, "gold");
+    assert_eq!(economy.gather.resource_task.stone, "stone");
+    // And every one of them is a real variant, which is what the loader guarantees.
+    for task in [
+        &economy.gather.resource_task.wood,
+        &economy.gather.resource_task.food,
+        &economy.gather.resource_task.gold,
+        &economy.gather.resource_task.stone,
+    ] {
+        assert!(
+            economy.gather.variant.contains_key(task),
+            "{task} is not a variant"
+        );
+    }
+}
+
+#[test]
+fn a_resource_task_that_is_not_a_variant_is_refused() {
+    let bad = GOOD.replace("food = \"forage\"", "food = \"berries\"");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("a task name that names no variant must be refused")
+        .to_string();
+    assert!(
+        err.contains("berries"),
+        "the error should name the task, got: {err}"
+    );
 }
 
 #[test]

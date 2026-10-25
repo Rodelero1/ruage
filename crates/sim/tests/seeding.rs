@@ -49,12 +49,14 @@ fn a_seeded_map_gives_each_player_a_town_centre_and_three_villagers() {
     let Some(fx) = fixture() else { return };
     let world = seeded(&fx);
 
-    assert_eq!(
-        world.entities().len(),
-        8,
-        "2 town centres + 3 villagers each"
-    );
-    let players: Vec<u8> = world.entities().iter().map(|e| e.player).collect();
+    let owned_count = world.entities().iter().filter(|e| e.player != 0).count();
+    assert_eq!(owned_count, 8, "2 town centres + 3 villagers each");
+    let players: Vec<u8> = world
+        .entities()
+        .iter()
+        .filter(|e| e.player != 0)
+        .map(|e| e.player)
+        .collect();
     assert_eq!(players, vec![1, 1, 1, 1, 2, 2, 2, 2], "grouped by player");
 
     for player in [1, 2] {
@@ -79,12 +81,16 @@ fn ids_run_player_by_player_in_role_order() {
     let world = seeded(&fx);
     let ids: Vec<u32> = world.entities().iter().map(|e| e.id.0).collect();
     assert_eq!(
-        ids,
-        vec![1, 2, 3, 4, 5, 6, 7, 8],
-        "ids are assigned, not hashed"
+        ids[..8],
+        [1, 2, 3, 4, 5, 6, 7, 8],
+        "players get ids first, then resource nodes"
     );
-    assert_eq!(world.entities()[0].unit, fx.economy.start.town_centre);
-    assert_eq!(world.entities()[1].unit, fx.economy.start.villager);
+    assert!(
+        ids.windows(2).all(|pair| pair[0] < pair[1]),
+        "the entity list is in ascending id order"
+    );
+    assert_eq!(world.entities()[0].unit, Some(fx.economy.start.town_centre));
+    assert_eq!(world.entities()[1].unit, Some(fx.economy.start.villager));
 }
 
 #[test]
@@ -94,7 +100,7 @@ fn villagers_carry_the_stats_from_the_unit_table() {
     let villager = fx.units.unit(fx.economy.start.villager).expect("VMBAS");
     let tc = fx.units.unit(fx.economy.start.town_centre).expect("RTWC");
 
-    for entity in world.entities() {
+    for entity in world.entities().iter().filter(|e| e.player != 0) {
         let stats = if entity.kind == EntityKind::Building {
             tc
         } else {
@@ -121,7 +127,7 @@ fn nobody_starts_in_a_forest() {
     let Some(fx) = fixture() else { return };
     let world = seeded(&fx);
     let scale = fx.settings.fixed_point_scale;
-    for entity in world.entities() {
+    for entity in world.entities().iter().filter(|e| e.player != 0) {
         let x = u16::try_from(entity.position.0.raw() / scale).expect("in range");
         let y = u16::try_from(entity.position.1.raw() / scale).expect("in range");
         assert_ne!(
@@ -143,6 +149,99 @@ fn villagers_do_not_share_a_tile() {
             seen.insert(entity.position),
             "two entities start on the same tile: {:?}",
             entity.position
+        );
+    }
+}
+
+#[test]
+fn every_resource_node_becomes_an_entity_carrying_its_amount() {
+    let Some(fx) = fixture() else { return };
+    let world = seeded(&fx);
+
+    let nodes: Vec<_> = world
+        .entities()
+        .iter()
+        .filter(|e| matches!(e.kind, EntityKind::Resource(_)))
+        .collect();
+    assert_eq!(
+        nodes.len(),
+        fx.map.resources.len(),
+        "one entity per map node"
+    );
+
+    let total = |kind: ruage_data::ResourceKind| -> u32 {
+        nodes
+            .iter()
+            .filter(|e| e.kind == EntityKind::Resource(kind))
+            .map(|e| e.amount)
+            .sum()
+    };
+    // The map says 90 wood tiles at 100, 12 food at 150, 8 gold at 400, 8 stone at 300.
+    assert_eq!(total(ruage_data::ResourceKind::Wood), 9_000);
+    assert_eq!(total(ruage_data::ResourceKind::Food), 1_800);
+    assert_eq!(total(ruage_data::ResourceKind::Gold), 3_200);
+    assert_eq!(total(ruage_data::ResourceKind::Stone), 2_400);
+}
+
+#[test]
+fn a_resource_node_has_no_unit_id() {
+    // Unit 0 is a real dat unit, so `unit: 0` would read as a genuine id and hand a tree the
+    // stats of an academy. Absence has to be representable.
+    let Some(fx) = fixture() else { return };
+    let world = seeded(&fx);
+    for node in world
+        .entities()
+        .iter()
+        .filter(|e| matches!(e.kind, EntityKind::Resource(_)))
+    {
+        assert_eq!(node.unit, None, "node {} claims a unit id", node.id.0);
+    }
+    for entity in world.entities().iter().filter(|e| e.player != 0) {
+        assert!(entity.unit.is_some(), "a player entity must have a unit id");
+    }
+}
+
+#[test]
+fn a_node_stands_on_the_tile_the_map_put_it_on() {
+    let Some(fx) = fixture() else { return };
+    let world = seeded(&fx);
+    let scale = fx.settings.fixed_point_scale;
+
+    for node in &fx.map.resources {
+        let expected = (
+            ruage_fixed::Fixed::from_raw(i64::from(node.x) * scale),
+            ruage_fixed::Fixed::from_raw(i64::from(node.y) * scale),
+        );
+        let entity = world
+            .entities()
+            .iter()
+            .find(|e| e.position == expected)
+            .unwrap_or_else(|| panic!("no entity at the map node ({}, {})", node.x, node.y));
+        assert_eq!(entity.kind, EntityKind::Resource(node.kind));
+        assert_eq!(entity.amount, node.amount);
+    }
+}
+
+#[test]
+fn a_villager_never_starts_inside_a_resource_node() {
+    let Some(fx) = fixture() else { return };
+    let world = seeded(&fx);
+    let mut node_tiles = std::collections::BTreeSet::new();
+    for node in &fx.map.resources {
+        node_tiles.insert((node.x, node.y));
+    }
+    let scale = fx.settings.fixed_point_scale;
+    for entity in world
+        .entities()
+        .iter()
+        .filter(|e| e.kind == EntityKind::Unit)
+    {
+        let x = u16::try_from(entity.position.0.raw() / scale).expect("in range");
+        let y = u16::try_from(entity.position.1.raw() / scale).expect("in range");
+        assert!(
+            !node_tiles.contains(&(x, y)),
+            "villager {} starts inside a resource node at ({x}, {y})",
+            entity.id.0
         );
     }
 }

@@ -81,9 +81,10 @@ fn runs_a_seeded_map_and_reports_tick_entities_and_hash() {
     let args = seeded_args("7", "100");
     let text = run(&as_refs(&args));
     assert!(text.contains("tick=100"), "stdout was:\n{text}");
+    // 2 town centres + 3 villagers each = 8, plus the 118 resource nodes the map declares.
     assert!(
-        text.contains("entities=8"),
-        "2 town centres + 3 villagers each:\n{text}"
+        text.contains("entities=126"),
+        "8 player entities + 118 nodes:\n{text}"
     );
     assert!(text.contains("players=2"), "stdout was:\n{text}");
     assert!(text.contains("hash="), "stdout was:\n{text}");

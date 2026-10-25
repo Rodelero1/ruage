@@ -88,6 +88,12 @@ strict Rust loaders
 path syntax remains documented but unimplemented — so the rule is enforced for four files of six.
 Do not read a green `cargo test` as "the config layer is complete".
 
+`economy.toml` also carries `[gather.resource_task]`: which gather task a node of each map kind
+presents (our map's food is berries, so `food = "forage"`, while hunting and fishing exist as
+variants nothing on this map triggers). The loader refuses a name that is not a key in
+`[gather.variant]`, so a typo is a startup failure rather than a villager who walks to a tree and
+never gathers.
+
 `economy.toml` also carries `[start]` — the town centre id, the villager id and how many
 villagers each player begins with. Those are the last ids that were in danger of being written
 into code; the engine now asks the config what a match begins with, and `World::seed_from` places

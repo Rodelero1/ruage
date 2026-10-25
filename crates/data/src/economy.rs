@@ -46,6 +46,41 @@ pub struct Gather {
     pub drop_sites_from: String,
     /// Task name → the villager-variant unit id that performs it (D11).
     pub variant: BTreeMap<String, u32>,
+    /// Which gather task a node of each map resource kind presents.
+    pub resource_task: ResourceTask,
+}
+
+/// The join between `config/map.toml` (wood/food/gold/stone) and the variant table above. Food is
+/// not a task: our map's food is berries, so it is foraged, while hunting and fishing exist as
+/// variants nothing on this map triggers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceTask {
+    pub wood: String,
+    pub food: String,
+    pub gold: String,
+    pub stone: String,
+}
+
+impl ResourceTask {
+    /// The task name for a map resource kind. Total, so a new kind cannot be added to the map
+    /// without this failing to compile.
+    pub fn for_kind(&self, kind: crate::ResourceKind) -> &str {
+        match kind {
+            crate::ResourceKind::Wood => &self.wood,
+            crate::ResourceKind::Food => &self.food,
+            crate::ResourceKind::Gold => &self.gold,
+            crate::ResourceKind::Stone => &self.stone,
+        }
+    }
+
+    fn entries(&self) -> [(&'static str, &String); 4] {
+        [
+            ("wood", &self.wood),
+            ("food", &self.food),
+            ("gold", &self.gold),
+            ("stone", &self.stone),
+        ]
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -101,6 +136,16 @@ struct RawGather {
     carry_from: String,
     drop_sites_from: String,
     variant: BTreeMap<String, u32>,
+    resource_task: RawResourceTask,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawResourceTask {
+    wood: String,
+    food: String,
+    gold: String,
+    stone: String,
 }
 
 #[derive(Deserialize)]
@@ -241,6 +286,24 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         ));
     }
 
+    let resource_task = ResourceTask {
+        wood: raw.gather.resource_task.wood,
+        food: raw.gather.resource_task.food,
+        gold: raw.gather.resource_task.gold,
+        stone: raw.gather.resource_task.stone,
+    };
+    // A task name that names no variant is a typo that would otherwise surface much later, as a
+    // villager who walks to a tree and never gathers.
+    for (kind, task) in resource_task.entries() {
+        if !raw.gather.variant.contains_key(task) {
+            return Err(invalid(
+                path,
+                "gather.resource_task",
+                format!("{kind} names task {task:?}, which is not in [gather.variant]"),
+            ));
+        }
+    }
+
     Ok(Economy {
         schema: raw.schema,
         farm: Farm {
@@ -253,6 +316,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             carry_from: raw.gather.carry_from,
             drop_sites_from: raw.gather.drop_sites_from,
             variant: raw.gather.variant,
+            resource_task,
         },
         build: Build {
             hp_per_second_per_villager: MaybeFixed::from_f64(raw.build.hp_per_second_per_villager),
