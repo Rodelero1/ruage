@@ -91,6 +91,36 @@ generates parsers for C#, Python, Java, JS, Go and Rust. For our own future read
 (`.aoe2spgame` in step 2b, `.scx` per D15), writing definitions is far cheaper than hand-rolling a
 parser, and it produces the documentation for free.
 
+## Deducing the tick rate from quantised fields (measured 2026-10-23)
+
+The idea: if a duration is *produced* by the tick loop, it is an integer number of ticks divided by
+the rate, so the greatest common divisor of many such durations is the tick period — clock recovery
+from quantised data. Run over every float field in the generated unit table:
+
+| field | distinct values | gcd | reads as |
+|---|---|---|---|
+| `reload` | 20 | **0.05 s** | a 50 ms grain |
+| `speed` | 56 | 0.001 s | authored to 3 decimals, tiles/s |
+| `work_rate` | 19 | 0.0001 s | authored to 4 decimals |
+| `range` | 18 | 0.01 s | authored to 2 decimals |
+| `los` | 19 | 1 s | authored in whole tiles |
+
+**The one hit.** All 20 distinct reload times are multiples of exactly 0.05 s, and two of them —
+`0.25` and `3.45` — are **not** multiples of 0.1. So the grid those values were quantised to is
+50 ms, not 100 ms: at 20 Hz they are whole tick counts (0.25 = 5, 0.9 = 18, 1.7 = 34, 2.5 = 50,
+3.45 = 69, 6.5 = 130, 10.0 = 200).
+
+**What that proves, and what it does not.** It excludes 10 Hz and anything coarser, and it shows
+the quantisation step is 50 ms. It does **not** prove 20 Hz: a designer writing reloads in 50 ms
+steps produces identical numbers, and 0.05 s is also a whole number of 60 Hz ticks (3). The other
+four fields are useless here — they show authoring granularity, and a gcd across all fields just
+collapses to the coarsest one.
+
+**To settle U12**, an observable the engine *computes* is needed rather than one a designer types:
+a recorded game's periodic sync records (decisive, needs one `.aoe2record` made on the Windows
+box), a save's task progress at a known game time (the save reader currently gets only player
+names), or a decompiled constant.
+
 ## Recommendation for D1
 
 Choose **G1 (own deterministic engine)**.
