@@ -14,9 +14,13 @@ use std::path::Path;
 use ruage_fixed::Fixed;
 use serde::Deserialize;
 
+mod combat;
 mod economy;
 mod map;
 mod units;
+pub use combat::{
+    AttackTiming, Buildings, Combat, Damage, Elevation, load_combat_file, load_combat_str,
+};
 pub use economy::{
     Build, Decay, Economy, Farm, Gather, Population, ResourceTask, Start, load_economy_file,
     load_economy_str,

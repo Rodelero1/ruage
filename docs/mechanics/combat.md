@@ -106,3 +106,85 @@ animation-cancelling behaviour is not, and is only needed for G2.
 Buildings carry armour like units (`BRKS` 0/7, `MRKT` 1/8) and some have attack
 (`RTWC` pierce 5, range 6, reload 2.0). Siege bonus damage against buildings is expressed
 as extra attack classes on the siege unit, not as a building flag.
+
+---
+
+# Implementation (step-5 slice)
+
+Status: melee only, no elevation, no projectiles. `combat.toml` supplies the constants; the
+per-unit arrays come from `units.toml`.
+
+## The rule as implemented
+
+```
+damage = max(minimum, sum over the attacker's attack classes of max(0, attack - armour_in_that_class))
+```
+
+That is the published formula with `k_elev = 1`, `k_mul_i = 1`, `k_res = 0` and `k_cracked = 1`,
+which is the AoC/HD subset — the elevation multipliers are loaded from `combat.toml` and unused
+because the slice has no terrain heights. Classes the target does not list get
+`damage.armour_missing_sentinel` (10000), which contributes nothing.
+
+Worked examples, straight from the tables:
+
+| pair | classes that land | damage |
+|---|---|---|
+| spearman (74) -> villager (83) | class 4: 4 - 0 | **4** |
+| villager (83) -> spearman (74) | class 11: 3 - 0 | **3** |
+| spearman (74) -> house (70) | class 4: 4 - 0 (the house's 7 is *pierce*, class 3) | **4** |
+| spearman (74) -> town centre (109) | class 4: 4 - 3 | **1** |
+
+The house line is worth reading twice: a building's armour does not stop a spear in this class, and
+the test pinned 1 until the array was read again.
+
+## Time to kill
+
+`reload` is the interval between blows, in seconds, read as ticks at the match rate: a spearman's
+2.0 s is 40 ticks at 20 Hz.
+
+The countdown is decremented **before** the check, so a blow lands on the tick the counter reaches
+zero. Firing one tick later makes the interval 41 ticks — a 1-tick error per swing that only shows
+up when something is timed to the blow, and it did: seven hits of four against 25 HP must span
+6 x 40 = 240 ticks, and the first run measured 246.
+
+A spearman needs 7 hits (25 HP, 4 damage), so a villager dies 240 ticks — **12.0 s** — after the
+first blow. That figure is derived, not published; the §6.1 10% band applies when it is compared
+with a recording of the real game, which does not exist yet.
+
+## Refusals
+
+`FriendlyFire` (same player), `NotATarget` (resources are gathered, not fought), `Unarmed` (no
+attack array, no unit id, or no positive reload). Damage and reload are resolved **at order time**
+and carried in the task, so the tick loop never reads a table and a replay cannot name its own
+numbers.
+
+## The dead
+
+Death is `hp <= 0` on a unit or building, and the sweep happens at the **end of the tick**, not
+where the damage lands: an entity that dies mid-tick still has a position to update and waypoints to
+spend, and removing it earlier panicked with "entity list is stable within a tick". Resource nodes
+are exempt — their HP is zero by design and their amount is what matters. Attackers whose target is
+gone stand down on the following tick.
+
+## A bug this work uncovered: idle units walked away
+
+`Entity.velocity` was doing two jobs — a unit's *speed* and a mover's current motion — and the
+`Idle` task moved an entity by its velocity. Seeding gave every villager its speed as velocity, so
+**every idle villager marched east forever**. Nothing caught it because every earlier test gave its
+villagers a task immediately; the combat test was the first to leave one standing.
+
+The fix separates the two: `Entity.speed` is a capability, `Entity.velocity` is a motion. Seeded,
+trained and placed units have zero velocity; only `Command::Spawn` — the movement test hook, whose
+whole purpose is a nameless mover — still sets velocity. Regression test:
+`an_idle_villager_stands_still` in `crates/sim/tests/seeding.rs`, which failed with entity 2 eight
+tiles from where it started.
+
+## Deliberate limits in this slice
+
+- **No elevation** — no terrain heights to apply it to.
+- **No projectiles** — ranged units need a projectile model and travel time.
+- **Damage lands at the start of the swing**, not at the 50% animation point `combat.toml`
+  describes, because the animation length is not in the data we have.
+- **Adjacency is one Chebyshev tile**, not the sum of the two units' radii.
+- **No tech effects** — the effect interpreter is step 7.
+- **No retreat or aggro** — a unit fights what it is told to fight, and stops when that is dead.

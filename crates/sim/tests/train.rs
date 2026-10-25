@@ -252,8 +252,13 @@ fn a_villager_costs_fifty_food_and_appears_after_its_create_time() {
     assert_eq!(new_villager.task, Task::Idle);
     let speed = fx.units.unit(83).expect("VMBAS").speed;
     assert_eq!(
-        new_villager.velocity.0,
+        new_villager.speed,
         speed.resolve(world.scale(), "speed").expect("resolved"),
         "speed comes from the unit table"
+    );
+    assert_eq!(
+        new_villager.velocity.0.raw(),
+        0,
+        "a freshly trained villager stands still: speed is a capability, not a motion"
     );
 }

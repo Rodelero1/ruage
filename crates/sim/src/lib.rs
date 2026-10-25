@@ -18,7 +18,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use ruage_data::{CommandApply, Economy, Map, ResourceKind, Sim as Settings, Units};
+use ruage_data::{CommandApply, Economy, Map, ResourceKind, Sim as Settings, Unit, Units};
 
 mod path;
 pub use path::{Walk, find_path};
@@ -50,6 +50,9 @@ pub struct Entity {
     /// and hand a tree the stats of an academy.
     pub unit: Option<u32>,
     pub position: (Fixed, Fixed),
+    /// How fast this entity can move. A capability, not a motion.
+    pub speed: Fixed,
+    /// Current motion, per tick, for movers with no task. Zero for a unit at rest.
     pub velocity: (Fixed, Fixed),
     pub hp: i32,
     /// What is left in a resource node, in fixed point so a take can be fractional. Zero for
@@ -66,6 +69,33 @@ pub struct Entity {
     pub carry: Fixed,
     /// The villager variant currently in use (the task's unit id), if any.
     pub variant: Option<u32>,
+}
+
+/// What a hit is worth. Comes from `combat.toml`; the per-unit numbers come from `units.toml`.
+#[derive(Debug, Clone, Copy)]
+pub struct DamageRules {
+    /// A stopped attack still lands for this much.
+    pub minimum: i32,
+    /// Armour assumed for a class the target does not list, high enough to contribute nothing.
+    pub missing_armour: i32,
+}
+
+/// Damage of one hit, class by class: every attack class is reduced by the target's armour in that
+/// class, sums that go negative contribute zero, and the total floors at `minimum`.
+///
+/// Elevation is not applied here: the slice has no terrain heights, so there is no elevation to
+/// apply. `combat.toml` keeps the multipliers for when there is.
+pub fn damage_dealt(attacker: &Unit, target: &Unit, rules: &DamageRules) -> i32 {
+    let mut total: i64 = 0;
+    for (class, amount) in &attacker.attacks {
+        let armour = target
+            .armours
+            .iter()
+            .find(|(target_class, _)| target_class == class)
+            .map_or(rules.missing_armour, |(_, value)| i32::from(*value));
+        total += i64::from((i32::from(*amount) - armour).max(0));
+    }
+    i32::try_from(total).unwrap_or(i32::MAX).max(rules.minimum)
 }
 
 /// A training order that passed every check: what it costs, how long it takes, and what comes out.
@@ -118,6 +148,15 @@ pub enum Task {
     Idle,
     /// Putting up a building at `site`.
     Build { site: EntityId },
+    /// Fighting `target`. Damage and reload are resolved when the order lands, so the tick loop
+    /// never reads a table and a replay cannot name its own numbers.
+    Attack {
+        target: EntityId,
+        damage: i32,
+        reload_ticks: u32,
+        /// Ticks until the next hit. Zero on the landing tick, so the first blow is immediate.
+        cooldown_ticks: u32,
+    },
     Gather {
         node: EntityId,
         /// Resource per tick, resolved from the variant's `work_rate` at the engine scale.
@@ -142,6 +181,11 @@ pub enum Command {
     /// Take from a resource node. The rate, the capacity and the variant come from the tables,
     /// not from the command: a replay must not be able to name its own numbers.
     Gather { villager: EntityId, node: EntityId },
+    /// Attack another player's unit or building.
+    Attack {
+        attacker: EntityId,
+        target: EntityId,
+    },
     /// Produce a unit at a building. Cost and duration come from the unit table; whether this
     /// building may make this unit comes from `economy.toml` (the dat does not carry that edge).
     Train { building: EntityId, unit: u32 },
@@ -207,6 +251,18 @@ pub enum SimError {
     NoPath {
         from: (u16, u16),
         to: (u16, u16),
+    },
+    /// You cannot attack your own side.
+    FriendlyFire {
+        id: EntityId,
+    },
+    /// Resources are gathered, not fought.
+    NotATarget {
+        id: EntityId,
+    },
+    /// This unit carries no weapon.
+    Unarmed {
+        id: EntityId,
     },
     /// The player cannot pay for the order.
     NotEnough {
@@ -306,6 +362,19 @@ impl fmt::Display for SimError {
             ),
             SimError::BuildingNotReady { id } => {
                 write!(f, "entity {} is still under construction", id.0)
+            }
+            SimError::FriendlyFire { id } => {
+                write!(f, "entity {} is on your own side", id.0)
+            }
+            SimError::NotATarget { id } => {
+                write!(
+                    f,
+                    "entity {} cannot be attacked: resources are gathered",
+                    id.0
+                )
+            }
+            SimError::Unarmed { id } => {
+                write!(f, "entity {} has no attack: it cannot fight", id.0)
             }
             SimError::AlreadyTraining { id } => {
                 write!(f, "entity {} is already training a unit", id.0)
@@ -435,6 +504,8 @@ pub struct World {
     stock: [[u32; ResourceKind::COUNT]; 2],
     /// Terrain, copied once at seed time. Static for a match.
     walk: Option<Walk>,
+    /// Damage constants from `combat.toml`, set with `load_combat`.
+    damage_rules: Option<DamageRules>,
     /// Remaining waypoints per unit, in tiles. Part of state: it decides where the unit goes next.
     paths: BTreeMap<EntityId, Vec<(u16, u16)>>,
     sim_rng: Pcg32,
@@ -455,6 +526,7 @@ impl World {
             economy: None,
             stock: [[0; ResourceKind::COUNT]; 2],
             walk: None,
+            damage_rules: None,
             paths: BTreeMap::new(),
             sim_rng: Pcg32::new(seed, SIM_STREAM),
             map_rng: Pcg32::new(seed, MAP_STREAM),
@@ -531,6 +603,9 @@ impl World {
             }
             Command::Train { building, unit } => {
                 self.check_train(*building, *unit)?;
+            }
+            Command::Attack { attacker, target } => {
+                self.check_attack(*attacker, *target)?;
             }
             Command::Spawn { .. } => {}
         }
@@ -634,7 +709,8 @@ impl World {
                 kind: EntityKind::Building,
                 unit: Some(tc_stats),
                 position: self.tile(here),
-                velocity: (tc_speed, Fixed::ZERO),
+                speed: tc_speed,
+                velocity: (Fixed::ZERO, Fixed::ZERO),
                 hp: town_centre.hp,
                 amount: Fixed::ZERO,
                 task: Task::Idle,
@@ -656,7 +732,8 @@ impl World {
                     kind: EntityKind::Unit,
                     unit: Some(villager_stats),
                     position: self.tile(spot),
-                    velocity: (villager_speed, Fixed::ZERO),
+                    speed: villager_speed,
+                    velocity: (Fixed::ZERO, Fixed::ZERO),
                     hp: villager.hp,
                     amount: Fixed::ZERO,
                     task: Task::Idle,
@@ -679,6 +756,7 @@ impl World {
                 kind: EntityKind::Resource(node.kind),
                 unit: None,
                 position: self.tile((node.x, node.y)),
+                speed: Fixed::ZERO,
                 velocity: (Fixed::ZERO, Fixed::ZERO),
                 hp: 0,
                 amount: Fixed::from_raw(i64::from(node.amount) * self.scale),
@@ -812,6 +890,78 @@ impl World {
         // `worker` is the villager; the quantity to bound against belongs to a different entity.
         let left_in_node = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
         rate_per_tick.raw().min(room).min(left_in_node).max(0)
+    }
+
+    /// Read the combat constants. Kept separate from `seed_from` so a world that never fights does
+    /// not need them, and so an attack without them fails loudly instead of guessing a minimum.
+    pub fn load_combat(&mut self, combat: &ruage_data::Combat) {
+        let (minimum, missing_armour) = combat.damage_rules();
+        self.damage_rules = Some(DamageRules {
+            minimum,
+            missing_armour,
+        });
+    }
+
+    /// The checks an attack order has to survive.
+    fn check_attack(&self, attacker: EntityId, target: EntityId) -> Result<(i32, u32), SimError> {
+        let source = self
+            .find(attacker)
+            .ok_or(SimError::MissingEntity(attacker))?;
+        let victim = self.find(target).ok_or(SimError::MissingEntity(target))?;
+        let rules = self.damage_rules.ok_or(SimError::NoTables)?;
+        if matches!(source.kind, EntityKind::Resource(_)) {
+            return Err(SimError::Unarmed { id: attacker });
+        }
+        if matches!(victim.kind, EntityKind::Resource(_)) {
+            return Err(SimError::NotATarget { id: target });
+        }
+        if source.player == victim.player {
+            return Err(SimError::FriendlyFire { id: target });
+        }
+        let units = self.units.as_ref().ok_or(SimError::NoTables)?;
+        let (attacker_stats, victim_stats) = match (source.unit, victim.unit) {
+            (Some(a), Some(b)) => (
+                units.unit(a).ok_or(SimError::MissingUnit { id: a })?,
+                units.unit(b).ok_or(SimError::MissingUnit { id: b })?,
+            ),
+            _ => return Err(SimError::Unarmed { id: attacker }),
+        };
+        if attacker_stats.attacks.is_empty() {
+            return Err(SimError::Unarmed { id: attacker });
+        }
+        let damage = damage_dealt(attacker_stats, victim_stats, &rules);
+        let reload_ticks = attacker_stats
+            .reload
+            .resolve(self.scale, "reload")
+            .map(|reload| reload.raw() * i64::from(self.tick_rate_hz) / self.scale)
+            .ok()
+            .and_then(|ticks| u32::try_from(ticks).ok())
+            .filter(|ticks| *ticks > 0)
+            .ok_or(SimError::Unarmed { id: attacker })?;
+        Ok((damage, reload_ticks))
+    }
+
+    /// Resolve the numbers at order time and start swinging.
+    fn start_attack(&mut self, attacker: EntityId, target: EntityId) -> Result<(), SimError> {
+        let (damage, reload_ticks) = self.check_attack(attacker, target)?;
+        let Some(source) = self.find(attacker) else {
+            return Err(SimError::MissingEntity(attacker));
+        };
+        let position = source.position;
+        let Some(victim) = self.find(target).map(|e| e.position) else {
+            return Err(SimError::MissingEntity(target));
+        };
+        let route = self.plan_path(position, victim)?;
+        self.paths.insert(attacker, route);
+        if let Some(entity) = self.find_mut(attacker) {
+            entity.task = Task::Attack {
+                target,
+                damage,
+                reload_ticks,
+                cooldown_ticks: 0,
+            };
+        }
+        Ok(())
     }
 
     /// The checks a training order has to survive. Readiness comes before trainability on
@@ -953,7 +1103,8 @@ impl World {
             kind: EntityKind::Unit,
             unit: Some(unit),
             position,
-            velocity: (speed, Fixed::ZERO),
+            speed,
+            velocity: (Fixed::ZERO, Fixed::ZERO),
             hp,
             amount: Fixed::ZERO,
             task: Task::Idle,
@@ -969,6 +1120,40 @@ impl World {
             source.training = None;
         }
         true
+    }
+
+    /// One tick of swinging: count the reload down and land a blow when it reaches zero.
+    ///
+    /// The countdown happens before the check on purpose. Firing on the tick the counter *reaches*
+    /// zero rather than the tick after makes a 2 s reload forty ticks at 20 Hz instead of
+    /// forty-one, which only shows up when something is timed to the blow.
+    fn swing(&mut self, attacker: EntityId) -> i32 {
+        let Some(entity) = self.find_mut(attacker) else {
+            return 0;
+        };
+        let Task::Attack {
+            target,
+            damage,
+            reload_ticks,
+            mut cooldown_ticks,
+        } = entity.task
+        else {
+            return 0;
+        };
+        cooldown_ticks = cooldown_ticks.saturating_sub(1);
+        let landed = if cooldown_ticks == 0 {
+            cooldown_ticks = reload_ticks;
+            damage
+        } else {
+            0
+        };
+        entity.task = Task::Attack {
+            target,
+            damage,
+            reload_ticks,
+            cooldown_ticks,
+        };
+        landed
     }
 
     /// One tick of work on a site. Returns true when this tick finished the building. HP is
@@ -1090,6 +1275,7 @@ impl World {
             kind: EntityKind::Building,
             unit: Some(unit_id),
             position,
+            speed: Fixed::ZERO,
             velocity: (Fixed::ZERO, Fixed::ZERO),
             hp: 1,
             amount: Fixed::ZERO,
@@ -1208,6 +1394,7 @@ impl World {
                 kind,
                 unit,
                 position,
+                speed,
                 velocity: (speed, Fixed::ZERO),
                 hp,
                 amount: Fixed::from_raw(i64::from(amount) * self.scale),
@@ -1220,6 +1407,7 @@ impl World {
             Command::Gather { villager, node } => self.start_gather(villager, node),
             Command::Build { villager, unit, at } => self.start_build(villager, unit, at),
             Command::Train { building, unit } => self.start_train(building, unit),
+            Command::Attack { attacker, target } => self.start_attack(attacker, target),
         }
     }
 
@@ -1244,15 +1432,44 @@ impl World {
         let mut switches: Vec<(EntityId, Task)> = Vec::new();
         let mut deposits: Vec<EntityId> = Vec::new();
         let mut builders: Vec<(EntityId, EntityId)> = Vec::new();
+        let mut strikes: Vec<(EntityId, EntityId)> = Vec::new();
 
         for entity in &self.entities {
             let (dx, dy) = match entity.task {
+                Task::Attack { target, .. } => {
+                    let Some(victim) = self
+                        .find(target)
+                        .filter(|v| !matches!(v.kind, EntityKind::Resource(_)))
+                        .map(|v| v.position)
+                    else {
+                        // The target is gone. The attacker stands down on the next tick.
+                        finished.push(entity.id);
+                        continue;
+                    };
+                    let here = self.tile_of(entity.position);
+                    let there = self.tile_of(victim);
+                    let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
+                    if adjacent {
+                        strikes.push((entity.id, target));
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        let next = self.next_waypoint(entity.id).unwrap_or(victim);
+                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                    }
+                }
                 Task::Build { site } => {
                     let Some(target) = self.find(site).map(|s| s.position) else {
                         finished.push(entity.id);
                         continue;
                     };
-                    let delta = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
+                    let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
                         SimError::Displacement {
                             id: entity.id,
                             detail: err.to_string(),
@@ -1270,7 +1487,7 @@ impl World {
                         finished.push(entity.id);
                         continue;
                     };
-                    let delta = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
+                    let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
                         SimError::Displacement {
                             id: entity.id,
                             detail: err.to_string(),
@@ -1293,7 +1510,7 @@ impl World {
                         finished.push(entity.id);
                         continue;
                     };
-                    let delta = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
+                    let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
                         SimError::Displacement {
                             id: entity.id,
                             detail: err.to_string(),
@@ -1460,6 +1677,16 @@ impl World {
                 self.paths.remove(&builder);
             }
         }
+        // Melee: a blow lands on the tick the attacker is in position, then every `reload_ticks`.
+        for (attacker, target) in strikes {
+            let landed = self.swing(attacker);
+            if landed <= 0 {
+                continue;
+            }
+            if let Some(victim) = self.find_mut(target) {
+                victim.hp -= landed;
+            }
+        }
         // Production: one job per building, finishing exactly on its create time. A unit with
         // nowhere to stand waits inside the building rather than being lost.
         let trainers: Vec<EntityId> = self
@@ -1541,6 +1768,13 @@ impl World {
             }
         }
 
+        // The dead leave the world only at the end of the tick, once every phase has finished with
+        // them: an entity that dies mid-tick still has a position to update and waypoints to spend.
+        // Resource nodes are exempt - their HP is zero by design and their amount is what matters.
+        self.entities.retain(|entity| {
+            !matches!(entity.kind, EntityKind::Unit | EntityKind::Building) || entity.hp > 0
+        });
+
         self.tick += 1;
         Ok(())
     }
@@ -1583,6 +1817,7 @@ impl World {
             fnv_bytes(&mut hash, &[tag, resource]);
             fnv_bytes(&mut hash, &entity.amount.raw().to_le_bytes());
             fnv_bytes(&mut hash, &entity.carry.raw().to_le_bytes());
+            fnv_bytes(&mut hash, &entity.speed.raw().to_le_bytes());
             match entity.training {
                 Some(job) => {
                     fnv_bytes(&mut hash, &[1u8]);
@@ -1605,6 +1840,18 @@ impl World {
             }
             match entity.task {
                 Task::Idle => fnv_bytes(&mut hash, &[0u8]),
+                Task::Attack {
+                    target,
+                    damage,
+                    reload_ticks,
+                    cooldown_ticks,
+                } => {
+                    fnv_bytes(&mut hash, &[4u8]);
+                    fnv_bytes(&mut hash, &target.0.to_le_bytes());
+                    fnv_bytes(&mut hash, &damage.to_le_bytes());
+                    fnv_bytes(&mut hash, &reload_ticks.to_le_bytes());
+                    fnv_bytes(&mut hash, &cooldown_ticks.to_le_bytes());
+                }
                 Task::Build { site } => {
                     fnv_bytes(&mut hash, &[3u8]);
                     fnv_bytes(&mut hash, &site.0.to_le_bytes());

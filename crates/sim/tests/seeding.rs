@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Sim as Settings, Terrain, Units, load_economy_file, load_map_file};
+use ruage_fixed::Fixed;
 use ruage_sim::{EntityKind, World};
 
 fn repo(rel: &str) -> PathBuf {
@@ -115,10 +116,11 @@ fn villagers_carry_the_stats_from_the_unit_table() {
         .iter()
         .find(|e| e.kind == EntityKind::Unit)
         .expect("a villager");
+    assert_eq!(unit.speed.raw(), 16_000, "speed is the resolved dat speed");
     assert_eq!(
-        unit.velocity.0.raw(),
-        16_000,
-        "velocity is the resolved dat speed"
+        unit.velocity,
+        (Fixed::ZERO, Fixed::ZERO),
+        "a villager at rest has no motion: speed is a capability, velocity is a movement"
     );
 }
 
@@ -290,4 +292,27 @@ fn a_start_unit_missing_from_the_table_is_an_error() {
         text.contains("4242"),
         "the error should name the id: {text}"
     );
+}
+
+#[test]
+fn an_idle_villager_stands_still() {
+    // `velocity` is a mover's current motion: the movement test hook uses it to walk a nameless
+    // entity. A real unit at rest has no motion - its *speed* is a capability, not a direction.
+    // Seeding used to set velocity to the villager's speed, so every idle villager marched east
+    // forever, invisible in gather tests because they are given a task immediately.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let before: Vec<_> = world
+        .entities()
+        .iter()
+        .filter(|e| e.player == 1)
+        .map(|e| (e.id, e.position))
+        .collect();
+    for _ in 0..200 {
+        world.step().expect("step");
+    }
+    for (id, position) in before {
+        let now = world.entity(id).expect("still alive").position;
+        assert_eq!(now, position, "entity {} drifted while idle", id.0);
+    }
 }
