@@ -72,6 +72,15 @@ pub enum Task {
         /// The variant's carry, in whole resources.
         carry_cap: u32,
     },
+    /// Carrying a full load to somewhere that will take it. The node is remembered so the
+    /// villager can go back to work once the load is dropped.
+    Return {
+        node: EntityId,
+        drop: EntityId,
+        kind: ResourceKind,
+        rate_per_tick: Fixed,
+        carry_cap: u32,
+    },
 }
 
 /// Inputs to the simulation. A replay is a list of these with the ticks they land on.
@@ -283,6 +292,8 @@ pub struct World {
     /// tick loop. A replay carries ids, never numbers.
     units: Option<Units>,
     economy: Option<Economy>,
+    /// Per player, per resource. Index is `player - 1`; player 0 has no stockpile.
+    stock: [[u32; ResourceKind::COUNT]; 2],
     sim_rng: Pcg32,
     map_rng: Pcg32,
 }
@@ -299,6 +310,7 @@ impl World {
             queue: Vec::new(),
             units: None,
             economy: None,
+            stock: [[0; ResourceKind::COUNT]; 2],
             sim_rng: Pcg32::new(seed, SIM_STREAM),
             map_rng: Pcg32::new(seed, MAP_STREAM),
         })
@@ -328,6 +340,14 @@ impl World {
 
     pub fn entity(&self, id: EntityId) -> Option<&Entity> {
         self.find(id)
+    }
+
+    /// What a player has banked. Player 0 (nobody) always reads zero.
+    pub fn stock(&self, player: u8, kind: ResourceKind) -> u32 {
+        self.stock
+            .get(usize::from(player).wrapping_sub(1))
+            .map(|row| row[kind.index()])
+            .unwrap_or(0)
     }
 
     pub fn carry(&self, id: EntityId) -> Fixed {
@@ -537,6 +557,29 @@ impl World {
         Ok(())
     }
 
+    /// The nearest building of `player`'s that the worker's own variant accepts as a drop site.
+    /// Selection is by squared distance with ties broken by id, so two villagers sent home in the
+    /// same tick agree on which building is closest.
+    fn nearest_drop_site(
+        &self,
+        player: u8,
+        from: (Fixed, Fixed),
+        variant: Option<u32>,
+    ) -> Option<EntityId> {
+        let units = self.units.as_ref()?;
+        let drop_sites = &units.unit(variant?)?.drop_sites;
+        self.entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::Building && entity.player == player)
+            .filter(|entity| entity.unit.is_some_and(|unit| drop_sites.contains(&unit)))
+            .min_by_key(|entity| {
+                let dx = entity.position.0.raw() - from.0.raw();
+                let dy = entity.position.1.raw() - from.1.raw();
+                (dx * dx + dy * dy, entity.id.0)
+            })
+            .map(|entity| entity.id)
+    }
+
     /// How much a worker takes this tick: the rate, the room left under its cap, and what the
     /// node still holds - the smallest of the three.
     fn take_amount(&self, worker: &Entity) -> i64 {
@@ -664,10 +707,33 @@ impl World {
         let mut deltas: Vec<(EntityId, Fixed, Fixed)> = Vec::with_capacity(self.entities.len());
         let mut takes: Vec<(EntityId, i64)> = Vec::new();
         let mut finished: Vec<EntityId> = Vec::new();
+        let mut switches: Vec<(EntityId, Task)> = Vec::new();
+        let mut deposits: Vec<EntityId> = Vec::new();
 
         for entity in &self.entities {
             let (dx, dy) = match entity.task {
-                Task::Gather { node, .. } => {
+                Task::Return { drop, .. } => {
+                    let Some(target) = self.find(drop).map(|n| n.position) else {
+                        finished.push(entity.id);
+                        continue;
+                    };
+                    let delta = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
+                        SimError::Displacement {
+                            id: entity.id,
+                            detail: err.to_string(),
+                        }
+                    })?;
+                    let (dx, dy) = step_towards(entity.position, target, delta.raw());
+                    if dx == 0 && dy == 0 {
+                        deposits.push(entity.id);
+                    }
+                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                }
+                Task::Gather {
+                    node,
+                    rate_per_tick,
+                    carry_cap,
+                } => {
                     let Some(target) = self.find(node).map(|n| n.position) else {
                         // The node is gone (a later increment may delete emptied nodes).
                         finished.push(entity.id);
@@ -686,6 +752,30 @@ impl World {
                         let take = self.take_amount(entity);
                         if take > 0 {
                             takes.push((entity.id, take));
+                            // A full load turns the worker around: the drop site is chosen from
+                            // the variant's own list, nearest first, at the moment the load fills
+                            // rather than when the order was given.
+                            let cap_raw = i64::from(carry_cap) * self.scale;
+                            if entity.carry.raw() + take >= cap_raw {
+                                let kind = match self.find(node).map(|n| n.kind) {
+                                    Some(EntityKind::Resource(kind)) => kind,
+                                    _ => continue,
+                                };
+                                if let Some(drop) =
+                                    self.nearest_drop_site(entity.player, target, entity.variant)
+                                {
+                                    switches.push((
+                                        entity.id,
+                                        Task::Return {
+                                            node,
+                                            drop,
+                                            kind,
+                                            rate_per_tick,
+                                            carry_cap,
+                                        },
+                                    ));
+                                }
+                            }
                         }
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))
@@ -730,6 +820,49 @@ impl World {
                 entity.carry = Fixed::from_raw(entity.carry.raw() + granted);
             }
         }
+        for (id, task) in switches {
+            if let Some(entity) = self.find_mut(id) {
+                entity.task = task;
+            }
+        }
+        // Deposit whole resources; the fraction stays in hand. Dropping the remainder instead
+        // would quietly destroy a slice of every trip.
+        for id in deposits {
+            let Some((player, task)) = self.find(id).map(|e| (e.player, e.task)) else {
+                continue;
+            };
+            let Task::Return {
+                node,
+                kind,
+                rate_per_tick,
+                carry_cap,
+                ..
+            } = task
+            else {
+                continue;
+            };
+            let raw = self.find(id).map(|e| e.carry.raw()).unwrap_or(0);
+            let whole = raw / self.scale;
+            let slot_player = usize::from(player).wrapping_sub(1);
+            if whole > 0 && slot_player < self.stock.len() {
+                let slot = &mut self.stock[slot_player][kind.index()];
+                *slot = slot.saturating_add(u32::try_from(whole).unwrap_or(u32::MAX));
+            }
+            let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
+            let scale = self.scale;
+            if let Some(entity) = self.find_mut(id) {
+                entity.carry = Fixed::from_raw(raw - whole * scale);
+                entity.task = if node_left > 0 {
+                    Task::Gather {
+                        node,
+                        rate_per_tick,
+                        carry_cap,
+                    }
+                } else {
+                    Task::Idle
+                };
+            }
+        }
         for id in finished {
             if let Some(entity) = self.find_mut(id) {
                 entity.task = Task::Idle;
@@ -762,6 +895,11 @@ impl World {
         let mut hash = FNV_OFFSET_BASIS;
         fnv_bytes(&mut hash, &self.tick.to_le_bytes());
         fnv_bytes(&mut hash, &(self.entities.len() as u32).to_le_bytes());
+        for row in &self.stock {
+            for value in row {
+                fnv_bytes(&mut hash, &value.to_le_bytes());
+            }
+        }
         for entity in &self.entities {
             fnv_bytes(&mut hash, &entity.id.0.to_le_bytes());
             fnv_bytes(&mut hash, &entity.player.to_le_bytes());
@@ -783,6 +921,20 @@ impl World {
             fnv_bytes(&mut hash, &entity.carry.raw().to_le_bytes());
             match entity.task {
                 Task::Idle => fnv_bytes(&mut hash, &[0u8]),
+                Task::Return {
+                    node,
+                    drop,
+                    kind,
+                    rate_per_tick,
+                    carry_cap,
+                } => {
+                    fnv_bytes(&mut hash, &[2u8]);
+                    fnv_bytes(&mut hash, &node.0.to_le_bytes());
+                    fnv_bytes(&mut hash, &drop.0.to_le_bytes());
+                    fnv_bytes(&mut hash, &[kind.index() as u8]);
+                    fnv_bytes(&mut hash, &rate_per_tick.raw().to_le_bytes());
+                    fnv_bytes(&mut hash, &carry_cap.to_le_bytes());
+                }
                 Task::Gather {
                     node,
                     rate_per_tick,

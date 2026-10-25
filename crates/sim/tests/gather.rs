@@ -194,7 +194,7 @@ fn the_rate_is_the_variants_work_rate_per_tick() {
 }
 
 #[test]
-fn the_carry_cap_comes_from_the_variant_and_stops_the_work() {
+fn the_carry_cap_comes_from_the_variant_and_bounds_every_trip() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
@@ -210,15 +210,21 @@ fn the_carry_cap_comes_from_the_variant_and_stops_the_work() {
         .expect("wood variant");
     let cap = fx.units.unit(variant).expect("VMLUM").carry;
 
+    let cap_raw = i64::from(cap) * world.scale();
     world.submit(Command::Gather { villager, node });
-    for _ in 0..4_000 {
+    for tick in 0..4_000 {
         world.step().expect("step");
+        assert!(
+            world.carry(villager).raw() <= cap_raw,
+            "at tick {tick} the villager carried {} units, past the variant's cap of {cap}",
+            world.carry(villager).raw() / world.scale()
+        );
     }
 
-    assert_eq!(
-        world.carry(villager).raw(),
-        i64::from(cap) * world.scale(),
-        "a full villager holds exactly the variant's carry ({cap})"
+    // And it kept working rather than standing there full: a full load is taken home.
+    assert!(
+        world.stock(1, ResourceKind::Wood) >= u32::from(cap),
+        "a villager that fills up must deliver, not idle at the tree"
     );
 }
 
@@ -254,6 +260,87 @@ fn a_depleted_node_stops_yielding() {
         world.carry(villager).raw(),
         5 * world.scale(),
         "the villager took exactly what the tree held, and stopped"
+    );
+}
+
+#[test]
+fn a_full_villager_carries_the_wood_home() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let villager = first_villager(&world);
+    let here = world.position(villager).expect("position");
+    let node = nearest(&world, ResourceKind::Wood, here);
+    let before = amount_of(&world, node).raw();
+
+    assert_eq!(
+        world.stock(1, ResourceKind::Wood),
+        0,
+        "the player starts with nothing"
+    );
+
+    world.submit(Command::Gather { villager, node });
+    let mut delivered = 0;
+    for _ in 0..6_000 {
+        world.step().expect("step");
+        delivered = world.stock(1, ResourceKind::Wood);
+        if delivered > 0 {
+            break;
+        }
+    }
+
+    assert!(delivered > 0, "a full villager must deliver its load");
+    let taken = before - amount_of(&world, node).raw();
+    assert_eq!(
+        i64::from(delivered) * world.scale() + world.carry(villager).raw(),
+        taken,
+        "everything the node lost is either in the stockpile or still in hand"
+    );
+    assert_eq!(delivered, 10, "one trip is one full VMLUM load");
+}
+
+#[test]
+fn a_closer_lumber_camp_wins_over_the_town_centre() {
+    // VMLUM's own drop list is [109 town centre, 562 lumber camp]. With a camp standing next to
+    // the tree, a woodcutter must use it: that is the whole point of the campaign economy.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let villager = first_villager(&world);
+    let here = world.position(villager).expect("position");
+    let node = nearest(&world, ResourceKind::Wood, here);
+    let node_position = world.position(node).expect("node position");
+
+    let camp_unit = 562;
+    let camp_position = (node_position.0, node_position.1);
+    let camp = EntityId(9_000);
+    world
+        .submit_checked(Command::Spawn {
+            id: camp,
+            player: 1,
+            kind: EntityKind::Building,
+            unit: Some(camp_unit),
+            position: camp_position,
+            speed: Fixed::ZERO,
+            hp: 600,
+            amount: 0,
+        })
+        .expect("spawn a lumber camp");
+
+    world.submit(Command::Gather { villager, node });
+    // Run until the villager fills up and chooses a destination.
+    let mut drop = None;
+    for _ in 0..4_000 {
+        world.step().expect("step");
+        let returning = world.entity(villager).map(|entity| entity.task);
+        if let Some(ruage_sim::Task::Return { drop: target, .. }) = returning {
+            drop = Some(target);
+            break;
+        }
+    }
+
+    assert_eq!(
+        drop,
+        Some(camp),
+        "the woodcutter must head for the camp it is standing next to"
     );
 }
 

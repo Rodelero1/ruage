@@ -26,6 +26,21 @@ pub enum ResourceKind {
     Stone,
 }
 
+impl ResourceKind {
+    /// Stable index for arrays indexed by resource. Exhaustive, so adding a kind is a compile
+    /// error here rather than a silently missing stockpile slot.
+    pub fn index(self) -> usize {
+        match self {
+            ResourceKind::Wood => 0,
+            ResourceKind::Food => 1,
+            ResourceKind::Gold => 2,
+            ResourceKind::Stone => 3,
+        }
+    }
+
+    pub const COUNT: usize = 4;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceNode {
     pub kind: ResourceKind,
