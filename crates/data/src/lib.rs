@@ -28,8 +28,8 @@ pub use economy::{
 };
 pub use map::{Map, ResourceKind, ResourceNode, Terrain, TownCentre, load_map_file, load_map_str};
 pub use techs::{
-    Effect, EffectCommand, Effects, Meaning, Tech, Techs, load_effects_file, load_effects_str,
-    load_techs_file, load_techs_str,
+    Attribute, Effect, EffectCommand, Effects, Meaning, Target, Tech, Techs, load_effects_file,
+    load_effects_str, load_techs_file, load_techs_str,
 };
 pub use units::{Unit, Units, load_units_file, load_units_str};
 

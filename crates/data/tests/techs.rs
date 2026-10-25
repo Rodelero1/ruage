@@ -255,3 +255,177 @@ commands = [[4, 83, -1, 9, 1.25]]
     assert_eq!(command.kind, 4);
     assert_eq!(command.value, MaybeFixed::from_f64(1.25));
 }
+
+/// Kind 4 adds, and Loom is the cleanest witness: +15 hit points to the civilians (class 4).
+#[test]
+fn loom_adds_fifteen_hit_points_to_the_civilians() {
+    let effects = effects();
+    let techs = techs();
+    let loom = effects
+        .effects
+        .values()
+        .find(|effect| effect.name == "Loom")
+        .expect("the Loom effect");
+    let command = loom.commands[0];
+    match ruage_data::Effects::meaning(&command, &techs) {
+        ruage_data::Meaning::AddAttribute {
+            target,
+            attribute,
+            value,
+        } => {
+            assert_eq!(target.class, Some(4), "civilians, the villager class");
+            assert_eq!(target.unit, None, "no single unit");
+            assert_eq!(attribute, 0, "attribute 0 is hit points");
+            assert_eq!(value, MaybeFixed::from_f64(15.0), "Loom gives +15 hp");
+        }
+        other => panic!("Loom read as {other:?}"),
+    }
+}
+
+/// Kind 5 multiplies, and Masonry is the witness: buildings x1.1 hit points. If kind 5 *added*, the
+/// same commands would give every building 1.1 extra hit points and Masonry would do nothing.
+#[test]
+fn masonry_multiplies_building_hit_points() {
+    let effects = effects();
+    let techs = techs();
+    let masonry = effects
+        .effects
+        .values()
+        .find(|effect| effect.name == "Masonry")
+        .expect("the Masonry effect");
+    let command = masonry.commands[0];
+    match ruage_data::Effects::meaning(&command, &techs) {
+        ruage_data::Meaning::MultiplyAttribute {
+            target,
+            attribute,
+            value,
+        } => {
+            assert_eq!(target.class, Some(3), "buildings");
+            assert_eq!(attribute, 0, "hit points");
+            assert_eq!(value, MaybeFixed::from_f64(1.1), "x1.1, a multiplier");
+        }
+        other => panic!("Masonry read as {other:?}"),
+    }
+}
+
+/// Attack is packed as `class * 256 + amount`. Forging's 1025 is class 4, one point - and reading
+/// it as a flat "+1025 attack" is what the packing exists to prevent.
+#[test]
+fn forging_packs_attack_as_class_times_256_plus_one() {
+    let effects = effects();
+    let techs = techs();
+    let forging = effects
+        .effects
+        .values()
+        .find(|effect| effect.name == "Forging")
+        .expect("the Forging effect");
+    let command = forging.commands[0];
+    match ruage_data::Effects::meaning(&command, &techs) {
+        ruage_data::Meaning::AddAttribute {
+            attribute, value, ..
+        } => {
+            assert_eq!(attribute, 9, "attribute 9 is attack");
+            let packed = value.resolve(1_000, "v").expect("a whole number").raw() / 1_000;
+            assert_eq!(packed, 1025, "Forging's packed attack");
+            assert_eq!(
+                ruage_data::Attribute::attack_from_packed(i32::try_from(packed).unwrap()),
+                Some(ruage_data::Attribute::Attack {
+                    class: 4,
+                    amount: 1
+                }),
+                "1025 decodes to melee class 4, one point"
+            );
+        }
+        other => panic!("Forging read as {other:?}"),
+    }
+}
+
+/// Fletching is the same reading on a different class: +1 pierce attack (769 = 3*256 + 1) and +1
+/// range. Two attributes in one effect, which is why the interpreter has to apply a list, not a
+/// scalar.
+#[test]
+fn fletching_adds_one_range_and_one_pierce_attack() {
+    let effects = effects();
+    let techs = techs();
+    let fletching = effects
+        .effects
+        .values()
+        .find(|effect| effect.name == "Fletching")
+        .expect("the Fletching effect");
+    let mut range = false;
+    let mut pierce = false;
+    for command in &fletching.commands {
+        if let ruage_data::Meaning::AddAttribute {
+            attribute, value, ..
+        } = ruage_data::Effects::meaning(command, &techs)
+        {
+            let raw = match value.resolve(1_000, "v") {
+                Ok(fixed) => fixed.raw() / 1_000,
+                Err(_) => continue,
+            };
+            if attribute == 1 && raw == 1 {
+                range = true;
+            }
+            if attribute == 9
+                && raw == 769
+                && ruage_data::Attribute::attack_from_packed(769)
+                    == Some(ruage_data::Attribute::Attack {
+                        class: 3,
+                        amount: 1,
+                    })
+            {
+                pierce = true;
+            }
+        }
+    }
+    assert!(range, "Fletching adds one range");
+    assert!(pierce, "Fletching adds one pierce attack");
+}
+
+/// The packing check over the whole file: wherever a kind 4/5 command claims attribute 9, its value
+/// must be a whole number that fits `class * 256 + amount`. If any of them needed a fraction or a
+/// value above 65535, the packing reading would be wrong.
+#[test]
+fn every_packed_attack_value_fits_the_packing() {
+    let effects = effects();
+    let mut checked = 0;
+    let mut negatives: Vec<(String, i32)> = Vec::new();
+    for effect in effects.effects.values() {
+        for command in &effect.commands {
+            if !matches!(command.kind, 4 | 5) || command.c != 9 {
+                continue;
+            }
+            let raw = command.value.resolve(1_000, "v").expect("a whole number");
+            let value = i32::try_from(raw.raw() / 1_000).expect("fits");
+            if value < 0 {
+                // Six commands pack a negative value, all in two effects. A negative cannot be
+                // `class * 256 + amount` as an unsigned pair, and the likeliest reading - a signed
+                // amount in the low byte, class in the high byte - is not proven by anything else
+                // in the file. So they are named, counted and left undecoded (U17) rather than
+                // given an interpretation that would look like knowledge.
+                negatives.push((effect.name.clone(), value));
+                continue;
+            }
+            assert!(
+                ruage_data::Attribute::attack_from_packed(value).is_some(),
+                "effect {:?} has packed attack {value}, which does not decode",
+                effect.name
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 300, "packed attack values are common: {checked}");
+    let named: Vec<(&str, i32)> = negatives.iter().map(|(n, v)| (n.as_str(), *v)).collect();
+    assert_eq!(
+        named,
+        vec![
+            ("Non-Research", -136),
+            ("Non-Research", -136),
+            ("Non-Research", -136),
+            ("Shinkichon", -226),
+            ("Shinkichon", -226),
+            ("Shinkichon", -226),
+        ],
+        "the negative packed values, exactly: any change here is a change in the data or a bug"
+    );
+}

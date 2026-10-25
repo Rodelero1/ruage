@@ -27,8 +27,62 @@ pub struct EffectCommand {
     pub value: MaybeFixed,
 }
 
+/// The values an effect can change, as far as the techs that use them show. The ids come from the
+/// data: 0 is hit points (Loom adds 15, Masonry multiplies by 1.1), 1 is range (Fletching adds 1),
+/// 8 is armour and 9 is attack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Attribute {
+    HitPoints,
+    Range,
+    Armour,
+    /// Attack is **packed**: the value is `class * 256 + amount`, so Forging's 1025 is class 4
+    /// (melee) plus 1. Any other reading makes the numbers meaningless - a "+1025 attack" upgrade.
+    Attack {
+        class: u8,
+        amount: u8,
+    },
+    Other(i16),
+}
+
+impl Attribute {
+    /// `None` for an attribute id nothing has pinned: an unknown attribute is a gap in our model,
+    /// not a licence to write it down as something familiar.
+    pub fn from_id(id: i16) -> Option<Self> {
+        Some(match id {
+            0 => Attribute::HitPoints,
+            1 => Attribute::Range,
+            8 => Attribute::Armour,
+            9 => Attribute::Attack {
+                class: 0,
+                amount: 0,
+            },
+            _ => return None,
+        })
+    }
+
+    /// Split a packed attack value. `None` when the value does not fit the packing, which is the
+    /// check that keeps the reading honest: 1025 is class 4 + 1, and 1025.5 is not attack at all.
+    pub fn attack_from_packed(value: i32) -> Option<Attribute> {
+        if !(0..=65_535).contains(&value) {
+            return None;
+        }
+        let class = u8::try_from((value >> 8) & 0xff).ok()?;
+        let amount = u8::try_from(value & 0xff).ok()?;
+        Some(Attribute::Attack { class, amount })
+    }
+}
+
+/// What an attribute command applies to: one unit, a whole class, or both unset for "everything the
+/// tech's own prerequisites allow".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Target {
+    pub unit: Option<u32>,
+    pub class: Option<i16>,
+}
+
 /// An effect command's meaning, as far as the data has spelled it out.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// `PartialEq` only: values are fixed point, which has no `Eq`.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Meaning {
     /// Kind 102: `value` is a tech id this effect takes away.
     DisableTech { tech: u32 },
@@ -37,6 +91,21 @@ pub enum Meaning {
     /// one present only in techs, so no id is unit-only (U16). Reading it as a unit would be wrong
     /// exactly where it matters - a "free lumberjack upgrade" would become a free villager.
     AmbiguousId { id: u32 },
+    /// Kind 4: add `value` to `attribute` on `target`. Pinned by Loom (+15 hp on class 4, the
+    /// civilians), Forging (+1 melee attack on class 6, the infantry) and Fletching (+1 range and
+    /// +1 pierce attack on class 0).
+    AddAttribute {
+        target: Target,
+        attribute: i16,
+        value: MaybeFixed,
+    },
+    /// Kind 5: multiply `attribute` by `value` on `target`. Pinned by Masonry (buildings x1.1 hp,
+    /// walls x1.1 hp) - a multiplier, not an addition, or Masonry would add 1.1 hit points.
+    MultiplyAttribute {
+        target: Target,
+        attribute: i16,
+        value: MaybeFixed,
+    },
     /// A kind nothing has pinned yet. Kept rather than dropped: an effect we cannot read is a fact
     /// about our model, not an absence in the data.
     Unpinned { kind: i16 },
@@ -299,6 +368,29 @@ impl Effects {
             101 => {
                 let id = u32::try_from(command.a).unwrap_or(0);
                 Meaning::AmbiguousId { id }
+            }
+            4 | 5 => {
+                let attribute = command.c;
+                if Attribute::from_id(attribute).is_none() && attribute != 9 {
+                    return Meaning::Unpinned { kind: command.kind };
+                }
+                let target = Target {
+                    unit: u32::try_from(command.a).ok(),
+                    class: (command.b >= 0).then_some(command.b),
+                };
+                if command.kind == 4 {
+                    Meaning::AddAttribute {
+                        target,
+                        attribute,
+                        value: command.value,
+                    }
+                } else {
+                    Meaning::MultiplyAttribute {
+                        target,
+                        attribute,
+                        value: command.value,
+                    }
+                }
             }
             other => Meaning::Unpinned { kind: other },
         }
