@@ -33,7 +33,9 @@ pub struct Unit {
     pub range: MaybeFixed,
     pub reload: MaybeFixed,
     pub accuracy: u16,
-    /// \-1 on four units, meaning "not trainable" rather than "trained instantly".
+    /// The dat's `create_time`: how long this takes to appear. For a unit that is training time;
+    /// **for a building it is build time** - one villager finishes a house in 25 s, a barracks in
+    /// 50, a farm in 15. -1 on four units means "not creatable", not "instant".
     pub train_time: i32,
     pub base_id: i32,
 }
