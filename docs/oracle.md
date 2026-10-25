@@ -121,6 +121,58 @@ a recorded game's periodic sync records (decisive, needs one `.aoe2record` made 
 box), a save's task progress at a known game time (the save reader currently gets only player
 names), or a decompiled constant.
 
+## Real HD recordings, and what the sync cadence says about U12 (measured 2026-10-25)
+
+`happyleavesaoc/aoc-mgz` (MIT) ships recorded games as test fixtures, including
+**`tests/recs/hd-5.7.aoe2record`** — a real HD 5.7 recording, the exact version family this engine
+targets. Fetched to scratch (not committed: third-party game data, D8):
+
+```
+https://raw.githubusercontent.com/happyleavesaoc/aoc-mgz/master/tests/recs/hd-5.7.aoe2record
+```
+
+**Container layout** (decoded by hand; the library's own header parser fails on these HD files
+across 1.8.20-1.8.51, so the container was read directly):
+
+| part | encoding |
+|---|---|
+| bytes 0-7 | `u32 section_len`, `u32 0` — section_len counts from byte 0 |
+| header section | raw DEFLATE (wbits -15); inflates to a `VER 9.4` payload |
+| after it | the **operation stream, uncompressed** — 40-byte meta block, then 4-byte op ids |
+
+The inflated header begins `VER 9.4`, i.e. **the same magic as the 13 save games** in step 2b. The
+save reader's work applies to recordings, and vice versa.
+
+**Op stream, hd-5.7:** 958,069 bytes, 68,011 ops — 31,104 `SYNC`, 31,104 `VIEWLOCK`, 5,792
+`ACTION`, 11 `CHAT`, ending exactly at EOF. Elapsed time 3,066,042 ms (51 min).
+
+**Sync cadence across four recordings:**
+
+| file | syncs | elapsed | syncs / second |
+|---|---|---|---|
+| hd-5.3 | 30,516 | 2,805,957 ms | 10.9 |
+| hd-5.7 | 31,104 | 3,066,042 ms | **10.1** |
+| hd-5.8 | 31,701 | 3,692,244 ms | 8.6 |
+| de-13.34 | 158,648 | 2,682,772 ms | **59.2** |
+
+DE syncs ≈ 60/s, HD ≈ 10/s — a 6:1 ratio. DE at 60 turns/s syncing once per turn is the natural
+reading (59.2 measured, not a suspiciously exact 60). HD at 20 turns/s would then sync once per
+**two** turns, giving 10/s.
+
+**This corroborates the 20 Hz assumption from a second direction.** The first was the dat grain:
+20 distinct attack reload times all multiples of exactly 0.05 s, with 0.25 and 3.45 excluding a
+0.1 s grid — and 0.25 s is 5 turns at 20 Hz but 2.5 turns at 10 Hz, so 10 Hz cannot quantise it.
+
+**What it still is not:** proof. It excludes 10 Hz only if reload times are tick-quantised, and it
+reads the cadence ratio against DE, whose rate is itself inferred. A decompiled constant remains
+the only direct answer.
+
+**What the recordings do settle:** they are the trajectory oracle step 2b wanted. `ORDER`, `MOVE`,
+`BUILD`, `RESEARCH`, `QUEUE` actions carry millisecond timestamps, so the slice can be compared
+against real games — arrival times, build completions, gather cadence — without a live Windows
+machine. Action timestamps show no fixed grid (gcd 1-2 ms), so the timestamps are clock-stamped
+rather than turn indices; per-tick state is still not recoverable.
+
 ## Recommendation for D1
 
 Choose **G1 (own deterministic engine)**.
