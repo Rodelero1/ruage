@@ -15,6 +15,9 @@ use crate::{ConfigError, MaybeFixed, SUPPORTED_SCHEMA};
 
 #[derive(Debug, Clone)]
 pub struct Economy {
+    /// Which buildings may create which units. Authored (see `config/economy.toml`): the dat
+    /// carries unit costs and create times but not the building-to-unit edge we read.
+    pub train: Train,
     pub schema: u32,
     pub farm: Farm,
     pub gather: Gather,
@@ -83,9 +86,23 @@ impl ResourceTask {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct Train {
+    /// Building unit id -> the unit ids it may create.
+    pub by_building: BTreeMap<u32, Vec<u32>>,
+}
+
+impl Train {
+    /// May this building create this unit?
+    pub fn allows(&self, building: u32, unit: u32) -> bool {
+        self.by_building
+            .get(&building)
+            .is_some_and(|units| units.contains(&unit))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Build {
-    pub hp_per_second_per_villager: MaybeFixed,
     pub repair_hp_per_second: MaybeFixed,
 }
 
@@ -109,6 +126,7 @@ struct RawEconomy {
     schema: u32,
     farm: RawFarm,
     gather: RawGather,
+    train: RawTrain,
     build: RawBuild,
     decay: RawDecay,
     population: RawPopulation,
@@ -150,8 +168,20 @@ struct RawResourceTask {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RawTrain {
+    entry: Vec<RawTrainEntry>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawTrainEntry {
+    building: u32,
+    units: Vec<u32>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawBuild {
-    hp_per_second_per_villager: f64,
     repair_hp_per_second: f64,
 }
 
@@ -318,8 +348,39 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             variant: raw.gather.variant,
             resource_task,
         },
+        train: {
+            let mut by_building: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+            for entry in raw.train.entry {
+                if entry.building == 0 {
+                    return Err(ConfigError::Invalid {
+                        key: "train.entry.building".to_owned(),
+                        detail: "unit 0 is not a building".to_owned(),
+                    });
+                }
+                if entry.units.is_empty() {
+                    return Err(ConfigError::Invalid {
+                        key: format!("train.entry[{}].units", entry.building),
+                        detail: "a building that trains nothing is a mistake, not a rule"
+                            .to_owned(),
+                    });
+                }
+                if entry.units.contains(&0) {
+                    return Err(ConfigError::Invalid {
+                        key: format!("train.entry[{}].units", entry.building),
+                        detail: "unit 0 is scenery, not something to train".to_owned(),
+                    });
+                }
+                if by_building.insert(entry.building, entry.units).is_some() {
+                    return Err(ConfigError::Invalid {
+                        key: format!("train.entry[{}]", entry.building),
+                        detail: "two entries for one building: the later would silently win"
+                            .to_owned(),
+                    });
+                }
+            }
+            Train { by_building }
+        },
         build: Build {
-            hp_per_second_per_villager: MaybeFixed::from_f64(raw.build.hp_per_second_per_villager),
             repair_hp_per_second: MaybeFixed::from_f64(raw.build.repair_hp_per_second),
         },
         decay: Decay {

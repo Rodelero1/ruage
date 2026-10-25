@@ -28,8 +28,10 @@ gold = 579
 stone = 124
 forage = 120
 [build]
-hp_per_second_per_villager = -1.0
 repair_hp_per_second = -1.0
+[[train.entry]]
+building = 109
+units = [83]
 [decay]
 enabled = true
 rate_from = "dat"
@@ -87,11 +89,11 @@ fn an_unresolved_rate_names_its_key() {
     let economy = load_economy_str(GOOD, "economy.toml").expect("fixture loads");
     let err = economy
         .build
-        .hp_per_second_per_villager
-        .resolve(20_000, "build.hp_per_second_per_villager")
+        .repair_hp_per_second
+        .resolve(20_000, "build.repair_hp_per_second")
         .expect_err("the sentinel must not resolve")
         .to_string();
-    assert!(err.contains("hp_per_second_per_villager"), "got: {err}");
+    assert!(err.contains("repair_hp_per_second"), "got: {err}");
     assert!(err.contains("unresolved"), "got: {err}");
 }
 
@@ -251,4 +253,39 @@ fn a_negative_farm_rate_is_refused() {
         .expect_err("a negative farm rate must be refused")
         .to_string();
     assert!(err.contains("farm.rate"), "got: {err}");
+}
+
+#[test]
+fn the_real_file_says_who_trains_what() {
+    let path =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/economy.toml");
+    let economy = load_economy_file(&path).expect("the project's own economy.toml");
+    assert!(
+        economy.train.allows(109, 83),
+        "the town centre trains villagers"
+    );
+    assert!(economy.train.allows(12, 74), "the barracks trains spearmen");
+    assert!(
+        !economy.train.allows(109, 74),
+        "the town centre must not train spearmen"
+    );
+    assert!(!economy.train.allows(70, 83), "a house trains nothing");
+}
+
+#[test]
+fn a_building_listed_twice_is_refused() {
+    let bad = GOOD.to_owned() + "\n[[train.entry]]\nbuilding = 109\nunits = [83]\n";
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("a duplicate building entry must be refused")
+        .to_string();
+    assert!(err.contains("train.entry[109]"), "got: {err}");
+}
+
+#[test]
+fn a_building_that_trains_nothing_is_refused() {
+    let bad = GOOD.replace("units = [83]", "units = []");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("an empty unit list must be refused")
+        .to_string();
+    assert!(err.contains("trains nothing"), "got: {err}");
 }

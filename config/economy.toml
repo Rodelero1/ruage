@@ -62,10 +62,10 @@ repair   = 156   # VMREP 12.5   the repair task, likewise not a gather rate
 # and using it as a gather rate would make every villager gather 2.5x too fast.
 
 [build]
-hp_per_second_per_villager = -1.0
-# PROVENANCE: unknown. The villager's build task (action 110) has work_value1 = 1.0 but no
-# HP/second is derivable from the dat. -1 = unresolved; engine must refuse to construct.
-
+# No build speed here on purpose. A building's HP/second is derived from the unit table:
+# hp / create_time (a house is 550 hp over 25 s). There is no knob, because a knob would be a
+# number we invented - and U15 taught that the number was in the dat all along, under a name
+# that did not look like "build time".
 repair_hp_per_second = -1.0
 # PROVENANCE: unknown, with a dat CANDIDATE: the repair variant VMREP (id 156) carries
 # work_rate = 12.5. If that is HP/second it is the answer; the semantics are unverified, so the
@@ -85,6 +85,18 @@ villager = 83
 villagers_per_player = 3
 # PROVENANCE: dat (ids, hp, speed) + the standard 3-villager start. The count is a match
 # rule, not a dat field, which is exactly why it belongs in config.
+
+[[train.entry]]
+building = 109
+units = [83]
+# PROVENANCE: authored, not a dat field we read. The dat says what a unit costs and how long it
+# takes, and the tech tree disables units per civ, but nothing we parse says "this building
+# makes that unit". So the mapping is content: 109 = RTWC trains 83 = VMBAS.
+
+[[train.entry]]
+building = 12
+units = [74]
+# 12 = BRKS trains 74 = SPRMN (40 hp, 0.9 tiles/s, 60 food + 20 gold, 21 s).
 
 [population]
 cap_default = 200
