@@ -171,3 +171,36 @@ standalone script rather than part of the engine binary.
   them invites two sources of truth drifting apart.
 - **Per-civ unit copies** — the dat duplicates 1,402 units per civ; the config ships civ 1 as
   canonical and will layer per-civ deltas on top (a few keys per civ, not 32 full copies).
+
+## Changing the tick rate (2026-10-23)
+
+`sim.tick_rate_hz` is a config value, and `minimum_scale()` in `crates/data/src/lib.rs` derives the
+smallest scale that keeps both of D10's grains exact: `lcm(10^dat_value_decimals,
+tick_rate_hz × 10^per_tick_decimals)`, i.e. `lcm(10000, 1000 × Hz)`.
+
+| Hz | minimum scale | per-tick displacement |
+|---|---|---|
+| 10 | 10,000 | speed × 1000 |
+| 20 | 20,000 | speed × 1000 |
+| 25 | 50,000 | speed × 2000 |
+| 30 | 30,000 | speed × 1000 |
+| 60 | 60,000 | speed × 1000 |
+| 100 | 100,000 | speed × 1000 |
+| 144 | 720,000 | speed × 5000 |
+| 240 | 240,000 | speed × 1000 |
+
+**What does not change.** Every dat number is per second, so gather rates, hp, build times and
+time-to-kill in seconds are stable across rates. The rate is sampling resolution, not accuracy: a
+higher rate does not make an exact dat value more exact, it only reduces the quantisation of
+tick-based events (damage cadence, build completion, deposit oscillations).
+
+**What changes.** The state hash, whenever the scale differs; tick-scheduled scripts (D15's
+opponent list is expressed in ticks); tests that pin raw integers; and CPU cost, which is linear —
+a 10-minute game is 12k ticks at 20 Hz, 36k at 60 Hz, 86k at 144 Hz. §6.1's bands are expressed in
+ticks, so they *tighten* in wall-clock as the rate rises: "1 tick" is 50 ms at 20 Hz and 7 ms at
+144 Hz. A higher rate makes the acceptance bands harder to meet, not easier.
+
+**Experimenting is cheapest now**, before there is a golden hash, a recorded trace or a scripted
+opponent schedule to re-baseline. `crates/data/tests/rate_sweep.rs` proves twelve rates from 10 to
+240 load at their derived scale, that a rate change without a scale change is refused, and that
+five dat speeds land on a whole unit per tick at each rate.

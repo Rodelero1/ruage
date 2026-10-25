@@ -356,6 +356,56 @@ pub fn load_sim_file(path: &Path) -> Result<Sim, ConfigError> {
     load_sim_str(&text, &path.display().to_string())
 }
 
+/// The smallest scale that satisfies both of D10's grains for a given tick rate:
+/// `lcm(10^dat_value_decimals, tick_rate_hz * 10^per_tick_decimals)`.
+///
+/// This is what makes the tick rate an experiment rather than a migration: at 20 Hz the answer is
+/// 20000, at 60 Hz it is 60000, at 25 Hz it is 50000 and at 144 Hz it is 720000. A larger scale is
+/// always legal (finer grid); this is the floor that keeps every dat value and every per-tick
+/// displacement exact.
+pub fn minimum_scale(
+    tick_rate_hz: u32,
+    dat_value_decimals: u32,
+    per_tick_decimals: u32,
+) -> Result<i64, ConfigError> {
+    let invalid = |detail: String| ConfigError::Invalid {
+        key: "minimum_scale".to_owned(),
+        detail,
+    };
+    if tick_rate_hz == 0 {
+        return Err(invalid("tick_rate_hz must be greater than zero".to_owned()));
+    }
+
+    let pow10 = |exp: u32| -> Result<i64, ConfigError> {
+        let mut out: i64 = 1;
+        for _ in 0..exp {
+            out = out
+                .checked_mul(10)
+                .ok_or_else(|| invalid(format!("10^{exp} does not fit an i64")))?;
+        }
+        Ok(out)
+    };
+
+    let value_grain = pow10(dat_value_decimals)?;
+    let per_tick = i64::from(tick_rate_hz)
+        .checked_mul(pow10(per_tick_decimals)?)
+        .ok_or_else(|| invalid("tick_rate_hz x 10^per_tick_decimals overflows i64".to_owned()))?;
+
+    // lcm(a, b) = a / gcd(a, b) * b, with the division first so the multiply is less likely to
+    // overflow.
+    let (mut a, mut b) = (value_grain, per_tick);
+    while b != 0 {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
+    let gcd = a;
+    per_tick
+        .checked_div(gcd)
+        .and_then(|q| q.checked_mul(value_grain))
+        .ok_or_else(|| invalid("the minimum scale overflows i64".to_owned()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
