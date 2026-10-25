@@ -9,6 +9,8 @@ repository.workspace = true
 [dependencies]
 ruage-fixed = { path = "../fixed" }
 ruage-data = { path = "../data" }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 
 [[bin]]
 name = "ruage-headless"

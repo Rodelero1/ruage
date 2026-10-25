@@ -67,6 +67,8 @@ version = "0.1.0"
 dependencies = [
  "ruage-data",
  "ruage-fixed",
+ "serde",
+ "toml",
 ]
 
 [[package]]

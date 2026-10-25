@@ -1,0 +1,158 @@
+# Step-5 scenario: one scripted match, human side and opponent.
+#
+# HAND-WRITTEN. Times are SECONDS, never ticks (D16): the same script runs at any tick rate, and a
+# script that named ticks would silently change meaning if the rate changed.
+#
+# Steps are resolved against the world when they are due, so they name *what* rather than *which
+# id*: "the first villager", "the nearest tree", "beside my town centre". Ids belong to seeding
+# order and would rot the moment the map changed; the scenario is about behaviour.
+
+schema = 1
+duration_seconds = 600.0
+
+# --- player 1: the full slice, gather -> house -> barracks -> spearman -> fight -------------------
+
+[[step]]
+at_seconds = 2.0
+player = 1
+kind = "gather"
+villager = 0
+resource = "wood"
+nth = 0
+
+[[step]]
+at_seconds = 3.0
+player = 1
+kind = "gather"
+villager = 1
+resource = "wood"
+nth = 1
+
+[[step]]
+at_seconds = 4.0
+player = 1
+kind = "gather"
+villager = 2
+resource = "wood"
+nth = 2
+
+# 25 wood is banked in well under a minute at 0.39/s per villager, but the walk home is the real
+# cost, so the timeouts below are generous on purpose: a script that only works at the exact tick is
+# a script that fails on the next rate change.
+[[step]]
+at_seconds = 120.0
+player = 1
+kind = "build"
+villager = 0
+unit = 70
+where = "near_town_centre"
+
+# A tree holds 200 and a villager idles when its own tree runs out (a recorded limit), so the three
+# are re-tasked onto the next three trees once the first ones are bare. This is the script working
+# around an engine limit, not a rule of the game: when the engine learns to seek another node, these
+# steps become unnecessary.
+[[step]]
+at_seconds = 200.0
+player = 1
+kind = "gather"
+villager = 0
+resource = "wood"
+nth = 3
+
+[[step]]
+at_seconds = 200.5
+player = 1
+kind = "gather"
+villager = 1
+resource = "wood"
+nth = 4
+
+# Timed from measured income, not from the nominal 0.39/s: three villagers on wood bank about
+# 0.75 wood per second once the walk home is counted (90 wood by 120 s), so 175 wood needs roughly
+# 285 s from the start. A schedule written from the dat rate alone lands short and the step is
+# refused - which is how this number was found.
+[[step]]
+at_seconds = 320.0
+player = 1
+kind = "build"
+villager = 0
+unit = 12
+where = "near_town_centre"
+
+# Food and gold for the spearman. The villagers switch off the tree once the barracks is paid for;
+# one villager on forage banks about 0.25 food per second, so 60 food takes ~240 s.
+[[step]]
+at_seconds = 330.0
+player = 1
+kind = "gather"
+villager = 1
+resource = "food"
+
+# The third villager joins the forager after the barracks is paid for: one villager banks about
+# 0.25 food per second and the spearman needs 60.
+[[step]]
+at_seconds = 380.0
+player = 1
+kind = "gather"
+villager = 0
+resource = "food"
+
+[[step]]
+at_seconds = 331.0
+player = 1
+kind = "gather"
+villager = 2
+resource = "gold"
+
+[[step]]
+at_seconds = 500.0
+player = 1
+kind = "train"
+building = "barracks"
+unit = 74
+
+# The spearman walks to the nearest enemy villager and fights. The opponent is told to stand there,
+# which is what makes this a fair test of time-to-kill rather than of pathing.
+[[step]]
+at_seconds = 525.0
+player = 1
+kind = "attack"
+attacker = 74
+target = "nearest_enemy"
+
+# --- player 2: the scripted opponent --------------------------------------------------------------
+
+# Two villagers on wood (so the opponent is doing something real), a house, and then they are left
+# in place to be attacked.
+[[step]]
+at_seconds = 5.0
+player = 2
+kind = "gather"
+villager = 0
+resource = "wood"
+
+[[step]]
+at_seconds = 6.0
+player = 2
+kind = "gather"
+villager = 1
+resource = "wood"
+
+[[step]]
+at_seconds = 400.0
+player = 2
+kind = "gather"
+villager = 2
+resource = "wood"
+
+[[step]]
+at_seconds = 460.0
+player = 2
+kind = "stop"
+villager = 0
+
+[[step]]
+at_seconds = 461.0
+player = 2
+kind = "stop"
+villager = 1

@@ -21,8 +21,13 @@ use std::fmt;
 use ruage_data::{CommandApply, Economy, Map, ResourceKind, Sim as Settings, Unit, Units};
 
 mod path;
+mod script;
 pub use path::{Walk, find_path};
 use ruage_fixed::Fixed;
+pub use script::{
+    NamedResource, Outcome, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind, describe,
+    load_scenario_file, load_scenario_str,
+};
 
 /// Stable handle for an entity. Ordered, so iteration by id is just sorting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -181,6 +186,8 @@ pub enum Command {
     /// Take from a resource node. The rate, the capacity and the variant come from the tables,
     /// not from the command: a replay must not be able to name its own numbers.
     Gather { villager: EntityId, node: EntityId },
+    /// Stand a unit down: drop its path and return it to idle.
+    Stop { unit: EntityId },
     /// Attack another player's unit or building.
     Attack {
         attacker: EntityId,
@@ -607,6 +614,8 @@ impl World {
             Command::Attack { attacker, target } => {
                 self.check_attack(*attacker, *target)?;
             }
+            // Stopping is always legal: there is nothing to be refused.
+            Command::Stop { .. } => {}
             Command::Spawn { .. } => {}
         }
         Ok(())
@@ -1408,6 +1417,13 @@ impl World {
             Command::Build { villager, unit, at } => self.start_build(villager, unit, at),
             Command::Train { building, unit } => self.start_train(building, unit),
             Command::Attack { attacker, target } => self.start_attack(attacker, target),
+            Command::Stop { unit } => {
+                self.paths.remove(&unit);
+                if let Some(entity) = self.find_mut(unit) {
+                    entity.task = Task::Idle;
+                }
+                Ok(())
+            }
         }
     }
 
