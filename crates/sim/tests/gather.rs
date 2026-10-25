@@ -256,10 +256,17 @@ fn a_depleted_node_stops_yielding() {
     }
 
     assert_eq!(amount_of(&world, node), Fixed::ZERO, "the tree is empty");
+    // The load never filled, so the villager takes the partial load home rather than standing on
+    // a dead tree with five wood in hand.
     assert_eq!(
-        world.carry(villager).raw(),
-        5 * world.scale(),
-        "the villager took exactly what the tree held, and stopped"
+        world.stock(1, ResourceKind::Wood),
+        5,
+        "everything the tree held reaches the stockpile"
+    );
+    assert_eq!(
+        world.carry(villager),
+        Fixed::ZERO,
+        "and nothing is left in hand"
     );
 }
 
@@ -296,6 +303,45 @@ fn a_full_villager_carries_the_wood_home() {
         "everything the node lost is either in the stockpile or still in hand"
     );
     assert_eq!(delivered, 10, "one trip is one full VMLUM load");
+}
+
+#[test]
+fn a_partial_load_comes_home_when_the_node_runs_out() {
+    // A three-wood tree against a ten-wood cap: the load never fills, so the "carry is full"
+    // rule never fires. Without a second rule the villager stands on a dead tree holding wood
+    // for the rest of the match - the resource is neither in the stockpile nor working.
+    let Some(fx) = fixture() else { return };
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    let map = ruage_data::load_map_str(&TINY_MAP.replace("amount = 5", "amount = 3"), "tiny.toml")
+        .expect("tiny map");
+    world
+        .seed_from(&map, &fx.economy, &fx.units)
+        .expect("seeding");
+
+    let node = world
+        .entities()
+        .iter()
+        .find(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
+        .expect("the tree")
+        .id;
+    let villager = first_villager(&world);
+    world.submit(Command::Gather { villager, node });
+
+    for _ in 0..2_000 {
+        world.step().expect("step");
+    }
+
+    assert_eq!(amount_of(&world, node), Fixed::ZERO, "the tree is empty");
+    assert_eq!(
+        world.stock(1, ResourceKind::Wood),
+        3,
+        "the partial load must be delivered, not stranded in the villager's hands"
+    );
+    assert_eq!(
+        world.carry(villager),
+        Fixed::ZERO,
+        "and nothing is left in hand afterwards"
+    );
 }
 
 #[test]

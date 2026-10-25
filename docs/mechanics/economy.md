@@ -120,6 +120,27 @@ is not a cost.
 `unit.resource_decay_rate` and the farm's 480 HP are in the data; how farm food depletes
 (250 per farm, and whether decay interacts) is **not** stated — **unknown**, oracle test.
 
+## The gather loop as implemented (2026-10-25)
+
+A villager's work is one small state machine, and every number in it comes from config:
+
+1. **Gather** — walk to the node (straight line until pathing exists), then while standing on it
+   take `min(variant work_rate / tick_rate, room under the variant's carry, what the node still
+   holds)` each tick.
+2. **Return** — the destination is the nearest building the villager's *own variant* lists in
+   `drop_sites`, chosen at the moment the load fills, not when the order was given. A lumber camp
+   therefore beats the town centre whenever it is closer, which is the whole point of the camp.
+3. **Deposit** — whole resources go to the player's stockpile and the fraction stays in hand, so
+   no trip silently destroys part of a load.
+
+**Two reasons to head home**, and both are load-bearing: the load is full, or the node just gave
+its last. Without the second rule a villager working a tree that holds less than one carry stands
+on a dead node holding wood for the rest of the match — the resource is in neither the stockpile
+nor the economy. That was a real defect, found by review after the deposit step landed.
+
+Known gaps: no retargeting after a node empties (the villager idles rather than walking to the
+next tree of the same kind), and movement ignores obstacles until A* lands.
+
 ## Open
 
 - ~~**U1** gather rate application and the missing DBA multiplier~~ — **resolved**: rates are

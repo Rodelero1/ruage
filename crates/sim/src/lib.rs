@@ -557,6 +557,31 @@ impl World {
         Ok(())
     }
 
+    /// The `Return` task that takes `entity` home from `node`, or `None` when the player has no
+    /// building the variant accepts (in which case the villager stays where it is rather than
+    /// walking to a drop site that would refuse it).
+    fn return_task(
+        &self,
+        entity: &Entity,
+        node: EntityId,
+        rate_per_tick: Fixed,
+        carry_cap: u32,
+    ) -> Option<Task> {
+        let kind = match self.find(node).map(|n| n.kind) {
+            Some(EntityKind::Resource(kind)) => kind,
+            _ => return None,
+        };
+        let from = self.find(node)?.position;
+        let drop = self.nearest_drop_site(entity.player, from, entity.variant)?;
+        Some(Task::Return {
+            node,
+            drop,
+            kind,
+            rate_per_tick,
+            carry_cap,
+        })
+    }
+
     /// The nearest building of `player`'s that the worker's own variant accepts as a drop site.
     /// Selection is by squared distance with ties broken by id, so two villagers sent home in the
     /// same tick agree on which building is closest.
@@ -750,32 +775,28 @@ impl World {
                     // Standing still on the node is what entitles a worker to take from it.
                     if dx == 0 && dy == 0 {
                         let take = self.take_amount(entity);
+                        let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
                         if take > 0 {
                             takes.push((entity.id, take));
-                            // A full load turns the worker around: the drop site is chosen from
-                            // the variant's own list, nearest first, at the moment the load fills
-                            // rather than when the order was given.
-                            let cap_raw = i64::from(carry_cap) * self.scale;
-                            if entity.carry.raw() + take >= cap_raw {
-                                let kind = match self.find(node).map(|n| n.kind) {
-                                    Some(EntityKind::Resource(kind)) => kind,
-                                    _ => continue,
-                                };
-                                if let Some(drop) =
-                                    self.nearest_drop_site(entity.player, target, entity.variant)
-                                {
-                                    switches.push((
-                                        entity.id,
-                                        Task::Return {
-                                            node,
-                                            drop,
-                                            kind,
-                                            rate_per_tick,
-                                            carry_cap,
-                                        },
-                                    ));
-                                }
-                            }
+                        }
+
+                        // Two reasons to head home: the load is full, or the node just gave its
+                        // last. The second matters because a partial load on a dead tree never
+                        // reaches the cap - the villager would stand there for the rest of the
+                        // match holding wood nobody can spend.
+                        let in_hand = entity.carry.raw() + take;
+                        let empty_node = node_left - take <= 0;
+                        let full = in_hand >= i64::from(carry_cap) * self.scale;
+                        if (take > 0 && (full || empty_node))
+                            || (take == 0 && empty_node && in_hand > 0)
+                        {
+                            switches.extend(
+                                self.return_task(entity, node, rate_per_tick, carry_cap)
+                                    .map(|task| (entity.id, task)),
+                            );
+                        }
+                        if take == 0 && empty_node && in_hand <= 0 {
+                            finished.push(entity.id);
                         }
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))
