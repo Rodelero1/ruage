@@ -1,30 +1,37 @@
-//! Headless runner: advance a world N ticks from a seed and print its state hash.
+//! Headless runner: seed a world from config, advance N ticks, print its state hash.
 //!
 //! This is the smallest thing that makes "can be cloned, built and run" true (D4 = B), and it
 //! is how a replay is checked from the outside: two runs of the same command must print the
 //! same hash, and a mismatch is a bug rather than bad luck.
 //!
 //! Usage:
-//!   ruage-headless --config config/sim.toml --seed 7 --ticks 100 --speed 1.35 --hp 100
+//!   ruage-headless --config config/sim.toml --map config/map.toml \
+//!                  --economy config/economy.toml --units config/gamedata/units.toml \
+//!                  --seed 7 --ticks 2000
 //!
-//! There are no default game values. `--speed` and `--hp` are required because a default would
-//! be a number invented by the CLI — exactly what D6 forbids — and a plausible wrong answer is
-//! worse than an error. A repeated flag is refused for the same reason: silently taking the
-//! first is how a run of 10 ticks gets reported as 10,000.
+//! There are no default game values, and nothing about units is accepted on the command line:
+//! who starts, where, and with what stats comes from the map, the economy and the unit table
+//! (D6). A `--speed` flag would be a number invented by the CLI. A repeated flag is refused for
+//! the same reason: silently taking the first is how a run of 10 ticks is reported as 10,000.
 
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::process::ExitCode;
 
-use ruage_fixed::Fixed;
-use ruage_sim::{EntityId, World};
+use ruage_data::{load_economy_file, load_map_file, load_sim_file, load_units_file};
+use ruage_sim::World;
 
-/// The single entity this runner creates. An id is an address, not a game value.
-const ENTITY: EntityId = EntityId(1);
+const USAGE: &str = "usage: ruage-headless --config <sim.toml> --map <map.toml> \
+                     --economy <economy.toml> --units <units.toml> --seed <u64> --ticks <u64>";
 
-const USAGE: &str = "usage: ruage-headless --config <sim.toml> --seed <u64> --ticks <u64> \
-                     --speed <decimal> --hp <i32>";
-
-const KNOWN: [&str; 5] = ["--config", "--seed", "--ticks", "--speed", "--hp"];
+const KNOWN: [&str; 6] = [
+    "--config",
+    "--map",
+    "--economy",
+    "--units",
+    "--seed",
+    "--ticks",
+];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -70,51 +77,55 @@ fn required<'a>(args: &BTreeMap<&'a str, &'a str>, name: &str) -> Result<&'a str
         .ok_or_else(|| format!("{name} is required"))
 }
 
+fn number<T: std::str::FromStr>(args: &BTreeMap<&str, &str>, name: &str) -> Result<T, String>
+where
+    T::Err: std::fmt::Display,
+{
+    required(args, name)?
+        .parse()
+        .map_err(|err| format!("{name}: {err}"))
+}
+
 fn run(args: &[String]) -> Result<(), String> {
     let parsed = parse(args)?;
 
     let config = required(&parsed, "--config")?;
-    let seed: u64 = required(&parsed, "--seed")?
-        .parse()
-        .map_err(|err| format!("--seed: {err}"))?;
-    let ticks: u64 = required(&parsed, "--ticks")?
-        .parse()
-        .map_err(|err| format!("--ticks: {err}"))?;
-    let speed_text = required(&parsed, "--speed")?;
-    let hp: i32 = required(&parsed, "--hp")?
-        .parse()
-        .map_err(|err| format!("--hp: {err}"))?;
+    let map_path = required(&parsed, "--map")?;
+    let economy_path = required(&parsed, "--economy")?;
+    let units_path = required(&parsed, "--units")?;
+    let seed: u64 = number(&parsed, "--seed")?;
+    let ticks: u64 = number(&parsed, "--ticks")?;
 
-    let settings =
-        ruage_data::load_sim_file(std::path::Path::new(config)).map_err(|err| format!("{err}"))?;
+    let settings = load_sim_file(Path::new(config)).map_err(|err| format!("{err}"))?;
+    let map = load_map_file(Path::new(map_path)).map_err(|err| format!("{err}"))?;
+    let economy = load_economy_file(Path::new(economy_path)).map_err(|err| format!("{err}"))?;
+    let units = load_units_file(Path::new(units_path)).map_err(|err| format!("{err}"))?;
 
-    // The scale comes from config; a speed the scale cannot represent is refused rather than
-    // rounded, which is the whole point of the fixed-point domain.
-    let speed = Fixed::parse(speed_text, settings.fixed_point_scale)
-        .map_err(|err| format!("--speed {speed_text}: {err}"))?;
-
-    let mut world = World::new(&settings, seed).map_err(|err| err.to_string())?;
+    let mut world = World::new(&settings, seed).map_err(|err| format!("{err}"))?;
     world
-        .spawn_now_checked(ENTITY, speed, hp)
-        .map_err(|err| err.to_string())?;
+        .seed_from(&map, &economy, &units)
+        .map_err(|err| format!("{err}"))?;
 
     for _ in 0..ticks {
-        world.step().map_err(|err| err.to_string())?;
+        world
+            .step()
+            .map_err(|err| format!("tick {}: {err}", world.tick()))?;
     }
 
-    let position = world
-        .position(ENTITY)
-        .ok_or("entity 1 vanished, which cannot happen")?;
+    let players = world
+        .entities()
+        .iter()
+        .map(|entity| entity.player)
+        .filter(|player| *player != 0)
+        .max()
+        .unwrap_or(0);
 
     println!(
-        "tick={} hash={:016x} x={} y={} entities={} scale={} tick_rate={}",
+        "tick={} entities={} players={} hash={:016x}",
         world.tick(),
-        world.state_hash(),
-        position.0.raw(),
-        position.1.raw(),
         world.entities().len(),
-        settings.fixed_point_scale,
-        world.tick_rate_hz(),
+        players,
+        world.state_hash()
     );
     Ok(())
 }

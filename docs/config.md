@@ -88,6 +88,12 @@ strict Rust loaders
 path syntax remains documented but unimplemented — so the rule is enforced for four files of six.
 Do not read a green `cargo test` as "the config layer is complete".
 
+`economy.toml` also carries `[start]` — the town centre id, the villager id and how many
+villagers each player begins with. Those are the last ids that were in danger of being written
+into code; the engine now asks the config what a match begins with, and `World::seed_from` places
+one town centre per map town-centre tile and that many villagers on the nearest free walkable
+tiles, with hp and speed resolved from `gamedata/units.toml`.
+
 The map loader enforces the invariants an author can get wrong: a row must be exactly `width`
 characters, terrain characters are `G` or `F` only, every resource tile is on the map, **wood
 must stand on forest and everything else on open ground** (which is what stops "a tree you can

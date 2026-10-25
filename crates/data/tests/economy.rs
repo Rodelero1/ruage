@@ -31,6 +31,11 @@ repair_hp_per_second = -1.0
 [decay]
 enabled = true
 rate_from = "dat"
+[start]
+town_centre = 109
+villager = 83
+villagers_per_player = 3
+
 [population]
 cap_default = 200
 house_population = 5
@@ -135,6 +140,52 @@ fn a_zero_variant_id_is_refused() {
         .expect_err("a zero variant id must be refused")
         .to_string();
     assert!(err.contains("gather.variant"), "got: {err}");
+}
+
+#[test]
+fn the_real_economy_names_the_starting_units() {
+    let economy = load_economy_file(&repo("config/economy.toml")).expect("economy.toml loads");
+    assert_eq!(economy.start.town_centre, 109, "RTWC");
+    assert_eq!(economy.start.villager, 83, "VMBAS");
+    assert_eq!(economy.start.villagers_per_player, 3);
+}
+
+#[test]
+fn a_missing_start_block_is_refused() {
+    let bad = GOOD.replace("[start]", "[renamed]");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("a config that does not say what a match begins with must be refused")
+        .to_string();
+    assert!(err.to_lowercase().contains("start"), "got: {err}");
+}
+
+#[test]
+fn start_ids_must_be_positive_and_distinct() {
+    let zero = GOOD.replace("town_centre = 109", "town_centre = 0");
+    assert!(
+        load_economy_str(&zero, "economy.toml").is_err(),
+        "id zero is not a unit"
+    );
+
+    let same = GOOD.replace("villager = 83", "villager = 109");
+    let err = load_economy_str(&same, "economy.toml")
+        .expect_err("one id cannot be both the town centre and the villager")
+        .to_string();
+    assert!(err.contains("109"), "got: {err}");
+}
+
+#[test]
+fn the_villager_count_must_be_a_sane_positive_number() {
+    for bad_count in ["0", "2000"] {
+        let bad = GOOD.replace(
+            "villagers_per_player = 3",
+            &format!("villagers_per_player = {bad_count}"),
+        );
+        let err = load_economy_str(&bad, "economy.toml")
+            .expect_err("an implausible villager count must be refused")
+            .to_string();
+        assert!(err.contains("villagers_per_player"), "got: {err}");
+    }
 }
 
 #[test]

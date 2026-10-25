@@ -17,17 +17,30 @@
 
 use std::fmt;
 
-use ruage_data::{CommandApply, Sim as Settings};
+use ruage_data::{CommandApply, Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
 
 /// Stable handle for an entity. Ordered, so iteration by id is just sorting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EntityId(pub u32);
 
+/// A building is a place; a unit is a thing that moves. Splitting them now keeps "villagers
+/// gather into the town centre" from being a special case of "entities with zero speed".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntityKind {
+    Building,
+    Unit,
+}
+
 /// The subset of an entity the tick loop touches today. Fixed-point only (D9).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
     pub id: EntityId,
+    /// 1 or 2. Zero is reserved for entities a test spawns with no owner.
+    pub player: u8,
+    pub kind: EntityKind,
+    /// The dat unit id this entity is an instance of (`config/gamedata/units.toml`).
+    pub unit: u32,
     pub position: (Fixed, Fixed),
     pub velocity: (Fixed, Fixed),
     pub hp: i32,
@@ -36,15 +49,41 @@ pub struct Entity {
 /// Inputs to the simulation. A replay is a list of these with the ticks they land on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
-    Spawn { id: EntityId, speed: Fixed, hp: i32 },
+    Spawn {
+        id: EntityId,
+        player: u8,
+        kind: EntityKind,
+        unit: u32,
+        position: (Fixed, Fixed),
+        speed: Fixed,
+        hp: i32,
+    },
 }
 
 #[derive(Debug)]
 pub enum SimError {
-    TooManyEntities { max: u32 },
+    TooManyEntities {
+        max: u32,
+    },
     DuplicateEntity(EntityId),
-    Displacement { id: EntityId, detail: String },
+    Displacement {
+        id: EntityId,
+        detail: String,
+    },
     Overflow(EntityId),
+    /// A config named a unit id the generated table does not contain.
+    MissingUnit {
+        id: u32,
+    },
+    /// The dat value is `-1.0`, i.e. unresolved, so it cannot enter state.
+    Unresolved {
+        id: u32,
+        detail: String,
+    },
+    /// No free tile near the town centre to place a starting villager.
+    NoSpace {
+        player: u8,
+    },
 }
 
 impl fmt::Display for SimError {
@@ -61,6 +100,17 @@ impl fmt::Display for SimError {
                 id.0
             ),
             SimError::Overflow(id) => write!(f, "entity {} position overflowed i64", id.0),
+            SimError::MissingUnit { id } => write!(
+                f,
+                "unit {id} is not in the unit table; the config points at an id the data lacks"
+            ),
+            SimError::Unresolved { id, detail } => {
+                write!(f, "unit {id} has an unresolved value: {detail}")
+            }
+            SimError::NoSpace { player } => write!(
+                f,
+                "no free tile next to player {player}'s town centre to place a villager"
+            ),
         }
     }
 }
@@ -114,9 +164,38 @@ fn fnv_bytes(hash: &mut u64, bytes: &[u8]) {
     }
 }
 
+/// The nearest free walkable tile around `from`, searched in ring order so the choice is
+/// deterministic and independent of any hash iteration.
+fn free_neighbour(
+    map: &Map,
+    from: (u16, u16),
+    used: &std::collections::BTreeSet<(u16, u16)>,
+) -> Option<(u16, u16)> {
+    for radius in 1..=8i32 {
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx.abs().max(dy.abs()) != radius {
+                    continue;
+                }
+                let (Some(x), Some(y)) = (
+                    u16::try_from(i32::from(from.0) + dx).ok(),
+                    u16::try_from(i32::from(from.1) + dy).ok(),
+                ) else {
+                    continue;
+                };
+                if map.is_walkable(x, y) && !used.contains(&(x, y)) {
+                    return Some((x, y));
+                }
+            }
+        }
+    }
+    None
+}
+
 pub struct World {
     tick: u64,
     tick_rate_hz: u32,
+    scale: i64,
     max_entities: u32,
     command_apply: CommandApply,
     entities: Vec<Entity>,
@@ -130,6 +209,7 @@ impl World {
         Ok(World {
             tick: 0,
             tick_rate_hz: settings.tick_rate_hz,
+            scale: settings.fixed_point_scale,
             max_entities: settings.max_entities,
             command_apply: settings.command_apply,
             entities: Vec::new(),
@@ -145,6 +225,11 @@ impl World {
 
     pub fn tick_rate_hz(&self) -> u32 {
         self.tick_rate_hz
+    }
+
+    /// The fixed-point scale every position and velocity in this world uses.
+    pub fn scale(&self) -> i64 {
+        self.scale
     }
 
     /// Entities in id order. The order is the invariant, not an implementation detail.
@@ -176,8 +261,9 @@ impl World {
         }
     }
 
-    /// Spawn outside the tick loop. Tests and tooling use this; the sim itself spawns through
-    /// commands. Panics on a duplicate id or a full world: those are programming errors.
+    /// Spawn a nameless mover at the origin. Movement tests use this; a real entity comes from
+    /// `seed_from`, because player, unit id and kind are not things a test should invent.
+    /// Panics on a duplicate id or a full world: those are programming errors.
     pub fn spawn_now(&mut self, id: EntityId, speed: Fixed, hp: i32) {
         self.spawn_now_checked(id, speed, hp)
             .unwrap_or_else(|err| panic!("{err}"));
@@ -189,35 +275,133 @@ impl World {
         speed: Fixed,
         hp: i32,
     ) -> Result<(), SimError> {
-        self.apply(Command::Spawn { id, speed, hp })
+        self.apply(Command::Spawn {
+            id,
+            player: 0,
+            kind: EntityKind::Unit,
+            unit: 0,
+            position: (Fixed::ZERO, Fixed::ZERO),
+            speed,
+            hp,
+        })
+    }
+
+    /// Build the opening position: one town centre per player, `villagers_per_player` villagers
+    /// around it, stats resolved from the unit table.
+    ///
+    /// Everything here is decided by the map and the config — no literal ids, no default
+    /// speeds (D6). Tiles are placed at their origin, so a tile at (x, y) is `x * scale`.
+    pub fn seed_from(
+        &mut self,
+        map: &Map,
+        economy: &Economy,
+        units: &Units,
+    ) -> Result<(), SimError> {
+        let tc_stats = economy.start.town_centre;
+        let villager_stats = economy.start.villager;
+        let town_centre = units
+            .unit(tc_stats)
+            .ok_or(SimError::MissingUnit { id: tc_stats })?;
+        let villager = units
+            .unit(villager_stats)
+            .ok_or(SimError::MissingUnit { id: villager_stats })?;
+
+        let resolve = |unit: &ruage_data::Unit, id: u32| -> Result<Fixed, SimError> {
+            unit.speed
+                .resolve(self.scale, "speed")
+                .map_err(|err| SimError::Unresolved {
+                    id,
+                    detail: err.to_string(),
+                })
+        };
+        let tc_speed = resolve(town_centre, tc_stats)?;
+        let villager_speed = resolve(villager, villager_stats)?;
+
+        let mut centres = map.town_centres.clone();
+        centres.sort_by_key(|centre| centre.player);
+
+        let mut used = std::collections::BTreeSet::new();
+        let mut next_id = 1u32;
+        for centre in centres {
+            let here = (centre.x, centre.y);
+            used.insert(here);
+            self.insert(Entity {
+                id: EntityId(next_id),
+                player: centre.player,
+                kind: EntityKind::Building,
+                unit: tc_stats,
+                position: self.tile(here),
+                velocity: (tc_speed, Fixed::ZERO),
+                hp: town_centre.hp,
+            })?;
+            next_id += 1;
+
+            for _ in 0..economy.start.villagers_per_player {
+                let spot = free_neighbour(map, here, &used).ok_or(SimError::NoSpace {
+                    player: centre.player,
+                })?;
+                used.insert(spot);
+                self.insert(Entity {
+                    id: EntityId(next_id),
+                    player: centre.player,
+                    kind: EntityKind::Unit,
+                    unit: villager_stats,
+                    position: self.tile(spot),
+                    velocity: (villager_speed, Fixed::ZERO),
+                    hp: villager.hp,
+                })?;
+                next_id += 1;
+            }
+        }
+        Ok(())
+    }
+
+    /// A tile's origin as a world position. Tiles are the unit of the map; the scale is the unit
+    /// of state, and this is the only place the two meet.
+    fn tile(&self, (x, y): (u16, u16)) -> (Fixed, Fixed) {
+        (
+            Fixed::from_raw(i64::from(x) * self.scale),
+            Fixed::from_raw(i64::from(y) * self.scale),
+        )
+    }
+
+    fn insert(&mut self, entity: Entity) -> Result<(), SimError> {
+        if self.find(entity.id).is_some() {
+            return Err(SimError::DuplicateEntity(entity.id));
+        }
+        if self.entities.len() >= self.max_entities as usize {
+            return Err(SimError::TooManyEntities {
+                max: self.max_entities,
+            });
+        }
+        let at = self
+            .entities
+            .iter()
+            .position(|existing| existing.id > entity.id)
+            .unwrap_or(self.entities.len());
+        self.entities.insert(at, entity);
+        Ok(())
     }
 
     fn apply(&mut self, command: Command) -> Result<(), SimError> {
         match command {
-            Command::Spawn { id, speed, hp } => {
-                if self.find(id).is_some() {
-                    return Err(SimError::DuplicateEntity(id));
-                }
-                if self.entities.len() >= self.max_entities as usize {
-                    return Err(SimError::TooManyEntities {
-                        max: self.max_entities,
-                    });
-                }
-                let entity = Entity {
-                    id,
-                    position: (Fixed::ZERO, Fixed::ZERO),
-                    velocity: (speed, Fixed::ZERO),
-                    hp,
-                };
-                // Insert by id: the vector is the iteration order.
-                let at = self
-                    .entities
-                    .iter()
-                    .position(|e| e.id > id)
-                    .unwrap_or(self.entities.len());
-                self.entities.insert(at, entity);
-                Ok(())
-            }
+            Command::Spawn {
+                id,
+                player,
+                kind,
+                unit,
+                position,
+                speed,
+                hp,
+            } => self.insert(Entity {
+                id,
+                player,
+                kind,
+                unit,
+                position,
+                velocity: (speed, Fixed::ZERO),
+                hp,
+            }),
         }
     }
 
@@ -283,6 +467,15 @@ impl World {
         fnv_bytes(&mut hash, &(self.entities.len() as u32).to_le_bytes());
         for entity in &self.entities {
             fnv_bytes(&mut hash, &entity.id.0.to_le_bytes());
+            fnv_bytes(&mut hash, &entity.player.to_le_bytes());
+            fnv_bytes(
+                &mut hash,
+                &[match entity.kind {
+                    EntityKind::Building => b'b',
+                    EntityKind::Unit => b'u',
+                }],
+            );
+            fnv_bytes(&mut hash, &entity.unit.to_le_bytes());
             fnv_bytes(&mut hash, &entity.position.0.raw().to_le_bytes());
             fnv_bytes(&mut hash, &entity.position.1.raw().to_le_bytes());
             fnv_bytes(&mut hash, &entity.velocity.0.raw().to_le_bytes());
@@ -406,6 +599,10 @@ overrides = "overrides.toml"
             w.spawn_now(EntityId(1), Fixed::parse("1.54", S).unwrap(), 100);
             w.submit(Command::Spawn {
                 id: EntityId(2),
+                player: 1,
+                kind: EntityKind::Unit,
+                unit: 83,
+                position: (Fixed::ZERO, Fixed::ZERO),
                 speed: Fixed::parse("0.8", S).unwrap(),
                 hp: 25,
             });
@@ -451,6 +648,10 @@ overrides = "overrides.toml"
         w.step().unwrap();
         w.submit(Command::Spawn {
             id: EntityId(1),
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: 83,
+            position: (Fixed::ZERO, Fixed::ZERO),
             speed: Fixed::ZERO,
             hp: 10,
         });
@@ -467,6 +668,10 @@ overrides = "overrides.toml"
         let mut w = World::new(&settings(20, "immediate"), 1).unwrap();
         w.submit(Command::Spawn {
             id: EntityId(1),
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: 83,
+            position: (Fixed::ZERO, Fixed::ZERO),
             speed: Fixed::ZERO,
             hp: 10,
         });

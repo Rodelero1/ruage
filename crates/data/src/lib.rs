@@ -18,7 +18,7 @@ mod economy;
 mod map;
 mod units;
 pub use economy::{
-    Build, Decay, Economy, Farm, Gather, Population, load_economy_file, load_economy_str,
+    Build, Decay, Economy, Farm, Gather, Population, Start, load_economy_file, load_economy_str,
 };
 pub use map::{Map, ResourceKind, ResourceNode, Terrain, TownCentre, load_map_file, load_map_str};
 pub use units::{Unit, Units, load_units_file, load_units_str};

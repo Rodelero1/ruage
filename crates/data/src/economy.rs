@@ -21,6 +21,15 @@ pub struct Economy {
     pub build: Build,
     pub decay: Decay,
     pub population: Population,
+    /// What a match begins with. Ids are config, never code (D6).
+    pub start: Start,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Start {
+    pub town_centre: u32,
+    pub villager: u32,
+    pub villagers_per_player: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +77,7 @@ struct RawEconomy {
     build: RawBuild,
     decay: RawDecay,
     population: RawPopulation,
+    start: RawStart,
 }
 
 #[derive(Deserialize)]
@@ -105,6 +115,14 @@ struct RawBuild {
 struct RawDecay {
     enabled: bool,
     rate_from: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawStart {
+    town_centre: u32,
+    villager: u32,
+    villagers_per_player: u32,
 }
 
 #[derive(Deserialize)]
@@ -196,6 +214,33 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         ));
     }
 
+    if raw.start.town_centre == 0 || raw.start.villager == 0 {
+        return Err(invalid(
+            path,
+            "start",
+            "unit id zero is not a building or a villager; both fields must be set",
+        ));
+    }
+    if raw.start.town_centre == raw.start.villager {
+        return Err(invalid(
+            path,
+            "start",
+            format!(
+                "{} is both the town centre and the villager; a match starts with one of each",
+                raw.start.town_centre
+            ),
+        ));
+    }
+    // A start above 50 is a typo, not a game variant: the dat's own largest starting count is
+    // nowhere near it, and spawning a thousand villagers would hide the mistake behind lag.
+    if !(1..=50).contains(&raw.start.villagers_per_player) {
+        return Err(invalid(
+            path,
+            "start.villagers_per_player",
+            format!("{} is not between 1 and 50", raw.start.villagers_per_player),
+        ));
+    }
+
     Ok(Economy {
         schema: raw.schema,
         farm: Farm {
@@ -220,6 +265,11 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         population: Population {
             cap_default: raw.population.cap_default,
             house_population: raw.population.house_population,
+        },
+        start: Start {
+            town_centre: raw.start.town_centre,
+            villager: raw.start.villager,
+            villagers_per_player: raw.start.villagers_per_player,
         },
     })
 }

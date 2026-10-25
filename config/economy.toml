@@ -68,6 +68,15 @@ enabled = true
 rate_from = "dat"
 # unit.resource_decay_rate exists per unit; semantics unverified.
 
+[start]
+# What a match begins with. Ids live here rather than in code (D6). 109 = RTWC, the town
+# centre that villager 83 names as its first drop site; 83 = VMBAS (25 hp, 0.8 tiles/s).
+town_centre = 109
+villager = 83
+villagers_per_player = 3
+# PROVENANCE: dat (ids, hp, speed) + the standard 3-villager start. The count is a match
+# rule, not a dat field, which is exactly why it belongs in config.
+
 [population]
 cap_default = 200
 house_population = 5
