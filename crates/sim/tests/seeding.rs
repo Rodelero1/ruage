@@ -16,6 +16,7 @@ struct Fixture {
     settings: Settings,
     map: Map,
     economy: Economy,
+    resources: ruage_data::Resources,
     units: Units,
 }
 
@@ -33,6 +34,8 @@ fn fixture() -> Option<Fixture> {
         settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
         map: load_map_file(&repo("config/map.toml")).expect("map.toml"),
         economy: load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
+        resources: ruage_data::load_resources_file(&repo("config/resources.toml"))
+            .expect("resources.toml"),
         units: ruage_data::load_units_file(&units).expect("units.toml"),
     })
 }
@@ -42,6 +45,7 @@ fn seeded(fx: &Fixture) -> World {
     world
         .seed_from(&fx.map, &fx.economy, &fx.units)
         .expect("seeding must succeed");
+    world.load_resources(&fx.resources);
     world
 }
 
@@ -270,6 +274,7 @@ fn two_seeds_of_the_same_inputs_hash_the_same() {
     // property worth pinning - if seeding ever starts rolling dice, this test says so.
     let mut c = World::new(&fx.settings, 99).expect("world");
     c.seed_from(&fx.map, &fx.economy, &fx.units).expect("seed");
+    c.load_resources(&fx.resources);
     assert_eq!(
         a.state_hash(),
         c.state_hash(),

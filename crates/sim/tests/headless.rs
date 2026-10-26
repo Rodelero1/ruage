@@ -27,12 +27,13 @@ fn have_units() -> bool {
     false
 }
 
-fn paths() -> [String; 4] {
+fn paths() -> [String; 5] {
     [
         repo("config/sim.toml").display().to_string(),
         repo("config/map.toml").display().to_string(),
         repo("config/economy.toml").display().to_string(),
         units().display().to_string(),
+        repo("config/resources.toml").display().to_string(),
     ]
 }
 
@@ -52,7 +53,7 @@ fn run(args: &[&str]) -> String {
 }
 
 fn seeded_args(seed: &str, ticks: &str) -> Vec<String> {
-    let [sim, map, economy, units] = paths();
+    let [sim, map, economy, units, resources] = paths();
     vec![
         "--config".into(),
         sim,
@@ -62,6 +63,8 @@ fn seeded_args(seed: &str, ticks: &str) -> Vec<String> {
         economy,
         "--units".into(),
         units,
+        "--resources".into(),
+        resources,
         "--seed".into(),
         seed.into(),
         "--ticks".into(),
@@ -110,7 +113,7 @@ fn a_missing_map_is_an_error_not_a_default() {
     if !have_units() {
         return;
     }
-    let [sim, _map, economy, units] = paths();
+    let [sim, _map, economy, units, resources] = paths();
     let out = Command::new(env!("CARGO_BIN_EXE_ruage-headless"))
         .args([
             "--config",
@@ -119,6 +122,8 @@ fn a_missing_map_is_an_error_not_a_default() {
             &economy,
             "--units",
             &units,
+            "--resources",
+            &resources,
             "--seed",
             "7",
             "--ticks",
@@ -188,7 +193,7 @@ fn a_units_path_that_does_not_exist_names_the_file() {
     if !have_units() {
         return;
     }
-    let [sim, map, economy, _units] = paths();
+    let [sim, map, economy, _units, resources] = paths();
     let missing = Path::new("/nonexistent/units.toml");
     let out = Command::new(env!("CARGO_BIN_EXE_ruage-headless"))
         .args([
@@ -200,6 +205,8 @@ fn a_units_path_that_does_not_exist_names_the_file() {
             &economy,
             "--units",
             missing.to_str().unwrap(),
+            "--resources",
+            &resources,
             "--seed",
             "7",
             "--ticks",
@@ -210,4 +217,37 @@ fn a_units_path_that_does_not_exist_names_the_file() {
     assert!(!out.status.success(), "a missing file must fail");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("units.toml"), "stderr was:\n{stderr}");
+}
+
+#[test]
+fn a_missing_resources_file_is_an_error_not_a_default() {
+    // D6: the CLI must not invent a resource table. Without one the world cannot price an order,
+    // so the runner asks for the file instead of reading `config/resources.toml` behind your back.
+    if !have_units() {
+        return;
+    }
+    let [sim, map, economy, units, _resources] = paths();
+    let out = Command::new(env!("CARGO_BIN_EXE_ruage-headless"))
+        .args([
+            "--config",
+            &sim,
+            "--map",
+            &map,
+            "--economy",
+            &economy,
+            "--units",
+            &units,
+            "--seed",
+            "7",
+            "--ticks",
+            "10",
+        ])
+        .output()
+        .expect("runner must be executable");
+    assert!(!out.status.success(), "a missing --resources must fail");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("--resources is required"),
+        "the refusal must name the flag as required, not as unknown: {stderr}"
+    );
 }

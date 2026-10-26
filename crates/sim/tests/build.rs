@@ -17,6 +17,7 @@ struct Fixture {
     settings: Settings,
     map: Map,
     economy: Economy,
+    resources: ruage_data::Resources,
     units: Units,
 }
 
@@ -33,6 +34,8 @@ fn fixture() -> Option<Fixture> {
         settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
         map: ruage_data::load_map_file(&repo("config/map.toml")).expect("map.toml"),
         economy: ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
+        resources: ruage_data::load_resources_file(&repo("config/resources.toml"))
+            .expect("resources.toml"),
         units: ruage_data::load_units_file(&units).expect("units.toml"),
     })
 }
@@ -42,6 +45,7 @@ fn seeded(fx: &Fixture) -> World {
     world
         .seed_from(&fx.map, &fx.economy, &fx.units)
         .expect("seeding");
+    world.load_resources(&fx.resources);
     world
 }
 
@@ -320,6 +324,7 @@ fn an_unreachable_site_is_refused_before_the_wood_is_spent() {
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
+    world.load_resources(&fx.resources);
 
     let villager = first_villager(&world);
     let scale = world.scale();

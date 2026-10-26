@@ -18,7 +18,7 @@ fn repo(rel: &str) -> PathBuf {
         .join(rel)
 }
 
-fn fixture() -> Option<(Settings, Map, Economy, Units)> {
+fn fixture() -> Option<(Settings, Map, Economy, Units, ruage_data::Resources)> {
     let units = repo("config/gamedata/units.toml");
     if !units.exists() {
         eprintln!("skipping: no units.toml (generated, D8)");
@@ -29,15 +29,20 @@ fn fixture() -> Option<(Settings, Map, Economy, Units)> {
         ruage_data::load_map_file(&repo("config/map.toml")).expect("map.toml"),
         ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
         ruage_data::load_units_file(&units).expect("units.toml"),
+        ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml"),
     ))
 }
 
 /// Idle units at rest: the cheapest possible world, so whatever cost shows up is per-entity
 /// bookkeeping rather than pathfinding.
-fn world_with(fx: &(Settings, Map, Economy, Units), extra_units: usize) -> World {
-    let (settings, map, economy, units) = fx;
+fn world_with(
+    fx: &(Settings, Map, Economy, Units, ruage_data::Resources),
+    extra_units: usize,
+) -> World {
+    let (settings, map, economy, units, resources) = fx;
     let mut world = World::new(settings, 11).expect("world");
     world.seed_from(map, economy, units).expect("seeding");
+    world.load_resources(resources);
     let scale = world.scale();
     for (next, i) in (10_000u32..).zip(0..extra_units) {
         let id = EntityId(next);

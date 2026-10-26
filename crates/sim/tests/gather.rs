@@ -19,6 +19,7 @@ struct Fixture {
     settings: Settings,
     map: Map,
     economy: Economy,
+    resources: ruage_data::Resources,
     units: Units,
 }
 
@@ -35,6 +36,8 @@ fn fixture() -> Option<Fixture> {
         settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
         map: ruage_data::load_map_file(&repo("config/map.toml")).expect("map.toml"),
         economy: ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
+        resources: ruage_data::load_resources_file(&repo("config/resources.toml"))
+            .expect("resources.toml"),
         units: ruage_data::load_units_file(&units).expect("units.toml"),
     })
 }
@@ -44,6 +47,7 @@ fn seeded(fx: &Fixture) -> World {
     world
         .seed_from(&fx.map, &fx.economy, &fx.units)
         .expect("seeding");
+    world.load_resources(&fx.resources);
     world
 }
 
@@ -236,6 +240,7 @@ fn a_depleted_node_stops_yielding() {
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
+    world.load_resources(&fx.resources);
 
     let node = world
         .entities()
@@ -317,6 +322,7 @@ fn a_partial_load_comes_home_when_the_node_runs_out() {
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
+    world.load_resources(&fx.resources);
 
     let node = world
         .entities()
@@ -402,6 +408,7 @@ fn two_villagers_on_one_node_cannot_take_more_than_it_holds() {
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
+    world.load_resources(&fx.resources);
 
     let node = world
         .entities()

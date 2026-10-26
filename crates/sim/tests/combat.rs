@@ -18,6 +18,7 @@ struct Fixture {
     settings: ruage_data::Sim,
     map: Map,
     economy: Economy,
+    resources: ruage_data::Resources,
     units: Units,
     combat: ruage_data::Combat,
 }
@@ -35,6 +36,8 @@ fn fixture() -> Option<Fixture> {
         settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
         map: ruage_data::load_map_file(&repo("config/map.toml")).expect("map.toml"),
         economy: ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
+        resources: ruage_data::load_resources_file(&repo("config/resources.toml"))
+            .expect("resources.toml"),
         units: ruage_data::load_units_file(&units).expect("units.toml"),
         combat: ruage_data::load_combat_file(&repo("config/combat.toml")).expect("combat.toml"),
     })
@@ -54,6 +57,7 @@ fn duel(fx: &Fixture) -> (World, EntityId, EntityId) {
     world
         .seed_from(&fx.map, &fx.economy, &fx.units)
         .expect("seeding");
+    world.load_resources(&fx.resources);
     world.load_combat(&fx.combat);
     let scale = world.scale();
     let at = |x: i64, y: i64| (Fixed::from_raw(x * scale), Fixed::from_raw(y * scale));

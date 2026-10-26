@@ -7,6 +7,7 @@
 //! Usage:
 //!   ruage-headless --config config/sim.toml --map config/map.toml \
 //!                  --economy config/economy.toml --units config/gamedata/units.toml \
+//!                  --resources config/resources.toml \
 //!                  --combat config/combat.toml --script config/scenario.toml --seed 7
 //!
 //!   --ticks N        run exactly N ticks (instead of the script's length)
@@ -22,21 +23,23 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use ruage_data::{
-    ResourceKind, load_combat_file, load_economy_file, load_map_file, load_sim_file,
-    load_units_file,
+    ResourceKind, load_combat_file, load_economy_file, load_map_file, load_resources_file,
+    load_sim_file, load_units_file,
 };
 use ruage_sim::{Outcome, Runner, World, describe, load_scenario_file};
 
 const USAGE: &str = "usage: ruage-headless --config <sim.toml> --map <map.toml> \
                      --economy <economy.toml> --units <units.toml> \
+                     --resources <resources.toml> \
                      [--combat <combat.toml>] [--script <scenario.toml>] \
                      [--ticks <n>] [--report <seconds>] --seed <u64>";
 
-const KNOWN: [&str; 10] = [
+const KNOWN: [&str; 11] = [
     "--config",
     "--map",
     "--economy",
     "--units",
+    "--resources",
     "--combat",
     "--script",
     "--seed",
@@ -109,12 +112,15 @@ fn run(args: &[String]) -> Result<(), String> {
         .map_err(|err| format!("{err}"))?;
     let units = load_units_file(Path::new(required(&parsed, "--units")?))
         .map_err(|err| format!("{err}"))?;
+    let resources = load_resources_file(Path::new(required(&parsed, "--resources")?))
+        .map_err(|err| format!("{err}"))?;
     let seed: u64 = number(&parsed, "--seed")?;
 
     let mut world = World::new(&settings, seed).map_err(|err| format!("{err}"))?;
     world
         .seed_from(&map, &economy, &units)
         .map_err(|err| format!("{err}"))?;
+    world.load_resources(&resources);
 
     if let Some(path) = parsed.get("--combat") {
         let combat = load_combat_file(Path::new(path)).map_err(|err| format!("{err}"))?;

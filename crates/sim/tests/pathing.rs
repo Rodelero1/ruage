@@ -18,6 +18,7 @@ fn repo(rel: &str) -> PathBuf {
 struct Fixture {
     settings: Settings,
     economy: Economy,
+    resources: ruage_data::Resources,
     units: Units,
 }
 
@@ -33,6 +34,8 @@ fn fixture() -> Option<Fixture> {
     Some(Fixture {
         settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
         economy: ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
+        resources: ruage_data::load_resources_file(&repo("config/resources.toml"))
+            .expect("resources.toml"),
         units: ruage_data::load_units_file(&units).expect("units.toml"),
     })
 }
@@ -112,6 +115,7 @@ fn world_with(fx: &Fixture, map_text: &str) -> (World, ruage_data::Map) {
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
+    world.load_resources(&fx.resources);
     (world, map)
 }
 
