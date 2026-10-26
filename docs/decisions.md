@@ -213,3 +213,33 @@ packed values are now modelled there), and any new deterministic-simulation writ
 
 The watch checks against our open questions rather than in the abstract: it is asked to name any
 U-number a source now answers, and to say "nothing changed" when nothing did.
+
+---
+
+## D19 - A match's content is identified by a hash, and a mismatch refuses the match
+
+**Decided 2026-10-25.** Two players in a LAN game must be running the same content. If they are not,
+the simulation diverges within a minute and the network is blamed for it.
+
+`ContentPack::load(config_dir)` reads every file a match depends on - `sim.toml`, `economy.toml`,
+`map.toml`, `gamedata/units.toml`, `combat.toml`, `resources.toml` - and produces one **content hash**
+(FNV-1a over each file's bytes, mixed with its name, in a fixed order).
+
+**The hash is over file bytes, not parsed values.** That is deliberate:
+
+- it is what "are we running the same data" actually means, and no field the loader happens to ignore
+  can slip past it;
+- it needs no stable serialisation of every struct, which would be a second source of divergence;
+- its cost is accepted: editing a comment changes the hash, so a modded pack must be re-published
+  rather than tweaked in place. For a shared pack, that is the correct behaviour.
+
+`differences(&other)` names the files that disagree, so a handshake can say *which* file rather than
+"different hash" - the difference between a five-second fix and an evening.
+
+**Where it goes:** the match handshake and the replay header, alongside `tick_rate_hz` and
+`fixed_point_scale` (D16). A peer whose hash differs is refused at the door. A replay whose hash
+differs from the running content is refused the same way, because it would silently simulate
+something else.
+
+**Not yet wired into a handshake** - there is no networking yet. The pack and its identity exist so
+that the first network code cannot be written without them.
