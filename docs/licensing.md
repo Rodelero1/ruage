@@ -116,3 +116,62 @@ tools/genconfig  ──imports──▶  GenieDatParser (GPL-3.0, Divy1211)
 `.gitignore` is the mechanism, and it is reviewed whenever a new artefact type appears. A
 pre-commit check is a sensible later addition: fail the commit if any staged path matches
 `Age2HD/`, `config/gamedata/`, `build/`, or a save/asset extension.
+
+---
+
+# Licence survey of comparable projects (2026-10-25)
+
+Checked against the GitHub API, not from memory:
+
+| project | declared licence | note |
+|---|---|---|
+| `SFTtech/openage` | GPL-3.0-or-later (NOASSERTION on GitHub) | copyleft |
+| `librematch/genie` | **AGPL-3.0** | copyleft *with the network clause* — worst case for reuse |
+| `SiegeEngineers/genie-rs` | GPL-3.0 | dormant since 2023 |
+| `SiegeEngineers/genieutils-py` | **LGPL-3.0** | the only "lesser" one in the field |
+| `SiegeEngineers/sld-extractor` | **none declared** | all rights reserved by default: no permission at all |
+| `SiegeEngineers/WololoKingdoms` | GPL-3.0 | |
+| `SiegeEngineers/aoc-reference-data` | none declared | data, but no explicit grant |
+| `OpenRA/OpenRA` | GPL-3.0 | |
+| `OpenRCT2/OpenRCT2` | GPL-3.0 | |
+| `openblack/openblack` | GPL-3.0 | |
+| `OpenTTD/OpenTTD` | GPL-2.0 (NOASSERTION) | |
+| `0 A.D.` | GPL-2.0+ code, CC-BY-SA art | art is separately licensed |
+
+**The field is uniformly copyleft.** Our MIT/Apache dual is the outlier, and that is a deliberate
+choice rather than an accident: a permissive engine can be embedded, packaged by distributions, read
+by modding tools and reused by other engines, and permissive code can be taken *into* a GPL project
+(MIT and Apache-2.0 are both GPL-3.0-compatible). The reverse is not true. Compatibility runs one
+way, and this is the direction that costs us nothing.
+
+## What that means concretely
+
+- **We may take code from:** nothing in the survey. Every comparable engine is GPL-3.0, and
+  `librematch/genie` is AGPL-3.0, which extends copyleft to network use.
+- **We may take ideas from:** all of them. Reading a GPL implementation and writing our own from the
+  data and the documented format is what D17 already requires for a different reason.
+- **`sld-extractor` has no licence at all.** "No licence" is not "free": default copyright applies.
+  It may be read for what it does, never copied.
+- **`genieutils-py` is LGPL-3.0**, the only licence in the field that would technically permit a
+  separate-component arrangement. Not needed: `GenieDatParser` is already separated (D12).
+
+## Correction to D13
+
+D13 said "adopt only `librematch/genie` file-format readers in a separate tooling repository". With
+the licence checked, that is **withdrawn**: AGPL-3.0 on a tool that reads game data would put the
+strongest copyleft obligation we could have chosen onto the part of the pipeline that touches the
+game's files. `GenieDatParser` (GPL-3.0, local build-time tool, separate repository) is the *less*
+restrictive option and stays the choice.
+
+## The policy to keep (D21)
+
+| artefact | licence | why |
+|---|---|---|
+| engine (`crates/`) | MIT OR Apache-2.0 | permissive, GPL-3.0-compatible, distributable |
+| content pack schema + our authored `config/` | MIT OR Apache-2.0 | a modder must be able to copy a schema without a licence question |
+| original art and audio (later) | CC-BY-SA 4.0, per-asset attribution | art wants attribution, not source disclosure |
+| game data | not shipped (D8) | it is not ours to license |
+
+"Compatibility" worth engineering is **format** compatibility, not licence compatibility: a documented,
+permissively licensed content-pack format is something other engines and modders can target, and it is
+the one thing the GPL projects cannot offer back.

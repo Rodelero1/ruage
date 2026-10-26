@@ -287,3 +287,31 @@ The map is part of the content pack hash today. When map variety arrives - diffe
 same two players without republishing a pack - the map becomes a **per-match** field hashed
 separately, beside `tick_rate_hz` and `fixed_point_scale`. Not before: one identity fewer is one
 desync cause fewer, and nothing about the current single authored map needs variety.
+
+---
+
+## D21 - Licence policy: permissive engine, attribution for art, nothing borrowed from GPL code
+
+**Decided 2026-10-25**, after surveying the field (see `docs/licensing.md`).
+
+Every comparable engine is GPL-3.0 (`openage`, `OpenRA`, `OpenRCT2`, `openblack`, `genie-rs`,
+`WololoKingdoms`) or AGPL-3.0 (`librematch/genie`). Our MIT/Apache dual is therefore an outlier, and
+it stays: permissive code can be taken into GPL projects, packaged by distributions and read by
+modding tools, while the reverse is not possible. The compatibility runs one way and this is the
+direction that costs nothing.
+
+Three artefacts, three answers:
+
+- **engine and content schema**: MIT OR Apache-2.0, as now. A modder must be able to copy a schema
+  format without a licence question.
+- **original art and audio**: CC-BY-SA 4.0 with per-asset attribution when they exist. Art needs
+  attribution, not source disclosure, and the engine already addresses visuals by content id (D18).
+- **game data**: never shipped (D8). It is not ours to license.
+
+**D13 is corrected**: `librematch/genie` is AGPL-3.0, so adopting its readers in the tooling repo is
+withdrawn - the network clause on the one component that reads the game's files is the strongest
+obligation available. `GenieDatParser` (GPL-3.0, local, separate repository) is the less restrictive
+choice and remains it.
+
+**`sld-extractor` declares no licence.** No licence is not permission: default copyright applies, so
+it may be read for what it does and never copied from.
