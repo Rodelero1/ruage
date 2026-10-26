@@ -9,10 +9,12 @@ is not "what would be nice" but **what each increment costs and what it buys**, 
 ## Done: kind 3 (81 of 93 carrying effects are *only* kind 3)
 
 `Command::Research` + a per-player researched set + `[3, from, to]` applied as a health-fraction
-preserving swap. The tech the tests use is Man-at-Arms (tech 222, effect 211, `74 → 75`, 100 food +
+preserving swap, with one order per tech in flight at a time (`TechInProgress`). The tech the tests use is Man-at-Arms (tech 222, effect 211, `74 → 75`, 100 food +
 40 gold, 40 s), identified by cost and time rather than by id. Not done, and named: prerequisites
 (`required`) are loaded and *not* enforced - tech 222 requires tech 101, the Feudal Age, whose own
-effect is a kind-102 gating command - and a unit already inside a production queue is not upgraded.
+effect is a kind-102 gating command - a unit already inside a production queue is not upgraded, and
+`location` reads as "any building" when it is `<= 0`, which the data leaves ambiguous: 458 techs
+carry `-1` and 136 carry `0`, while only 13 name a barracks explicitly.
 
 ## The census, re-measured
 
