@@ -151,3 +151,58 @@ dat_id = 1
         .to_string();
     assert!(err.contains("claimed twice"), "got: {err}");
 }
+
+#[test]
+fn reference_ids_translate_to_slots() {
+    // The dat's numbering, translated once, in the pack layer. 0 food, 1 wood, 2 stone, 3 gold -
+    // while the slots are wood, food, gold, stone. The whole point is that these disagree.
+    let resources = project();
+    assert_eq!(
+        resources.slot_for_dat_id(1),
+        Some(0),
+        "dat 1 is wood, slot 0"
+    );
+    assert_eq!(
+        resources.slot_for_dat_id(0),
+        Some(1),
+        "dat 0 is food, slot 1"
+    );
+    assert_eq!(
+        resources.slot_for_dat_id(3),
+        Some(2),
+        "dat 3 is gold, slot 2"
+    );
+    assert_eq!(
+        resources.slot_for_dat_id(2),
+        Some(3),
+        "dat 2 is stone, slot 3"
+    );
+    assert_eq!(
+        resources.slot_for_dat_id(99),
+        None,
+        "an id the pack does not carry"
+    );
+}
+
+#[test]
+fn a_pack_without_reference_ids_translates_nothing() {
+    // Our own content pack will not claim the dat's numbers at all. Every lookup must then miss,
+    // rather than quietly resolving to slot 0 and paying a house with food.
+    let ours = r#"
+schema = 1
+
+[[resource]]
+slot = 0
+name = "timber"
+
+[[resource]]
+slot = 1
+name = "grain"
+"#;
+    let resources = load_resources_str(ours, "resources.toml").expect("loads");
+    for dat_id in 0..4 {
+        assert_eq!(resources.slot_for_dat_id(dat_id), None);
+    }
+    assert_eq!(resources.slot_of("timber"), Some(0));
+    assert_eq!(resources.count(), 2, "a two-resource pack is legal");
+}

@@ -34,6 +34,19 @@ impl Resources {
             .position(|resource| resource.name == name)
     }
 
+    /// The stockpile slot for the *reference pack's* id, or `None` when this pack does not carry
+    /// that id. This is where the dat's numbering is translated, so `crates/` never has to know it
+    /// (D17): a cost entry `[1, 25]` becomes slot `slot_for_dat_id(1)` and nothing above the pack
+    /// layer sees the 1.
+    ///
+    /// A pack of our own has no reference ids at all, so every lookup returns `None` - which is
+    /// correct, and is why callers must handle it rather than defaulting to slot 0.
+    pub fn slot_for_dat_id(&self, dat_id: u16) -> Option<usize> {
+        self.entries
+            .iter()
+            .position(|resource| resource.dat_id == Some(dat_id))
+    }
+
     pub fn name(&self, slot: usize) -> Option<&str> {
         self.entries
             .get(slot)
