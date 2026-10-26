@@ -1,8 +1,18 @@
-# Next step: the effect interpreter, priced from the data
+# The effect interpreter, priced from the data
 
-Written 2026-10-26, after the resource enum and the unit roles became content (SPEC v0.54). The
-question this file answers is not "what would be nice" but **what the next increment costs and what
-it buys**, measured against `config/gamedata/effects.toml` rather than remembered.
+Written 2026-10-26, after the resource enum and the unit roles became content (SPEC v0.54).
+**Kind 3 landed the same day** (v0.55): research plus "every unit `a` becomes unit `b`". This file
+keeps the census that decided the order of work and records what is left - the question it answers
+is not "what would be nice" but **what each increment costs and what it buys**, measured against
+`config/gamedata/effects.toml` rather than remembered.
+
+## Done: kind 3 (81 of 93 carrying effects are *only* kind 3)
+
+`Command::Research` + a per-player researched set + `[3, from, to]` applied as a health-fraction
+preserving swap. The tech the tests use is Man-at-Arms (tech 222, effect 211, `74 → 75`, 100 food +
+40 gold, 40 s), identified by cost and time rather than by id. Not done, and named: prerequisites
+(`required`) are loaded and *not* enforced - tech 222 requires tech 101, the Feudal Age, whose own
+effect is a kind-102 gating command - and a unit already inside a production queue is not upgraded.
 
 ## The census, re-measured
 

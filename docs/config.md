@@ -274,3 +274,16 @@ costs. The test that pins the whole boundary is
 five resources called grain, iron, salt, wool and timber, a map whose wood is called timber, and a
 house that costs `{ resource = "timber", amount = 25 }`, gathered, paid for and built to full hp —
 with the slot-0 column asserted to stay empty throughout.
+
+## Techs cost what units cost (2026-10-26)
+
+`crates/data/src/cost.rs` holds one price type, and both tables use it: `[1, 25]` is the reference
+pack's id and `{ resource = "timber", amount = 25 }` is a name the pack defines. That matters for
+research, which is content like everything else: a tech's price resolves through `cost_slot`, so a
+pack of our own can price a tech in its own resources, and a pack that cannot price it refuses the
+order rather than starting it for free.
+
+`techs.toml` and `effects.toml` are part of the **content pack** as of the same date - `PACK_FILES`
+is eight files, not six - because a peer running different techs is playing a different game. The
+content hash covers their bytes too, so a mismatch is caught at the handshake rather than when one
+side's spearman upgrades and the other's does not.
