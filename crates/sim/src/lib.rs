@@ -15,11 +15,12 @@
 //! not tunable game values — D6 governs the latter. Everything game-shaped comes from
 //! `ruage_data::Sim`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use ruage_data::{
-    CommandApply, Cost, CostResource, Economy, Map, Resources, Sim as Settings, Unit, Units,
+    CommandApply, Cost, CostResource, Economy, Effects, Map, Resources, Sim as Settings, Unit,
+    Units,
 };
 
 mod path;
@@ -90,6 +91,8 @@ pub struct Entity {
     /// Present while a building is going up. Progress is counted in ticks worked, so a
     /// construction finishes exactly at its build time even when HP/second is not a whole number.
     pub construction: Option<Construction>,
+    /// Present while this building is researching a tech: one at a time, like production.
+    pub researching: Option<Research>,
     /// What the unit is carrying, in fixed point; whole resources are taken on deposit.
     pub carry: Fixed,
     /// The villager variant currently in use (the task's unit id), if any.
@@ -123,6 +126,16 @@ pub fn damage_dealt(attacker: &Unit, target: &Unit, rules: &DamageRules) -> i32 
     i32::try_from(total).unwrap_or(i32::MAX).max(rules.minimum)
 }
 
+/// A tech being researched: which one, and how long it has left.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Research {
+    pub tech: u32,
+    pub remaining_ticks: u32,
+    /// The tick an order lands is not a working tick (see `Training::fresh`), and research has the
+    /// same rule, so a 40 s tech at 20 Hz lands exactly 800 ticks after it starts.
+    pub fresh: bool,
+}
+
 /// A training order that passed every check: what it costs, how long it takes, and what comes out.
 struct TrainPlan {
     costs: Vec<Cost>,
@@ -144,6 +157,14 @@ pub struct Training {
     /// True on the tick the order lands. That tick is spent starting the job, not working on it,
     /// so a 25 s unit ordered now appears 500 ticks from now rather than 499.
     pub fresh: bool,
+}
+
+/// A research order that passed every check: what it costs, how long it takes, and whose it is.
+#[derive(Debug, Clone)]
+struct ResearchPlan {
+    costs: Vec<Cost>,
+    ticks: u32,
+    player: u8,
 }
 
 /// A build order that passed every check: what it costs, how long it takes, whose money it is.
@@ -223,6 +244,9 @@ pub enum Command {
         unit: u32,
         at: (u16, u16),
     },
+    /// Research a tech at a building. Price, duration, where it may happen and what it applies all
+    /// come from the tech and effect tables - a replay carries the id, never the numbers.
+    Research { building: EntityId, tech: u32 },
     Spawn {
         id: EntityId,
         player: u8,
@@ -307,6 +331,27 @@ pub enum SimError {
     /// Content named a role the economy does not define.
     NoRole {
         role: String,
+    },
+    /// A research order names a tech the tech table does not contain.
+    MissingTech {
+        id: u32,
+    },
+    /// A tech names an effect the effect table does not contain.
+    MissingEffect {
+        id: u32,
+    },
+    /// This building is not where that tech is researched (the tech's own `location`).
+    CannotResearchHere {
+        building: u32,
+        tech: u32,
+    },
+    /// The building is already researching something.
+    AlreadyResearching {
+        id: EntityId,
+    },
+    /// This player already has the tech.
+    AlreadyResearched {
+        tech: u32,
     },
     /// The pack defines more resources than a stockpile has columns for.
     TooManyResources {
@@ -407,6 +452,24 @@ impl fmt::Display for SimError {
                 f,
                 "{role:?} is not a role in economy.toml's [role] table, so there is no unit behind it"
             ),
+            SimError::MissingTech { id } => write!(
+                f,
+                "tech {id} is not in the tech table; the order names something the data lacks"
+            ),
+            SimError::MissingEffect { id } => write!(
+                f,
+                "a tech names effect {id}, which is not in the effect table, so it cannot be applied"
+            ),
+            SimError::CannotResearchHere { building, tech } => write!(
+                f,
+                "unit {building} is not where tech {tech} is researched: see the tech's `location`"
+            ),
+            SimError::AlreadyResearching { id } => {
+                write!(f, "entity {} is already researching a tech", id.0)
+            }
+            SimError::AlreadyResearched { tech } => {
+                write!(f, "tech {tech} has already been researched by this player")
+            }
             SimError::TooManyResources { count, max } => write!(
                 f,
                 "the content pack defines {count} resources; a stockpile has {max} columns \
@@ -588,6 +651,13 @@ pub struct World {
     damage_rules: Option<DamageRules>,
     /// Remaining waypoints per unit, in tiles. Part of state: it decides where the unit goes next.
     paths: BTreeMap<EntityId, Vec<(u16, u16)>>,
+    /// The tech and effect tables, when they have been loaded. A research order is resolved against
+    /// them the way damage is resolved against `combat.toml`: once, at order time.
+    techs: Option<ruage_data::Techs>,
+    effects: Option<Effects>,
+    /// Per player, the techs already researched. Part of state: it decides what a later upgrade
+    /// does and what a later order resolves to, so it is hashed.
+    researched: BTreeMap<u8, BTreeSet<u32>>,
     /// The pack's resource table, when one has been loaded. Costs carry the reference pack's ids and
     /// nodes carry columns; `slot_for_dat_id` and `name` are the only places the two are related, so
     /// this is the field every cost and every gather order reads (D17).
@@ -608,6 +678,9 @@ impl World {
             queue: Vec::new(),
             units: None,
             economy: None,
+            techs: None,
+            effects: None,
+            researched: BTreeMap::new(),
             stock: [[0; MAX_RESOURCES]; MAX_PLAYERS],
             walk: None,
             damage_rules: None,
@@ -721,6 +794,9 @@ impl World {
             }
             Command::Train { building, unit } => {
                 self.check_train(*building, *unit)?;
+            }
+            Command::Research { building, tech } => {
+                self.check_research(*building, *tech)?;
             }
             Command::Attack { attacker, target } => {
                 self.check_attack(*attacker, *target)?;
@@ -845,6 +921,7 @@ impl World {
                 task: Task::Idle,
                 training: None,
                 construction: None,
+                researching: None,
                 carry: Fixed::ZERO,
                 variant: None,
             })?;
@@ -868,6 +945,7 @@ impl World {
                     task: Task::Idle,
                     training: None,
                     construction: None,
+                    researching: None,
                     carry: Fixed::ZERO,
                     variant: None,
                 })?;
@@ -892,6 +970,7 @@ impl World {
                 task: Task::Idle,
                 training: None,
                 construction: None,
+                researching: None,
                 carry: Fixed::ZERO,
                 variant: None,
             })?;
@@ -1246,6 +1325,7 @@ impl World {
             task: Task::Idle,
             training: None,
             construction: None,
+            researching: None,
             carry: Fixed::ZERO,
             variant: None,
         });
@@ -1427,6 +1507,7 @@ impl World {
                 total_ticks,
                 max_hp,
             }),
+            researching: None,
             carry: Fixed::ZERO,
             variant: None,
         })?;
@@ -1439,6 +1520,175 @@ impl World {
         self.paths.insert(villager, route);
         if let Some(worker) = self.find_mut(villager) {
             worker.task = Task::Build { site: id };
+        }
+        Ok(())
+    }
+
+    /// The checks a research order has to survive: is this a finished building, is it the building
+    /// the tech names, is the tech unknown / already had / already being researched here, and can
+    /// the player pay. Returns the price and how many ticks it takes.
+    fn check_research(&self, building: EntityId, tech: u32) -> Result<ResearchPlan, SimError> {
+        let entity = self
+            .find(building)
+            .ok_or(SimError::MissingEntity(building))?;
+        if entity.kind != EntityKind::Building {
+            return Err(SimError::TrainNeedsABuilding { id: building });
+        }
+        if entity.construction.is_some() {
+            return Err(SimError::BuildingNotReady { id: building });
+        }
+        if entity.researching.is_some() {
+            return Err(SimError::AlreadyResearching { id: building });
+        }
+        let techs = self.techs.as_ref().ok_or(SimError::NoTables)?;
+        let stats = techs.get(tech).ok_or(SimError::MissingTech { id: tech })?;
+        if self.researched(entity.player).contains(&tech) {
+            return Err(SimError::AlreadyResearched { tech });
+        }
+        // `location` is the unit that researches it (12 is a barracks, 87 an archery range). Zero
+        // means "anywhere", which is how the data spells a tech with no home building.
+        if let Ok(place) = u32::try_from(stats.location)
+            && place != 0
+            && entity.unit != Some(place)
+        {
+            return Err(SimError::CannotResearchHere {
+                building: entity.unit.unwrap_or(0),
+                tech,
+            });
+        }
+        let effects = self.effects.as_ref().ok_or(SimError::NoTables)?;
+        if let Some(effect_id) = stats.effect_id
+            && effects.get(effect_id).is_none()
+        {
+            return Err(SimError::MissingEffect { id: effect_id });
+        }
+        for cost in &stats.costs {
+            let slot = self.cost_slot(cost)?;
+            let need = u32::from(cost.amount);
+            let have = self.stock(entity.player, slot);
+            if have < need {
+                return Err(SimError::NotEnough {
+                    resource: self.slot_name(slot),
+                    need,
+                    have,
+                });
+            }
+        }
+        let ticks = u32::try_from(stats.research_time)
+            .ok()
+            .and_then(|seconds| seconds.checked_mul(self.tick_rate_hz))
+            .ok_or(SimError::MissingTech { id: tech })?;
+        Ok(ResearchPlan {
+            costs: stats.costs.clone(),
+            ticks,
+            player: entity.player,
+        })
+    }
+
+    /// Pay for a tech and start its timer. Paid only after every check passed, so a refused order
+    /// spends nothing.
+    fn start_research(&mut self, building: EntityId, tech: u32) -> Result<(), SimError> {
+        let plan = self.check_research(building, tech)?;
+        for cost in &plan.costs {
+            let slot = self.cost_slot(cost)?;
+            let index = usize::from(plan.player).wrapping_sub(1);
+            let Some(row) = self.stock.get_mut(index) else {
+                return Err(SimError::PlayerOutOfRange {
+                    player: plan.player,
+                });
+            };
+            row[slot] -= u32::from(cost.amount);
+        }
+        let Some(entity) = self.find_mut(building) else {
+            return Err(SimError::MissingEntity(building));
+        };
+        entity.researching = Some(Research {
+            tech,
+            remaining_ticks: plan.ticks,
+            fresh: true,
+        });
+        Ok(())
+    }
+
+    /// Apply a researched tech: mark it done and run its effect commands.
+    ///
+    /// Only **kind 3** is interpreted so far - an upgrade, "every unit `a` becomes unit `b`". Every
+    /// other kind is left alone on purpose and counted in `docs/next-step.md`: applying half a tech
+    /// silently would be worse than applying the half that is modelled, and the tests that use this
+    /// path assert the effect they use contains nothing else.
+    fn finish_research(&mut self, player: u8, tech: u32) -> Result<(), SimError> {
+        self.researched.entry(player).or_default().insert(tech);
+        let Some(effect_id) = self
+            .techs
+            .as_ref()
+            .and_then(|techs| techs.get(tech))
+            .and_then(|stats| stats.effect_id)
+        else {
+            return Ok(());
+        };
+        let commands: Vec<(i16, i16, i16)> = self
+            .effects
+            .as_ref()
+            .and_then(|effects| effects.get(effect_id))
+            .map(|effect| {
+                effect
+                    .commands
+                    .iter()
+                    .map(|command| (command.kind, command.a, command.b))
+                    .collect()
+            })
+            .ok_or(SimError::MissingEffect { id: effect_id })?;
+
+        for (kind, a, b) in commands {
+            if kind != 3 {
+                continue;
+            }
+            let (Ok(from), Ok(to)) = (u32::try_from(a), u32::try_from(b)) else {
+                // A negative argument is "nothing", not an id: kind 3 always names both units.
+                continue;
+            };
+            self.upgrade_units(player, from, to)?;
+        }
+        Ok(())
+    }
+
+    /// Replace every unit of `player`'s that is a `from` with a `to`, keeping the fraction of health
+    /// it had: a spearman at half health becomes a swordsman at half health, not a healed one.
+    fn upgrade_units(&mut self, player: u8, from: u32, to: u32) -> Result<(), SimError> {
+        let units = self.units.as_ref().ok_or(SimError::NoTables)?;
+        let target = units.unit(to).ok_or(SimError::MissingUnit { id: to })?;
+        let old_max = units.unit(from).map_or(0, |unit| unit.hp);
+        let new_max = target.hp;
+        let speed =
+            target
+                .speed
+                .resolve(self.scale, "speed")
+                .map_err(|err| SimError::Unresolved {
+                    id: to,
+                    detail: err.to_string(),
+                })?;
+
+        let ids: Vec<EntityId> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.player == player && entity.unit == Some(from))
+            .map(|entity| entity.id)
+            .collect();
+        for id in ids {
+            let Some(entity) = self.find_mut(id) else {
+                continue;
+            };
+            let scaled = if old_max > 0 {
+                // Ceiling division: a unit that had *any* health left keeps at least one point.
+                let numerator = i64::from(entity.hp) * i64::from(new_max);
+                i32::try_from((numerator + i64::from(old_max) - 1) / i64::from(old_max))
+                    .unwrap_or(new_max)
+            } else {
+                new_max
+            };
+            entity.hp = scaled.clamp(1, new_max);
+            entity.unit = Some(to);
+            entity.speed = speed;
         }
         Ok(())
     }
@@ -1569,6 +1819,7 @@ impl World {
                     task: Task::Idle,
                     training: None,
                     construction: None,
+                    researching: None,
                     carry: Fixed::ZERO,
                     variant: None,
                 })
@@ -1576,6 +1827,7 @@ impl World {
             Command::Gather { villager, node } => self.start_gather(villager, node),
             Command::Build { villager, unit, at } => self.start_build(villager, unit, at),
             Command::Train { building, unit } => self.start_train(building, unit),
+            Command::Research { building, tech } => self.start_research(building, tech),
             Command::Attack { attacker, target } => self.start_attack(attacker, target),
             Command::Stop { unit } => {
                 self.paths.remove(&unit);
@@ -1901,6 +2153,44 @@ impl World {
                 self.spawn_from_building(id);
             }
         }
+        // Research: the same one-job-per-building timer, and the effect lands when it reaches zero.
+        let researchers: Vec<(EntityId, u8, u32)> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.researching.is_some() && entity.construction.is_none())
+            .filter_map(|entity| {
+                entity
+                    .researching
+                    .map(|job| (entity.id, entity.player, job.tech))
+            })
+            .collect();
+        for (id, player, tech) in researchers {
+            let landed = match self.find_mut(id) {
+                Some(entity) => match entity.researching {
+                    Some(mut job) => {
+                        if job.fresh {
+                            job.fresh = false;
+                            entity.researching = Some(job);
+                            false
+                        } else {
+                            job.remaining_ticks = job.remaining_ticks.saturating_sub(1);
+                            let done = job.remaining_ticks == 0;
+                            if done {
+                                entity.researching = None;
+                            } else {
+                                entity.researching = Some(job);
+                            }
+                            done
+                        }
+                    }
+                    None => false,
+                },
+                None => false,
+            };
+            if landed {
+                self.finish_research(player, tech)?;
+            }
+        }
         for id in finished {
             if let Some(entity) = self.find_mut(id) {
                 entity.task = Task::Idle;
@@ -1995,6 +2285,32 @@ impl World {
         Ok(())
     }
 
+    /// Hand the world the tech and effect tables. Refused when either is empty, because an empty
+    /// table is a content mistake that would otherwise surface as "every tech is missing".
+    pub fn load_research(
+        &mut self,
+        techs: &ruage_data::Techs,
+        effects: &Effects,
+    ) -> Result<(), SimError> {
+        if techs.techs.is_empty() {
+            return Err(SimError::MissingTech { id: 0 });
+        }
+        if effects.effects.is_empty() {
+            return Err(SimError::MissingEffect { id: 0 });
+        }
+        self.techs = Some(techs.clone());
+        self.effects = Some(effects.clone());
+        Ok(())
+    }
+
+    /// The techs a player has researched. Empty for a player who has done nothing, and for an id
+    /// outside `1..=MAX_PLAYERS`.
+    #[must_use]
+    pub fn researched(&self, player: u8) -> &BTreeSet<u32> {
+        static NONE: BTreeSet<u32> = BTreeSet::new();
+        self.researched.get(&player).unwrap_or(&NONE)
+    }
+
     /// Hand the world its resource table. Without one, a cost cannot name a stockpile slot and
     /// spending has to fail rather than guess - which is the point of taking this in explicitly.
     ///
@@ -2076,6 +2392,13 @@ impl World {
                 fnv_bytes(&mut hash, &value.to_le_bytes());
             }
         }
+        for (player, techs) in &self.researched {
+            fnv_bytes(&mut hash, &[*player]);
+            fnv_bytes(&mut hash, &(techs.len() as u32).to_le_bytes());
+            for tech in techs {
+                fnv_bytes(&mut hash, &tech.to_le_bytes());
+            }
+        }
         for (id, path) in &self.paths {
             fnv_bytes(&mut hash, &id.0.to_le_bytes());
             fnv_bytes(&mut hash, &(path.len() as u32).to_le_bytes());
@@ -2098,6 +2421,15 @@ impl World {
             fnv_bytes(&mut hash, &entity.amount.raw().to_le_bytes());
             fnv_bytes(&mut hash, &entity.carry.raw().to_le_bytes());
             fnv_bytes(&mut hash, &entity.speed.raw().to_le_bytes());
+            match entity.researching {
+                Some(job) => {
+                    fnv_bytes(&mut hash, &[1u8]);
+                    fnv_bytes(&mut hash, &job.tech.to_le_bytes());
+                    fnv_bytes(&mut hash, &job.remaining_ticks.to_le_bytes());
+                    fnv_bytes(&mut hash, &[u8::from(job.fresh)]);
+                }
+                None => fnv_bytes(&mut hash, &[0u8]),
+            }
             match entity.training {
                 Some(job) => {
                     fnv_bytes(&mut hash, &[1u8]);

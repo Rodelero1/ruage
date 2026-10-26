@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use crate::cost::{Cost, RawCost};
 use crate::{ConfigError, MaybeFixed, SUPPORTED_SCHEMA};
 
 /// One `[kind, a, b, c, value]` command.
@@ -154,7 +155,8 @@ pub struct Tech {
     /// representable rather than impossible.
     pub effect_id: Option<u32>,
     pub research_time: i32,
-    pub costs: Vec<(u8, u16)>,
+    /// Priced like a unit's (D17): reference ids from the generated table, or names a pack defines.
+    pub costs: Vec<Cost>,
     pub required: Vec<i32>,
     pub location: i16,
 }
@@ -203,7 +205,7 @@ struct RawTech {
     id: u32,
     effect_id: i32,
     research_time: i32,
-    costs: Vec<[f64; 2]>,
+    costs: Vec<RawCost>,
     required: Vec<i32>,
     location: i16,
 }
@@ -308,19 +310,11 @@ pub fn load_techs_str(text: &str, path: &str) -> Result<Techs, ConfigError> {
                 ),
             });
         }
-        let mut costs = Vec::with_capacity(tech.costs.len());
-        for pair in tech.costs {
-            let [resource, amount] = pair;
-            let resource = u8::try_from(resource as i64).map_err(|_| ConfigError::Invalid {
-                key: format!("tech[{}].costs", tech.id),
-                detail: format!("resource id {resource} is not a byte"),
-            })?;
-            let amount = u16::try_from(amount as i64).map_err(|_| ConfigError::Invalid {
-                key: format!("tech[{}].costs", tech.id),
-                detail: format!("amount {amount} is not a cost"),
-            })?;
-            costs.push((resource, amount));
-        }
+        let costs = tech
+            .costs
+            .iter()
+            .map(|c| crate::cost::convert(c, || format!("tech[{}].costs", tech.id)))
+            .collect::<Result<Vec<_>, ConfigError>>()?;
         if techs
             .insert(
                 tech.id,

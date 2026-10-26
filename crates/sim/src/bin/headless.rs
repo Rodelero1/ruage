@@ -23,8 +23,8 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use ruage_data::{
-    load_combat_file, load_economy_file, load_map_file, load_resources_file, load_sim_file,
-    load_units_file,
+    load_combat_file, load_economy_file, load_effects_file, load_map_file, load_resources_file,
+    load_sim_file, load_techs_file, load_units_file,
 };
 use ruage_sim::{Outcome, Runner, World, describe, load_scenario_file};
 
@@ -34,13 +34,15 @@ const USAGE: &str = "usage: ruage-headless --config <sim.toml> --map <map.toml> 
                      [--combat <combat.toml>] [--script <scenario.toml>] \
                      [--ticks <n>] [--report <seconds>] --seed <u64>";
 
-const KNOWN: [&str; 11] = [
+const KNOWN: [&str; 13] = [
     "--config",
     "--map",
     "--economy",
     "--units",
     "--resources",
     "--combat",
+    "--techs",
+    "--effects",
     "--script",
     "--seed",
     "--ticks",
@@ -127,6 +129,15 @@ fn run(args: &[String]) -> Result<(), String> {
     if let Some(path) = parsed.get("--combat") {
         let combat = load_combat_file(Path::new(path)).map_err(|err| format!("{err}"))?;
         world.load_combat(&combat);
+    }
+    // Research is optional like combat: a run that never researches does not need the tables, and a
+    // run that does gets a refusal rather than a guess.
+    if let (Some(techs), Some(effects)) = (parsed.get("--techs"), parsed.get("--effects")) {
+        let techs = load_techs_file(Path::new(techs)).map_err(|err| format!("{err}"))?;
+        let effects = load_effects_file(Path::new(effects)).map_err(|err| format!("{err}"))?;
+        world
+            .load_research(&techs, &effects)
+            .map_err(|err| format!("{err}"))?;
     }
 
     let mut runner = match parsed.get("--script") {

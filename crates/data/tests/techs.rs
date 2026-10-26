@@ -36,9 +36,21 @@ fn the_project_files_load() {
         "effects carry commands; got {}",
         effects.total_commands()
     );
-    // Tech 2 is the first with a real price: 1000 food and 500 gold.
+    // Tech 2 is the first with a real price: 1000 food and 500 gold, as reference ids.
     let tech = techs.get(2).expect("tech 2");
-    assert_eq!(tech.costs, vec![(0, 1000), (3, 500)]);
+    assert_eq!(
+        tech.costs,
+        vec![
+            ruage_data::Cost {
+                resource: ruage_data::CostResource::ReferenceId(0),
+                amount: 1000
+            },
+            ruage_data::Cost {
+                resource: ruage_data::CostResource::ReferenceId(3),
+                amount: 500
+            },
+        ]
+    );
     assert_eq!(tech.research_time, 45);
     assert_eq!(tech.effect_id, Some(454));
 }
@@ -428,4 +440,42 @@ fn every_packed_attack_value_fits_the_packing() {
         ],
         "the negative packed values, exactly: any change here is a change in the data or a bug"
     );
+}
+
+/// A tech's price goes through the same content vocabulary a unit's does (D17): the generated table
+/// keeps the reference ids, and a pack of our own writes `{ resource = "timber", amount = 25 }`.
+#[test]
+fn a_tech_may_name_its_costs_like_a_unit_does() {
+    let text = r#"
+schema = 1
+kind = "techs"
+
+[[tech]]
+id = 2
+effect_id = 454
+research_time = 45
+costs = [{ resource = "timber", amount = 25 }]
+required = []
+location = 0
+"#;
+    let techs = load_techs_str(text, "techs.toml").expect("a named tech cost is legal content");
+    let tech = techs.get(2).expect("the tech");
+    assert_eq!(tech.costs.len(), 1);
+    assert_eq!(
+        tech.costs[0].resource,
+        ruage_data::CostResource::Name("timber".to_owned())
+    );
+    assert_eq!(tech.costs[0].amount, 25);
+
+    // And the reference form still means what it meant: an id the pack resolves at payment.
+    let reference = text.replace(
+        "costs = [{ resource = \"timber\", amount = 25 }]",
+        "costs = [[0, 1000], [3, 500]]",
+    );
+    let techs = load_techs_str(&reference, "techs.toml").expect("the reference form still loads");
+    assert_eq!(
+        techs.get(2).expect("the tech").costs[0].resource,
+        ruage_data::CostResource::ReferenceId(0)
+    );
+    assert_eq!(techs.get(2).expect("the tech").costs[0].amount, 1000);
 }

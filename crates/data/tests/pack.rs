@@ -30,6 +30,16 @@ fn the_project_pack_loads_and_has_an_identity() {
     assert_eq!(pack.identity().len(), 16, "hex of a u64");
     assert_eq!(pack.parts.len(), PACK_FILES.len());
     assert_eq!(pack.resources.count(), 4);
+    assert_eq!(
+        pack.techs.techs.len(),
+        801,
+        "801 techs travel with the pack"
+    );
+    assert_eq!(
+        pack.effects.effects.len(),
+        798,
+        "798 effects too: they are content"
+    );
     assert!(!pack.units.units.is_empty());
     assert!(!pack.combat.buildings.can_attack || pack.combat.buildings.can_attack);
 }
@@ -108,7 +118,11 @@ fn every_pack_file_is_required() {
     for name in PACK_FILES {
         assert!(name.ends_with(".toml"), "{name} should be a config file");
     }
-    assert_eq!(PACK_FILES.len(), 6);
+    assert_eq!(
+        PACK_FILES.len(),
+        8,
+        "six behaviour files and two tables of research"
+    );
     let dir = Path::new(".");
     assert!(dir.exists());
 }

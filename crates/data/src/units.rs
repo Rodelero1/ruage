@@ -10,6 +10,8 @@ use std::path::Path;
 
 use serde::Deserialize;
 
+use crate::cost::{Cost, RawCost};
+
 use crate::{ConfigError, MaybeFixed, SUPPORTED_SCHEMA};
 
 #[derive(Debug, Clone)]
@@ -55,29 +57,6 @@ impl Units {
 }
 
 // --- wire format --------------------------------------------------------------------------
-
-/// What a cost names. Two namespaces, deliberately: the reference pack's ids (what the generator
-/// emits today) and names the content pack defines (what an original pack uses, D17).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CostResource {
-    ReferenceId(u8),
-    Name(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Cost {
-    pub resource: CostResource,
-    pub amount: u16,
-}
-
-/// `[1, 25]` is the reference pack's id; `{ resource = "timber", amount = 25 }` is a name. Untagged
-/// so the generated table (arrays, 574 KB) is untouched by the form our own content needs.
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum RawCost {
-    Reference([i64; 2]),
-    Named { resource: String, amount: u16 },
-}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -188,46 +167,7 @@ pub fn load_units_str(text: &str, path: &str) -> Result<Units, ConfigError> {
         let costs = r
             .costs
             .iter()
-            .map(|c| match c {
-                // The reference pack's numbering: `[1, 25]` is 25 wood, and the pack is what turns
-                // that id into a stockpile column when the cost is paid.
-                RawCost::Reference([id, amount]) => {
-                    let resource = u8::try_from(*id).map_err(|_| {
-                        invalid(
-                            path,
-                            format!("units[{}].costs", r.id),
-                            format!("{id} is not a resource id"),
-                        )
-                    })?;
-                    let amount = u16::try_from(*amount).map_err(|_| {
-                        invalid(
-                            path,
-                            format!("units[{}].costs", r.id),
-                            format!("{amount} does not fit a u16"),
-                        )
-                    })?;
-                    Ok(Cost {
-                        resource: CostResource::ReferenceId(resource),
-                        amount,
-                    })
-                }
-                // Our own content: `{ resource = "timber", amount = 25 }`, priced in a name the
-                // pack defines, so an original pack never borrows Age of Empires' numbering (D17).
-                RawCost::Named { resource, amount } => {
-                    let name = resource.trim();
-                    if name.is_empty() {
-                        return Err(invalid(
-                            path,
-                            format!("units[{}].costs", r.id),
-                            "a named cost needs a resource name".to_owned(),
-                        ));
-                    }
-                    Ok(Cost {
-                        resource: CostResource::Name(name.to_owned()),
-                        amount: *amount,
-                    })
-                }
-            })
+            .map(|c| crate::cost::convert(c, || format!("units[{}].costs", r.id)))
             .collect::<Result<Vec<_>, ConfigError>>()?;
 
         let unit = Unit {

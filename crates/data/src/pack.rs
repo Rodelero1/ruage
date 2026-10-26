@@ -18,20 +18,25 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::{
-    Combat, ConfigError, Economy, Map, Resources, Sim, Units, load_combat_file, load_economy_file,
-    load_map_file, load_resources_file, load_sim_file, load_units_file,
+    Combat, ConfigError, Economy, Effects, Map, Resources, Sim, Techs, Units, load_combat_file,
+    load_economy_file, load_effects_file, load_map_file, load_resources_file, load_sim_file,
+    load_techs_file, load_units_file,
 };
 
 /// Every file a match reads. The order here is the order the hash is computed in, so adding a file
 /// changes every pack's hash - which is correct, because a build that needs a file an older build
 /// did not is not the same content.
-pub const PACK_FILES: [&str; 6] = [
+pub const PACK_FILES: [&str; 8] = [
     "sim.toml",
     "economy.toml",
     "map.toml",
     "units.toml",
     "combat.toml",
     "resources.toml",
+    // Research is content too: a tech's price and timer, and the commands its effect applies. A
+    // peer running different techs is playing a different game, so the handshake must see them.
+    "techs.toml",
+    "effects.toml",
 ];
 
 /// Where a pack file lives relative to the config directory. `units.toml` is under `gamedata/`
@@ -39,7 +44,8 @@ pub const PACK_FILES: [&str; 6] = [
 /// regardless of how the directory is arranged on disk.
 pub fn pack_path(dir: &Path, name: &str) -> PathBuf {
     match name {
-        "units.toml" => dir.join("gamedata").join(name),
+        // Generated from the game data (D8), and therefore under `gamedata/`.
+        "units.toml" | "techs.toml" | "effects.toml" => dir.join("gamedata").join(name),
         other => dir.join(other),
     }
 }
@@ -52,6 +58,9 @@ pub struct ContentPack {
     pub units: Units,
     pub combat: Combat,
     pub resources: Resources,
+    /// Research: the tech table and the effect commands it points at.
+    pub techs: Techs,
+    pub effects: Effects,
     /// FNV-1a over `(name, length, bytes)` for each file in `PACK_FILES` order.
     pub hash: u64,
     /// Which files went into the hash, so a handshake can explain a mismatch instead of saying
@@ -94,6 +103,8 @@ impl ContentPack {
         let map = load_map_file(&dir.join("map.toml"), &resources)?;
         let units = load_units_file(&pack_path(dir, "units.toml"))?;
         let combat = load_combat_file(&dir.join("combat.toml"))?;
+        let techs = load_techs_file(&pack_path(dir, "techs.toml"))?;
+        let effects = load_effects_file(&pack_path(dir, "effects.toml"))?;
 
         // The pack hash mixes the per-file hashes *with their names*, so two files swapping
         // contents cannot produce the same pack hash as an honest pack.
@@ -111,6 +122,8 @@ impl ContentPack {
             units,
             combat,
             resources,
+            techs,
+            effects,
             hash,
             parts,
         })

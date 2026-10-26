@@ -1,0 +1,399 @@
+//! Research: a tech is a price and a timer, and its effect is applied when it lands.
+//!
+//! This is the kind-3 slice of the effect interpreter: an **upgrade** replaces one unit with another
+//! for the player who researched it (D17's importer keeps the meaning, the engine applies
+//! "every 74 becomes 75"). The tech used throughout is the dat's Man-at-Arms: tech 222, effect 211,
+//! `[3, 74, 75, -1, 0]`, 100 food + 40 gold, 40 s — the published cost and time, which is how the
+//! tech was identified in the first place (never by id).
+
+use std::path::PathBuf;
+
+use ruage_data::{Economy, Effects, Map, Sim as Settings, Techs, Units};
+use ruage_fixed::Fixed;
+use ruage_sim::{Command, EntityId, EntityKind, SimError, World};
+
+fn repo(rel: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(rel)
+}
+
+/// The project pack's column for a resource, so a test says "food" the way content does.
+fn slot(name: &str) -> usize {
+    ruage_data::load_resources_file(&repo("config/resources.toml"))
+        .expect("resources.toml")
+        .slot_of(name)
+        .unwrap_or_else(|| panic!("the pack has no {name}"))
+}
+
+/// Man-at-Arms, and the two units it swaps.
+const MAN_AT_ARMS: u32 = 222;
+const SPEARMAN: u32 = 74;
+const SWORDSMAN: u32 = 75;
+const BARRACKS: u32 = 12;
+const TOWN_CENTRE: u32 = 109;
+
+struct Fixture {
+    settings: Settings,
+    map: Map,
+    economy: Economy,
+    resources: ruage_data::Resources,
+    units: Units,
+    combat: ruage_data::Combat,
+    techs: Techs,
+    effects: Effects,
+}
+
+fn fixture() -> Option<Fixture> {
+    let units = repo("config/gamedata/units.toml");
+    let techs = repo("config/gamedata/techs.toml");
+    let effects = repo("config/gamedata/effects.toml");
+    if !units.exists() || !techs.exists() || !effects.exists() {
+        eprintln!("skipping: generated data is absent (D8)");
+        return None;
+    }
+    let resources =
+        ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml");
+    Some(Fixture {
+        settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
+        map: ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map.toml"),
+        economy: ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
+        resources,
+        units: ruage_data::load_units_file(&units).expect("units.toml"),
+        combat: ruage_data::load_combat_file(&repo("config/combat.toml")).expect("combat.toml"),
+        techs: ruage_data::load_techs_file(&techs).expect("techs.toml"),
+        effects: ruage_data::load_effects_file(&effects).expect("effects.toml"),
+    })
+}
+
+fn seeded(fx: &Fixture) -> World {
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    world
+        .seed_from(&fx.map, &fx.economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    world.load_combat(&fx.combat);
+    world
+        .load_research(&fx.techs, &fx.effects)
+        .expect("the tech and effect tables");
+    world
+}
+
+fn first_villager(world: &World) -> EntityId {
+    world
+        .entities()
+        .iter()
+        .find(|e| e.player == 1 && e.kind == EntityKind::Unit)
+        .expect("a villager")
+        .id
+}
+
+/// Gather until the bank holds at least `want` in a column, re-tasking the villager whenever its
+/// node runs dry (the engine has no "seek the next node" yet, so the test drives it).
+fn bank(world: &mut World, slot: usize, want: u32) {
+    let villager = first_villager(world);
+    let mut node = nearest_node(world, villager, slot).expect("a node of that column");
+    world.submit(Command::Gather { villager, node });
+    for _ in 0..400_000 {
+        world.step().expect("step");
+        if world.stock(1, slot) >= want {
+            return;
+        }
+        let idle = world
+            .entity(villager)
+            .is_some_and(|entity| entity.task == ruage_sim::Task::Idle);
+        let empty = world
+            .entity(node)
+            .is_none_or(|entity| entity.amount.raw() <= 0);
+        if idle || empty {
+            let Some(next) = nearest_node(world, villager, slot) else {
+                break;
+            };
+            node = next;
+            world.submit(Command::Gather { villager, node });
+        }
+    }
+    panic!(
+        "could not bank {want} in column {slot}; the bank holds {}",
+        world.stock(1, slot)
+    );
+}
+
+fn nearest_node(world: &World, from: EntityId, slot: usize) -> Option<EntityId> {
+    let here = world.position(from)?;
+    world
+        .entities()
+        .iter()
+        .filter(|e| e.kind == EntityKind::Resource(slot) && e.amount.raw() > 0)
+        .min_by_key(|e| {
+            let dx = e.position.0.raw() - here.0.raw();
+            let dy = e.position.1.raw() - here.1.raw();
+            (dx * dx + dy * dy, e.id.0)
+        })
+        .map(|e| e.id)
+}
+
+/// A finished building, spawned rather than built: these tests are about research, not masonry.
+fn place(world: &mut World, player: u8, id: u32, unit: u32, tile: (i64, i64), hp: i32) -> EntityId {
+    let scale = world.scale();
+    let id = EntityId(id);
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player,
+            kind: if unit == SPEARMAN {
+                EntityKind::Unit
+            } else {
+                EntityKind::Building
+            },
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(tile.0 * scale),
+                Fixed::from_raw(tile.1 * scale),
+            ),
+            speed: Fixed::ZERO,
+            hp,
+            amount: 0,
+        })
+        .expect("spawn");
+    // Commands are queued (`CommandApply::NextTick`), so the entity exists after one step.
+    world.step().expect("step");
+    id
+}
+
+fn money(world: &mut World) {
+    bank(world, slot("food"), 100);
+    bank(world, slot("gold"), 40);
+}
+
+#[test]
+fn the_man_at_arms_effect_is_an_upgrade_and_nothing_else() {
+    // The slice is only honest if the tech it uses is genuinely a kind-3 effect. If the dat ever
+    // gives effect 211 a second kind, this test says so rather than the interpreter silently
+    // applying half a tech.
+    let Some(fx) = fixture() else { return };
+    let tech = fx.techs.get(MAN_AT_ARMS).expect("tech 222");
+    assert_eq!(tech.research_time, 40, "40 s, as published");
+    let effect_id = tech.effect_id.expect("an effect");
+    let effect = fx.effects.get(effect_id).expect("effect 211");
+    let kinds: Vec<i16> = effect.commands.iter().map(|c| c.kind).collect();
+    assert_eq!(kinds, vec![3], "a pure upgrade");
+    let command = effect.commands[0];
+    assert_eq!(
+        (command.a, command.b),
+        (SPEARMAN as i16, SWORDSMAN as i16),
+        "74 becomes 75"
+    );
+}
+
+#[test]
+fn research_is_refused_without_the_money() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let barracks = place(&mut world, 1, 9_000, BARRACKS, (8, 8), 1200);
+
+    let err = world
+        .submit_checked(Command::Research {
+            building: barracks,
+            tech: MAN_AT_ARMS,
+        })
+        .expect_err("100 food and 40 gold are not free");
+    match err {
+        SimError::NotEnough {
+            ref resource,
+            need,
+            have,
+        } => {
+            assert_eq!((resource.as_str(), need, have), ("food", 100, 0));
+        }
+        other => panic!("expected NotEnough, got {other:?}"),
+    }
+    assert!(world.researched(1).is_empty(), "nothing was researched");
+}
+
+#[test]
+fn research_needs_the_building_the_tech_names_and_a_finished_one() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    money(&mut world);
+
+    // A town centre is a building, but Man-at-Arms is a barracks tech (location 12).
+    let centre = place(&mut world, 1, 9_001, TOWN_CENTRE, (10, 10), 2400);
+    let err = world
+        .submit_checked(Command::Research {
+            building: centre,
+            tech: MAN_AT_ARMS,
+        })
+        .expect_err("the wrong building cannot research this");
+    assert!(
+        matches!(err, SimError::CannotResearchHere { .. }),
+        "expected CannotResearchHere, got {err:?}"
+    );
+
+    // A barracks still under construction cannot, so build one for real.
+    bank(&mut world, slot("wood"), 175);
+    world
+        .submit_checked(Command::Build {
+            villager: first_villager(&world),
+            unit: BARRACKS,
+            at: (14, 14),
+        })
+        .expect("a barracks costs 175 wood, which the villager just banked");
+    world.step().expect("step");
+    let under_construction = world
+        .entities()
+        .iter()
+        .find(|e| e.unit == Some(BARRACKS) && e.construction.is_some())
+        .map(|e| e.id)
+        .expect("the site exists");
+    let err = world
+        .submit_checked(Command::Research {
+            building: under_construction,
+            tech: MAN_AT_ARMS,
+        })
+        .expect_err("a building site cannot research");
+    assert!(
+        matches!(err, SimError::BuildingNotReady { .. }),
+        "expected BuildingNotReady, got {err:?}"
+    );
+
+    // And a unit cannot research at all.
+    let villager = first_villager(&world);
+    let err = world
+        .submit_checked(Command::Research {
+            building: villager,
+            tech: MAN_AT_ARMS,
+        })
+        .expect_err("only buildings research");
+    assert!(
+        matches!(err, SimError::TrainNeedsABuilding { .. }),
+        "expected TrainNeedsABuilding, got {err:?}"
+    );
+}
+
+#[test]
+fn a_tech_cannot_be_researched_twice() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    money(&mut world);
+    money(&mut world);
+    let barracks = place(&mut world, 1, 9_003, BARRACKS, (16, 16), 1200);
+
+    world
+        .submit_checked(Command::Research {
+            building: barracks,
+            tech: MAN_AT_ARMS,
+        })
+        .expect("the first order is legal");
+    for _ in 0..900 {
+        world.step().expect("step");
+    }
+    assert!(world.researched(1).contains(&MAN_AT_ARMS), "it landed");
+
+    let err = world
+        .submit_checked(Command::Research {
+            building: barracks,
+            tech: MAN_AT_ARMS,
+        })
+        .expect_err("a tech is researched once");
+    assert!(
+        matches!(err, SimError::AlreadyResearched { tech } if tech == MAN_AT_ARMS),
+        "expected AlreadyResearched, got {err:?}"
+    );
+}
+
+#[test]
+fn research_takes_the_techs_own_time_and_then_upgrades_what_its_owner_has() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    money(&mut world);
+    let barracks = place(&mut world, 1, 9_004, BARRACKS, (18, 18), 1200);
+    // Two of the player's spearmen: one untouched, one at half health, so the fraction can be seen.
+    let whole = place(&mut world, 1, 9_010, SPEARMAN, (18, 20), 40);
+    let hurt = place(&mut world, 1, 9_011, SPEARMAN, (20, 18), 20);
+    // And one of the opponent's, which must not be touched.
+    let enemy = place(&mut world, 2, 9_012, SPEARMAN, (20, 20), 40);
+
+    let before = world.stock(1, slot("food"));
+    let gold_before = world.stock(1, slot("gold"));
+    world
+        .submit_checked(Command::Research {
+            building: barracks,
+            tech: MAN_AT_ARMS,
+        })
+        .expect("the order is legal");
+
+    // The order lands on the next tick, which is when the price is paid (`NextTick`).
+    world.step().expect("step");
+    assert_eq!(world.stock(1, slot("food")), before - 100, "food paid");
+    assert_eq!(world.stock(1, slot("gold")), gold_before - 40, "gold paid");
+    let started = world.tick();
+
+    // 40 s at 20 Hz is 800 ticks, counted from the tick the order landed.
+    let ticks = u64::from(40 * world.tick_rate_hz());
+    for _ in 0..ticks - 1 {
+        world.step().expect("step");
+    }
+    assert_eq!(
+        world.entity(whole).expect("still there").unit,
+        Some(SPEARMAN),
+        "one tick before its time, nothing has happened yet"
+    );
+
+    world.step().expect("step");
+    assert_eq!(
+        world.tick() - started,
+        ticks,
+        "the tech lands exactly research_time x tick_rate ticks after it started"
+    );
+    assert!(world.researched(1).contains(&MAN_AT_ARMS));
+
+    // The whole unit is now a swordsman at its full health.
+    let upgraded = world.entity(whole).expect("still there");
+    assert_eq!(upgraded.unit, Some(SWORDSMAN), "74 became 75");
+    assert_eq!(upgraded.hp, 45, "45 hp is the swordsman's maximum");
+
+    // The damaged one keeps its *fraction*: 20 of 40 is half, so 45 becomes 22.5, rounded up.
+    let wounded = world.entity(hurt).expect("still there");
+    assert_eq!(wounded.unit, Some(SWORDSMAN));
+    assert_eq!(
+        wounded.hp, 23,
+        "half health stays half health (45 / 2, rounded up)"
+    );
+
+    // And the opponent's identical unit is untouched.
+    assert_eq!(
+        world.entity(enemy).expect("still there").unit,
+        Some(SPEARMAN),
+        "an upgrade is the researching player's alone"
+    );
+}
+
+#[test]
+fn the_researched_set_is_part_of_the_state_hash() {
+    let Some(fx) = fixture() else { return };
+    let mut a = seeded(&fx);
+    let mut b = seeded(&fx);
+    money(&mut a);
+    money(&mut b);
+    let barracks_a = place(&mut a, 1, 9_005, BARRACKS, (22, 22), 1200);
+    let _barracks_b = place(&mut b, 1, 9_005, BARRACKS, (22, 22), 1200);
+    assert_eq!(a.state_hash(), b.state_hash(), "identical worlds agree");
+
+    a.submit_checked(Command::Research {
+        building: barracks_a,
+        tech: MAN_AT_ARMS,
+    })
+    .expect("legal");
+    for _ in 0..900 {
+        a.step().expect("step");
+        b.step().expect("step");
+    }
+    assert_ne!(
+        a.state_hash(),
+        b.state_hash(),
+        "a researched tech must change the hash: it changes what later orders resolve to"
+    );
+}

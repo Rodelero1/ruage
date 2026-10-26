@@ -15,6 +15,7 @@ use ruage_fixed::Fixed;
 use serde::Deserialize;
 
 mod combat;
+mod cost;
 mod economy;
 mod map;
 mod pack;
@@ -24,6 +25,7 @@ mod units;
 pub use combat::{
     AttackTiming, Buildings, Combat, Damage, Elevation, load_combat_file, load_combat_str,
 };
+pub use cost::{Cost, CostResource};
 pub use economy::{
     Build, Decay, Economy, Farm, Gather, Population, Start, load_economy_file, load_economy_str,
 };
@@ -36,7 +38,7 @@ pub use techs::{
     Attribute, Effect, EffectCommand, Effects, Meaning, Target, Tech, Techs, load_effects_file,
     load_effects_str, load_techs_file, load_techs_str,
 };
-pub use units::{Cost, CostResource, Unit, Units, load_units_file, load_units_str};
+pub use units::{Unit, Units, load_units_file, load_units_str};
 
 /// Values that enter simulation state are fixed-point. `-1.0` marks "unknown".
 #[derive(Debug, Clone, Copy, PartialEq)]
