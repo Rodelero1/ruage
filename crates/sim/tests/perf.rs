@@ -42,7 +42,9 @@ fn world_with(
     let (settings, map, economy, units, resources) = fx;
     let mut world = World::new(settings, 11).expect("world");
     world.seed_from(map, economy, units).expect("seeding");
-    world.load_resources(resources);
+    world
+        .load_resources(resources)
+        .expect("the pack fits the stockpile");
     let scale = world.scale();
     for (next, i) in (10_000u32..).zip(0..extra_units) {
         let id = EntityId(next);

@@ -45,7 +45,9 @@ fn seeded(fx: &Fixture) -> World {
     world
         .seed_from(&fx.map, &fx.economy, &fx.units)
         .expect("seeding");
-    world.load_resources(&fx.resources);
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     world
 }
 

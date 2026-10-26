@@ -57,7 +57,9 @@ fn duel(fx: &Fixture) -> (World, EntityId, EntityId) {
     world
         .seed_from(&fx.map, &fx.economy, &fx.units)
         .expect("seeding");
-    world.load_resources(&fx.resources);
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     world.load_combat(&fx.combat);
     let scale = world.scale();
     let at = |x: i64, y: i64| (Fixed::from_raw(x * scale), Fixed::from_raw(y * scale));

@@ -120,8 +120,9 @@ fn run(args: &[String]) -> Result<(), String> {
     world
         .seed_from(&map, &economy, &units)
         .map_err(|err| format!("{err}"))?;
-    world.load_resources(&resources);
-
+    world
+        .load_resources(&resources)
+        .expect("the pack fits the stockpile");
     if let Some(path) = parsed.get("--combat") {
         let combat = load_combat_file(Path::new(path)).map_err(|err| format!("{err}"))?;
         world.load_combat(&combat);

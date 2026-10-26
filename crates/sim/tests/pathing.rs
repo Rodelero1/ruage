@@ -115,7 +115,9 @@ fn world_with(fx: &Fixture, map_text: &str) -> (World, ruage_data::Map) {
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
-    world.load_resources(&fx.resources);
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     (world, map)
 }
 

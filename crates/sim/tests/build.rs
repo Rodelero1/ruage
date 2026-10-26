@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, ResourceKind, Sim as Settings, Units};
-use ruage_sim::{Command, EntityId, EntityKind, SimError, Task, World};
+use ruage_sim::{Command, EntityId, EntityKind, MAX_RESOURCES, SimError, Task, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -45,7 +45,9 @@ fn seeded(fx: &Fixture) -> World {
     world
         .seed_from(&fx.map, &fx.economy, &fx.units)
         .expect("seeding");
-    world.load_resources(&fx.resources);
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     world
 }
 
@@ -148,6 +150,7 @@ name = "grain"
 "#;
 
 /// The same, but with one reference id, in a column past the stockpile's width.
+#[allow(dead_code)]
 const WIDE_PACK: &str = r#"
 schema = 1
 
@@ -195,8 +198,9 @@ fn a_pack_that_does_not_carry_a_cost_id_refuses_the_order() {
     assert!(before >= 25, "the villager banked {before} wood");
 
     let pack = ruage_data::load_resources_str(OWN_PACK, "<own pack>").expect("the pack loads");
-    world.load_resources(&pack);
-
+    world
+        .load_resources(&pack)
+        .expect("the pack fits the stockpile");
     let err = world
         .submit_checked(Command::Build {
             villager,
@@ -221,48 +225,77 @@ fn a_pack_that_does_not_carry_a_cost_id_refuses_the_order() {
     );
 }
 
+/// One resource past the widest stockpile a world can hold (eight columns): nine named resources,
+/// the last of them answering to the reference pack's wood id.
+const TOO_WIDE_PACK: &str = r#"
+schema = 1
+
+[[resource]]
+slot = 0
+name = "timber"
+
+[[resource]]
+slot = 1
+name = "grain"
+
+[[resource]]
+slot = 2
+name = "iron"
+
+[[resource]]
+slot = 3
+name = "salt"
+
+[[resource]]
+slot = 4
+name = "clay"
+
+[[resource]]
+slot = 5
+name = "wool"
+
+[[resource]]
+slot = 6
+name = "resin"
+
+[[resource]]
+slot = 7
+name = "pitch"
+
+[[resource]]
+slot = 8
+name = "sand"
+dat_id = 1
+"#;
+
 #[test]
-fn a_pack_that_puts_a_cost_id_past_the_stockpile_refuses_the_order() {
-    // Same class of content mistake, and the one that would panic: the stockpile is still an array
-    // sized by the enum, so a pack that names a fifth column has nowhere to put it.
+fn a_pack_wider_than_the_stockpile_is_refused_when_it_is_loaded() {
+    // The stockpile is a fixed array, so its width is a fact about the engine and a pack has to fit
+    // it. Refusing at load - rather than at the first cost - means no order can ever name a column
+    // that does not exist, and it is the same fact stated once instead of once per site.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let villager = first_villager(&world);
-    let site = free_tile_near(&world, villager);
-    let node = world
-        .entities()
-        .iter()
-        .filter(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
-        .map(|e| e.id)
-        .next()
-        .expect("a tree");
-    bank_wood(&mut world, 25, node);
-    let before = world.stock(1, ResourceKind::Wood);
 
-    let pack = ruage_data::load_resources_str(WIDE_PACK, "<wide pack>").expect("the pack loads");
-    world.load_resources(&pack);
-
+    let pack =
+        ruage_data::load_resources_str(TOO_WIDE_PACK, "<too wide>").expect("the pack parses");
     let err = world
-        .submit_checked(Command::Build {
-            villager,
-            unit: 70,
-            at: site,
-        })
-        .expect_err("a cost in a column the stockpile cannot hold must be refused");
+        .load_resources(&pack)
+        .expect_err("nine resources do not fit eight stockpile columns");
 
     assert!(
-        matches!(err, SimError::ResourceSlotOutOfRange { dat_id: 1, slot: 4 }),
-        "expected ResourceSlotOutOfRange for dat id 1 in slot 4, got {err:?}"
+        matches!(
+            err,
+            SimError::TooManyResources {
+                count: 9,
+                max: MAX_RESOURCES
+            }
+        ),
+        "expected TooManyResources {{ count: 9, max: {MAX_RESOURCES} }}, got {err:?}"
     );
     let text = format!("{err}");
     assert!(
-        text.contains("id 1") && text.contains("slot 4"),
-        "the refusal must name the id and the column: {text}"
-    );
-    assert_eq!(
-        world.stock(1, ResourceKind::Wood),
-        before,
-        "a refused order must not be paid from slot 0"
+        text.contains('9') && text.contains(&MAX_RESOURCES.to_string()),
+        "the refusal must name the count and the width: {text}"
     );
 }
 
@@ -463,8 +496,9 @@ fn an_unreachable_site_is_refused_before_the_wood_is_spent() {
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
-    world.load_resources(&fx.resources);
-
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     let villager = first_villager(&world);
     let scale = world.scale();
     let wall = ruage_fixed::Fixed::from_raw(8 * scale);

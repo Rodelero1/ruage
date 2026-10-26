@@ -45,7 +45,9 @@ fn seeded(fx: &Fixture) -> World {
     world
         .seed_from(&fx.map, &fx.economy, &fx.units)
         .expect("seeding must succeed");
-    world.load_resources(&fx.resources);
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     world
 }
 
@@ -274,7 +276,8 @@ fn two_seeds_of_the_same_inputs_hash_the_same() {
     // property worth pinning - if seeding ever starts rolling dice, this test says so.
     let mut c = World::new(&fx.settings, 99).expect("world");
     c.seed_from(&fx.map, &fx.economy, &fx.units).expect("seed");
-    c.load_resources(&fx.resources);
+    c.load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     assert_eq!(
         a.state_hash(),
         c.state_hash(),

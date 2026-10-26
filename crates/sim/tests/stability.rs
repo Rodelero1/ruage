@@ -36,7 +36,9 @@ fn world(fx: &(Settings, Map, Economy, Units, ruage_data::Resources), seed: u64)
     let (settings, map, economy, units, resources) = fx;
     let mut world = World::new(settings, seed).expect("world");
     world.seed_from(map, economy, units).expect("seeding");
-    world.load_resources(resources);
+    world
+        .load_resources(resources)
+        .expect("the pack fits the stockpile");
     world
 }
 

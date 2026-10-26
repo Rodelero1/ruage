@@ -37,6 +37,16 @@ pub use script::{
 /// paid in every state hash.
 pub const MAX_PLAYERS: usize = 8;
 
+/// The largest number of stockpiled resources a match can have. Like `MAX_PLAYERS` this is a
+/// constant rather than a runtime number because a stockpile is a fixed-size row, and the content
+/// pack is refused at load when it defines more than this (D17: the pack says *which and how many*
+/// resources exist, the engine only says how wide a row it can store).
+///
+/// Eight rather than four: four is what the reference pack needs, and the cost of the headroom is
+/// a zeroed `u32` per player per unused column, while a later widening would mean re-baselining
+/// every state hash.
+pub const MAX_RESOURCES: usize = 8;
+
 /// Stable handle for an entity. Ordered, so iteration by id is just sorting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EntityId(pub u32);
@@ -287,10 +297,10 @@ pub enum SimError {
     UnknownResource {
         dat_id: u16,
     },
-    /// A cost names a resource this pack carries, in a stockpile column the world has no room for.
-    ResourceSlotOutOfRange {
-        dat_id: u16,
-        slot: usize,
+    /// The pack defines more resources than a stockpile has columns for.
+    TooManyResources {
+        count: usize,
+        max: usize,
     },
     /// The player cannot pay for the order. The name is the pack's, so the message says "wood"
     /// only because the pack calls slot 0 that (D17).
@@ -377,11 +387,10 @@ impl fmt::Display for SimError {
                 "a cost names resource id {dat_id}, which this content pack does not carry: \
                  refusing rather than paying from another slot"
             ),
-            SimError::ResourceSlotOutOfRange { dat_id, slot } => write!(
+            SimError::TooManyResources { count, max } => write!(
                 f,
-                "a cost names resource id {dat_id}, which this pack puts in stockpile slot {slot}; \
-                 a world stocks {} columns",
-                ResourceKind::COUNT
+                "the content pack defines {count} resources; a stockpile has {max} columns \
+                 (MAX_RESOURCES in the engine, because a stockpile is a fixed-size row)"
             ),
             SimError::NotEnough {
                 resource,
@@ -550,8 +559,9 @@ pub struct World {
     units: Option<Units>,
     economy: Option<Economy>,
     /// Per player, per resource. Index is `player - 1`; player 0 has no stockpile and neither does
-    /// anything above `MAX_PLAYERS`.
-    stock: [[u32; ResourceKind::COUNT]; MAX_PLAYERS],
+    /// anything above `MAX_PLAYERS`. The width is a constant because the row is an array, and the
+    /// pack is checked against it when it is loaded - so a slot is always inside the row.
+    stock: [[u32; MAX_RESOURCES]; MAX_PLAYERS],
     /// Terrain, copied once at seed time. Static for a match.
     walk: Option<Walk>,
     /// Damage constants from `combat.toml`, set with `load_combat`.
@@ -578,7 +588,7 @@ impl World {
             queue: Vec::new(),
             units: None,
             economy: None,
-            stock: [[0; ResourceKind::COUNT]; MAX_PLAYERS],
+            stock: [[0; MAX_RESOURCES]; MAX_PLAYERS],
             walk: None,
             damage_rules: None,
             paths: BTreeMap::new(),
@@ -631,19 +641,13 @@ impl World {
 
     /// The stockpile column a cost's resource id resolves to, or a refusal.
     ///
-    /// The pack owns the mapping (D17), and two content mistakes are refused rather than guessed:
-    /// an id the pack does not carry, and an id it carries in a column past the stockpile's width
-    /// (the array is still sized by `ResourceKind::COUNT`; widening it from the pack is the next
-    /// step of `docs/plan-resource-deletion.md`). Guessing would be invisible: slot 0 is wood in
-    /// our pack, so a wrong guess spends the wrong resource and every number still adds up.
+    /// The pack owns the mapping (D17), so a cost entry `[1, 25]` becomes a column here and nothing
+    /// above the pack layer learns that 1 is wood. A refusal rather than a guess, because guessing
+    /// is invisible: slot 0 is wood in our pack, so a wrong guess spends the wrong resource and
+    /// every number still adds up.
     fn cost_slot(&self, dat_id: u16) -> Result<usize, SimError> {
-        let slot = self
-            .resource_slot(dat_id)
-            .ok_or(SimError::UnknownResource { dat_id })?;
-        if slot >= ResourceKind::COUNT {
-            return Err(SimError::ResourceSlotOutOfRange { dat_id, slot });
-        }
-        Ok(slot)
+        self.resource_slot(dat_id)
+            .ok_or(SimError::UnknownResource { dat_id })
     }
 
     /// The pack's name for a stockpile column, for error messages only - a name never enters state.
@@ -1946,8 +1950,28 @@ impl World {
 
     /// Hand the world its resource table. Without one, a cost cannot name a stockpile slot and
     /// spending has to fail rather than guess - which is the point of taking this in explicitly.
-    pub fn load_resources(&mut self, resources: &Resources) {
+    ///
+    /// The pack also decides *how many* resources exist, and a stockpile row is a fixed-size array,
+    /// so a pack wider than the row is refused here: one refusal at load instead of a bounds check
+    /// on every cost site, and no order can ever name a column that is not there.
+    pub fn load_resources(&mut self, resources: &Resources) -> Result<(), SimError> {
+        if resources.count() > MAX_RESOURCES {
+            return Err(SimError::TooManyResources {
+                count: resources.count(),
+                max: MAX_RESOURCES,
+            });
+        }
         self.resources = Some(resources.clone());
+        Ok(())
+    }
+
+    /// The stockpile slot for a resource's name, as the pack spells it. This is how a test, a
+    /// scenario or a UI asks for "wood" without the engine knowing that word.
+    #[must_use]
+    pub fn slot_of(&self, name: &str) -> Option<usize> {
+        self.resources
+            .as_ref()
+            .and_then(|resources| resources.slot_of(name))
     }
 
     /// The stockpile slot for a cost's resource id, resolved by the pack.
@@ -2361,7 +2385,9 @@ overrides = "overrides.toml"
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../config/resources.toml"),
         )
         .expect("the project's resource table");
-        world.load_resources(&resources);
+        world
+            .load_resources(&resources)
+            .expect("the pack fits the stockpile");
         assert_eq!(world.resource_slot(1), Some(0), "dat 1 is wood, slot 0");
         assert_eq!(world.resource_slot(0), Some(1), "dat 0 is food, slot 1");
         assert_eq!(

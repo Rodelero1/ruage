@@ -47,7 +47,9 @@ fn seeded(fx: &Fixture) -> World {
     world
         .seed_from(&fx.map, &fx.economy, &fx.units)
         .expect("seeding");
-    world.load_resources(&fx.resources);
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     world
 }
 
@@ -240,8 +242,9 @@ fn a_depleted_node_stops_yielding() {
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
-    world.load_resources(&fx.resources);
-
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     let node = world
         .entities()
         .iter()
@@ -322,8 +325,9 @@ fn a_partial_load_comes_home_when_the_node_runs_out() {
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
-    world.load_resources(&fx.resources);
-
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     let node = world
         .entities()
         .iter()
@@ -408,8 +412,9 @@ fn two_villagers_on_one_node_cannot_take_more_than_it_holds() {
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
-    world.load_resources(&fx.resources);
-
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     let node = world
         .entities()
         .iter()
