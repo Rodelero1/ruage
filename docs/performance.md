@@ -51,6 +51,34 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Fourth pass, after research and modifiers (2026-10-26)
+
+Same probes, three runs each, and one methodological note that matters: the earlier passes' numbers
+were taken on a *separately measured* machine state, so they are the baseline this pass is judged
+against (2.26-2.36 us/tick at 126 entities, 32.99-33.44 at 2,126).
+
+| entities | before (v0.55) | after (v0.56) | ns/entity before -> after |
+|---|---|---|---|
+| 126 | 2.26-2.36 | 2.27-2.40 | 18.0-18.8 -> 18.0-19.1 |
+| 626 | 10.78-10.88 | 11.13-11.43 | 17.2-17.4 -> 17.8-18.3 |
+| 1126 | 18.09-18.25 | 18.68-19.31 | 16.1-16.2 -> 16.6-17.2 |
+| 2126 | 32.99-33.44 | 34.51-35.96 | 15.5-15.7 -> 16.2-16.9 |
+
+A ten-minute match (126 entities, 12,000 ticks): 27.9-28.8 ms, unchanged in practice. **At 2,126
+entities the tick is ~5% slower, and the cause is not the new code path.** The first attempt blamed
+the obvious suspect - a second per-tick scan of the entity list, added for the research timer - so it
+was merged into the production scan (one pass, two lists). Re-measured: no change at 2,126. What did
+change is `Entity`: `Option<Research>` is another 16 bytes on a struct that is walked once per tick,
+so fewer entities fit per cache line. That is the honest price of research state; boxing the job
+would take 8 of the 16 bytes back if it ever matters, and a real match (126 entities) does not feel
+it.
+
+Stability, same pass: the four-hour probe still ends with 126 entities and no growth, and the same
+seed still reproduces its hash exactly - `936e71d5a641044f` now, where the previous pass printed
+`508a746d89cc76e1`. That change is expected and worth stating: the hash now covers `researching` per
+entity and the per-player `researched` set, so any state-shape change moves it. Behaviour is
+unchanged (entity count, damage arithmetic, and every non-research test still passes).
+
 ## What the first pass found, and why the numbers before it were bad
 
 The tick used to collect this tick's movement as `(id, dx, dy)`, then resolve each id with a linear

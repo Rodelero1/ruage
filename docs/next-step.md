@@ -35,6 +35,19 @@ Attributes those 1,667 commands touch, most common first: **9 attack (321), 0 hp
 10 (45). The `class` field (`b`) is `-1` — "every class" — in **1,229 of 1,667**, and the target
 unit (`a`) is `-1` — "every unit" — in **440**.
 
+## Done next: kinds 4 and 5, for attack and armour (2026-10-26, v0.56)
+
+The importer now decodes the packing, so an effect carries `modifiers` beside its raw `commands`, and
+the engine applies **attack and armour** changes where damage is resolved: additions before
+multiplications, in researched-tech order, filtered by the unit id or class the modifier names.
+Checked against published numbers: Forging (+1 melee attack, blow 4 -> 5), Scale Mail (+1 melee and
++1 pierce armour, blow 4 -> 3), and a class filter that keeps Forging off a class-4 villager.
+
+Still not interpreted, and counted: **hit points (220 commands)**, range (177), gather rate (117),
+speed (47), carry (12), plus the `other:`/`unpacked:` attributes the importer could not name. Hit
+points are the interesting one: attack and armour are *resolved* at order time, while hp is state, so
+it needs a stored maximum per entity before a "+15 hp" can be applied without inventing one.
+
 ## Why this is the right next increment and not a bigger one
 
 - **Half the data, two verbs.** Kinds 4 and 5 are "add" and "multiply", and both were pinned by

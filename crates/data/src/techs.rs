@@ -18,6 +18,33 @@ use serde::Deserialize;
 use crate::cost::{Cost, RawCost};
 use crate::{ConfigError, MaybeFixed, SUPPORTED_SCHEMA};
 
+/// What a modifier does to the value it names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModOp {
+    Add,
+    Multiply,
+}
+
+/// A kind 4 or 5 command, **decoded by the importer**: the dat packs an attack or armour change as
+/// `class * 256 + amount` (Forging's 1025 is class 4, +1), and that packing is format knowledge, so
+/// it is undone in `ruage-tools` and the engine only ever sees the class and the amount (D17).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Modifier {
+    pub op: ModOp,
+    /// The engine's own vocabulary, as the importer names it: `attack`, `armour`, `hit_points`,
+    /// `range`, `speed`, `gather_rate`, `carry`, or `other:<id>` / `unpacked:<id>` for a command the
+    /// importer could not decode. An unknown name is carried, not discarded: it is a gap in the
+    /// model, and silently dropping it would make a tech look fully applied when it is not.
+    pub attribute: String,
+    /// The attack/armour class, when the attribute is one of those; -1 otherwise.
+    pub attribute_class: i16,
+    /// Target unit id, -1 for every unit.
+    pub unit: i32,
+    /// Target unit class, -1 for every class.
+    pub unit_class: i16,
+    pub value: f64,
+}
+
 /// One `[kind, a, b, c, value]` command.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EffectCommand {
@@ -116,7 +143,10 @@ pub enum Meaning {
 pub struct Effect {
     pub id: u32,
     pub name: String,
+    /// The raw commands, kept as the record of what the dat said.
     pub commands: Vec<EffectCommand>,
+    /// The same commands, decoded (kind 4 and 5 only): what an interpreter actually applies.
+    pub modifiers: Vec<Modifier>,
 }
 
 #[derive(Debug, Clone)]
@@ -189,6 +219,21 @@ struct RawEffect {
     id: u32,
     name: String,
     commands: Vec<[f64; 5]>,
+    /// Written by the importer for kinds 4 and 5. Defaulted so a pack written before the decode
+    /// existed still loads - and then simply has no modifiers to apply.
+    #[serde(default)]
+    modifiers: Vec<RawModifier>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawModifier {
+    op: String,
+    attribute: String,
+    attribute_class: i16,
+    unit: i32,
+    unit_class: i16,
+    value: f64,
 }
 
 #[derive(Deserialize)]
@@ -263,6 +308,39 @@ pub fn load_effects_str(text: &str, path: &str) -> Result<Effects, ConfigError> 
                 value: MaybeFixed::from_f64(value),
             });
         }
+        let mut modifiers = Vec::with_capacity(effect.modifiers.len());
+        for raw in effect.modifiers {
+            let op = match raw.op.as_str() {
+                "add" => ModOp::Add,
+                "multiply" => ModOp::Multiply,
+                other => {
+                    return Err(ConfigError::Invalid {
+                        key: format!("effect[{}].modifiers.op", effect.id),
+                        detail: format!("{other:?} is neither \"add\" nor \"multiply\""),
+                    });
+                }
+            };
+            if raw.attribute.trim().is_empty() {
+                return Err(ConfigError::Invalid {
+                    key: format!("effect[{}].modifiers.attribute", effect.id),
+                    detail: "a modifier needs an attribute".to_owned(),
+                });
+            }
+            if !raw.value.is_finite() {
+                return Err(ConfigError::Invalid {
+                    key: format!("effect[{}].modifiers.value", effect.id),
+                    detail: format!("{} is not a number", raw.value),
+                });
+            }
+            modifiers.push(Modifier {
+                op,
+                attribute: raw.attribute.trim().to_owned(),
+                attribute_class: raw.attribute_class,
+                unit: raw.unit,
+                unit_class: raw.unit_class,
+                value: raw.value,
+            });
+        }
         if effects
             .insert(
                 effect.id,
@@ -270,6 +348,7 @@ pub fn load_effects_str(text: &str, path: &str) -> Result<Effects, ConfigError> 
                     id: effect.id,
                     name: effect.name,
                     commands,
+                    modifiers,
                 },
             )
             .is_some()

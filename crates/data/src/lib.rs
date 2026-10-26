@@ -35,8 +35,8 @@ pub use resources::{
     ResourceDef, ResourceSite, Resources, load_resources_file, load_resources_str,
 };
 pub use techs::{
-    Attribute, Effect, EffectCommand, Effects, Meaning, Target, Tech, Techs, load_effects_file,
-    load_effects_str, load_techs_file, load_techs_str,
+    Attribute, Effect, EffectCommand, Effects, Meaning, ModOp, Modifier, Target, Tech, Techs,
+    load_effects_file, load_effects_str, load_techs_file, load_techs_str,
 };
 pub use units::{Unit, Units, load_units_file, load_units_str};
 

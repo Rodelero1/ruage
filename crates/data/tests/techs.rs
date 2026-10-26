@@ -479,3 +479,32 @@ location = 0
     );
     assert_eq!(techs.get(2).expect("the tech").costs[0].amount, 1000);
 }
+
+/// Kind 4 and 5 commands arrive twice: raw, as the record of what the dat said, and decoded as
+/// **modifiers** - because `class * 256 + amount` is a fact about the format and belongs to the
+/// importer, not to the engine (D17).
+#[test]
+fn the_project_effects_carry_decoded_attack_modifiers() {
+    let effects = effects();
+    let forging = effects.get(67).expect("effect 67 is Forging");
+    assert_eq!(forging.name, "Forging");
+    let melee: Vec<&ruage_data::Modifier> = forging
+        .modifiers
+        .iter()
+        .filter(|m| m.op == ruage_data::ModOp::Add && m.attribute == "attack" && m.unit_class == 6)
+        .collect();
+    assert_eq!(melee.len(), 1, "one +1 melee attack for infantry");
+    assert_eq!(melee[0].attribute_class, 4, "class 4 is melee");
+    assert_eq!(melee[0].value, 1.0, "1025 decodes to +1, not +1025");
+    assert_eq!(melee[0].unit, -1, "every unit of that class");
+
+    // A multiplier keeps its value and its classless attribute: Masonry is buildings x1.1 hp.
+    let masonry = effects.get(50).expect("effect 50 is Masonry");
+    let hp = masonry
+        .modifiers
+        .iter()
+        .find(|m| m.op == ruage_data::ModOp::Multiply && m.attribute == "hit_points")
+        .expect("a hit-point multiplier");
+    assert_eq!(hp.value, 1.1);
+    assert_eq!(hp.unit_class, 3, "buildings");
+}

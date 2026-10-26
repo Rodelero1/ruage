@@ -114,16 +114,39 @@ pub struct DamageRules {
 /// Elevation is not applied here: the slice has no terrain heights, so there is no elevation to
 /// apply. `combat.toml` keeps the multipliers for when there is.
 pub fn damage_dealt(attacker: &Unit, target: &Unit, rules: &DamageRules) -> i32 {
+    damage_between(&attacker.attacks, &target.armours, rules)
+}
+
+/// The formula itself, over the *effective* lists: attacks and armours after every modifier the two
+/// owners have researched. Splitting it this way keeps the arithmetic testable on its own and lets
+/// the tick loop pass adjusted values without inventing a modified `Unit`.
+pub fn damage_between(attacks: &[(i16, i16)], armours: &[(i16, i16)], rules: &DamageRules) -> i32 {
     let mut total: i64 = 0;
-    for (class, amount) in &attacker.attacks {
-        let armour = target
-            .armours
+    for (class, amount) in attacks {
+        let armour = armours
             .iter()
             .find(|(target_class, _)| target_class == class)
             .map_or(rules.missing_armour, |(_, value)| i32::from(*value));
         total += i64::from((i32::from(*amount) - armour).max(0));
     }
     i32::try_from(total).unwrap_or(i32::MAX).max(rules.minimum)
+}
+
+/// Add `amount` to a class in an attack/armour list, creating the entry when the unit does not list
+/// that class: an upgrade can grant an attack class a unit does not otherwise have.
+fn add_to_class(list: &mut Vec<(i16, i16)>, class: i16, amount: i16) {
+    match list.iter_mut().find(|(entry, _)| *entry == class) {
+        Some((_, value)) => *value = value.saturating_add(amount),
+        None => list.push((class, amount)),
+    }
+}
+
+/// Multiply a class's value, rounded half away from zero: a multiplier on a class the unit does not
+/// have is a no-op, because there is nothing to scale.
+fn multiply_class(list: &mut [(i16, i16)], class: i16, factor: f64) {
+    if let Some((_, value)) = list.iter_mut().find(|(entry, _)| *entry == class) {
+        *value = i16::try_from((f64::from(*value) * factor).round() as i64).unwrap_or(*value);
+    }
 }
 
 /// A tech being researched: which one, and how long it has left.
@@ -1145,7 +1168,11 @@ impl World {
         if attacker_stats.attacks.is_empty() {
             return Err(SimError::Unarmed { id: attacker });
         }
-        let damage = damage_dealt(attacker_stats, victim_stats, &rules);
+        // Both sides' attacks and armours are adjusted by what their owners have researched: an
+        // upgrade is resolved here, at order time, so the tick loop still never reads a table.
+        let attacks = self.adjusted(source.player, attacker_stats, "attack");
+        let armours = self.adjusted(victim.player, victim_stats, "armour");
+        let damage = damage_between(&attacks, &armours, &rules);
         let reload_ticks = attacker_stats
             .reload
             .resolve(self.scale, "reload")
@@ -1623,6 +1650,63 @@ impl World {
             fresh: true,
         });
         Ok(())
+    }
+
+    /// A unit's attacks or armours after every modifier its owner has researched.
+    ///
+    /// Additions are applied before multiplications, in researched-tech order, so the result cannot
+    /// depend on the order techs happened to be researched in. A modifier matches on the unit id it
+    /// names, on the unit's class, or on neither (-1 means "everything").
+    fn adjusted(&self, player: u8, unit: &Unit, attribute: &str) -> Vec<(i16, i16)> {
+        let base = if attribute == "attack" {
+            &unit.attacks
+        } else {
+            &unit.armours
+        };
+        let (Some(effects), Some(techs)) = (self.effects.as_ref(), self.techs.as_ref()) else {
+            return base.clone();
+        };
+        let mut chosen = Vec::new();
+        for tech_id in self.researched(player) {
+            let Some(effect_id) = techs.get(*tech_id).and_then(|tech| tech.effect_id) else {
+                continue;
+            };
+            let Some(effect) = effects.get(effect_id) else {
+                continue;
+            };
+            for modifier in &effect.modifiers {
+                if modifier.attribute != attribute {
+                    continue;
+                }
+                if modifier.unit >= 0 && u32::try_from(modifier.unit).ok() != Some(unit.id) {
+                    continue;
+                }
+                if modifier.unit_class >= 0 && modifier.unit_class != unit.class {
+                    continue;
+                }
+                // An attack or armour change is a change *to a class*; one that names no class is
+                // content we cannot place. Skipping it is inert today (an unlisted class loses to
+                // any attack), but a later rule that lets a classless entry through would turn it
+                // into "+99 to everything".
+                if modifier.attribute_class < 0 {
+                    continue;
+                }
+                chosen.push(modifier);
+            }
+        }
+
+        let mut out = base.clone();
+        for modifier in chosen.iter().filter(|m| m.op == ruage_data::ModOp::Add) {
+            let amount = i16::try_from(modifier.value.round() as i64).unwrap_or(i16::MAX);
+            add_to_class(&mut out, modifier.attribute_class, amount);
+        }
+        for modifier in chosen
+            .iter()
+            .filter(|m| m.op == ruage_data::ModOp::Multiply)
+        {
+            multiply_class(&mut out, modifier.attribute_class, modifier.value);
+        }
+        out
     }
 
     /// Apply a researched tech: mark it done and run its effect commands.
@@ -2139,12 +2223,21 @@ impl World {
         }
         // Production: one job per building, finishing exactly on its create time. A unit with
         // nowhere to stand waits inside the building rather than being lost.
-        let trainers: Vec<EntityId> = self
-            .entities
-            .iter()
-            .filter(|entity| entity.training.is_some() && entity.construction.is_none())
-            .map(|entity| entity.id)
-            .collect();
+        // Production and research: one pass over the entities, because both timers are the same
+        // shape and the second `collect` used to cost a whole extra scan of the world every tick.
+        let mut trainers: Vec<EntityId> = Vec::new();
+        let mut researchers: Vec<(EntityId, u8, u32)> = Vec::new();
+        for entity in &self.entities {
+            if entity.construction.is_some() {
+                continue;
+            }
+            if entity.training.is_some() {
+                trainers.push(entity.id);
+            }
+            if let Some(job) = entity.researching {
+                researchers.push((entity.id, entity.player, job.tech));
+            }
+        }
         for id in trainers {
             let ready = match self.find_mut(id) {
                 Some(entity) => match entity.training {
@@ -2168,17 +2261,7 @@ impl World {
                 self.spawn_from_building(id);
             }
         }
-        // Research: the same one-job-per-building timer, and the effect lands when it reaches zero.
-        let researchers: Vec<(EntityId, u8, u32)> = self
-            .entities
-            .iter()
-            .filter(|entity| entity.researching.is_some() && entity.construction.is_none())
-            .filter_map(|entity| {
-                entity
-                    .researching
-                    .map(|job| (entity.id, entity.player, job.tech))
-            })
-            .collect();
+        // Research: the same timer, and the effect lands when it reaches zero.
         for (id, player, tech) in researchers {
             let landed = match self.find_mut(id) {
                 Some(entity) => match entity.researching {
