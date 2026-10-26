@@ -118,13 +118,152 @@ fn a_build_without_the_resources_is_refused() {
         unit: house,
         at: site,
     }) {
-        Err(SimError::NotEnough { kind, need, have }) => {
-            assert_eq!(kind, ResourceKind::Wood);
+        Err(SimError::NotEnough {
+            resource,
+            need,
+            have,
+        }) => {
+            // "wood" is the pack's name for slot 0 (config/resources.toml), not a fixed word: the
+            // error reports content, so it says what the pack says.
+            assert_eq!(resource, "wood");
             assert_eq!(need, 25, "a house costs 25 wood");
             assert_eq!(have, 0);
         }
         other => panic!("expected NotEnough, got {other:?}"),
     }
+}
+
+/// A pack of *our own* resources: names and slots, no reference ids at all. Nothing in it can
+/// resolve a cost that arrived from the reference pack, which is the shape a mod has (D17/D18).
+const OWN_PACK: &str = r#"
+schema = 1
+
+[[resource]]
+slot = 0
+name = "timber"
+
+[[resource]]
+slot = 1
+name = "grain"
+"#;
+
+/// The same, but with one reference id, in a column past the stockpile's width.
+const WIDE_PACK: &str = r#"
+schema = 1
+
+[[resource]]
+slot = 0
+name = "timber"
+
+[[resource]]
+slot = 1
+name = "grain"
+
+[[resource]]
+slot = 2
+name = "iron"
+
+[[resource]]
+slot = 3
+name = "salt"
+
+[[resource]]
+slot = 4
+name = "clay"
+dat_id = 1
+"#;
+
+#[test]
+fn a_pack_that_does_not_carry_a_cost_id_refuses_the_order() {
+    // The pack is the authority on what a cost's id means (D17). This pack has no reference ids,
+    // so the house's "25 of dat id 1" names nothing. Paying from slot 0 anyway would take the
+    // timber column because the enum happens to number wood 0 - a house bought with the wrong
+    // goods, which no test could notice and no player could explain.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let villager = first_villager(&world);
+    let site = free_tile_near(&world, villager);
+    let node = world
+        .entities()
+        .iter()
+        .filter(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
+        .map(|e| e.id)
+        .next()
+        .expect("a tree");
+    bank_wood(&mut world, 25, node);
+    let before = world.stock(1, ResourceKind::Wood);
+    assert!(before >= 25, "the villager banked {before} wood");
+
+    let pack = ruage_data::load_resources_str(OWN_PACK, "<own pack>").expect("the pack loads");
+    world.load_resources(&pack);
+
+    let err = world
+        .submit_checked(Command::Build {
+            villager,
+            unit: 70,
+            at: site,
+        })
+        .expect_err("a cost naming an id the pack lacks must be refused");
+
+    assert!(
+        matches!(err, SimError::UnknownResource { dat_id: 1 }),
+        "expected UnknownResource for dat id 1, got {err:?}"
+    );
+    let text = format!("{err}");
+    assert!(
+        text.contains("id 1") && text.contains("does not carry"),
+        "the refusal must name the id and say the pack lacks it: {text}"
+    );
+    assert_eq!(
+        world.stock(1, ResourceKind::Wood),
+        before,
+        "a refused order must not be paid from slot 0"
+    );
+}
+
+#[test]
+fn a_pack_that_puts_a_cost_id_past_the_stockpile_refuses_the_order() {
+    // Same class of content mistake, and the one that would panic: the stockpile is still an array
+    // sized by the enum, so a pack that names a fifth column has nowhere to put it.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let villager = first_villager(&world);
+    let site = free_tile_near(&world, villager);
+    let node = world
+        .entities()
+        .iter()
+        .filter(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
+        .map(|e| e.id)
+        .next()
+        .expect("a tree");
+    bank_wood(&mut world, 25, node);
+    let before = world.stock(1, ResourceKind::Wood);
+
+    let pack = ruage_data::load_resources_str(WIDE_PACK, "<wide pack>").expect("the pack loads");
+    world.load_resources(&pack);
+
+    let err = world
+        .submit_checked(Command::Build {
+            villager,
+            unit: 70,
+            at: site,
+        })
+        .expect_err("a cost in a column the stockpile cannot hold must be refused");
+
+    assert!(
+        matches!(err, SimError::ResourceSlotOutOfRange { dat_id: 1, slot: 4 }),
+        "expected ResourceSlotOutOfRange for dat id 1 in slot 4, got {err:?}"
+    );
+    let text = format!("{err}");
+    assert!(
+        text.contains("id 1") && text.contains("slot 4"),
+        "the refusal must name the id and the column: {text}"
+    );
+    assert_eq!(
+        world.stock(1, ResourceKind::Wood),
+        before,
+        "a refused order must not be paid from slot 0"
+    );
 }
 
 #[test]

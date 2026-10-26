@@ -283,9 +283,19 @@ pub enum SimError {
     Unarmed {
         id: EntityId,
     },
-    /// The player cannot pay for the order.
+    /// A cost names a resource id this content pack does not carry.
+    UnknownResource {
+        dat_id: u16,
+    },
+    /// A cost names a resource this pack carries, in a stockpile column the world has no room for.
+    ResourceSlotOutOfRange {
+        dat_id: u16,
+        slot: usize,
+    },
+    /// The player cannot pay for the order. The name is the pack's, so the message says "wood"
+    /// only because the pack calls slot 0 that (D17).
     NotEnough {
-        kind: ResourceKind,
+        resource: String,
         need: u32,
         have: u32,
     },
@@ -362,9 +372,25 @@ impl fmt::Display for SimError {
                 "no walkable route from {:?} to {:?}: the target is walled off",
                 from, to
             ),
-            SimError::NotEnough { kind, need, have } => {
-                write!(f, "not enough {kind:?}: {need} needed, {have} in the bank")
-            }
+            SimError::UnknownResource { dat_id } => write!(
+                f,
+                "a cost names resource id {dat_id}, which this content pack does not carry: \
+                 refusing rather than paying from another slot"
+            ),
+            SimError::ResourceSlotOutOfRange { dat_id, slot } => write!(
+                f,
+                "a cost names resource id {dat_id}, which this pack puts in stockpile slot {slot}; \
+                 a world stocks {} columns",
+                ResourceKind::COUNT
+            ),
+            SimError::NotEnough {
+                resource,
+                need,
+                have,
+            } => write!(
+                f,
+                "not enough {resource}: {need} needed, {have} in the bank"
+            ),
             SimError::SiteOccupied { tile } => {
                 write!(f, "something already stands at {:?}", tile)
             }
@@ -590,10 +616,42 @@ impl World {
 
     /// What a player has banked. Player 0 (nobody) always reads zero.
     pub fn stock(&self, player: u8, kind: ResourceKind) -> u32 {
+        self.stock_in(player, kind.index())
+    }
+
+    /// What a player has banked in a stockpile column. The column is the pack's slot, not an
+    /// enum's index, so this is the read every cost check uses.
+    fn stock_in(&self, player: u8, slot: usize) -> u32 {
         self.stock
             .get(usize::from(player).wrapping_sub(1))
-            .map(|row| row[kind.index()])
+            .and_then(|row| row.get(slot))
+            .copied()
             .unwrap_or(0)
+    }
+
+    /// The stockpile column a cost's resource id resolves to, or a refusal.
+    ///
+    /// The pack owns the mapping (D17), and two content mistakes are refused rather than guessed:
+    /// an id the pack does not carry, and an id it carries in a column past the stockpile's width
+    /// (the array is still sized by `ResourceKind::COUNT`; widening it from the pack is the next
+    /// step of `docs/plan-resource-deletion.md`). Guessing would be invisible: slot 0 is wood in
+    /// our pack, so a wrong guess spends the wrong resource and every number still adds up.
+    fn cost_slot(&self, dat_id: u16) -> Result<usize, SimError> {
+        let slot = self
+            .resource_slot(dat_id)
+            .ok_or(SimError::UnknownResource { dat_id })?;
+        if slot >= ResourceKind::COUNT {
+            return Err(SimError::ResourceSlotOutOfRange { dat_id, slot });
+        }
+        Ok(slot)
+    }
+
+    /// The pack's name for a stockpile column, for error messages only - a name never enters state.
+    fn slot_name(&self, slot: usize) -> String {
+        self.resources
+            .as_ref()
+            .and_then(|resources| resources.name(slot))
+            .map_or_else(|| format!("slot {slot}"), |name| name.to_owned())
     }
 
     pub fn carry(&self, id: EntityId) -> Fixed {
@@ -1042,12 +1100,15 @@ impl World {
             })?;
 
         for (dat_id, quantity) in &stats.costs {
-            if let Some(kind) = ResourceKind::from_dat_id(*dat_id) {
-                let need = u32::from(*quantity);
-                let have = self.stock(entity.player, kind);
-                if have < need {
-                    return Err(SimError::NotEnough { kind, need, have });
-                }
+            let slot = self.cost_slot(u16::from(*dat_id))?;
+            let need = u32::from(*quantity);
+            let have = self.stock_in(entity.player, slot);
+            if have < need {
+                return Err(SimError::NotEnough {
+                    resource: self.slot_name(slot),
+                    need,
+                    have,
+                });
             }
         }
 
@@ -1067,16 +1128,14 @@ impl World {
     fn start_train(&mut self, building: EntityId, unit: u32) -> Result<(), SimError> {
         let plan = self.check_train(building, unit)?;
         for (dat_id, quantity) in &plan.costs {
-            if let Some(kind) = ResourceKind::from_dat_id(*dat_id) {
-                let index = usize::from(plan.player).wrapping_sub(1);
-                let Some(row) = self.stock.get_mut(index) else {
-                    return Err(SimError::PlayerOutOfRange {
-                        player: plan.player,
-                    });
-                };
-                let slot = &mut row[kind.index()];
-                *slot -= u32::from(*quantity);
-            }
+            let slot = self.cost_slot(u16::from(*dat_id))?;
+            let index = usize::from(plan.player).wrapping_sub(1);
+            let Some(row) = self.stock.get_mut(index) else {
+                return Err(SimError::PlayerOutOfRange {
+                    player: plan.player,
+                });
+            };
+            row[slot] -= u32::from(*quantity);
         }
         let Some(entity) = self.find_mut(building) else {
             return Err(SimError::MissingEntity(building));
@@ -1252,12 +1311,15 @@ impl World {
             .ok_or(SimError::MissingEntity(villager))?;
 
         for (dat_id, quantity) in &stats.costs {
-            if let Some(kind) = ResourceKind::from_dat_id(*dat_id) {
-                let need = u32::from(*quantity);
-                let have = self.stock(worker.player, kind);
-                if have < need {
-                    return Err(SimError::NotEnough { kind, need, have });
-                }
+            let slot = self.cost_slot(u16::from(*dat_id))?;
+            let need = u32::from(*quantity);
+            let have = self.stock_in(worker.player, slot);
+            if have < need {
+                return Err(SimError::NotEnough {
+                    resource: self.slot_name(slot),
+                    need,
+                    have,
+                });
             }
         }
 
@@ -1305,14 +1367,12 @@ impl World {
 
         // Paid only after every check passed, so a refused order spends nothing.
         for (dat_id, quantity) in &costs {
-            if let Some(kind) = ResourceKind::from_dat_id(*dat_id) {
-                let index = usize::from(player).wrapping_sub(1);
-                let Some(row) = self.stock.get_mut(index) else {
-                    return Err(SimError::PlayerOutOfRange { player });
-                };
-                let slot = &mut row[kind.index()];
-                *slot -= u32::from(*quantity);
-            }
+            let slot = self.cost_slot(u16::from(*dat_id))?;
+            let index = usize::from(player).wrapping_sub(1);
+            let Some(row) = self.stock.get_mut(index) else {
+                return Err(SimError::PlayerOutOfRange { player });
+            };
+            row[slot] -= u32::from(*quantity);
         }
 
         let position = self.tile(at);
