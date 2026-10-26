@@ -353,6 +353,10 @@ pub enum SimError {
     AlreadyResearched {
         tech: u32,
     },
+    /// This player is already researching the tech at another building.
+    TechInProgress {
+        tech: u32,
+    },
     /// The pack defines more resources than a stockpile has columns for.
     TooManyResources {
         count: usize,
@@ -470,6 +474,10 @@ impl fmt::Display for SimError {
             SimError::AlreadyResearched { tech } => {
                 write!(f, "tech {tech} has already been researched by this player")
             }
+            SimError::TechInProgress { tech } => write!(
+                f,
+                "tech {tech} is already being researched at another building"
+            ),
             SimError::TooManyResources { count, max } => write!(
                 f,
                 "the content pack defines {count} resources; a stockpile has {max} columns \
@@ -1544,6 +1552,13 @@ impl World {
         let stats = techs.get(tech).ok_or(SimError::MissingTech { id: tech })?;
         if self.researched(entity.player).contains(&tech) {
             return Err(SimError::AlreadyResearched { tech });
+        }
+        // One tech, one order: two buildings researching the same tech would both charge and the
+        // second would apply an upgrade with nothing left to upgrade.
+        if self.entities.iter().any(|other| {
+            other.player == entity.player && other.researching.is_some_and(|job| job.tech == tech)
+        }) {
+            return Err(SimError::TechInProgress { tech });
         }
         // `location` is the unit that researches it (12 is a barracks, 87 an archery range). Zero
         // means "anywhere", which is how the data spells a tech with no home building.

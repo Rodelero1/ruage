@@ -397,3 +397,43 @@ fn the_researched_set_is_part_of_the_state_hash() {
         "a researched tech must change the hash: it changes what later orders resolve to"
     );
 }
+
+#[test]
+fn the_same_tech_cannot_be_researched_at_two_buildings_at_once() {
+    // Two barracks, one tech, two orders: without this check both would be accepted, both would
+    // charge, and the second would re-apply an upgrade that has nothing left to upgrade. Paying
+    // twice for one tech is the kind of bug no endpoint assertion notices.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    // Enough for two techs, so the refusal under test cannot be "cannot afford".
+    bank(&mut world, slot("food"), 200);
+    bank(&mut world, slot("gold"), 80);
+    let first = place(&mut world, 1, 9_020, BARRACKS, (24, 24), 1200);
+    let second = place(&mut world, 1, 9_021, BARRACKS, (26, 26), 1200);
+
+    world
+        .submit_checked(Command::Research {
+            building: first,
+            tech: MAN_AT_ARMS,
+        })
+        .expect("the first order is legal");
+    world.step().expect("step");
+    let paid_once = world.stock(1, slot("food"));
+
+    let err = world
+        .submit_checked(Command::Research {
+            building: second,
+            tech: MAN_AT_ARMS,
+        })
+        .expect_err("a tech already in progress cannot be started again");
+    assert!(
+        matches!(err, SimError::TechInProgress { tech } if tech == MAN_AT_ARMS),
+        "expected TechInProgress, got {err:?}"
+    );
+    world.step().expect("step");
+    assert_eq!(
+        world.stock(1, slot("food")),
+        paid_once,
+        "a refused order must not be paid"
+    );
+}
