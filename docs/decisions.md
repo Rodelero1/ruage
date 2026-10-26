@@ -141,9 +141,15 @@ work; the engine receives "add 1 to attack class 4".
 
 Consequences already visible in the code:
 
-- `ResourceKind` is a fixed enum and stockpiles are `[[u32; ResourceKind::COUNT]; 2]` — four
-  resources and two players in the *type*. (b) below is impossible until this is data.
+- ~~`ResourceKind` is a fixed enum and stockpiles are `[[u32; ResourceKind::COUNT]; 2]` — four
+  resources and two players in the *type*.~~ **Paid down 2026-10-26** (`docs/plan-resource-deletion.md`):
+  resources are content (`config/resources.toml`), a node carries a column, costs name their
+  resource by reference id *or* by name, and the stockpile's width is the engine's `MAX_RESOURCES`
+  with the pack's count checked at load. Proven by `a_content_pack_with_our_own_resources_loads_and_spends`.
+  The player count was already data by D20.
 - `script.rs` names `109` and `12`; the scenario format should name roles from the content pack.
+  (**Still open**: the resource half of this is done - a step names a resource and the pack resolves
+  it - but building and training still quote dat ids.)
 - `Attribute::from_id` knowing 0/1/8/9 is fine *in the importer*, not in the engine.
 
 ## D18 — Target shape: A now, B-capable; assets swappable from the start

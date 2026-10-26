@@ -1,12 +1,10 @@
 # Resources. HAND-WRITTEN — our schema, not the dat's numbering.
 #
-# This is the first piece of the content pack that is *ours*: the engine will read its resource
-# list from here, and the dat's ids (0 food, 1 wood, 2 stone, 3 gold) are an importer detail that
-# will live in the generator, not in `crates/` (D17).
-#
-# While `ResourceKind` still exists it is the concrete pack, and its slot order must match this
-# file's order — `crates/data/tests/resources.rs` fails if they drift. Deleting the enum is the
-# next increment; this file and that test are the bridge.
+# This is the content pack's resource list, and it is the engine's *whole* idea of a resource (D17):
+# the enum that used to be the pack (`ResourceKind`) was deleted on 2026-10-26, and nothing in
+# `crates/` knows the word "wood" any more. Slots are stockpile columns; names are what maps,
+# scenarios and the economy use; `dat_id` is the reference pack's numbering (0 food, 1 wood,
+# 2 stone, 3 gold), kept optional so a pack of our own can omit it entirely.
 
 schema = 1
 

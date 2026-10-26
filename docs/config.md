@@ -217,7 +217,7 @@ opponent schedule to re-baseline. `crates/data/tests/rate_sweep.rs` proves twelv
 240 load at their derived scale, that a rate change without a scale change is refused, and that
 five dat speeds land on a whole unit per tick at each rate.
 
-## `resources.toml` — the first content of our own (2026-10-25)
+## `resources.toml` — the engine's whole idea of a resource (2026-10-25, rewritten 2026-10-26)
 
 ```toml
 schema = 1
@@ -226,20 +226,40 @@ schema = 1
 slot = 0
 name = "wood"
 dat_id = 1
+site = "forest"
 ```
 
-`slot` is the stockpile column the engine indexes; `name` is what configs and scenarios use;
-`dat_id` is the *reference pack's* numbering, carried only so the bridge test can check the
-correspondence. Slots are dense from zero in file order — the loader refuses a gap, because a gap is
-a stockpile column nothing can address, and it refuses a duplicate name, because a name lookup would
-silently take the first.
+Four fields, and each answers a different question:
 
-**This file is a bridge, and the bridge is a test.** `ResourceKind` is still a four-variant enum and
-stockpiles are still `[[u32; ResourceKind::COUNT]; 2]`, so today the enum *is* the pack.
-`crates/data/tests/resources.rs` asserts that the file and the enum agree on name, slot and
-`dat_id`; when the enum is deleted, that test is deleted with it and this file becomes the only
-truth. Until then, adding a resource means editing both, and the failure is a named test rather
-than a silent mismatch.
+- **`slot`** — the stockpile column. Dense from zero in file order; the loader refuses a gap, because
+  a gap is a column nothing can address, and a duplicate name, because a name lookup would silently
+  take the first. The engine indexes this and nothing else.
+- **`name`** — what map files, scenarios and the economy call the resource. It is the only vocabulary
+  the content has, and the engine never invents one.
+- **`dat_id`** — the *reference pack's* numbering, optional. Present, it is what a cost entry
+  `[1, 25]` resolves against; absent (a pack of our own), every reference lookup misses, which is
+  correct and is why callers handle `None` rather than defaulting to column 0.
+- **`site`** — where a map may put a node of this resource: `"forest"` or open ground (the default).
+  "Wood grows in forests" is a fact about wood, so it lives here, and the map loader enforces it in
+  both directions — a forest resource off a forest tile, and an open-ground resource inside one.
 
-D17 says the dat's numbering must not reach `crates/`. It has not yet: `ResourceKind::dat_id()`
-still lives in the data crate. That is the leak this file exists to close, not a fact it documents.
+**This file is now the only truth about resources.** `ResourceKind` — the four-variant enum that
+used to *be* the pack, with `[[u32; ResourceKind::COUNT]; 2]` stockpiles — was deleted on 2026-10-26
+along with its bridge test (`the_content_file_agrees_with_resource_kind`, which asserted the file
+and the enum agreed on name, slot and dat id). What replaced it:
+
+| Question | Answer |
+|---|---|
+| How many resources exist? | `Resources::count()`, checked at load against the engine's `MAX_RESOURCES = 8` — a stockpile row is an array, so the *width* is the engine's fact while the *count* is content's |
+| What is a node? | `EntityKind::Resource(slot)` — a column, never a kind |
+| What does a cost mean? | A cost names its resource: `[1, 25]` (reference id) or `{ resource = "timber", amount = 25 }` (name) |
+| Which task works a resource? | `[gather.resource_task]`, keyed by **name** (`timber = "wood"`) |
+| Where may it stand? | `site`, enforced by the map loader |
+
+D17's rule — the dat's numbering must not reach `crates/` — now holds for resources: `dat_id` is
+read in one place (`Resources::slot_for_dat_id`), and every other layer speaks columns, names and
+costs. The test that pins the whole boundary is
+`a_content_pack_with_our_own_resources_loads_and_spends` in `crates/sim/tests/build.rs`: a pack of
+five resources called grain, iron, salt, wool and timber, a map whose wood is called timber, and a
+house that costs `{ resource = "timber", amount = 25 }`, gathered, paid for and built to full hp —
+with the slot-0 column asserted to stay empty throughout.
