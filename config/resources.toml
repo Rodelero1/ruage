@@ -1,0 +1,34 @@
+# Resources. HAND-WRITTEN — our schema, not the dat's numbering.
+#
+# This is the first piece of the content pack that is *ours*: the engine will read its resource
+# list from here, and the dat's ids (0 food, 1 wood, 2 stone, 3 gold) are an importer detail that
+# will live in the generator, not in `crates/` (D17).
+#
+# While `ResourceKind` still exists it is the concrete pack, and its slot order must match this
+# file's order — `crates/data/tests/resources.rs` fails if they drift. Deleting the enum is the
+# next increment; this file and that test are the bridge.
+
+schema = 1
+
+# `slot` is the stockpile column. Slots must be dense from 0 and are what the engine indexes;
+# `name` is what the scenario format and the config use; `dat_id` is the reference pack's own
+# numbering, kept only so the bridge can check the correspondence.
+[[resource]]
+slot = 0
+name = "wood"
+dat_id = 1
+
+[[resource]]
+slot = 1
+name = "food"
+dat_id = 0
+
+[[resource]]
+slot = 2
+name = "gold"
+dat_id = 3
+
+[[resource]]
+slot = 3
+name = "stone"
+dat_id = 2

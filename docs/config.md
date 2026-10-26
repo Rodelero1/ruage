@@ -216,3 +216,30 @@ ticks, so they *tighten* in wall-clock as the rate rises: "1 tick" is 50 ms at 2
 opponent schedule to re-baseline. `crates/data/tests/rate_sweep.rs` proves twelve rates from 10 to
 240 load at their derived scale, that a rate change without a scale change is refused, and that
 five dat speeds land on a whole unit per tick at each rate.
+
+## `resources.toml` — the first content of our own (2026-10-25)
+
+```toml
+schema = 1
+
+[[resource]]
+slot = 0
+name = "wood"
+dat_id = 1
+```
+
+`slot` is the stockpile column the engine indexes; `name` is what configs and scenarios use;
+`dat_id` is the *reference pack's* numbering, carried only so the bridge test can check the
+correspondence. Slots are dense from zero in file order — the loader refuses a gap, because a gap is
+a stockpile column nothing can address, and it refuses a duplicate name, because a name lookup would
+silently take the first.
+
+**This file is a bridge, and the bridge is a test.** `ResourceKind` is still a four-variant enum and
+stockpiles are still `[[u32; ResourceKind::COUNT]; 2]`, so today the enum *is* the pack.
+`crates/data/tests/resources.rs` asserts that the file and the enum agree on name, slot and
+`dat_id`; when the enum is deleted, that test is deleted with it and this file becomes the only
+truth. Until then, adding a resource means editing both, and the failure is a named test rather
+than a silent mismatch.
+
+D17 says the dat's numbering must not reach `crates/`. It has not yet: `ResourceKind::dat_id()`
+still lives in the data crate. That is the leak this file exists to close, not a fact it documents.

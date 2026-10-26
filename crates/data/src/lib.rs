@@ -17,6 +17,7 @@ use serde::Deserialize;
 mod combat;
 mod economy;
 mod map;
+mod resources;
 mod techs;
 mod units;
 pub use combat::{
@@ -27,6 +28,7 @@ pub use economy::{
     load_economy_str,
 };
 pub use map::{Map, ResourceKind, ResourceNode, Terrain, TownCentre, load_map_file, load_map_str};
+pub use resources::{ResourceDef, Resources, load_resources_file, load_resources_str};
 pub use techs::{
     Attribute, Effect, EffectCommand, Effects, Meaning, Target, Tech, Techs, load_effects_file,
     load_effects_str, load_techs_file, load_techs_str,
