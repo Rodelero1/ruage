@@ -251,3 +251,46 @@ fn attacking_your_own_unit_is_refused() {
         other => panic!("expected FriendlyFire, got {other:?}"),
     }
 }
+
+#[test]
+fn a_dead_unit_does_not_leave_its_route_behind() {
+    // Every unit that dies used to keep its remaining waypoints in `paths` forever: a long 4v4 with
+    // hundreds of deaths would accumulate routes nobody walks, and the state hash walks them too.
+    let Some(fx) = fixture() else { return };
+    let (mut world, spearman, villager) = duel(&fx);
+
+    // Give the villager a route of its own by sending it at the spearman.
+    world
+        .submit_checked(Command::Attack {
+            attacker: villager,
+            target: spearman,
+        })
+        .expect("the villager may attack");
+    world.step().expect("step");
+    assert!(
+        world.path_len(villager).is_some(),
+        "the order should have planned a route"
+    );
+
+    // Then let the spearman finish it. Damage comes from the attacker's stats, not the command, so
+    // this takes the same seven blows the kill test already measures.
+    world
+        .submit_checked(Command::Attack {
+            attacker: spearman,
+            target: villager,
+        })
+        .expect("the spearman may attack");
+    let mut steps = 0;
+    while world.entity(villager).is_some() {
+        world.step().expect("step");
+        steps += 1;
+        // Seven blows at a two-second reload is 280 ticks; anything near 40 would be the first hit.
+        assert!(steps < 400, "the villager should have died by now");
+    }
+    assert_eq!(
+        world.path_len(villager),
+        None,
+        "a dead unit's route must be released with it"
+    );
+    println!("villager died after {steps} ticks, route released");
+}

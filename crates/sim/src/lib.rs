@@ -1857,12 +1857,31 @@ impl World {
         // The dead leave the world only at the end of the tick, once every phase has finished with
         // them: an entity that dies mid-tick still has a position to update and waypoints to spend.
         // Resource nodes are exempt - their HP is zero by design and their amount is what matters.
+        // Route bookkeeping dies with its owner. Without this a unit that is killed mid-walk keeps
+        // its remaining waypoints forever - a long match accumulates routes nobody walks, and the
+        // state hash walks them, so a dead unit's path was part of the hash.
+        let mut buried: Vec<EntityId> = Vec::new();
         self.entities.retain(|entity| {
-            !matches!(entity.kind, EntityKind::Unit | EntityKind::Building) || entity.hp > 0
+            let keep =
+                !matches!(entity.kind, EntityKind::Unit | EntityKind::Building) || entity.hp > 0;
+            if !keep {
+                buried.push(entity.id);
+            }
+            keep
         });
+        for id in buried {
+            self.paths.remove(&id);
+        }
 
         self.tick += 1;
         Ok(())
+    }
+
+    /// How many waypoints remain for this entity, or `None` when it has no route. Exposed so tests
+    /// can assert that bookkeeping is released when an entity dies.
+    #[must_use]
+    pub fn path_len(&self, id: EntityId) -> Option<usize> {
+        self.paths.get(&id).map(Vec::len)
     }
 
     /// Canonical hash over the state. Encoding is explicit little-endian: no `usize`, no

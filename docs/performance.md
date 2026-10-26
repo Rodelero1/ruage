@@ -69,3 +69,31 @@ id lookup — slower, correct, and only on ticks where the world changed shape.
 
 The rule that matters: **do not optimise what has not been measured**, and when a number changes
 shape with n, suspect a lookup inside a loop rather than a constant factor.
+
+## Stability pass (2026-10-25)
+
+Probes in `crates/sim/tests/stability.rs`, also `#[ignore]`d:
+
+- **Four simulated hours** (288,000 ticks) on the authored map: no panic, entity count flat at 126
+  from start to finish, tick counter exact. 0.63 s for the run, so a whole match is far cheaper than
+  real time.
+- **The same seed twice, four hours**: identical state hash (`6a619a6227c77db1`). Determinism was
+  previously checked only over ten minutes; a divergence needing hours to surface - an accumulator,
+  an unordered iteration - would have slipped past.
+
+### The leak this found
+
+`paths` (route per entity) was never pruned when an entity died. A unit killed mid-walk kept its
+remaining waypoints **forever**, and `state_hash` walks `paths`, so a dead unit's route was part of
+the hash as well. A four-versus-four match with hundreds of deaths would accumulate routes nobody
+walks; the idle probe could not see it because nothing dies.
+
+Fixed by collecting the buried ids in the same `retain` that removes them and dropping their routes.
+`a_dead_unit_does_not_leave_its_route_behind` covers it and was watched failing first
+(`left: Some(1)`).
+
+### What is still not covered
+
+Nothing kills entities over a long run, so the hours-long probe exercises the idle backbone only. A
+long *fighting* run - scripted production on both sides for four hours - is the missing stability
+test, and it needs a scenario that keeps making units.
