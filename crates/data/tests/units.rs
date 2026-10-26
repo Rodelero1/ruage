@@ -64,8 +64,10 @@ fn the_real_unit_table_loads_and_answers_known_values() {
     assert_eq!(knight.hp, 100);
     assert_eq!(knight.speed.resolve(20_000, "speed").unwrap().raw(), 27_000);
     assert!(knight.armours.contains(&(3, 2)), "2 pierce armour");
-    // Three pairs: 60 food, 75 gold, and 1 of resource 4 (population headroom).
-    assert_eq!(knight.costs, vec![(0, 60), (3, 75), (4, 1)]);
+    // Two pairs: 60 food and 75 gold. The dat's third pair for a knight is 1 of resource 4, which
+    // is population - a cost the stockpile cannot hold, so the importer does not emit it as one
+    // (see `test_population_is_not_a_stockpile_cost` in the tooling's tests).
+    assert_eq!(knight.costs, vec![(0, 60), (3, 75)]);
 
     // The base villager: 25 hp, 0.8 tiles/s, and its work_rate is the *build* task's 1.0.
     let villager = units.unit(83).expect("VMBAS exists");
