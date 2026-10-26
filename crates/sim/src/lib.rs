@@ -18,7 +18,9 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use ruage_data::{CommandApply, Economy, Map, ResourceKind, Sim as Settings, Unit, Units};
+use ruage_data::{
+    CommandApply, Economy, Map, ResourceKind, Resources, Sim as Settings, Unit, Units,
+};
 
 mod path;
 mod script;
@@ -530,6 +532,10 @@ pub struct World {
     damage_rules: Option<DamageRules>,
     /// Remaining waypoints per unit, in tiles. Part of state: it decides where the unit goes next.
     paths: BTreeMap<EntityId, Vec<(u16, u16)>>,
+    /// The pack's resource table, when one has been loaded. Costs already carry the reference ids,
+    /// and `slot_for_dat_id` is the only place they become stockpile slots (D17) - so this is the
+    /// field the four cost sites will read once `ResourceKind` goes.
+    resources: Option<Resources>,
     sim_rng: Pcg32,
     map_rng: Pcg32,
 }
@@ -550,6 +556,7 @@ impl World {
             walk: None,
             damage_rules: None,
             paths: BTreeMap::new(),
+            resources: None,
             sim_rng: Pcg32::new(seed, SIM_STREAM),
             map_rng: Pcg32::new(seed, MAP_STREAM),
         })
@@ -1877,6 +1884,23 @@ impl World {
         Ok(())
     }
 
+    /// Hand the world its resource table. Without one, a cost cannot name a stockpile slot and
+    /// spending has to fail rather than guess - which is the point of taking this in explicitly.
+    pub fn load_resources(&mut self, resources: &Resources) {
+        self.resources = Some(resources.clone());
+    }
+
+    /// The stockpile slot for a cost's resource id, resolved by the pack.
+    ///
+    /// `None` means this pack does not carry that id - a content mistake the caller must refuse,
+    /// not a slot to guess at.
+    #[must_use]
+    pub fn resource_slot(&self, dat_id: u16) -> Option<usize> {
+        self.resources
+            .as_ref()
+            .and_then(|resources| resources.slot_for_dat_id(dat_id))
+    }
+
     /// How many waypoints remain for this entity, or `None` when it has no route. Exposed so tests
     /// can assert that bookkeeping is released when an entity dies.
     #[must_use]
@@ -2260,5 +2284,30 @@ overrides = "overrides.toml"
                 id.0
             );
         }
+    }
+
+    #[test]
+    fn the_world_resolves_resource_slots_through_the_pack() {
+        // D17's boundary, one step closer: the world does not decide what slot wood is, the pack
+        // does. Until this existed the mapping lived next to the engine's own enum.
+        let mut world = World::new(&settings(20, "next_tick"), 3).expect("world");
+        assert_eq!(
+            world.resource_slot(1),
+            None,
+            "with no table loaded, nothing may be guessed"
+        );
+
+        let resources = ruage_data::load_resources_file(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../config/resources.toml"),
+        )
+        .expect("the project's resource table");
+        world.load_resources(&resources);
+        assert_eq!(world.resource_slot(1), Some(0), "dat 1 is wood, slot 0");
+        assert_eq!(world.resource_slot(0), Some(1), "dat 0 is food, slot 1");
+        assert_eq!(
+            world.resource_slot(99),
+            None,
+            "an id the pack does not carry"
+        );
     }
 }
