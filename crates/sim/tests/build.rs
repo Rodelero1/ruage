@@ -161,33 +161,6 @@ slot = 1
 name = "grain"
 "#;
 
-/// The same, but with one reference id, in a column past the stockpile's width.
-#[allow(dead_code)]
-const WIDE_PACK: &str = r#"
-schema = 1
-
-[[resource]]
-slot = 0
-name = "timber"
-
-[[resource]]
-slot = 1
-name = "grain"
-
-[[resource]]
-slot = 2
-name = "iron"
-
-[[resource]]
-slot = 3
-name = "salt"
-
-[[resource]]
-slot = 4
-name = "clay"
-dat_id = 1
-"#;
-
 #[test]
 fn a_pack_that_does_not_carry_a_cost_id_refuses_the_order() {
     // The pack is the authority on what a cost's id means (D17). This pack has no reference ids,
