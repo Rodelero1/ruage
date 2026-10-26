@@ -49,41 +49,10 @@ pub struct Gather {
     pub drop_sites_from: String,
     /// Task name → the villager-variant unit id that performs it (D11).
     pub variant: BTreeMap<String, u32>,
-    /// Which gather task a node of each map resource kind presents.
-    pub resource_task: ResourceTask,
-}
-
-/// The join between `config/map.toml` (wood/food/gold/stone) and the variant table above. Food is
-/// not a task: our map's food is berries, so it is foraged, while hunting and fishing exist as
-/// variants nothing on this map triggers.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResourceTask {
-    pub wood: String,
-    pub food: String,
-    pub gold: String,
-    pub stone: String,
-}
-
-impl ResourceTask {
-    /// The task name for a map resource kind. Total, so a new kind cannot be added to the map
-    /// without this failing to compile.
-    pub fn for_kind(&self, kind: crate::ResourceKind) -> &str {
-        match kind {
-            crate::ResourceKind::Wood => &self.wood,
-            crate::ResourceKind::Food => &self.food,
-            crate::ResourceKind::Gold => &self.gold,
-            crate::ResourceKind::Stone => &self.stone,
-        }
-    }
-
-    fn entries(&self) -> [(&'static str, &String); 4] {
-        [
-            ("wood", &self.wood),
-            ("food", &self.food),
-            ("gold", &self.gold),
-            ("stone", &self.stone),
-        ]
-    }
+    /// Resource *name*, as `config/resources.toml` spells it → the gather task it presents. Keyed by
+    /// name because the engine has no resource kinds of its own (D17): the pack says a node is
+    /// "timber", this table says timber is worked by the "wood" task.
+    pub resource_task: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -154,16 +123,9 @@ struct RawGather {
     carry_from: String,
     drop_sites_from: String,
     variant: BTreeMap<String, u32>,
-    resource_task: RawResourceTask,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawResourceTask {
-    wood: String,
-    food: String,
-    gold: String,
-    stone: String,
+    /// A resource name → the gather task that works it. Free-form keys: which resources exist is the
+    /// content pack's business, and this loader can only check the task side of the join.
+    resource_task: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -316,20 +278,23 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         ));
     }
 
-    let resource_task = ResourceTask {
-        wood: raw.gather.resource_task.wood,
-        food: raw.gather.resource_task.food,
-        gold: raw.gather.resource_task.gold,
-        stone: raw.gather.resource_task.stone,
-    };
+    let resource_task = raw.gather.resource_task;
+    // An empty join is a match where nothing on the map can be worked at all.
+    if resource_task.is_empty() {
+        return Err(invalid(
+            path,
+            "gather.resource_task",
+            "no resource names a gather task: nothing on the map could be worked".to_owned(),
+        ));
+    }
     // A task name that names no variant is a typo that would otherwise surface much later, as a
     // villager who walks to a tree and never gathers.
-    for (kind, task) in resource_task.entries() {
+    for (resource, task) in &resource_task {
         if !raw.gather.variant.contains_key(task) {
             return Err(invalid(
                 path,
                 "gather.resource_task",
-                format!("{kind} names task {task:?}, which is not in [gather.variant]"),
+                format!("{resource} names task {task:?}, which is not in [gather.variant]"),
             ));
         }
     }

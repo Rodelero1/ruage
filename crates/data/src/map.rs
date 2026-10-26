@@ -9,7 +9,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::{ConfigError, SUPPORTED_SCHEMA};
+use crate::{ConfigError, ResourceSite, Resources, SUPPORTED_SCHEMA};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Terrain {
@@ -17,85 +17,12 @@ pub enum Terrain {
     Forest,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ResourceKind {
-    Wood,
-    Food,
-    Gold,
-    Stone,
-}
-
-impl ResourceKind {
-    /// Stable index for arrays indexed by resource. Exhaustive, so adding a kind is a compile
-    /// error here rather than a silently missing stockpile slot.
-    pub fn index(self) -> usize {
-        match self {
-            ResourceKind::Wood => 0,
-            ResourceKind::Food => 1,
-            ResourceKind::Gold => 2,
-            ResourceKind::Stone => 3,
-        }
-    }
-
-    /// The dat's own resource id for this kind. A format fact of the file, not a game value:
-    /// the cost arrays in `units.toml` use these ids (`[[1, 25]]` is 25 wood), and 4 means
-    /// population, which is not a stockpiled resource.
-    pub fn dat_id(self) -> u8 {
-        match self {
-            ResourceKind::Food => 0,
-            ResourceKind::Wood => 1,
-            ResourceKind::Stone => 2,
-            ResourceKind::Gold => 3,
-        }
-    }
-
-    /// The kind for a dat resource id, or `None` for ids that are not stockpiled resources
-    /// (4 is population; pseudo-resources appear in task data, not costs).
-    pub fn from_dat_id(id: u8) -> Option<Self> {
-        match id {
-            0 => Some(ResourceKind::Food),
-            1 => Some(ResourceKind::Wood),
-            2 => Some(ResourceKind::Stone),
-            3 => Some(ResourceKind::Gold),
-            _ => None,
-        }
-    }
-
-    pub const COUNT: usize = 4;
-}
-
-#[cfg(test)]
-mod id_tests {
-    use super::ResourceKind;
-
-    /// Two mappings live on the same type and must never be folded into one: `index` is the slot
-    /// in a stockpile row, `dat_id` is the dat's own numbering. Wood is slot 0 and dat id 1, so a
-    /// "simplification" that unifies them would silently deposit wood into the food slot.
-    #[test]
-    fn the_stockpile_order_and_the_dat_ids_disagree() {
-        assert_eq!(ResourceKind::Wood.index(), 0);
-        assert_eq!(ResourceKind::Wood.dat_id(), 1);
-        assert_eq!(ResourceKind::Food.index(), 1);
-        assert_eq!(ResourceKind::Food.dat_id(), 0);
-        for kind in [
-            ResourceKind::Wood,
-            ResourceKind::Food,
-            ResourceKind::Gold,
-            ResourceKind::Stone,
-        ] {
-            assert_eq!(
-                ResourceKind::from_dat_id(kind.dat_id()),
-                Some(kind),
-                "dat ids must round-trip"
-            );
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceNode {
-    pub kind: ResourceKind,
+    /// The content pack's stockpile column for this resource. A column, not a name and not a kind:
+    /// the map file says `kind = "timber"`, the pack answers "slot 0", and everything above the
+    /// pack layer works in columns (D17).
+    pub slot: usize,
     pub x: u16,
     pub y: u16,
     pub amount: u32,
@@ -157,7 +84,8 @@ struct RawMap {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawResource {
-    kind: ResourceKind,
+    /// The resource's name, as `config/resources.toml` spells it.
+    kind: String,
     amount: u32,
     tiles: Vec<[u16; 2]>,
 }
@@ -177,7 +105,7 @@ fn invalid(path: &str, key: impl AsRef<str>, detail: impl Into<String>) -> Confi
     }
 }
 
-pub fn load_map_str(text: &str, path: &str) -> Result<Map, ConfigError> {
+pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, ConfigError> {
     let raw: RawFile = toml::from_str(text).map_err(|err| ConfigError::Parse {
         path: path.to_owned(),
         detail: err.to_string(),
@@ -247,8 +175,25 @@ pub fn load_map_str(text: &str, path: &str) -> Result<Map, ConfigError> {
     };
 
     // --- resources ---
+    // The pack is the authority on what a name means: an unknown one is a typo nobody could ever
+    // gather, and it must not default to a column (slot 0 would quietly make it a tree).
     let mut resources = Vec::new();
     for group in &raw.map.resource {
+        let Some(slot) = pack.slot_of(&group.kind) else {
+            return Err(invalid(
+                path,
+                "map.resource",
+                format!(
+                    "{:?} is not a resource the content pack defines ({} are: {})",
+                    group.kind,
+                    pack.count(),
+                    (0..pack.count())
+                        .filter_map(|slot| pack.name(slot))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            ));
+        };
         if group.tiles.is_empty() {
             return Err(invalid(
                 path,
@@ -271,28 +216,35 @@ pub fn load_map_str(text: &str, path: &str) -> Result<Map, ConfigError> {
                     format!("{:?} at ({x}, {y}) is outside the map", group.kind),
                 ));
             };
-            // A tree must stand on forest; everything else stands on open ground. This is the
-            // check that catches "a tree you can walk through" or "gold in the trees".
-            match group.kind {
-                ResourceKind::Wood if tile != Terrain::Forest => {
+            // Where this resource may stand is content (`site` in resources.toml), because "wood
+            // grows in forests" is a fact about wood. This is the check that catches "a tree you
+            // can walk through" or "gold in the trees".
+            match pack.site(slot) {
+                Some(ResourceSite::Forest) if tile != Terrain::Forest => {
                     return Err(invalid(
                         path,
                         "map.resource",
-                        format!("wood at ({x}, {y}) is not on a forest tile"),
+                        format!(
+                            "{:?} at ({x}, {y}) is not on a forest tile, and the pack says it grows in forests",
+                            group.kind
+                        ),
                     ));
                 }
-                ResourceKind::Wood => {}
-                _ if tile == Terrain::Forest => {
+                Some(ResourceSite::Forest) | None => {}
+                Some(ResourceSite::Open) if tile == Terrain::Forest => {
                     return Err(invalid(
                         path,
                         "map.resource",
-                        format!("{:?} at ({x}, {y}) is inside a forest", group.kind),
+                        format!(
+                            "{:?} at ({x}, {y}) is inside a forest, and the pack does not put it there",
+                            group.kind
+                        ),
                     ));
                 }
-                _ => {}
+                Some(ResourceSite::Open) => {}
             }
             resources.push(ResourceNode {
-                kind: group.kind,
+                slot,
                 x: *x,
                 y: *y,
                 amount: group.amount,
@@ -360,8 +312,8 @@ pub fn load_map_str(text: &str, path: &str) -> Result<Map, ConfigError> {
                 path,
                 "map.resource",
                 format!(
-                    "{:?} at ({}, {}) sits under player {}'s town centre",
-                    node.kind, node.x, node.y, town.player
+                    "a resource at ({}, {}) sits under player {}'s town centre",
+                    node.x, node.y, town.player
                 ),
             ));
         }
@@ -383,10 +335,10 @@ pub fn load_map_str(text: &str, path: &str) -> Result<Map, ConfigError> {
     })
 }
 
-pub fn load_map_file(path: &Path) -> Result<Map, ConfigError> {
+pub fn load_map_file(path: &Path, pack: &Resources) -> Result<Map, ConfigError> {
     let text = std::fs::read_to_string(path).map_err(|err| ConfigError::Io {
         path: path.display().to_string(),
         detail: err.to_string(),
     })?;
-    load_map_str(&text, &path.display().to_string())
+    load_map_str(&text, &path.display().to_string(), pack)
 }

@@ -32,12 +32,14 @@ fn fixture() -> Option<Fixture> {
         );
         return None;
     }
+    // The pack first: the map names its resources and only the pack turns a name into a column.
+    let resources =
+        ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml");
     Some(Fixture {
         settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
-        map: ruage_data::load_map_file(&repo("config/map.toml")).expect("map.toml"),
+        map: ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map.toml"),
         economy: ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
-        resources: ruage_data::load_resources_file(&repo("config/resources.toml"))
-            .expect("resources.toml"),
+        resources,
         units: ruage_data::load_units_file(&units).expect("units.toml"),
         combat: ruage_data::load_combat_file(&repo("config/combat.toml")).expect("combat.toml"),
     })

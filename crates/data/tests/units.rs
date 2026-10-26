@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use ruage_data::{Terrain, load_map_file, load_units_file, load_units_str};
+use ruage_data::{CostResource, Terrain, load_map_file, load_units_file, load_units_str};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -67,7 +67,19 @@ fn the_real_unit_table_loads_and_answers_known_values() {
     // Two pairs: 60 food and 75 gold. The dat's third pair for a knight is 1 of resource 4, which
     // is population - a cost the stockpile cannot hold, so the importer does not emit it as one
     // (see `test_population_is_not_a_stockpile_cost` in the tooling's tests).
-    assert_eq!(knight.costs, vec![(0, 60), (3, 75)]);
+    assert_eq!(
+        knight.costs,
+        vec![
+            ruage_data::Cost {
+                resource: CostResource::ReferenceId(0),
+                amount: 60
+            },
+            ruage_data::Cost {
+                resource: CostResource::ReferenceId(3),
+                amount: 75
+            },
+        ]
+    );
 
     // The base villager: 25 hp, 0.8 tiles/s, and its work_rate is the *build* task's 1.0.
     let villager = units.unit(83).expect("VMBAS exists");
@@ -206,11 +218,33 @@ fn the_units_table_and_the_map_agree_on_the_world() {
         eprintln!("skipping: generated data absent");
         return;
     }
-    let map = load_map_file(&map_path).expect("map.toml loads");
+    let pack = ruage_data::load_resources_file(&repo("config/resources.toml"))
+        .expect("resources.toml loads");
+    let map = load_map_file(&map_path, &pack).expect("map.toml loads");
     let units = load_units_file(&units_path).expect("units.toml loads");
     for tc in &map.town_centres {
         assert_eq!(map.terrain_at(tc.x, tc.y), Some(Terrain::Grass));
     }
     let villager = units.unit(83).expect("VMBAS");
     assert!(villager.speed.resolve(20_000, "speed").unwrap().raw() > 0);
+}
+
+/// A pack of our own names what a unit costs instead of quoting the reference pack's numbering
+/// (D17). Without this the engine could only ever price units from AoE2's own resource ids, so an
+/// original content pack could not make a building cost anything at all.
+#[test]
+fn a_cost_may_name_its_resource_instead_of_quoting_a_reference_id() {
+    let text = GOOD.replace(
+        "costs = [[0, 60], [3, 75]]",
+        "costs = [{ resource = \"timber\", amount = 25 }]",
+    );
+    let units = load_units_str(&text, "units.toml").expect("a named cost is legal content");
+    let knight = units.unit(38).expect("the unit");
+    assert_eq!(knight.costs.len(), 1);
+    assert_eq!(
+        knight.costs[0].resource,
+        CostResource::Name("timber".to_owned()),
+        "the name is the pack's to define"
+    );
+    assert_eq!(knight.costs[0].amount, 25);
 }

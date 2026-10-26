@@ -1,8 +1,8 @@
-//! The content pack's resource list, and the bridge that keeps it in step with `ResourceKind`.
+//! The content pack's resource list: the only statement of what a resource is.
 
 use std::path::PathBuf;
 
-use ruage_data::{ResourceKind, Resources, load_resources_str};
+use ruage_data::{Resources, load_resources_str};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -37,35 +37,6 @@ fn the_project_file_is_dense_and_named() {
             usize::from(resource.slot),
             slot,
             "slots are dense from zero"
-        );
-    }
-}
-
-/// The bridge (D17): while `ResourceKind` exists it *is* the concrete pack, so the content file and
-/// the enum must agree on three things at once - the name, the stockpile slot and the reference
-/// pack's id. When the enum goes, this test goes with it, and the file becomes the only truth.
-#[test]
-fn the_content_file_agrees_with_resource_kind() {
-    let resources = project();
-    for kind in [
-        ResourceKind::Wood,
-        ResourceKind::Food,
-        ResourceKind::Gold,
-        ResourceKind::Stone,
-    ] {
-        let name = format!("{kind:?}").to_lowercase();
-        let slot = resources
-            .slot_of(&name)
-            .unwrap_or_else(|| panic!("{name} is missing from config/resources.toml"));
-        assert_eq!(
-            slot,
-            kind.index(),
-            "{name} lives in the wrong stockpile column"
-        );
-        assert_eq!(
-            resources.entries[slot].dat_id,
-            Some(u16::from(kind.dat_id())),
-            "{name} carries the wrong reference-pack id"
         );
     }
 }

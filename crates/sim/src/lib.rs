@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use ruage_data::{
-    CommandApply, Economy, Map, ResourceKind, Resources, Sim as Settings, Unit, Units,
+    CommandApply, Cost, CostResource, Economy, Map, Resources, Sim as Settings, Unit, Units,
 };
 
 mod path;
@@ -27,8 +27,8 @@ mod script;
 pub use path::{Walk, find_path};
 use ruage_fixed::Fixed;
 pub use script::{
-    NamedResource, Outcome, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind, describe,
-    load_scenario_file, load_scenario_str,
+    Outcome, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind, describe, load_scenario_file,
+    load_scenario_str,
 };
 
 /// The largest number of players a match can have: eight, so four-versus-four (D20). It is a
@@ -57,8 +57,10 @@ pub struct EntityId(pub u32);
 pub enum EntityKind {
     Building,
     Unit,
-    /// A tree, a berry bush or a mine: a place that holds a quantity and can be worked down.
-    Resource(ResourceKind),
+    /// A tree, a berry bush or a mine: a place that holds a quantity and can be worked down. The
+    /// payload is the content pack's stockpile column, because that is what a deposit needs and it
+    /// is the only thing the engine may know about a resource (D17).
+    Resource(usize),
 }
 
 /// The subset of an entity the tick loop touches today. Fixed-point only (D9).
@@ -123,7 +125,7 @@ pub fn damage_dealt(attacker: &Unit, target: &Unit, rules: &DamageRules) -> i32 
 
 /// A training order that passed every check: what it costs, how long it takes, and what comes out.
 struct TrainPlan {
-    costs: Vec<(u8, u16)>,
+    costs: Vec<Cost>,
     ticks: u32,
     hp: i32,
     speed: Fixed,
@@ -148,7 +150,7 @@ pub struct Training {
 struct BuildPlan {
     total_ticks: u32,
     max_hp: i32,
-    costs: Vec<(u8, u16)>,
+    costs: Vec<Cost>,
     player: u8,
 }
 
@@ -192,7 +194,8 @@ pub enum Task {
     Return {
         node: EntityId,
         drop: EntityId,
-        kind: ResourceKind,
+        /// The stockpile column this load banks into, taken from the node when the order landed.
+        slot: usize,
         rate_per_tick: Fixed,
         carry_cap: u32,
     },
@@ -297,6 +300,10 @@ pub enum SimError {
     UnknownResource {
         dat_id: u16,
     },
+    /// A cost names a resource this content pack does not define.
+    UnknownResourceName {
+        name: String,
+    },
     /// The pack defines more resources than a stockpile has columns for.
     TooManyResources {
         count: usize,
@@ -385,6 +392,11 @@ impl fmt::Display for SimError {
             SimError::UnknownResource { dat_id } => write!(
                 f,
                 "a cost names resource id {dat_id}, which this content pack does not carry: \
+                 refusing rather than paying from another slot"
+            ),
+            SimError::UnknownResourceName { name } => write!(
+                f,
+                "a cost names the resource {name:?}, which this content pack does not define: \
                  refusing rather than paying from another slot"
             ),
             SimError::TooManyResources { count, max } => write!(
@@ -568,9 +580,9 @@ pub struct World {
     damage_rules: Option<DamageRules>,
     /// Remaining waypoints per unit, in tiles. Part of state: it decides where the unit goes next.
     paths: BTreeMap<EntityId, Vec<(u16, u16)>>,
-    /// The pack's resource table, when one has been loaded. Costs already carry the reference ids,
-    /// and `slot_for_dat_id` is the only place they become stockpile slots (D17) - so this is the
-    /// field the four cost sites will read once `ResourceKind` goes.
+    /// The pack's resource table, when one has been loaded. Costs carry the reference pack's ids and
+    /// nodes carry columns; `slot_for_dat_id` and `name` are the only places the two are related, so
+    /// this is the field every cost and every gather order reads (D17).
     resources: Option<Resources>,
     sim_rng: Pcg32,
     map_rng: Pcg32,
@@ -624,14 +636,11 @@ impl World {
         self.find(id)
     }
 
-    /// What a player has banked. Player 0 (nobody) always reads zero.
-    pub fn stock(&self, player: u8, kind: ResourceKind) -> u32 {
-        self.stock_in(player, kind.index())
-    }
-
-    /// What a player has banked in a stockpile column. The column is the pack's slot, not an
-    /// enum's index, so this is the read every cost check uses.
-    fn stock_in(&self, player: u8, slot: usize) -> u32 {
+    /// What a player has banked in a stockpile column. Player 0 (nobody) always reads zero.
+    ///
+    /// The column is the pack's slot, so a caller that wants "wood" asks the pack for the column
+    /// (`slot_of`) rather than naming a resource here.
+    pub fn stock(&self, player: u8, slot: usize) -> u32 {
         self.stock
             .get(usize::from(player).wrapping_sub(1))
             .and_then(|row| row.get(slot))
@@ -639,15 +648,25 @@ impl World {
             .unwrap_or(0)
     }
 
-    /// The stockpile column a cost's resource id resolves to, or a refusal.
+    /// The stockpile column a cost resolves to, or a refusal.
     ///
-    /// The pack owns the mapping (D17), so a cost entry `[1, 25]` becomes a column here and nothing
-    /// above the pack layer learns that 1 is wood. A refusal rather than a guess, because guessing
-    /// is invisible: slot 0 is wood in our pack, so a wrong guess spends the wrong resource and
-    /// every number still adds up.
-    fn cost_slot(&self, dat_id: u16) -> Result<usize, SimError> {
-        self.resource_slot(dat_id)
-            .ok_or(SimError::UnknownResource { dat_id })
+    /// The pack owns the mapping (D17), in both of the namespaces a cost may use: a reference id
+    /// (`[1, 25]`, what the generator emits) or a name (`{ resource = "timber" }`, what a pack of our
+    /// own writes). Either becomes a column here and nothing above the pack layer learns what the
+    /// cost meant. A refusal rather than a guess, because guessing is invisible: slot 0 is wood in
+    /// our pack, so a wrong guess spends the wrong resource and every number still adds up.
+    fn cost_slot(&self, cost: &Cost) -> Result<usize, SimError> {
+        match &cost.resource {
+            CostResource::ReferenceId(dat_id) => {
+                self.resource_slot(u16::from(*dat_id))
+                    .ok_or(SimError::UnknownResource {
+                        dat_id: u16::from(*dat_id),
+                    })
+            }
+            CostResource::Name(name) => self
+                .slot_of(name)
+                .ok_or_else(|| SimError::UnknownResourceName { name: name.clone() }),
+        }
     }
 
     /// The pack's name for a stockpile column, for error messages only - a name never enters state.
@@ -853,7 +872,7 @@ impl World {
             self.insert(Entity {
                 id: EntityId(next_id),
                 player: 0,
-                kind: EntityKind::Resource(node.kind),
+                kind: EntityKind::Resource(node.slot),
                 unit: None,
                 position: self.tile((node.x, node.y)),
                 speed: Fixed::ZERO,
@@ -908,8 +927,8 @@ impl World {
         rate_per_tick: Fixed,
         carry_cap: u32,
     ) -> Option<Task> {
-        let kind = match self.find(node).map(|n| n.kind) {
-            Some(EntityKind::Resource(kind)) => kind,
+        let slot = match self.find(node).map(|n| n.kind) {
+            Some(EntityKind::Resource(slot)) => slot,
             _ => return None,
         };
         let from = self.find(node)?.position;
@@ -917,7 +936,7 @@ impl World {
         Some(Task::Return {
             node,
             drop,
-            kind,
+            slot,
             rate_per_tick,
             carry_cap,
         })
@@ -1103,10 +1122,10 @@ impl World {
                 unit,
             })?;
 
-        for (dat_id, quantity) in &stats.costs {
-            let slot = self.cost_slot(u16::from(*dat_id))?;
-            let need = u32::from(*quantity);
-            let have = self.stock_in(entity.player, slot);
+        for cost in &stats.costs {
+            let slot = self.cost_slot(cost)?;
+            let need = u32::from(cost.amount);
+            let have = self.stock(entity.player, slot);
             if have < need {
                 return Err(SimError::NotEnough {
                     resource: self.slot_name(slot),
@@ -1131,15 +1150,15 @@ impl World {
     /// Pay for a unit and put it in the building's single production slot.
     fn start_train(&mut self, building: EntityId, unit: u32) -> Result<(), SimError> {
         let plan = self.check_train(building, unit)?;
-        for (dat_id, quantity) in &plan.costs {
-            let slot = self.cost_slot(u16::from(*dat_id))?;
+        for cost in &plan.costs {
+            let slot = self.cost_slot(cost)?;
             let index = usize::from(plan.player).wrapping_sub(1);
             let Some(row) = self.stock.get_mut(index) else {
                 return Err(SimError::PlayerOutOfRange {
                     player: plan.player,
                 });
             };
-            row[slot] -= u32::from(*quantity);
+            row[slot] -= u32::from(cost.amount);
         }
         let Some(entity) = self.find_mut(building) else {
             return Err(SimError::MissingEntity(building));
@@ -1314,10 +1333,10 @@ impl World {
             .find(villager)
             .ok_or(SimError::MissingEntity(villager))?;
 
-        for (dat_id, quantity) in &stats.costs {
-            let slot = self.cost_slot(u16::from(*dat_id))?;
-            let need = u32::from(*quantity);
-            let have = self.stock_in(worker.player, slot);
+        for cost in &stats.costs {
+            let slot = self.cost_slot(cost)?;
+            let need = u32::from(cost.amount);
+            let have = self.stock(worker.player, slot);
             if have < need {
                 return Err(SimError::NotEnough {
                     resource: self.slot_name(slot),
@@ -1370,13 +1389,13 @@ impl World {
         } = self.check_build(villager, unit_id, at)?;
 
         // Paid only after every check passed, so a refused order spends nothing.
-        for (dat_id, quantity) in &costs {
-            let slot = self.cost_slot(u16::from(*dat_id))?;
+        for cost in &costs {
+            let slot = self.cost_slot(cost)?;
             let index = usize::from(player).wrapping_sub(1);
             let Some(row) = self.stock.get_mut(index) else {
                 return Err(SimError::PlayerOutOfRange { player });
             };
-            row[slot] -= u32::from(*quantity);
+            row[slot] -= u32::from(cost.amount);
         }
 
         let position = self.tile(at);
@@ -1422,12 +1441,30 @@ impl World {
             let units = self.units.as_ref().ok_or(SimError::NoTables)?;
             let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
 
-            let kind = match self.find(node).map(|entity| entity.kind) {
-                Some(EntityKind::Resource(kind)) => kind,
+            let slot = match self.find(node).map(|entity| entity.kind) {
+                Some(EntityKind::Resource(slot)) => slot,
                 Some(_) => return Err(SimError::NotAResource { id: node }),
                 None => return Err(SimError::MissingEntity(node)),
             };
-            let task_name = economy.gather.resource_task.for_kind(kind).to_owned();
+            // Which task works this node is content twice over: the pack names the resource, and
+            // `[gather.resource_task]` says which variant's job that name is (D17).
+            let resource = self
+                .resources
+                .as_ref()
+                .and_then(|resources| resources.name(slot))
+                .ok_or_else(|| SimError::NoVariant {
+                    task: format!("slot {slot}"),
+                    detail: "the content pack names no resource in this column".to_owned(),
+                })?;
+            let task_name = economy
+                .gather
+                .resource_task
+                .get(resource)
+                .ok_or_else(|| SimError::NoVariant {
+                    task: resource.to_owned(),
+                    detail: "no [gather.resource_task] entry for this resource".to_owned(),
+                })?
+                .clone();
             let variant_id =
                 *economy
                     .gather
@@ -1754,7 +1791,7 @@ impl World {
             };
             let Task::Return {
                 node,
-                kind,
+                slot,
                 rate_per_tick,
                 carry_cap,
                 ..
@@ -1766,7 +1803,7 @@ impl World {
             let whole = raw / self.scale;
             let slot_player = usize::from(player).wrapping_sub(1);
             if whole > 0 && slot_player < self.stock.len() {
-                let slot = &mut self.stock[slot_player][kind.index()];
+                let slot = &mut self.stock[slot_player][slot];
                 *slot = slot.saturating_add(u32::try_from(whole).unwrap_or(u32::MAX));
             }
             let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
@@ -1965,6 +2002,13 @@ impl World {
         Ok(())
     }
 
+    /// The pack's resource table, when one has been loaded. A caller that wants to show what a
+    /// player has asks the pack for its names rather than hardcoding them (D17).
+    #[must_use]
+    pub fn resources(&self) -> Option<&Resources> {
+        self.resources.as_ref()
+    }
+
     /// The stockpile slot for a resource's name, as the pack spells it. This is how a test, a
     /// scenario or a UI asks for "wood" without the engine knowing that word.
     #[must_use]
@@ -2017,15 +2061,9 @@ impl World {
             let (tag, resource) = match entity.kind {
                 EntityKind::Building => (b'b', 0u8),
                 EntityKind::Unit => (b'u', 0),
-                EntityKind::Resource(kind) => (
-                    b'r',
-                    match kind {
-                        ResourceKind::Wood => 1,
-                        ResourceKind::Food => 2,
-                        ResourceKind::Gold => 3,
-                        ResourceKind::Stone => 4,
-                    },
-                ),
+                // The column, not a kind: a pack that renumbers its resources renumbers this tag
+                // too, which is what "the state changed" means for a node.
+                EntityKind::Resource(slot) => (b'r', u8::try_from(slot).unwrap_or(u8::MAX)),
             };
             fnv_bytes(&mut hash, &[tag, resource]);
             fnv_bytes(&mut hash, &entity.amount.raw().to_le_bytes());
@@ -2072,14 +2110,14 @@ impl World {
                 Task::Return {
                     node,
                     drop,
-                    kind,
+                    slot,
                     rate_per_tick,
                     carry_cap,
                 } => {
                     fnv_bytes(&mut hash, &[2u8]);
                     fnv_bytes(&mut hash, &node.0.to_le_bytes());
                     fnv_bytes(&mut hash, &drop.0.to_le_bytes());
-                    fnv_bytes(&mut hash, &[kind.index() as u8]);
+                    fnv_bytes(&mut hash, &[u8::try_from(slot).unwrap_or(u8::MAX)]);
                     fnv_bytes(&mut hash, &rate_per_tick.raw().to_le_bytes());
                     fnv_bytes(&mut hash, &carry_cap.to_le_bytes());
                 }

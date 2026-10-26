@@ -6,13 +6,27 @@
 
 use std::path::PathBuf;
 
-use ruage_data::{Economy, ResourceKind, Sim as Settings, Units};
+use ruage_data::{Economy, Sim as Settings, Units};
 use ruage_sim::{Command, EntityId, EntityKind, SimError, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join(rel)
+}
+
+/// The project pack's column for a resource, so a test says "wood" the way content does and the
+/// pack is what turns that into a stockpile column (D17).
+fn slot(name: &str) -> usize {
+    slot_in(
+        &ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml"),
+        name,
+    )
+}
+
+fn slot_in(pack: &ruage_data::Resources, name: &str) -> usize {
+    pack.slot_of(name)
+        .unwrap_or_else(|| panic!("the pack has no {name}"))
 }
 
 struct Fixture {
@@ -110,7 +124,8 @@ y = 7
 "#;
 
 fn world_with(fx: &Fixture, map_text: &str) -> (World, ruage_data::Map) {
-    let map = ruage_data::load_map_str(map_text, "fixture.toml").expect("fixture map");
+    let map =
+        ruage_data::load_map_str(map_text, "fixture.toml", &fx.resources).expect("fixture map");
     let mut world = World::new(&fx.settings, 7).expect("world");
     world
         .seed_from(&map, &fx.economy, &fx.units)
@@ -134,7 +149,7 @@ fn wood_node(world: &World) -> EntityId {
     world
         .entities()
         .iter()
-        .find(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
+        .find(|e| matches!(e.kind, EntityKind::Resource(s) if s == slot("wood")))
         .expect("a tree")
         .id
 }
@@ -214,7 +229,7 @@ fn the_walk_home_and_the_walk_back_are_paths_too() {
                 || map.terrain_at(tile.0, tile.1) != Some(ruage_data::Terrain::Forest),
             "at tick {tick} the villager stood inside a tree at {tile:?} on the way home or back"
         );
-        if world.stock(1, ResourceKind::Wood) > 0 {
+        if world.stock(1, slot("wood")) > 0 {
             delivered = true;
             break;
         }

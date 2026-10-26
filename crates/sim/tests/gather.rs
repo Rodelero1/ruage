@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use ruage_data::{Economy, Map, ResourceKind, Sim as Settings, Units};
+use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, SimError, World};
 
@@ -13,6 +13,20 @@ fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join(rel)
+}
+
+/// The project pack's column for a resource, so a test says "wood" the way content does and the
+/// pack is what turns that into a stockpile column (D17).
+fn slot(name: &str) -> usize {
+    slot_in(
+        &ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml"),
+        name,
+    )
+}
+
+fn slot_in(pack: &ruage_data::Resources, name: &str) -> usize {
+    pack.slot_of(name)
+        .unwrap_or_else(|| panic!("the pack has no {name}"))
 }
 
 struct Fixture {
@@ -32,12 +46,14 @@ fn fixture() -> Option<Fixture> {
         );
         return None;
     }
+    // The pack first: the map names its resources and only the pack turns a name into a column.
+    let resources =
+        ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml");
     Some(Fixture {
         settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
-        map: ruage_data::load_map_file(&repo("config/map.toml")).expect("map.toml"),
+        map: ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map.toml"),
         economy: ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
-        resources: ruage_data::load_resources_file(&repo("config/resources.toml"))
-            .expect("resources.toml"),
+        resources,
         units: ruage_data::load_units_file(&units).expect("units.toml"),
     })
 }
@@ -92,11 +108,11 @@ fn first_villager(world: &World) -> EntityId {
 
 /// The nearest node of `kind` to `from`: squared distance, ties broken by id, so the choice is a
 /// function of state rather than of iteration order.
-fn nearest(world: &World, kind: ResourceKind, from: (Fixed, Fixed)) -> EntityId {
+fn nearest(world: &World, slot: usize, from: (Fixed, Fixed)) -> EntityId {
     world
         .entities()
         .iter()
-        .filter(|e| e.kind == EntityKind::Resource(kind))
+        .filter(|e| e.kind == EntityKind::Resource(slot))
         .min_by_key(|e| {
             let dx = e.position.0.raw() - from.0.raw();
             let dy = e.position.1.raw() - from.1.raw();
@@ -116,7 +132,7 @@ fn a_gather_order_does_not_teleport_anyone() {
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
     let here = world.position(villager).expect("position");
-    let node = nearest(&world, ResourceKind::Wood, here);
+    let node = nearest(&world, slot("wood"), here);
     let node_position = world.position(node).expect("node position");
 
     world.submit(Command::Gather { villager, node });
@@ -133,7 +149,7 @@ fn the_villager_walks_to_the_node_and_then_takes_from_it() {
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
     let here = world.position(villager).expect("position");
-    let node = nearest(&world, ResourceKind::Wood, here);
+    let node = nearest(&world, slot("wood"), here);
     let node_position = world.position(node).expect("node position");
     let before = amount_of(&world, node).raw();
 
@@ -162,7 +178,7 @@ fn the_rate_is_the_variants_work_rate_per_tick() {
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
     let here = world.position(villager).expect("position");
-    let node = nearest(&world, ResourceKind::Wood, here);
+    let node = nearest(&world, slot("wood"), here);
 
     // VMLUM gathers wood at 0.390 per second: 7800 at scale 20000, so 390 a tick at 20 Hz.
     let variant = fx
@@ -205,7 +221,7 @@ fn the_carry_cap_comes_from_the_variant_and_bounds_every_trip() {
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
     let here = world.position(villager).expect("position");
-    let node = nearest(&world, ResourceKind::Wood, here);
+    let node = nearest(&world, slot("wood"), here);
 
     let variant = fx
         .economy
@@ -229,7 +245,7 @@ fn the_carry_cap_comes_from_the_variant_and_bounds_every_trip() {
 
     // And it kept working rather than standing there full: a full load is taken home.
     assert!(
-        world.stock(1, ResourceKind::Wood) >= u32::from(cap),
+        world.stock(1, slot("wood")) >= u32::from(cap),
         "a villager that fills up must deliver, not idle at the tree"
     );
 }
@@ -238,7 +254,7 @@ fn the_carry_cap_comes_from_the_variant_and_bounds_every_trip() {
 fn a_depleted_node_stops_yielding() {
     let Some(fx) = fixture() else { return };
     let mut world = World::new(&fx.settings, 7).expect("world");
-    let map = ruage_data::load_map_str(TINY_MAP, "tiny.toml").expect("tiny map");
+    let map = ruage_data::load_map_str(TINY_MAP, "tiny.toml", &fx.resources).expect("tiny map");
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
@@ -248,7 +264,7 @@ fn a_depleted_node_stops_yielding() {
     let node = world
         .entities()
         .iter()
-        .find(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
+        .find(|e| matches!(e.kind, EntityKind::Resource(s) if s == slot("wood")))
         .expect("the tree")
         .id;
     assert_eq!(
@@ -267,7 +283,7 @@ fn a_depleted_node_stops_yielding() {
     // The load never filled, so the villager takes the partial load home rather than standing on
     // a dead tree with five wood in hand.
     assert_eq!(
-        world.stock(1, ResourceKind::Wood),
+        world.stock(1, slot("wood")),
         5,
         "everything the tree held reaches the stockpile"
     );
@@ -284,11 +300,11 @@ fn a_full_villager_carries_the_wood_home() {
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
     let here = world.position(villager).expect("position");
-    let node = nearest(&world, ResourceKind::Wood, here);
+    let node = nearest(&world, slot("wood"), here);
     let before = amount_of(&world, node).raw();
 
     assert_eq!(
-        world.stock(1, ResourceKind::Wood),
+        world.stock(1, slot("wood")),
         0,
         "the player starts with nothing"
     );
@@ -297,7 +313,7 @@ fn a_full_villager_carries_the_wood_home() {
     let mut delivered = 0;
     for _ in 0..6_000 {
         world.step().expect("step");
-        delivered = world.stock(1, ResourceKind::Wood);
+        delivered = world.stock(1, slot("wood"));
         if delivered > 0 {
             break;
         }
@@ -320,8 +336,12 @@ fn a_partial_load_comes_home_when_the_node_runs_out() {
     // for the rest of the match - the resource is neither in the stockpile nor working.
     let Some(fx) = fixture() else { return };
     let mut world = World::new(&fx.settings, 7).expect("world");
-    let map = ruage_data::load_map_str(&TINY_MAP.replace("amount = 5", "amount = 3"), "tiny.toml")
-        .expect("tiny map");
+    let map = ruage_data::load_map_str(
+        &TINY_MAP.replace("amount = 5", "amount = 3"),
+        "tiny.toml",
+        &fx.resources,
+    )
+    .expect("tiny map");
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
@@ -331,7 +351,7 @@ fn a_partial_load_comes_home_when_the_node_runs_out() {
     let node = world
         .entities()
         .iter()
-        .find(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
+        .find(|e| matches!(e.kind, EntityKind::Resource(s) if s == slot("wood")))
         .expect("the tree")
         .id;
     let villager = first_villager(&world);
@@ -343,7 +363,7 @@ fn a_partial_load_comes_home_when_the_node_runs_out() {
 
     assert_eq!(amount_of(&world, node), Fixed::ZERO, "the tree is empty");
     assert_eq!(
-        world.stock(1, ResourceKind::Wood),
+        world.stock(1, slot("wood")),
         3,
         "the partial load must be delivered, not stranded in the villager's hands"
     );
@@ -362,7 +382,7 @@ fn a_closer_lumber_camp_wins_over_the_town_centre() {
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
     let here = world.position(villager).expect("position");
-    let node = nearest(&world, ResourceKind::Wood, here);
+    let node = nearest(&world, slot("wood"), here);
     let node_position = world.position(node).expect("node position");
 
     let camp_unit = 562;
@@ -407,8 +427,12 @@ fn two_villagers_on_one_node_cannot_take_more_than_it_holds() {
     // resource out of nothing - the node clamps at zero and the villagers keep the difference.
     let Some(fx) = fixture() else { return };
     let mut world = World::new(&fx.settings, 7).expect("world");
-    let map = ruage_data::load_map_str(&TINY_MAP.replace("amount = 5", "amount = 1"), "tiny.toml")
-        .expect("tiny map");
+    let map = ruage_data::load_map_str(
+        &TINY_MAP.replace("amount = 5", "amount = 1"),
+        "tiny.toml",
+        &fx.resources,
+    )
+    .expect("tiny map");
     world
         .seed_from(&map, &fx.economy, &fx.units)
         .expect("seeding");
@@ -418,7 +442,7 @@ fn two_villagers_on_one_node_cannot_take_more_than_it_holds() {
     let node = world
         .entities()
         .iter()
-        .find(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
+        .find(|e| matches!(e.kind, EntityKind::Resource(s) if s == slot("wood")))
         .expect("the tree")
         .id;
     let villagers: Vec<EntityId> = world
@@ -476,7 +500,7 @@ fn ordering_a_node_to_gather_is_an_error() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let here = world.position(first_villager(&world)).expect("position");
-    let node = nearest(&world, ResourceKind::Wood, here);
+    let node = nearest(&world, slot("wood"), here);
 
     match world.submit_checked(Command::Gather {
         villager: node,
@@ -494,7 +518,7 @@ fn the_same_orders_produce_the_same_hash() {
         let mut world = seeded(fx);
         let villager = first_villager(&world);
         let here = world.position(villager).expect("position");
-        let node = nearest(&world, ResourceKind::Wood, here);
+        let node = nearest(&world, slot("wood"), here);
         world.submit(Command::Gather { villager, node });
         for _ in 0..500 {
             world.step().expect("step");

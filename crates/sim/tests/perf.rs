@@ -24,12 +24,15 @@ fn fixture() -> Option<(Settings, Map, Economy, Units, ruage_data::Resources)> {
         eprintln!("skipping: no units.toml (generated, D8)");
         return None;
     }
+    // The pack first: the map names its resources and only the pack turns a name into a column.
+    let resources =
+        ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml");
     Some((
         ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
-        ruage_data::load_map_file(&repo("config/map.toml")).expect("map.toml"),
+        ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map.toml"),
         ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
         ruage_data::load_units_file(&units).expect("units.toml"),
-        ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml"),
+        resources,
     ))
 }
 

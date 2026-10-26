@@ -15,6 +15,20 @@ fn repo(rel: &str) -> PathBuf {
         .join(rel)
 }
 
+/// The project pack's column for a resource, so a test says "wood" the way content does and the
+/// pack is what turns that into a stockpile column (D17).
+fn slot(name: &str) -> usize {
+    slot_in(
+        &ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml"),
+        name,
+    )
+}
+
+fn slot_in(pack: &ruage_data::Resources, name: &str) -> usize {
+    pack.slot_of(name)
+        .unwrap_or_else(|| panic!("the pack has no {name}"))
+}
+
 struct Fixture {
     settings: Settings,
     map: Map,
@@ -33,12 +47,14 @@ fn fixture() -> Option<Fixture> {
         );
         return None;
     }
+    // The pack first: the map names its resources and only the pack turns a name into a column.
+    let resources =
+        ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml");
     Some(Fixture {
         settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
-        map: ruage_data::load_map_file(&repo("config/map.toml")).expect("map.toml"),
+        map: ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map.toml"),
         economy: ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
-        resources: ruage_data::load_resources_file(&repo("config/resources.toml"))
-            .expect("resources.toml"),
+        resources,
         units: ruage_data::load_units_file(&units).expect("units.toml"),
         combat: ruage_data::load_combat_file(&repo("config/combat.toml")).expect("combat.toml"),
     })
@@ -127,7 +143,7 @@ resource = "wood"
     assert_eq!(runner.outcomes.len(), 1);
     assert_eq!(runner.outcomes[0].1, Outcome::Ran);
     assert!(
-        world.stock(1, ruage_data::ResourceKind::Wood) > 0,
+        world.stock(1, slot("wood")) > 0,
         "a minute of gathering should reach the bank"
     );
 }
@@ -219,4 +235,37 @@ fn stopping_a_unit_is_always_accepted() {
     world
         .submit_checked(Command::Stop { unit: villager })
         .expect("stopping needs no preconditions");
+}
+
+/// A step that names a resource the pack does not define must be *reported*, not skipped. A replay
+/// is the record of a match: a silently ignored step is a match that diverges from its own script
+/// with nothing to say why, and a misspelt resource name is exactly how that would start (D17).
+#[test]
+fn a_scenario_naming_a_resource_the_pack_lacks_is_refused() {
+    let Some(fx) = fixture() else { return };
+    let scenario = r#"
+schema = 1
+duration_seconds = 2
+
+[[step]]
+at_seconds = 0.0
+player = 1
+kind = "gather"
+villager = 0
+resource = "silver"
+"#;
+    let (_, runner) = play(&fx, scenario, 3);
+    let refusal = runner
+        .outcomes
+        .iter()
+        .map(|(_, outcome)| outcome.clone())
+        .find_map(|outcome| match outcome {
+            Outcome::Refused(reason) => Some(reason),
+            _ => None,
+        })
+        .expect("the step must be refused, not silently dropped");
+    assert!(
+        refusal.contains("silver"),
+        "the refusal must name the resource the pack lacks: {refusal}"
+    );
 }

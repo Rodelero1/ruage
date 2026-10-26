@@ -17,6 +17,9 @@ schema = 1
 slot = 0
 name = "wood"
 dat_id = 1
+# Where a map may place a node of this resource (the map loader enforces it): wood grows in
+# forests, everything else stands on open ground. This is content, not a match arm on an enum.
+site = "forest"
 
 [[resource]]
 slot = 1

@@ -23,8 +23,8 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use ruage_data::{
-    ResourceKind, load_combat_file, load_economy_file, load_map_file, load_resources_file,
-    load_sim_file, load_units_file,
+    load_combat_file, load_economy_file, load_map_file, load_resources_file, load_sim_file,
+    load_units_file,
 };
 use ruage_sim::{Outcome, Runner, World, describe, load_scenario_file};
 
@@ -106,13 +106,14 @@ fn run(args: &[String]) -> Result<(), String> {
 
     let settings =
         load_sim_file(Path::new(required(&parsed, "--config")?)).map_err(|err| format!("{err}"))?;
-    let map =
-        load_map_file(Path::new(required(&parsed, "--map")?)).map_err(|err| format!("{err}"))?;
+    // The pack first: the map names its resources, and only the pack knows their columns.
+    let resources = load_resources_file(Path::new(required(&parsed, "--resources")?))
+        .map_err(|err| format!("{err}"))?;
+    let map = load_map_file(Path::new(required(&parsed, "--map")?), &resources)
+        .map_err(|err| format!("{err}"))?;
     let economy = load_economy_file(Path::new(required(&parsed, "--economy")?))
         .map_err(|err| format!("{err}"))?;
     let units = load_units_file(Path::new(required(&parsed, "--units")?))
-        .map_err(|err| format!("{err}"))?;
-    let resources = load_resources_file(Path::new(required(&parsed, "--resources")?))
         .map_err(|err| format!("{err}"))?;
     let seed: u64 = number(&parsed, "--seed")?;
 
@@ -212,11 +213,19 @@ fn report(world: &World) {
         .iter()
         .filter(|entity| entity.kind == ruage_sim::EntityKind::Building)
         .count();
-    println!(
-        "{seconds:>7.1}s  wood {:>4}  food {:>4}  gold {:>3}  stone {:>3}  units {units:>3}  buildings {buildings:>2}",
-        world.stock(1, ResourceKind::Wood),
-        world.stock(1, ResourceKind::Food),
-        world.stock(1, ResourceKind::Gold),
-        world.stock(1, ResourceKind::Stone),
-    );
+    // The resources printed are the ones the pack defines, in slot order: the runner has no list of
+    // its own, so a pack of our own reports its own names (D17).
+    let stocks = world
+        .resources()
+        .map(|resources| {
+            (0..resources.count())
+                .filter_map(|slot| {
+                    let name = resources.name(slot)?;
+                    Some(format!("{name} {:>4}", world.stock(1, slot)))
+                })
+                .collect::<Vec<_>>()
+                .join("  ")
+        })
+        .unwrap_or_default();
+    println!("{seconds:>7.1}s  {stocks}  units {units:>3}  buildings {buildings:>2}");
 }

@@ -88,10 +88,12 @@ impl ContentPack {
 
         let sim = load_sim_file(&dir.join("sim.toml"))?;
         let economy = load_economy_file(&dir.join("economy.toml"))?;
-        let map = load_map_file(&dir.join("map.toml"))?;
+        // Resources before the map: the map names its resources, and only the pack can turn a name
+        // into a stockpile column (D17).
+        let resources = load_resources_file(&dir.join("resources.toml"))?;
+        let map = load_map_file(&dir.join("map.toml"), &resources)?;
         let units = load_units_file(&pack_path(dir, "units.toml"))?;
         let combat = load_combat_file(&dir.join("combat.toml"))?;
-        let resources = load_resources_file(&dir.join("resources.toml"))?;
 
         // The pack hash mixes the per-file hashes *with their names*, so two files swapping
         // contents cannot produce the same pack hash as an honest pack.

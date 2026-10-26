@@ -1,12 +1,27 @@
 //! `config/resources.toml`: the content pack's resource list.
 //!
 //! This is the engine's view of resources: a dense list of slots with names, defined by content.
-//! The dat's own numbering (`dat_id`) is the reference pack's business and is kept only so the
-//! bridge test can check that the two agree while `ResourceKind` still exists (D17).
+//! The dat's own numbering (`dat_id`) is the reference pack's business and lives here so that a
+//! cost entry `[1, 25]` can be translated exactly once, at the pack boundary (D17). A pack of our
+//! own has no reference ids at all, and then every `dat_id` lookup misses - which is correct.
 
 use serde::Deserialize;
 
 use crate::{ConfigError, SUPPORTED_SCHEMA};
+
+/// Where a resource of this kind may stand on a map. It is content because "wood grows in forests"
+/// is a fact about wood: our own pack may put anything it likes in a forest, or nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResourceSite {
+    /// Open ground: grass, and anything else a map calls walkable.
+    #[default]
+    Open,
+    /// A forest tile. A node the pack places here must stand on one, and a node it does not must
+    /// not - a tree you can walk through, or gold inside the treeline, is a map that cannot be
+    /// played rather than a map that is merely odd.
+    Forest,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceDef {
@@ -15,6 +30,8 @@ pub struct ResourceDef {
     pub name: String,
     /// The reference pack's id, when this pack came from one. `None` for resources of our own.
     pub dat_id: Option<u16>,
+    /// The terrain a map node of this resource must stand on.
+    pub site: ResourceSite,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +69,11 @@ impl Resources {
             .get(slot)
             .map(|resource| resource.name.as_str())
     }
+
+    /// The terrain a node in this column must stand on, or `None` when the pack has no such column.
+    pub fn site(&self, slot: usize) -> Option<ResourceSite> {
+        self.entries.get(slot).map(|resource| resource.site)
+    }
 }
 
 #[derive(Deserialize)]
@@ -71,6 +93,9 @@ struct RawResource {
     name: String,
     #[serde(default)]
     dat_id: Option<u16>,
+    /// Omitted means open ground; `site = "forest"` says this resource lives in forests.
+    #[serde(default)]
+    site: ResourceSite,
 }
 
 pub fn load_resources_str(text: &str, path: &str) -> Result<Resources, ConfigError> {
@@ -139,6 +164,7 @@ pub fn load_resources_str(text: &str, path: &str) -> Result<Resources, ConfigErr
             slot: resource.slot,
             name: name.to_owned(),
             dat_id: resource.dat_id,
+            site: resource.site,
         });
     }
 

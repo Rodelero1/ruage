@@ -12,6 +12,20 @@ fn repo(rel: &str) -> PathBuf {
         .join(rel)
 }
 
+/// The project pack's column for a resource, so a test says "wood" the way content does and the
+/// pack is what turns that into a stockpile column (D17).
+fn slot(name: &str) -> usize {
+    slot_in(
+        &ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml"),
+        name,
+    )
+}
+
+fn slot_in(pack: &ruage_data::Resources, name: &str) -> usize {
+    pack.slot_of(name)
+        .unwrap_or_else(|| panic!("the pack has no {name}"))
+}
+
 struct Fixture {
     settings: Settings,
     map: Map,
@@ -30,12 +44,14 @@ fn fixture() -> Option<Fixture> {
         );
         return None;
     }
+    // The pack first: the map names its resources and only the pack turns a name into a column.
+    let resources =
+        ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml");
     Some(Fixture {
         settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
-        map: load_map_file(&repo("config/map.toml")).expect("map.toml"),
+        map: load_map_file(&repo("config/map.toml"), &resources).expect("map.toml"),
         economy: load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
-        resources: ruage_data::load_resources_file(&repo("config/resources.toml"))
-            .expect("resources.toml"),
+        resources,
         units: ruage_data::load_units_file(&units).expect("units.toml"),
     })
 }
@@ -179,19 +195,19 @@ fn every_resource_node_becomes_an_entity_carrying_its_amount() {
 
     // Nodes hold their remaining amount in fixed point, so totals are compared in whole units.
     let scale = fx.settings.fixed_point_scale;
-    let total = |kind: ruage_data::ResourceKind| -> i64 {
+    let total = |slot: usize| -> i64 {
         nodes
             .iter()
-            .filter(|e| e.kind == EntityKind::Resource(kind))
+            .filter(|e| e.kind == EntityKind::Resource(slot))
             .map(|e| e.amount.raw())
             .sum::<i64>()
             / scale
     };
     // The map says 90 wood tiles at 100, 12 food at 150, 8 gold at 400, 8 stone at 300.
-    assert_eq!(total(ruage_data::ResourceKind::Wood), 9_000);
-    assert_eq!(total(ruage_data::ResourceKind::Food), 1_800);
-    assert_eq!(total(ruage_data::ResourceKind::Gold), 3_200);
-    assert_eq!(total(ruage_data::ResourceKind::Stone), 2_400);
+    assert_eq!(total(slot("wood")), 9_000);
+    assert_eq!(total(slot("food")), 1_800);
+    assert_eq!(total(slot("gold")), 3_200);
+    assert_eq!(total(slot("stone")), 2_400);
 }
 
 #[test]
@@ -228,7 +244,7 @@ fn a_node_stands_on_the_tile_the_map_put_it_on() {
             .iter()
             .find(|e| e.position == expected)
             .unwrap_or_else(|| panic!("no entity at the map node ({}, {})", node.x, node.y));
-        assert_eq!(entity.kind, EntityKind::Resource(node.kind));
+        assert_eq!(entity.kind, EntityKind::Resource(node.slot));
         assert_eq!(
             entity.amount.raw(),
             i64::from(node.amount) * scale,
@@ -350,7 +366,7 @@ fn eight_sides_are_representable_and_a_ninth_is_refused() {
             .unwrap_or_else(|err| panic!("player {player} must be playable: {err}"));
     }
     assert_eq!(
-        world.stock(8, ruage_data::ResourceKind::Wood),
+        world.stock(8, slot("wood")),
         0,
         "the eighth side has a stockpile, empty"
     );

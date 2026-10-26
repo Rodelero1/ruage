@@ -4,13 +4,27 @@
 
 use std::path::PathBuf;
 
-use ruage_data::{Economy, Map, ResourceKind, Sim as Settings, Units};
+use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_sim::{Command, EntityId, EntityKind, MAX_RESOURCES, SimError, Task, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join(rel)
+}
+
+/// The project pack's column for a resource, so a test says "wood" the way content does and the
+/// pack is what turns that into a stockpile column (D17).
+fn slot(name: &str) -> usize {
+    slot_in(
+        &ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml"),
+        name,
+    )
+}
+
+fn slot_in(pack: &ruage_data::Resources, name: &str) -> usize {
+    pack.slot_of(name)
+        .unwrap_or_else(|| panic!("the pack has no {name}"))
 }
 
 struct Fixture {
@@ -30,12 +44,14 @@ fn fixture() -> Option<Fixture> {
         );
         return None;
     }
+    // The pack first: the map names its resources and only the pack turns a name into a column.
+    let resources =
+        ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml");
     Some(Fixture {
         settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
-        map: ruage_data::load_map_file(&repo("config/map.toml")).expect("map.toml"),
+        map: ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map.toml"),
         economy: ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
-        resources: ruage_data::load_resources_file(&repo("config/resources.toml"))
-            .expect("resources.toml"),
+        resources,
         units: ruage_data::load_units_file(&units).expect("units.toml"),
     })
 }
@@ -92,13 +108,13 @@ fn bank_wood(world: &mut World, want: u32, node: EntityId) {
     world.submit(Command::Gather { villager, node });
     for _ in 0..60_000 {
         world.step().expect("step");
-        if world.stock(1, ResourceKind::Wood) >= want {
+        if world.stock(1, slot("wood")) >= want {
             return;
         }
     }
     panic!(
         "could not bank {want} wood; the bank holds {}",
-        world.stock(1, ResourceKind::Wood)
+        world.stock(1, slot("wood"))
     );
 }
 
@@ -110,11 +126,7 @@ fn a_build_without_the_resources_is_refused() {
     let site = free_tile_near(&world, villager);
     let house = 70;
 
-    assert_eq!(
-        world.stock(1, ResourceKind::Wood),
-        0,
-        "the player starts broke"
-    );
+    assert_eq!(world.stock(1, slot("wood")), 0, "the player starts broke");
     match world.submit_checked(Command::Build {
         villager,
         unit: house,
@@ -189,12 +201,12 @@ fn a_pack_that_does_not_carry_a_cost_id_refuses_the_order() {
     let node = world
         .entities()
         .iter()
-        .filter(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
+        .filter(|e| matches!(e.kind, EntityKind::Resource(s) if s == slot("wood")))
         .map(|e| e.id)
         .next()
         .expect("a tree");
     bank_wood(&mut world, 25, node);
-    let before = world.stock(1, ResourceKind::Wood);
+    let before = world.stock(1, slot("wood"));
     assert!(before >= 25, "the villager banked {before} wood");
 
     let pack = ruage_data::load_resources_str(OWN_PACK, "<own pack>").expect("the pack loads");
@@ -219,7 +231,7 @@ fn a_pack_that_does_not_carry_a_cost_id_refuses_the_order() {
         "the refusal must name the id and say the pack lacks it: {text}"
     );
     assert_eq!(
-        world.stock(1, ResourceKind::Wood),
+        world.stock(1, slot("wood")),
         before,
         "a refused order must not be paid from slot 0"
     );
@@ -308,7 +320,7 @@ fn a_house_is_paid_for_and_finishes_in_its_create_time() {
     let node = world
         .entities()
         .iter()
-        .filter(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
+        .filter(|e| matches!(e.kind, EntityKind::Resource(s) if s == slot("wood")))
         .min_by_key(|e| {
             let dx = e.position.0.raw() - here.0.raw();
             let dy = e.position.1.raw() - here.1.raw();
@@ -318,7 +330,7 @@ fn a_house_is_paid_for_and_finishes_in_its_create_time() {
         .id;
 
     bank_wood(&mut world, 25, node);
-    let before = world.stock(1, ResourceKind::Wood);
+    let before = world.stock(1, slot("wood"));
     let site = free_tile_near(&world, villager);
     let house_unit = 70;
     let build_time = fx.units.unit(house_unit).expect("HOUS").train_time;
@@ -336,7 +348,7 @@ fn a_house_is_paid_for_and_finishes_in_its_create_time() {
     // paid then - not when the house finishes, and not before the order is actually being run.
     world.step().expect("step");
     assert_eq!(
-        world.stock(1, ResourceKind::Wood),
+        world.stock(1, slot("wood")),
         before - 25,
         "the wood is spent when the order lands, not when the house finishes"
     );
@@ -412,7 +424,7 @@ fn a_site_on_top_of_something_is_refused() {
     let node = world
         .entities()
         .iter()
-        .filter(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
+        .filter(|e| matches!(e.kind, EntityKind::Resource(s) if s == slot("wood")))
         .min_by_key(|e| {
             let dx = e.position.0.raw() - here.0.raw();
             let dy = e.position.1.raw() - here.1.raw();
@@ -490,7 +502,7 @@ player = 2
 #[test]
 fn an_unreachable_site_is_refused_before_the_wood_is_spent() {
     let Some(fx) = fixture() else { return };
-    let map = ruage_data::load_map_str(WALLED_MAP, "<walled fixture>")
+    let map = ruage_data::load_map_str(WALLED_MAP, "<walled fixture>", &fx.resources)
         .expect("the walled fixture map loads");
     let mut world = World::new(&fx.settings, 11).expect("world");
     world
@@ -505,12 +517,12 @@ fn an_unreachable_site_is_refused_before_the_wood_is_spent() {
     let wood = world
         .entities()
         .iter()
-        .filter(|e| matches!(e.kind, EntityKind::Resource(ResourceKind::Wood)))
+        .filter(|e| matches!(e.kind, EntityKind::Resource(s) if s == slot("wood")))
         .find(|e| e.position.0.raw() < wall.raw())
         .expect("wood on the near side")
         .id;
     bank_wood(&mut world, 25, wood);
-    let before = world.stock(1, ResourceKind::Wood);
+    let before = world.stock(1, slot("wood"));
     assert!(before >= 25, "the villager banked {before} wood");
     let buildings = world
         .entities()
@@ -529,7 +541,7 @@ fn an_unreachable_site_is_refused_before_the_wood_is_spent() {
     }
 
     assert_eq!(
-        world.stock(1, ResourceKind::Wood),
+        world.stock(1, slot("wood")),
         before,
         "a refused order must cost nothing"
     );
@@ -541,5 +553,240 @@ fn an_unreachable_site_is_refused_before_the_wood_is_spent() {
             .count(),
         buildings,
         "a refused order must not leave a construction site behind"
+    );
+}
+
+/// A content pack of our own, all the way to a paid-for building: five resources (so the priced one
+/// is in the fifth column the enum could never have held), a timber node in a forest, and a house
+/// that costs `timber`.
+///
+/// This is the finish line of D17. Nothing in it names Age of Empires II: no resource ids, no
+/// `ResourceKind`, no fixed count of four. `grain` sits in slot 0, which is where a fallback-to-zero
+/// would put the money - so a wrong mapping pays with the wrong goods and this test says so.
+const OWN_FIVE_PACK: &str = r#"
+schema = 1
+
+[[resource]]
+slot = 0
+name = "grain"
+
+[[resource]]
+slot = 1
+name = "iron"
+
+[[resource]]
+slot = 2
+name = "salt"
+
+[[resource]]
+slot = 3
+name = "wool"
+
+[[resource]]
+slot = 4
+name = "timber"
+site = "forest"
+"#;
+
+/// Three units and nothing else: a town centre to start from and drop at, a villager that carries
+/// and works, and a house priced in a name.
+const OWN_UNITS: &str = r#"
+schema = 1
+kind = "units"
+civ = 1
+civ_name = "ours"
+
+[[unit]]
+id = 109
+name = "TOWNC"
+class = 3
+hp = 2400
+los = 4.0
+speed = 0.0
+carry = 0
+work_rate = 0.0
+drop_sites = []
+garrison = 0
+radius = [1.0, 1.0, 2.0]
+costs = []
+attacks = []
+armours = []
+range = 0.0
+reload = 0.0
+accuracy = 0
+train_time = 200
+base_id = 109
+
+[[unit]]
+id = 83
+name = "VILL"
+class = 4
+hp = 25
+los = 4.0
+speed = 0.8
+carry = 35
+work_rate = 0.39
+drop_sites = [109]
+garrison = 0
+radius = [0.2, 0.2, 0.0]
+costs = []
+attacks = []
+armours = []
+range = 0.0
+reload = 0.0
+accuracy = 0
+train_time = 25
+base_id = 83
+
+[[unit]]
+id = 70
+name = "HOUS"
+class = 3
+hp = 550
+los = 2.0
+speed = 0.0
+carry = 0
+work_rate = 0.0
+drop_sites = []
+garrison = 0
+radius = [1.0, 1.0, 2.0]
+costs = [{ resource = "timber", amount = 25 }]
+attacks = []
+armours = []
+range = 0.0
+reload = 0.0
+accuracy = 0
+train_time = 25
+base_id = 70
+"#;
+
+/// A 6x6 map with a four-tile wood in the corner, named the way our pack names it.
+const OWN_MAP: &str = r#"
+schema = 1
+[map]
+width = 6
+height = 6
+terrain = [
+  "GGGGGG",
+  "GFFFGG",
+  "GFFFGG",
+  "GGGGGG",
+  "GGGGGG",
+  "GGGGGG",
+]
+[[map.resource]]
+kind = "timber"
+amount = 500
+tiles = [[1, 1], [2, 1]]
+[[map.town_centre]]
+player = 1
+x = 5
+y = 5
+[[map.town_centre]]
+player = 2
+x = 0
+y = 5
+"#;
+
+#[test]
+fn a_content_pack_with_our_own_resources_loads_and_spends() {
+    let Some(fx) = fixture() else { return };
+
+    // The pack, the unit table and the map, all of our own.
+    let pack = ruage_data::load_resources_str(OWN_FIVE_PACK, "<own pack>").expect("the pack loads");
+    let timber = pack.slot_of("timber").expect("timber is in the pack");
+    let grain = pack.slot_of("grain").expect("grain is in the pack");
+    let units = ruage_data::load_units_str(OWN_UNITS, "<own units>").expect("the units load");
+    let map = ruage_data::load_map_str(OWN_MAP, "<own map>", &pack).expect("the map loads");
+
+    // The economy is the project's, with one entry added: our own name for the wood task. (The
+    // economy file is content too, and this is the line it would carry in a pack of our own.)
+    let mut economy = fx.economy.clone();
+    economy.gather.variant.insert("wood".to_owned(), 83);
+    economy
+        .gather
+        .resource_task
+        .insert("timber".to_owned(), "wood".to_owned());
+
+    let mut world = World::new(&fx.settings, 5).expect("world");
+    world.seed_from(&map, &economy, &units).expect("seeding");
+    world.load_resources(&pack).expect("the pack fits");
+
+    assert_eq!(world.stock(1, grain), 0, "a fresh world has nothing banked");
+
+    // Gather until the bank holds the price of a house, in the fifth column.
+    let villager = world
+        .entities()
+        .iter()
+        .find(|e| e.player == 1 && e.kind == EntityKind::Unit)
+        .map(|e| e.id)
+        .expect("a villager");
+    let node = world
+        .entities()
+        .iter()
+        .find(|e| e.kind == EntityKind::Resource(timber))
+        .map(|e| e.id)
+        .expect("a timber node");
+    world
+        .submit_checked(Command::Gather { villager, node })
+        .expect("a gather order on a resource the pack defines");
+    for _ in 0..4_000 {
+        world.step().expect("step");
+        if world.stock(1, timber) >= 25 {
+            break;
+        }
+    }
+    let banked = world.stock(1, timber);
+    assert!(
+        banked >= 25,
+        "the villager banked {banked} timber, which does not pay for a house"
+    );
+    assert_eq!(
+        world.stock(1, grain),
+        0,
+        "gathering timber must not credit slot 0 (grain): the cost named a resource, not a column"
+    );
+
+    // Build it, and let it finish.
+    // Two tiles diagonal from the town centre: grass, empty, and reachable from the wood.
+    let site = (4, 4);
+    assert!(
+        map.is_walkable(site.0, site.1),
+        "the site must be open ground, terrain was {:?}",
+        map.terrain_at(site.0, site.1)
+    );
+    let before = world.stock(1, timber);
+    world
+        .submit_checked(Command::Build {
+            villager,
+            unit: 70,
+            at: site,
+        })
+        .expect("a house priced in timber, a resource the pack defines");
+    // Queued commands land on the next tick (`CommandApply::NextTick`), so the price is paid then.
+    world.step().expect("step");
+    assert_eq!(
+        world.stock(1, timber),
+        before - 25,
+        "the price came out of the timber column"
+    );
+    assert_eq!(world.stock(1, grain), 0, "and not out of grain");
+
+    let mut finished = None;
+    for _ in 0..2_000 {
+        world.step().expect("step");
+        if let Some(house) = world
+            .entities()
+            .iter()
+            .find(|e| e.unit == Some(70) && e.construction.is_none() && e.player == 1)
+        {
+            finished = Some(house.hp);
+            break;
+        }
+    }
+    assert_eq!(
+        finished,
+        Some(550),
+        "an own-content house must be built to full hp"
     );
 }

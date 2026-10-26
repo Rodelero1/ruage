@@ -14,7 +14,6 @@ use crate::{Command, EntityId, EntityKind, World};
 /// The scenario format's own version. It is not a config file: it describes a match, so it moves
 /// at its own pace and does not share `config/`'s schema constant.
 pub const SCENARIO_SCHEMA: u32 = 1;
-use ruage_data::ResourceKind;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -35,10 +34,10 @@ pub struct Step {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum StepKind {
-    /// Put one of this player's villagers on a resource.
+    /// Put one of this player's villagers on a resource, named as the content pack names it.
     Gather {
         villager: usize,
-        resource: NamedResource,
+        resource: String,
         /// Which of the nearest nodes of that kind: 0 is nearest. Three villagers told 0, 1 and 2
         /// work three different trees instead of queueing on one and idling when it runs out.
         #[serde(default)]
@@ -56,26 +55,6 @@ pub enum StepKind {
     Attack { attacker: u32, target: String },
     /// Stand a villager down.
     Stop { villager: usize },
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum NamedResource {
-    Wood,
-    Food,
-    Gold,
-    Stone,
-}
-
-impl NamedResource {
-    fn kind(self) -> ResourceKind {
-        match self {
-            NamedResource::Wood => ResourceKind::Wood,
-            NamedResource::Food => ResourceKind::Food,
-            NamedResource::Gold => ResourceKind::Gold,
-            NamedResource::Stone => ResourceKind::Stone,
-        }
-    }
 }
 
 /// What happened to a step, kept so the run can be reported rather than guessed at.
@@ -158,11 +137,14 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
         } => {
             let unit = nth_villager(world, player, *villager)
                 .ok_or_else(|| format!("player {player} has no villager {villager}"))?;
-            let node = nearest_resource(world, unit, resource.kind(), *nth).ok_or_else(|| {
+            let slot = world.slot_of(resource).ok_or_else(|| {
                 format!(
-                    "player {player} has no {:?} node number {nth} to gather",
-                    resource.kind()
+                    "the content pack defines no resource called {resource:?}, so this step names \
+                     nothing a villager could gather"
                 )
+            })?;
+            let node = nearest_resource(world, unit, slot, *nth).ok_or_else(|| {
+                format!("player {player} has no {resource} node number {nth} to gather")
             })?;
             Ok(Command::Gather {
                 villager: unit,
@@ -255,17 +237,12 @@ fn nth_villager(world: &World, player: u8, index: usize) -> Option<EntityId> {
 
 /// The `nth` nearest node of a kind, ordered by (distance, id) so the choice is deterministic and
 /// two villagers told `nth = 0` and `nth = 1` land on different nodes.
-fn nearest_resource(
-    world: &World,
-    from: EntityId,
-    kind: ResourceKind,
-    nth: usize,
-) -> Option<EntityId> {
+fn nearest_resource(world: &World, from: EntityId, slot: usize, nth: usize) -> Option<EntityId> {
     let here = world.position(from)?;
     let mut nodes: Vec<(i64, u32, EntityId)> = world
         .entities()
         .iter()
-        .filter(|entity| entity.kind == EntityKind::Resource(kind))
+        .filter(|entity| entity.kind == EntityKind::Resource(slot))
         .map(|entity| {
             let dx = entity.position.0.raw() - here.0.raw();
             let dy = entity.position.1.raw() - here.1.raw();

@@ -4,13 +4,27 @@
 
 use std::path::PathBuf;
 
-use ruage_data::{Economy, Map, ResourceKind, Sim as Settings, Units};
+use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_sim::{Command, EntityId, EntityKind, SimError, Task, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join(rel)
+}
+
+/// The project pack's column for a resource, so a test says "wood" the way content does and the
+/// pack is what turns that into a stockpile column (D17).
+fn slot(name: &str) -> usize {
+    slot_in(
+        &ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml"),
+        name,
+    )
+}
+
+fn slot_in(pack: &ruage_data::Resources, name: &str) -> usize {
+    pack.slot_of(name)
+        .unwrap_or_else(|| panic!("the pack has no {name}"))
 }
 
 struct Fixture {
@@ -30,12 +44,14 @@ fn fixture() -> Option<Fixture> {
         );
         return None;
     }
+    // The pack first: the map names its resources and only the pack turns a name into a column.
+    let resources =
+        ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources.toml");
     Some(Fixture {
         settings: ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim.toml"),
-        map: ruage_data::load_map_file(&repo("config/map.toml")).expect("map.toml"),
+        map: ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map.toml"),
         economy: ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
-        resources: ruage_data::load_resources_file(&repo("config/resources.toml"))
-            .expect("resources.toml"),
+        resources,
         units: ruage_data::load_units_file(&units).expect("units.toml"),
     })
 }
@@ -69,14 +85,14 @@ fn first_villager(world: &World) -> EntityId {
         .id
 }
 
-/// Gather until the bank holds at least `want` of a kind, from the nearest node of that kind.
-fn bank(world: &mut World, kind: ResourceKind, want: u32) {
+/// Gather until the bank holds at least `want` in a stockpile column, from the nearest node of it.
+fn bank(world: &mut World, slot: usize, want: u32) {
     let villager = first_villager(world);
     let here = world.position(villager).expect("position");
     let node = world
         .entities()
         .iter()
-        .filter(|e| e.kind == EntityKind::Resource(kind))
+        .filter(|e| e.kind == EntityKind::Resource(slot))
         .min_by_key(|e| {
             let dx = e.position.0.raw() - here.0.raw();
             let dy = e.position.1.raw() - here.1.raw();
@@ -87,13 +103,13 @@ fn bank(world: &mut World, kind: ResourceKind, want: u32) {
     world.submit(Command::Gather { villager, node });
     for _ in 0..200_000 {
         world.step().expect("step");
-        if world.stock(1, kind) >= want {
+        if world.stock(1, slot) >= want {
             return;
         }
     }
     panic!(
-        "could not bank {want} {kind:?}; the bank holds {}",
-        world.stock(1, kind)
+        "could not bank {want} in column {slot}; the bank holds {}",
+        world.stock(1, slot)
     );
 }
 
@@ -124,7 +140,7 @@ fn a_building_that_is_still_going_up_cannot_train() {
     let node = world
         .entities()
         .iter()
-        .filter(|e| e.kind == EntityKind::Resource(ResourceKind::Wood))
+        .filter(|e| e.kind == EntityKind::Resource(slot("wood")))
         .min_by_key(|e| {
             let dx = e.position.0.raw() - here.0.raw();
             let dy = e.position.1.raw() - here.1.raw();
@@ -132,7 +148,7 @@ fn a_building_that_is_still_going_up_cannot_train() {
         })
         .expect("a tree")
         .id;
-    bank(&mut world, ResourceKind::Wood, 25);
+    bank(&mut world, slot("wood"), 25);
 
     let scale = world.scale();
     let x = u16::try_from(world.position(villager).expect("p").0.raw() / scale).unwrap();
@@ -169,7 +185,7 @@ fn a_second_order_cannot_replace_a_running_one() {
     let mut world = seeded(&fx);
     // Enough for two villagers on purpose: with only 50 food the second order would be refused
     // for being unaffordable, and the test would pass without proving anything about the slot.
-    bank(&mut world, ResourceKind::Food, 100);
+    bank(&mut world, slot("food"), 100);
     let centre = town_centre(&world);
     world
         .submit_checked(Command::Train {
@@ -178,7 +194,7 @@ fn a_second_order_cannot_replace_a_running_one() {
         })
         .expect("the first order");
     world.step().expect("step");
-    let after_first = world.stock(1, ResourceKind::Food);
+    let after_first = world.stock(1, slot("food"));
     assert!(
         after_first >= 50,
         "the second order must be affordable, or this test proves nothing"
@@ -193,7 +209,7 @@ fn a_second_order_cannot_replace_a_running_one() {
         other => panic!("expected AlreadyTraining, got {other:?}"),
     }
     assert_eq!(
-        world.stock(1, ResourceKind::Food),
+        world.stock(1, slot("food")),
         after_first,
         "a refused order must cost nothing"
     );
@@ -203,9 +219,9 @@ fn a_second_order_cannot_replace_a_running_one() {
 fn a_villager_costs_fifty_food_and_appears_after_its_create_time() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    bank(&mut world, ResourceKind::Food, 50);
+    bank(&mut world, slot("food"), 50);
     let centre = town_centre(&world);
-    let before = world.stock(1, ResourceKind::Food);
+    let before = world.stock(1, slot("food"));
     let villagers = world
         .entities()
         .iter()
@@ -220,7 +236,7 @@ fn a_villager_costs_fifty_food_and_appears_after_its_create_time() {
         .expect("the order must be accepted");
     world.step().expect("step");
     assert_eq!(
-        world.stock(1, ResourceKind::Food),
+        world.stock(1, slot("food")),
         before - 50,
         "a villager costs 50 food, paid when the order lands"
     );

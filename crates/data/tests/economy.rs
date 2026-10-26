@@ -161,25 +161,28 @@ fn the_real_economy_names_the_starting_units() {
 }
 
 #[test]
-fn the_real_economy_maps_each_resource_kind_to_a_gather_task() {
+fn the_real_economy_maps_each_resource_name_to_a_gather_task() {
+    // Keyed by the pack's names (D17): the economy does not know what a *kind* of resource is, it
+    // knows that the resource called "food" is worked by the foraging variant.
     let economy = load_economy_file(&repo("config/economy.toml")).expect("economy.toml loads");
-    assert_eq!(economy.gather.resource_task.wood, "wood");
-    assert_eq!(
-        economy.gather.resource_task.food, "forage",
-        "berries are foraged"
-    );
-    assert_eq!(economy.gather.resource_task.gold, "gold");
-    assert_eq!(economy.gather.resource_task.stone, "stone");
+    let task = |name: &str| {
+        economy
+            .gather
+            .resource_task
+            .get(name)
+            .map(String::as_str)
+            .unwrap_or_else(|| panic!("{name} names no gather task"))
+    };
+    assert_eq!(task("wood"), "wood");
+    assert_eq!(task("food"), "forage", "berries are foraged");
+    assert_eq!(task("gold"), "gold");
+    assert_eq!(task("stone"), "stone");
     // And every one of them is a real variant, which is what the loader guarantees.
-    for task in [
-        &economy.gather.resource_task.wood,
-        &economy.gather.resource_task.food,
-        &economy.gather.resource_task.gold,
-        &economy.gather.resource_task.stone,
-    ] {
+    for name in ["wood", "food", "gold", "stone"] {
         assert!(
-            economy.gather.variant.contains_key(task),
-            "{task} is not a variant"
+            economy.gather.variant.contains_key(task(name)),
+            "{} is not a variant",
+            task(name)
         );
     }
 }
