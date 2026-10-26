@@ -107,7 +107,7 @@ fn a_step_that_cannot_be_resolved_is_reported_not_dropped() {
     let Some(fx) = fixture() else { return };
     // No such villager: player 1 starts with three.
     let text = r#"
-schema = 1
+schema = 2
 duration_seconds = 1.0
 
 [[step]]
@@ -129,7 +129,7 @@ resource = "wood"
 fn a_scripted_order_moves_the_world() {
     let Some(fx) = fixture() else { return };
     let text = r#"
-schema = 1
+schema = 2
 duration_seconds = 60.0
 
 [[step]]
@@ -244,7 +244,7 @@ fn stopping_a_unit_is_always_accepted() {
 fn a_scenario_naming_a_resource_the_pack_lacks_is_refused() {
     let Some(fx) = fixture() else { return };
     let scenario = r#"
-schema = 1
+schema = 2
 duration_seconds = 2
 
 [[step]]
@@ -267,5 +267,37 @@ resource = "silver"
     assert!(
         refusal.contains("silver"),
         "the refusal must name the resource the pack lacks: {refusal}"
+    );
+}
+
+/// The scenario format names roles, not dat ids (D17). A role the economy does not define must be
+/// refused with the name in the message, because the alternative - a step that silently targets
+/// unit 0 - is a match that diverges from its own script with nothing to explain it.
+#[test]
+fn a_scenario_naming_a_role_the_economy_lacks_is_refused() {
+    let Some(fx) = fixture() else { return };
+    let scenario = r#"
+schema = 2
+duration_seconds = 3
+
+[[step]]
+at_seconds = 0.0
+player = 1
+kind = "build"
+villager = 0
+role = "wonder"
+"#;
+    let (_, runner) = play(&fx, scenario, 3);
+    let refusal = runner
+        .outcomes
+        .iter()
+        .find_map(|(_, outcome)| match outcome {
+            Outcome::Refused(reason) => Some(reason.clone()),
+            _ => None,
+        })
+        .expect("the step must be refused, not silently dropped");
+    assert!(
+        refusal.contains("wonder"),
+        "the refusal must name the role: {refusal}"
     );
 }

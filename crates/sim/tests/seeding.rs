@@ -112,16 +112,25 @@ fn ids_run_player_by_player_in_role_order() {
         ids.windows(2).all(|pair| pair[0] < pair[1]),
         "the entity list is in ascending id order"
     );
-    assert_eq!(world.entities()[0].unit, Some(fx.economy.start.town_centre));
-    assert_eq!(world.entities()[1].unit, Some(fx.economy.start.villager));
+    // The start names roles; the economy's role table is the only place the ids live (D17).
+    let tc = fx.economy.role[&fx.economy.start.town_centre];
+    let villager = fx.economy.role[&fx.economy.start.villager];
+    assert_eq!(world.entities()[0].unit, Some(tc));
+    assert_eq!(world.entities()[1].unit, Some(villager));
 }
 
 #[test]
 fn villagers_carry_the_stats_from_the_unit_table() {
     let Some(fx) = fixture() else { return };
     let world = seeded(&fx);
-    let villager = fx.units.unit(fx.economy.start.villager).expect("VMBAS");
-    let tc = fx.units.unit(fx.economy.start.town_centre).expect("RTWC");
+    let villager = fx
+        .units
+        .unit(fx.economy.role[&fx.economy.start.villager])
+        .expect("VMBAS");
+    let tc = fx
+        .units
+        .unit(fx.economy.role[&fx.economy.start.town_centre])
+        .expect("RTWC");
 
     for entity in world.entities().iter().filter(|e| e.player != 0) {
         let stats = if entity.kind == EntityKind::Building {
@@ -302,15 +311,34 @@ fn two_seeds_of_the_same_inputs_hash_the_same() {
 }
 
 #[test]
-fn a_start_unit_missing_from_the_table_is_an_error() {
+fn a_start_role_the_economy_does_not_define_is_an_error() {
+    // The role table is content, so the engine refuses a start that names a word it does not have
+    // rather than seeding unit 0 (D17).
     let Some(fx) = fixture() else { return };
     let mut economy = fx.economy.clone();
-    economy.start.villager = 4_242;
+    economy.start.villager = "peasant".to_owned();
 
     let mut world = World::new(&fx.settings, 7).expect("world");
     let err = world
         .seed_from(&fx.map, &economy, &fx.units)
-        .expect_err("a unit id that is not in the table must be refused");
+        .expect_err("a start role with no unit must be refused");
+    let text = format!("{err}");
+    assert!(
+        text.contains("peasant"),
+        "the error should name the role: {text}"
+    );
+}
+
+#[test]
+fn a_start_role_naming_a_unit_missing_from_the_table_is_an_error() {
+    let Some(fx) = fixture() else { return };
+    let mut economy = fx.economy.clone();
+    economy.role.insert("villager".to_owned(), 4_242);
+
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    let err = world
+        .seed_from(&fx.map, &economy, &fx.units)
+        .expect_err("a role whose unit is not in the table must be refused");
     let text = format!("{err}");
     assert!(
         text.contains("4242"),

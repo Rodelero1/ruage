@@ -6,8 +6,12 @@
 # Steps are resolved against the world when they are due, so they name *what* rather than *which
 # id*: "the first villager", "the nearest tree", "beside my town centre". Ids belong to seeding
 # order and would rot the moment the map changed; the scenario is about behaviour.
+#
+# Schema 2: a unit is named by its *role* (`[role]` in economy.toml - house, barracks, spearman),
+# not by the dat id. The ids are the reference pack's, and a pack of our own has entirely different
+# ones, so a scenario that quoted them could not be replayed against any other content (D17).
 
-schema = 1
+schema = 2
 duration_seconds = 600.0
 
 # --- player 1: the full slice, gather -> house -> barracks -> spearman -> fight -------------------
@@ -44,7 +48,7 @@ at_seconds = 120.0
 player = 1
 kind = "build"
 villager = 0
-unit = 70
+role = "house"
 where = "near_town_centre"
 
 # A tree holds 200 and a villager idles when its own tree runs out (a recorded limit), so the three
@@ -76,7 +80,7 @@ at_seconds = 320.0
 player = 1
 kind = "build"
 villager = 0
-unit = 12
+role = "barracks"
 where = "near_town_centre"
 
 # Food and gold for the spearman. The villagers switch off the tree once the barracks is paid for;
@@ -109,7 +113,7 @@ at_seconds = 500.0
 player = 1
 kind = "train"
 building = "barracks"
-unit = 74
+role = "spearman"
 
 # The spearman walks to the nearest enemy villager and fights. The opponent is told to stand there,
 # which is what makes this a fair test of time-to-kill rather than of pathing.
@@ -117,7 +121,7 @@ unit = 74
 at_seconds = 525.0
 player = 1
 kind = "attack"
-attacker = 74
+attacker = "spearman"
 target = "nearest_enemy"
 
 # --- player 2: the scripted opponent --------------------------------------------------------------

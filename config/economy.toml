@@ -78,10 +78,10 @@ rate_from = "dat"
 # unit.resource_decay_rate exists per unit; semantics unverified.
 
 [start]
-# What a match begins with. Ids live here rather than in code (D6). 109 = RTWC, the town
-# centre that villager 83 names as its first drop site; 83 = VMBAS (25 hp, 0.8 tiles/s).
-town_centre = 109
-villager = 83
+# What a match begins with, named by role. The ids live in [role] below, so nothing outside the
+# content pack has to know that a town centre is 109 (D17).
+town_centre = "town_centre"
+villager = "villager"
 villagers_per_player = 3
 # PROVENANCE: dat (ids, hp, speed) + the standard 3-villager start. The count is a match
 # rule, not a dat field, which is exactly why it belongs in config.
@@ -97,6 +97,16 @@ units = [83]
 building = 12
 units = [74]
 # 12 = BRKS trains 74 = SPRMN (40 hp, 0.9 tiles/s, 60 food + 20 gold, 21 s).
+
+[role]
+# A role is the engine's word for a unit: everything that must not quote the dat's numbering uses
+# one - the start above, the scenario format, and the engine's own seeding. Add a role here and a
+# scenario can name it; the ids are the reference pack's and change with the dat (D17).
+town_centre = 109   # RTWC, the building a villager drops wood at
+villager = 83       # VMBAS, 25 hp, 0.8 tiles/s
+house = 70          # HOUS, 25 wood, 25 s
+barracks = 12       # BRKS
+spearman = 74       # SPRM, 40 hp, 0.9 tiles/s
 
 [population]
 cap_default = 200

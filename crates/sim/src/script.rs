@@ -13,7 +13,10 @@ use crate::{Command, EntityId, EntityKind, World};
 
 /// The scenario format's own version. It is not a config file: it describes a match, so it moves
 /// at its own pace and does not share `config/`'s schema constant.
-pub const SCENARIO_SCHEMA: u32 = 1;
+///
+/// Version 2: a step names **roles** (`role = "house"`), not the dat's unit ids. The economy's
+/// `[role]` table is the vocabulary, so a scenario for a pack of our own is writable at all (D17).
+pub const SCENARIO_SCHEMA: u32 = 2;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -46,13 +49,13 @@ pub enum StepKind {
     /// Put up a building beside one of this player's own buildings of the same type.
     Build {
         villager: usize,
-        unit: u32,
+        role: String,
         where_: Option<String>,
     },
-    /// Train a unit at a named building.
-    Train { building: String, unit: u32 },
-    /// Send this player's newest unit of a type at the nearest enemy.
-    Attack { attacker: u32, target: String },
+    /// Train a unit at a named building. Both are roles (`[role]` in economy.toml).
+    Train { building: String, role: String },
+    /// Send this player's newest unit of a role at the nearest enemy.
+    Attack { attacker: String, target: String },
     /// Stand a villager down.
     Stop { villager: usize },
 }
@@ -151,23 +154,21 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 node,
             })
         }
-        StepKind::Build { villager, unit, .. } => {
+        StepKind::Build { villager, role, .. } => {
             let worker = nth_villager(world, player, *villager)
                 .ok_or_else(|| format!("player {player} has no villager {villager}"))?;
+            let unit = role_of(world, role)?;
             let at = free_tile_near(world, player)
                 .ok_or_else(|| format!("player {player} has no free ground by its town centre"))?;
             Ok(Command::Build {
                 villager: worker,
-                unit: *unit,
+                unit,
                 at,
             })
         }
-        StepKind::Train { building, unit } => {
-            let wanted = match building.as_str() {
-                "town_centre" => 109,
-                "barracks" => 12,
-                other => return Err(format!("unknown building {other:?}")),
-            };
+        StepKind::Train { building, role } => {
+            let wanted = role_of(world, building)?;
+            let unit = role_of(world, role)?;
             let site = world
                 .entities()
                 .iter()
@@ -181,10 +182,11 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 .ok_or_else(|| format!("player {player} has no finished {building}"))?;
             Ok(Command::Train {
                 building: site,
-                unit: *unit,
+                unit,
             })
         }
         StepKind::Attack { attacker, target } => {
+            let attacker_unit = role_of(world, attacker)?;
             if target.as_str() != "nearest_enemy" {
                 return Err(format!("unknown target selector {target:?}"));
             }
@@ -194,7 +196,7 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 .filter(|entity| {
                     entity.player == player
                         && entity.kind == EntityKind::Unit
-                        && entity.unit == Some(*attacker)
+                        && entity.unit == Some(attacker_unit)
                 })
                 .map(|entity| entity.id)
                 .max()
@@ -219,6 +221,15 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
             Ok(Command::Stop { unit })
         }
     }
+}
+
+/// A role name resolved through the content pack's economy, or a refusal that names it.
+fn role_of(world: &World, role: &str) -> Result<u32, String> {
+    world.role_unit(role).ok_or_else(|| {
+        format!(
+            "{role:?} is not a role in economy.toml's [role] table, so no unit can be named by it"
+        )
+    })
 }
 
 fn nth_villager(world: &World, player: u8, index: usize) -> Option<EntityId> {
@@ -255,8 +266,11 @@ fn nearest_resource(world: &World, from: EntityId, slot: usize, nth: usize) -> O
 
 /// The first free tile within two of this player's town centre, in a fixed scan order.
 fn free_tile_near(world: &World, player: u8) -> Option<(u16, u16)> {
+    let centre_role = world.role_unit("town_centre")?;
     let centre = world.entities().iter().find(|entity| {
-        entity.player == player && entity.kind == EntityKind::Building && entity.unit == Some(109)
+        entity.player == player
+            && entity.kind == EntityKind::Building
+            && entity.unit == Some(centre_role)
     })?;
     let scale = world.scale();
     let origin = (
@@ -301,9 +315,11 @@ pub fn describe(outcome: &Outcome) -> String {
 }
 
 impl World {
-    /// The unit id a player's villagers use, from the economy tables.
+    /// The unit id a player's villagers use: the `start.villager` role, resolved through the
+    /// economy's role table.
     pub fn start_villager_unit(&self) -> Option<u32> {
-        self.economy.as_ref().map(|economy| economy.start.villager)
+        let economy = self.economy.as_ref()?;
+        economy.role.get(&economy.start.villager).copied()
     }
 
     /// Is this tile inside the map, walkable, and empty?

@@ -24,14 +24,19 @@ pub struct Economy {
     pub build: Build,
     pub decay: Decay,
     pub population: Population,
-    /// What a match begins with. Ids are config, never code (D6).
+    /// What a match begins with, by role name. Config, never code (D6).
     pub start: Start,
+    /// Role name → unit id. One vocabulary for everything that must not quote the dat's numbering:
+    /// the start of a match, the scenario format, and the engine's own seeding (D17).
+    pub role: BTreeMap<String, u32>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Start {
-    pub town_centre: u32,
-    pub villager: u32,
+    /// Role names, not unit ids: the roles below are the vocabulary content uses, and the engine
+    /// never has to know that a town centre is unit 109 (D17).
+    pub town_centre: String,
+    pub villager: String,
     pub villagers_per_player: u32,
 }
 
@@ -100,6 +105,8 @@ struct RawEconomy {
     decay: RawDecay,
     population: RawPopulation,
     start: RawStart,
+    /// Role name → unit id. Required: content that cannot name a unit at all is not content.
+    role: BTreeMap<String, u32>,
 }
 
 #[derive(Deserialize)]
@@ -157,8 +164,8 @@ struct RawDecay {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawStart {
-    town_centre: u32,
-    villager: u32,
+    town_centre: String,
+    villager: String,
     villagers_per_player: u32,
 }
 
@@ -251,12 +258,39 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         ));
     }
 
-    if raw.start.town_centre == 0 || raw.start.villager == 0 {
+    if raw.role.is_empty() {
         return Err(invalid(
             path,
-            "start",
-            "unit id zero is not a building or a villager; both fields must be set",
+            "role",
+            "no roles: the start and every scenario step name units by role, so an empty table \
+             names nothing",
         ));
+    }
+    // Zero is a real unit id, which is exactly why it cannot be a role: the field would read as
+    // unset and a match would seed whatever id 0 happens to be.
+    for (name, id) in &raw.role {
+        if *id == 0 {
+            return Err(invalid(
+                path,
+                "role",
+                format!("{name} = 0: unit id zero is a real unit, never a role"),
+            ));
+        }
+    }
+    for (field, name) in [
+        ("town_centre", &raw.start.town_centre),
+        ("villager", &raw.start.villager),
+    ] {
+        if !raw.role.contains_key(name) {
+            return Err(invalid(
+                path,
+                "start",
+                format!(
+                    "{field} names the role {name:?}, which [role] does not define (it defines: {})",
+                    raw.role.keys().cloned().collect::<Vec<_>>().join(", ")
+                ),
+            ));
+        }
     }
     if raw.start.town_centre == raw.start.villager {
         return Err(invalid(
@@ -361,6 +395,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             villager: raw.start.villager,
             villagers_per_player: raw.start.villagers_per_player,
         },
+        role: raw.role,
     })
 }
 

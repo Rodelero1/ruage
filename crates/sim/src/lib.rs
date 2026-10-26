@@ -304,6 +304,10 @@ pub enum SimError {
     UnknownResourceName {
         name: String,
     },
+    /// Content named a role the economy does not define.
+    NoRole {
+        role: String,
+    },
     /// The pack defines more resources than a stockpile has columns for.
     TooManyResources {
         count: usize,
@@ -398,6 +402,10 @@ impl fmt::Display for SimError {
                 f,
                 "a cost names the resource {name:?}, which this content pack does not define: \
                  refusing rather than paying from another slot"
+            ),
+            SimError::NoRole { role } => write!(
+                f,
+                "{role:?} is not a role in economy.toml's [role] table, so there is no unit behind it"
             ),
             SimError::TooManyResources { count, max } => write!(
                 f,
@@ -791,8 +799,10 @@ impl World {
         self.units = Some(units.clone());
         self.economy = Some(economy.clone());
         self.walk = Some(Walk::from_map(map));
-        let tc_stats = economy.start.town_centre;
-        let villager_stats = economy.start.villager;
+        // The start names roles; the economy's role table is what turns them into units, so this
+        // function never learns that a town centre is 109 (D17).
+        let tc_stats = self.role_unit_in(economy, &economy.start.town_centre)?;
+        let villager_stats = self.role_unit_in(economy, &economy.start.villager)?;
         let town_centre = units
             .unit(tc_stats)
             .ok_or(SimError::MissingUnit { id: tc_stats })?;
@@ -2000,6 +2010,25 @@ impl World {
         }
         self.resources = Some(resources.clone());
         Ok(())
+    }
+
+    /// The unit id behind a role name, from the loaded economy (`[role]` in economy.toml). This is
+    /// how content names a unit without quoting the dat's numbering (D17).
+    #[must_use]
+    pub fn role_unit(&self, role: &str) -> Option<u32> {
+        self.economy
+            .as_ref()
+            .and_then(|economy| economy.role.get(role).copied())
+    }
+
+    fn role_unit_in(&self, economy: &Economy, role: &str) -> Result<u32, SimError> {
+        economy
+            .role
+            .get(role)
+            .copied()
+            .ok_or_else(|| SimError::NoRole {
+                role: role.to_owned(),
+            })
     }
 
     /// The pack's resource table, when one has been loaded. A caller that wants to show what a

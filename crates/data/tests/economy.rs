@@ -41,9 +41,13 @@ food = "forage"
 gold = "gold"
 stone = "stone"
 
-[start]
+[role]
 town_centre = 109
 villager = 83
+
+[start]
+town_centre = "town_centre"
+villager = "villager"
 villagers_per_player = 3
 
 [population]
@@ -155,9 +159,13 @@ fn a_zero_variant_id_is_refused() {
 #[test]
 fn the_real_economy_names_the_starting_units() {
     let economy = load_economy_file(&repo("config/economy.toml")).expect("economy.toml loads");
-    assert_eq!(economy.start.town_centre, 109, "RTWC");
-    assert_eq!(economy.start.villager, 83, "VMBAS");
+    // A start names *roles*, and the role table is what turns them into dat ids (D17): nothing in
+    // `crates/` needs to know that a town centre is 109.
+    assert_eq!(economy.start.town_centre, "town_centre");
+    assert_eq!(economy.start.villager, "villager");
     assert_eq!(economy.start.villagers_per_player, 3);
+    assert_eq!(economy.role.get("town_centre"), Some(&109), "RTWC");
+    assert_eq!(economy.role.get("villager"), Some(&83), "VMBAS");
 }
 
 #[test]
@@ -209,18 +217,14 @@ fn a_missing_start_block_is_refused() {
 }
 
 #[test]
-fn start_ids_must_be_positive_and_distinct() {
-    let zero = GOOD.replace("town_centre = 109", "town_centre = 0");
-    assert!(
-        load_economy_str(&zero, "economy.toml").is_err(),
-        "id zero is not a unit"
-    );
-
-    let same = GOOD.replace("villager = 83", "villager = 109");
+fn start_roles_must_be_defined_and_distinct() {
+    // A role of 0 is refused (see `a_role_cannot_be_unit_zero`); a *start* naming the same role
+    // twice would seed one unit where a match needs two kinds of thing.
+    let same = GOOD.replace("villager = \"villager\"", "villager = \"town_centre\"");
     let err = load_economy_str(&same, "economy.toml")
-        .expect_err("one id cannot be both the town centre and the villager")
+        .expect_err("one role cannot be both the town centre and the villager")
         .to_string();
-    assert!(err.contains("109"), "got: {err}");
+    assert!(err.contains("town_centre"), "got: {err}");
 }
 
 #[test]
@@ -291,4 +295,42 @@ fn a_building_that_trains_nothing_is_refused() {
         .expect_err("an empty unit list must be refused")
         .to_string();
     assert!(err.contains("trains nothing"), "got: {err}");
+}
+
+/// A start that names a role the table does not define is a match nobody can seed: the engine has a
+/// word for what to place and no unit behind it.
+#[test]
+fn a_start_naming_an_undefined_role_is_refused() {
+    let bad = GOOD.replace(
+        "town_centre = \"town_centre\"",
+        "town_centre = \"great_hall\"",
+    );
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("a start role with no unit must be refused")
+        .to_string();
+    assert!(
+        err.contains("great_hall"),
+        "the error should name it: {err}"
+    );
+}
+
+/// Unit 0 is a real dat unit, so it is never a role: a zero here would seed a match with whatever
+/// id 0 happens to be, and no test would notice.
+#[test]
+fn a_role_cannot_be_unit_zero() {
+    let bad = GOOD.replace("villager = 83", "villager = 0");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("role 0 is not a unit id a match can place")
+        .to_string();
+    assert!(err.contains("villager"), "got: {err}");
+}
+
+/// A role table is the vocabulary scenarios and the start use; empty, it names nothing.
+#[test]
+fn an_empty_role_table_is_refused() {
+    let bad = GOOD.replace("[role]\ntown_centre = 109\nvillager = 83\n", "[role]\n");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("no roles means no unit can be named")
+        .to_string();
+    assert!(err.contains("role"), "got: {err}");
 }
