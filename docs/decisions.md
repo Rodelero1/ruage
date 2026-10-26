@@ -178,3 +178,38 @@ replacement" is therefore written as a schema and a boundary, not as a graphics 
 `VER 5.7.2`. The unit → sprite *link* and how the install stores the numbered graphic resources
 (DRS, and whether `slp_id` indexes it directly) are **not** checked yet — that is the first task of
 the asset-pack work, not an assumption to build on.
+
+---
+
+## D14 (amended 2026-10-25) - openage is the primary prior-art source
+
+The weekly watch (Monday 09:00 UTC) now leads with **SFTtech/openage** rather than treating the field
+evenly, because it is the one project that has already paid the costs we are about to pay: a
+from-scratch AoE2 engine with its own asset pipeline.
+
+Four specific things to learn there, in order of usefulness to us:
+
+1. **Their asset pipeline (D18).** How the install's SLP/DRS graphics are converted into openage's
+   own formats, and how palettes, player colour, frame anchors and animation timing are handled.
+   This is our asset-pack layer, and it is the difference between "graphics replaceable" being a
+   schema and being a rewrite.
+2. **Their engine/content split** - the *nyan* data format - against D17. Where is their boundary
+   better than ours, and where does it force engine changes that ours avoids?
+3. **Their determinism and networking posture, as a contrast and not a model.** openage's time
+   subsystem is a wall-clock event queue with a 50 ms update cap, not a fixed tick (recorded under
+   U12). Our tick loop is not negotiable, so this is the one place where being similar would be a
+   mistake.
+4. **Effect and tech modelling**, against what is pinned (kind 102 disables a tech, kind 4 adds an
+   attribute, kind 5 multiplies) and what is not (U16's ambiguous `a` field, U17's negative packed
+   attack).
+
+**Licence rule, unchanged and not negotiable:** openage and the genie tooling are GPL-3.0. Reading
+for ideas is fine; no code enters `crates/`, which is MIT/Apache. "It was only a small function" is
+the sentence that creates the problem, and the watch is asked to flag anything that looks like it.
+
+Still watched at lower priority: `librematch/genie` (format readers, exact-DE target - D13),
+`SiegeEngineers/genie-rs` (dat modelling; check whether U15's `create_time` and U17's negative
+packed values are now modelled there), and any new deterministic-simulation writeups.
+
+The watch checks against our open questions rather than in the abstract: it is asked to name any
+U-number a source now answers, and to say "nothing changed" when nothing did.
