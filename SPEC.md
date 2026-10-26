@@ -610,6 +610,7 @@ should say so rather than claim otherwise.
 | `docs/mechanics/*.md` | current | 6 subsystem files + `README.md` (tag legend, index, unknown registry U1–U12) |
 | `docs/formats/*.md` | planned | dat / slp / dld / rms / per — what our parser assumes |
 | `docs/decisions.md` | current | D1–D21 with rationale: D5 dat authoritative, D6 config layer, D7 mandatory TDD, D8 no game data in git, D17 four layers, D20 eight sides, D21 licence |
+| `docs/next-step.md` | current | What the effect interpreter costs and buys, measured from `effects.toml`: 1,667 of 3,306 commands are kinds 4/5, 270 effects are nothing else, and the engine already resolves stats at order time |
 | `docs/plan-resource-deletion.md` | **done (2026-10-26)** | The plan D17 was paid down with: what was load-bearing, the order of work, and the test that proves the boundary — `a_content_pack_with_our_own_resources_loads_and_spends` |
 | `build/` | throwaway | Inflated dats, converted JSON, Ghidra projects |
 
