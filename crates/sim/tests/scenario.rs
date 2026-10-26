@@ -301,3 +301,87 @@ role = "wonder"
         "the refusal must name the role: {refusal}"
     );
 }
+
+/// The engine must not know the *word* "town_centre": it is a role name from `economy.toml`, and a
+/// pack of our own may call its keep anything it likes. This builds a world whose only gathering
+/// point is called `keep` and asks for a house beside it, so the engine's own free-tile search has
+/// to resolve the role rather than a literal (D17).
+#[test]
+fn a_world_whose_town_centre_role_is_renamed_still_finds_a_build_site() {
+    let Some(fx) = fixture() else { return };
+    let mut economy = fx.economy.clone();
+    let tc = economy
+        .role
+        .remove("town_centre")
+        .expect("the project pack has one");
+    economy.role.insert("keep".to_owned(), tc);
+    economy.start.town_centre = "keep".to_owned();
+
+    let mut world = World::new(&fx.settings, 5).expect("world");
+    world
+        .seed_from(&fx.map, &economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    world.load_combat(&fx.combat);
+
+    // Three villagers gather, then one of them puts up a house beside the renamed centre: the site
+    // is the thing under test, and wood is only what makes the order legal.
+    let scenario = load_scenario_str(
+        r#"
+schema = 2
+duration_seconds = 150
+
+[[step]]
+at_seconds = 0.0
+player = 1
+kind = "gather"
+villager = 0
+resource = "wood"
+
+[[step]]
+at_seconds = 0.0
+player = 1
+kind = "gather"
+villager = 1
+resource = "wood"
+nth = 1
+
+[[step]]
+at_seconds = 0.0
+player = 1
+kind = "gather"
+villager = 2
+resource = "wood"
+nth = 2
+
+[[step]]
+at_seconds = 120.0
+player = 1
+kind = "build"
+villager = 0
+role = "house"
+"#,
+        "<scenario>",
+    )
+    .expect("the scenario parses");
+
+    let mut runner = Runner::new(&scenario, world.tick_rate_hz()).expect("runnable");
+    for _ in 0..u64::from(world.tick_rate_hz()) * 150 {
+        runner.due(&mut world);
+        world.step().expect("step");
+    }
+    let refused: Vec<String> = runner
+        .outcomes
+        .iter()
+        .filter_map(|(_, outcome)| match outcome {
+            Outcome::Refused(reason) => Some(reason.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        refused.is_empty(),
+        "a build step must not need the literal \"town_centre\": {refused:?}"
+    );
+}

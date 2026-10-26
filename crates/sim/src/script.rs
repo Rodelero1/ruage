@@ -266,11 +266,12 @@ fn nearest_resource(world: &World, from: EntityId, slot: usize, nth: usize) -> O
 
 /// The first free tile within two of this player's town centre, in a fixed scan order.
 fn free_tile_near(world: &World, player: u8) -> Option<(u16, u16)> {
-    let centre_role = world.role_unit("town_centre")?;
+    // The start's own town-centre role, not the word: a pack of our own may call it "keep" (D17).
+    let centre_unit = world.start_town_centre_unit()?;
     let centre = world.entities().iter().find(|entity| {
         entity.player == player
             && entity.kind == EntityKind::Building
-            && entity.unit == Some(centre_role)
+            && entity.unit == Some(centre_unit)
     })?;
     let scale = world.scale();
     let origin = (
@@ -320,6 +321,13 @@ impl World {
     pub fn start_villager_unit(&self) -> Option<u32> {
         let economy = self.economy.as_ref()?;
         economy.role.get(&economy.start.villager).copied()
+    }
+
+    /// The unit id of the town centre a match starts from: the `start.town_centre` role. Scripted
+    /// steps place buildings beside it, and they must do that by role rather than by the word.
+    pub fn start_town_centre_unit(&self) -> Option<u32> {
+        let economy = self.economy.as_ref()?;
+        economy.role.get(&economy.start.town_centre).copied()
     }
 
     /// Is this tile inside the map, walkable, and empty?

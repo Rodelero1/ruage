@@ -17,10 +17,15 @@ Ids belong to seeding order and would rot the moment the map changed, so a step 
 |---|---|
 | `villager = 0` | this player's first villager (by entity id) |
 | `resource = "wood"`, `nth = 1` | the second-nearest wood node to that villager |
-| `unit = 70` | the unit table's id: a house |
-| `building = "barracks"` | this player's finished barracks |
-| `attacker = 74` | this player's newest spearman |
+| `role = "house"` | a unit, by its role in `economy.toml`'s `[role]` table |
+| `building = "barracks"` | this player's finished barracks, also by role |
+| `attacker = "spearman"` | this player's newest spearman, also by role |
 | `target = "nearest_enemy"` | the closest enemy unit |
+
+**Schema 2 names roles; schema 1 wrote dat ids** (`unit = 70`, `attacker = 74`). The role table is
+the engine's whole vocabulary for units - the start of a match uses it too - so a scenario can be
+replayed against a pack whose ids are entirely different, which is what "content" means here (D17).
+An unknown role is refused with its name, and so is an unknown resource name.
 
 `nth` exists for a specific reason: three villagers each told "the nearest tree" all pick the *same*
 tree, exhaust its 200 wood, and idle. Telling them 0, 1 and 2 puts them on three trees.

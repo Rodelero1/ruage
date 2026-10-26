@@ -24,6 +24,33 @@ A ten-minute match at 20 Hz (12,000 ticks, 126 entities): **28 ms** wall.
 Flat ns/entity = linear in entities. At 2,000 entities a tick costs 33 µs, which is 0.65 ms per
 simulated second — 0.06% of one core. There is no performance problem to solve here yet.
 
+## Third pass, after the resource-enum deletion (2026-10-26)
+
+Same probes, same machine, re-run three times because the first attempt was wrong (below):
+
+| entities | µs/tick | ns/entity/tick | previous |
+|---|---|---|---|
+| 126 | 2.26–2.36 | 18.0–18.8 | 2.35 / 18.6 |
+| 376 | 6.10–6.34 | 16.0–16.9 | 6.16 / 16.4 |
+| 626 | 10.78–10.88 | 17.2–17.4 | 11.19 / 17.9 |
+| 1126 | 18.09–18.25 | 16.1–16.2 | 18.63 / 16.5 |
+| 2126 | 32.99–33.44 | 15.5–15.7 | 32.62 / 15.3 |
+
+A ten-minute match (12,000 ticks, 126 entities): **27.4–28.5 ms** wall. Flat ns/entity again, so
+replacing the enum with a content table cost nothing measurable: the tick never looked a resource
+up, and widening the stockpile row from 4 columns to 8 touches only the state hash, not the loop.
+
+**The measurement that was wrong, and why it is worth writing down.** The first run of this pass
+reported 21.05 µs at 1,126 entities and **48.63 µs at 2,126 — a rising ns/entity (22.9), which is
+the exact signature of the O(n²) the second pass removed.** It was noise: a `--release` build of the
+probe itself was still running in the background, and this container has **two cores**. Nothing in
+the code had changed between the bad run and the good ones. Rules that follow: measure with nothing
+else running, repeat three times, and treat a *rising* ns/entity as a hypothesis to test rather than
+a verdict - it is also what a busy machine looks like once the small worlds stop fitting in cache.
+
+Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
+with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
+
 ## What the first pass found, and why the numbers before it were bad
 
 The tick used to collect this tick's movement as `(id, dx, dy)`, then resolve each id with a linear

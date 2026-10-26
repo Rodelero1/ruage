@@ -101,11 +101,15 @@ variants nothing on this map triggers). The loader refuses a name that is not a 
 `[gather.variant]`, so a typo is a startup failure rather than a villager who walks to a tree and
 never gathers.
 
-`economy.toml` also carries `[start]` — the town centre id, the villager id and how many
-villagers each player begins with. Those are the last ids that were in danger of being written
-into code; the engine now asks the config what a match begins with, and `World::seed_from` places
-one town centre per map town-centre tile and that many villagers on the nearest free walkable
-tiles, with hp and speed resolved from `gamedata/units.toml`.
+`economy.toml` also carries `[start]` — **role names**, not ids: which role is the town centre,
+which is the villager, and how many villagers each player begins with — plus `[role]`, the table that
+turns a role into a unit id (`town_centre = 109`, `house = 70`, `barracks = 12`, `spearman = 74`).
+The role table is the engine's whole vocabulary for units, so nothing outside content has to know
+that a town centre is 109 (D17): `World::seed_from` places one town centre per map town-centre tile
+and that many villagers on the nearest free walkable tiles, a scenario step names `role = "house"`,
+and the engine's own free-tile search finds the centre through `start.town_centre`. The loader
+refuses an empty role table, a role mapped to unit 0 (zero is a real unit id, so it cannot mean
+"unset"), and a `[start]` naming a role the table does not define.
 
 The map loader enforces the invariants an author can get wrong: a row must be exactly `width`
 characters, terrain characters are `G` or `F` only, every resource tile is on the map, **wood
