@@ -120,3 +120,61 @@ one arithmetic step, and it needs no code.
 
 **Implementation rule until then:** the farm rate must be a *single named constant* loaded
 from the dat (`FARM.task_info.work_rate`), never inlined, so a re-measure changes one number.
+
+---
+
+## D17 — Four layers, and only one of them is about Age of Empires
+
+**Decided 2026-10-25.** The engine must be able to ship a game that is not Age of Empires II,
+without being rewritten.
+
+| layer | owns | may know about AoE2? |
+|---|---|---|
+| **engine** (`crates/`) | fixed-point determinism, tick loop, commands and replays, pathing, entity model, damage arithmetic, effect verbs | **no** — it knows *kinds* of things, never particular ones |
+| **content pack** (`config/`, our schema) | resources, units, buildings, techs, effects, map, scenario — in our vocabulary | carries AoE2's *values* today; nothing about them is typed into the engine |
+| **importer** (tooling repo, D12) | dat → content pack, plus the dat's semantics (packed attack, class ids, effect kinds) | **all of the AoE2 knowledge lives here** |
+| **asset pack** | entity + state → sprite reference | today points at the install's graphics; later at ours |
+
+The rule that follows: **any number or id that means something only because of AoE2 stays outside
+`crates/`**. Pinning "kind 5 multiplies" and "attack is packed `class * 256 + amount`" is importer
+work; the engine receives "add 1 to attack class 4".
+
+Consequences already visible in the code:
+
+- `ResourceKind` is a fixed enum and stockpiles are `[[u32; ResourceKind::COUNT]; 2]` — four
+  resources and two players in the *type*. (b) below is impossible until this is data.
+- `script.rs` names `109` and `12`; the scenario format should name roles from the content pack.
+- `Attribute::from_id` knowing 0/1/8/9 is fine *in the importer*, not in the engine.
+
+## D18 — Target shape: A now, B-capable; assets swappable from the start
+
+**Decided 2026-10-25.** The owner's words: keep the vibe and dynamics; start with the original
+graphics, tech trees and stats; be ready to replace the graphics; move towards our own content as far
+as the cost allows.
+
+- **(a) now.** Reference content is the dat's numbers and the install's art. That is what makes the
+  work verifiable: every mechanic has a known-good value to compare against.
+- **(b) scheduled, not blocked.** Own resources, own tech tree, own stats — the engine must not need
+  a change to accept them. That is what D17 buys.
+- **(c) not planned.** Divergent rules (new resource set, ages replaced) would still be content, and
+  the same schema should carry them; nothing is designed against that hope.
+
+**Graphics readiness is a data question before it is a rendering question.** The dat carries a sprite
+table — `slp_id`, `layer`, `force_player_color`, `color_table`, `num_deltas`, `bounding_box`,
+`sound_id` — with animation deltas and player-colour flags, so an entity → sprite binding can be
+**generated** by the importer rather than hand-authored. Two consequences:
+
+1. the engine addresses visuals by a *content id*, never by a file name, so a replacement pack is a
+   different table with the same shape;
+2. sprite geometry the simulation needs (radius, footprint) is already in the unit table, so
+   **swapping art cannot change gameplay** — which is the test to write when the first renderer
+   lands.
+
+**Not yet done, deliberately:** there is no renderer. The headless run is the harness, and a renderer
+is a large piece of work that buys nothing until the simulation is worth watching. "Ready for
+replacement" is therefore written as a schema and a boundary, not as a graphics engine.
+
+**Verified / not verified.** The sprite fields above are read from `GenieDatParser`'s model at
+`VER 5.7.2`. The unit → sprite *link* and how the install stores the numbered graphic resources
+(DRS, and whether `slp_id` indexes it directly) are **not** checked yet — that is the first task of
+the asset-pack work, not an assumption to build on.
