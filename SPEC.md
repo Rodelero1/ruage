@@ -6,7 +6,7 @@ this tree is either source data or supporting documentation.
 
 | | |
 |---|---|
-| Spec version | 0.52 |
+| Spec version | 0.53 |
 | Last updated | 2026-10-26 |
 | Decision status | **D1 = G1, D2 = file-based oracle, D17 = four layers with the resource enum deleted — see §6 and `docs/decisions.md`** |
 | Historical handoff | [`docs/age2hd.md`](docs/age2hd.md) — read it *through* the errata in §4 |
@@ -54,9 +54,6 @@ workspace/Age2HD/
 ├── crates/
 │   ├── fixed/               ruage-fixed — exact decimal → i64 fixed point, checked ops
 │   └── data/                ruage-data — strict config loading, -1.0 sentinel
-├── tools/                   ← shipped tooling, TEST-FIRST (D7, §11)
-│   ├── genconfig/           dat → config/gamedata generator
-│   └── tests/               pytest suite
 ├── build/                   derived artifacts: inflated dats, converted JSON, probe
 │                            scripts (exempt from D7), Ghidra projects. Never committed.
 └── Age2HD/                  the Steam install — READ ONLY, do not modify
@@ -69,9 +66,16 @@ workspace/Age2HD/
     └── resources/en, _packages, Docs, SaveGame, …
 ```
 
-Rules: write only to `SPEC.md`, `docs/`, `config/`, `tools/`, `build/`. Never write into
+Rules: write only to `SPEC.md`, `docs/`, `config/`, `build/`. Never write into
 `Age2HD/`. Anything generated goes in `build/` or `config/gamedata/` and must be
 reproducible from a recipe in this file.
+
+**The importer is a separate repository** (`ruage-tools`, D12, split 2026-10-26): it holds the
+`.dat` reader, the semantics that belong to Age of Empires (resource ids, packed attack, effect
+kinds) and its pytest suite. It is GPL-3.0-or-later because it imports `GenieDatParser`; this
+repository is MIT OR Apache-2.0 and reads only TOML. The split is why this repository's history
+contains no import of that parser (checked: `git log --all -- tools/` is empty after the rewrite),
+so publishing it publishes nothing borrowed.
 
 ---
 
@@ -481,7 +485,7 @@ exists without a test, it cannot be trusted, and unverified code is worse than m
 | Must be test-first | Exempt |
 |---|---|
 | Rust engine crates (`sim`, `data`, `config`) | Throwaway analysis probes in `build/tools/` (`save-explore.py`, `introspect.py`, one-off dat queries) |
-| Shipped tooling that produces artefacts (`gen_config.py`) | Generated output (`config/gamedata/*.toml`) — verified by tests, not written by hand |
+| Shipped tooling that produces artefacts (now in `ruage-tools`, same rule) | Generated output (`config/gamedata/*.toml`) — verified by tests, not written by hand |
 | Anything that touches the dat loader, the config loader, or the sim loop | Documentation and `docs/**` |
 
 The exemption is for *exploration*, not for shipping: when a probe's logic graduates into the
@@ -588,11 +592,12 @@ should say so rather than claim otherwise.
 
 | Path | Status | Purpose |
 |---|---|---|
-| `SPEC.md` | current, v0.52 | Entry point — this file |
+| `SPEC.md` | current, v0.53 | Entry point — this file |
 | `docs/age2hd.md` | historical, **superseded by §4** | 2026-10-23 handoff from the previous session |
 | `docs/hermes.container` | reference | Host container definition |
 | `docs/parse-notes.md` | current | Step 1 record: toolchain, reproduce commands, parse counts, cross-validation, per-civ unit model, caveats, licences |
-| `tools/` | current | **D7** — test-first tooling: `genconfig/` (dat → config) + 17 pytest tests |
+| `ruage-tools` (separate repo) | current | **D7/D12** — test-first importer: `genconfig/` (dat → content pack) + 22 pytest tests, GPL-3.0-or-later |
+| `README.md`, `LICENSE-MIT`, `LICENSE-APACHE` | current | Public entry point and the dual licence (D21) |
 | `config/` | current | **D6** — gamedata TOML (generated) + behaviour configs + `overrides.toml`; see `docs/config.md` |
 | `docs/config.md` | current | Config layer: precedence, strict loading, provenance tags, regeneration, staleness check, D4 caveat |
 | `crates/fixed`, `crates/data` | current | Fixed-point arithmetic + strict config loaders (sim, economy, map, units, techs, effects, combat, resources, pack) |
@@ -627,6 +632,7 @@ should say so rather than claim otherwise.
 | 2026-10-23 | v0.11 — **D7: TDD is mandatory** (§11). Iron Law, recorded-RED requirement, scope = engine crates + shipped tooling (probes exempt), behaviour-based coverage with no % gate, plus the eight project-specific tests that must precede their code (config strictness, override precedence, manifest staleness, fixed-point exactness, determinism hash, damage formula, effects interpreter). |
 | 2026-10-23 | v0.12 — `gen_config.py` **deleted and rewritten test-first** as `tools/genconfig/` (17 tests, each seen failing first: float formatting, sub-precision guard, string escaping, name decoding, unit/tech/effect/civ records, all four renderers, manifest, CLI, and a real-dat integration test). Output verified byte-identical in data to the deleted script. SPEC §2 layout now includes `config/` and `tools/`. |
 | 2026-10-23 | v0.13 — **D8: no game data in version control** (EU compliance). `git init` + `.gitignore` + tested pre-commit hook; 35 files / 328 KB committed, zero game data staged. Added `docs/licensing.md` (legal basis: Software Directive Art. 6 interoperability, Database Directive Art. 7 substantial extraction) and the project skill `age2hd-engine-conventions` so future sessions get the invariants and dat traps without re-discovery. |
+| 2026-10-26 | v0.53 — **the importer leaves, and the engine's history comes with it.** D4 said publish early with the generator split first; D12 said the split is mechanical. Both are now true: `tools/` moved to its own repository (`Rodelero1/ruage-tools`, GPL-3.0-or-later) carrying every commit that touched it, and this repository's history was **rewritten** so the GPL parser never appears in it (`git log --all -- tools/` is empty) — because deleting a directory on top of history would still publish it. The tooling side needed three changes the split forced: `tests/test_config_consistency.py` and `tests/test_integration.py` resolve `RUAGE_CONFIG`/`RUAGE_DAT` instead of walking to a sibling `config/` (and skip with the variable's name when unset), `pyproject.toml` declares GPL-3.0-or-later and the distribution name `ruage-tools`, and a README states the boundary. This side gains `README.md`, `LICENSE-MIT`, `LICENSE-APACHE` and the recipe in `docs/config.md` now clones the importer rather than running `cd tools`. Both repositories are **private** at the time of writing: the split is the prerequisite, the visibility flip is the owner's. **175 tests**, unchanged. |
 | 2026-10-26 | v0.52 — **the resource kinds are content, and `ResourceKind` is gone.** Three commits pay down D17's most-cited leak. (1) The four cost sites (train/build, check/apply) resolve a cost's resource through the pack, and two content mistakes are refused rather than guessed: an id the pack does not carry (`UnknownResource` — the old code *skipped* such a cost, so a pack that could not price a house made it free) and an id in a column past the stockpile (`ResourceSlotOutOfRange`). (2) The stockpile's width becomes the engine's (`MAX_RESOURCES = 8`, because a row is an array) and the *pack's count* is checked at load (`TooManyResources`), which retires that range check entirely. (3) `ResourceKind`, `index()`, `dat_id()`, `from_dat_id()`, `COUNT` and the bridge test are deleted: a map node carries the pack's **column** (`map.toml` keeps readable names, `load_map_str` takes the pack and refuses a name it does not define), where a node may stand is content (`site = "forest"` on wood, open ground by default, both directions enforced), `[gather.resource_task]` is keyed by resource **name**, a scenario step names a resource and an unknown one is reported not skipped, `World::stock`/`slot_of`/`resources()` speak columns, and a cost may name its resource (`{ resource = "timber", amount = 25 }`) beside the reference form (`[1, 25]`), untagged so the 574 KB generated table is byte-identical. **Finish line, `a_content_pack_with_our_own_resources_loads_and_spends`:** a pack of five resources with timber in slot 4, a map whose wood is called timber, a three-unit table whose house costs `{ resource = "timber", amount = 25 }` — gather 25 timber into the fifth column, order the house, watch it finish at 550 hp, with grain (slot 0) asserted to stay 0 the whole way, so a fallback-to-column-zero pays in the wrong goods and the test says so. Two stale tests were rewritten rather than deleted (the economy join is keyed by name now; unit costs are `Cost`/`CostResource`, not a `(u8, u16)` pair). **175 tests**, clippy `--all-targets` and fmt clean, tools suite 22 passed. |
 | 2026-10-25 | v0.51 — **eight sides, and the repository goes public soon.** D20: stockpiles are `[..; MAX_PLAYERS]` with `MAX_PLAYERS = 8` (4v4), not two; `Command::Spawn` refuses a ninth side in both the dry run and the apply, so the failure is `PlayerOutOfRange` rather than a panic on the array, and player 0 stays neutral because resource nodes live there. The movement hook `spawn_now` uses player 0, which is how the first version of the check broke six tests — the bound is a ceiling, not a range. D4 resolved: publish early, **generator split out first** (D12), because while `tools/genconfig` imports GPL-3.0 `GenieDatParser` in the same repository, publishing publishes its obligations too. Map identity stays inside the pack until map variety arrives, then becomes a per-match field. **161 tests.** |
 | 2026-10-25 | v0.50 — **a match's content becomes one identified thing.** `ContentPack::load` reads all six files a match depends on and produces a **content hash** (FNV-1a over each file's bytes mixed with its name, fixed order). The hash is over **bytes, not parsed values**: it is what "same data" actually means, no ignored field can slip past, and it needs no second serialisation to keep in step. Cost accepted: a comment edit changes it, so a modded pack is republished rather than tweaked. `differences()` names the disagreeing file so a handshake reports which one; the identity goes into the match handshake and replay header beside `tick_rate_hz` and `fixed_point_scale` (D16), and a mismatch refuses the match. Not wired to networking yet — deliberately: the identity exists so the first netcode cannot be written without it. Also `pack_path` records that `units.toml` lives under `gamedata/` because it is generated (D8) while the rest are hand-written; a pack is one thing to a handshake regardless of the directory layout. **160 tests.** |

@@ -42,7 +42,7 @@ of blobs, zero derived game data (verified against the remote tree, not just the
 |---|---|
 | `SPEC.md`, `docs/**` | Our analysis, decisions, sources. Facts and formulas, with small illustrative values quoted for explanation. |
 | `config/*.toml` (except `gamedata/`) | Hand-written engine constants and overrides. Our choices, not their data. |
-| `tools/**` | Our code, tests, lockfile. |
+| `tools/**` | **Moved out** (2026-10-26, D12): the importer's own repository. |
 | `.gitignore` | The policy itself. |
 
 ## What is never in the repository
@@ -65,7 +65,7 @@ cd tools
 uv run python -m genconfig ../Age2HD/resources/_common/dat/empires2_x2_p1.dat ../config
 ```
 
-That is the point of `tools/genconfig` being shipped while its *output* is not: the code is
+That is the point of the importer (`ruage-tools`) being shipped while its *output* is not: the code is
 ours to publish, the data is not ours to distribute.
 
 ## Documentation rule
@@ -103,7 +103,7 @@ tools/genconfig  ──imports──▶  GenieDatParser (GPL-3.0, Divy1211)
 - **The GPL covers the program, not its output.** The generated TOML is not GPL-licensed — it is
   derived game data, restricted by D8 instead, which is a different and stricter rule.
 - **Consequence.** Publishing the engine cannot be affected by this licence; only the packaging
-  of `tools/` is a question. **Decided (D12):** the generator moves to its own repository,
+  of the generator is a question. **Decided (D12), and done 2026-10-26:** it moved to its own repository,
   GPL-3.0, together with a fork of the parser if we have to modify it — and we probably will,
   since `VER 5.7.2` already raises `VersionError` for the per-task list and cannot read
   `unique_unit_effect_ids` or `name2`. Forking a GPL library is permitted and stays GPL, so the

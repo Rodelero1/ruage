@@ -276,7 +276,9 @@ retrofit.
 
 Order, because it is forced:
 
-1. **Split the generator out first** (D12). `tools/genconfig` imports the GPL-3.0 `GenieDatParser`;
+1. **Split the generator out first** (D12). **Done 2026-10-26** — `Rodelero1/ruage-tools`, and this
+   repository's history was rewritten so the parser never appears in it. The original reasoning:
+   `tools/genconfig` imports the GPL-3.0 `GenieDatParser`;
    while those share a repository, publishing publishes the GPL dependency and its obligations with
    it.
 2. Then the engine repository is publishable as it stands: MIT/Apache `crates/`, no game data (D8),

@@ -59,16 +59,23 @@ behaviour constants are separate keys that never collide with data keys.
 
 ## Regenerating
 
+The generator lives in its **own repository**, [`ruage-tools`](https://github.com/Rodelero1/ruage-tools)
+(D12, split 2026-10-26): it is GPL-3.0-or-later because it imports `GenieDatParser`, and this
+repository is MIT OR Apache-2.0. It takes the dat and the output directory as arguments, so it
+writes into *this* checkout without living in it.
+
 ```bash
-cd /opt/data/workspace/Age2HD/tools
+git clone https://github.com/Rodelero1/ruage-tools ../ruage-tools
+cd ../ruage-tools
 uv run python -m genconfig \
-  ../Age2HD/resources/_common/dat/empires2_x2_p1.dat \
-  ../config
+  /opt/data/workspace/Age2HD/Age2HD/resources/_common/dat/empires2_x2_p1.dat \
+  ../ruage/config
 ```
 
-The generator is **test-first** (D7, SPEC §11): 17 tests in `tools/tests/`, run with
-`cd tools && uv run --with pytest pytest`. The suite includes a real-dat integration test that
-asserts 1,166 units, knight 100 HP / 1.35 speed / 2-2 armour, and effect 195 carrying floats.
+The generator is **test-first** (D7, SPEC §11), and its suite stays with it: 22 tests, run with
+`uv run --with pytest pytest`. Two of them need this side of the boundary and skip without it:
+`RUAGE_CONFIG=<this checkout>/config` for the cross-file checks, `RUAGE_DAT=<install>/…/empires2_x2_p1.dat`
+for the real-dat integration test (1,166 units, knight 100 HP / 1.35 speed / 2-2 armour, effect 195).
 
 `config/MANIFEST.toml` records the dat's sha256, byte size, per-file sha256s and counts.
 
