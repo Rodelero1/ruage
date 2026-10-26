@@ -280,6 +280,100 @@ name = "sand"
 dat_id = 1
 "#;
 
+/// A pack with two names, neither of them the one the house is priced in.
+const NO_TIMBER_PACK: &str = r#"
+schema = 1
+
+[[resource]]
+slot = 0
+name = "grain"
+
+[[resource]]
+slot = 1
+name = "iron"
+"#;
+
+#[test]
+fn a_named_cost_the_pack_does_not_define_is_refused() {
+    // Same failure class as an unknown reference id, one namespace over: the pack is the only
+    // authority on what a name means, so a name it does not carry must refuse the order rather than
+    // be quietly dropped - a dropped cost is a free building.
+    //
+    // The content is the finish-line fixture's (a house priced in `timber`), with a pack whose names
+    // are grain and iron: everything about this world is legal except the one word the cost uses.
+    let Some(fx) = fixture() else { return };
+    let pack =
+        ruage_data::load_resources_str(NO_TIMBER_PACK, "<no timber>").expect("the pack loads");
+    let units = ruage_data::load_units_str(OWN_UNITS, "<own units>").expect("the units load");
+    let map = ruage_data::load_map_str(
+        &OWN_MAP
+            .replace("kind = \"timber\"", "kind = \"grain\"")
+            .replace("tiles = [[1, 1], [2, 1]]", "tiles = [[3, 3]]"),
+        "<own map>",
+        &pack,
+    )
+    .expect("the map loads: grain on open ground");
+
+    let mut economy = fx.economy.clone();
+    economy.gather.variant.insert("wood".to_owned(), 83);
+    economy
+        .gather
+        .resource_task
+        .insert("grain".to_owned(), "wood".to_owned());
+
+    let mut world = World::new(&fx.settings, 5).expect("world");
+    world.seed_from(&map, &economy, &units).expect("seeding");
+    world.load_resources(&pack).expect("the pack fits");
+
+    let grain = pack.slot_of("grain").expect("grain");
+    let villager = world
+        .entities()
+        .iter()
+        .find(|e| e.player == 1 && e.kind == EntityKind::Unit)
+        .map(|e| e.id)
+        .expect("a villager");
+    let node = world
+        .entities()
+        .iter()
+        .find(|e| e.kind == EntityKind::Resource(grain))
+        .map(|e| e.id)
+        .expect("a grain node");
+    world
+        .submit_checked(Command::Gather { villager, node })
+        .expect("gather");
+    for _ in 0..2_000 {
+        world.step().expect("step");
+        if world.stock(1, grain) > 0 {
+            break;
+        }
+    }
+    let before = world.stock(1, grain);
+    assert!(before > 0, "the villager banked nothing to spend");
+
+    let err = world
+        .submit_checked(Command::Build {
+            villager,
+            unit: 70,
+            at: (4, 4),
+        })
+        .expect_err("a named cost the pack does not define must be refused");
+    assert!(
+        matches!(err, SimError::UnknownResourceName { ref name } if name == "timber"),
+        "expected UnknownResourceName for timber, got {err:?}"
+    );
+    let text = format!("{err}");
+    assert!(
+        text.contains("timber") && text.contains("does not define"),
+        "the refusal must name the resource and say the pack lacks it: {text}"
+    );
+    world.step().expect("step");
+    assert_eq!(
+        world.stock(1, grain),
+        before,
+        "a refused order must not be paid"
+    );
+}
+
 #[test]
 fn a_pack_wider_than_the_stockpile_is_refused_when_it_is_loaded() {
     // The stockpile is a fixed array, so its width is a fact about the engine and a pack has to fit

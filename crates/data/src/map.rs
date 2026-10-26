@@ -218,9 +218,20 @@ pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, Con
             };
             // Where this resource may stand is content (`site` in resources.toml), because "wood
             // grows in forests" is a fact about wood. This is the check that catches "a tree you
-            // can walk through" or "gold in the trees".
-            match pack.site(slot) {
-                Some(ResourceSite::Forest) if tile != Terrain::Forest => {
+            // can walk through" or "gold in the trees". A column the pack cannot describe at all is
+            // a contradiction in the pack, so it is refused rather than treated as open ground.
+            let Some(site) = pack.site(slot) else {
+                return Err(invalid(
+                    path,
+                    "map.resource",
+                    format!(
+                        "the pack names {:?} in column {slot} but does not say where it may stand",
+                        group.kind
+                    ),
+                ));
+            };
+            match site {
+                ResourceSite::Forest if tile != Terrain::Forest => {
                     return Err(invalid(
                         path,
                         "map.resource",
@@ -230,8 +241,8 @@ pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, Con
                         ),
                     ));
                 }
-                Some(ResourceSite::Forest) | None => {}
-                Some(ResourceSite::Open) if tile == Terrain::Forest => {
+                ResourceSite::Forest => {}
+                ResourceSite::Open if tile == Terrain::Forest => {
                     return Err(invalid(
                         path,
                         "map.resource",
@@ -241,7 +252,7 @@ pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, Con
                         ),
                     ));
                 }
-                Some(ResourceSite::Open) => {}
+                ResourceSite::Open => {}
             }
             resources.push(ResourceNode {
                 slot,
