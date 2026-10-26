@@ -29,6 +29,12 @@ pub use script::{
     load_scenario_file, load_scenario_str,
 };
 
+/// The largest number of players a match can have: eight, so four-versus-four (D20). It is a
+/// constant rather than a runtime number because stockpiles are fixed-size arrays, and it is eight
+/// rather than two because the cost of widening is paid once and the cost of a later re-refactor is
+/// paid in every state hash.
+pub const MAX_PLAYERS: usize = 8;
+
 /// Stable handle for an entity. Ordered, so iteration by id is just sorting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EntityId(pub u32);
@@ -259,6 +265,10 @@ pub enum SimError {
         from: (u16, u16),
         to: (u16, u16),
     },
+    /// A player number outside `1..=MAX_PLAYERS`.
+    PlayerOutOfRange {
+        player: u8,
+    },
     /// You cannot attack your own side.
     FriendlyFire {
         id: EntityId,
@@ -370,6 +380,10 @@ impl fmt::Display for SimError {
             SimError::BuildingNotReady { id } => {
                 write!(f, "entity {} is still under construction", id.0)
             }
+            SimError::PlayerOutOfRange { player } => write!(
+                f,
+                "player {player} is outside 1..={MAX_PLAYERS}: a match has at most {MAX_PLAYERS} sides"
+            ),
             SimError::FriendlyFire { id } => {
                 write!(f, "entity {} is on your own side", id.0)
             }
@@ -507,8 +521,9 @@ pub struct World {
     /// tick loop. A replay carries ids, never numbers.
     units: Option<Units>,
     economy: Option<Economy>,
-    /// Per player, per resource. Index is `player - 1`; player 0 has no stockpile.
-    stock: [[u32; ResourceKind::COUNT]; 2],
+    /// Per player, per resource. Index is `player - 1`; player 0 has no stockpile and neither does
+    /// anything above `MAX_PLAYERS`.
+    stock: [[u32; ResourceKind::COUNT]; MAX_PLAYERS],
     /// Terrain, copied once at seed time. Static for a match.
     walk: Option<Walk>,
     /// Damage constants from `combat.toml`, set with `load_combat`.
@@ -531,7 +546,7 @@ impl World {
             queue: Vec::new(),
             units: None,
             economy: None,
-            stock: [[0; ResourceKind::COUNT]; 2],
+            stock: [[0; ResourceKind::COUNT]; MAX_PLAYERS],
             walk: None,
             damage_rules: None,
             paths: BTreeMap::new(),
@@ -616,7 +631,14 @@ impl World {
             }
             // Stopping is always legal: there is nothing to be refused.
             Command::Stop { .. } => {}
-            Command::Spawn { .. } => {}
+            // The bound belongs in the dry run too, or `submit_checked` accepts a ninth side and
+            // the failure only appears a tick later inside the queue.
+            Command::Spawn { player, .. } => {
+                // 0 is neutral (no stockpile); the ceiling is what has to hold (D20).
+                if usize::from(*player) > MAX_PLAYERS {
+                    return Err(SimError::PlayerOutOfRange { player: *player });
+                }
+            }
         }
         Ok(())
     }
@@ -1039,7 +1061,13 @@ impl World {
         let plan = self.check_train(building, unit)?;
         for (dat_id, quantity) in &plan.costs {
             if let Some(kind) = ResourceKind::from_dat_id(*dat_id) {
-                let slot = &mut self.stock[usize::from(plan.player).wrapping_sub(1)][kind.index()];
+                let index = usize::from(plan.player).wrapping_sub(1);
+                let Some(row) = self.stock.get_mut(index) else {
+                    return Err(SimError::PlayerOutOfRange {
+                        player: plan.player,
+                    });
+                };
+                let slot = &mut row[kind.index()];
                 *slot -= u32::from(*quantity);
             }
         }
@@ -1271,7 +1299,11 @@ impl World {
         // Paid only after every check passed, so a refused order spends nothing.
         for (dat_id, quantity) in &costs {
             if let Some(kind) = ResourceKind::from_dat_id(*dat_id) {
-                let slot = &mut self.stock[usize::from(player).wrapping_sub(1)][kind.index()];
+                let index = usize::from(player).wrapping_sub(1);
+                let Some(row) = self.stock.get_mut(index) else {
+                    return Err(SimError::PlayerOutOfRange { player });
+                };
+                let slot = &mut row[kind.index()];
                 *slot -= u32::from(*quantity);
             }
         }
@@ -1397,22 +1429,32 @@ impl World {
                 speed,
                 hp,
                 amount,
-            } => self.insert(Entity {
-                id,
-                player,
-                kind,
-                unit,
-                position,
-                speed,
-                velocity: (speed, Fixed::ZERO),
-                hp,
-                amount: Fixed::from_raw(i64::from(amount) * self.scale),
-                task: Task::Idle,
-                training: None,
-                construction: None,
-                carry: Fixed::ZERO,
-                variant: None,
-            }),
+            } => {
+                // Spawn is the only command that names a player directly, so the bound is enforced
+                // here too: an entity for player 9 would otherwise sit in the world until something
+                // tried to hand it a stockpile, and then panic on the array.
+                // Player 0 is neutral - resource nodes live there and it has no stockpile - so the
+                // bound is only the ceiling. The movement hook in `spawn_now` uses player 0.
+                if usize::from(player) > MAX_PLAYERS {
+                    return Err(SimError::PlayerOutOfRange { player });
+                }
+                self.insert(Entity {
+                    id,
+                    player,
+                    kind,
+                    unit,
+                    position,
+                    speed,
+                    velocity: (speed, Fixed::ZERO),
+                    hp,
+                    amount: Fixed::from_raw(i64::from(amount) * self.scale),
+                    task: Task::Idle,
+                    training: None,
+                    construction: None,
+                    carry: Fixed::ZERO,
+                    variant: None,
+                })
+            }
             Command::Gather { villager, node } => self.start_gather(villager, node),
             Command::Build { villager, unit, at } => self.start_build(villager, unit, at),
             Command::Train { building, unit } => self.start_train(building, unit),

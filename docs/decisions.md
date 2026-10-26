@@ -243,3 +243,47 @@ something else.
 
 **Not yet wired into a handshake** - there is no networking yet. The pack and its identity exist so
 that the first network code cannot be written without them.
+
+---
+
+## D20 - Eight sides, so four-versus-four
+
+**Decided 2026-10-25.** The engine supports **at most 8 players** (4v4), not 2.
+
+Stockpiles were `[[u32; ResourceKind::COUNT]; 2]` - two players in the *type*. They are now
+`[...; MAX_PLAYERS]` with `MAX_PLAYERS = 8`, and `Command::Spawn` refuses a ninth side in both the dry
+run and the apply, so the failure is a named `PlayerOutOfRange` rather than a panic on the array.
+
+Why eight and not two: the cost is paid once during this refactor, while the array is a constant;
+a later widening is paid in every state hash, every replay and every test that pins one. Four-versus-
+four is also the real ceiling for the reference game, so it is the number content can be written
+against.
+
+**Player 0 stays neutral** - resource nodes live there - which is why the bound is a ceiling and not
+a range: `1..=8` for sides, `0` for "nobody".
+
+## D4 (resolved 2026-10-25) - publish early, tooling first
+
+The repository goes **public**, and soon rather than after the game is playable. The owner's
+long-term plan is an open-source engine, so the provenance decisions are cheaper to make now than to
+retrofit.
+
+Order, because it is forced:
+
+1. **Split the generator out first** (D12). `tools/genconfig` imports the GPL-3.0 `GenieDatParser`;
+   while those share a repository, publishing publishes the GPL dependency and its obligations with
+   it.
+2. Then the engine repository is publishable as it stands: MIT/Apache `crates/`, no game data (D8),
+   no GPL code, and a `docs/mechanics/` folder whose provenance is documented per file.
+
+**Consequence for how work is written from now on:** anything added under `crates/` must be
+defensible as original work informed by data and published specification, never as a transcription of
+someone else's implementation - which D17 already requires for a different reason (the engine must
+not know AoE2 particulars).
+
+## Map and pack identity (2026-10-25)
+
+The map is part of the content pack hash today. When map variety arrives - different maps between the
+same two players without republishing a pack - the map becomes a **per-match** field hashed
+separately, beside `tick_rate_hz` and `fixed_point_scale`. Not before: one identity fewer is one
+desync cause fewer, and nothing about the current single authored map needs variety.

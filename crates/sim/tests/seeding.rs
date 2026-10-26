@@ -316,3 +316,51 @@ fn an_idle_villager_stands_still() {
         assert_eq!(now, position, "entity {} drifted while idle", id.0);
     }
 }
+
+#[test]
+fn eight_sides_are_representable_and_a_ninth_is_refused() {
+    // D20: 4v4 is the ceiling, so stockpiles are eight wide. This test exists because the width
+    // used to be hardcoded to two in the type, and a silent ninth player would have panicked on
+    // the array rather than being refused.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let scale = world.scale();
+    let at = |x: i64, y: i64| (Fixed::from_raw(x * scale), Fixed::from_raw(y * scale));
+
+    for player in 1..=8u8 {
+        world
+            .submit_checked(ruage_sim::Command::Spawn {
+                id: ruage_sim::EntityId(900 + u32::from(player)),
+                player,
+                kind: EntityKind::Unit,
+                unit: Some(83),
+                position: at(30 + i64::from(player), 30),
+                speed: Fixed::ZERO,
+                hp: 25,
+                amount: 0,
+            })
+            .unwrap_or_else(|err| panic!("player {player} must be playable: {err}"));
+    }
+    assert_eq!(
+        world.stock(8, ruage_data::ResourceKind::Wood),
+        0,
+        "the eighth side has a stockpile, empty"
+    );
+
+    let err = world
+        .submit_checked(ruage_sim::Command::Spawn {
+            id: ruage_sim::EntityId(999),
+            player: 9,
+            kind: EntityKind::Unit,
+            unit: Some(83),
+            position: at(40, 40),
+            speed: Fixed::ZERO,
+            hp: 25,
+            amount: 0,
+        })
+        .expect_err("a ninth side has no stockpile and no place");
+    assert!(
+        err.to_string().contains("outside 1..=8"),
+        "the refusal must name the bound, got: {err}"
+    );
+}
