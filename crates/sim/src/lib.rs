@@ -1484,7 +1484,11 @@ impl World {
         // Decide this tick's work in id order, then apply it. Deciding first keeps the second
         // pass free of lookups, so an entity cannot be moved *and* read from in the same tick in
         // an order-dependent way.
-        let mut deltas: Vec<(EntityId, Fixed, Fixed)> = Vec::with_capacity(self.entities.len());
+        // (index, id, dx, dy): the index is the fast path and the id is the check. `insert` keeps
+        // the list sorted by id, so anything spawned later in the same tick shifts every index after
+        // it - the id is what makes that detectable instead of silently moving the wrong entities.
+        let mut deltas: Vec<(usize, EntityId, Fixed, Fixed)> =
+            Vec::with_capacity(self.entities.len());
         let mut takes: Vec<(EntityId, i64)> = Vec::new();
         let mut finished: Vec<EntityId> = Vec::new();
         let mut switches: Vec<(EntityId, Task)> = Vec::new();
@@ -1492,7 +1496,10 @@ impl World {
         let mut builders: Vec<(EntityId, EntityId)> = Vec::new();
         let mut strikes: Vec<(EntityId, EntityId)> = Vec::new();
 
-        for entity in &self.entities {
+        // Indexed, not id-collected: resolving each id afterwards is a linear scan per entity,
+        // which makes the whole tick O(n^2). The entity list does not change during this loop, so
+        // an index stays valid and the second pass touches each entity once.
+        for (index, entity) in self.entities.iter().enumerate() {
             let (dx, dy) = match entity.task {
                 Task::Attack { target, .. } => {
                     let Some(victim) = self
@@ -1623,7 +1630,7 @@ impl World {
                     (dx, dy)
                 }
             };
-            deltas.push((entity.id, dx, dy));
+            deltas.push((index, entity.id, dx, dy));
         }
 
         // Grant takes in id order, each bounded by what the node still holds *at that moment*.
@@ -1783,10 +1790,31 @@ impl World {
         }
 
         let mut reached: Vec<(EntityId, (Fixed, Fixed))> = Vec::new();
-        for (id, dx, dy) in deltas {
-            let entity = self
-                .find_mut(id)
-                .expect("entity list is stable within a tick");
+        for (index, id, dx, dy) in deltas {
+            // Fast path: the entity at this index is still the one we decided for. If a spawn moved
+            // it, fall back to a lookup by id - slower, but correct, and only on ticks where the
+            // world changed shape.
+            if self.entities.get(index).map(|entity| entity.id) != Some(id) {
+                let position = self
+                    .find(id)
+                    .expect("entity list is stable within a tick")
+                    .position;
+                let moved = (
+                    position
+                        .0
+                        .checked_add(dx)
+                        .map_err(|_| SimError::Overflow(id))?,
+                    position
+                        .1
+                        .checked_add(dy)
+                        .map_err(|_| SimError::Overflow(id))?,
+                );
+                let entity = self.find_mut(id).expect("just found");
+                entity.position = moved;
+                reached.push((id, moved));
+                continue;
+            }
+            let entity = &mut self.entities[index];
             entity.position.0 = entity
                 .position
                 .0
@@ -2172,5 +2200,46 @@ overrides = "overrides.toml"
             .spawn_now_checked(EntityId(5), Fixed::ZERO, 10)
             .expect_err("max_entities = 4 must be enforced");
         assert!(err.to_string().contains("max_entities"), "got: {err}");
+    }
+
+    #[test]
+    fn a_spawn_in_the_same_tick_does_not_move_the_wrong_entities() {
+        // `insert` keeps the list sorted by id, so a unit spawned during a tick shifts the index of
+        // every entity after it. Applying this tick's movements by index alone would then move the
+        // wrong units; the tick carries the id as a check for that reason. The whole suite passed
+        // without this test, because nothing else both moves and spawns in one tick.
+        // 20 Hz with the fixture's 20,000 scale: a raw speed of 100 is exactly 5 units per tick.
+        let mut world = World::new(&settings(20, "next_tick"), 5).expect("world");
+        world.spawn_now(EntityId(1), Fixed::from_raw(100), 10);
+        world.spawn_now(EntityId(2), Fixed::from_raw(100), 10);
+        let before = (
+            world.entity(EntityId(1)).expect("1").position.0.raw(),
+            world.entity(EntityId(2)).expect("2").position.0.raw(),
+        );
+
+        // A spawn with an id below both, queued for the same tick the two movers advance in.
+        world
+            .submit_checked(Command::Spawn {
+                id: EntityId(3),
+                player: 1,
+                kind: EntityKind::Unit,
+                unit: Some(83),
+                position: (Fixed::ZERO, Fixed::ZERO),
+                speed: Fixed::ZERO,
+                hp: 25,
+                amount: 0,
+            })
+            .expect("spawn");
+        world.step().expect("step");
+
+        for (id, was) in [(EntityId(1), before.0), (EntityId(2), before.1)] {
+            let now = world.entity(id).expect("still there").position.0.raw();
+            assert_eq!(
+                now - was,
+                5,
+                "entity {} must move by its own delta, not by a neighbour's",
+                id.0
+            );
+        }
     }
 }
