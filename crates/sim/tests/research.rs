@@ -382,19 +382,36 @@ fn the_researched_set_is_part_of_the_state_hash() {
     let _barracks_b = place(&mut b, 1, 9_005, BARRACKS, (22, 22), 1200);
     assert_eq!(a.state_hash(), b.state_hash(), "identical worlds agree");
 
+    // A third world that researches the same tech at the same tick, so "deterministic" is checked
+    // for the new path and not just assumed from the old ones.
+    let mut c = seeded(&fx);
+    money(&mut c);
+    let barracks_c = place(&mut c, 1, 9_005, BARRACKS, (22, 22), 1200);
+
     a.submit_checked(Command::Research {
         building: barracks_a,
+        tech: MAN_AT_ARMS,
+    })
+    .expect("legal");
+    c.submit_checked(Command::Research {
+        building: barracks_c,
         tech: MAN_AT_ARMS,
     })
     .expect("legal");
     for _ in 0..900 {
         a.step().expect("step");
         b.step().expect("step");
+        c.step().expect("step");
     }
     assert_ne!(
         a.state_hash(),
         b.state_hash(),
         "a researched tech must change the hash: it changes what later orders resolve to"
+    );
+    assert_eq!(
+        a.state_hash(),
+        c.state_hash(),
+        "two worlds that researched the same tech agree, so the new state is deterministic"
     );
 }
 
