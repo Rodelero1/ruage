@@ -808,8 +808,9 @@ pub struct World {
     /// civ's tree effect whenever a research is ordered - it is content, so keeping a copy in state
     /// would be a second source of truth for the same fact.
     civs: Option<ruage_data::Civs>,
-    /// Which civilisation, once resolved against the table above.
-    civ: Option<u32>,
+    /// Which civilisation each player is, once resolved against the table above. Index 0 is player 1.
+    /// Part of state (hashed), because it changes what the world will allow.
+    civ_by_player: [Option<u32>; MAX_PLAYERS],
     /// Units that some tech *makes available* (kind-2 rows with a positive flag). Derived from the
     /// effects table at load: content, not state, so it is not hashed.
     gated_units: BTreeSet<u32>,
@@ -851,7 +852,7 @@ impl World {
             techs: None,
             effects: None,
             civs: None,
-            civ: None,
+            civ_by_player: [None; MAX_PLAYERS],
             gated_units: BTreeSet::new(),
             upgrade_tech: BTreeMap::new(),
             availability_techs: Vec::new(),
@@ -1387,7 +1388,7 @@ impl World {
         let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
         // The same availability rule as building: a trebuchet needs the tech that makes it available,
         // and "no way to have it yet" outranks "not enough wood".
-        if let Some(civ) = self.civ_barred_unit(unit) {
+        if let Some(civ) = self.civ_barred_unit(entity.player, unit) {
             return Err(SimError::UnitBarred { unit, civ });
         }
         if !self.unit_available(entity.player, unit) {
@@ -1647,7 +1648,7 @@ impl World {
             .ok_or(SimError::MissingEntity(villager))?;
 
         // Availability outranks the price: "you cannot have this yet" is the answer, not "you are poor".
-        if let Some(civ) = self.civ_barred_unit(unit_id) {
+        if let Some(civ) = self.civ_barred_unit(worker.player, unit_id) {
             return Err(SimError::UnitBarred { unit: unit_id, civ });
         }
         if !self.unit_available(worker.player, unit_id) {
@@ -1801,7 +1802,7 @@ impl World {
         // British list carries the Hussar, the Eagle line and the Paladin, while no civ's list carries
         // Loom or an age - so these are restrictions, not permissions (see crates/data/src/civs.rs).
         // Checked before the prerequisites so a barred tech says so rather than asking for an age.
-        if let Some(civ) = self.barred_by(tech) {
+        if let Some(civ) = self.barred_by(entity.player, tech) {
             return Err(SimError::TechBarred { tech, civ });
         }
         // Prerequisites: every id a tech lists is a *tech* id (all 614 entries in the table resolve to
@@ -2788,12 +2789,19 @@ impl World {
         let wanted = self
             .economy
             .as_ref()
-            .and_then(|economy| economy.start.civ.clone());
-        if let Some(name) = wanted {
-            let civ = civs
-                .by_name(&name)
-                .ok_or_else(|| SimError::UnknownCiv { name: name.clone() })?;
-            self.civ = Some(civ.id);
+            .map(|economy| economy.start.civs.clone())
+            .unwrap_or_default();
+        if !wanted.is_empty() {
+            self.civ_by_player = [None; MAX_PLAYERS];
+            for index in 0..MAX_PLAYERS {
+                // The last entry covers everyone past the end of the list: a pack that names one civ
+                // means "everyone plays this one".
+                let name = &wanted[index.min(wanted.len() - 1)];
+                let civ = civs
+                    .by_name(name)
+                    .ok_or_else(|| SimError::UnknownCiv { name: name.clone() })?;
+                self.civ_by_player[index] = Some(civ.id);
+            }
         }
         self.civs = Some(civs.clone());
         Ok(())
@@ -2830,9 +2838,9 @@ impl World {
     /// Derived on the spot rather than cached: the set would have been one more field on `World`, and a
     /// field on `World` costs more than the lookup does (`docs/performance.md`, pass seven and thirteen).
     /// The scan is one effect's command list, and only when an order is placed.
-    fn civ_barred_unit(&self, unit: u32) -> Option<String> {
+    fn civ_barred_unit(&self, player: u8, unit: u32) -> Option<String> {
         let civs = self.civs.as_ref()?;
-        let civ = civs.get(self.civ?)?;
+        let civ = civs.get(self.civ_of(player)?)?;
         let effects = self.effects.as_ref()?;
         let effect = effects.get(civ.tech_tree_effect?)?;
         let barred = effect.commands.iter().any(|command| {
@@ -2880,12 +2888,18 @@ impl World {
         result
     }
 
+    /// Which civilisation a player is, once the table is loaded and content has named one.
+    fn civ_of(&self, player: u8) -> Option<u32> {
+        let index = usize::from(player).checked_sub(1)?;
+        self.civ_by_player.get(index).copied().flatten()
+    }
+
     /// Is this tech on the player's civilisation's restriction list? Returns the civ's name, so a
     /// refusal can say *whose* rule it is.
-    fn barred_by(&self, tech: u32) -> Option<String> {
+    fn barred_by(&self, player: u8, tech: u32) -> Option<String> {
         let civs = self.civs.as_ref()?;
         let effects = self.effects.as_ref()?;
-        let civ = civs.get(self.civ?)?;
+        let civ = civs.get(self.civ_of(player)?)?;
         let effect = effects.get(civ.tech_tree_effect?)?;
         // Kind 102 carries the barred id in `value` and leaves the four selectors at -1: the effect
         // table says "this id is in the tree", with no state field to read a direction from, which is
@@ -3104,9 +3118,12 @@ impl World {
         // The civilisation is hashed because it changes what the world will allow: two runs that
         // differ in it refuse different techs, and a replay that lost it would diverge silently. Only
         // when set, so a world that names no civ hashes exactly as it did before civs existed.
-        if let Some(civ) = self.civ {
-            fnv_bytes(&mut hash, b"civ");
-            fnv_bytes(&mut hash, &civ.to_le_bytes());
+        for (index, civ) in self.civ_by_player.iter().enumerate() {
+            if let Some(civ) = civ {
+                fnv_bytes(&mut hash, b"civ");
+                fnv_bytes(&mut hash, &[u8::try_from(index).unwrap_or(u8::MAX)]);
+                fnv_bytes(&mut hash, &civ.to_le_bytes());
+            }
         }
         fnv_bytes(&mut hash, &(self.entities.len() as u32).to_le_bytes());
         for row in &self.stock {

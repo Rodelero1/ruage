@@ -253,6 +253,21 @@ per tick.
 Next: per-player civs (which is what would let two players be different civilisations), then team bonuses
 and the per-civ tuning array.
 
+## Done next: per-player civilisations (2026-10-27, v0.67)
+
+`[start] civs = ["British", "Huns"]` - entry *n* is player *n+1*, the last entry covers any further
+player, and a one-entry list still means "everyone plays this one". The two bar lookups now take a player,
+and the ids are hashed **per player**, so a replay cannot lose whose civ was which.
+
+The project's own pack naming two civs is the point rather than a flourish: it makes the bar rules a live
+case. Player 1 is refused the Hussar (428) and builds houses; player 2 is allowed the tech and cannot
+build a house. One test asserts both halves in one world, and it matches on the error *variant*
+(`TechBarred` versus `MissingPrerequisite`) rather than on a message, because 428 has a prerequisite chain
+that would otherwise make the assertion about the wrong rule.
+
+Next: team bonuses (`team_bonus_effect`, carried and unapplied), then the per-civ 211-number tuning array,
+then the remaining effect kinds (0 and 1 modify a named unit's attributes and costs).
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

@@ -51,6 +51,16 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Fourteenth pass: judged by inspection, because the probe cannot see it (2026-10-27)
+
+Per-player civs add one array to `World` (`[Option<u32>; 8]`, 32 bytes) and change two lookups from
+world-level to player-level. Both lookups run on an order, never per tick, so by the thirteenth pass'
+finding this is not a change the idle probe can resolve - and a fresh A/B would only re-measure the ±8%
+floor. What is measurable is reported instead: the four-hour probe is **unchanged** at
+`b30d49d89f8bcf4f` (it loads no civs, so every entry is `None` and the hash loop writes nothing), while
+the scripted run with all tables moves to `936b127946fd2ef3`, because both players' civ ids are now hashed
+per player - which is the point: a replay cannot lose *whose* civ was which.
+
 ## Thirteenth pass: the idle probe cannot resolve a change with no tick path (2026-10-27)
 
 This pass added a civ-level unit bar - the Huns cannot build houses. Nothing in it runs per tick: the bar

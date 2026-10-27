@@ -55,6 +55,7 @@ const CASTLE: u32 = 82;
 const CASTLE_MAKE_AVAIL: u32 = 137;
 const BARRACKS_MAKE_AVAIL: u32 = 220;
 const TREBUCHET: u32 = 331;
+const VILLAGER: u32 = 83;
 const TREBUCHET_MAKE_AVAIL: u32 = 256;
 const FORGING: u32 = 67;
 
@@ -262,10 +263,17 @@ fn place(world: &mut World, player: u8, id: u32, unit: u32, tile: (i64, i64), hp
 /// building created later keeps the id the tech names. And grant *after* gathering, because the town
 /// centre's upgrade means the villagers' drop sites no longer match it.
 fn feudal(world: &mut World) {
+    feudal_for(world, 1);
+}
+
+/// The same for any player: a test with two civilisations needs both of them to have aged up.
+fn feudal_for(world: &mut World, player: u8) {
     // 104 comes from the pack's `[start] techs`; 659 is the other parent of Feudal and has to be
     // granted, then Feudal itself.
     for tech in [659, FEUDAL_AGE] {
-        world.grant_tech(1, tech).expect("seeding the Feudal Age");
+        world
+            .grant_tech(player, tech)
+            .expect("seeding the Feudal Age");
     }
 }
 
@@ -714,7 +722,7 @@ fn a_pack_naming_a_civilisation_the_table_lacks_is_refused() {
     let Some(fx) = fixture() else { return };
     let civs = fx.civs.clone();
     let mut economy = fx.economy.clone();
-    economy.start.civ = Some("Martian".to_owned());
+    economy.start.civs = vec!["Martian".to_owned()];
     let mut world = World::new(&fx.settings, 7).expect("world");
     world
         .seed_from(&fx.map, &economy, &fx.units)
@@ -927,7 +935,7 @@ fn the_spear_line_upgrades_the_units_the_player_already_has() {
 fn the_huns_cannot_build_a_house() {
     let Some(fx) = fixture() else { return };
     let mut economy = fx.economy.clone();
-    economy.start.civ = Some("Huns".to_owned());
+    economy.start.civs = vec!["Huns".to_owned()];
     let mut world = seeded_with(&fx, &economy);
     world.load_civs(&fx.civs).expect("the civ table");
     let villager = first_villager(&world);
@@ -952,4 +960,81 @@ fn the_huns_cannot_build_a_house() {
             at: site,
         })
         .expect("the Huns still build barracks");
+}
+
+/// Two players, two civilisations: the bar is per player, not per world. Britain cannot research the
+/// Hussar (tech 428 is on its list) and can build houses; the Huns are the other way round on both
+/// counts - they can research the Hussar and cannot build a house at all.
+#[test]
+fn two_players_can_be_different_civilisations() {
+    let Some(fx) = fixture() else { return };
+    let mut economy = fx.economy.clone();
+    economy.start.civs = vec!["British".to_owned(), "Huns".to_owned()];
+    let mut world = seeded_with(&fx, &economy);
+    world.load_civs(&fx.civs).expect("the civ table");
+    feudal_for(&mut world, 1);
+    feudal_for(&mut world, 2);
+    for player in [1, 2] {
+        world
+            .grant_tech(player, 102)
+            .expect("the Castle Age, which the Hussar also needs");
+        world
+            .grant_tech(player, 103)
+            .expect("and the Imperial Age, which the Hussar lists");
+    }
+
+    // Research: Britain is barred from the Hussar, the Huns are not.
+    let briton_stable = place(&mut world, 1, 9_900, STABLE, (14, 14), 1200);
+    let hun_stable = place(&mut world, 2, 9_901, STABLE, (20, 20), 1200);
+    bank(&mut world, slot("food"), 900);
+    bank(&mut world, slot("gold"), 900);
+    let err = world
+        .submit_checked(Command::Research {
+            building: briton_stable,
+            tech: HUSSAR,
+        })
+        .expect_err("Britain has no Hussar")
+        .to_string();
+    assert!(err.contains("British"), "the refusal names the civ: {err}");
+    // The Huns are not barred from it: whatever else stands in the way (428 also wants tech 254), the
+    // refusal must not be the civilisation's. That is the difference under test.
+    let hun_error = world
+        .submit_checked(Command::Research {
+            building: hun_stable,
+            tech: HUSSAR,
+        })
+        .expect_err("this world has not met every prerequisite of 428");
+    assert!(
+        matches!(hun_error, SimError::MissingPrerequisite { .. }),
+        "the Huns are not barred from the Hussar, only short of prerequisites: {hun_error:?}"
+    );
+
+    // Building: the reverse pair on the house.
+    let briton_villager = first_villager(&world);
+    let site = free_tile(&world, briton_villager);
+    world
+        .submit_checked(Command::Build {
+            villager: briton_villager,
+            unit: 70,
+            at: site,
+        })
+        .expect("a Briton builds houses");
+
+    let hun_villager = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 2 && entity.unit == Some(VILLAGER))
+        .map(|entity| entity.id)
+        .expect("a Hunnic villager");
+    bank(&mut world, slot("wood"), 100);
+    let hun_site = free_tile(&world, hun_villager);
+    let err = world
+        .submit_checked(Command::Build {
+            villager: hun_villager,
+            unit: 70,
+            at: hun_site,
+        })
+        .expect_err("the Huns have no houses")
+        .to_string();
+    assert!(err.contains("Huns"), "the refusal names the civ: {err}");
 }

@@ -118,7 +118,11 @@ commands, so the importer derives it, and the engine resolves a variant to its r
 names a building: what a tech is researched at, where a carried load may be dropped, what a building
 trains, and what a scenario's `role = "barracks"` means.
 
-`[start] civ = "British"` names the civilisation a match is played as, by the name `civs.toml` gives it.
+`[start] civs = ["British", "Huns"]` names the civilisations a match is played as, by the names
+`civs.toml` gives them: entry *n* is player *n+1*, and the last entry covers any further player, so a pack
+that names one civ means "everyone plays this one". The project's own pack names two, which is what the
+bar rules are exercised against - player 1 is refused the Hussar and can build houses, player 2 is the
+other way round on both counts.
 The civ table is generated from the dat (`id`, `name`, `tech_tree_effect`, `team_bonus_effect`), and the
 effect it names holds the techs that civ **cannot** research — a restriction list, per D23. Content never
 names the effect id, only the civ; `World::load_civs` resolves the name and refuses an unknown one by

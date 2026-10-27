@@ -43,9 +43,10 @@ pub struct Start {
     /// Tech roles a match begins with, already researched. Without them a match could research
     /// nothing at all: every tech in the table lists the Dark Age as a prerequisite.
     pub techs: Vec<String>,
-    /// The civilisation the match is played as, by the name `civs.toml` gives it. Content's word for
-    /// it: the civ table owns the id and the effect that lists what this civ cannot research.
-    pub civ: Option<String>,
+    /// The civilisations the match is played as, by the names `civs.toml` gives them: entry *n* is
+    /// player *n+1*, and the last entry covers any further player. Content's words, because the civ
+    /// table owns the ids and the effect that lists what each civ cannot research.
+    pub civs: Vec<String>,
     /// Resource *name* -> how much each player begins with. Names, not columns: the pack owns the
     /// stockpile's layout (D17), so a pack with five resources can open with its own four.
     pub stock: BTreeMap<String, u32>,
@@ -187,7 +188,7 @@ struct RawStart {
     #[serde(default)]
     stock: BTreeMap<String, u32>,
     #[serde(default)]
-    civ: Option<String>,
+    civs: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -443,7 +444,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             villagers_per_player: raw.start.villagers_per_player,
             techs: raw.start.techs,
             stock: raw.start.stock,
-            civ: raw.start.civ,
+            civs: raw.start.civs,
         },
         role: raw.role,
         tech_role: raw.tech_role,
