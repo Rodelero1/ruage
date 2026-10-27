@@ -133,6 +133,32 @@ ten-minute script has to gather before it can build and cannot afford a 50-gold 
 stock = { wood = 200, food = 200, gold = 100, stone = 200 }` (the standard opening) is the same shape of
 content, but it will move every test that asserts "the player starts broke", so it wants its own step.
 
+## Done next: the standard opening stockpile (2026-10-27, v0.62)
+
+`[start] stock = { food = 200, wood = 200, gold = 100, stone = 200 }`, resolved through the pack's own
+column names and applied once. With it, the project scenario can research Loom at t=0 (50 gold) *and*
+still afford its spearman, so **the ten-minute script now demonstrates the interpreter end to end**
+instead of demonstrating a queue.
+
+The churn was the interesting part, because every test that said "the player starts broke" was
+asserting a *content* fact as an engine rule:
+
+- three gather tests now count from `opening` rather than from zero;
+- `a_build_without_the_resources_is_refused` and `research_is_refused_without_the_money` ask for a pack
+  with `start.stock` cleared, which is how content says "this match opens broke";
+- the two own-pack tests (five own resources) had to clear the project's stock too, and their failure
+  was the mechanism working: `UnknownResourceName { name: "food" }`, because a grain/iron/salt pack
+  cannot start with 200 food;
+- the build-time test lost an assertion that measured wall-clock ticks between "arrival" (inferred from
+  position) and the finish, which moved by one because the villager no longer walks to a node first. It
+  now asserts the rule - the house needs exactly 500 **builder-ticks**, the last of which is the one
+  that finishes it - and says why the wall-clock version was a fixture artefact.
+
+What is left of "what a match begins with" is nothing; the next increment is the **tech tree proper**:
+kind-6/kind-101/102 commands decide what a building may train *per age*, which is the other half of what
+`[train.entry]` means today (it says a barracks trains spearmen, and nothing says a Feudal barracks
+cannot train something else).
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

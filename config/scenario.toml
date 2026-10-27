@@ -16,6 +16,15 @@ duration_seconds = 600.0
 
 # --- player 1: the full slice, gather -> house -> barracks -> spearman -> fight -------------------
 
+# Research first, at the town centre: Loom is 50 gold, the match opens with 100, and it gives every
+# villager +15 health immediately - so this script demonstrates the interpreter rather than a queue.
+[[step]]
+at_seconds = 0.0
+player = 1
+kind = "research"
+building = "town_centre"
+tech = "loom"
+
 [[step]]
 at_seconds = 2.0
 player = 1

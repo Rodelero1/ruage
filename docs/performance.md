@@ -51,6 +51,18 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Ninth pass: the opening stockpile is seed-time only (2026-10-27)
+
+Interleaved A/B against `HEAD`: 126 entities 2.28-2.35 against base's 2.34-2.38, 1,126 19.05-19.69
+against 19.20-19.30, 2,126 36.35-37.57 against 36.47-36.99 - parity in both orderings, which is what a
+seed-time assignment into a fixed array should look like. Load average 3.0-4.0 on the host throughout.
+
+Two hashes moved, both **because the feature is state**, and both are the intended difference rather
+than a drift: the four-hour probe now ends at `b30d49d89f8bcf4f` (was `936e71d5a641044f`) and the
+600-tick scripted run at `d5fe4af2413a0791` (was `0f5eea624d75d87a` without research tables), because
+every player opens with 200/200/100/200 and the script's own first step now researches Loom. The probe
+still ends at 126 entities with no growth.
+
 ## Eighth pass: no tick path touched (2026-10-27)
 
 Starting techs are granted at seed or table-load time, so the interleaved A/B has nothing to find, and

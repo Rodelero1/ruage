@@ -54,9 +54,9 @@ table. Rather than guess, content names the id once.
 The step exists because research had no end-to-end demonstration without it — it was reachable only
 from the command API, i.e. only from a test. `a_scenario_researches_a_tech_named_by_a_role` is that
 demonstration: three villagers gather gold, the bank pays 50 for Loom at 120 s, and every villager in
-the reported final state has 40 health instead of 25. The project's own ten-minute script does *not*
-use the step: it spends its gold on a spearman and has 20 left when the fighting starts, so a research
-step there would be refused — and the point of that script is gather, build, train, fight.
+the reported final state has 40 health instead of 25. The project's own ten-minute script
+uses it as its first step: Loom costs 50 of the 100 gold the match opens with, and gives every villager
++15 health immediately, so the reported end state shows the interpreter working rather than a queue.
 
 ## The ten-minute run
 

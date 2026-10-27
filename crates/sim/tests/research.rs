@@ -85,6 +85,22 @@ fn seeded(fx: &Fixture) -> World {
     world
 }
 
+/// The same world with a different economy: how a test says "this pack opens broke", which the
+/// project's own pack no longer does.
+fn seeded_with(fx: &Fixture, economy: &ruage_data::Economy) -> World {
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    world
+        .seed_from(&fx.map, economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    world
+        .load_research(&fx.techs, &fx.effects)
+        .expect("the research tables load");
+    world
+}
+
 fn first_villager(world: &World) -> EntityId {
     world
         .entities()
@@ -209,7 +225,11 @@ fn the_man_at_arms_effect_is_an_upgrade_and_nothing_else() {
 #[test]
 fn research_is_refused_without_the_money() {
     let Some(fx) = fixture() else { return };
-    let mut world = seeded(&fx);
+    // The pack opens with the standard stockpile - enough to pay for Man-at-Arms twice over - so this
+    // world starts broke: a pack with no `[start] stock` is how content says that.
+    let mut broke = fx.economy.clone();
+    broke.start.stock.clear();
+    let mut world = seeded_with(&fx, &broke);
     feudal(&mut world);
     let barracks = place(&mut world, 1, 9_000, BARRACKS, (8, 8), 1200);
 

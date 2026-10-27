@@ -129,9 +129,7 @@ fn a_build_without_the_resources_is_refused() {
     world
         .seed_from(&fx.map, &economy, &fx.units)
         .expect("seeding");
-    world
-        .load_resources(&fx.resources)
-        .expect("the pack fits");
+    world.load_resources(&fx.resources).expect("the pack fits");
     let villager = first_villager(&world);
     let site = free_tile_near(&world, villager);
     let house = 70;
@@ -479,9 +477,18 @@ fn a_house_is_paid_for_and_finishes_in_its_create_time() {
     // Walking time is not build time: the clock starts when the builder is on the site, and the
     // work phase reads positions before movement, so the tick of arrival is not a working tick.
     // N working ticks therefore end exactly N ticks after arrival.
+    // The count comes from `progress_ticks`, which the finishing tick clears along with the whole
+    // `construction` block - so the last builder-tick is only visible as the house reaching full
+    // health. Hence: one short, plus a finished house.
     assert_eq!(
-        worked, total_ticks,
+        worked + 1,
+        total_ticks,
         "the house needs exactly {total_ticks} builder-ticks, whatever the walk was"
+    );
+    assert_eq!(
+        world.entity(site_entity).expect("site").hp,
+        max_hp,
+        "and the last of them is the one that finishes it"
     );
     // Not asserted: the ticks between "arrival" (inferred from position) and the finish. The work
     // phase reads positions before movement, so whether the arrival tick counts depends on how far
@@ -491,6 +498,7 @@ fn a_house_is_paid_for_and_finishes_in_its_create_time() {
         arrived_at.expect("the builder reaches the site"),
         finished_at.expect("the house is finished"),
     );
+    assert_eq!(
         world.entity(site_entity).expect("site").kind,
         EntityKind::Building
     );
@@ -887,7 +895,12 @@ fn a_match_opens_with_the_stockpile_the_pack_names() {
     let Some(fx) = fixture() else { return };
     let world = seeded(&fx);
     for player in [1, 2] {
-        for (name, want) in [("food", 200u32), ("wood", 200), ("gold", 100), ("stone", 200)] {
+        for (name, want) in [
+            ("food", 200u32),
+            ("wood", 200),
+            ("gold", 100),
+            ("stone", 200),
+        ] {
             assert_eq!(
                 world.stock(player, slot(name)),
                 want,

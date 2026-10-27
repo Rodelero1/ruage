@@ -118,6 +118,13 @@ commands, so the importer derives it, and the engine resolves a variant to its r
 names a building: what a tech is researched at, where a carried load may be dropped, what a building
 trains, and what a scenario's `role = "barracks"` means.
 
+`[start] stock = { food = 200, wood = 200, gold = 100, stone = 200 }` is the standard opening: resource
+**names** to amounts, resolved through the pack at load, so a pack with five resources opens with its
+own five. It is applied once - a second `load_resources` does not re-apply it and wipe what the players
+have gathered since (`start_stock_applied` is state, and hashed) - and a name the pack has no column for
+is refused with the name in the message rather than dropped, because a player who silently starts with
+no gold cannot pay for anything and has no way to know why.
+
 `[start] techs` names the techs a match begins with, by `[tech_role]`. The pack opens with
 `techs = ["dark_age"]`, because every tech in the table lists the Dark Age (104) as a prerequisite: a
 match that started with nothing researched could research **nothing at all**. The engine grants them

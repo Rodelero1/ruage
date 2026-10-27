@@ -2617,7 +2617,8 @@ impl World {
         if self.start_stock_applied {
             return Ok(());
         }
-        let (Some(economy), Some(resources)) = (self.economy.as_ref(), self.resources.as_ref()) else {
+        let (Some(economy), Some(resources)) = (self.economy.as_ref(), self.resources.as_ref())
+        else {
             return Ok(());
         };
         let mut wanted: Vec<(usize, u32)> = Vec::new();

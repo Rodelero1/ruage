@@ -261,6 +261,8 @@ fn a_depleted_node_stops_yielding() {
     world
         .load_resources(&fx.resources)
         .expect("the pack fits the stockpile");
+    // The pack opens with a stockpile, so every count below is measured from here.
+    let opening = world.stock(1, slot("wood"));
     let node = world
         .entities()
         .iter()
@@ -281,9 +283,10 @@ fn a_depleted_node_stops_yielding() {
 
     assert_eq!(amount_of(&world, node), Fixed::ZERO, "the tree is empty");
     // The load never filled, so the villager takes the partial load home rather than standing on
-    // a dead tree with five wood in hand.
+    // a dead tree with five wood in hand. Counted from the opening stockpile, because the pack now
+    // opens with one.
     assert_eq!(
-        world.stock(1, slot("wood")),
+        world.stock(1, slot("wood")) - opening,
         5,
         "everything the tree held reaches the stockpile"
     );
@@ -303,17 +306,15 @@ fn a_full_villager_carries_the_wood_home() {
     let node = nearest(&world, slot("wood"), here);
     let before = amount_of(&world, node).raw();
 
-    assert_eq!(
-        world.stock(1, slot("wood")),
-        0,
-        "the player starts with nothing"
-    );
+    // Not "starts with nothing": the pack opens with the standard stockpile. What the test is about
+    // is a load arriving, so everything is counted from here.
+    let opening = world.stock(1, slot("wood"));
 
     world.submit(Command::Gather { villager, node });
     let mut delivered = 0;
     for _ in 0..6_000 {
         world.step().expect("step");
-        delivered = world.stock(1, slot("wood"));
+        delivered = world.stock(1, slot("wood")) - opening;
         if delivered > 0 {
             break;
         }
@@ -348,6 +349,8 @@ fn a_partial_load_comes_home_when_the_node_runs_out() {
     world
         .load_resources(&fx.resources)
         .expect("the pack fits the stockpile");
+    // The pack opens with a stockpile, so every count below is measured from here.
+    let opening = world.stock(1, slot("wood"));
     let node = world
         .entities()
         .iter()
@@ -363,7 +366,7 @@ fn a_partial_load_comes_home_when_the_node_runs_out() {
 
     assert_eq!(amount_of(&world, node), Fixed::ZERO, "the tree is empty");
     assert_eq!(
-        world.stock(1, slot("wood")),
+        world.stock(1, slot("wood")) - opening,
         3,
         "the partial load must be delivered, not stranded in the villager's hands"
     );
