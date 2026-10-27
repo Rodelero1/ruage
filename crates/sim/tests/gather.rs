@@ -530,3 +530,142 @@ fn the_same_orders_produce_the_same_hash() {
     };
     assert_eq!(run(&fx), run(&fx));
 }
+
+// --- farms --------------------------------------------------------------------------------------
+//
+// A farm is a building the villager works: the one entity in the engine that is neither a resource
+// node nor a producer. `[farm]` has been in economy.toml since the beginning and nothing read it.
+
+/// Run until the site is finished, or give up loudly: a test that silently stops building would look
+/// like a gather failure later.
+fn finish_building(world: &mut World, site: EntityId) {
+    for _ in 0..4_000 {
+        if world.entity(site).map(|e| e.construction.is_none()) == Some(true) {
+            return;
+        }
+        world.step().expect("step");
+    }
+    panic!("the building never finished");
+}
+
+/// Build a farm for player 1 next to the town centre and return its id once it is up.
+fn a_finished_farm(world: &mut World) -> EntityId {
+    let villager = first_villager(world);
+    let site = (4, 4);
+    world
+        .submit_checked(Command::Build {
+            villager,
+            unit: FARM,
+            at: site,
+        })
+        .expect("a farm costs wood the player has");
+    world.step().expect("step");
+    let farm = world
+        .entities()
+        .iter()
+        .filter(|e| e.kind == EntityKind::Building && e.unit == Some(FARM))
+        .map(|e| e.id)
+        .next()
+        .expect("the site exists");
+    finish_building(world, farm);
+    farm
+}
+
+const FARM: u32 = 50;
+
+#[test]
+fn a_villager_works_a_farm_for_food() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let farm = a_finished_farm(&mut world);
+    let villager = first_villager(&world);
+    let before_food = world.stock(1, slot("food"));
+    let before_farm = amount_of(&world, farm);
+    assert!(before_farm.raw() > 0, "a finished farm holds food");
+
+    world
+        .submit_checked(Command::Gather {
+            villager,
+            node: farm,
+        })
+        .expect("a farm can be worked");
+
+    let mut banked = 0;
+    for _ in 0..6_000 {
+        world.step().expect("step");
+        let now = world.stock(1, slot("food"));
+        if now > before_food {
+            banked = now - before_food;
+            break;
+        }
+    }
+    assert!(banked > 0, "the villager brought food home from the farm");
+    assert!(
+        amount_of(&world, farm).raw() < before_farm.raw(),
+        "the food came out of the farm, not from nowhere"
+    );
+}
+
+#[test]
+fn a_farm_holds_only_what_content_gives_it() {
+    let Some(fx) = fixture() else { return };
+    let mut economy = fx.economy.clone();
+    economy.farm.food_per_farm = 20;
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    world
+        .seed_from(&fx.map, &economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    let farm = a_finished_farm(&mut world);
+    let villager = first_villager(&world);
+    let before_food = world.stock(1, slot("food"));
+    world
+        .submit_checked(Command::Gather {
+            villager,
+            node: farm,
+        })
+        .expect("a farm can be worked");
+
+    // Long enough for many trips: the farm runs out and the total is what content said, not more.
+    for _ in 0..60_000 {
+        world.step().expect("step");
+    }
+    assert_eq!(
+        world.stock(1, slot("food")) - before_food,
+        20,
+        "twenty food in the farm is twenty food in the bank"
+    );
+    assert_eq!(amount_of(&world, farm).raw(), 0, "and the farm is spent");
+}
+
+#[test]
+fn a_farm_still_going_up_cannot_be_worked() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let villager = first_villager(&world);
+    world
+        .submit_checked(Command::Build {
+            villager,
+            unit: FARM,
+            at: (4, 4),
+        })
+        .expect("build");
+    world.step().expect("step");
+    let farm = world
+        .entities()
+        .iter()
+        .filter(|e| e.kind == EntityKind::Building && e.unit == Some(FARM))
+        .map(|e| e.id)
+        .next()
+        .expect("the site exists");
+
+    match world.submit_checked(Command::Gather {
+        villager,
+        node: farm,
+    }) {
+        Err(SimError::BuildingNotReady { id }) => assert_eq!(id, farm),
+        other => panic!("expected BuildingNotReady, got {other:?}"),
+    }
+}

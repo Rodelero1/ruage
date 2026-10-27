@@ -19,8 +19,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use ruage_data::{
-    CommandApply, Cost, CostResource, Economy, Effects, Map, Resources, Sim as Settings, Unit,
-    Units,
+    CommandApply, Cost, CostResource, Economy, Effects, Map, MaybeFixed, Resources,
+    Sim as Settings, Unit, Units,
 };
 
 mod path;
@@ -975,9 +975,10 @@ impl World {
                     return Err(SimError::NotAUnit { id: *villager });
                 }
                 let target = self.find(*node).ok_or(SimError::MissingEntity(*node))?;
-                if !matches!(target.kind, EntityKind::Resource(_)) {
-                    return Err(SimError::NotAResource { id: *node });
-                }
+                // What may be gathered from is content's answer, not the validator's: a node, or a
+                // building the pack calls a farm. One helper, so the order cannot accept something
+                // the validator refuses.
+                self.gather_source(*node)?;
                 // A walled-off node is refused here rather than discovered ten seconds later by a
                 // villager walking into a wall and giving up.
                 if let Some(position) = self.find(*villager).map(|e| e.position) {
@@ -1190,6 +1191,13 @@ impl World {
 
     /// A tile's origin as a world position. Tiles are the unit of the map; the scale is the unit
     /// of state, and this is the only place the two meet.
+    /// Can a walker get from one place to another? Asked by the scenario runner when it picks which
+    /// node to send a villager to, so the script chooses a node it can reach instead of ordering a
+    /// trip the engine will refuse.
+    pub fn can_reach(&self, from: (Fixed, Fixed), to: (Fixed, Fixed)) -> bool {
+        self.plan_path(from, to).is_ok()
+    }
+
     fn tile(&self, (x, y): (u16, u16)) -> (Fixed, Fixed) {
         (
             Fixed::from_raw(i64::from(x) * self.scale),
@@ -1225,10 +1233,10 @@ impl World {
         rate_per_tick: Fixed,
         carry_cap: u32,
     ) -> Option<Task> {
-        let slot = match self.find(node).map(|n| n.kind) {
-            Some(EntityKind::Resource(slot)) => slot,
-            _ => return None,
-        };
+        // The column comes from the same place the order got it. Carrying it in the task instead
+        // would add 8 bytes to every entity for a value the switch needs once a trip.
+        let (resource, _) = self.gather_source(node).ok()?;
+        let slot = self.slot_of(&resource)?;
         let from = self.find(node)?.position;
         let drop = self.nearest_drop_site(entity.player, from, entity.variant)?;
         Some(Task::Return {
@@ -1305,6 +1313,7 @@ impl World {
             node,
             rate_per_tick,
             carry_cap,
+            ..
         } = worker.task
         else {
             return 0;
@@ -1752,6 +1761,22 @@ impl World {
         }
 
         let position = self.tile(at);
+        // A farm is worth `food_per_farm` food the moment its plot is marked out, and it is
+        // unworkable until finished - which is why the amount is set here and not on completion: the
+        // plot is also the whole budget, and a plot destroyed half-built takes its food with it.
+        let farm_food = self
+            .economy
+            .as_ref()
+            .filter(|economy| {
+                economy
+                    .farm
+                    .unit
+                    .as_ref()
+                    .and_then(|role| economy.role.get(role).copied())
+                    == Some(unit_id)
+            })
+            .map(|economy| Fixed::from_raw(i64::from(economy.farm.food_per_farm) * self.scale))
+            .unwrap_or(Fixed::ZERO);
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
         self.insert(Entity {
             id,
@@ -1762,7 +1787,7 @@ impl World {
             speed: Fixed::ZERO,
             velocity: (Fixed::ZERO, Fixed::ZERO),
             hp: 1,
-            amount: Fixed::ZERO,
+            amount: farm_food,
             task: Task::Idle,
             training: None,
             construction: Some(Construction {
@@ -1779,7 +1804,12 @@ impl World {
             .find(villager)
             .map(|entity| entity.position)
             .ok_or(SimError::MissingEntity(villager))?;
-        let route = self.plan_path(from, position)?;
+        // Beside the site, not on it: a builder standing inside the footprint has no free tile to
+        // plan a route home from, and once finished the building would be under the villager.
+        let route = match self.work_position(from, position) {
+            Some(stand) => self.plan_path(from, stand)?,
+            None => self.plan_path(from, position)?,
+        };
         self.paths.insert(villager, route);
         if let Some(worker) = self.find_mut(villager) {
             worker.task = Task::Build { site: id };
@@ -2127,6 +2157,91 @@ impl World {
     /// Turn a gather order into resolved state: the variant, the per-tick rate and the capacity
     /// are read from the tables here, once, and stored on the entity. Nothing in the tick loop
     /// looks at a table, and a replay cannot name its own numbers.
+    /// Where a worker stands to work a building: the first neighbouring tile that is both free and
+    /// reachable from `from`, in a fixed scan order, so the choice is a function of the map rather
+    /// than of iteration order. `None` when there is none, and the caller keeps its old behaviour of
+    /// walking at the building itself.
+    fn work_position(
+        &self,
+        from: (Fixed, Fixed),
+        target: (Fixed, Fixed),
+    ) -> Option<(Fixed, Fixed)> {
+        let scale = self.scale;
+        let x = u16::try_from(target.0.raw() / scale).ok()?;
+        let y = u16::try_from(target.1.raw() / scale).ok()?;
+        const RING: [(i32, i32); 8] = [
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (-1, 0),
+            (1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+        ];
+        RING.iter().find_map(|(dx, dy)| {
+            let tile = (
+                u16::try_from(i32::from(x) + dx).ok()?,
+                u16::try_from(i32::from(y) + dy).ok()?,
+            );
+            if !self.is_free_ground(tile.0, tile.1) {
+                return None;
+            }
+            let position = self.tile(tile);
+            // Free is not the same as reachable: a free tile inside a wall is no place to stand.
+            self.plan_path(from, position).ok().map(|_| position)
+        })
+    }
+
+    /// What may be gathered from an entity, and whether the thing being worked sets the pace: a farm
+    /// does (its own work rate), a tree does not (the villager's variant does).
+    ///
+    /// The farm is content's idea (D27). The engine knows two kinds of gatherable thing only because
+    /// `[farm]` names a building and the resource it yields.
+    fn gather_source(&self, node: EntityId) -> Result<(String, Option<MaybeFixed>), SimError> {
+        let entity = self
+            .find(node)
+            .cloned()
+            .ok_or(SimError::MissingEntity(node))?;
+        if let EntityKind::Resource(slot) = entity.kind {
+            let name = self
+                .resources
+                .as_ref()
+                .and_then(|resources| resources.name(slot))
+                .ok_or_else(|| SimError::NoVariant {
+                    task: format!("slot {slot}"),
+                    detail: "the content pack names no resource in this column".to_owned(),
+                })?;
+            return Ok((name.to_owned(), None));
+        }
+        let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
+        let farm_unit = economy
+            .farm
+            .unit
+            .as_ref()
+            .and_then(|role| economy.role.get(role).copied());
+        if farm_unit.is_none() || entity.kind != EntityKind::Building || entity.unit != farm_unit {
+            return Err(SimError::NotAResource { id: node });
+        }
+        if entity.construction.is_some() {
+            // A plot holds its food from the moment it is marked out, but nothing comes out of it
+            // until it is finished.
+            return Err(SimError::BuildingNotReady { id: node });
+        }
+        let resource = economy
+            .farm
+            .resource
+            .clone()
+            .ok_or_else(|| SimError::NoVariant {
+                task: "farm".to_owned(),
+                detail: "[farm] names no resource for the farm to yield".to_owned(),
+            })?;
+        // `use_villager_rate` picks who sets the pace: the building's own work rate, or the
+        // variant's. It is a data question, so content holds the answer.
+        let rate = (!economy.farm.use_villager_rate).then_some(economy.farm.rate);
+        Ok((resource, rate))
+    }
+
     fn start_gather(&mut self, villager: EntityId, node: EntityId) -> Result<(), SimError> {
         // Whose techs apply: the villager's owner's (a rate modifier is the worker's, not the node's).
         let worker_player = self
@@ -2137,27 +2252,19 @@ impl World {
             let units = self.units.as_ref().ok_or(SimError::NoTables)?;
             let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
 
-            let slot = match self.find(node).map(|entity| entity.kind) {
-                Some(EntityKind::Resource(slot)) => slot,
-                Some(_) => return Err(SimError::NotAResource { id: node }),
-                None => return Err(SimError::MissingEntity(node)),
-            };
-            // Which task works this node is content twice over: the pack names the resource, and
-            // `[gather.resource_task]` says which variant's job that name is (D17).
-            let resource = self
-                .resources
-                .as_ref()
-                .and_then(|resources| resources.name(slot))
-                .ok_or_else(|| SimError::NoVariant {
-                    task: format!("slot {slot}"),
-                    detail: "the content pack names no resource in this column".to_owned(),
+            let (resource, farm_rate) = self.gather_source(node)?;
+            // The load has a column to land in, and that is checked here rather than discovered at
+            // the deposit: an order naming a resource the stockpile has no column for is refused now.
+            self.slot_of(&resource)
+                .ok_or_else(|| SimError::UnknownResourceName {
+                    name: resource.clone(),
                 })?;
             let task_name = economy
                 .gather
                 .resource_task
-                .get(resource)
+                .get(&resource)
                 .ok_or_else(|| SimError::NoVariant {
-                    task: resource.to_owned(),
+                    task: resource.clone(),
                     detail: "no [gather.resource_task] entry for this resource".to_owned(),
                 })?
                 .clone();
@@ -2180,13 +2287,22 @@ impl World {
                     detail: "a variant that cannot carry anything cannot gather".to_owned(),
                 });
             }
-            let rate = variant
-                .work_rate
-                .resolve(self.scale, "work_rate")
-                .map_err(|err| SimError::NoVariant {
-                    task: task_name.clone(),
-                    detail: err.to_string(),
-                })?;
+            let rate = match farm_rate {
+                Some(rate) => {
+                    rate.resolve(self.scale, "farm.rate")
+                        .map_err(|err| SimError::NoVariant {
+                            task: "farm".to_owned(),
+                            detail: err.to_string(),
+                        })?
+                }
+                None => variant
+                    .work_rate
+                    .resolve(self.scale, "work_rate")
+                    .map_err(|err| SimError::NoVariant {
+                        task: task_name.clone(),
+                        detail: err.to_string(),
+                    })?,
+            };
             // Gather rate and carry capacity are resolved *here*, when the order lands, from the
             // variant and the owner's modifiers: a load already in hand keeps the numbers it started
             // with, which is what "the resources have to be gathered first" means.
@@ -2219,7 +2335,17 @@ impl World {
             .find(node)
             .map(|entity| entity.position)
             .ok_or(SimError::MissingEntity(node))?;
-        let route = self.plan_path(from, to)?;
+        // A building's own tile is blocked, so a worker stands *beside* it. Planning to the centre
+        // would walk the villager into the building, and the walk home would then start from a
+        // blocked tile and never find a route.
+        let route = if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
+            match self.work_position(from, to) {
+                Some(stand) => self.plan_path(from, stand)?,
+                None => self.plan_path(from, to)?,
+            }
+        } else {
+            self.plan_path(from, to)?
+        };
         self.paths.insert(villager, route);
 
         let worker = self
@@ -2353,18 +2479,25 @@ impl World {
                         finished.push(entity.id);
                         continue;
                     };
-                    let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
-                        SimError::Displacement {
-                            id: entity.id,
-                            detail: err.to_string(),
-                        }
-                    })?;
-                    let next = self.next_waypoint(entity.id).unwrap_or(target);
-                    let (dx, dy) = step_towards(entity.position, next, delta.raw());
-                    if entity.position == target && dx == 0 && dy == 0 {
+                    // Adjacent counts: the site's own tile is where the building will be, so a
+                    // builder works from the tile beside it.
+                    let here = self.tile_of(entity.position);
+                    let there = self.tile_of(target);
+                    let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
+                    if adjacent {
                         builders.push((entity.id, site));
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        let next = self.next_waypoint(entity.id).unwrap_or(target);
+                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
                     }
-                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
                 }
                 Task::Return { drop, .. } => {
                     let Some(target) = self.find(drop).map(|n| n.position) else {
@@ -2389,23 +2522,26 @@ impl World {
                     rate_per_tick,
                     carry_cap,
                 } => {
-                    let Some(target) = self.find(node).map(|n| n.position) else {
+                    let Some((target, target_is_building)) = self
+                        .find(node)
+                        .map(|n| (n.position, n.kind == EntityKind::Building))
+                    else {
                         // The node is gone (a later increment may delete emptied nodes).
                         finished.push(entity.id);
                         continue;
                     };
-                    let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
-                        SimError::Displacement {
-                            id: entity.id,
-                            detail: err.to_string(),
-                        }
-                    })?;
-                    let next = self.next_waypoint(entity.id).unwrap_or(target);
-                    let (dx, dy) = step_towards(entity.position, next, delta.raw());
-                    let at_node = entity.position == target;
+                    let here = self.tile_of(entity.position);
+                    let there = self.tile_of(target);
+                    // A node is stood on; a building is worked from the tile beside it, because its
+                    // own tile is blocked and a worker that insisted on it would walk forever.
+                    let at_node = entity.position == target
+                        || (target_is_building
+                            && here.0.abs_diff(there.0) <= 1
+                            && here.1.abs_diff(there.1) <= 1);
 
-                    // Standing still on the node is what entitles a worker to take from it.
-                    if at_node && dx == 0 && dy == 0 {
+                    // Standing still at the thing being worked is what entitles a worker to take
+                    // from it.
+                    if at_node {
                         let take = self.take_amount(entity);
                         let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
                         if take > 0 {
@@ -2430,8 +2566,18 @@ impl World {
                         if take == 0 && empty_node && in_hand <= 0 {
                             finished.push(entity.id);
                         }
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        let next = self.next_waypoint(entity.id).unwrap_or(target);
+                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
                     }
-                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
                 }
                 Task::Idle => {
                     let dx = entity.velocity.0.div_exact(tick_rate).map_err(|err| {

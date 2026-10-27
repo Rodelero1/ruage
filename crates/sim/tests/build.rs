@@ -459,11 +459,19 @@ fn a_house_is_paid_for_and_finishes_in_its_create_time() {
         if let Some(construction) = world.entity(site_entity).and_then(|e| e.construction) {
             worked = worked.max(u64::from(construction.progress_ticks));
         }
+        // A builder stands beside the site, not on it: the site's tile is where the house will be.
         if arrived_at.is_none()
-            && world.position(villager).expect("position")
-                == world.position(site_entity).expect("position")
+            && let (Some(here), Some(there)) =
+                (world.position(villager), world.position(site_entity))
         {
-            arrived_at = Some(world.tick());
+            let scale = world.scale();
+            let tile = |position: (ruage_fixed::Fixed, ruage_fixed::Fixed)| {
+                (position.0.raw() / scale, position.1.raw() / scale)
+            };
+            let (here, there) = (tile(here), tile(there));
+            if here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1 {
+                arrived_at = Some(world.tick());
+            }
         }
         let hp = world.entity(site_entity).expect("site").hp;
         assert!(hp >= last_hp, "construction must not go backwards");

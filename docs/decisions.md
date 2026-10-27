@@ -467,3 +467,37 @@ unapplied until the mechanics land, and that is cheaper than pretending.
 The same reasoning retires the "implement kinds 0 and 1 next" plan: kind 0's attributes are 19/20/21 (four
 hundred rows of garrison and projectile behaviour) and kind 1's are resource ids including farm food, and
 the sim has **zero** mentions of a farm. Both need mechanics before they need an interpreter.
+
+## D27 - A farm is a building content calls a farm, and workers stand beside what they work
+
+`[farm]` sat in `economy.toml` for months with nothing reading it. It now names two things the engine
+cannot know by itself:
+
+    [farm]
+    unit = "farm"        # a role, resolved to unit 50
+    resource = "food"    # the column a worked farm fills
+
+That is the whole of the engine's knowledge about farms. `gather_source` returns a resource name and an
+optional pace for **any** entity: a resource node names its column, a building does if content says it is
+the farm. `use_villager_rate` picks who sets the pace - the building's own work rate or the farmer
+variant's - which is a data question, so content holds the answer and the comment records that the 0.4/0.53
+reading is still unresolved.
+
+A farm is worth `food_per_farm` food from the moment its plot is marked out, and it is unworkable until
+finished (`BuildingNotReady`). The plot *is* the budget: a half-built farm destroyed takes its food with it,
+and a spent farm stays as a building that yields nothing, like a bare tree.
+
+**Two bugs came out of this, and both were about standing.** The gather tick decided a worker had arrived
+when `position == node.position` - true for a tree you stand on, never for a building, whose own tile is
+blocked. And the builder had always walked *onto* its site, finishing the job standing inside the
+building: from there no route home can be planned, because the tile it stands on is blocked. So:
+
+- `work_position` finds the neighbouring tile that is both free **and reachable** (a free tile inside a
+  wall is no place to stand - that cost a scenario step), in a fixed scan order;
+- both the gather and the build ticks accept adjacency as arrival, and refuse to walk into the building;
+- `return_task` used to read the stockpile column off the node's *kind*, which returns `None` for a
+  building - so a villager on a farm filled its load and then stood there forever. It now asks the same
+  authority the order asked (`gather_source`).
+
+The column was briefly carried in `Task::Gather` instead. That was reverted: `Task` is 32 bytes either
+way, so the field cost nothing, but it also bought nothing, and one authority is better than two.

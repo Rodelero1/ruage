@@ -60,6 +60,11 @@ pub struct Farm {
     pub rate: MaybeFixed,
     pub use_villager_rate: bool,
     pub food_per_farm: u32,
+    /// The role that names the farm building, if this pack has farms. A building is worth gathering
+    /// from only because content says so: the engine has no idea what a farm is.
+    pub unit: Option<String>,
+    /// The resource a worked farm yields, by name.
+    pub resource: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -132,6 +137,10 @@ struct RawFarm {
     rate: f64,
     use_villager_rate: bool,
     depletion: RawDepletion,
+    #[serde(default)]
+    unit: Option<String>,
+    #[serde(default)]
+    resource: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -285,6 +294,26 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         ));
     }
 
+    // A farm that names a building but no resource (or the reverse) would gather into nothing or
+    // from nothing, so both or neither.
+    if raw.farm.unit.is_some() != raw.farm.resource.is_some() {
+        return Err(invalid(
+            path,
+            "farm",
+            "`unit` and `resource` go together: a farm that yields nothing, or a resource that comes \
+             from no building, is half a rule",
+        ));
+    }
+    if let Some(role) = &raw.farm.unit
+        && !raw.role.contains_key(role)
+    {
+        return Err(invalid(
+            path,
+            "farm.unit",
+            format!("`{role}` is not a role: the farm building is named like every other unit"),
+        ));
+    }
+
     if raw.role.is_empty() {
         return Err(invalid(
             path,
@@ -390,6 +419,8 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             rate: MaybeFixed::from_f64(raw.farm.rate),
             use_villager_rate: raw.farm.use_villager_rate,
             food_per_farm: raw.farm.depletion.food_per_farm,
+            unit: raw.farm.unit,
+            resource: raw.farm.resource,
         },
         gather: Gather {
             rate_from: raw.gather.rate_from,

@@ -51,6 +51,23 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Sixteenth pass: a change the idle probe cannot see, and a wrong guess about why (2026-10-27)
+
+Farms add per-tick work, but only for workers: two tile conversions and two comparisons in the gather and
+build arms. The idle probe is all-idle, so it should be blind to this - and it was not: **base 2.16-2.18
+us/tick against 2.32-2.73** over two interleaved rounds, load average 2.8-3.0.
+
+The first hypothesis was the pass-seven one, that the change had grown `Entity`. It was checked rather than
+asserted, and it was **wrong**: a throwaway `size_of` test gives `Task 32, Entity 184` on *both* builds -
+the extra field fitted in existing padding. (It has since been removed again for other reasons, at no cost
+in bytes.) So the difference is either the floor from pass thirteen or an effect of code placement; either
+way it is not attributable, and the numbers above are recorded as unresolved rather than as a regression.
+The four-hour probe is a better signal and it is unchanged: 126 entities, `b30d49d89f8bcf4f`.
+
+One caveat worth keeping: the scripted 900-tick hash did not move either (`936b127946fd2ef3`), because 900
+ticks is 45 s and the scenario's first build order is at 60 s. A hash that "did not change" only means
+something if the replay reached the code.
+
 ## Fifteenth pass: teams are seed-time and per-attack (2026-10-27)
 
 `team_of` runs inside `check_attack`, and the team array is resolved once at seeding. No tick path, so by

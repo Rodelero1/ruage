@@ -277,14 +277,19 @@ fn nth_villager(world: &World, player: u8, index: usize) -> Option<EntityId> {
         .nth(index)
 }
 
-/// The `nth` nearest node of a kind, ordered by (distance, id) so the choice is deterministic and
-/// two villagers told `nth = 0` and `nth = 1` land on different nodes.
+/// The `nth` nearest node of a kind that the villager can actually walk to, ordered by
+/// (distance, id) so the choice is deterministic and two villagers told `nth = 0` and `nth = 1` land
+/// on different nodes.
+///
+/// Reachability is part of the choice, not a check afterwards: a tree behind a wall is not a tree
+/// this villager can be sent to, and the script should pick the next one rather than refuse.
 fn nearest_resource(world: &World, from: EntityId, slot: usize, nth: usize) -> Option<EntityId> {
     let here = world.position(from)?;
     let mut nodes: Vec<(i64, u32, EntityId)> = world
         .entities()
         .iter()
         .filter(|entity| entity.kind == EntityKind::Resource(slot))
+        .filter(|entity| world.can_reach(here, entity.position))
         .map(|entity| {
             let dx = entity.position.0.raw() - here.0.raw();
             let dy = entity.position.1.raw() - here.1.raw();

@@ -5,6 +5,11 @@
 schema = 1
 
 [farm]
+# Which building is a farm, and what working it yields: both are content, because the engine has no
+# idea what a farm is. A farm is the one building worth gathering from.
+unit = "farm"
+resource = "food"
+
 rate = 0.4
 # PROVENANCE: dat — FARM.task_info.work_rate (unit id 50). Fixed by decision D5.
 # Mechanism unresolved: the farmer villager (id 259) carries 0.530, the farm building 0.400.
@@ -128,7 +133,10 @@ barracks = 12       # BRKS
 # (40 hp, 60 food/20 gold, 21 s) and every infantry upgrade - Man-at-Arms, Long Swordsman, Two-Handed
 # Swordsman, Champion - upgrades *from* 74. The spear line is 93 -> 358 -> 359.
 militia = 74        # 40 hp, 60 food + 20 gold, 21 s: the Dark Age infantry unit
-spearman = 93       # 45 hp, 35 food + 25 wood, 22 s: available once the Feudal Age lands (tech 87)
+spearman = 93
+# The building a villager works for food. The engine treats it like any other building except for
+# this one thing: `[farm]` says its work yields the `food` column.
+farm = 50       # 45 hp, 35 food + 25 wood, 22 s: available once the Feudal Age lands (tech 87)
 pikeman = 358       # 55 hp: an upgrade, researched (tech 197, Castle Age)
 halberdier = 359    # 60 hp: an upgrade, researched (tech 429, Imperial)
 castle = 82         # CSTL, 4800 hp - available from the Castle Age (tech 137 makes it)

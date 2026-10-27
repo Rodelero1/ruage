@@ -118,6 +118,12 @@ commands, so the importer derives it, and the engine resolves a variant to its r
 names a building: what a tech is researched at, where a carried load may be dropped, what a building
 trains, and what a scenario's `role = "barracks"` means.
 
+`[farm]` says which building is a farm and what working it yields - `unit = "farm"` (a role) and
+`resource = "food"`. Those two names are the entire extent of the engine's farming knowledge: a farm is a
+building it would otherwise treat like any other, and it becomes worth gathering from only because content
+says so. Leave them out and no building yields anything. `use_villager_rate` decides who sets the pace (the
+building's own `rate`, or the farmer variant's), and `depletion.food_per_farm` is the plot's whole budget.
+
 `[start] teams = [1, 1]` puts players on teams: entry *n* is player *n+1*, the last entry covers any
 further player, and **empty means a free-for-all** (every player is their own team, so the setting is only
 written by a pack that wants allies). Two players on one team cannot attack each other (`AlliedTarget`);

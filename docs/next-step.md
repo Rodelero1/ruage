@@ -289,6 +289,28 @@ So the next honest step is the one this exposed: **farms**, because `[farm]` is 
 farm upgrade line is the first kind-1 effect with somewhere to land, and because a gatherable building is
 the first entity that is neither a resource node nor a producer.
 
+## Done next: farms (2026-10-27, v0.69)
+
+`[farm]` is read at last: `unit = "farm"` and `resource = "food"` say which building yields what, and that
+is the extent of the engine's farming knowledge. `gather_source` is the one authority on "what may be
+worked here", used by the validator, the order and the trip home; a farm holds `food_per_farm` from the
+moment its plot is marked out and cannot be worked until it is finished.
+
+**Three defects fell out, all about where a worker stands.** Arrival was `position == node.position`
+(never true for a blocked building tile); the builder walked *onto* its site and finished the job standing
+inside the building, from which no route home can be planned; and `return_task` read the stockpile column
+off the node's *kind*, so a farm gave no trip home at all and a villager filled its load and then stood
+there for the rest of the match. Now: `work_position` picks the neighbouring tile that is free **and
+reachable** (a free tile inside a wall cost a scenario step), both ticks accept adjacency, and the column
+comes from `gather_source`.
+
+Because positions changed, the ten-minute scenario's `nth` tree choices needed to become
+reachability-aware: `nearest_resource` now filters on `World::can_reach`, so the script picks a tree it can
+walk to instead of ordering a trip the engine refuses.
+
+Next: farms make the kind-1 farm food line (Horse Collar 75, Heavy Plow 125, Crop Rotation 175)
+implementable, so that is the first thing `[farm] depletion` should learn.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a
