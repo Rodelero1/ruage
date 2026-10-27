@@ -658,3 +658,28 @@ A weak test fell out of the mutation run as well: `queued_units_count_against_th
 expected the third to be refused, and it passed even with the committed count deleted - because the two were
 still *pending*, so the pending-orders rule caught it instead. It now steps once, asserts the head is
 running, and fails when the committed count is removed, which is the state it was written for.
+
+## D34 - The ceiling pauses training; it never refuses the order (correcting D31's refusal)
+
+Housing went in with the ceiling refusing orders: `PopulationCapped` before the price was quoted, and
+committed units counted so a queue could not slip past. **That was wrong, and the correction is the rule
+the game has:** a queue may hold more units than the player can support, and when the ceiling is reached
+**training pauses** - the job keeps its remaining ticks and waits for a unit to die or a house to finish.
+Refusing the order made the ceiling a wall you cannot queue behind, which is not what a city-builder does
+with an idle barracks.
+
+So `check_train` no longer looks at population at all, `PopulationCapped` is gone, and the production pass
+asks once per player with a building in production whether that player is at their ceiling; a capped player's
+jobs are skipped, which leaves their countdown untouched. When a slot frees the same job continues.
+
+Two things this cost, both worth naming. First, "committed units count against the cap" and its two helpers
+existed only to serve the refusal, and both were deleted rather than left as dead code. Second, the tests
+that asserted `PopulationCapped` were *five* and all had to be rewritten to the new shape - which is the real
+price of a wrong rule: the tests cement it.
+
+**A weak test of my own, again.** `a_full_player_holds_the_order_and_pauses_the_clock` asserts that nothing
+arrives and that the countdown does not move - and it still passes with the pause removed, because a crowd of
+five villagers around a town centre leaves a finished unit nowhere to stand, so "nothing arrived" is true for
+the wrong reason. The mutation *is* caught, by `a_queue_can_exceed_the_ceiling_and_drains_later` (which
+expects five alive after eight thousand ticks) and by the two house/death tests. Recorded rather than
+quietly kept: a test whose failure mode is masked by a second rule is worth less than it looks.

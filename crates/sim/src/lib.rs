@@ -440,12 +440,6 @@ pub enum SimError {
         id: EntityId,
         length: u32,
     },
-    /// This player cannot support another unit: their population is at their ceiling.
-    PopulationCapped {
-        player: u8,
-        population: u32,
-        cap: u32,
-    },
     /// The target is on the attacker's own team.
     AlliedTarget {
         id: EntityId,
@@ -598,14 +592,6 @@ impl fmt::Display for SimError {
             SimError::TechInProgress { tech } => write!(
                 f,
                 "tech {tech} is already being researched at another building"
-            ),
-            SimError::PopulationCapped {
-                player,
-                population,
-                cap,
-            } => write!(
-                f,
-                "player {player} is at {population}/{cap} population: finish a house before training more"
             ),
             SimError::AlliedTarget { id } => write!(
                 f,
@@ -1500,23 +1486,9 @@ impl World {
         if !self.unit_available(entity.player, unit) {
             return Err(SimError::UnitUnavailable { unit });
         }
-        // Population: a unit that would take the player past their ceiling is refused here, before
-        // any price is quoted, because "no housing" is the answer to every attempt until a house is
-        // finished.
-        // What is already committed counts: a queue is a promise to pay, and five villagers waiting
-        // behind a town centre's five would otherwise slip past the ceiling.
-        let population = self
-            .population(entity.player)
-            .saturating_add(self.committed(entity.player))
-            .saturating_add(self.pending_orders(entity.player));
-        let cap = self.population_cap(entity.player);
-        if population.saturating_add(1) > cap {
-            return Err(SimError::PopulationCapped {
-                player: entity.player,
-                population,
-                cap,
-            });
-        }
+        // Population is not an ordering rule: a queue may hold more than the player can support, and
+        // the *training* pauses at the ceiling instead (D34). Refusing here would make the ceiling a
+        // wall you cannot queue behind, which is not how the game plays.
         // An upgrade target is not available on its own: a barracks trains pikemen only after the
         // Pikeman tech. Without this, `[train.entry]` naming the spear line would let a Dark Age
         // barracks train halberdiers.
@@ -2310,40 +2282,6 @@ impl World {
         .unwrap_or(u32::MAX)
     }
 
-    /// Units this player has committed to but does not have yet: the one each building is making and
-    /// everything behind it.
-    fn committed(&self, player: u8) -> u32 {
-        let heads = self
-            .entities
-            .iter()
-            .filter(|entity| entity.player == player && entity.training.is_some())
-            .count();
-        let waiting: usize = self
-            .queued
-            .iter()
-            .filter(|(id, _)| {
-                self.find(**id)
-                    .is_some_and(|entity| entity.player == player)
-            })
-            .map(|(_, waiting)| waiting.len())
-            .sum();
-        u32::try_from(heads.saturating_add(waiting)).unwrap_or(u32::MAX)
-    }
-
-    /// Units this player has ordered that have not been applied yet. They are neither alive nor in a
-    /// building's queue, but they are spoken for, so the population gate has to see them.
-    fn pending_orders(&self, player: u8) -> u32 {
-        u32::try_from(
-            self.queue
-                .iter()
-                .filter(|command| {
-                    matches!(command, Command::Train { building, .. } if self.find(*building).is_some_and(|entity| entity.player == player))
-                })
-                .count(),
-        )
-        .unwrap_or(u32::MAX)
-    }
-
     /// The ceiling on this player's population: what content allows, from finished buildings only - a
     /// house supports its five when it is finished, not when it is ordered.
     ///
@@ -3001,6 +2939,10 @@ impl World {
         // Production and research: one pass over the entities, because both timers are the same
         // shape and the second `collect` used to cost a whole extra scan of the world every tick.
         let mut trainers: Vec<EntityId> = Vec::new();
+        // Who is at their ceiling, worked out once per player that has a building in production rather
+        // than once per building per tick. A paused job keeps its remaining ticks: the queue waits for
+        // a unit to die or a house to finish, which is the rule (D34).
+        let mut capped: [bool; MAX_PLAYERS] = [false; MAX_PLAYERS];
         let mut researchers: Vec<(EntityId, u8, u32)> = Vec::new();
         for entity in &self.entities {
             if entity.construction.is_some() {
@@ -3013,7 +2955,26 @@ impl World {
                 researchers.push((entity.id, entity.player, job.tech));
             }
         }
+        {
+            let mut seen: [bool; MAX_PLAYERS] = [false; MAX_PLAYERS];
+            for id in &trainers {
+                if let Some(player) = self.find(*id).map(|entity| entity.player) {
+                    let index = usize::from(player).wrapping_sub(1);
+                    if index < MAX_PLAYERS && !seen[index] {
+                        seen[index] = true;
+                        capped[index] = self.population(player) >= self.population_cap(player);
+                    }
+                }
+            }
+        }
         for id in trainers {
+            if self.find(id).is_some_and(|entity| {
+                capped[usize::from(entity.player)
+                    .wrapping_sub(1)
+                    .min(MAX_PLAYERS - 1)]
+            }) {
+                continue;
+            }
             let ready = match self.find_mut(id) {
                 Some(entity) => match entity.training {
                     Some(mut job) => {

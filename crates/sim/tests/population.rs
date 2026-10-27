@@ -1,12 +1,13 @@
-//! Population and housing: what a player may add to their army, and what raises the ceiling.
+//! Population and housing: what a player may support, and what happens at the ceiling.
 //!
-//! Written before the implementation (D7). `[population]` has been in `economy.toml` since the
-//! beginning and nothing read it, so until now a house was 25 wood and a shape on the map.
+//! Written before the implementation (D7), and rewritten when the rule turned out to be the other one:
+//! the ceiling does not refuse orders - a queue may hold more than the player can support - it **pauses
+//! training** until a unit dies or a house finishes (D34).
 
 use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Units};
-use ruage_sim::{Command, EntityId, EntityKind, SimError, World};
+use ruage_sim::{Command, EntityId, EntityKind, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -20,6 +21,7 @@ struct Fixture {
     economy: Economy,
     resources: ruage_data::Resources,
     units: Units,
+    combat: ruage_data::Combat,
     civs: ruage_data::Civs,
     techs: ruage_data::Techs,
     effects: ruage_data::Effects,
@@ -42,6 +44,7 @@ fn fixture() -> Option<Fixture> {
         economy: ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml"),
         resources,
         units: ruage_data::load_units_file(&units).expect("units.toml"),
+        combat: ruage_data::load_combat_file(&repo("config/combat.toml")).expect("combat.toml"),
         civs: ruage_data::load_civs_file(&repo("config/gamedata/civs.toml")).expect("civs.toml"),
         techs: ruage_data::load_techs_file(&repo("config/gamedata/techs.toml"))
             .expect("techs.toml"),
@@ -54,7 +57,7 @@ fn seeded(fx: &Fixture) -> World {
     seeded_with(fx, &fx.economy, true)
 }
 
-/// A world with wood and food to spare: every test here builds and trains, and the price of either is
+/// A world with food and wood to spare: every test here builds and trains, and the price of either is
 /// not what is under test.
 fn seeded_with(fx: &Fixture, economy: &Economy, civs: bool) -> World {
     let mut economy = economy.clone();
@@ -73,6 +76,7 @@ fn seeded_with(fx: &Fixture, economy: &Economy, civs: bool) -> World {
     world
         .load_resources(&fx.resources)
         .expect("the pack fits the stockpile");
+    world.load_combat(&fx.combat);
     if civs {
         // The bar rules live in the civ's tech-tree effect, so the effect table comes with them.
         world
@@ -101,6 +105,14 @@ fn first_villager(world: &World) -> EntityId {
         .id
 }
 
+fn villagers(world: &World) -> usize {
+    world
+        .entities()
+        .iter()
+        .filter(|e| e.player == 1 && e.kind == EntityKind::Unit && e.unit == Some(VILLAGER))
+        .count()
+}
+
 fn a_free_tile(world: &World) -> (u16, u16) {
     let scale = world.scale();
     let centre = world.entity(town_centre(world)).expect("tc");
@@ -122,8 +134,7 @@ fn a_free_tile(world: &World) -> (u16, u16) {
     panic!("no free ground near the town centre");
 }
 
-/// Queue a house and run until it is finished.
-fn a_finished_house(world: &mut World) -> EntityId {
+fn a_house_site(world: &mut World) -> EntityId {
     let villager = first_villager(world);
     let at = a_free_tile(world);
     world.submit(Command::Build {
@@ -132,144 +143,186 @@ fn a_finished_house(world: &mut World) -> EntityId {
         at,
     });
     world.step().expect("step");
-    let site = world
+    world
         .entities()
         .iter()
         .filter(|e| e.kind == EntityKind::Building && e.unit == Some(HOUSE))
         .map(|e| e.id)
         .next()
-        .expect("the house site exists");
+        .expect("the house site exists")
+}
+
+fn finish(world: &mut World, site: EntityId) {
     for _ in 0..4_000 {
         if world.entity(site).map(|e| e.construction.is_none()) == Some(true) {
-            return site;
+            return;
         }
         world.step().expect("step");
     }
-    panic!("the house never finished");
+    panic!("the building never finished");
 }
 
-/// Fill the player up to their cap by training villagers, and return how many that took.
-fn train_until_refused(world: &mut World) -> u32 {
+fn a_finished_house(world: &mut World) {
+    let site = a_house_site(world);
+    finish(world, site);
+}
+
+/// Order villagers one at a time until one stops arriving - the ceiling pausing it - and return how
+/// many arrived. The order that stalls is still queued when this returns.
+fn fill_to_the_ceiling(world: &mut World) -> usize {
     let centre = town_centre(world);
-    let baseline = villager_count(world);
-    let mut trained = 0;
-    for _ in 0..40 {
-        match world.submit_checked(Command::Train {
-            building: centre,
-            unit: VILLAGER,
-        }) {
-            Ok(()) => {
-                trained += 1;
-                // Let the villager arrive so the population is real before the next order: one slot
-                // per building, so ordering again too early would be a different refusal.
-                let want = baseline + usize::try_from(trained).expect("a small number");
-                let mut arrived = false;
-                for _ in 0..4_000 {
-                    world.step().expect("step");
-                    if villager_count(world) >= want {
-                        arrived = true;
-                        break;
-                    }
-                }
-                if !arrived {
-                    // The finished unit waits inside its building when every neighbouring tile is
-                    // taken, which is what a crowd around a town centre does. That is the engine
-                    // being careful, not the cap, and it is not what this helper measures.
-                    return trained - 1;
-                }
+    let start = villagers(world);
+    for arrived in 0..40 {
+        world
+            .submit_checked(Command::Train {
+                building: centre,
+                unit: VILLAGER,
+            })
+            .expect("a queue may hold more than the player can support");
+        let want = start + arrived + 1;
+        let mut seen = false;
+        for _ in 0..4_000 {
+            world.step().expect("step");
+            if villagers(world) >= want {
+                seen = true;
+                break;
             }
-            Err(SimError::PopulationCapped { .. }) => return trained,
-            Err(other) => panic!("expected a population refusal, got {other:?}"),
+        }
+        if !seen {
+            return arrived;
         }
     }
-    panic!("the player trained forty villagers: nothing is capping them");
-}
-
-fn villager_count(world: &World) -> usize {
-    world
-        .entities()
-        .iter()
-        .filter(|e| e.player == 1 && e.kind == EntityKind::Unit && e.unit == Some(VILLAGER))
-        .count()
+    panic!("the player trained forty villagers: the ceiling is not pausing anything");
 }
 
 const HOUSE: u32 = 70;
 const VILLAGER: u32 = 83;
+const SPEARMAN: u32 = 93;
 
 #[test]
 fn a_town_centre_supports_five_units() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    // Three villagers start, the town centre holds five: two more fit, the third does not.
-    assert_eq!(train_until_refused(&mut world), 2);
+    // Three villagers start and the town centre holds five, so two more arrive and no more.
+    assert_eq!(villagers(&world), 3);
+    assert_eq!(fill_to_the_ceiling(&mut world), 2);
+    assert_eq!(villagers(&world), 5);
 }
 
+/// The order is not refused at the ceiling: it is held, and its clock does not run.
 #[test]
-fn a_finished_house_raises_the_cap() {
+fn a_full_player_holds_the_order_and_pauses_the_clock() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    a_finished_house(&mut world);
-    assert_eq!(
-        train_until_refused(&mut world),
-        7,
-        "five from the town centre plus five from the house, minus the three villagers already there"
-    );
-}
-
-#[test]
-fn a_house_under_construction_supports_nothing_yet() {
-    let Some(fx) = fixture() else { return };
-    // Five villagers fill the town centre's own five, so the only thing that can let another one in
-    // is a finished house.
-    let mut economy = fx.economy.clone();
-    economy.start.villagers_per_player = 5;
-    let mut world = seeded_with(&fx, &economy, true);
-    let villager = first_villager(&world);
-    let at = a_free_tile(&world);
-    world.submit(Command::Build {
-        villager,
-        unit: HOUSE,
-        at,
-    });
-    world.step().expect("step");
-    let site = world
-        .entities()
-        .iter()
-        .filter(|e| e.kind == EntityKind::Building && e.unit == Some(HOUSE))
-        .map(|e| e.id)
-        .next()
-        .expect("the house site exists");
-    assert!(
-        world.entity(site).expect("site").construction.is_some(),
-        "the house is not built yet"
-    );
-
+    fill_to_the_ceiling(&mut world);
     let centre = town_centre(&world);
-    match world.submit_checked(Command::Train {
-        building: centre,
-        unit: VILLAGER,
-    }) {
-        Err(SimError::PopulationCapped {
-            cap, population, ..
-        }) => {
-            assert_eq!((population, cap), (5, 5), "five of five, house not counted");
-        }
-        other => panic!("expected PopulationCapped, got {other:?}"),
-    }
-
-    // Finish it, and the same order is allowed.
-    for _ in 0..4_000 {
-        if world.entity(site).map(|e| e.construction.is_none()) == Some(true) {
-            break;
-        }
-        world.step().expect("step");
-    }
     world
         .submit_checked(Command::Train {
             building: centre,
             unit: VILLAGER,
         })
-        .expect("a finished house supports five more");
+        .expect("a queue may hold more than the player can support");
+    world.step().expect("step");
+    let paused = world
+        .entity(centre)
+        .and_then(|entity| entity.training)
+        .expect("the job started");
+    let before = villagers(&world);
+
+    for _ in 0..2_000 {
+        world.step().expect("step");
+    }
+    assert_eq!(villagers(&world), before, "nothing arrived");
+    let still = world
+        .entity(centre)
+        .and_then(|entity| entity.training)
+        .expect("the job is still there");
+    assert_eq!(
+        still.remaining_ticks, paused.remaining_ticks,
+        "a paused job does not count down"
+    );
+}
+
+#[test]
+fn a_finished_house_lets_a_paused_unit_arrive() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    fill_to_the_ceiling(&mut world);
+    let centre = town_centre(&world);
+    world
+        .submit_checked(Command::Train {
+            building: centre,
+            unit: VILLAGER,
+        })
+        .expect("the order is held");
+    world.step().expect("step");
+    let before = villagers(&world);
+
+    a_finished_house(&mut world);
+    for _ in 0..6_000 {
+        world.step().expect("step");
+        if villagers(&world) > before {
+            return;
+        }
+    }
+    panic!("the house finished and the held villager still never arrived");
+}
+
+/// Killing a unit frees its population, and the held order is the thing that notices.
+#[test]
+fn a_dead_unit_lets_a_paused_unit_arrive() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    fill_to_the_ceiling(&mut world);
+    let centre = town_centre(&world);
+    world
+        .submit_checked(Command::Train {
+            building: centre,
+            unit: VILLAGER,
+        })
+        .expect("the order is held");
+    world.step().expect("step");
+    let before = villagers(&world);
+
+    // An enemy spearman beside one of the player's villagers: seven blows and a slot is free.
+    let scale = world.scale();
+    let victim = first_villager(&world);
+    let spot = world.position(victim).expect("position");
+    let attacker = EntityId(9_999);
+    world
+        .submit_checked(Command::Spawn {
+            id: attacker,
+            player: 2,
+            kind: EntityKind::Unit,
+            unit: Some(SPEARMAN),
+            position: (spot.0, ruage_fixed::Fixed::from_raw(spot.1.raw() + scale)),
+            speed: ruage_fixed::Fixed::ZERO,
+            hp: 200,
+            amount: 0,
+        })
+        .expect("spawn");
+    world.step().expect("step");
+    world
+        .submit_checked(Command::Attack {
+            attacker,
+            target: victim,
+        })
+        .expect("attack");
+
+    for _ in 0..6_000 {
+        world.step().expect("step");
+        if villagers(&world) < before {
+            break;
+        }
+    }
+    assert!(villagers(&world) < before, "the villager died");
+    for _ in 0..6_000 {
+        world.step().expect("step");
+        if villagers(&world) >= before {
+            return;
+        }
+    }
+    panic!("a death freed population and the held villager still never arrived");
 }
 
 /// The Huns cannot build houses at all (their tech tree takes the house away), so a cap that counts
@@ -280,36 +333,69 @@ fn a_civilisation_that_cannot_build_houses_gets_the_whole_cap() {
     let mut economy = fx.economy.clone();
     economy.start.civs = vec!["Huns".to_owned()];
     let mut world = seeded_with(&fx, &economy, true);
-    let trained = train_until_refused(&mut world);
-    assert!(
-        trained >= 20,
-        "the Huns train past any house-derived cap, and trained {trained}"
+    let centre = town_centre(&world);
+    let before = villagers(&world);
+    for _ in 0..20 {
+        // The queue holds five, so this keeps it fed rather than trying to place twenty at once.
+        if world
+            .submit_checked(Command::Train {
+                building: centre,
+                unit: VILLAGER,
+            })
+            .is_err()
+        {
+            for _ in 0..4_000 {
+                world.step().expect("step");
+                if world
+                    .entity(centre)
+                    .is_some_and(|entity| entity.training.is_none())
+                {
+                    break;
+                }
+            }
+            world
+                .submit_checked(Command::Train {
+                    building: centre,
+                    unit: VILLAGER,
+                })
+                .expect("the Huns train without housing");
+        }
+        world.step().expect("step");
+    }
+    for _ in 0..80_000 {
+        world.step().expect("step");
+        if villagers(&world) >= before + 20 {
+            return;
+        }
+    }
+    panic!(
+        "the Huns trained {} of 20: something capped them by houses",
+        villagers(&world) - before
     );
 }
 
-/// The ceiling is content's, not the sum of the buildings: forty houses do not buy four hundred units.
+/// The ceiling is content's, not the sum of the buildings: a small `cap_default` holds even with a house.
 #[test]
 fn the_cap_stops_at_what_content_allows() {
     let Some(fx) = fixture() else { return };
     let mut economy = fx.economy.clone();
     economy.population.cap_default = 8;
-    economy.population.house_population = 5;
     let mut world = seeded_with(&fx, &economy, true);
     a_finished_house(&mut world);
-    // Three villagers, cap 8: five more fit, whatever the house arithmetic says.
-    assert_eq!(train_until_refused(&mut world), 5);
+    // Three villagers and a ceiling of eight: five arrive, where house plus town centre would say
+    // thirteen.
+    assert_eq!(fill_to_the_ceiling(&mut world), 5);
+    assert_eq!(villagers(&world), 8);
 }
 
-/// A queue cannot be used to slip past the ceiling: the order is refused because the units already in
-/// the queue are population the player has committed to.
+/// A queue may be longer than the ceiling, and it drains as the population frees up - that is the rule
+/// the ceiling pause exists for.
 #[test]
-fn queued_units_count_against_the_cap() {
+fn a_queue_can_exceed_the_ceiling_and_drains_later() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let centre = town_centre(&world);
-    // Three villagers and a town centre's five: exactly two more fit, and queuing a third is an
-    // attempt to hold five.
-    for placed in 0..2 {
+    for placed in 0..5 {
         world
             .submit_checked(Command::Train {
                 building: centre,
@@ -317,26 +403,25 @@ fn queued_units_count_against_the_cap() {
             })
             .unwrap_or_else(|err| panic!("order {placed} refused: {err:?}"));
     }
-    // Apply them: the point of this test is the *applied* queue (one being made, one behind it), not
-    // orders still waiting in the command queue.
     world.step().expect("step");
-    assert!(
-        world
-            .entity(centre)
-            .expect("town centre")
-            .training
-            .is_some(),
-        "the first order is being made"
-    );
-    match world.submit_checked(Command::Train {
-        building: centre,
-        unit: VILLAGER,
-    }) {
-        Err(SimError::PopulationCapped {
-            population, cap, ..
-        }) => {
-            assert_eq!((population, cap), (5, 5), "three alive and two queued");
-        }
-        other => panic!("expected PopulationCapped, got {other:?}"),
+    for _ in 0..8_000 {
+        world.step().expect("step");
     }
+    assert_eq!(
+        villagers(&world),
+        5,
+        "three started, two arrived, the rest wait"
+    );
+
+    a_finished_house(&mut world);
+    for _ in 0..20_000 {
+        world.step().expect("step");
+        if villagers(&world) >= 8 {
+            return;
+        }
+    }
+    panic!(
+        "the queue did not drain after the house: only {} villagers",
+        villagers(&world)
+    );
 }

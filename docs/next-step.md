@@ -430,6 +430,20 @@ still pending, so it passed with the committed count deleted. It steps once now.
 Next: **projectiles as entities** (a shot is instant damage at range today), or **kind 0** once garrison and
 line of sight exist, or **per-civ tuning** (the 211-number array, still unread).
 
+## Corrected: the ceiling pauses, it does not refuse (2026-10-27, v0.76)
+
+The housing step shipped the ceiling as a refusal. It is not one: a queue may hold more than the player can
+support, and when the ceiling is reached **training pauses** - the job keeps its remaining ticks and waits
+for a unit to die or a house to finish. `check_train` no longer looks at population, `PopulationCapped` is
+gone, and the production pass asks once per player with a building in production whether they are full.
+
+The price of the wrong rule was the tests: five of them asserted the refusal and all five had to be
+rewritten. And one of the new ones - "pauses the clock" - still passes with the pause removed, because a
+crowd of villagers around a town centre gives a finished unit nowhere to stand; the mutation is caught by
+the queue-drain test and by the house and death tests instead.
+
+Next: **projectiles as entities**, which was the instruction this correction interrupted.
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

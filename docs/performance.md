@@ -51,6 +51,16 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Twenty-third pass: the pause costs one scan per producing player per tick (2026-10-27)
+
+The ceiling pause is the first *unconditional* per-tick addition in a while: for every player with a
+building in production, the tick counts that player's units to compare against their ceiling. It is one
+walk of the entity list per such player - two in a two-player match with both sides producing - and it
+short-circuits the whole thing when nobody is training, which is the common case in the probes. At 126
+entities that is a couple of hundred comparisons, which is why both anchors stay put
+(`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`); it is recorded here because it is the shape that would matter at
+scale, and the fix when it does is to keep a per-player unit count rather than recounting.
+
 ## Twenty-second pass: the tick loop did not change shape (2026-10-27)
 
 The queue could have been done by turning `Entity.training` into a `Vec`, which would have widened the hot
