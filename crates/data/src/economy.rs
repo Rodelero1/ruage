@@ -40,6 +40,9 @@ pub struct Start {
     pub town_centre: String,
     pub villager: String,
     pub villagers_per_player: u32,
+    /// Tech roles a match begins with, already researched. Without them a match could research
+    /// nothing at all: every tech in the table lists the Dark Age as a prerequisite.
+    pub techs: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -173,6 +176,8 @@ struct RawStart {
     town_centre: String,
     villager: String,
     villagers_per_player: u32,
+    #[serde(default)]
+    techs: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -280,6 +285,20 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
                 path,
                 "role",
                 format!("{name} = 0: unit id zero is a real unit, never a role"),
+            ));
+        }
+    }
+    // A starting tech is a *tech role*, because the engine would otherwise have to be told that
+    // "dark age" is id 104.
+    for name in &raw.start.techs {
+        if !raw.tech_role.contains_key(name) {
+            return Err(invalid(
+                path,
+                "start.techs",
+                format!(
+                    "{name:?} is not a [tech_role], so no tech can be named by it: the match would \
+                     start with a tech the pack cannot describe"
+                ),
             ));
         }
     }
@@ -412,6 +431,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             town_centre: raw.start.town_centre,
             villager: raw.start.villager,
             villagers_per_player: raw.start.villagers_per_player,
+            techs: raw.start.techs,
         },
         role: raw.role,
         tech_role: raw.tech_role,

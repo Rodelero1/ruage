@@ -83,6 +83,9 @@ rate_from = "dat"
 town_centre = "town_centre"
 villager = "villager"
 villagers_per_player = 3
+# What the match opens with. Every tech in the table lists the Dark Age tech as a prerequisite, so a
+# match that did not start with it could research nothing at all.
+techs = ["dark_age"]
 # PROVENANCE: dat (ids, hp, speed) + the standard 3-villager start. The count is a match
 # rule, not a dat field, which is exactly why it belongs in config.
 
@@ -113,6 +116,7 @@ spearman = 74       # SPRM, 40 hp, 0.9 tiles/s
 # A tech has no name in the dat (names are string-ids into the language files), so content that has
 # to name one - the scenario format, a UI - uses these. Same rule as [role]: the ids are the
 # reference pack's, the words are ours (D17).
+dark_age = 104      # free, instant, no home building: the prerequisite every other tech lists
 man_at_arms = 222   # 100 food + 40 gold, 40 s: spearmen (74) become swordsmen (75)
 loom = 22           # 50 gold, 25 s, at the town centre: villagers 25 -> 40 health
 feudal_age = 101    # the prerequisite Man-at-Arms lists; its effect is a tech-tree gate, unimplemented

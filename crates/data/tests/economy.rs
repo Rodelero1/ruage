@@ -52,6 +52,7 @@ man_at_arms = 222
 town_centre = "town_centre"
 villager = "villager"
 villagers_per_player = 3
+techs = ["man_at_arms"]
 
 [population]
 cap_default = 200
@@ -387,4 +388,30 @@ fn a_train_entry_names_units_by_role() {
         err.contains("units"),
         "the refusal points at the field: {err}"
     );
+}
+
+/// A match does not begin with nothing researched: the Dark Age tech is what every other tech lists as
+/// a prerequisite. Content says which techs a match opens with, by role, so the engine is not asked to
+/// know that "dark age" means tech 104 (D17).
+#[test]
+fn the_starting_techs_are_roles_and_must_exist() {
+    let economy = load_economy_str(GOOD, "economy.toml").expect("fixture loads");
+    assert_eq!(
+        economy.start.techs,
+        vec!["man_at_arms".to_owned()],
+        "kept as written; the role is resolved where it is used"
+    );
+
+    let unknown = GOOD.replace("techs = [\"man_at_arms\"]", "techs = [\"bronze_age\"]");
+    let err = load_economy_str(&unknown, "economy.toml")
+        .expect_err("a starting tech the pack cannot name is a mistake")
+        .to_string();
+    assert!(err.contains("bronze_age"), "the refusal names it: {err}");
+}
+
+#[test]
+fn a_match_may_start_with_no_research() {
+    let plain = GOOD.replace("\ntechs = [\"man_at_arms\"]", "");
+    let economy = load_economy_str(&plain, "economy.toml").expect("the field is optional");
+    assert!(economy.start.techs.is_empty());
 }

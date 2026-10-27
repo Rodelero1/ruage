@@ -114,6 +114,25 @@ any finished building), and the tests do it with `grant_tech`. Content should sa
 ["dark_age"]` and seeding should grant it, which is the same place kind-6 tech-tree effects (what a
 building may train, per age) will need to land.
 
+## Done next: a match opens with its starting techs (2026-10-27, v0.61)
+
+`[start] techs = ["dark_age"]` and `[tech_role] dark_age = 104`, granted by the engine when the world
+is seeded *or* when the research tables are loaded - either order, because a headless runner and a
+scenario runner call them the other way round from each other. The point is not bookkeeping: every tech
+in the table lists 104 as a prerequisite, so the previous state of the world ("nothing researched") was
+one in which **research was impossible**. Tests had been granting it by hand, which is exactly the
+smell: a test doing what the game should.
+
+Two fixtures had to learn the same thing, and their failure was informative - a purpose-built tech
+table with no 104 made `load_research` fail with `MissingTech { id: 104 }`, which is the right answer:
+content that says "start with dark_age" and tables that cannot supply it are inconsistent, and the
+loader says so rather than starting a match that silently cannot research.
+
+**Still missing from "what a match begins with": resources.** Every player starts with nothing, so the
+ten-minute script has to gather before it can build and cannot afford a 50-gold tech at all. `[start]
+stock = { wood = 200, food = 200, gold = 100, stone = 200 }` (the standard opening) is the same shape of
+content, but it will move every test that asserts "the player starts broke", so it wants its own step.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

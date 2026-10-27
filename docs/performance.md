@@ -51,6 +51,17 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Eighth pass: no tick path touched (2026-10-27)
+
+Starting techs are granted at seed or table-load time, so the interleaved A/B has nothing to find, and
+it found nothing: parity at 126 entities (2.23-2.28 against base's 2.37-2.53) and 1,126 (19.71-19.99
+against 19.38-20.00). At 2,126 the numbers read 36.7-37.8 against 34.8-36.1, which is the **same 2-3%
+residual the seventh pass recorded as unexplained** - not a new cost, and the box's load average was
+4.8 throughout. The stability and scripted hashes both stayed put (`936e71d5a641044f`,
+`0f5eea624d75d87a`) because those probes load no research tables; with `--techs`/`--effects` the
+scripted run hashes `db92f158160e7a5b`, which is the intended difference: the opening state now
+contains the Dark Age tech.
+
 ## Seventh pass: a field on `Unit` costs more than a lookup table (2026-10-27)
 
 The prerequisite gate needed the variant relation (an age-up replaces the town centre 109 with 71), and

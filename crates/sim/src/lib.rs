@@ -1079,6 +1079,9 @@ impl World {
             })?;
             next_id += 1;
         }
+        // If the research tables are already loaded, the opening techs belong to this position; if
+        // they arrive later, `load_research` grants them then. See `grant_starting_techs`.
+        self.grant_starting_techs()?;
         Ok(())
     }
 
@@ -2595,6 +2598,41 @@ impl World {
         }
         self.techs = Some(techs.clone());
         self.effects = Some(effects.clone());
+
+        self.grant_starting_techs()
+    }
+
+    /// Grant the techs content says a match opens with - the pack names the Dark Age, which every other
+    /// tech lists as a prerequisite, so a world that skipped it could research nothing at all.
+    ///
+    /// Both `seed_from` and `load_research` call this: a runner may load the tables before it seeds or
+    /// after, and the opening position must not depend on that order. Granting twice is harmless - a
+    /// researched tech is a set insert, the health delta is zero, and a kind-3 upgrade finds no unit
+    /// still carrying the old id.
+    fn grant_starting_techs(&mut self) -> Result<(), SimError> {
+        if self.techs.is_none() {
+            return Ok(());
+        }
+        let Some(economy) = self.economy.clone() else {
+            return Ok(());
+        };
+        let starting: Vec<u32> = economy
+            .start
+            .techs
+            .iter()
+            .filter_map(|role| economy.tech_role.get(role).copied())
+            .collect();
+        if starting.is_empty() {
+            return Ok(());
+        }
+        for player in 1..=u8::try_from(MAX_PLAYERS).unwrap_or(1) {
+            if !self.entities.iter().any(|entity| entity.player == player) {
+                continue;
+            }
+            for tech in &starting {
+                self.grant_tech(player, *tech)?;
+            }
+        }
         Ok(())
     }
 

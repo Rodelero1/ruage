@@ -32,6 +32,10 @@ const SPEARMAN: u32 = 74;
 const SWORDSMAN: u32 = 75;
 const BARRACKS: u32 = 12;
 const TOWN_CENTRE: u32 = 109;
+/// The techs the pack's `[start] techs` names, and the one every other tech needs.
+const DARK_AGE: u32 = 104;
+const FEUDAL_AGE: u32 = 101;
+const LOOM: u32 = 22;
 
 struct Fixture {
     settings: Settings,
@@ -170,7 +174,9 @@ fn place(world: &mut World, player: u8, id: u32, unit: u32, tile: (i64, i64), hp
 /// building created later keeps the id the tech names. And grant *after* gathering, because the town
 /// centre's upgrade means the villagers' drop sites no longer match it.
 fn feudal(world: &mut World) {
-    for tech in [104, 659, 101] {
+    // 104 comes from the pack's `[start] techs`; 659 is the other parent of Feudal and has to be
+    // granted, then Feudal itself.
+    for tech in [659, FEUDAL_AGE] {
         world.grant_tech(1, tech).expect("seeding the Feudal Age");
     }
 }
@@ -528,5 +534,54 @@ fn a_tech_is_legal_once_its_prerequisite_is_researched() {
     assert!(
         world.researched(1).contains(&MAN_AT_ARMS),
         "the tech lands once researched"
+    );
+}
+
+/// A match opens with the techs content says it does. The pack names `start.techs = ["dark_age"]`,
+/// which is tech 104 - free, instant, and the prerequisite of every other tech in the table - so a
+/// world that skipped it could research nothing, and every test would have to grant it by hand.
+#[test]
+fn a_world_opens_with_the_techs_the_pack_starts_with() {
+    let Some(fx) = fixture() else { return };
+    let world = seeded(&fx);
+    for player in [1, 2] {
+        assert!(
+            world.researched(player).contains(&DARK_AGE),
+            "player {player} opens with the Dark Age tech: {:?}",
+            world.researched(player)
+        );
+    }
+    assert!(
+        !world.researched(1).contains(&FEUDAL_AGE),
+        "and not with an age it has to earn"
+    );
+
+    // Loom lists 104 as its prerequisite, so it is legal on turn one - the point of starting with it.
+    let mut world = seeded(&fx);
+    let centre = place(&mut world, 1, 9_500, TOWN_CENTRE, (14, 14), 2400);
+    bank(&mut world, slot("gold"), 50);
+    world
+        .submit_checked(Command::Research {
+            building: centre,
+            tech: LOOM,
+        })
+        .expect("Loom is legal in the opening position");
+}
+
+/// The tables can be loaded before the world is seeded - a headless runner may do either - and the
+/// starting techs must arrive the same way in both orders. Granting them only where `load_research`
+/// finds entities would make the match's opening depend on call order, which is exactly the kind of
+/// bug that shows up as "research does nothing" in someone else's integration.
+#[test]
+fn starting_techs_arrive_whichever_order_the_tables_are_loaded() {
+    let Some(fx) = fixture() else { return };
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    world.load_research(&fx.techs, &fx.effects).expect("tables");
+    world
+        .seed_from(&fx.map, &fx.economy, &fx.units)
+        .expect("seeding");
+    assert!(
+        world.researched(1).contains(&DARK_AGE),
+        "the match opens with the Dark Age even when the tables came first"
     );
 }

@@ -199,7 +199,8 @@ fn feudal(world: &mut World) {
 }
 
 fn feudal_for(world: &mut World, player: u8) {
-    for tech in [104, 659, 101] {
+    // 104 arrives with the match (the pack names it in `[start] techs`); 659 is Feudal's other parent.
+    for tech in [659, 101] {
         world
             .grant_tech(player, tech)
             .expect("seeding the Feudal Age");
@@ -352,6 +353,15 @@ modifiers = [{ op = "add", attribute = "attack", attribute_class = -1, unit = -1
         r#"
 schema = 1
 kind = "techs"
+
+# The pack's `[start] techs` names the Dark Age, so the tables a world loads have to carry it.
+[[tech]]
+id = 104
+effect_id = -1
+research_time = 0
+costs = []
+required = []
+location = 0
 
 [[tech]]
 id = 222

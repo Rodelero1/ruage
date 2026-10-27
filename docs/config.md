@@ -118,6 +118,13 @@ commands, so the importer derives it, and the engine resolves a variant to its r
 names a building: what a tech is researched at, where a carried load may be dropped, what a building
 trains, and what a scenario's `role = "barracks"` means.
 
+`[start] techs` names the techs a match begins with, by `[tech_role]`. The pack opens with
+`techs = ["dark_age"]`, because every tech in the table lists the Dark Age (104) as a prerequisite: a
+match that started with nothing researched could research **nothing at all**. The engine grants them
+whichever order its tables are loaded in - `seed_from` and `load_research` both try - and a tech role
+the pack cannot name is refused at load. The tables must carry the tech: `--techs`/`--effects` on the
+headless runner, or `World::load_research` in a test.
+
 `[[train.entry]]` says which building may create which unit, and it names **roles**, like everything
 else that talks about a unit: `building = "town_centre"`, `units = ["villager"]`. The ids are resolved
 through `[role]` when the pack loads, so an author who mistypes a role is told at load which name was
