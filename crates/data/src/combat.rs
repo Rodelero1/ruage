@@ -7,6 +7,9 @@ use crate::{ConfigError, MaybeFixed, SUPPORTED_SCHEMA};
 #[derive(Debug, Clone)]
 pub struct Combat {
     pub damage: Damage,
+    /// The fraction of its hit points a building can fall to before it ejects its garrison. Published:
+    /// a building ejects at 20% or below and takes nobody in until it is repaired above that.
+    pub garrison_eject_fraction: MaybeFixed,
     /// How fast a shot flies, in tiles per second. Zero means shots land where they are aimed with no
     /// flight at all, which is what a pack written before projectiles existed meant.
     pub projectile_speed: MaybeFixed,
@@ -60,6 +63,10 @@ impl Combat {
     }
 }
 
+fn default_eject_fraction() -> f64 {
+    0.2
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawFile {
@@ -68,6 +75,9 @@ struct RawFile {
     /// Defaulted to zero: no flight, which is how every shot behaved until this existed.
     #[serde(default)]
     projectile_speed: f64,
+    /// Defaulted to a fifth, which is the published rule.
+    #[serde(default = "default_eject_fraction")]
+    garrison_eject_fraction: f64,
     elevation: RawElevation,
     attack_timing: RawAttackTiming,
     buildings: RawBuildings,
@@ -152,6 +162,7 @@ pub fn load_combat_str(text: &str, path: &str) -> Result<Combat, ConfigError> {
 
     Ok(Combat {
         projectile_speed: MaybeFixed::from_f64(raw.projectile_speed),
+        garrison_eject_fraction: MaybeFixed::from_f64(raw.garrison_eject_fraction),
         damage: Damage {
             minimum: raw.damage.minimum,
             armour_missing_sentinel: MaybeFixed::from_f64(raw.damage.armour_missing_sentinel),

@@ -730,3 +730,56 @@ parsed and unused. Now:
 this player see", but nothing asks: there is no fog, no scouting rule, and no targeting rule that hides
 anything. A visibility model with no consumer is the mistake D26 recorded, so it waits for one - a UI
 overlay, a scenario condition, or a rule that makes unseen units untargetable.
+
+## D37 - Correcting D36: a garrison is ejected at 20%, and a building's volley is dps arithmetic
+
+Two rules went in wrong in D36 and are corrected here, on published sources and the user's statement of
+them.
+
+**Ejection, not death.** D36 said a garrison dies with its shelter. It does not: a building **ejects** its
+garrison once it falls to **20% of its hit points or below**, and refuses a new garrison until it is repaired
+above that. The units come out unharmed and land where they already stand - the game does not punish a
+player for a building taking damage. (Rams and siege towers are the exception: only destruction ejects them,
+and this engine has no garrisonable ram yet.) The fraction is content:
+`[combat] garrison_eject_fraction = 0.2`, with the source named beside it, and the check sits where damage is
+applied rather than in a per-tick scan.
+
+**Extra arrows are dps arithmetic, and the qualifier is the damage class.** The published rule:
+
+    extra arrows = floor( sum of garrisoned units' dps / building dps )
+
+where a dps is the **pierce (class 3) attack over the reload**. Two consequences worth stating: the division
+happens **once at the end** (not per unit), and only units that deal *pierce* damage from range contribute -
+which is why a Throwing Axeman, a Mameluke or a Gbeto adds nothing despite being ranged. That qualifier is
+data rather than lore: our own table shows the axeman (281) and the Gbeto (1013) as ranged with a **melee
+(class 4)** attack and no pierce, while archers, cavalry archers and hand cannoneers carry pierce.
+
+**Two things deliberately not modelled yet, both recorded rather than papered over:** the published rules have
+each extra arrow transmit the *garrisoned unit's* attack (only the first arrow is the building's), and a
+garrisoned villager counts as a fixed 2.5 dps whatever the villager's own numbers are. Today every arrow in a
+volley carries the building's damage, and villagers contribute their own (zero) pierce dps. Both are visible
+differences from the game and neither is guessed at.
+
+**A test that passed for the wrong reason, found by mutating the wrong thing.** The first Throwing Axeman test
+survived removing the range qualifier, because an axeman has no pierce damage to contribute anyway - the
+discard happened in the dps function, not the range check. Mutating the *damage class* filter instead fails it,
+which is what that test actually pins.
+
+## D38 - A production building holds only what it has just trained
+
+D36 let any building with a garrison capacity take any unit standing beside it. That is wrong for the five
+buildings that exist to *make* units: the barracks, archery range, stable, siege workshop and dock accept only
+a unit they have just trained - in the game by putting the rally flag on the building itself - and a unit that
+has walked out can never come back. Town centres, towers and castles take units in from outside.
+
+**The data draws the line without help from a list of names.** Those five buildings each carry a garrison
+capacity of ten and **no attack array**; the three shelters each carry a capacity *and* an attack array with a
+range. So the rule is "a building that can fight takes outsiders in", which is the same split, derived rather
+than enumerated, and it keeps the engine free of a hard-coded set of building ids (D17).
+
+The refusal is `CannotGarrisonHere`, and its message says what the rule is rather than what the code did.
+
+**One half of the rule is not modelled yet, and is named:** a freshly trained unit can be kept inside its
+production building by rallying to the building itself. This engine has no rally points at all - a trained unit
+always appears on the neighbouring tile - so today a barracks holds nobody. That is the correct behaviour for a
+production building under this rule, and the other half arrives with rally points, which is a step of its own.

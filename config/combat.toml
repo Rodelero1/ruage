@@ -5,6 +5,11 @@
 
 schema = 1
 
+garrison_eject_fraction = 0.2
+# PROVENANCE: published (Fandom "Garrison", Aoe2Sheet): a building ejects its garrison once it is at 20%
+# of its hit points or below, and takes nobody in until repaired above it. Units inside a ram or siege
+# tower are the exception - only destruction ejects them - and this engine has no garrisonable ram yet.
+
 projectile_speed = 10.0
 # PROVENANCE: authored. A shot is an entity that flies at this many tiles per second, and ten is a
 # stand-in for the dat's per-unit missile speed, which this importer does not read yet. Zero would make

@@ -486,6 +486,45 @@ no scouting, no untargetable-when-unseen rule. It waits for a consumer.
 Next: **kind 0** now has garrison capacity to act on (attribute 21), or **the per-civ 211-number array**,
 still unread.
 
+## Corrected: ejection at 20%, and volleys that count (2026-10-27, v0.79)
+
+D36 got two rules wrong, and both are now the published ones.
+
+**A garrison is ejected, not killed**, when its building falls to 20% of its hit points or below - unharmed,
+where it stands - and the building takes nobody in until repaired above that. Content:
+`[combat] garrison_eject_fraction = 0.2`, checked where damage lands rather than in a per-tick scan.
+
+**A building's extra arrows are dps arithmetic:** `floor(sum of garrisoned units' dps / building dps)`, where
+dps is the **pierce** attack over the reload, divided once at the end. The qualifier is the damage class, and
+our own data settles it - a Throwing Axeman (281) and a Gbeto (1013) are ranged with *melee* damage and add
+nothing, while archers, cavalry archers and hand cannoneers add.
+
+**Not modelled, and named:** each extra arrow should carry the garrisoned unit's attack (only the first is the
+building's), and a garrisoned villager should count as a fixed 2.5 dps. Today every arrow in a volley carries
+the building's damage and villagers contribute nothing.
+
+Mutation-proved: removing the ejection fails the ejection test, forcing one arrow fails the archer test, and
+counting melee damage as pierce fails the axeman test. That last one also showed the axeman test was passing
+for a different reason than its name suggested.
+
+## Corrected again: production buildings do not take outsiders (2026-10-27, v0.80)
+
+A second correction to D36, from the same source. The barracks, archery range, stable, siege workshop and dock
+hold **only what they have just trained** (by rallying to themselves) and never take a unit back in; town
+centres, towers and castles take units from outside. The data draws the line itself - those five carry a
+garrison capacity of ten and **no attack array**, the three shelters carry both - so the rule is "a building
+that can fight takes outsiders in" rather than a hard-coded list of ids.
+
+`CannotGarrisonHere` says so. **Not modelled, and named:** the other half (a trained unit kept inside by
+rallying to its own building) needs rally points, which this engine does not have - so today a barracks holds
+nobody, which is right for a production building.
+
+**Also in this commit:** the ejection and volley corrections above, and the correction to the Throwing Axeman
+test that had been passing off the pierce filter rather than the range check.
+
+Next: **rally points** (which is what makes production-building garrison usable, and what a scenario wants
+anyway), then kind 0.
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

@@ -310,10 +310,11 @@ fn a_building_without_attacks_is_unarmed() {
 
 const BARRACKS: u32 = 12;
 
-/// A garrison goes down with its shelter. The alternative - ejecting everyone onto the rubble - would
-/// let a razed town centre disgorge fifteen villagers into the middle of a fight.
+/// Published rule: a building ejects its garrison once it is down to 20% of its hit points, and refuses a
+/// new one until it is repaired above that. Units inside a ram or a siege tower are the exception (only
+/// destruction ejects them), and this engine has no garrisonable rams.
 #[test]
-fn a_garrison_dies_with_its_building() {
+fn a_damaged_building_ejects_its_garrison() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let centre = town_centre(&world);
@@ -329,7 +330,7 @@ fn a_garrison_dies_with_its_building() {
         .expect("garrison");
     world.step().expect("step");
 
-    // Raze it: a pile of spearmen with orders to hit the town centre until it falls.
+    // A pile of spearmen until the town centre is under a fifth of its health.
     let target = (home.0.raw() / scale, home.1.raw() / scale + 2);
     for i in 0..12i64 {
         let attacker = place_moving(
@@ -348,17 +349,36 @@ fn a_garrison_dies_with_its_building() {
             })
             .expect("attack the town centre");
     }
-    for _ in 0..20_000 {
+    for _ in 0..40_000 {
         world.step().expect("step");
-        if world.entity(centre).is_none() {
+        let Some(building) = world.entity(centre) else {
+            panic!("the town centre fell: it should have been ejected from first");
+        };
+        let max = fx.units.unit(109).expect("town centre").hp;
+        if building.hp * 5 <= max {
             break;
         }
     }
-    assert!(world.entity(centre).is_none(), "the town centre fell");
+
+    let building = world.entity(centre).expect("town centre");
+    let max = fx.units.unit(109).expect("town centre").hp;
     assert!(
-        world.entity(villager).is_none(),
-        "the villager inside fell with it"
+        building.hp * 5 <= max,
+        "the town centre is down to {} of {max}, which is not the twentieth percentile yet",
+        building.hp
     );
+    assert_eq!(
+        world.entity(villager).expect("villager").task,
+        Task::Idle,
+        "the garrison was ejected, not killed"
+    );
+    match world.submit_checked(Command::Garrison {
+        unit: villager,
+        building: centre,
+    }) {
+        Err(SimError::GarrisonTooDamaged { id }) => assert_eq!(id, centre),
+        other => panic!("expected GarrisonTooDamaged, got {other:?}"),
+    }
 }
 
 /// A unit inside a building is not on the map: the building is the target, and the unit goes with it.
@@ -386,5 +406,165 @@ fn a_garrisoned_unit_cannot_be_attacked() {
     }) {
         Err(SimError::NotATarget { id }) => assert_eq!(id, villager),
         other => panic!("expected NotATarget, got {other:?}"),
+    }
+}
+
+/// Extra arrows: the published rule is `floor(sum of garrisoned units' dps / building dps)`, where dps is
+/// the **pierce** attack over the reload - and only units that deal pierce damage from range count, which
+/// is why a Throwing Axeman (melee damage at range 3) adds nothing.
+#[test]
+fn garrisoned_archers_add_arrows_to_a_town_centre() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let centre = town_centre(&world);
+    let scale = world.scale();
+    let home = world.position(centre).expect("position");
+    let tile = (home.0.raw() / scale + 1, home.1.raw() / scale);
+
+    // The town centre: pierce 5 over a 2 s reload. An archer: pierce 4 over 2 s, so one archer is
+    // worth 2/2.5 = 0.8 extra arrows and three are worth 2.4 -> two extra arrows.
+    let target = place(
+        &mut world,
+        2,
+        9_970,
+        SPEARMAN,
+        (home.0.raw() / scale, home.1.raw() / scale + 5),
+        5_000,
+    );
+    for i in 0..3 {
+        let archer = place(&mut world, 1, 9_971 + i, ARCHER, tile, 30);
+        world
+            .submit_checked(Command::Garrison {
+                unit: archer,
+                building: centre,
+            })
+            .expect("an archer fits");
+        world.step().expect("step");
+    }
+
+    world
+        .submit_checked(Command::Attack {
+            attacker: centre,
+            target,
+        })
+        .expect("a town centre reaches six tiles");
+    world.step().expect("step");
+    let arrows = world
+        .entities()
+        .iter()
+        .filter(|e| e.kind == EntityKind::Projectile)
+        .count();
+    assert_eq!(
+        arrows, 3,
+        "one arrow of its own plus two from three archers"
+    );
+}
+
+/// A unit that fights at range with melee damage adds nothing: the formula counts pierce dps.
+#[test]
+fn a_throwing_axeman_adds_no_arrows() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let centre = town_centre(&world);
+    let scale = world.scale();
+    let home = world.position(centre).expect("position");
+    let tile = (home.0.raw() / scale + 1, home.1.raw() / scale);
+    let target = place(
+        &mut world,
+        2,
+        9_980,
+        SPEARMAN,
+        (home.0.raw() / scale, home.1.raw() / scale + 5),
+        5_000,
+    );
+    for i in 0..4 {
+        let axeman = place(&mut world, 1, 9_981 + i, THROWING_AXEMAN, tile, 30);
+        world
+            .submit_checked(Command::Garrison {
+                unit: axeman,
+                building: centre,
+            })
+            .expect("terrible, but allowed");
+        world.step().expect("step");
+    }
+    world
+        .submit_checked(Command::Attack {
+            attacker: centre,
+            target,
+        })
+        .expect("an attack order");
+    world.step().expect("step");
+    let arrows = world
+        .entities()
+        .iter()
+        .filter(|e| e.kind == EntityKind::Projectile)
+        .count();
+    assert_eq!(arrows, 1, "the building's own arrow, and no more");
+}
+
+const ARCHER: u32 = 4;
+const THROWING_AXEMAN: u32 = 281;
+
+/// Only a building that can fight takes units in from outside; a production building holds nothing but
+/// what it has just trained (in the game by setting its rally onto itself), and a unit that has left can
+/// never come back. The data draws the line by itself: the barracks, archery range, stable, siege workshop
+/// and dock each carry a garrison capacity of ten and **no attack array**, while the town centre, tower and
+/// castle carry a capacity *and* an attack.
+#[test]
+fn a_production_building_does_not_take_units_in_from_outside() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let scale = world.scale();
+    let centre = town_centre(&world);
+    let home = world.position(centre).expect("position");
+    // A builder has to be able to walk to its site, so this one has a speed.
+    let builder = place_moving(
+        &mut world,
+        1,
+        9_950,
+        VILLAGER,
+        (home.0.raw() / scale + 2, home.1.raw() / scale),
+        25,
+        0.8,
+    );
+    let at = (u16::try_from(home.0.raw() / scale).unwrap() + 3, 2);
+    world
+        .submit_checked(Command::Build {
+            villager: builder,
+            unit: BARRACKS,
+            at,
+        })
+        .expect("a barracks");
+    world.step().expect("step");
+    let barracks = world
+        .entities()
+        .iter()
+        .filter(|e| e.kind == EntityKind::Building && e.unit == Some(BARRACKS))
+        .map(|e| e.id)
+        .next()
+        .expect("the site");
+    for _ in 0..12_000 {
+        if world.entity(barracks).map(|e| e.construction.is_none()) == Some(true) {
+            break;
+        }
+        world.step().expect("step");
+    }
+    assert!(
+        world
+            .entity(barracks)
+            .is_some_and(|e| e.construction.is_none()),
+        "the barracks finished, so it can be asked to take someone in"
+    );
+    // Stand the villager beside its own barracks.
+    let site = world.position(barracks).expect("position");
+    let tile = (site.0.raw() / scale, site.1.raw() / scale);
+    let walker = place(&mut world, 1, 9_990, VILLAGER, (tile.0, tile.1 + 1), 25);
+
+    match world.submit_checked(Command::Garrison {
+        unit: walker,
+        building: barracks,
+    }) {
+        Err(SimError::CannotGarrisonHere { id }) => assert_eq!(id, barracks),
+        other => panic!("expected CannotGarrisonHere, got {other:?}"),
     }
 }

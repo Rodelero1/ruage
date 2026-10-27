@@ -472,6 +472,14 @@ pub enum SimError {
     TooFar {
         id: EntityId,
     },
+    /// Only a building that can fight takes units in from outside.
+    CannotGarrisonHere {
+        id: EntityId,
+    },
+    /// The building is too badly damaged to hold a garrison: it has ejected the last one.
+    GarrisonTooDamaged {
+        id: EntityId,
+    },
     /// The building has no room for another unit.
     GarrisonFull {
         id: EntityId,
@@ -641,6 +649,14 @@ impl fmt::Display for SimError {
             SimError::GarrisonFull { id, capacity } => {
                 write!(f, "entity {} is full: it holds {capacity} units", id.0)
             }
+            SimError::GarrisonTooDamaged { id } => {
+                write!(f, "entity {} is too badly damaged to hold a garrison", id.0)
+            }
+            SimError::CannotGarrisonHere { id } => write!(
+                f,
+                "entity {} holds only the units it has just trained: it cannot be entered from outside",
+                id.0
+            ),
             SimError::AlliedTarget { id } => write!(
                 f,
                 "entity {} is on the attacker's team: allies are not targets",
@@ -867,6 +883,8 @@ pub struct World {
     combat_projectile_speed: Option<Fixed>,
     /// The same speed as a per-tick step, because the tick loop must not divide.
     projectile_step: i64,
+    /// Fraction of its health (in engine units) at or below which a building ejects its garrison.
+    garrison_eject_at: Fixed,
     /// Remaining waypoints per unit, in tiles. Part of state: it decides where the unit goes next.
     paths: BTreeMap<EntityId, Vec<(u16, u16)>>,
     /// The tech and effect tables, when they have been loaded. A research order is resolved against
@@ -946,6 +964,7 @@ impl World {
             damage_rules: None,
             combat_projectile_speed: None,
             projectile_step: 0,
+            garrison_eject_at: Fixed::ZERO,
             paths: BTreeMap::new(),
             resources: None,
             sim_rng: Pcg32::new(seed, SIM_STREAM),
@@ -1416,6 +1435,10 @@ impl World {
             .ok()
             .filter(|speed| speed.raw() > 0);
         self.projectile_step = self.projectile_speed();
+        self.garrison_eject_at = combat
+            .garrison_eject_fraction
+            .resolve(self.scale, "combat.garrison_eject_fraction")
+            .unwrap_or(Fixed::ZERO);
     }
 
     /// The checks an attack order has to survive.
@@ -2002,6 +2025,29 @@ impl World {
         if shelter.player != source.player {
             return Err(SimError::FriendlyFire { id: building });
         }
+        // Only a building that fights takes units in from outside. A production building - barracks,
+        // archery range, stable, siege workshop, dock - holds nothing but what it has just trained, and
+        // a unit that has left it can never come back. The data draws the line itself: exactly those
+        // five carry a garrison capacity and no attack array, while the town centre, towers and castles
+        // carry both (D38).
+        let units_for_hp = self.units.as_ref().ok_or(SimError::NoTables)?;
+        if let Some(stats) = shelter.unit.and_then(|built| units_for_hp.unit(built))
+            && (stats.attacks.is_empty()
+                || stats
+                    .range
+                    .resolve(self.scale, "range")
+                    .map_or(0, |range| range.raw())
+                    <= 0)
+        {
+            return Err(SimError::CannotGarrisonHere { id: building });
+        }
+        if let Some(stats) = shelter.unit.and_then(|built| units_for_hp.unit(built)) {
+            let max = self.max_hp(shelter.player, stats.id).unwrap_or(stats.hp);
+            let floor = (i64::from(max) * self.garrison_eject_at.raw()) / self.scale;
+            if i64::from(shelter.hp) <= floor {
+                return Err(SimError::GarrisonTooDamaged { id: building });
+            }
+        }
         let units = self.units.as_ref().ok_or(SimError::NoTables)?;
         let capacity = shelter
             .unit
@@ -2417,6 +2463,71 @@ impl World {
     /// Turn a gather order into resolved state: the variant, the per-tick rate and the capacity
     /// are read from the tables here, once, and stored on the entity. Nothing in the tick loop
     /// looks at a table, and a replay cannot name its own numbers.
+    /// How many arrows a building fires at once: its own, plus one for every whole multiple of its own
+    /// damage per second that its garrison contributes. The published rule is
+    /// `floor(sum of garrisoned units' dps / building dps)`, and only units that deal **pierce** damage
+    /// from range count - so an archer adds, and a Throwing Axeman (melee damage at range) does not (D37).
+    fn volley(&self, building: EntityId) -> u32 {
+        let Some(entity) = self.find(building) else {
+            return 1;
+        };
+        let Some(units) = self.units.as_ref() else {
+            return 1;
+        };
+        let Some(stats) = entity.unit.and_then(|unit| units.unit(unit)) else {
+            return 1;
+        };
+        let building_dps = self.pierce_dps(entity.player, stats);
+        if building_dps <= 0.0 {
+            return 1;
+        }
+        let mut garrison_dps = 0.0;
+        for occupant in self.entities.iter() {
+            if occupant.player != entity.player || occupant.kind != EntityKind::Unit {
+                continue;
+            }
+            if occupant.task != (Task::Garrisoned { building }) {
+                continue;
+            }
+            let Some(unit) = occupant.unit.and_then(|unit| units.unit(unit)) else {
+                continue;
+            };
+            // Range plus pierce damage: a unit that fights at range but deals melee damage (a Mameluke,
+            // a Throwing Axeman, a Gbeto) contributes nothing.
+            if unit
+                .range
+                .resolve(self.scale, "range")
+                .map_or(0, |range| range.raw())
+                <= 0
+            {
+                continue;
+            }
+            garrison_dps += self.pierce_dps(occupant.player, unit);
+        }
+        let extra = (garrison_dps / building_dps).floor().max(0.0);
+        let extra = u32::try_from(extra as i64).unwrap_or(0);
+        1u32.saturating_add(extra)
+    }
+
+    /// A unit's pierce damage per second, with its owner's upgrades applied: the pierce (class 3)
+    /// attack over the reload, both from the data.
+    fn pierce_dps(&self, player: u8, stats: &Unit) -> f64 {
+        let pierce: i32 = self
+            .adjusted(player, stats, "attack")
+            .iter()
+            .filter(|(class, _)| *class == 3)
+            .map(|(_, amount)| i32::from(*amount))
+            .sum();
+        let reload = stats
+            .reload
+            .resolve(self.scale, "reload")
+            .map_or(0, |r| r.raw());
+        if pierce <= 0 || reload <= 0 {
+            return 0.0;
+        }
+        f64::from(pierce) * self.scale as f64 / reload as f64
+    }
+
     /// How fast a shot flies this tick, in engine units; zero when the pack shoots instantly.
     fn projectile_speed(&self) -> i64 {
         let Some(speed) = self.combat_projectile_speed else {
@@ -2866,6 +2977,9 @@ impl World {
         let mut landed_arrows: Vec<EntityId> = Vec::new();
         let mut landings: Vec<(EntityId, i32)> = Vec::new();
         let mut shots: Vec<Shot> = Vec::new();
+        // Whoever was hit this tick. A building among them may have crossed the eject threshold, and
+        // that is where its garrison comes out (D37).
+        let mut ejected: Vec<EntityId> = Vec::new();
         let projectile_step = self.projectile_step;
 
         // Indexed, not id-collected: resolving each id afterwards is a linear scan per entity,
@@ -3176,7 +3290,7 @@ impl World {
             let flight = self.projectile_speed();
             let Some(source) = self
                 .find(attacker)
-                .map(|entity| (entity.position, entity.player))
+                .map(|entity| (entity.position, entity.player, entity.kind))
             else {
                 continue;
             };
@@ -3188,12 +3302,24 @@ impl World {
                 // was given, so an upgrade that arrives mid-flight changes nothing about it. It is
                 // *recorded* here and created below, because the entity list is index-stable for the
                 // length of this tick and inserting into it mid-pass would shift every later index.
-                shots.push((source.1, source.0, aim, target, landed));
+                // A building looses a volley rather than a shot: its own arrow plus whatever its
+                // garrison adds. Each arrow carries the *building's* damage for now - the published
+                // rule has extra arrows transmit the unit's attack, and that difference is recorded
+                // in docs/decisions.md rather than guessed at here (D37).
+                let arrows = if source.2 == EntityKind::Building {
+                    self.volley(attacker)
+                } else {
+                    1
+                };
+                for _ in 0..arrows {
+                    shots.push((source.1, source.0, aim, target, landed));
+                }
                 continue;
             }
             if let Some(victim) = self.find_mut(target) {
                 victim.hp -= landed;
             }
+            ejected.push(target);
         }
         // Production: one job per building, finishing exactly on its create time. A unit with
         // nowhere to stand waits inside the building rather than being lost.
@@ -3370,9 +3496,41 @@ impl World {
             {
                 victim.hp -= damage;
             }
+            ejected.push(target);
         }
         for id in landed_arrows {
             self.entities.retain(|entity| entity.id != id);
+        }
+        // A building at or below its eject fraction throws its garrison out. They are unharmed - the
+        // published rule - and they land where they already stand.
+        for id in ejected {
+            // Copy what is needed out of the borrow before touching anything mutable.
+            let Some((kind, hp, player, unit)) = self
+                .find(id)
+                .map(|building| (building.kind, building.hp, building.player, building.unit))
+            else {
+                continue;
+            };
+            if kind != EntityKind::Building || hp <= 0 {
+                continue;
+            }
+            let Some(unit) = unit else { continue };
+            let max = self.max_hp(player, unit).unwrap_or(hp);
+            let floor = (i64::from(max) * self.garrison_eject_at.raw()) / self.scale;
+            if i64::from(hp) > floor {
+                continue;
+            }
+            let inside: Vec<EntityId> = self
+                .entities
+                .iter()
+                .filter(|entity| entity.task == (Task::Garrisoned { building: id }))
+                .map(|entity| entity.id)
+                .collect();
+            for unit in inside {
+                if let Some(entity) = self.find_mut(unit) {
+                    entity.task = Task::Idle;
+                }
+            }
         }
 
         // The dead leave the world only at the end of the tick, once every phase has finished with
