@@ -435,6 +435,11 @@ pub enum SimError {
     TechInProgress {
         tech: u32,
     },
+    /// This building's queue is full: the unit being made plus everything behind it.
+    QueueFull {
+        id: EntityId,
+        length: u32,
+    },
     /// This player cannot support another unit: their population is at their ceiling.
     PopulationCapped {
         player: u8,
@@ -505,10 +510,7 @@ pub enum SimError {
     BuildingNotReady {
         id: EntityId,
     },
-    /// The building is already producing something.
-    AlreadyTraining {
-        id: EntityId,
-    },
+
     /// Training happens at buildings, not at units.
     TrainNeedsABuilding {
         id: EntityId,
@@ -693,9 +695,11 @@ impl fmt::Display for SimError {
             SimError::Unarmed { id } => {
                 write!(f, "entity {} has no attack: it cannot fight", id.0)
             }
-            SimError::AlreadyTraining { id } => {
-                write!(f, "entity {} is already training a unit", id.0)
-            }
+            SimError::QueueFull { id, length } => write!(
+                f,
+                "entity {} already holds {length} units: the queue is full",
+                id.0
+            ),
             SimError::TrainNeedsABuilding { id } => {
                 write!(f, "entity {} is not a building: only buildings train", id.0)
             }
@@ -859,6 +863,10 @@ pub struct World {
     /// Whether the opening stockpile has been applied. Part of state, because it decides whether a
     /// later `load_resources` re-applies it and wipes what the players have gathered since.
     start_stock_applied: bool,
+    /// Units waiting behind the one a building is making, by building. A side table rather than a
+    /// second field on `Entity`: the entity array is walked every tick, and a `Vec` in it costs every
+    /// entity for the sake of a few buildings (docs/performance.md, pass seven).
+    queued: BTreeMap<EntityId, Vec<Training>>,
     /// Per player, the techs already researched. Part of state: it decides what a later upgrade
     /// does and what a later order resolves to, so it is hashed.
     researched: BTreeMap<u8, BTreeSet<u32>>,
@@ -888,6 +896,7 @@ impl World {
             civ_by_player: [None; MAX_PLAYERS],
             team_by_player: [1, 2, 3, 4, 5, 6, 7, 8],
             teams_named: false,
+            queued: BTreeMap::new(),
             gated_units: BTreeSet::new(),
             upgrade_tech: BTreeMap::new(),
             availability_techs: Vec::new(),
@@ -1458,10 +1467,29 @@ impl World {
         if entity.construction.is_some() {
             return Err(SimError::BuildingNotReady { id: building });
         }
-        // One slot per building in this slice. Overwriting would charge for the new unit and throw
-        // the old one away, so the order is refused instead.
-        if entity.training.is_some() {
-            return Err(SimError::AlreadyTraining { id: building });
+        // A building holds `queue_length` units at once: the one being made and those behind it. The
+        // order is refused only when there is no room, because the queue is content's number, not the
+        // engine's (D33).
+        // Orders can be waiting to be applied (`command_apply = "next_tick"`), and a queue limit that
+        // ignored them would accept five in one tick and then hold all five - the limit is about what
+        // the building will hold, not about what has been applied so far.
+        let pending = self
+            .queue
+            .iter()
+            .filter(|command| matches!(command, Command::Train { building: queued, .. } if *queued == building))
+            .count();
+        let held = u32::from(entity.training.is_some())
+            + u32::try_from(self.queued.get(&building).map_or(0, Vec::len)).unwrap_or(u32::MAX)
+            + u32::try_from(pending).unwrap_or(u32::MAX);
+        let limit = self
+            .economy
+            .as_ref()
+            .map_or(1, |economy| economy.train.queue_length);
+        if held >= limit {
+            return Err(SimError::QueueFull {
+                id: building,
+                length: limit,
+            });
         }
         let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
         // The same availability rule as building: a trebuchet needs the tech that makes it available,
@@ -1475,7 +1503,12 @@ impl World {
         // Population: a unit that would take the player past their ceiling is refused here, before
         // any price is quoted, because "no housing" is the answer to every attempt until a house is
         // finished.
-        let population = self.population(entity.player);
+        // What is already committed counts: a queue is a promise to pay, and five villagers waiting
+        // behind a town centre's five would otherwise slip past the ceiling.
+        let population = self
+            .population(entity.player)
+            .saturating_add(self.committed(entity.player))
+            .saturating_add(self.pending_orders(entity.player));
         let cap = self.population_cap(entity.player);
         if population.saturating_add(1) > cap {
             return Err(SimError::PopulationCapped {
@@ -1559,16 +1592,21 @@ impl World {
             };
             row[slot] -= u32::from(cost.amount);
         }
-        let Some(entity) = self.find_mut(building) else {
-            return Err(SimError::MissingEntity(building));
-        };
-        entity.training = Some(Training {
+        let job = Training {
             unit,
             remaining_ticks: plan.ticks,
             hp: plan.hp,
             speed: plan.speed,
             fresh: true,
-        });
+        };
+        let Some(entity) = self.find_mut(building) else {
+            return Err(SimError::MissingEntity(building));
+        };
+        if entity.training.is_none() {
+            entity.training = Some(job);
+        } else {
+            self.queued.entry(building).or_default().push(job);
+        }
         Ok(())
     }
 
@@ -1646,8 +1684,20 @@ impl World {
         if inserted.is_err() {
             return false;
         }
+        // The next unit in the queue starts where the finished one left off: its own create time was
+        // priced when it was ordered, and it begins counting from that total.
+        let next = self.queued.get_mut(&building).and_then(|waiting| {
+            if waiting.is_empty() {
+                None
+            } else {
+                Some(waiting.remove(0))
+            }
+        });
         if let Some(source) = self.find_mut(building) {
-            source.training = None;
+            source.training = next;
+        }
+        if self.queued.get(&building).is_some_and(Vec::is_empty) {
+            self.queued.remove(&building);
         }
         true
     }
@@ -2255,6 +2305,40 @@ impl World {
             self.entities
                 .iter()
                 .filter(|entity| entity.player == player && entity.kind == EntityKind::Unit)
+                .count(),
+        )
+        .unwrap_or(u32::MAX)
+    }
+
+    /// Units this player has committed to but does not have yet: the one each building is making and
+    /// everything behind it.
+    fn committed(&self, player: u8) -> u32 {
+        let heads = self
+            .entities
+            .iter()
+            .filter(|entity| entity.player == player && entity.training.is_some())
+            .count();
+        let waiting: usize = self
+            .queued
+            .iter()
+            .filter(|(id, _)| {
+                self.find(**id)
+                    .is_some_and(|entity| entity.player == player)
+            })
+            .map(|(_, waiting)| waiting.len())
+            .sum();
+        u32::try_from(heads.saturating_add(waiting)).unwrap_or(u32::MAX)
+    }
+
+    /// Units this player has ordered that have not been applied yet. They are neither alive nor in a
+    /// building's queue, but they are spoken for, so the population gate has to see them.
+    fn pending_orders(&self, player: u8) -> u32 {
+        u32::try_from(
+            self.queue
+                .iter()
+                .filter(|command| {
+                    matches!(command, Command::Train { building, .. } if self.find(*building).is_some_and(|entity| entity.player == player))
+                })
                 .count(),
         )
         .unwrap_or(u32::MAX)
@@ -3512,6 +3596,20 @@ impl World {
         // The civilisation is hashed because it changes what the world will allow: two runs that
         // differ in it refuse different techs, and a replay that lost it would diverge silently. Only
         // when set, so a world that names no civ hashes exactly as it did before civs existed.
+        for (id, waiting) in &self.queued {
+            fnv_bytes(&mut hash, b"queued");
+            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+            fnv_bytes(
+                &mut hash,
+                &u32::try_from(waiting.len())
+                    .unwrap_or(u32::MAX)
+                    .to_le_bytes(),
+            );
+            for job in waiting {
+                fnv_bytes(&mut hash, &job.unit.to_le_bytes());
+                fnv_bytes(&mut hash, &job.remaining_ticks.to_le_bytes());
+            }
+        }
         if self.teams_named {
             fnv_bytes(&mut hash, b"teams");
             fnv_bytes(&mut hash, &self.team_by_player);

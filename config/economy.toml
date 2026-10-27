@@ -105,6 +105,11 @@ stock = { food = 200, wood = 200, gold = 100, stone = 200 }
 # PROVENANCE: dat (ids, hp, speed) + the standard 3-villager start. The count is a match
 # rule, not a dat field, which is exactly why it belongs in config.
 
+# How many units one building may hold at once: the one being made plus those queued behind it. Five is
+# the game's number. A queued order is paid when it is placed, which is what makes a queue a commitment.
+[train]
+queue_length = 5
+
 [[train.entry]]
 building = "town_centre"
 units = ["villager"]

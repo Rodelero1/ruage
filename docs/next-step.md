@@ -409,6 +409,27 @@ Next, in the order I would take them: **training queue** (one slot per building 
 even that), **projectiles as entities** if the visual/gameplay difference matters, then **kind 0** - which
 is per-unit attribute changes and needs garrison and LOS to land.
 
+## Done next: the training queue (2026-10-27, v0.75)
+
+`[train] queue_length = 5` is content now, and one slot per building is gone. The head of the queue stays on
+`Entity.training` - so the tick loop keeps its fast path and `Entity` does not grow - and the rest waits in
+`World.queued`, a side table by building, the same shape as `paths` and `Units::variants`.
+
+An order is paid when it is placed; a finished unit hands the building to the next, which starts counting
+from the create time it was priced at; and the population gate counts committed units, so a queue cannot
+slip past housing.
+
+**The finding worth carrying forward:** with `command_apply = "next_tick"`, `submit_checked` validates
+against state where the previous orders have not landed, so five orders in one tick all saw an empty queue
+and all passed. The checks now count pending `Train` commands as well. Immediate-apply mode would have
+hidden this completely, which is an argument for keeping the suite on `next_tick`.
+
+Mutation run also caught a weak test of my own: the population-cap-queue test placed two orders that were
+still pending, so it passed with the committed count deleted. It steps once now.
+
+Next: **projectiles as entities** (a shot is instant damage at range today), or **kind 0** once garrison and
+line of sight exist, or **per-civ tuning** (the 211-number array, still unread).
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

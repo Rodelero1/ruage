@@ -88,6 +88,9 @@ pub struct Gather {
 pub struct Train {
     /// Building unit id -> the unit ids it may create.
     pub by_building: BTreeMap<u32, Vec<u32>>,
+    /// How many units a building may hold at once: the one being made plus those behind it. The game
+    /// uses five, and content owns the number because a pack of our own may want another.
+    pub queue_length: u32,
 }
 
 impl Train {
@@ -177,6 +180,14 @@ struct RawGather {
 #[serde(deny_unknown_fields)]
 struct RawTrain {
     entry: Vec<RawTrainEntry>,
+    /// Defaulted to the game's five, so a pack written before the queue existed queues like the game
+    /// rather than refusing the second order.
+    #[serde(default = "default_queue_length")]
+    queue_length: u32,
+}
+
+fn default_queue_length() -> u32 {
+    5
 }
 
 #[derive(Deserialize)]
@@ -478,7 +489,18 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
                     });
                 }
             }
-            Train { by_building }
+            let queue_length = raw.train.queue_length;
+            if queue_length == 0 {
+                return Err(invalid(
+                    path,
+                    "train.queue_length",
+                    "a building that may hold no units cannot train at all",
+                ));
+            }
+            Train {
+                by_building,
+                queue_length,
+            }
         },
         build: Build {
             repair_hp_per_second: MaybeFixed::from_f64(raw.build.repair_hp_per_second),

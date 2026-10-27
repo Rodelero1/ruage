@@ -299,3 +299,44 @@ fn the_cap_stops_at_what_content_allows() {
     // Three villagers, cap 8: five more fit, whatever the house arithmetic says.
     assert_eq!(train_until_refused(&mut world), 5);
 }
+
+/// A queue cannot be used to slip past the ceiling: the order is refused because the units already in
+/// the queue are population the player has committed to.
+#[test]
+fn queued_units_count_against_the_cap() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let centre = town_centre(&world);
+    // Three villagers and a town centre's five: exactly two more fit, and queuing a third is an
+    // attempt to hold five.
+    for placed in 0..2 {
+        world
+            .submit_checked(Command::Train {
+                building: centre,
+                unit: VILLAGER,
+            })
+            .unwrap_or_else(|err| panic!("order {placed} refused: {err:?}"));
+    }
+    // Apply them: the point of this test is the *applied* queue (one being made, one behind it), not
+    // orders still waiting in the command queue.
+    world.step().expect("step");
+    assert!(
+        world
+            .entity(centre)
+            .expect("town centre")
+            .training
+            .is_some(),
+        "the first order is being made"
+    );
+    match world.submit_checked(Command::Train {
+        building: centre,
+        unit: VILLAGER,
+    }) {
+        Err(SimError::PopulationCapped {
+            population, cap, ..
+        }) => {
+            assert_eq!((population, cap), (5, 5), "three alive and two queued");
+        }
+        other => panic!("expected PopulationCapped, got {other:?}"),
+    }
+}

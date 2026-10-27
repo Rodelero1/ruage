@@ -67,6 +67,21 @@ fn seeded(fx: &Fixture) -> World {
     world
 }
 
+/// A world on content of the test's choosing, with food in the bank: the tests that need a hundred
+/// orders should not spend their time gathering them.
+fn seeded_rich(fx: &Fixture, economy: &Economy) -> World {
+    let mut economy = economy.clone();
+    economy.start.stock = [("food".to_owned(), 2_000)].into_iter().collect();
+    let mut world = World::new(&fx.settings, 5).expect("world");
+    world
+        .seed_from(&fx.map, &economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    world
+}
+
 fn town_centre(world: &World) -> EntityId {
     world
         .entities()
@@ -179,41 +194,103 @@ fn a_building_that_is_still_going_up_cannot_train() {
     let _ = node;
 }
 
+/// One slot per building was a slice, not the game: a real barracks queues. The order is paid when it
+/// is placed - that is what makes a queue a commitment - and the second villager arrives one create
+/// time after the first, not immediately.
 #[test]
-fn a_second_order_cannot_replace_a_running_one() {
+fn a_second_order_joins_the_queue_and_is_paid_at_once() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    // Enough for two villagers on purpose: with only 50 food the second order would be refused
-    // for being unaffordable, and the test would pass without proving anything about the slot.
-    bank(&mut world, slot("food"), 100);
+    bank(&mut world, slot("food"), 150);
     let centre = town_centre(&world);
-    world
-        .submit_checked(Command::Train {
-            building: centre,
-            unit: 83,
-        })
-        .expect("the first order");
+    let order = |world: &mut World| {
+        world
+            .submit_checked(Command::Train {
+                building: centre,
+                unit: VILLAGER,
+            })
+            .expect("the order is accepted while one is training")
+    };
+
+    order(&mut world);
     world.step().expect("step");
     let after_first = world.stock(1, slot("food"));
-    assert!(
-        after_first >= 50,
-        "the second order must be affordable, or this test proves nothing"
-    );
-
-    // The food for the second villager would be taken and the first job thrown away with it.
-    match world.submit_checked(Command::Train {
-        building: centre,
-        unit: 83,
-    }) {
-        Err(SimError::AlreadyTraining { id }) => assert_eq!(id, centre),
-        other => panic!("expected AlreadyTraining, got {other:?}"),
-    }
+    order(&mut world);
+    // The order is priced when it is applied, one tick later, and the tick after that begins work on
+    // it; the price is the same either way.
+    world.step().expect("step");
     assert_eq!(
         world.stock(1, slot("food")),
-        after_first,
-        "a refused order must cost nothing"
+        after_first - 50,
+        "the queued order is paid when it is placed"
+    );
+
+    // Both arrive, one create time apart.
+    let create_ticks = u64::from(world.tick_rate_hz()) * 25;
+    let mut arrivals = Vec::new();
+    let mut seen = villager_count(&world);
+    for _ in 0..(create_ticks * 4) {
+        world.step().expect("step");
+        let now = villager_count(&world);
+        while seen < now {
+            arrivals.push(world.tick());
+            seen += 1;
+        }
+        if arrivals.len() == 2 {
+            break;
+        }
+    }
+    assert_eq!(arrivals.len(), 2, "both villagers arrived");
+    let gap = arrivals[1] - arrivals[0];
+    assert!(
+        gap.abs_diff(create_ticks) <= 2,
+        "the second waits its own create time: {gap} ticks against {create_ticks}"
     );
 }
+
+/// The queue has a length, and content owns it.
+#[test]
+fn the_queue_stops_at_the_length_content_allows() {
+    let Some(fx) = fixture() else { return };
+    // The population ceiling is not what this test is about, so it is lifted out of the way: a queue
+    // of five villagers needs five population and the town centre alone has that.
+    let mut economy = fx.economy.clone();
+    economy.population.cap_default = 50;
+    economy.population.town_centre_population = 50;
+    let mut world = seeded_rich(&fx, &economy);
+    let centre = town_centre(&world);
+    let length = economy.train.queue_length;
+    for placed in 0..length {
+        world
+            .submit_checked(Command::Train {
+                building: centre,
+                unit: VILLAGER,
+            })
+            .unwrap_or_else(|err| panic!("order {placed} of {length} was refused: {err:?}"));
+    }
+    match world.submit_checked(Command::Train {
+        building: centre,
+        unit: VILLAGER,
+    }) {
+        Err(SimError::QueueFull {
+            id,
+            length: refused,
+        }) => {
+            assert_eq!((id, refused), (centre, length));
+        }
+        other => panic!("expected QueueFull, got {other:?}"),
+    }
+}
+
+fn villager_count(world: &World) -> usize {
+    world
+        .entities()
+        .iter()
+        .filter(|e| e.player == 1 && e.kind == EntityKind::Unit && e.unit == Some(VILLAGER))
+        .count()
+}
+
+const VILLAGER: u32 = 83;
 
 #[test]
 fn a_villager_costs_fifty_food_and_appears_after_its_create_time() {

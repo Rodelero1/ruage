@@ -51,6 +51,18 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Twenty-second pass: the tick loop did not change shape (2026-10-27)
+
+The queue could have been done by turning `Entity.training` into a `Vec`, which would have widened the hot
+array by 24 bytes for every entity to serve a handful of buildings - the pass-seven mistake. Instead the
+head is still `Option<Training>` on the entity, the tick loop still walks one job per building, and only the
+handover (once per finished unit) touches the side table. `Entity` is unchanged in size, and the tick costs
+exactly what it cost before: one `saturating_sub` per building with a job.
+
+The anchors are unchanged (`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`), and this time that is meaningful rather
+than incidental: the scripted run trains villagers, so it does enter the training code - it simply enters
+the same code as before, because the head of the queue is where it always was.
+
 ## Twenty-first pass: one comparison swapped for another, in the tick (2026-10-27)
 
 Ranged combat is the first change in six passes to touch the tick path: the attack branch used to compute

@@ -630,3 +630,31 @@ numeric: an archer five tiles from its target walks a tile without Fletching and
 **Not modelled, and named rather than implied:** projectiles (an arrow is instant damage at range, not an
 entity), line of sight (a ranged unit can shoot anything within reach it has a path to, walls included),
 and buildings that shoot (the town centre's arrows need garrisoning, which is a mechanic of its own).
+
+## D33 - A queue is a side table, and the validator has to count orders it cannot see applied
+
+One slot per building was a slice, not the game: a real barracks holds five. `[train] queue_length = 5` is
+now content, the head of the queue stays exactly where it was (`Entity.training`, so the tick loop keeps its
+fast path and `Entity` does not grow), and everything behind it waits in `World.queued`, a side table keyed
+by building - the same shape as `paths` and `Units::variants`, and for the same reason (pass seven).
+
+Three rules come with it:
+
+- an order is **paid when it is placed**, which is what makes a queue a commitment rather than a wish;
+- a finished unit hands the building to the next one, which starts counting from the create time it was
+  priced at;
+- the population gate counts **committed** units - the one being made plus those behind it - so a queue
+  cannot be used to slip past a housing ceiling.
+
+**The subtlety that cost an hour, and is worth the paragraph.** `command_apply = "next_tick"` means an order
+joins `World.queue` and is applied on the next step - so `submit_checked` validates against state in which
+the *previous* orders have not landed yet. Thrown at a five-deep queue, five orders placed in one tick all
+passed validation, because each saw an empty queue. The checks now count pending `Train` commands for the
+same building as well, and separately count pending orders per player for the population gate. The
+immediate-apply mode would have hidden this entirely, which is a good argument for keeping the suite on
+`next_tick`.
+
+A weak test fell out of the mutation run as well: `queued_units_count_against_the_cap` placed two orders and
+expected the third to be refused, and it passed even with the committed count deleted - because the two were
+still *pending*, so the pending-orders rule caught it instead. It now steps once, asserts the head is
+running, and fails when the committed count is removed, which is the state it was written for.

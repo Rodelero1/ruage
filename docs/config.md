@@ -118,6 +118,11 @@ commands, so the importer derives it, and the engine resolves a variant to its r
 names a building: what a tech is researched at, where a carried load may be dropped, what a building
 trains, and what a scenario's `role = "barracks"` means.
 
+`[train] queue_length = 5` is how many units one building may hold at once - the one being made plus those
+queued behind it. A queued order is paid when it is placed, and when a unit finishes the next one starts
+at the create time it was priced at. A sixth order is refused with `QueueFull`, and queued units count
+against the population ceiling, so a queue cannot be used to slip past housing.
+
 `[population]` feeds the housing rule: `cap_default` is the ceiling nothing raises, `house_population` is
 what one finished house supports, and `town_centre_population` what one finished town centre supports (both
 five in the game; a castle's twenty is not modelled yet). Population is one per live unit, and a train order
