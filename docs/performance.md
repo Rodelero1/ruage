@@ -51,6 +51,15 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Nineteenth pass: counting happens on a research, not in a tick (2026-10-27)
+
+The prerequisite check now walks a tech's requirement list and counts, in both places it exists: an order
+and the availability resolver. Both run when a tech is researched, never inside a tick, and nothing was
+added to `World` - `min_required` lives on the `Tech` table that was already loaded. So the idle probe has
+nothing to see and nothing was claimed from it. The four-hour probe is unchanged at `b30d49d89f8bcf4f`
+(that world loads no tech tables). The scripted run moves again, to `05c91e3bff3f9eee`, because more techs
+are granted at load now that the OR-sets can be satisfied.
+
 ## Eighteenth pass: a load-time list, granted only on a research (2026-10-27)
 
 Shadow techs add roughly two hundred ids to `availability_techs`, and that list is walked by

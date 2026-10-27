@@ -352,6 +352,24 @@ Next: `[train.entry]` per age is now redundant with availability, so the better 
 a shadow tech that means "you have a barracks" should be granted when the player builds one - which is also
 the hook the known simplification replaces.
 
+## Done next: the count in the prerequisites (2026-10-27, v0.72)
+
+The dat's tech carries `min_required_techs` beside `required_tech_ids`, and `ruage-tools` had been
+exporting only the ids - so "at least two of these five" was read as "all five" everywhere. Nineteen techs
+have `min < count`, and both copies of the gate (the order path and the availability resolver) now count.
+
+The importer clamps a count of zero, or one longer than the list, to "all of them", which is exactly what a
+pack written before the field existed meant - so no old pack changes meaning.
+
+**A correction went into D29 as well.** It claimed that an archery range becoming buildable without a
+barracks was wrong against the game. It is not: the archery range has no building prerequisite in AoE2, and
+the dat says so with an OR-set that contains an always-true marker (638).
+
+**A test that proved nothing, caught by mutation.** The first version of the counting test used the Hand
+Cannon tech and passed even with the "all" rule restored, because 285 is granted for free once its own
+prerequisites are met. The real test uses a pack of our own - one tech for the order path, one for the
+resolver - since no tech in this dat can reach the order path with a count.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

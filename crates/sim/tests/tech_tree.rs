@@ -276,3 +276,175 @@ fn a_finished_building(world: &mut World, unit: u32) -> EntityId {
     }
     panic!("the building never finished");
 }
+
+/// The order path has its own copy of the counting rule, and no tech in the dat can reach it: every
+/// tech whose count matters is a free availability or shadow tech, granted by the resolver. So it is
+/// pinned with a pack of our own - a tech that lists three prerequisites and needs two.
+const TWO_OF_THREE: &str = r#"
+schema = 1
+kind = "techs"
+
+[[tech]]
+id = 900
+effect_id = 900
+research_time = 1
+costs = []
+required = [901, 902, 903]
+min_required = 2
+location = 0
+
+[[tech]]
+id = 901
+effect_id = 900
+research_time = 0
+costs = []
+required = []
+min_required = 0
+location = 0
+
+[[tech]]
+id = 902
+effect_id = 900
+research_time = 0
+costs = []
+required = []
+min_required = 0
+location = 0
+
+[[tech]]
+id = 903
+effect_id = 900
+research_time = 0
+costs = []
+required = []
+min_required = 0
+location = 0
+
+# An availability tech: it makes unit 70 (a house) buildable, and it needs two of the three markers.
+# This is the resolver's path, which no tech in the dat can reach - every count-sensitive tech there
+# ends up satisfied anyway, because its alternatives are always-true markers.
+[[tech]]
+id = 910
+effect_id = 910
+research_time = 0
+costs = []
+required = [901, 902, 903]
+min_required = 2
+location = -1
+
+# The pack's own `[start] techs` name 104, and a world without it cannot be seeded.
+[[tech]]
+id = 104
+effect_id = 900
+research_time = 0
+costs = []
+required = []
+min_required = 0
+location = -1
+"#;
+
+const TWO_OF_THREE_EFFECTS: &str = r#"
+schema = 1
+kind = "effects"
+
+[[effect]]
+id = 900
+name = "Nothing"
+commands = []
+modifiers = []
+resource_modifiers = []
+
+[[effect]]
+id = 910
+name = "Houses (make avail)"
+commands = [[2, 70, 1, -1, 0.0]]
+modifiers = []
+resource_modifiers = []
+"#;
+
+fn two_of_three_world(fx: &Fixture) -> World {
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    world
+        .seed_from(&fx.map, &fx.economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    let techs = ruage_data::load_techs_str(TWO_OF_THREE, "techs.toml").expect("custom techs");
+    let effects =
+        ruage_data::load_effects_str(TWO_OF_THREE_EFFECTS, "effects.toml").expect("custom effects");
+    world.load_research(&techs, &effects).expect("research");
+    world
+}
+
+fn research_order(world: &mut World, tech: u32) -> Result<(), SimError> {
+    let centre = world
+        .entities()
+        .iter()
+        .find(|e| e.player == 1 && e.kind == EntityKind::Building)
+        .expect("the town centre")
+        .id;
+    world.submit_checked(Command::Research {
+        building: centre,
+        tech,
+    })
+}
+
+#[test]
+fn a_tech_needs_only_as_many_prerequisites_as_content_says() {
+    let Some(fx) = fixture() else { return };
+    let mut world = two_of_three_world(&fx);
+    world.grant_tech(1, 901).expect("one prerequisite");
+    world.grant_tech(1, 902).expect("two prerequisites");
+    research_order(&mut world, 900).expect("two of three is enough");
+}
+
+#[test]
+fn one_of_three_is_not_enough() {
+    let Some(fx) = fixture() else { return };
+    let mut world = two_of_three_world(&fx);
+    world.grant_tech(1, 901).expect("one prerequisite");
+    match research_order(&mut world, 900) {
+        Err(SimError::MissingPrerequisite { tech, .. }) => assert_eq!(tech, 900),
+        other => panic!("expected MissingPrerequisite, got {other:?}"),
+    }
+}
+
+/// The resolver's copy of the counting rule: an availability tech is granted when enough of its
+/// prerequisites are there, and the building it enables follows.
+#[test]
+fn an_availability_tech_counts_its_prerequisites() {
+    let Some(fx) = fixture() else { return };
+    let mut world = two_of_three_world(&fx);
+    for tech in [901, 902] {
+        world.grant_tech(1, tech).expect("a marker");
+    }
+    let villager = first_villager(&world);
+    let at = a_free_tile(&world);
+    world
+        .submit_checked(Command::Build {
+            villager,
+            unit: HOUSE,
+            at,
+        })
+        .expect("two of three markers make houses available");
+}
+
+#[test]
+fn an_availability_tech_with_one_marker_is_not_granted() {
+    let Some(fx) = fixture() else { return };
+    let mut world = two_of_three_world(&fx);
+    world.grant_tech(1, 901).expect("one marker");
+    let villager = first_villager(&world);
+    let at = a_free_tile(&world);
+    match world.submit_checked(Command::Build {
+        villager,
+        unit: HOUSE,
+        at,
+    }) {
+        Err(SimError::UnitUnavailable { unit }) => assert_eq!(unit, HOUSE),
+        other => panic!("expected UnitUnavailable, got {other:?}"),
+    }
+}
+
+const HOUSE: u32 = 70;

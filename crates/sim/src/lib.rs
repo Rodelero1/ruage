@@ -1867,18 +1867,24 @@ impl World {
             return Err(SimError::TechBarred { tech, civ });
         }
         // Prerequisites: every id a tech lists is a *tech* id (all 614 entries in the table resolve to
-        // techs, even where the number also names a building), so the gate is simply "researched".
-        for required in &stats.required {
-            let Ok(missing) = u32::try_from(*required) else {
-                continue;
-            };
-            if !self.researched(entity.player).contains(&missing) {
-                return Err(SimError::MissingPrerequisite {
-                    tech,
-                    missing,
-                    role: self.tech_role_name(missing).map(str::to_owned),
-                });
-            }
+        // techs, even where the number also names a building), and the count matters: the dat's own
+        // `min_required_techs` says how many of them are enough, and tech 120 ("Shadow Node for Age
+        // Two") lists five buildings while needing two (D30).
+        let missing: Vec<u32> = stats
+            .required
+            .iter()
+            .filter_map(|required| u32::try_from(*required).ok())
+            .filter(|required| !self.researched(entity.player).contains(required))
+            .collect();
+        let have = stats.required.len().saturating_sub(missing.len());
+        if have < usize::from(stats.min_required)
+            && let Some(missing) = missing.first().copied()
+        {
+            return Err(SimError::MissingPrerequisite {
+                tech,
+                missing,
+                role: self.tech_role_name(missing).map(str::to_owned),
+            });
         }
         let effects = self.effects.as_ref().ok_or(SimError::NoTables)?;
         if let Some(effect_id) = stats.effect_id
@@ -3125,10 +3131,14 @@ impl World {
                     let Some(stats) = self.techs.as_ref().and_then(|techs| techs.get(tech)) else {
                         continue;
                     };
-                    let ready = stats.required.iter().all(|required| {
-                        u32::try_from(*required)
-                            .is_ok_and(|id| self.researched(player).contains(&id))
-                    });
+                    // The same counting rule as an order: "at least min_required of them".
+                    let have = stats
+                        .required
+                        .iter()
+                        .filter_map(|required| u32::try_from(*required).ok())
+                        .filter(|required| self.researched(player).contains(required))
+                        .count();
+                    let ready = have >= usize::from(stats.min_required);
                     if ready {
                         self.finish_research(player, tech)?;
                         granted = true;

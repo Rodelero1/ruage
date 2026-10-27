@@ -202,6 +202,10 @@ pub struct Tech {
     /// Priced like a unit's (D17): reference ids from the generated table, or names a pack defines.
     pub costs: Vec<Cost>,
     pub required: Vec<i32>,
+    /// How many of `required` are enough: the dat's own field, because a tech listing five shadow
+    /// buildings and needing two of them means "any two", not "all five" (D30). Equal to
+    /// `required.len()` when content does not say otherwise, which is what "all of them" means.
+    pub min_required: u16,
     pub location: i16,
 }
 
@@ -277,6 +281,10 @@ struct RawTech {
     research_time: i32,
     costs: Vec<RawCost>,
     required: Vec<i32>,
+    /// Defaulted to zero and read as "all of `required`", so a pack written before this existed keeps
+    /// the meaning it had.
+    #[serde(default)]
+    min_required: u16,
     location: i16,
 }
 
@@ -434,6 +442,13 @@ pub fn load_techs_str(text: &str, path: &str) -> Result<Techs, ConfigError> {
             .iter()
             .map(|c| crate::cost::convert(c, || format!("tech[{}].costs", tech.id)))
             .collect::<Result<Vec<_>, ConfigError>>()?;
+        // "At least this many of `required`". A count of zero means content said nothing, and the
+        // meaning a pack had before the field existed is "all of them".
+        let min_required = if tech.min_required == 0 {
+            u16::try_from(tech.required.len()).unwrap_or(u16::MAX)
+        } else {
+            tech.min_required
+        };
         if techs
             .insert(
                 tech.id,
@@ -443,6 +458,7 @@ pub fn load_techs_str(text: &str, path: &str) -> Result<Techs, ConfigError> {
                     research_time: tech.research_time,
                     costs,
                     required: tech.required,
+                    min_required,
                     location: tech.location,
                 },
             )

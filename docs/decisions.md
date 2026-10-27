@@ -544,9 +544,39 @@ prerequisites are met, exactly like the availability techs already were. Two con
 - the Feudal Age is reachable by playing (500 food at the town centre) with no help from a test;
 - the archery range, stable and everything else behind the shadow chain arrive with it.
 
-**The simplification, stated plainly:** a shadow tech means "*you have this building*", and the engine
-cannot tell which building - the name that says so lives in a language string ("Shadow Barracks -- Age
-Two") whose text is not data the engine should parse. So the shadows are satisfied up front, and an archery
-range becomes buildable in Feudal **without** a barracks standing. That is wrong against the game, it is
-bounded, and it is cheaper than parsing display strings for structure. It is recorded here so that when
-"requires a building nearby" lands, this is the hook it replaces.
+**Correction (same day): this is not a simplification after all.** The first version of this note claimed
+that an archery range becoming buildable "without a barracks standing" was wrong against the game. Two
+things say otherwise. In AoE2 the archery range's only prerequisite *is* the Feudal Age - it has no
+building prerequisite - and the dat agrees: 667 requires `[122, 638]` with **min 1**, and 638 is a marker
+with no requirements, so that half of the gate is vacuous **by design**. The barracks shadow is in an OR
+set with an always-true marker, which is how this dat spells "no building needed". The hand-granting that
+used to be necessary was the real defect, and it is gone. See D30 for the field that made the OR visible.
+
+## D30 - A tech's prerequisites are "at least N of these", and the engine was reading "all"
+
+The dat's tech record carries **two** fields: `required_tech_ids` (up to six) and `min_required_techs`.
+`ruage-tools` exported the first and dropped the second, so every prerequisite in the engine read as
+"all of them". The dat means "at least this many":
+
+| tech | requires | min | meaning |
+|---|---|---|---|
+| 120 Shadow Node, Age Two | 110, 258, 108, 122, 282 | 2 | any two Dark Age buildings |
+| 135 Shadow Node, Age Three | 132, 106, 130, 128 | 2 | any two Castle buildings |
+| 147 ARRG (make avail) | 101, 667 | 2 | Feudal **and** (barracks or marker) |
+| 659 (used by the Feudal Age) | 120, 638 | 1 | node **or** marker |
+| 85 Hand Cannon | 103, 47, 285 | 2 | Imperial and (Chemistry or free-Chemistry) |
+
+Nineteen techs in the table have `min < count`. Both copies of the gate - the order path in
+`check_research` and the availability resolver - now count satisfied prerequisites and compare to
+`min_required`. Content that says nothing gets "all of them", which is what a pack written before the
+field existed meant, so no old pack changes meaning.
+
+**What this quietly shows:** the outcome rarely changes, which is why "all" survived this long. In the
+cases that matter the OR-sets contain an always-true marker (638, 110), so demanding everything happened to
+land on the same answer. The rule was wrong even where it did not yet bite.
+
+**And a test that proved nothing.** The first version of this test used the Hand Cannon tech, on the theory
+that "all three" would make a hand cannoneer unobtainable. The mutation check - restoring the "all" rule and
+running the suite - showed it passing anyway: 285 ("C-Bonus, Free Chemistry") is granted for free once its
+own prerequisites are met, so all three were satisfied regardless. The test that counts now uses a pack of
+our own, one tech per gate copy, because no tech in this dat can reach the order path with a count.
