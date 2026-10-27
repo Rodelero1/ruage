@@ -40,6 +40,11 @@ const LOOM: u32 = 22;
 const HUSSAR: u32 = 428;
 const STABLE: u32 = 101;
 const SMITH: u32 = 103;
+const CASTLE: u32 = 82;
+const CASTLE_MAKE_AVAIL: u32 = 137;
+const BARRACKS_MAKE_AVAIL: u32 = 220;
+const TREBUCHET: u32 = 331;
+const TREBUCHET_MAKE_AVAIL: u32 = 256;
 const FORGING: u32 = 67;
 
 struct Fixture {
@@ -115,6 +120,32 @@ fn seeded_with(fx: &Fixture, economy: &ruage_data::Economy) -> World {
         .load_research(&fx.techs, &fx.effects)
         .expect("the research tables load");
     world
+}
+
+/// The first tile beside a villager that is free of entities: enough for a build order in a test.
+fn free_tile(world: &World, from: EntityId) -> (u16, u16) {
+    let position = world.position(from).expect("position");
+    let scale = world.scale();
+    let x = u16::try_from(position.0.raw() / scale).expect("in range");
+    let y = u16::try_from(position.1.raw() / scale).expect("in range");
+    for radius in 1..8u16 {
+        for dy in 0..=radius {
+            for dx in 0..=radius {
+                let candidate = (x + dx, y + dy);
+                let occupied = world.entities().iter().any(|entity| {
+                    entity.position
+                        == (
+                            ruage_fixed::Fixed::from_raw(i64::from(candidate.0) * scale),
+                            ruage_fixed::Fixed::from_raw(i64::from(candidate.1) * scale),
+                        )
+                });
+                if !occupied {
+                    return candidate;
+                }
+            }
+        }
+    }
+    panic!("nowhere to build");
 }
 
 fn first_villager(world: &World) -> EntityId {
@@ -668,4 +699,107 @@ fn a_pack_naming_a_civilisation_the_table_lacks_is_refused() {
         .expect_err("there is no civ called Martian")
         .to_string();
     assert!(err.contains("Martian"), "the refusal names it: {err}");
+}
+
+/// Availability: a unit that some tech *makes available* cannot be built or trained before that tech
+/// lands. The castle is the cleanest case in the data - tech 137 "Castle -- Age Three" (free, instant,
+/// no home building) requires the Castle Age (102) and enables unit 82.
+#[test]
+fn a_castle_cannot_be_built_before_the_age_that_enables_it() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let villager = first_villager(&world);
+    // Enough for a castle (650 stone), so the refusal under test is availability and not the price.
+    bank(&mut world, slot("food"), 400);
+    bank(&mut world, slot("stone"), 700);
+    let site = free_tile(&world, villager);
+
+    let err = world
+        .submit_checked(Command::Build {
+            villager,
+            unit: CASTLE,
+            at: site,
+        })
+        .expect_err("a castle is not available in the Dark Age")
+        .to_string();
+    assert!(
+        err.contains("castle") || err.contains("82"),
+        "the refusal names the unit: {err}"
+    );
+
+    // The Castle Age arrives; its bookkeeping tech (137) is free and instant, so it lands with it.
+    feudal(&mut world);
+    world.grant_tech(1, 102).expect("the Castle Age");
+    assert!(
+        world.researched(1).contains(&CASTLE_MAKE_AVAIL),
+        "enabling a unit is bookkeeping, so the engine applies it: {:?}",
+        world.researched(1)
+    );
+    world
+        .submit_checked(Command::Build {
+            villager,
+            unit: CASTLE,
+            at: site,
+        })
+        .expect("and now the castle is available");
+}
+
+/// The other half: a unit nothing gates stays ungated. `[train.entry]` trains spearmen from the Dark
+/// Age and a villager is a villager, so availability must not turn into a blanket lock.
+#[test]
+fn a_unit_that_no_tech_gates_is_unaffected() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let villager = first_villager(&world);
+    let site = free_tile(&world, villager);
+    bank(&mut world, slot("wood"), 100);
+    world
+        .submit_checked(Command::Build {
+            villager,
+            unit: 70,
+            at: site,
+        })
+        .expect("a house needs no availability tech");
+
+    // And the barracks is available from the Dark Age, because tech 220 needs only that.
+    assert!(
+        world.researched(1).contains(&BARRACKS_MAKE_AVAIL),
+        "the match opens with the barracks available: {:?}",
+        world.researched(1)
+    );
+}
+
+/// Training obeys the same rule as building. The trebuchet (331) is made available by tech 256, which
+/// requires the Imperial Age (103) - so a castle at the Castle Age can hold everything except it.
+#[test]
+fn a_trebuchet_cannot_be_trained_before_the_imperial_age() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    feudal(&mut world);
+    world.grant_tech(1, 102).expect("the Castle Age");
+    let castle = place(&mut world, 1, 9_700, CASTLE, (14, 14), 4800);
+    bank(&mut world, slot("wood"), 400);
+    bank(&mut world, slot("gold"), 400);
+
+    let err = world
+        .submit_checked(Command::Train {
+            building: castle,
+            unit: TREBUCHET,
+        })
+        .expect_err("a trebuchet is not available before the Imperial Age")
+        .to_string();
+    assert!(err.contains("331"), "the refusal names the unit: {err}");
+
+    world.grant_tech(1, 103).expect("the Imperial Age");
+    assert!(
+        world.researched(1).contains(&TREBUCHET_MAKE_AVAIL),
+        "and the Imperial Age brings it: {:?}",
+        world.researched(1)
+    );
+    world
+        .submit_checked(Command::Train {
+            building: castle,
+            unit: TREBUCHET,
+        })
+        .expect("now it can be trained");
 }

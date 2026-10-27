@@ -51,6 +51,19 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Eleventh pass: availability is load-time and per-order (2026-10-27)
+
+The two availability sets (109 gated units, 81 bookkeeping techs) are derived once when the research
+tables load, and the per-order check walks the player's researched set. Nothing runs per tick. The
+interleaved A/B: 126 entities 2.24-2.26 against 2.27-2.28 µs/tick, 2,126 37.19-37.42 against 37.08-37.19
+- parity; 1,126 reads 19.80-19.83 against 19.39-19.45, the same 2% residual recorded since the seventh
+pass, on a box at load 4.2.
+
+Hashes: the four-hour probe is unchanged at `b30d49d89f8bcf4f` (it loads no research, so nothing is
+gated and nothing auto-grants), while the scripted run with `--techs`/`--effects`/`--civs` moves to
+`66179905f8bcffa8` - the difference being three techs the opening position now applies for itself
+(220 barracks, 523 palisade gate, 332 outpost) and one it no longer has to.
+
 ## Tenth pass: a civ's bar list is derived per order (2026-10-27)
 
 No tick path changed: the restriction list is resolved inside `check_research`, i.e. when an order is

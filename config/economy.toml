@@ -106,6 +106,10 @@ units = ["villager"]
 [[train.entry]]
 building = "barracks"
 units = ["spearman"]
+
+[[train.entry]]
+building = "castle"
+units = ["trebuchet"]
 # A barracks makes spearmen (40 hp, 0.9 tiles/s, 60 food + 20 gold, 21 s).
 
 [role]
@@ -117,6 +121,8 @@ villager = 83       # VMBAS, 25 hp, 0.8 tiles/s
 house = 70          # HOUS, 25 wood, 25 s
 barracks = 12       # BRKS
 spearman = 74       # SPRM, 40 hp, 0.9 tiles/s
+castle = 82         # CSTL, 4800 hp - available from the Castle Age (tech 137 makes it)
+trebuchet = 331     # PTREB - available from the Imperial Age (tech 256 makes it)
 
 [tech_role]
 # A tech has no name in the dat (names are string-ids into the language files), so content that has

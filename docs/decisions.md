@@ -383,3 +383,28 @@ checked **before** prerequisites: a tech the player can never have should say so
 
 `team_bonus_effect` is carried and not applied; the per-civ `resources` array (211 numbers of tuning) is
 carried uninterpreted, because naming its entries from the values alone would be guessing.
+
+## D24 - A unit exists once a tech "makes it available", and those techs are bookkeeping
+
+Kind 2 is the availability command: `[2, unit, flag, -1, 0]`. The effects that carry it name themselves
+- "Barracks (make avail)", "Watch Tower (make avail)", "Castle -- Age Three", "Trebuchet", "Pike" - so
+the reading needs less argument than D23's did, and the census backs it: **109 units are named by a
+positive kind-2 row, and 81 techs exist only to name them**. Each of those techs costs nothing, takes no
+time, has no home building, and does nothing but kind-2 rows; every one of them requires an age (59 of
+them also require tech 266, the "a castle exists" marker). Exactly one has no requirements at all: 332
+"Outpost (make avail)", which is available from the first second.
+
+Two rules follow, and both are content-driven rather than hard-coded:
+
+1. **A unit is gated if some tech makes it available.** A gated unit cannot be built or trained until a
+   tech that carries a positive kind-2 row for it has been researched. A unit no tech gates - villager,
+   house, spearman - is available always, which is what stops the rule from becoming a blanket lock.
+2. **A tech that costs nothing, takes no time, has no home building and does nothing but make units
+   available is bookkeeping, and the engine applies it as soon as its prerequisites are met.** That is
+   why aging up makes the barracks, watch tower, pike and castle appear without the player spending a
+   click on an invisible tech, and why the rule needs no per-age table in content.
+
+Not interpreted: the four `b = 0/-1` rows (the Huns' house, and four "Enable sheep/llama/cow/turkey"
+rows with an attribute in `c`). Their direction is not established by anything in the data, and guessing
+would show up as a unit a civilisation mysteriously cannot build. They are recorded here as a known gap
+rather than silently read as "disable".

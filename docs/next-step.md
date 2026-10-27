@@ -185,6 +185,28 @@ What that leaves, in the order it now makes sense:
 - **team bonuses** (`team_bonus_effect`, carried and unapplied) and the 211-number per-civ `resources`
   array, both of which need names before they mean anything.
 
+## Done next: unit availability (2026-10-27, v0.64)
+
+Kind 2 with a positive flag is "make this unit available", and the effect names say so themselves
+("Barracks (make avail)", "Castle -- Age Three", "Trebuchet"). 109 units are gated that way by 81 techs
+that do nothing else, cost nothing, take no time and have no home building - so the engine treats them as
+bookkeeping and applies them as their prerequisites are met (D24). The consequences are visible rather
+than theoretical:
+
+- a **castle** cannot be built before the Castle Age, and can the tick after it (tech 137);
+- a **trebuchet** cannot be trained before the Imperial Age (tech 256) - trained, not built, so
+  `check_train` carries the same rule as `check_build`;
+- a **house**, a **villager** and a **spearman** are unaffected, because no tech gates them.
+
+The refusal is `UnitUnavailable`, checked **before** the price: "you cannot have this yet" outranks "you
+are poor". Counted from the data rather than guessed: 109 gated units, 81 bookkeeping techs, exactly one
+with no requirements (332, the outpost).
+
+Next, in order: the **`b = 0/-1` kind-2 rows** (the Huns' house and four "enable animal" rows) whose
+direction is not established - they are the last thing keeping a civ's *negative* availability out of the
+model; then **per-player civs**, which is what would let two players be different civilisations and stop
+`[start] civ` being a single name; then the **team bonuses** and the per-civ tuning array.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

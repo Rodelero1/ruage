@@ -431,6 +431,11 @@ pub enum SimError {
     TechInProgress {
         tech: u32,
     },
+    /// The player has no way to have this unit yet: some tech makes it available, and that tech has not
+    /// been researched.
+    UnitUnavailable {
+        unit: u32,
+    },
     /// The player's civilisation cannot research the tech at all.
     TechBarred {
         tech: u32,
@@ -567,6 +572,10 @@ impl fmt::Display for SimError {
             SimError::TechInProgress { tech } => write!(
                 f,
                 "tech {tech} is already being researched at another building"
+            ),
+            SimError::UnitUnavailable { unit } => write!(
+                f,
+                "unit {unit} is not available yet: a tech that makes it available has not been researched"
             ),
             SimError::TechBarred { tech, civ } => {
                 write!(
@@ -783,6 +792,15 @@ pub struct World {
     civs: Option<ruage_data::Civs>,
     /// Which civilisation, once resolved against the table above.
     civ: Option<u32>,
+    /// Units that some tech *makes available* (kind-2 rows with a positive flag). Derived from the
+    /// effects table at load: content, not state, so it is not hashed.
+    gated_units: BTreeSet<u32>,
+    /// Techs that cost nothing, take no time, have no home building and do nothing but make units
+    /// available. They are bookkeeping - "the barracks exists now" - so the engine applies them as soon
+    /// as their prerequisites are met instead of asking a player to spend a click on them.
+    availability_techs: Vec<u32>,
+    /// Re-entrancy guard for `grant_availability`, which grants techs that may unlock further ones.
+    resolving_availability: bool,
     /// Whether the opening stockpile has been applied. Part of state, because it decides whether a
     /// later `load_resources` re-applies it and wipes what the players have gathered since.
     start_stock_applied: bool,
@@ -813,6 +831,9 @@ impl World {
             effects: None,
             civs: None,
             civ: None,
+            gated_units: BTreeSet::new(),
+            availability_techs: Vec::new(),
+            resolving_availability: false,
             start_stock_applied: false,
             researched: BTreeMap::new(),
             stock: [[0; MAX_RESOURCES]; MAX_PLAYERS],
@@ -1342,6 +1363,11 @@ impl World {
             return Err(SimError::AlreadyTraining { id: building });
         }
         let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
+        // The same availability rule as building: a trebuchet needs the tech that makes it available,
+        // and "no way to have it yet" outranks "not enough wood".
+        if !self.unit_available(entity.player, unit) {
+            return Err(SimError::UnitUnavailable { unit });
+        }
         // A barracks upgraded by an age is unit 498, and `[train.entry]` names 12.
         let building_root = self
             .units
@@ -1581,6 +1607,10 @@ impl World {
             .find(villager)
             .ok_or(SimError::MissingEntity(villager))?;
 
+        // Availability outranks the price: "you cannot have this yet" is the answer, not "you are poor".
+        if !self.unit_available(worker.player, unit_id) {
+            return Err(SimError::UnitUnavailable { unit: unit_id });
+        }
         for cost in &stats.costs {
             let slot = self.cost_slot(cost)?;
             let need = u32::from(cost.amount);
@@ -1593,7 +1623,6 @@ impl World {
                 });
             }
         }
-
         let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
         if !walk.contains(at.0, at.1) || walk.blocked(at.0, at.1) {
             return Err(SimError::SiteBlocked { tile: at });
@@ -1909,7 +1938,15 @@ impl World {
     /// other kind is left alone on purpose and counted in `docs/next-step.md`: applying half a tech
     /// silently would be worse than applying the half that is modelled, and the tests that use this
     /// path assert the effect they use contains nothing else.
+    /// A tech has landed: apply it, then apply whatever availability it unlocked.
     fn finish_research(&mut self, player: u8, tech: u32) -> Result<(), SimError> {
+        self.apply_tech(player, tech)?;
+        self.grant_availability(player)
+    }
+
+    /// Mark a tech researched and apply it. Does not chase availability techs; `finish_research` is the
+    /// entry point that does.
+    fn apply_tech(&mut self, player: u8, tech: u32) -> Result<(), SimError> {
         // What the player's units are worth *before* this tech, so the grant is the difference the
         // tech made rather than a full heal: a wounded unit keeps its wound.
         let before: Vec<(EntityId, u32, i32)> = self
@@ -2638,6 +2675,40 @@ impl World {
         self.techs = Some(techs.clone());
         self.effects = Some(effects.clone());
 
+        // What availability looks like in this pack: which units some tech can make available, and which
+        // techs exist only to do that. Both are read once, from content.
+        self.gated_units.clear();
+        self.availability_techs.clear();
+        for effect in effects.effects.values() {
+            for command in &effect.commands {
+                if command.kind == 2
+                    && command.b == 1
+                    && let Ok(unit) = u32::try_from(command.a)
+                {
+                    self.gated_units.insert(unit);
+                }
+            }
+        }
+        for tech in techs.techs.values() {
+            if tech.research_time != 0 || !tech.costs.is_empty() || tech.location >= 0 {
+                continue;
+            }
+            let Some(effect_id) = tech.effect_id else {
+                continue;
+            };
+            let Some(effect) = effects.effects.get(&effect_id) else {
+                continue;
+            };
+            let bookkeeping = !effect.commands.is_empty()
+                && effect
+                    .commands
+                    .iter()
+                    .all(|command| command.kind == 2 && command.b == 1);
+            if bookkeeping {
+                self.availability_techs.push(tech.id);
+            }
+        }
+
         self.grant_starting_techs()
     }
 
@@ -2657,6 +2728,67 @@ impl World {
         }
         self.civs = Some(civs.clone());
         Ok(())
+    }
+
+    /// May this player have this unit at all? A unit is *gated* when some tech's effect makes it
+    /// available (kind 2, positive flag), and gated units need one of those techs researched. A unit
+    /// nothing gates - a villager, a house, a spearman - is available always.
+    fn unit_available(&self, player: u8, unit: u32) -> bool {
+        if !self.gated_units.contains(&unit) {
+            return true;
+        }
+        let (Some(effects), Some(techs)) = (self.effects.as_ref(), self.techs.as_ref()) else {
+            return true;
+        };
+        self.researched(player).iter().any(|tech_id| {
+            let Some(effect_id) = techs.get(*tech_id).and_then(|tech| tech.effect_id) else {
+                return false;
+            };
+            let Some(effect) = effects.get(effect_id) else {
+                return false;
+            };
+            effect.commands.iter().any(|command| {
+                command.kind == 2
+                    && command.b == 1
+                    && u32::try_from(command.a).is_ok_and(|id| id == unit)
+            })
+        })
+    }
+
+    /// Apply the availability techs whose prerequisites the player now meets, and keep going while
+    /// granting one unlocks another. Idempotent, and guarded against re-entry because granting a tech
+    /// runs `finish_research`, which calls this again.
+    fn grant_availability(&mut self, player: u8) -> Result<(), SimError> {
+        if self.resolving_availability {
+            return Ok(());
+        }
+        self.resolving_availability = true;
+        let result = (|| -> Result<(), SimError> {
+            loop {
+                let mut granted = false;
+                for tech in self.availability_techs.clone() {
+                    if self.researched(player).contains(&tech) {
+                        continue;
+                    }
+                    let Some(stats) = self.techs.as_ref().and_then(|techs| techs.get(tech)) else {
+                        continue;
+                    };
+                    let ready = stats.required.iter().all(|required| {
+                        u32::try_from(*required)
+                            .is_ok_and(|id| self.researched(player).contains(&id))
+                    });
+                    if ready {
+                        self.finish_research(player, tech)?;
+                        granted = true;
+                    }
+                }
+                if !granted {
+                    return Ok(());
+                }
+            }
+        })();
+        self.resolving_availability = false;
+        result
     }
 
     /// Is this tech on the player's civilisation's restriction list? Returns the civ's name, so a
@@ -2748,6 +2880,7 @@ impl World {
             for tech in &starting {
                 self.grant_tech(player, *tech)?;
             }
+            self.grant_availability(player)?;
         }
         Ok(())
     }
