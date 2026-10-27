@@ -51,6 +51,17 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Twenty-fifth pass: garrison is a task, and a building shooting is a unit that stands still (2026-10-27)
+
+Garrison adds no per-tick work: a garrisoned unit's arm of the movement match returns zero movement, and the
+check "is this unit inside something" only runs when an order or an attack names it. `check_garrison` counts
+the units already inside, which is a walk of the entity list per garrison order - the same shape as the
+population count, and only on an order.
+
+Buildings that fight cost nothing new either: a building with an attack order goes through the attack arm,
+computes zero movement (speed zero), and fires a projectile through the path D35 already priced. Neither
+anchor moved (`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`).
+
 ## Twenty-fourth pass: an arrow costs a scan when it is fired, and nothing per tick (2026-10-27)
 
 A shot is an entity, so it is walked by every per-tick pass like any other - but it does no work of its own

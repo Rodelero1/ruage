@@ -464,6 +464,28 @@ how trained units are spawned, and the first thing to fix if arrow-heavy fights 
 Next: **garrison and line of sight**, which is what kind 0 needs before any of its 106 commands can mean
 anything, or **the per-civ 211-number array**, still unread.
 
+## Done next: garrison, and buildings that fight (2026-10-27, v0.78)
+
+`garrison` and the buildings' own `attack`/`range` were both parsed and unused. Now a unit goes inside
+(`Command::Garrison`) with the building's own capacity as the limit, must be standing on it or beside it, and
+cannot act or be attacked while inside; ungarrisoning lets it out where it stands; and **a garrison dies with
+its shelter** rather than pouring out of a razed town centre. A town centre shoots because a building is an
+armed entity that cannot walk: reach from `range`, damage from its attack array, shot as a projectile.
+
+Two details worth keeping: `start_attack` skips pathing for a building (pathing from a blocked tile refused
+every shot), and that guard must test the *kind*, not the speed - a stationary unit in a test still wants its
+route, which one existing test proved by breaking.
+
+Mutation-proved three ways, and one of them found a hole: removing the capacity check fails the full-building
+test, letting a garrison survive its shelter fails the razing test, and letting garrisoned units be attacked
+was **not** caught by anything until a test was added for it.
+
+**Line of sight stays out, with the reason written down:** 844 units carry `los`, but nothing asks - no fog,
+no scouting, no untargetable-when-unseen rule. It waits for a consumer.
+
+Next: **kind 0** now has garrison capacity to act on (attribute 21), or **the per-civ 211-number array**,
+still unread.
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

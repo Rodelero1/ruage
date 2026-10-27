@@ -276,6 +276,9 @@ pub enum Task {
     Idle,
     /// Putting up a building at `site`.
     Build { site: EntityId },
+    /// Inside a building. A garrisoned unit still exists - it costs population and dies with its
+    /// shelter - but it is not on the map: it cannot act, and it cannot be attacked.
+    Garrisoned { building: EntityId },
     /// A shot in flight: where it will land, what it does when it gets there, and who it was meant
     /// for. The aim is a position, not the target, so an arrow at a unit that then walks away lands
     /// where it was fired - and finds nothing worth hurting.
@@ -341,6 +344,11 @@ pub enum Command {
     /// Research a tech at a building. Price, duration, where it may happen and what it applies all
     /// come from the tech and effect tables - a replay carries the id, never the numbers.
     Research { building: EntityId, tech: u32 },
+    /// Put a unit inside a building. The capacity is the building's own `garrison` field, so the only
+    /// numbers involved are the data's.
+    Garrison { unit: EntityId, building: EntityId },
+    /// Let everyone out of a building.
+    Ungarrison { building: EntityId },
     Spawn {
         id: EntityId,
         player: u8,
@@ -455,6 +463,19 @@ pub enum SimError {
     QueueFull {
         id: EntityId,
         length: u32,
+    },
+    /// This unit is inside a building and cannot act until it is let out.
+    Garrisoned {
+        id: EntityId,
+    },
+    /// The unit is too far away to walk into the building: it has to be standing on it or beside it.
+    TooFar {
+        id: EntityId,
+    },
+    /// The building has no room for another unit.
+    GarrisonFull {
+        id: EntityId,
+        capacity: u32,
     },
     /// The target is on the attacker's own team.
     AlliedTarget {
@@ -609,6 +630,17 @@ impl fmt::Display for SimError {
                 f,
                 "tech {tech} is already being researched at another building"
             ),
+            SimError::Garrisoned { id } => {
+                write!(f, "entity {} is garrisoned and cannot act", id.0)
+            }
+            SimError::TooFar { id } => write!(
+                f,
+                "entity {} is not next to the building: move it there before garrisoning",
+                id.0
+            ),
+            SimError::GarrisonFull { id, capacity } => {
+                write!(f, "entity {} is full: it holds {capacity} units", id.0)
+            }
             SimError::AlliedTarget { id } => write!(
                 f,
                 "entity {} is on the attacker's team: allies are not targets",
@@ -1033,6 +1065,17 @@ impl World {
                 self.check_attack(*attacker, *target)?;
             }
             // Stopping is always legal: there is nothing to be refused.
+            Command::Garrison { unit, building } => {
+                self.check_garrison(*unit, *building)?;
+            }
+            Command::Ungarrison { building } => {
+                let entity = self
+                    .find(*building)
+                    .ok_or(SimError::MissingEntity(*building))?;
+                if entity.kind != EntityKind::Building {
+                    return Err(SimError::TrainNeedsABuilding { id: *building });
+                }
+            }
             Command::Stop { .. } => {}
             // The bound belongs in the dry run too, or `submit_checked` accepts a ninth side and
             // the failure only appears a tick later inside the queue.
@@ -1389,12 +1432,17 @@ impl World {
         if matches!(source.kind, EntityKind::Resource(_)) {
             return Err(SimError::Unarmed { id: attacker });
         }
+        if matches!(source.task, Task::Garrisoned { .. }) {
+            return Err(SimError::Garrisoned { id: attacker });
+        }
         if matches!(
             victim.kind,
             EntityKind::Resource(_) | EntityKind::Projectile
-        ) {
+        ) || matches!(victim.task, Task::Garrisoned { .. })
+        {
             // A tree is not a target and neither is an arrow: one cannot bleed and the other is a
-            // consequence, not a combatant.
+            // consequence, not a combatant. Nor is a unit inside a building - the building is the
+            // target, and the unit goes with it.
             return Err(SimError::NotATarget { id: target });
         }
         if source.player == victim.player {
@@ -1456,8 +1504,13 @@ impl World {
         let Some(victim) = self.find(target).map(|e| e.position) else {
             return Err(SimError::MissingEntity(target));
         };
-        let route = self.plan_path(position, victim)?;
-        self.paths.insert(attacker, route);
+        // A building does not walk: its reach is its range, and pathing from a blocked tile would
+        // refuse every shot a town centre wants to take. The test is the kind, not the speed - a unit
+        // with no speed still gets a route, which is what a stationary test fixture relies on.
+        if source.kind != EntityKind::Building {
+            let route = self.plan_path(position, victim)?;
+            self.paths.insert(attacker, route);
+        }
         if let Some(entity) = self.find_mut(attacker) {
             entity.task = Task::Attack {
                 target,
@@ -1927,6 +1980,67 @@ impl World {
     /// The checks a research order has to survive: is this a finished building, is it the building
     /// the tech names, is the tech unknown / already had / already being researched here, and can
     /// the player pay. Returns the price and how many ticks it takes.
+    /// The checks a garrison order has to survive: a unit, a finished building of the same player, room
+    /// inside it, and the unit close enough to walk in - the capacity is the building's own data field.
+    fn check_garrison(&self, unit: EntityId, building: EntityId) -> Result<(), SimError> {
+        let source = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
+        if source.kind != EntityKind::Unit {
+            return Err(SimError::NotAUnit { id: unit });
+        }
+        if matches!(source.task, Task::Garrisoned { .. }) {
+            return Err(SimError::Garrisoned { id: unit });
+        }
+        let shelter = self
+            .find(building)
+            .ok_or(SimError::MissingEntity(building))?;
+        if shelter.kind != EntityKind::Building {
+            return Err(SimError::TrainNeedsABuilding { id: building });
+        }
+        if shelter.construction.is_some() {
+            return Err(SimError::BuildingNotReady { id: building });
+        }
+        if shelter.player != source.player {
+            return Err(SimError::FriendlyFire { id: building });
+        }
+        let units = self.units.as_ref().ok_or(SimError::NoTables)?;
+        let capacity = shelter
+            .unit
+            .and_then(|built| units.unit(built))
+            .map_or(0, |stats| u32::from(stats.garrison));
+        let inside = u32::try_from(
+            self.entities
+                .iter()
+                .filter(|entity| {
+                    entity.player == source.player
+                        && entity.kind == EntityKind::Unit
+                        && entity.task == (Task::Garrisoned { building })
+                })
+                .count(),
+        )
+        .unwrap_or(u32::MAX);
+        if inside >= capacity {
+            return Err(SimError::GarrisonFull {
+                id: building,
+                capacity,
+            });
+        }
+        // Standing on the building's tile or beside it is close enough. A unit across the map is not
+        // teleported in: move it first.
+        let scale = self.scale;
+        let here = (
+            u16::try_from(source.position.0.raw() / scale).unwrap_or(0),
+            u16::try_from(source.position.1.raw() / scale).unwrap_or(0),
+        );
+        let there = (
+            u16::try_from(shelter.position.0.raw() / scale).unwrap_or(0),
+            u16::try_from(shelter.position.1.raw() / scale).unwrap_or(0),
+        );
+        if here.0.abs_diff(there.0) > 1 || here.1.abs_diff(there.1) > 1 {
+            return Err(SimError::TooFar { id: unit });
+        }
+        Ok(())
+    }
+
     fn check_research(&self, building: EntityId, tech: u32) -> Result<ResearchPlan, SimError> {
         let entity = self
             .find(building)
@@ -2689,6 +2803,28 @@ impl World {
             Command::Train { building, unit } => self.start_train(building, unit),
             Command::Research { building, tech } => self.start_research(building, tech),
             Command::Attack { attacker, target } => self.start_attack(attacker, target),
+            Command::Garrison { unit, building } => {
+                // Inside, the unit keeps its position and its load: it is sheltered, not teleported.
+                if let Some(entity) = self.find_mut(unit) {
+                    entity.task = Task::Garrisoned { building };
+                }
+                self.paths.remove(&unit);
+                Ok(())
+            }
+            Command::Ungarrison { building } => {
+                let leaving: Vec<EntityId> = self
+                    .entities
+                    .iter()
+                    .filter(|entity| entity.task == (Task::Garrisoned { building }))
+                    .map(|entity| entity.id)
+                    .collect();
+                for id in leaving {
+                    if let Some(entity) = self.find_mut(id) {
+                        entity.task = Task::Idle;
+                    }
+                }
+                Ok(())
+            }
             Command::Stop { unit } => {
                 self.paths.remove(&unit);
                 if let Some(entity) = self.find_mut(unit) {
@@ -2900,6 +3036,9 @@ impl World {
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))
                 }
+                // Inside a building: no movement, no work, and no cooldown runs - a sheltered unit is
+                // simply not on the map.
+                Task::Garrisoned { .. } => (Fixed::ZERO, Fixed::ZERO),
                 Task::Idle => {
                     let dx = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
                         SimError::Displacement {
@@ -3250,6 +3389,13 @@ impl World {
                 buried.push(entity.id);
             }
             keep
+        });
+        // A garrison goes down with its shelter: a unit inside a building that dies has nowhere to be,
+        // and the alternative - ejecting it onto the rubble - would let a razed town centre disgorge
+        // fifteen villagers.
+        let razed: BTreeSet<EntityId> = buried.iter().copied().collect();
+        self.entities.retain(|entity| {
+            !matches!(entity.task, Task::Garrisoned { building } if razed.contains(&building))
         });
         for id in buried {
             self.paths.remove(&id);
@@ -3789,6 +3935,10 @@ impl World {
             }
             match entity.task {
                 Task::Idle => fnv_bytes(&mut hash, &[0u8]),
+                Task::Garrisoned { building } => {
+                    fnv_bytes(&mut hash, &[6u8]);
+                    fnv_bytes(&mut hash, &building.0.to_le_bytes());
+                }
                 Task::Fly {
                     target,
                     damage,

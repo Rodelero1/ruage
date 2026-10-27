@@ -706,3 +706,27 @@ every pack written before this meant.
 The projectile id is "one past the highest", which is an O(n) scan per shot. Training spawns do the same, so
 this is consistent rather than new, and it is recorded in `docs/performance.md` as the thing to fix first if
 arrow-heavy fights ever show up in a profile.
+
+## D36 - Garrison is data, buildings fight, and line of sight still has no consumer
+
+Every unit carries `garrison` in the dat (a town centre 15, a castle 20, a barracks 10) and 55 buildings
+have a real capacity; town centres, towers and castles also carry an `attack` array and a `range`. Both were
+parsed and unused. Now:
+
+- `Command::Garrison { unit, building }` puts a unit inside, `Command::Ungarrison { building }` lets it out.
+  The capacity is the **building's own field**, so the only numbers are the data's. The unit must be standing
+  on the building or beside it (`TooFar` otherwise) - a garrison is not a teleport.
+- A garrisoned unit still exists: it costs population (the game charges for it), it cannot act
+  (`Garrisoned`), it cannot be attacked (`NotATarget` - the building is the target), and it is not on the
+  map for movement.
+- **A garrison dies with its shelter.** Ejecting everyone onto the rubble would let a razed town centre
+  disgorge fifteen villagers into a fight, which is generous in a way the game is not.
+- A **building fights like a unit that cannot walk**: the reach is its `range`, the damage its attack array,
+  and the shot is a projectile (D35). `start_attack` skips pathing for a building - pathing from a blocked
+  tile refused every shot a town centre wanted to take - and the guard is the *kind*, not the speed, because
+  a stationary unit in a test still wants its route.
+
+**Line of sight is deliberately still out.** `los` (844 of 1,166 units) would let the engine answer "what can
+this player see", but nothing asks: there is no fog, no scouting rule, and no targeting rule that hides
+anything. A visibility model with no consumer is the mistake D26 recorded, so it waits for one - a UI
+overlay, a scenario condition, or a rule that makes unseen units untargetable.
