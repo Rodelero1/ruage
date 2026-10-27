@@ -432,3 +432,15 @@ is an upgrade.** `[train.entry]` names the line (a barracks trains militia and s
 means a pikeman matches that entry, and `check_train` refuses a unit whose upgrade tech has not been
 researched - otherwise a Dark Age barracks could train halberdiers the moment someone wrote them into the
 entry list.
+
+### D24a - The zero flag is "disabled", and the negative ones are not that
+
+`[2, unit, 0, -1, 0]` takes a unit away: one row in the whole table, in the Huns' tree, for the house -
+and the Huns cannot build houses. That is enough evidence for the zero flag, and the engine reads it as a
+civ-level bar that no tech can lift (`UnitBarred`, "not available to the Huns").
+
+The four `b = -1` rows are **not** that. They live in effects called "Enable sheep/llamaged/cow/turkey",
+each carried by a tech that *costs* 40 food + 25 wood and takes 15 s (555 and its siblings), and each
+carries an attribute in `c` and a value (0.85) that no enable/disable reading accounts for. Whatever they
+are - a scenario-tool leftover, or a herding special case - they are not a match mechanic, and reading
+them as "disable" would be inventing a rule. They stay uninterpreted and named here.

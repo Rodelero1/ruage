@@ -231,6 +231,28 @@ per-player civs, team bonuses, and the per-civ tuning array. One more thing this
 dat's name codes are not identity** - the spear line is evidence for that, and any future role should be
 chosen from stats and the upgrade graph rather than from the name.
 
+## Done next: a civ that takes a unit away (2026-10-27, v0.66)
+
+`[2, unit, 0, -1, 0]` is the disable form, and there is exactly one in the table: the Huns' tree takes away
+the **house**, which is true of the game. The bar is a civ-level rule that no tech lifts — `UnitBarred`,
+naming the civ — and it is **derived on demand** rather than cached, because a cached set would have been
+one more field on `World` and pass seven priced that shape.
+
+The four `b = -1` rows are a different animal and are now named as such (D24a): effects called "Enable
+sheep/llama/cow/turkey", carried by techs that cost 40 food + 25 wood and take 15 s, with an attribute and
+a value in them. Nothing about that reads as enable/disable, so they stay uninterpreted rather than
+guessed at.
+
+**The measurement finding outranks the feature (pass thirteen).** The A/B claimed +6% for a change with no
+tick path. Chasing it showed the probe has a between-build sensitivity of roughly ±8% at 126 entities, and
+that every "~2% residual" since pass seven was that sensitivity — partly because the base worktree ran with
+a `units.toml` stripped of `variant_of`. Future passes: compare against the *previous commit* with the
+**same** data files, and treat a sub-10% difference in the idle probe as unresolved unless the change runs
+per tick.
+
+Next: per-player civs (which is what would let two players be different civilisations), then team bonuses
+and the per-civ tuning array.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

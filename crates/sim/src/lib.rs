@@ -431,6 +431,11 @@ pub enum SimError {
     TechInProgress {
         tech: u32,
     },
+    /// The player's civilisation does not have this unit at all.
+    UnitBarred {
+        unit: u32,
+        civ: String,
+    },
     /// The unit is an upgrade, and the tech that upgrades into it has not been researched.
     UnitNotUpgraded {
         unit: u32,
@@ -577,6 +582,10 @@ impl fmt::Display for SimError {
             SimError::TechInProgress { tech } => write!(
                 f,
                 "tech {tech} is already being researched at another building"
+            ),
+            SimError::UnitBarred { unit, civ } => write!(
+                f,
+                "unit {unit} is not available to the {civ}: it is not in their tech tree"
             ),
             SimError::UnitNotUpgraded { unit, tech } => write!(
                 f,
@@ -1378,6 +1387,9 @@ impl World {
         let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
         // The same availability rule as building: a trebuchet needs the tech that makes it available,
         // and "no way to have it yet" outranks "not enough wood".
+        if let Some(civ) = self.civ_barred_unit(unit) {
+            return Err(SimError::UnitBarred { unit, civ });
+        }
         if !self.unit_available(entity.player, unit) {
             return Err(SimError::UnitUnavailable { unit });
         }
@@ -1635,6 +1647,9 @@ impl World {
             .ok_or(SimError::MissingEntity(villager))?;
 
         // Availability outranks the price: "you cannot have this yet" is the answer, not "you are poor".
+        if let Some(civ) = self.civ_barred_unit(unit_id) {
+            return Err(SimError::UnitBarred { unit: unit_id, civ });
+        }
         if !self.unit_available(worker.player, unit_id) {
             return Err(SimError::UnitUnavailable { unit: unit_id });
         }
@@ -2807,6 +2822,26 @@ impl World {
                     && u32::try_from(command.a).is_ok_and(|id| id == unit)
             })
         })
+    }
+
+    /// Is this unit taken away by the player's civilisation? Returns the civ's name so a refusal can say
+    /// whose rule it is.
+    ///
+    /// Derived on the spot rather than cached: the set would have been one more field on `World`, and a
+    /// field on `World` costs more than the lookup does (`docs/performance.md`, pass seven and thirteen).
+    /// The scan is one effect's command list, and only when an order is placed.
+    fn civ_barred_unit(&self, unit: u32) -> Option<String> {
+        let civs = self.civs.as_ref()?;
+        let civ = civs.get(self.civ?)?;
+        let effects = self.effects.as_ref()?;
+        let effect = effects.get(civ.tech_tree_effect?)?;
+        let barred = effect.commands.iter().any(|command| {
+            // Zero is the data's "take it away": one row in the whole table, the Huns' house.
+            command.kind == 2
+                && command.b == 0
+                && u32::try_from(command.a).is_ok_and(|id| id == unit)
+        });
+        barred.then(|| civ.name.clone())
     }
 
     /// Apply the availability techs whose prerequisites the player now meets, and keep going while

@@ -51,6 +51,32 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Thirteenth pass: the idle probe cannot resolve a change with no tick path (2026-10-27)
+
+This pass added a civ-level unit bar - the Huns cannot build houses. Nothing in it runs per tick: the bar
+is a scan of one effect's command list, and only when a build or train order is placed. The interleaved
+A/B nevertheless reported **+6% at 126 entities**, reproducibly, in three rounds and both orderings
+(base 2.27-2.35 µs/tick, new 2.39-2.51). So it was chased rather than explained away:
+
+1. The first suspicion was the `BTreeSet` the change had put on `World`. **Removed** it (the bar is now
+   derived on demand) and re-measured: 2.42-2.44, unchanged. Not the field.
+2. The next was the data: every A/B since the seventh pass had run the base worktree with a
+   `units.toml` **stripped of `variant_of`**, because back then the base could not parse it. That strip
+   makes the base's unit table smaller than the new build's. Fed the current binary the stripped file and
+   it measured 2.23-2.27 - matching base - while both builds with the full file split 2.25-2.27 (base)
+   against 2.44-2.51 (new). So the strip does bias the comparison, **but it is not this gap**.
+3. What is left is code layout: nothing in the change is reachable from an idle tick, and the same code
+   measured twice in the same process reproduces to 0.01 µs, so the difference is between *builds*, not
+   runs.
+
+The honest conclusion, and the reason this is written down rather than rounded off: an idle-tick probe at
+126 entities has a between-build sensitivity of roughly ±8%, which is the same order as the changes we
+have been reporting since the seventh pass. The "~2% residual" recorded there and carried forward in four
+later passes is almost certainly this sensitivity, not a regression. What the probe can still be trusted
+for is a change that *does* run per tick (the entity-count scaling curve), and what should be used to
+judge a change that does not is the inspection plus the unchanged hashes - the four-hour probe still ends
+at 126 entities with `b30d49d89f8bcf4f`.
+
 ## Twelfth pass: upgrade gating is load-time plus per-order (2026-10-27)
 
 The unit -> upgrade-tech map is built once at table load, and the two gates (available? upgraded?) run on

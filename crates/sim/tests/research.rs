@@ -919,3 +919,37 @@ fn the_spear_line_upgrades_the_units_the_player_already_has() {
     );
     assert_eq!(halberdier.hp, 60);
 }
+
+/// A civ can also *take* a unit away: the Huns' tech tree carries `[2, 70, 0, -1, 0]`, and the Huns
+/// cannot build houses in the game. That is the only civ-level availability row in the data, and it is
+/// why a kind-2 command with a zero flag is read as "disabled".
+#[test]
+fn the_huns_cannot_build_a_house() {
+    let Some(fx) = fixture() else { return };
+    let mut economy = fx.economy.clone();
+    economy.start.civ = Some("Huns".to_owned());
+    let mut world = seeded_with(&fx, &economy);
+    world.load_civs(&fx.civs).expect("the civ table");
+    let villager = first_villager(&world);
+    bank(&mut world, slot("wood"), 100);
+    let site = free_tile(&world, villager);
+
+    let err = world
+        .submit_checked(Command::Build {
+            villager,
+            unit: 70,
+            at: site,
+        })
+        .expect_err("the Huns have no houses")
+        .to_string();
+    assert!(err.contains("Huns"), "the refusal names the civ: {err}");
+
+    // And the bar is that one unit, not the Huns' whole build menu.
+    world
+        .submit_checked(Command::Build {
+            villager,
+            unit: BARRACKS,
+            at: site,
+        })
+        .expect("the Huns still build barracks");
+}
