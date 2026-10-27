@@ -431,6 +431,13 @@ pub enum SimError {
     TechInProgress {
         tech: u32,
     },
+    /// The tech lists a prerequisite this player has not researched.
+    MissingPrerequisite {
+        tech: u32,
+        missing: u32,
+        /// The content word for the prerequisite, when the pack has one.
+        role: Option<String>,
+    },
     /// The pack defines more resources than a stockpile has columns for.
     TooManyResources {
         count: usize,
@@ -552,6 +559,20 @@ impl fmt::Display for SimError {
                 f,
                 "tech {tech} is already being researched at another building"
             ),
+            SimError::MissingPrerequisite {
+                tech,
+                missing,
+                role,
+            } => match role {
+                Some(role) => write!(
+                    f,
+                    "tech {tech} needs {role} ({missing}) first, and this player has not researched it"
+                ),
+                None => write!(
+                    f,
+                    "tech {tech} needs tech {missing} first, and this player has not researched it"
+                ),
+            },
             SimError::TooManyResources { count, max } => write!(
                 f,
                 "the content pack defines {count} resources; a stockpile has {max} columns \
@@ -1127,7 +1148,13 @@ impl World {
         self.entities
             .iter()
             .filter(|entity| entity.kind == EntityKind::Building && entity.player == player)
-            .filter(|entity| entity.unit.is_some_and(|unit| drop_sites.contains(&unit)))
+            // By family, not by id: an upgraded town centre is unit 71, and the drop list names 109.
+            .filter(|entity| {
+                entity.unit.is_some_and(|unit| {
+                    let root = units.root(unit);
+                    drop_sites.contains(&unit) || drop_sites.contains(&root)
+                })
+            })
             .min_by_key(|entity| {
                 let dx = entity.position.0.raw() - from.0.raw();
                 let dy = entity.position.1.raw() - from.1.raw();
@@ -1280,7 +1307,13 @@ impl World {
             return Err(SimError::AlreadyTraining { id: building });
         }
         let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
-        if !economy.train.allows(building_unit, unit) {
+        // A barracks upgraded by an age is unit 498, and `[train.entry]` names 12.
+        let building_root = self
+            .units
+            .as_ref()
+            .map_or(building_unit, |units| units.root(building_unit));
+        if !(economy.train.allows(building_unit, unit) || economy.train.allows(building_root, unit))
+        {
             return Err(SimError::NotTrainableHere {
                 building: building_unit,
                 unit,
@@ -1648,12 +1681,29 @@ impl World {
         // means "anywhere", which is how the data spells a tech with no home building.
         if let Ok(place) = u32::try_from(stats.location)
             && place != 0
-            && entity.unit != Some(place)
+            && entity
+                .unit
+                .map(|unit| self.units.as_ref().map_or(unit, |units| units.root(unit)))
+                != Some(place)
         {
             return Err(SimError::CannotResearchHere {
                 building: entity.unit.unwrap_or(0),
                 tech,
             });
+        }
+        // Prerequisites: every id a tech lists is a *tech* id (all 614 entries in the table resolve to
+        // techs, even where the number also names a building), so the gate is simply "researched".
+        for required in &stats.required {
+            let Ok(missing) = u32::try_from(*required) else {
+                continue;
+            };
+            if !self.researched(entity.player).contains(&missing) {
+                return Err(SimError::MissingPrerequisite {
+                    tech,
+                    missing,
+                    role: self.tech_role_name(missing).map(str::to_owned),
+                });
+            }
         }
         let effects = self.effects.as_ref().ok_or(SimError::NoTables)?;
         if let Some(effect_id) = stats.effect_id
@@ -2580,6 +2630,39 @@ impl World {
         self.economy
             .as_ref()
             .and_then(|economy| economy.role.get(role).copied())
+    }
+
+    /// Is this unit the same *building* as the role names? True for the unit itself and for any
+    /// variant an age upgraded it into, so a scenario that says `building = "barracks"` finds the
+    /// feudal barracks (498) as well as the dark age one (12).
+    pub fn is_family(&self, unit: u32, wanted: u32) -> bool {
+        match self.units.as_ref() {
+            Some(units) => units.root(unit) == units.root(wanted),
+            None => unit == wanted,
+        }
+    }
+
+    /// The name a tech is known by in the pack, when it has one. Used where a refusal has to name a
+    /// tech: an id alone tells a player nothing, and the pack already has the word (D17).
+    pub fn tech_role_name(&self, tech: u32) -> Option<&str> {
+        self.economy.as_ref().and_then(|economy| {
+            economy
+                .tech_role
+                .iter()
+                .find(|(_, id)| **id == tech)
+                .map(|(name, _)| name.as_str())
+        })
+    }
+
+    /// Mark a tech as already researched, applying it exactly as a completed research would: the
+    /// seeded state of a world that begins in a later age, and how a test that is about something else
+    /// gets a prerequisite out of the way.
+    pub fn grant_tech(&mut self, player: u8, tech: u32) -> Result<(), SimError> {
+        let techs = self.techs.as_ref().ok_or(SimError::NoTables)?;
+        if techs.get(tech).is_none() {
+            return Err(SimError::MissingTech { id: tech });
+        }
+        self.finish_research(player, tech)
     }
 
     /// The tech a `[tech_role]` name stands for. Techs have no name in the dat, so this is the only

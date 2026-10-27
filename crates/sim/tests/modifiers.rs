@@ -189,6 +189,23 @@ fn research(world: &mut World, player: u8, smith: EntityId, tech: u32, seconds: 
 }
 
 /// One blow from `attacker` against `victim`: how much health the victim loses.
+/// The age a tech in this file needs, granted the way a scenario that begins later in the game would.
+///
+/// Order matters: the age effects carry kind-3 commands that upgrade building ids (town centre
+/// 109 -> 71, barracks 12 -> 498, house 70 -> 463), so grant **after** banking - the villagers' drop
+/// sites name 109 - and **before** placing whatever the test researches at.
+fn feudal(world: &mut World) {
+    feudal_for(world, 1);
+}
+
+fn feudal_for(world: &mut World, player: u8) {
+    for tech in [104, 659, 101] {
+        world
+            .grant_tech(player, tech)
+            .expect("seeding the Feudal Age");
+    }
+}
+
 fn blow(world: &mut World, attacker: EntityId, victim: EntityId) -> i32 {
     let before = world.entity(victim).expect("victim").hp;
     world
@@ -224,6 +241,7 @@ fn forging_adds_one_melee_attack_to_the_infantry_it_covers() {
     );
 
     let mut researched = seeded(&fx);
+    feudal(&mut researched);
     let smith = place(&mut researched, 1, 9_102, SMITH, (14, 14), 1_000);
     let attacker = place(&mut researched, 1, 9_103, SPEARMAN, (10, 10), 40);
     let victim = place(&mut researched, 2, 9_104, SPEARMAN, (11, 10), 40);
@@ -243,7 +261,9 @@ fn scale_mail_adds_one_melee_and_one_pierce_armour() {
     // Published: Scale Mail is +1/+1 armour. Against the same 4 melee attack, the victim now takes 3.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    // The armour is the victim's, so the *victim's* owner is the one who researches it.
+    // The armour is the victim's, so the *victim's* owner is the one who researches it - including
+    // the age it needs to be allowed to.
+    feudal_for(&mut world, 2);
     let smith = place(&mut world, 2, 9_110, SMITH, (30, 30), 1_000);
     let attacker = place(&mut world, 1, 9_111, SPEARMAN, (10, 10), 40);
     let victim = place(&mut world, 2, 9_112, SPEARMAN, (11, 10), 40);
@@ -269,6 +289,7 @@ fn a_modifier_only_touches_the_unit_class_it_names() {
     // must not move - the class filter is the whole difference between "an upgrade" and "a cheat".
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
+    feudal(&mut world);
     let smith = place(&mut world, 1, 9_120, SMITH, (14, 14), 1_000);
     let attacker = place(&mut world, 1, 9_121, 83, (10, 10), 25);
     let victim = place(&mut world, 2, 9_122, 83, (11, 10), 25);
@@ -289,6 +310,7 @@ fn a_modifier_is_the_researching_players_alone() {
     // If the adjustment were keyed on the unit rather than its owner, both sides would get it.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
+    feudal(&mut world);
     let smith = place(&mut world, 1, 9_130, SMITH, (14, 14), 1_000);
     let mine = place(&mut world, 1, 9_131, SPEARMAN, (20, 20), 40);
     let theirs = place(&mut world, 2, 9_132, SPEARMAN, (21, 20), 40);
@@ -365,12 +387,15 @@ location = 0
 fn loom_raises_every_villagers_health_immediately() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
+    let villager0 = first_villager(&world);
+    bank(&mut world, 1, villager0, slot("gold"), 50);
+    world
+        .grant_tech(1, 104)
+        .expect("Loom needs the Dark Age tech");
     let centre = place(&mut world, 1, 9_200, TOWN_CENTRE, (14, 14), 2400);
     // One villager at full health, one wounded to 10 of 25.
     let whole = place(&mut world, 1, 9_201, VILLAGER, (10, 10), 25);
     let hurt = place(&mut world, 1, 9_202, VILLAGER, (10, 12), 10);
-    let villager = first_villager(&world);
-    bank(&mut world, 1, villager, slot("gold"), 50);
     research(&mut world, 1, centre, LOOM, 25);
 
     assert_eq!(world.entity(whole).expect("villager").hp, 40, "25 + 15");
@@ -392,6 +417,10 @@ fn loom_raises_every_villagers_health_immediately() {
 fn masonry_raises_building_health_by_a_tenth() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
+    feudal(&mut world);
+    world
+        .grant_tech(1, 102)
+        .expect("Masonry sits in the Castle Age");
     let castle = place(&mut world, 1, 9_210, CASTLE, (14, 14), 4800);
     let house = place(&mut world, 1, 9_211, HOUSE, (10, 10), 550);
     let wounded = place(&mut world, 1, 9_212, HOUSE, (10, 12), 100);
@@ -413,6 +442,7 @@ fn masonry_raises_building_health_by_a_tenth() {
 fn wheelbarrow_changes_what_is_gathered_next_and_not_a_load_in_hand() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
+    feudal(&mut world);
     let centre = place(&mut world, 1, 9_220, TOWN_CENTRE, (14, 14), 2400);
     let villager = first_villager(&world);
 
@@ -508,6 +538,7 @@ fn place_moving(
 fn a_speed_addition_arrives_in_tiles_per_second_and_not_in_scale_units() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
+    feudal(&mut world);
     let centre = place(&mut world, 1, 9_230, TOWN_CENTRE, (14, 14), 2400);
     // 1.2 tiles/s, which is what the table says for this unit.
     let scout = place_moving(
@@ -526,5 +557,82 @@ fn a_speed_addition_arrives_in_tiles_per_second_and_not_in_scale_units() {
         world.entity(scout).expect("scout").speed.raw(),
         31_000,
         "1.2 + 0.35 = 1.55 tiles/s, which is 31000 at scale 20000 - not 24000.35"
+    );
+}
+
+/// An age-up is a kind-3 command like any other, and its targets include buildings: the Feudal Age
+/// upgrades the blacksmith 103 into 105. Forging names a blacksmith as its home, so an engine that
+/// compared ids would tell a feudal player that their blacksmith is not a blacksmith.
+#[test]
+fn an_age_up_does_not_take_the_blacksmith_away() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let smith = place(&mut world, 1, 9_400, SMITH, (14, 14), 1_000);
+    let attacker = place(&mut world, 1, 9_401, SPEARMAN, (10, 10), 40);
+    let victim = place(&mut world, 2, 9_402, SPEARMAN, (11, 10), 40);
+    let villager = first_villager(&world);
+    bank(&mut world, 1, villager, slot("food"), 150);
+    feudal(&mut world);
+
+    // The smith really did change identity - that is the premise, not an incidental.
+    assert_eq!(
+        world.entity(smith).expect("smith").unit,
+        Some(105),
+        "the Feudal Age upgrades the blacksmith (103 -> 105)"
+    );
+    assert!(world.is_family(105, SMITH), "and it is still a blacksmith");
+
+    world
+        .submit_checked(Command::Research {
+            building: smith,
+            tech: FORGING,
+        })
+        .expect("Forging is legal at an upgraded blacksmith");
+    for _ in 0..2_000 {
+        world.step().expect("step");
+        if world.researched(1).contains(&FORGING) {
+            break;
+        }
+    }
+    assert_eq!(
+        blow(&mut world, attacker, victim),
+        5,
+        "and it still lands: 4 melee + Forging's 1"
+    );
+}
+
+/// The same family question for the economy: villagers drop wood at the town centre, and the Feudal
+/// Age replaces 109 with 71. Without the family link a player who aged up could never bank anything
+/// again - every load would be carried forever.
+#[test]
+fn villagers_still_bank_after_the_town_centre_is_upgraded() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    feudal(&mut world);
+    let centre = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Building)
+        .and_then(|entity| entity.unit)
+        .expect("a town centre");
+    assert_eq!(
+        centre, 71,
+        "the Feudal Age upgraded the town centre (109 -> 71)"
+    );
+
+    let villager = first_villager(&world);
+    let node = nearest_node(&world, villager, slot("wood")).expect("a tree");
+    world
+        .submit_checked(Command::Gather { villager, node })
+        .expect("gather");
+    for _ in 0..20_000 {
+        world.step().expect("step");
+        if world.stock(1, slot("wood")) > 0 {
+            break;
+        }
+    }
+    assert!(
+        world.stock(1, slot("wood")) > 0,
+        "a villager banks wood at an upgraded town centre"
     );
 }

@@ -39,6 +39,11 @@ pub struct Unit {
     /// **for a building it is build time** - one villager finishes a house in 25 s, a barracks in
     /// 50, a farm in 15. -1 on four units means "not creatable", not "instant".
     pub train_time: i32,
+    /// The unit this one is an upgraded variant of, when a tech replaces an id instead of changing a
+    /// number: an age-up turns the town centre 109 into 71 and the barracks 12 into 498. Everything
+    /// that names a building by id has to keep matching across that, so the engine resolves through
+    /// this rather than comparing ids. `None` for the 976 units nothing upgrades into.
+    pub variant_of: Option<u32>,
     pub base_id: i32,
 }
 
@@ -48,11 +53,38 @@ pub struct Units {
     pub civ_name: String,
     /// Every populated id, in id order.
     pub units: BTreeMap<u32, Unit>,
+    /// Variant id -> the unit it was upgraded from (an age-up replaces 109 with 71, 12 with 498).
+    ///
+    /// Its own table rather than a field on `Unit`: only 190 of 1,166 units have a parent, and
+    /// widening every record for them cost 2-4% of a tick at 1,126 entities in table footprint alone
+    /// (`docs/performance.md`, seventh pass). A lookup keeps `Unit` exactly as it was.
+    pub variants: BTreeMap<u32, u32>,
 }
 
 impl Units {
     pub fn unit(&self, id: u32) -> Option<&Unit> {
         self.units.get(&id)
+    }
+
+    /// The unit this id belongs to by *family*: a variant resolves to the unit it was upgraded from,
+    /// all the way up. An age-up replaces a building's id (town centre 109 -> 71 -> 141), and every
+    /// rule that names a building - what a tech is researched at, where a villager drops wood, what a
+    /// barracks trains - has to keep holding after it, so those comparisons go through here rather
+    /// than comparing ids directly.
+    ///
+    /// An id the table does not know is its own root: the engine would rather match nothing than
+    /// invent a family for a unit that does not exist. The hop limit is a cycle guard - the data has
+    /// no cycles, but a hand-written pack could, and an infinite loop in a tick is not a failure mode
+    /// worth risking for a lookup this cheap.
+    pub fn root(&self, id: u32) -> u32 {
+        let mut current = id;
+        for _ in 0..8 {
+            match self.variants.get(&current).copied() {
+                Some(parent) if parent != current => current = parent,
+                _ => return current,
+            }
+        }
+        current
     }
 }
 
@@ -93,6 +125,8 @@ struct RawUnit {
     reload: f64,
     accuracy: u16,
     train_time: i32,
+    #[serde(default)]
+    variant_of: Option<u32>,
     base_id: i32,
 }
 
@@ -163,6 +197,7 @@ pub fn load_units_str(text: &str, path: &str) -> Result<Units, ConfigError> {
     }
 
     let mut units = BTreeMap::new();
+    let mut variants: BTreeMap<u32, u32> = BTreeMap::new();
     for r in raw.unit {
         let costs = r
             .costs
@@ -194,8 +229,19 @@ pub fn load_units_str(text: &str, path: &str) -> Result<Units, ConfigError> {
             accuracy: r.accuracy,
             train_time: r.train_time,
             base_id: r.base_id,
+            variant_of: r.variant_of,
         };
 
+        if let Some(parent) = r.variant_of {
+            if parent == r.id {
+                return Err(invalid(
+                    path,
+                    format!("units[{}].variant_of", r.id),
+                    "a unit cannot be a variant of itself",
+                ));
+            }
+            variants.insert(r.id, parent);
+        }
         if units.insert(unit.id, unit).is_some() {
             return Err(invalid(
                 path,
@@ -223,6 +269,7 @@ pub fn load_units_str(text: &str, path: &str) -> Result<Units, ConfigError> {
         civ: raw.civ,
         civ_name: raw.civ_name,
         units,
+        variants,
     })
 }
 

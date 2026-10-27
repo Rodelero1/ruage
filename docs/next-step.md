@@ -84,6 +84,36 @@ Two defects the review of this slice found, and what is left of them:
 integer refused outright — accepting both spellings is how the numbering creeps back in. A role the
 table lacks is an error the author sees at load, not a building that quietly makes the wrong unit.
 
+## Done next: tech-tree gating, and the age-up identity defect it uncovered (2026-10-27, v0.60)
+
+**Prerequisites are enforced.** Every id a tech lists in `required` is a *tech* id - all 614 entries
+across the table resolve to techs, even where the number also names a building (tech 50 is Masonry, unit
+50 is a farm) - so the gate is "has this player researched it", refused as `MissingPrerequisite` and
+named with the pack's `[tech_role]` word when it has one. `World::grant_tech` completes a research
+instantly for a world that begins later in the game, and it goes through `finish_research` so a granted
+tech applies exactly like a paid one.
+
+**That gate could not be tested without confronting an age-up.** The Feudal Age effect carries 14 kind-3
+commands that *replace building ids*: town centre 109 -> 71, barracks 12 -> 498, blacksmith 103 -> 105,
+house 70 -> 463. The engine applied them literally, so after an age-up:
+
+- villagers could no longer deposit anything (the drop list names 109, the town centre was 71),
+- Forging was refused at a "not a blacksmith" (the blacksmith was 105),
+- `[train.entry]` no longer matched a barracks (12 vs 498).
+
+Three separate breakages from one mechanism, all in a real match, none in any test because no test had
+granted an age. The fix is a **family**: `ruage-tools` derives `variant_of` from the kind-3 pairs (190
+units have a parent; the dat's own `base_id` points at itself and is useless), `Units::root` walks it,
+and the four places that name a building - drop sites, research location, training, and the scenario's
+role search - compare families rather than ids. Mutation-proved: restoring `unit == wanted` in
+`is_family` fails `an_age_up_does_not_take_the_blacksmith_away`.
+
+**What is still not modelled, and is the natural next increment**: a match does not *start* with the
+Dark Age tech granted - a scenario's first step has to research it (it is free, instant, and legal at
+any finished building), and the tests do it with `grant_tech`. Content should say `[start] techs =
+["dark_age"]` and seeding should grant it, which is the same place kind-6 tech-tree effects (what a
+building may train, per age) will need to land.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

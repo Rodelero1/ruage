@@ -111,6 +111,13 @@ and the engine's own free-tile search finds the centre through `start.town_centr
 refuses an empty role table, a role mapped to unit 0 (zero is a real unit id, so it cannot mean
 "unset"), and a `[start]` naming a role the table does not define.
 
+`units.toml` carries `variant_of` on the 190 units that are an *upgraded variant* of another: an age-up
+replaces a building's id rather than changing its numbers (town centre 109 -> 71, barracks 12 -> 498,
+blacksmith 103 -> 105). The relation exists nowhere in the dat except in the effects table's kind-3
+commands, so the importer derives it, and the engine resolves a variant to its root wherever a rule
+names a building: what a tech is researched at, where a carried load may be dropped, what a building
+trains, and what a scenario's `role = "barracks"` means.
+
 `[[train.entry]]` says which building may create which unit, and it names **roles**, like everything
 else that talks about a unit: `building = "town_centre"`, `units = ["villager"]`. The ids are resolved
 through `[role]` when the pack loads, so an author who mistypes a role is told at load which name was

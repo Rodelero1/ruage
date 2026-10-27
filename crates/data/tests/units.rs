@@ -248,3 +248,41 @@ fn a_cost_may_name_its_resource_instead_of_quoting_a_reference_id() {
     );
     assert_eq!(knight.costs[0].amount, 25);
 }
+
+/// An age-up replaces a building's unit id with a per-age variant (town centre 109 -> 71, barracks
+/// 12 -> 498). Everything that names a building by id has to keep matching after that, so the pack
+/// carries the relation and the engine resolves a variant to the unit it came from.
+#[test]
+fn a_variant_resolves_to_the_unit_it_was_upgraded_from() {
+    let path = repo("config/gamedata/units.toml");
+    if !path.exists() {
+        eprintln!(
+            "skipping: {} is not present (generated data, D8)",
+            path.display()
+        );
+        return;
+    }
+    let units = load_units_file(&path).expect("units.toml");
+    assert_eq!(units.root(109), 109, "the town centre is its own root");
+    assert_eq!(
+        units.root(71),
+        109,
+        "the feudal town centre is a variant of the dark age one"
+    );
+    assert_eq!(units.root(12), 12);
+    assert_eq!(units.root(498), 12, "the feudal barracks is a variant too");
+    assert_eq!(
+        units.root(105),
+        103,
+        "and the feudal blacksmith, which is why research locations have to match by family"
+    );
+    // A chain (71 -> 141) has to end at the same root rather than one hop up.
+    assert_eq!(
+        units.root(141),
+        109,
+        "castle-age town centre, two hops from 109"
+    );
+    // An id nobody upgrades into, and an id that is not in the table at all.
+    assert_eq!(units.root(83), 83);
+    assert_eq!(units.root(99_999), 99_999, "an unknown id is its own root");
+}

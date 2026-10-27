@@ -178,7 +178,9 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 .find(|entity| {
                     entity.player == player
                         && entity.kind == EntityKind::Building
-                        && entity.unit == Some(wanted)
+                        && entity
+                            .unit
+                            .is_some_and(|unit| world.is_family(unit, wanted))
                         && entity.construction.is_none()
                 })
                 .map(|entity| entity.id)
@@ -202,7 +204,9 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 .find(|entity| {
                     entity.player == player
                         && entity.kind == EntityKind::Building
-                        && entity.unit == Some(wanted)
+                        && entity
+                            .unit
+                            .is_some_and(|unit| world.is_family(unit, wanted))
                         && entity.construction.is_none()
                 })
                 .map(|entity| entity.id)

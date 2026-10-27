@@ -78,6 +78,14 @@ fn world(fx: &Fixture, seed: u64) -> World {
     world
         .load_research(&fx.techs, &fx.effects)
         .expect("the research tables load");
+    // A match opens in the Dark Age, and nearly every tech lists that Dark Age tech (104) as a
+    // prerequisite. It is free and instant, so granting it is what the game does at t=0 rather than a
+    // shortcut: the alternative is every scenario spending its first step researching it.
+    for player in 1..=2 {
+        world
+            .grant_tech(player, 104)
+            .expect("the Dark Age tech is in the table");
+    }
     world
 }
 

@@ -163,6 +163,18 @@ fn place(world: &mut World, player: u8, id: u32, unit: u32, tile: (i64, i64), hp
     id
 }
 
+/// Put the world in the Feudal Age, because every tech in this file lists it as a prerequisite.
+///
+/// **Order matters twice.** Grant before placing the buildings a test researches at: the age effect
+/// carries kind-3 commands that upgrade building ids (town centre 109 -> 71, barracks 12 -> 498), so a
+/// building created later keeps the id the tech names. And grant *after* gathering, because the town
+/// centre's upgrade means the villagers' drop sites no longer match it.
+fn feudal(world: &mut World) {
+    for tech in [104, 659, 101] {
+        world.grant_tech(1, tech).expect("seeding the Feudal Age");
+    }
+}
+
 fn money(world: &mut World) {
     bank(world, slot("food"), 100);
     bank(world, slot("gold"), 40);
@@ -192,6 +204,7 @@ fn the_man_at_arms_effect_is_an_upgrade_and_nothing_else() {
 fn research_is_refused_without_the_money() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
+    feudal(&mut world);
     let barracks = place(&mut world, 1, 9_000, BARRACKS, (8, 8), 1200);
 
     let err = world
@@ -210,7 +223,11 @@ fn research_is_refused_without_the_money() {
         }
         other => panic!("expected NotEnough, got {other:?}"),
     }
-    assert!(world.researched(1).is_empty(), "nothing was researched");
+    assert!(
+        !world.researched(1).contains(&MAN_AT_ARMS),
+        "the refused order researched nothing: {:?}",
+        world.researched(1)
+    );
 }
 
 #[test]
@@ -279,6 +296,7 @@ fn a_tech_cannot_be_researched_twice() {
     let mut world = seeded(&fx);
     money(&mut world);
     money(&mut world);
+    feudal(&mut world);
     let barracks = place(&mut world, 1, 9_003, BARRACKS, (16, 16), 1200);
 
     world
@@ -309,6 +327,7 @@ fn research_takes_the_techs_own_time_and_then_upgrades_what_its_owner_has() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     money(&mut world);
+    feudal(&mut world);
     let barracks = place(&mut world, 1, 9_004, BARRACKS, (18, 18), 1200);
     // Two of the player's spearmen: one untouched, one at half health, so the fraction can be seen.
     let whole = place(&mut world, 1, 9_010, SPEARMAN, (18, 20), 40);
@@ -378,6 +397,8 @@ fn the_researched_set_is_part_of_the_state_hash() {
     let mut b = seeded(&fx);
     money(&mut a);
     money(&mut b);
+    feudal(&mut a);
+    feudal(&mut b);
     let barracks_a = place(&mut a, 1, 9_005, BARRACKS, (22, 22), 1200);
     let _barracks_b = place(&mut b, 1, 9_005, BARRACKS, (22, 22), 1200);
     assert_eq!(a.state_hash(), b.state_hash(), "identical worlds agree");
@@ -386,6 +407,7 @@ fn the_researched_set_is_part_of_the_state_hash() {
     // for the new path and not just assumed from the old ones.
     let mut c = seeded(&fx);
     money(&mut c);
+    feudal(&mut c);
     let barracks_c = place(&mut c, 1, 9_005, BARRACKS, (22, 22), 1200);
 
     a.submit_checked(Command::Research {
@@ -425,6 +447,7 @@ fn the_same_tech_cannot_be_researched_at_two_buildings_at_once() {
     // Enough for two techs, so the refusal under test cannot be "cannot afford".
     bank(&mut world, slot("food"), 200);
     bank(&mut world, slot("gold"), 80);
+    feudal(&mut world);
     let first = place(&mut world, 1, 9_020, BARRACKS, (24, 24), 1200);
     let second = place(&mut world, 1, 9_021, BARRACKS, (26, 26), 1200);
 
@@ -452,5 +475,58 @@ fn the_same_tech_cannot_be_researched_at_two_buildings_at_once() {
         world.stock(1, slot("food")),
         paid_once,
         "a refused order must not be paid"
+    );
+}
+
+/// 222 Man-at-Arms lists `required = [101]` in the table, and 101 is the Feudal Age (500 food, at the
+/// town centre). Requirements are *tech* ids - all 614 entries across the table resolve to techs, even
+/// where the number also happens to be a building - so the gate is "has this player researched it".
+#[test]
+fn a_tech_whose_prerequisite_is_not_researched_is_refused() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let barracks = place(&mut world, 1, 9_300, BARRACKS, (14, 14), 1200);
+    money(&mut world);
+
+    let err = world
+        .submit_checked(Command::Research {
+            building: barracks,
+            tech: MAN_AT_ARMS,
+        })
+        .expect_err("Man-at-Arms before the Feudal Age is not legal")
+        .to_string();
+    assert!(
+        err.contains("feudal_age") || err.contains("101"),
+        "the refusal names the missing prerequisite, and prefers the content word: {err}"
+    );
+    assert!(
+        !world.researched(1).contains(&MAN_AT_ARMS),
+        "a refused order researches nothing"
+    );
+}
+
+#[test]
+fn a_tech_is_legal_once_its_prerequisite_is_researched() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    money(&mut world);
+    feudal(&mut world);
+    let barracks = place(&mut world, 1, 9_310, BARRACKS, (14, 14), 1200);
+    world
+        .submit_checked(Command::Research {
+            building: barracks,
+            tech: MAN_AT_ARMS,
+        })
+        .expect("Man-at-Arms is legal in the Feudal Age");
+
+    for _ in 0..2_000 {
+        world.step().expect("step");
+        if world.researched(1).contains(&MAN_AT_ARMS) {
+            break;
+        }
+    }
+    assert!(
+        world.researched(1).contains(&MAN_AT_ARMS),
+        "the tech lands once researched"
     );
 }

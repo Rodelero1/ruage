@@ -51,6 +51,32 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Seventh pass: a field on `Unit` costs more than a lookup table (2026-10-27)
+
+The prerequisite gate needed the variant relation (an age-up replaces the town centre 109 with 71), and
+the first version put `variant_of: Option<u32>` on `Unit`. The interleaved A/B - the method from the
+sixth pass - said the tick got **4-6% slower at 1,126 and 2,126 entities** while nothing new ran per
+tick, which is the sort of number that has to be chased rather than explained away.
+
+Chased: the same build with a `units.toml` stripped of the new field measured **identically to base**
+(19.07/19.66 at 1,126 against base's 18.63-19.18), so the cost was not the code but the **parsed table's
+footprint** - 8 more bytes on each of 1,166 records, for a relation only 190 of them have.
+
+So the relation moved out of `Unit` and into `Units.variants`, a 190-entry map. `Unit` is byte-for-byte
+what it was, and the gap narrowed to what the method's own bias produces (base run against base is ~2%
+slower in second position):
+
+| entities | base | new | reading |
+|---|---|---|---|
+| 126 | 2.23-2.25 | 2.26-2.35 | parity; 2.35 is one noisy round |
+| 1126 | 18.95-19.20 | 19.43-19.76 | ~2-3% higher, order checked both ways |
+| 2126 | 36.03-36.82 | 36.70-37.74 | ~2% higher |
+
+A residual **2-3% at 1,126+ entities remains unexplained**: every new lookup happens on an order or a
+deposit, none per tick, so this is codegen or layout rather than work. It is recorded as open rather
+than dismissed, and it is not visible at 126 entities - a real match - where the two builds are
+indistinguishable within noise.
+
 ## Sixth pass: measured against the previous commit, not against a memory (2026-10-27)
 
 The fifth pass could only say "3-8% slower at the larger sizes, but the box was busy", which is not a
