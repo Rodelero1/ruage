@@ -501,3 +501,26 @@ building: from there no route home can be planned, because the tile it stands on
 
 The column was briefly carried in `Task::Gather` instead. That was reverted: `Task` is 32 bytes either
 way, so the field cost nothing, but it also bought nothing, and one authority is better than two.
+
+## D28 - Farm food is a resource the dat numbers, so content names the number
+
+Horse Collar, Heavy Plow and Crop Rotation are kind-1 commands: `[1, 36, 1, -1, 75]`. Read as units they
+look absurd (a bombard cannon's price?), and the earlier notes in this repository read the field as a unit
+id. It is a **resource** id, and the numbers settle it: 75, 125, 175 are the published food-per-farm
+bonuses of the three farm upgrades, and they are all additions to resource 36.
+
+So the importer decodes kind 1 into its own table (`resource_modifiers`), the engine carries it, and
+content says which id means "food per farm":
+
+    [farm]
+    food_resource = 36
+
+That is the third appearance of the same shape (D17): the dat has a namespace with no names in it, the
+importer refuses to invent names, and the content pack supplies the meaning. With no `food_resource`,
+farm food simply never changes.
+
+**Existing plots hear about an upgrade; spent plots do not.** A plot's food is a budget, so a tech that
+adds 75 adds it to every plot the player has *that still has food in it* - the game's farm upgrades do
+benefit a farm already standing. A plot that has given everything stays at zero: its food was eaten, and
+an upgrade that refilled it would be inventing food. Modes other than 0 (set) and 1 (add) exist once
+(`-1`, effect 605) and are carried without interpretation, like `other:` attributes.

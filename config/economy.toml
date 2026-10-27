@@ -9,6 +9,10 @@ schema = 1
 # idea what a farm is. A farm is the one building worth gathering from.
 unit = "farm"
 resource = "food"
+# The dat's internal resource that farm upgrades add to. The dat has no resource names, so this id is
+# the only handle: 36 is the farm food line — Horse Collar +75, Heavy Plow +125, Crop Rotation +175.
+# Leave it out and no tech changes farm food.
+food_resource = 36
 
 rate = 0.4
 # PROVENANCE: dat — FARM.task_info.work_rate (unit id 50). Fixed by decision D5.

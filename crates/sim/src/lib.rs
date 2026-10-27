@@ -1775,7 +1775,7 @@ impl World {
                     .and_then(|role| economy.role.get(role).copied())
                     == Some(unit_id)
             })
-            .map(|economy| Fixed::from_raw(i64::from(economy.farm.food_per_farm) * self.scale))
+            .map(|_| Fixed::from_raw(self.farm_food_total(player) * self.scale))
             .unwrap_or(Fixed::ZERO);
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
         self.insert(Entity {
@@ -2044,8 +2044,41 @@ impl World {
     /// path assert the effect they use contains nothing else.
     /// A tech has landed: apply it, then apply whatever availability it unlocked.
     fn finish_research(&mut self, player: u8, tech: u32) -> Result<(), SimError> {
+        let food_before = self.farm_food_bonus(player);
         self.apply_tech(player, tech)?;
-        self.grant_availability(player)
+        self.grant_availability(player)?;
+        // Farm upgrades are the one effect that changes ground already worked: the plot's food is a
+        // budget, so what the tech adds goes onto every plot this player has that still has food in
+        // it. A spent plot stays spent - its food is eaten, and an upgrade does not bring it back.
+        let added = self.farm_food_bonus(player) - food_before;
+        if added > 0 {
+            self.grow_plots(player, added);
+        }
+        Ok(())
+    }
+
+    /// Add `food` to every plot of this player's that still holds some, in id order so the result is
+    /// a function of state. Content decides which building is a plot, exactly as it does everywhere
+    /// else; a pack with no farm yields nothing here.
+    fn grow_plots(&mut self, player: u8, food: i64) {
+        let Some(farm_unit) = self
+            .economy
+            .as_ref()
+            .and_then(|economy| economy.farm.unit.as_ref())
+            .and_then(|role| self.economy.as_ref()?.role.get(role).copied())
+        else {
+            return;
+        };
+        let scale = self.scale;
+        for entity in &mut self.entities {
+            if entity.player == player
+                && entity.kind == EntityKind::Building
+                && entity.unit == Some(farm_unit)
+                && entity.amount.raw() > 0
+            {
+                entity.amount = Fixed::from_raw(entity.amount.raw() + food * scale);
+            }
+        }
     }
 
     /// Mark a tech researched and apply it. Does not chase availability techs; `finish_research` is the
@@ -2157,6 +2190,42 @@ impl World {
     /// Turn a gather order into resolved state: the variant, the per-tick rate and the capacity
     /// are read from the tables here, once, and stored on the entity. Nothing in the tick loop
     /// looks at a table, and a replay cannot name its own numbers.
+    /// How much food a new farm plot of this player's is worth: what content gives a farm, plus what
+    /// the player's techs have added to the dat's farm food resource.
+    fn farm_food_total(&self, player: u8) -> i64 {
+        let base = self
+            .economy
+            .as_ref()
+            .map_or(0, |economy| i64::from(economy.farm.food_per_farm));
+        base + self.farm_food_bonus(player)
+    }
+
+    /// The farm food a player's researched techs have added, in whole food.
+    fn farm_food_bonus(&self, player: u8) -> i64 {
+        let (Some(economy), Some(effects), Some(techs)) = (
+            self.economy.as_ref(),
+            self.effects.as_ref(),
+            self.techs.as_ref(),
+        ) else {
+            return 0;
+        };
+        let Some(resource) = economy.farm.food_resource else {
+            return 0;
+        };
+        let Some(researched) = self.researched.get(&player) else {
+            return 0;
+        };
+        researched
+            .iter()
+            .filter_map(|tech| techs.get(*tech))
+            .filter_map(|tech| tech.effect_id)
+            .filter_map(|effect| effects.get(effect))
+            .flat_map(|effect| &effect.resource_modifiers)
+            .filter(|modifier| modifier.resource == resource && modifier.mode == 1)
+            .map(|modifier| modifier.value.round() as i64)
+            .sum()
+    }
+
     /// Where a worker stands to work a building: the first neighbouring tile that is both free and
     /// reachable from `from`, in a fixed scan order, so the choice is a function of the map rather
     /// than of iteration order. `None` when there is none, and the caller keeps its old behaviour of

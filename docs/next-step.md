@@ -311,6 +311,22 @@ walk to instead of ordering a trip the engine refuses.
 Next: farms make the kind-1 farm food line (Horse Collar 75, Heavy Plow 125, Crop Rotation 175)
 implementable, so that is the first thing `[farm] depletion` should learn.
 
+## Done next: the farm food line (2026-10-27, v0.70)
+
+Kind 1 is `[1, 36, 1, -1, 75]`: a change to a *resource*, and the earlier reading of that field as a unit id
+was wrong. The importer now decodes kind 1 into `resource_modifiers` (its own namespace, next to kind 4/5's
+unit attributes), and content names the id: `[farm] food_resource = 36`. The numbers settle the reading -
+75/125/175 are the published Horse Collar/Heavy Plow/Crop Rotation bonuses, all additions to resource 36.
+
+A tech that lands adds its food to every plot the player has that still holds some, and every plot built
+afterwards starts at the new total; a spent plot stays spent. Two tests pin it (an existing farm 250 -> 325,
+a new farm at 325) and a third pins the spent case.
+
+Next: the remaining kind-1 resources are the same shape and mostly need mechanics we lack (Guilds, Banking,
+the market), so the honest next step is **unit availability by age** - the tech tree's kinds 6/101/102 -
+which is what `[train.entry]` is missing and what the farm gate (tech 216, "Farms (make avail)") already
+demonstrates: a free, instant tech whose only job is to make a building available.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

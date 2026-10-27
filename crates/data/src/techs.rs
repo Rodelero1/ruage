@@ -45,6 +45,18 @@ pub struct Modifier {
     pub value: f64,
 }
 
+/// A kind 1 command, **decoded by the importer**: a change to a *resource*, where a kind 4 or 5
+/// changes a unit's attribute. The dat names no resources, so the id is carried raw and the content
+/// pack says which id means what (the farm food line is resource 36: +75/+125/+175, D28).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResourceModifier {
+    pub resource: u32,
+    /// 0 sets the resource, 1 adds to it. The dat also carries a single `-1` row (effect 605), which
+    /// is kept and not interpreted rather than guessed at - the same rule as `other:` attributes.
+    pub mode: i16,
+    pub value: f64,
+}
+
 /// One `[kind, a, b, c, value]` command.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EffectCommand {
@@ -147,6 +159,8 @@ pub struct Effect {
     pub commands: Vec<EffectCommand>,
     /// The same commands, decoded (kind 4 and 5 only): what an interpreter actually applies.
     pub modifiers: Vec<Modifier>,
+    /// And kind 1 decoded: changes to a resource rather than to a unit's attributes.
+    pub resource_modifiers: Vec<ResourceModifier>,
 }
 
 #[derive(Debug, Clone)]
@@ -223,6 +237,9 @@ struct RawEffect {
     /// existed still loads - and then simply has no modifiers to apply.
     #[serde(default)]
     modifiers: Vec<RawModifier>,
+    /// Written by the importer for kind 1, and defaulted for the same reason.
+    #[serde(default)]
+    resource_modifiers: Vec<RawResourceModifier>,
 }
 
 #[derive(Deserialize)]
@@ -233,6 +250,14 @@ struct RawModifier {
     attribute_class: i16,
     unit: i32,
     unit_class: i16,
+    value: f64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawResourceModifier {
+    resource: u32,
+    mode: i16,
     value: f64,
 }
 
@@ -341,6 +366,20 @@ pub fn load_effects_str(text: &str, path: &str) -> Result<Effects, ConfigError> 
                 value: raw.value,
             });
         }
+        let mut resource_modifiers = Vec::with_capacity(effect.resource_modifiers.len());
+        for raw in effect.resource_modifiers {
+            if !raw.value.is_finite() {
+                return Err(ConfigError::Invalid {
+                    key: format!("effect[{}].resource_modifiers.value", effect.id),
+                    detail: format!("{} is not a number", raw.value),
+                });
+            }
+            resource_modifiers.push(ResourceModifier {
+                resource: raw.resource,
+                mode: raw.mode,
+                value: raw.value,
+            });
+        }
         if effects
             .insert(
                 effect.id,
@@ -349,6 +388,7 @@ pub fn load_effects_str(text: &str, path: &str) -> Result<Effects, ConfigError> 
                     name: effect.name,
                     commands,
                     modifiers,
+                    resource_modifiers,
                 },
             )
             .is_some()

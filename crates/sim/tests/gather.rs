@@ -609,15 +609,7 @@ fn a_villager_works_a_farm_for_food() {
 #[test]
 fn a_farm_holds_only_what_content_gives_it() {
     let Some(fx) = fixture() else { return };
-    let mut economy = fx.economy.clone();
-    economy.farm.food_per_farm = 20;
-    let mut world = World::new(&fx.settings, 7).expect("world");
-    world
-        .seed_from(&fx.map, &economy, &fx.units)
-        .expect("seeding");
-    world
-        .load_resources(&fx.resources)
-        .expect("the pack fits the stockpile");
+    let mut world = seeded_researchable(&fx, 20);
     let farm = a_finished_farm(&mut world);
     let villager = first_villager(&world);
     let before_food = world.stock(1, slot("food"));
@@ -669,3 +661,149 @@ fn a_farm_still_going_up_cannot_be_worked() {
         other => panic!("expected BuildingNotReady, got {other:?}"),
     }
 }
+
+// --- the farm food line ---------------------------------------------------------------------------
+//
+// Horse Collar, Heavy Plow and Crop Rotation are kind-1 commands on dat resource 36: +75, +125, +175.
+// The importer decodes them; content names which resource id that is; the engine adds it to farm food.
+
+/// Feudal Age, the gate Horse Collar hangs off.
+fn grant_feudal(world: &mut World, player: u8) {
+    for tech in [659, 101] {
+        world
+            .grant_tech(player, tech)
+            .expect("seeding the Feudal Age");
+    }
+}
+
+/// A world whose player 1 can afford a 75/75 tech without gathering first.
+fn seeded_rich(fx: &Fixture) -> World {
+    seeded_researchable(fx, fx.economy.farm.food_per_farm)
+}
+
+/// The same, with the farm's own budget overridden so a plot can be eaten inside a test.
+fn seeded_researchable(fx: &Fixture, food_per_farm: u32) -> World {
+    let mut economy = fx.economy.clone();
+    economy.farm.food_per_farm = food_per_farm;
+    economy.start.stock = [("food".to_owned(), 500), ("wood".to_owned(), 500)]
+        .into_iter()
+        .collect();
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    world
+        .seed_from(&fx.map, &economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    // Research needs the tech and effect tables; the rest of this suite never asks for them. With
+    // them comes availability: the pack gates the farm itself behind tech 216 ("Farms (make avail)",
+    // free and instant), and this world has not met its prerequisites.
+    let techs =
+        ruage_data::load_techs_file(&repo("config/gamedata/techs.toml")).expect("techs.toml");
+    let effects =
+        ruage_data::load_effects_file(&repo("config/gamedata/effects.toml")).expect("effects.toml");
+    world
+        .load_research(&techs, &effects)
+        .expect("research tables");
+    world.grant_tech(1, 216).expect("farming is available");
+    world
+}
+
+/// A mill, which is where the pack puts the farm upgrades (tech location 68).
+fn a_mill(world: &mut World, at: (u16, u16)) -> EntityId {
+    let villager = first_villager(world);
+    world
+        .submit_checked(Command::Build {
+            villager,
+            unit: MILL,
+            at,
+        })
+        .expect("a mill costs 100 wood the player has");
+    world.step().expect("step");
+    let mill = world
+        .entities()
+        .iter()
+        .filter(|e| e.kind == EntityKind::Building && e.unit == Some(MILL))
+        .map(|e| e.id)
+        .next()
+        .expect("the mill site exists");
+    finish_building(world, mill);
+    mill
+}
+
+fn research(world: &mut World, tech: u32) {
+    let mill = a_mill(world, (6, 6));
+    world
+        .submit_checked(Command::Research {
+            building: mill,
+            tech,
+        })
+        .expect("the research order");
+    // Horse Collar is 20 s; the world is at 20 ticks per second, and the order is applied on the
+    // first step, so this budget is a wide margin rather than a measured number.
+    for _ in 0..2_000 {
+        world.step().expect("step");
+    }
+}
+
+#[test]
+fn horse_collar_gives_an_existing_farm_more_food() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded_rich(&fx);
+    let farm = a_finished_farm(&mut world);
+    let base = amount_of(&world, farm).raw();
+    assert_eq!(base, 250 * world.scale(), "content says 250 per farm");
+
+    grant_feudal(&mut world, 1);
+    research(&mut world, HORSE_COLLAR);
+
+    assert_eq!(
+        amount_of(&world, farm).raw(),
+        base + 75 * world.scale(),
+        "Horse Collar adds 75 to a farm already standing"
+    );
+}
+
+#[test]
+fn a_farm_built_after_the_upgrade_holds_the_new_total() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded_rich(&fx);
+    grant_feudal(&mut world, 1);
+    research(&mut world, HORSE_COLLAR);
+    let farm = a_finished_farm(&mut world);
+    assert_eq!(
+        amount_of(&world, farm).raw(),
+        325 * world.scale(),
+        "250 base plus Horse Collar's 75"
+    );
+}
+
+/// A plot that has given everything already holds nothing, and an upgrade does not resurrect it: the
+/// food is gone, and a spent plot is a barren one.
+#[test]
+fn an_upgrade_does_not_refill_a_spent_farm() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded_researchable(&fx, 20);
+    let farm = a_finished_farm(&mut world);
+    world
+        .submit_checked(Command::Gather {
+            villager: first_villager(&world),
+            node: farm,
+        })
+        .expect("work the plot");
+    // Eat the whole plot: twenty food at 0.4/s is one trip of two loads, and the margin is wide.
+    for _ in 0..20_000 {
+        world.step().expect("step");
+        if amount_of(&world, farm).raw() == 0 {
+            break;
+        }
+    }
+    assert_eq!(amount_of(&world, farm).raw(), 0, "the plot is spent");
+
+    grant_feudal(&mut world, 1);
+    research(&mut world, HORSE_COLLAR);
+    assert_eq!(amount_of(&world, farm).raw(), 0, "a spent plot stays spent");
+}
+
+const HORSE_COLLAR: u32 = 14;
+const MILL: u32 = 68;

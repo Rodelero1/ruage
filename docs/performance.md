@@ -51,6 +51,14 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Seventeenth pass: farm food is priced at two moments, not every tick (2026-10-27)
+
+The farm food line adds nothing to the tick: the total is computed when a plot is placed and, for existing
+plots, once when a tech finishes (`grow_plots`, a single pass over the entity list). No state was added to
+`World`, so there is nothing for the idle probe to see and nothing was claimed from it. The four-hour probe
+is unchanged at `b30d49d89f8bcf4f`; the scripted run now reaches the build order (900 ticks was 45 s and the
+build is at 60 s), so the determinism anchor is the longer one: 2,400 ticks, `046fd1d8d8d0301c`.
+
 ## Sixteenth pass: a change the idle probe cannot see, and a wrong guess about why (2026-10-27)
 
 Farms add per-tick work, but only for workers: two tile conversions and two comparisons in the gather and

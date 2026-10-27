@@ -65,6 +65,10 @@ pub struct Farm {
     pub unit: Option<String>,
     /// The resource a worked farm yields, by name.
     pub resource: Option<String>,
+    /// The dat's *internal* resource that a farm upgrade adds to - 36 for the farm food line
+    /// (Horse Collar +75, Heavy Plow +125, Crop Rotation +175). The dat names no resources, so this
+    /// is an id and content has to say which id means "food per farm" (D28).
+    pub food_resource: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -141,6 +145,8 @@ struct RawFarm {
     unit: Option<String>,
     #[serde(default)]
     resource: Option<String>,
+    #[serde(default)]
+    food_resource: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -421,6 +427,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             food_per_farm: raw.farm.depletion.food_per_farm,
             unit: raw.farm.unit,
             resource: raw.farm.resource,
+            food_resource: raw.farm.food_resource,
         },
         gather: Gather {
             rate_from: raw.gather.rate_from,

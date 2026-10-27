@@ -118,6 +118,11 @@ commands, so the importer derives it, and the engine resolves a variant to its r
 names a building: what a tech is researched at, where a carried load may be dropped, what a building
 trains, and what a scenario's `role = "barracks"` means.
 
+`[farm] food_resource = 36` names the dat's *internal* resource that farm upgrades add to: the dat has no
+resource names, so an id is the only handle, and 36 is the farm food line (Horse Collar +75, Heavy Plow
++125, Crop Rotation +175). A tech whose effect adds to that resource raises every plot the player has that
+still holds food, and every plot built afterwards. With no `food_resource`, farming never improves.
+
 `[farm]` says which building is a farm and what working it yields - `unit = "farm"` (a role) and
 `resource = "food"`. Those two names are the entire extent of the engine's farming knowledge: a farm is a
 building it would otherwise treat like any other, and it becomes worth gathering from only because content
