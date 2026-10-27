@@ -323,3 +323,41 @@ choice and remains it.
 
 **`sld-extractor` declares no licence.** No licence is not permission: default copyright applies, so
 it may be read for what it does and never copied from.
+
+---
+
+## D22 - Bring your own copy: the game requires a legally acquired original
+
+**Decided 2026-10-25.** Ruage does not distribute the game's data or art. It runs against an
+installation the player already owns, and continues to require that installation until replacement
+content exists for every piece it uses.
+
+This is the standard posture for interoperable engines - ScummVM, OpenRA, OpenTTD's original-graphics
+option - and it is a *posture*, not a licence: it reduces exposure by never redistributing, and it
+does not claim Microsoft's permission.
+
+### What it binds, concretely
+
+1. **Nothing derived from the installation may enter the repository.** Already D8 for data; the same
+   rule now covers anything an asset extractor produces. The asset pack is generated on the player's
+   machine, into a cache directory, and `config/gamedata/`, `MANIFEST.toml` and any sprite cache stay
+   gitignored.
+2. **A generated content pack is not shareable.** This is the consequence worth stating loudly: a
+   player who sends a friend their pack is redistributing game data, which is precisely what this
+   decision exists to avoid. The LAN story is therefore *each player imports from their own
+   installation* - and D19's hash is what makes that safe, because two imports of the same version
+   produce the same identity. A mismatch refuses the match rather than accepting a shared pack.
+3. **Replacement is tracked per piece, not all at once.** D18's asset pack entry gains a provenance
+   field (`original` vs `ours`), and the content pack records which of its pieces still depend on the
+   installation. The long-term goal - a standalone game - is then a query, not a rewrite: "how many
+   entries are still `original`?"
+4. **First run says so plainly.** The importer takes the path to the player's installation and refuses
+   with a message naming what it looked for and which version it accepts (dat 5.7.2 currently). No
+   path is guessed, no download is offered, and no default is baked into a CLI (D6).
+5. **The product is not named after the game.** Trademark is untouched by any of the above.
+
+### What it does not fix
+
+It does not make redistribution of assets lawful, and it does not permit shipping a "convenience" pack
+"for testing". The line is the same one D21 draws: expression we did not create is never ours to
+distribute, whatever the intent.
