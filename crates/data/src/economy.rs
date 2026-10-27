@@ -112,8 +112,14 @@ pub struct Decay {
 
 #[derive(Debug, Clone)]
 pub struct Population {
+    /// The ceiling no amount of building raises.
     pub cap_default: u32,
+    /// What one finished house supports.
     pub house_population: u32,
+    /// What one finished town centre supports. Published: a house and a town centre both support five,
+    /// a castle twenty - the castle is not modelled, so a pack that wants its cap says it here or not
+    /// at all (D31).
+    pub town_centre_population: u32,
 }
 
 // --- wire format: one struct per table, strict -------------------------------------------
@@ -216,6 +222,10 @@ struct RawStart {
 struct RawPopulation {
     cap_default: u32,
     house_population: u32,
+    /// Defaulted to zero: a pack written before housing existed supported nothing from its town
+    /// centres, which is exactly what "the field is absent" should mean.
+    #[serde(default)]
+    town_centre_population: u32,
 }
 
 fn invalid(path: &str, key: &str, detail: impl Into<String>) -> ConfigError {
@@ -480,6 +490,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         population: Population {
             cap_default: raw.population.cap_default,
             house_population: raw.population.house_population,
+            town_centre_population: raw.population.town_centre_population,
         },
         start: Start {
             town_centre: raw.start.town_centre,

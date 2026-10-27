@@ -51,6 +51,17 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Twentieth pass: two scans per order, none per tick (2026-10-27)
+
+Housing adds two walks over the entity list - population, and the finished houses and town centres - to
+`check_train`, which runs when an order is placed. Nothing is stored: both numbers are derived, so `World`
+did not grow and no tick does any new work. The idle probe therefore has nothing to see and nothing was
+claimed from it; the four-hour probe is unchanged at `b30d49d89f8bcf4f` and the scripted run is unchanged
+at `05c91e3bff3f9eee`, because the scenario's villager count never reaches the town centre's five.
+
+This is the first step in a while where *no* hash moved, which is worth a sentence: the feature changes what
+a player may do, not what the world is.
+
 ## Nineteenth pass: counting happens on a research, not in a tick (2026-10-27)
 
 The prerequisite check now walks a tech's requirement list and counts, in both places it exists: an order

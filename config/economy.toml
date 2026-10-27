@@ -158,5 +158,8 @@ feudal_age = 101    # the prerequisite Man-at-Arms lists; its effect is a tech-t
 [population]
 cap_default = 200
 house_population = 5
+# A town centre supports five units, like a house; a castle twenty (not modelled yet). Published:
+# the game manual and the AoE2 DB both say five, and the Chinese +5 is a civ bonus, not a rule here.
+town_centre_population = 5
 # PROVENANCE: published. Per-building values are in the dat only indirectly (civ resources
 # array, U8) so they are stated here instead.

@@ -118,6 +118,13 @@ commands, so the importer derives it, and the engine resolves a variant to its r
 names a building: what a tech is researched at, where a carried load may be dropped, what a building
 trains, and what a scenario's `role = "barracks"` means.
 
+`[population]` feeds the housing rule: `cap_default` is the ceiling nothing raises, `house_population` is
+what one finished house supports, and `town_centre_population` what one finished town centre supports (both
+five in the game; a castle's twenty is not modelled yet). Population is one per live unit, and a train order
+past the ceiling is refused with `PopulationCapped` before it is priced. A civilisation whose tech tree
+takes the house away is exempt from the house arithmetic and gets `cap_default` - which is how the Huns stay
+playable.
+
 `[farm] food_resource = 36` names the dat's *internal* resource that farm upgrades add to: the dat has no
 resource names, so an id is the only handle, and 36 is the farm food line (Horse Collar +75, Heavy Plow
 +125, Crop Rotation +175). A tech whose effect adds to that resource raises every plot the player has that

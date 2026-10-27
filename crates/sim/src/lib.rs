@@ -431,6 +431,12 @@ pub enum SimError {
     TechInProgress {
         tech: u32,
     },
+    /// This player cannot support another unit: their population is at their ceiling.
+    PopulationCapped {
+        player: u8,
+        population: u32,
+        cap: u32,
+    },
     /// The target is on the attacker's own team.
     AlliedTarget {
         id: EntityId,
@@ -586,6 +592,14 @@ impl fmt::Display for SimError {
             SimError::TechInProgress { tech } => write!(
                 f,
                 "tech {tech} is already being researched at another building"
+            ),
+            SimError::PopulationCapped {
+                player,
+                population,
+                cap,
+            } => write!(
+                f,
+                "player {player} is at {population}/{cap} population: finish a house before training more"
             ),
             SimError::AlliedTarget { id } => write!(
                 f,
@@ -1434,6 +1448,18 @@ impl World {
         if !self.unit_available(entity.player, unit) {
             return Err(SimError::UnitUnavailable { unit });
         }
+        // Population: a unit that would take the player past their ceiling is refused here, before
+        // any price is quoted, because "no housing" is the answer to every attempt until a house is
+        // finished.
+        let population = self.population(entity.player);
+        let cap = self.population_cap(entity.player);
+        if population.saturating_add(1) > cap {
+            return Err(SimError::PopulationCapped {
+                player: entity.player,
+                population,
+                cap,
+            });
+        }
         // An upgrade target is not available on its own: a barracks trains pikemen only after the
         // Pikeman tech. Without this, `[train.entry]` naming the spear line would let a Dark Age
         // barracks train halberdiers.
@@ -2196,6 +2222,61 @@ impl World {
     /// Turn a gather order into resolved state: the variant, the per-tick rate and the capacity
     /// are read from the tables here, once, and stored on the entity. Nothing in the tick loop
     /// looks at a table, and a replay cannot name its own numbers.
+    /// How many units this player has. Every unit is worth one: the dat has no per-unit population
+    /// cost, and neither does the game.
+    fn population(&self, player: u8) -> u32 {
+        u32::try_from(
+            self.entities
+                .iter()
+                .filter(|entity| entity.player == player && entity.kind == EntityKind::Unit)
+                .count(),
+        )
+        .unwrap_or(u32::MAX)
+    }
+
+    /// The ceiling on this player's population: what content allows, from finished buildings only - a
+    /// house supports its five when it is finished, not when it is ordered.
+    ///
+    /// A civilisation whose tech tree takes the house away (the Huns) is exempt from house arithmetic
+    /// altogether, or it would sit at zero for the whole match. That exemption is read from the same
+    /// content the bar itself comes from, so a pack with no civs simply has no exemption (D31).
+    fn population_cap(&self, player: u8) -> u32 {
+        let Some(economy) = self.economy.as_ref() else {
+            return u32::MAX;
+        };
+        let population = &economy.population;
+        let house = economy.role.get("house").copied();
+        if let Some(house) = house
+            && self.civ_barred_unit(player, house).is_some()
+        {
+            return population.cap_default;
+        }
+        let count = |role: &str| -> u32 {
+            let Some(unit) = economy.role.get(role).copied() else {
+                return 0;
+            };
+            u32::try_from(
+                self.entities
+                    .iter()
+                    .filter(|entity| {
+                        entity.player == player
+                            && entity.kind == EntityKind::Building
+                            && entity.construction.is_none()
+                            && entity.unit.is_some_and(|built| {
+                                self.units
+                                    .as_ref()
+                                    .map_or(built == unit, |units| units.root(built) == unit)
+                            })
+                    })
+                    .count(),
+            )
+            .unwrap_or(0)
+        };
+        let houses = count("house").saturating_mul(population.house_population);
+        let centres = count("town_centre").saturating_mul(population.town_centre_population);
+        houses.saturating_add(centres).min(population.cap_default)
+    }
+
     /// How much food a new farm plot of this player's is worth: what content gives a farm, plus what
     /// the player's techs have added to the dat's farm food resource.
     fn farm_food_total(&self, player: u8) -> i64 {

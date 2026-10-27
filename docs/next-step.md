@@ -370,6 +370,23 @@ Cannon tech and passed even with the "all" rule restored, because 285 is granted
 prerequisites are met. The real test uses a pack of our own - one tech for the order path, one for the
 resolver - since no tech in this dat can reach the order path with a count.
 
+## Done next: housing (2026-10-27, v0.73)
+
+`[population]` was the last parsed-and-unused table, and a house was 25 wood and a shape on the map. Now
+population is one per live unit, the ceiling is `min(cap_default, finished houses x 5 + finished town
+centres x 5)`, and a train order past it is refused with `PopulationCapped` before it is priced.
+
+`town_centre_population = 5` is new content and published fact (a house and a town centre both support
+five; a castle's twenty is not modelled). The Huns needed a rule rather than a formula - their tree bars
+the house, so a cap that counted houses would pin them at zero - and the exemption is read from the same
+bar the engine already checks, giving them `cap_default`.
+
+Three mutations, three precise failures: no check at all fails four tests, counting unfinished houses fails
+only the construction test, dropping the Huns exemption fails only the Huns test.
+
+Next: **ranged combat** - `range` is attribute 1 and 177 commands, and every unit is melee today. It is the
+largest mechanic left and it touches the tick loop, so it gets the full review budget.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

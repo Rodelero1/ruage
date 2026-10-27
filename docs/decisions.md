@@ -580,3 +580,31 @@ that "all three" would make a hand cannoneer unobtainable. The mutation check - 
 running the suite - showed it passing anyway: 285 ("C-Bonus, Free Chemistry") is granted for free once its
 own prerequisites are met, so all three were satisfied regardless. The test that counts now uses a pack of
 our own, one tech per gate copy, because no tech in this dat can reach the order path with a count.
+
+## D31 - Housing, and the exemption that has to come from the tree
+
+`[population]` was the last parsed-and-unused table: `cap_default = 200` and `house_population = 5` had
+been validated at load for months while the sim never read them. Housing is now real:
+
+- population is the number of live units a player has, one each - the dat carries no per-unit cost, and
+  neither does the game;
+- the ceiling is `min(cap_default, houses x house_population + town_centres x town_centre_population)`,
+  counted from **finished** buildings only: a house supports its five when it is finished, not when the
+  site is marked out;
+- a train order past the ceiling is refused with `PopulationCapped`, before any price is quoted.
+
+`town_centre_population = 5` is new content, and it is published fact rather than invention: a house and a
+town centre both support five, a castle twenty (the manual and the AoE2 DB agree; the Chinese +5 is a civ
+bonus, not a rule). A castle is not modelled, so a pack that wants its twenty says so when castles land.
+
+**The Huns are the reason this needed a rule rather than a formula.** Their tech tree takes the house away
+(`[2, 70, 0, -1, 0]`), so a cap that counts houses leaves them at zero population for the whole match. The
+exemption is therefore read from the *same* content the bar comes from: if the player's civilisation bars
+the house, no house arithmetic applies and the ceiling is `cap_default`. No new field, no invented rule,
+and a pack with no civs has no exemption because it has no bars.
+
+Two smaller findings, both from making the tests behave: a trained unit whose every neighbouring tile is
+taken **waits inside its building** rather than being lost, so a crowd around a town centre stalls training
+- that is the engine being careful, and the test helper now says so instead of asserting an arrival that
+cannot happen. And the population fixture had to load the **effect tables** for the Huns' exemption to
+exist at all: a bar is read from the civ's tech-tree effect, so a world without effects has no exemptions.
