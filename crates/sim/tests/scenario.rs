@@ -36,6 +36,8 @@ struct Fixture {
     resources: ruage_data::Resources,
     units: Units,
     combat: ruage_data::Combat,
+    techs: ruage_data::Techs,
+    effects: ruage_data::Effects,
 }
 
 fn fixture() -> Option<Fixture> {
@@ -57,6 +59,10 @@ fn fixture() -> Option<Fixture> {
         resources,
         units: ruage_data::load_units_file(&units).expect("units.toml"),
         combat: ruage_data::load_combat_file(&repo("config/combat.toml")).expect("combat.toml"),
+        techs: ruage_data::load_techs_file(&repo("config/gamedata/techs.toml"))
+            .expect("techs.toml"),
+        effects: ruage_data::load_effects_file(&repo("config/gamedata/effects.toml"))
+            .expect("effects.toml"),
     })
 }
 
@@ -69,6 +75,9 @@ fn world(fx: &Fixture, seed: u64) -> World {
         .load_resources(&fx.resources)
         .expect("the pack fits the stockpile");
     world.load_combat(&fx.combat);
+    world
+        .load_research(&fx.techs, &fx.effects)
+        .expect("the research tables load");
     world
 }
 
@@ -384,4 +393,104 @@ role = "house"
         refused.is_empty(),
         "a build step must not need the literal \"town_centre\": {refused:?}"
     );
+}
+
+/// A scenario could not name a tech at all until `[tech_role]` existed (techs have no name in the dat),
+/// so research had no end-to-end demonstration outside a unit test. This is that demonstration: Loom,
+/// researched at the town centre, reaches every villager in a scripted match.
+#[test]
+fn a_scenario_researches_a_tech_named_by_a_role() {
+    let Some(fx) = fixture() else { return };
+    // Three villagers on gold first: the pack starts a match with an empty bank, and Loom costs 50,
+    // so the scenario has to earn it - which is also the honest check that research and gathering
+    // live in the same economy.
+    let text = r#"
+schema = 2
+duration_seconds = 220
+
+[[step]]
+at_seconds = 0.0
+player = 1
+kind = "gather"
+villager = 0
+resource = "gold"
+
+[[step]]
+at_seconds = 0.5
+player = 1
+kind = "gather"
+villager = 1
+resource = "gold"
+nth = 1
+
+[[step]]
+at_seconds = 1.0
+player = 1
+kind = "gather"
+villager = 2
+resource = "gold"
+nth = 2
+
+[[step]]
+at_seconds = 120.0
+player = 1
+kind = "research"
+building = "town_centre"
+tech = "loom"
+"#;
+    let (world, runner) = play(&fx, text, 12_345);
+    assert!(
+        runner
+            .outcomes
+            .iter()
+            .any(|(_, outcome)| *outcome == Outcome::Ran),
+        "the research order is accepted: {:?}",
+        runner.outcomes
+    );
+    assert!(
+        runner
+            .outcomes
+            .iter()
+            .all(|(_, outcome)| *outcome == Outcome::Ran),
+        "every step ran, including the three gathers: {:?}",
+        runner.outcomes
+    );
+    let villagers: Vec<i32> = world
+        .entities()
+        .iter()
+        .filter(|entity| entity.player == 1 && entity.unit == Some(83))
+        .map(|entity| entity.hp)
+        .collect();
+    assert!(
+        !villagers.is_empty(),
+        "player 1 has villagers to begin with"
+    );
+    assert!(
+        villagers.iter().all(|hp| *hp == 40),
+        "Loom is +15 for a 25-health villager, so all of them: {villagers:?}"
+    );
+}
+
+#[test]
+fn a_scenario_naming_a_tech_the_economy_lacks_is_refused() {
+    let Some(fx) = fixture() else { return };
+    let text = r#"
+schema = 2
+duration_seconds = 10
+
+[[step]]
+at_seconds = 0.0
+player = 1
+kind = "research"
+building = "town_centre"
+tech = "bronze_working"
+"#;
+    let (_, runner) = play(&fx, text, 12_345);
+    match runner.outcomes.first().map(|(_, outcome)| outcome.clone()) {
+        Some(Outcome::Refused(reason)) => assert!(
+            reason.contains("bronze_working"),
+            "the refusal names what it could not find: {reason}"
+        ),
+        other => panic!("expected a refusal, got {other:?}"),
+    }
 }

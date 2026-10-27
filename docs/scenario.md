@@ -34,6 +34,30 @@ A step that cannot be resolved — no such villager, no finished barracks, canno
 **reported**, not skipped quietly: `ruage-headless` prints `step at 471.0s refused: not enough
 Food: 60 needed, 50 in the bank`. The test asserts every step in the project scenario ran.
 
+## Researching
+
+A scenario can research, and it names the tech the way it names everything else: by a content word.
+
+```toml
+[[step]]
+at_seconds = 120.0
+player = 1
+kind = "research"
+building = "town_centre"   # a [role]
+tech = "loom"              # a [tech_role]
+```
+
+The tech comes from `[tech_role]` and not `[role]` because a tech has no name in the dat to import:
+the file stores a string-id into the game's language files, so "Loom" exists only in a translation
+table. Rather than guess, content names the id once.
+
+The step exists because research had no end-to-end demonstration without it — it was reachable only
+from the command API, i.e. only from a test. `a_scenario_researches_a_tech_named_by_a_role` is that
+demonstration: three villagers gather gold, the bank pays 50 for Loom at 120 s, and every villager in
+the reported final state has 40 health instead of 25. The project's own ten-minute script does *not*
+use the step: it spends its gold on a spearman and has 20 left when the fighting starts, so a research
+step there would be refused — and the point of that script is gather, build, train, fight.
+
 ## The ten-minute run
 
 `cargo run -p ruage-sim --bin ruage-headless -- --config config/sim.toml --map config/map.toml \

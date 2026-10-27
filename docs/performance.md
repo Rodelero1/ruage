@@ -51,6 +51,31 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Fifth pass, after health, speed, gather rate and carry (2026-10-26)
+
+Nothing in this slice runs per tick: health and speed are read when a unit spawns, is upgraded or has
+a tech land, and gather rate and carry capacity when a gather order lands. So the expectation was "no
+change at 126 entities", and that is what the probe shows (two clean runs; a third run was discarded
+because the load average was 3.0 on a two-CPU box and every number in it was inflated by half).
+
+| entities | fourth pass | fifth pass | ns/entity |
+|---|---|---|---|
+| 126 | 2.27-2.40 | 2.36-2.38 | 18.7-18.9 |
+| 626 | 11.13-11.43 | 11.60-11.84 | 18.5-18.9 |
+| 1126 | 18.68-19.31 | 19.39-20.42 | 17.2-18.1 |
+| 2126 | 34.51-35.96 | 36.74-39.58 | 17.3-18.6 |
+
+The larger sizes read 3-8% above the fourth pass, and I am **not** claiming that as a regression: the
+machine's load average was 3.0 against 2.3 for that pass, one repetition was obviously contaminated,
+and a code path that only runs on spawn/order/damage cannot add per-tick cost. A ten-minute match is
+28.0-28.3 ms against 27.9-28.8.
+
+The stability probe is the better evidence for this slice: 288,000 ticks still end at 126 entities and
+the hash is **`936e71d5a641044f`, exactly what the fourth pass printed** — the state did not change
+shape, because no field was added. A scripted 600-tick run also hashes identically against `HEAD`'s
+build (`0f5eea624d75d87a`), which is what "behaviour-preserving when nothing is researched" means
+when it is checked rather than asserted.
+
 ## Fourth pass, after research and modifiers (2026-10-26)
 
 Same probes, three runs each, and one methodological note that matters: the earlier passes' numbers

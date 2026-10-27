@@ -43,10 +43,27 @@ multiplications, in researched-tech order, filtered by the unit id or class the 
 Checked against published numbers: Forging (+1 melee attack, blow 4 -> 5), Scale Mail (+1 melee and
 +1 pierce armour, blow 4 -> 3), and a class filter that keeps Forging off a class-4 villager.
 
-Still not interpreted, and counted: **hit points (220 commands)**, range (177), gather rate (117),
-speed (47), carry (12), plus the `other:`/`unpacked:` attributes the importer could not name. Hit
-points are the interesting one: attack and armour are *resolved* at order time, while hp is state, so
-it needs a stored maximum per entity before a "+15 hp" can be applied without inventing one.
+Done since, in a second slice (v0.57): **hit points, speed, gather rate and carry**.
+
+Two rules were needed, and both were decisions rather than code:
+
+- **Health and speed are state, so a research grants them to units that already exist.** A villager at
+  25 health becomes 40 when Loom lands (and one wounded to 10 becomes 25 — the grant is health, not a
+  reset). Masonry is the same shape: a house at 550 becomes 605, one at 100 becomes 155.
+- **Gather rate and carry capacity are resolved when an order lands.** A load already in hand keeps
+  the numbers it started with, so Wheelbarrow's +25% carry changes what the *next* trip carries and
+  not the load being carried now. This is why the interpreter needed no re-pricing pass over
+  in-flight tasks.
+
+The maximum is not stored per entity: it is derived (`max_hp(player, unit)` = the table's value with
+the researching player's modifiers), which keeps `Entity` unchanged — the previous slice learned what
+a wider `Entity` costs.
+
+Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
+attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
+exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a
+comment. After that: `required` gating (a tech that needs its prerequisite), and the tech-tree effects
+(kind 6 enables/disables) that decide what a building may train.
 
 ## Why this is the right next increment and not a bigger one
 

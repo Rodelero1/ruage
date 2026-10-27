@@ -111,6 +111,12 @@ and the engine's own free-tile search finds the centre through `start.town_centr
 refuses an empty role table, a role mapped to unit 0 (zero is a real unit id, so it cannot mean
 "unset"), and a `[start]` naming a role the table does not define.
 
+`[tech_role]` does the same job for **techs**, which the dat does not name at all (a tech carries a
+string-id into the game's language files, so the importer has no word for one): `man_at_arms = 222`,
+`loom = 22`, `feudal_age = 101`. It is optional — a pack with no research needs no table — but a
+scenario step that says `tech = "loom"` needs the entry, and the loader refuses a role mapped to tech
+0 for the same reason as units (tech zero is a real tech, "New Technology").
+
 The map loader enforces the invariants an author can get wrong: a row must be exactly `width`
 characters, terrain characters are `G` or `F` only, every resource tile is on the map, **wood
 must stand on forest and everything else on open ground** (which is what stops "a tree you can

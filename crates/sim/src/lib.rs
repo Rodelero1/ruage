@@ -132,6 +132,45 @@ pub fn damage_between(attacks: &[(i16, i16)], armours: &[(i16, i16)], rules: &Da
     i32::try_from(total).unwrap_or(i32::MAX).max(rules.minimum)
 }
 
+/// Apply modifiers to a plain number (a carry cap), additions first.
+fn apply_scalar(base: f64, modifiers: &[&ruage_data::Modifier]) -> f64 {
+    let mut value = base;
+    for modifier in modifiers.iter().filter(|m| m.op == ruage_data::ModOp::Add) {
+        value += modifier.value;
+    }
+    for modifier in modifiers
+        .iter()
+        .filter(|m| m.op == ruage_data::ModOp::Multiply)
+    {
+        value *= modifier.value;
+    }
+    value
+}
+
+/// The same for a fixed-point quantity, which round-trips through `f64` for the arithmetic and back
+/// through `round`, so a rate stays an exact whole number of scale units or it is a bug in the data.
+fn scale_fixed(base: Fixed, modifiers: &[&ruage_data::Modifier]) -> Fixed {
+    let scaled = apply_scalar(base.raw() as f64, modifiers);
+    Fixed::from_raw(scaled.round() as i64)
+}
+
+/// A unit's maximum health with its hit-point modifiers applied, additions first. Floored at 1: a
+/// modifier that would zero a maximum is content we refuse to believe rather than a unit that cannot
+/// exist.
+fn scaled_health(unit: &Unit, modifiers: &[&ruage_data::Modifier]) -> i32 {
+    let mut hp = f64::from(unit.hp);
+    for modifier in modifiers.iter().filter(|m| m.op == ruage_data::ModOp::Add) {
+        hp += modifier.value;
+    }
+    for modifier in modifiers
+        .iter()
+        .filter(|m| m.op == ruage_data::ModOp::Multiply)
+    {
+        hp *= modifier.value;
+    }
+    i32::try_from(hp.round() as i64).unwrap_or(unit.hp).max(1)
+}
+
 /// Add `amount` to a class in an attack/armour list, creating the entry when the unit does not list
 /// that class: an upgrade can grant an attack class a unit does not otherwise have.
 fn add_to_class(list: &mut Vec<(i16, i16)>, class: i16, amount: i16) {
@@ -1304,11 +1343,15 @@ impl World {
         let Some(job) = self.find(building).and_then(|e| e.training) else {
             return true;
         };
-        let (unit, hp, speed) = (job.unit, job.hp, job.speed);
         let Some(source) = self.find(building) else {
             return true;
         };
         let player = source.player;
+        // Health and speed are resolved when the unit appears, so a tech researched while it was in
+        // the queue still counts.
+        let hp = self.max_hp(player, job.unit).unwrap_or(job.hp);
+        let speed = self.effective_speed(player, job.unit).unwrap_or(job.speed);
+        let unit = job.unit;
         let scale = self.scale;
         let origin = (
             u16::try_from(source.position.0.raw() / scale).unwrap_or(0),
@@ -1652,19 +1695,15 @@ impl World {
         Ok(())
     }
 
-    /// A unit's attacks or armours after every modifier its owner has researched.
-    ///
-    /// Additions are applied before multiplications, in researched-tech order, so the result cannot
-    /// depend on the order techs happened to be researched in. A modifier matches on the unit id it
-    /// names, on the unit's class, or on neither (-1 means "everything").
-    fn adjusted(&self, player: u8, unit: &Unit, attribute: &str) -> Vec<(i16, i16)> {
-        let base = if attribute == "attack" {
-            &unit.attacks
-        } else {
-            &unit.armours
-        };
+    /// Every modifier of `attribute` that applies to `unit`, from the techs `player` has researched.
+    fn modifiers_for(
+        &self,
+        player: u8,
+        unit: &Unit,
+        attribute: &str,
+    ) -> Vec<&ruage_data::Modifier> {
         let (Some(effects), Some(techs)) = (self.effects.as_ref(), self.techs.as_ref()) else {
-            return base.clone();
+            return Vec::new();
         };
         let mut chosen = Vec::new();
         for tech_id in self.researched(player) {
@@ -1684,19 +1723,34 @@ impl World {
                 if modifier.unit_class >= 0 && modifier.unit_class != unit.class {
                     continue;
                 }
-                // An attack or armour change is a change *to a class*; one that names no class is
-                // content we cannot place. Skipping it is inert today (an unlisted class loses to
-                // any attack), but a later rule that lets a classless entry through would turn it
-                // into "+99 to everything".
-                if modifier.attribute_class < 0 {
-                    continue;
-                }
                 chosen.push(modifier);
             }
         }
+        chosen
+    }
+
+    /// A unit's attacks or armours after every modifier its owner has researched.
+    ///
+    /// Additions are applied before multiplications, in researched-tech order, so the result cannot
+    /// depend on the order techs happened to be researched in. A modifier matches on the unit id it
+    /// names, on the unit's class, or on neither (-1 means "everything").
+    fn adjusted(&self, player: u8, unit: &Unit, attribute: &str) -> Vec<(i16, i16)> {
+        let base = if attribute == "attack" {
+            &unit.attacks
+        } else {
+            &unit.armours
+        };
+        let chosen = self.modifiers_for(player, unit, attribute);
 
         let mut out = base.clone();
         for modifier in chosen.iter().filter(|m| m.op == ruage_data::ModOp::Add) {
+            // An attack or armour change is a change *to a class*; one that names no class is
+            // content we cannot place. Skipping it is inert today (an unlisted class loses to any
+            // attack), but a later rule that lets a classless entry through would turn it into
+            // "+99 to everything".
+            if modifier.attribute_class < 0 {
+                continue;
+            }
             let amount = i16::try_from(modifier.value.round() as i64).unwrap_or(i16::MAX);
             add_to_class(&mut out, modifier.attribute_class, amount);
         }
@@ -1704,9 +1758,50 @@ impl World {
             .iter()
             .filter(|m| m.op == ruage_data::ModOp::Multiply)
         {
+            if modifier.attribute_class < 0 {
+                continue;
+            }
             multiply_class(&mut out, modifier.attribute_class, modifier.value);
         }
         out
+    }
+
+    /// A unit's maximum health for this player: the table's value with every hit-point modifier
+    /// applied, additions before multiplications. Health is *state*, so this is what a spawn uses and
+    /// what a research grant is measured against.
+    fn max_hp(&self, player: u8, unit_id: u32) -> Result<i32, SimError> {
+        let units = self.units.as_ref().ok_or(SimError::NoTables)?;
+        let unit = units
+            .unit(unit_id)
+            .ok_or(SimError::MissingUnit { id: unit_id })?;
+        Ok(scaled_health(
+            unit,
+            &self.modifiers_for(player, unit, "hit_points"),
+        ))
+    }
+
+    /// A unit's speed for this player, at the engine scale.
+    fn effective_speed(&self, player: u8, unit_id: u32) -> Result<Fixed, SimError> {
+        let units = self.units.as_ref().ok_or(SimError::NoTables)?;
+        let unit = units
+            .unit(unit_id)
+            .ok_or(SimError::MissingUnit { id: unit_id })?;
+        let base = unit
+            .speed
+            .resolve(self.scale, "speed")
+            .map_err(|err| SimError::Unresolved {
+                id: unit_id,
+                detail: err.to_string(),
+            })?;
+        let modifiers = self.modifiers_for(player, unit, "speed");
+        let scaled =
+            modifiers
+                .iter()
+                .fold(base.raw() as f64, |value, modifier| match modifier.op {
+                    ruage_data::ModOp::Add => value + modifier.value,
+                    ruage_data::ModOp::Multiply => value * modifier.value,
+                });
+        Ok(Fixed::from_raw(scaled.round() as i64))
     }
 
     /// Apply a researched tech: mark it done and run its effect commands.
@@ -1716,7 +1811,35 @@ impl World {
     /// silently would be worse than applying the half that is modelled, and the tests that use this
     /// path assert the effect they use contains nothing else.
     fn finish_research(&mut self, player: u8, tech: u32) -> Result<(), SimError> {
+        // What the player's units are worth *before* this tech, so the grant is the difference the
+        // tech made rather than a full heal: a wounded unit keeps its wound.
+        let before: Vec<(EntityId, u32, i32)> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.player == player)
+            .filter_map(|entity| {
+                let unit = entity.unit?;
+                Some((
+                    entity.id,
+                    unit,
+                    self.max_hp(player, unit).unwrap_or(entity.hp),
+                ))
+            })
+            .collect();
+
         self.researched.entry(player).or_default().insert(tech);
+
+        // Health and speed are state, so every unit the player already has gains them at once.
+        for (id, unit_id, old_max) in before {
+            let new_max = self.max_hp(player, unit_id)?;
+            let speed = self.effective_speed(player, unit_id)?;
+            let grant = new_max - old_max;
+            if let Some(entity) = self.find_mut(id) {
+                entity.hp = entity.hp.saturating_add(grant).clamp(1, new_max);
+                entity.speed = speed;
+            }
+        }
+
         let Some(effect_id) = self
             .techs
             .as_ref()
@@ -1754,18 +1877,10 @@ impl World {
     /// Replace every unit of `player`'s that is a `from` with a `to`, keeping the fraction of health
     /// it had: a spearman at half health becomes a swordsman at half health, not a healed one.
     fn upgrade_units(&mut self, player: u8, from: u32, to: u32) -> Result<(), SimError> {
-        let units = self.units.as_ref().ok_or(SimError::NoTables)?;
-        let target = units.unit(to).ok_or(SimError::MissingUnit { id: to })?;
-        let old_max = units.unit(from).map_or(0, |unit| unit.hp);
-        let new_max = target.hp;
-        let speed =
-            target
-                .speed
-                .resolve(self.scale, "speed")
-                .map_err(|err| SimError::Unresolved {
-                    id: to,
-                    detail: err.to_string(),
-                })?;
+        // Both caps go through the modifier table, so an upgrade does not undo a health tech.
+        let old_max = self.max_hp(player, from).unwrap_or(0);
+        let new_max = self.max_hp(player, to)?;
+        let speed = self.effective_speed(player, to)?;
 
         let ids: Vec<EntityId> = self
             .entities
@@ -1796,6 +1911,11 @@ impl World {
     /// are read from the tables here, once, and stored on the entity. Nothing in the tick loop
     /// looks at a table, and a replay cannot name its own numbers.
     fn start_gather(&mut self, villager: EntityId, node: EntityId) -> Result<(), SimError> {
+        // Whose techs apply: the villager's owner's (a rate modifier is the worker's, not the node's).
+        let worker_player = self
+            .find(villager)
+            .map(|entity| entity.player)
+            .ok_or(SimError::MissingEntity(villager))?;
         let (variant_id, rate_per_tick, carry_cap) = {
             let units = self.units.as_ref().ok_or(SimError::NoTables)?;
             let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
@@ -1850,6 +1970,18 @@ impl World {
                     task: task_name.clone(),
                     detail: err.to_string(),
                 })?;
+            // Gather rate and carry capacity are resolved *here*, when the order lands, from the
+            // variant and the owner's modifiers: a load already in hand keeps the numbers it started
+            // with, which is what "the resources have to be gathered first" means.
+            let rate = scale_fixed(
+                rate,
+                &self.modifiers_for(worker_player, variant, "gather_rate"),
+            );
+            let carry = apply_scalar(
+                f64::from(variant.carry),
+                &self.modifiers_for(worker_player, variant, "carry"),
+            );
+            let carry_cap = u32::try_from(carry.round() as i64).unwrap_or(u32::from(variant.carry));
             // Exactness is the D10 invariant: a rate that does not split into whole per-tick
             // amounts would drift, so it is an error rather than a rounded accumulation.
             let rate_per_tick = rate
@@ -1858,7 +1990,7 @@ impl World {
                     task: task_name.clone(),
                     detail: err.to_string(),
                 })?;
-            (variant_id, rate_per_tick, u32::from(variant.carry))
+            (variant_id, rate_per_tick, carry_cap)
         };
 
         let from = self
@@ -2433,6 +2565,14 @@ impl World {
         self.economy
             .as_ref()
             .and_then(|economy| economy.role.get(role).copied())
+    }
+
+    /// The tech a `[tech_role]` name stands for. Techs have no name in the dat, so this is the only
+    /// way content - the scenario format, a UI - can name one without quoting an id.
+    pub fn tech_role(&self, role: &str) -> Option<u32> {
+        self.economy
+            .as_ref()
+            .and_then(|economy| economy.tech_role.get(role).copied())
     }
 
     fn role_unit_in(&self, economy: &Economy, role: &str) -> Result<u32, SimError> {

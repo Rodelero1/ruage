@@ -29,6 +29,8 @@ pub struct Economy {
     /// Role name → unit id. One vocabulary for everything that must not quote the dat's numbering:
     /// the start of a match, the scenario format, and the engine's own seeding (D17).
     pub role: BTreeMap<String, u32>,
+    /// Tech role → tech id. Techs have no name in the dat, so content that names one needs this.
+    pub tech_role: BTreeMap<String, u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,6 +109,8 @@ struct RawEconomy {
     start: RawStart,
     /// Role name → unit id. Required: content that cannot name a unit at all is not content.
     role: BTreeMap<String, u32>,
+    #[serde(default)]
+    tech_role: BTreeMap<String, u32>,
 }
 
 #[derive(Deserialize)]
@@ -277,6 +281,16 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             ));
         }
     }
+    // Tech 0 is a real tech ("New Technology"), so it cannot mean "no role" either.
+    for (name, id) in &raw.tech_role {
+        if *id == 0 {
+            return Err(invalid(
+                path,
+                "tech_role",
+                format!("{name} = 0: tech id zero is a real tech, never a role"),
+            ));
+        }
+    }
     for (field, name) in [
         ("town_centre", &raw.start.town_centre),
         ("villager", &raw.start.villager),
@@ -396,6 +410,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             villagers_per_player: raw.start.villagers_per_player,
         },
         role: raw.role,
+        tech_role: raw.tech_role,
     })
 }
 

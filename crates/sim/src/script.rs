@@ -54,6 +54,9 @@ pub enum StepKind {
     },
     /// Train a unit at a named building. Both are roles (`[role]` in economy.toml).
     Train { building: String, role: String },
+    /// Research a tech at a named building. The building is a role; the tech is a `[tech_role]`
+    /// entry, because a tech has no name in the dat at all (D17).
+    Research { building: String, tech: String },
     /// Send this player's newest unit of a role at the nearest enemy.
     Attack { attacker: String, target: String },
     /// Stand a villager down.
@@ -183,6 +186,30 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
             Ok(Command::Train {
                 building: site,
                 unit,
+            })
+        }
+        StepKind::Research { building, tech } => {
+            let wanted = role_of(world, building)?;
+            let tech_id = world.tech_role(tech).ok_or_else(|| {
+                format!(
+                    "{tech:?} is not a tech role in economy.toml's [tech_role] table, so no tech can \
+                     be named by it"
+                )
+            })?;
+            let site = world
+                .entities()
+                .iter()
+                .find(|entity| {
+                    entity.player == player
+                        && entity.kind == EntityKind::Building
+                        && entity.unit == Some(wanted)
+                        && entity.construction.is_none()
+                })
+                .map(|entity| entity.id)
+                .ok_or_else(|| format!("player {player} has no finished {building}"))?;
+            Ok(Command::Research {
+                building: site,
+                tech: tech_id,
             })
         }
         StepKind::Attack { attacker, target } => {

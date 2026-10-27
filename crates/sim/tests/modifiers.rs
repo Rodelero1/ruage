@@ -31,6 +31,16 @@ const SCALE_MAIL: u32 = 74;
 const SMITH: u32 = 103;
 const SPEARMAN: u32 = 74;
 
+/// The stateful ones: Loom (+15 hp to villagers, at the town centre), Masonry (buildings x1.1 hp, at a
+/// castle), Wheelbarrow (villager speed x1.1 and carry x1.25, at the town centre).
+const LOOM: u32 = 22;
+const MASONRY: u32 = 50;
+const WHEELBARROW: u32 = 213;
+const TOWN_CENTRE: u32 = 109;
+const CASTLE: u32 = 209;
+const VILLAGER: u32 = 83;
+const HOUSE: u32 = 70;
+
 struct Fixture {
     settings: Settings,
     map: Map,
@@ -135,7 +145,7 @@ fn place(world: &mut World, player: u8, id: u32, unit: u32, tile: (i64, i64), hp
     let scale = world.scale();
     let id = EntityId(id);
     let kind = match unit {
-        SMITH | 109 | 12 | 70 => EntityKind::Building,
+        SMITH | TOWN_CENTRE | CASTLE | 12 | HOUSE => EntityKind::Building,
         _ => EntityKind::Unit,
     };
     world
@@ -343,4 +353,115 @@ location = 0
         4,
         "a classless attack modifier is content we cannot place, not +99 to everything"
     );
+}
+
+/// Loom is +15 hp for villagers (published), and the decision for this increment is that existing
+/// units *gain* it: a villager at 25 becomes 40, and one at 10 becomes 25.
+#[test]
+fn loom_raises_every_villagers_health_immediately() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let centre = place(&mut world, 1, 9_200, TOWN_CENTRE, (14, 14), 2400);
+    // One villager at full health, one wounded to 10 of 25.
+    let whole = place(&mut world, 1, 9_201, VILLAGER, (10, 10), 25);
+    let hurt = place(&mut world, 1, 9_202, VILLAGER, (10, 12), 10);
+    let villager = first_villager(&world);
+    bank(&mut world, 1, villager, slot("gold"), 50);
+    research(&mut world, 1, centre, LOOM, 25);
+
+    assert_eq!(world.entity(whole).expect("villager").hp, 40, "25 + 15");
+    assert_eq!(
+        world.entity(hurt).expect("villager").hp,
+        25,
+        "the grant is health, not a reset: 10 + 15"
+    );
+    // And it is the villagers', not everything's: a spearman is class 6.
+    let spearman = place(&mut world, 1, 9_203, SPEARMAN, (12, 10), 40);
+    assert_eq!(
+        world.entity(spearman).expect("spearman").hp,
+        40,
+        "Loom names class 4, so infantry keeps its 40"
+    );
+}
+
+#[test]
+fn masonry_raises_building_health_by_a_tenth() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let castle = place(&mut world, 1, 9_210, CASTLE, (14, 14), 4800);
+    let house = place(&mut world, 1, 9_211, HOUSE, (10, 10), 550);
+    let wounded = place(&mut world, 1, 9_212, HOUSE, (10, 12), 100);
+    let villager = first_villager(&world);
+    // 150 food and 175 wood, which is what the table charges for it.
+    bank(&mut world, 1, villager, slot("food"), 150);
+    bank(&mut world, 1, villager, slot("wood"), 175);
+    research(&mut world, 1, castle, MASONRY, 50);
+
+    assert_eq!(world.entity(house).expect("house").hp, 605, "550 x 1.1");
+    assert_eq!(
+        world.entity(wounded).expect("house").hp,
+        155,
+        "100 gains the 55 the maximum grew by, not a full heal"
+    );
+}
+
+#[test]
+fn wheelbarrow_changes_what_is_gathered_next_and_not_a_load_in_hand() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let centre = place(&mut world, 1, 9_220, TOWN_CENTRE, (14, 14), 2400);
+    let villager = first_villager(&world);
+
+    // An order placed *before* the tech: its rate and cap are already resolved.
+    let node = nearest_node(&world, villager, slot("wood")).expect("a tree");
+    world
+        .submit_checked(Command::Gather { villager, node })
+        .expect("gather");
+    world.step().expect("step");
+    let before = match world.entity(villager).expect("villager").task {
+        ruage_sim::Task::Gather {
+            rate_per_tick,
+            carry_cap,
+            ..
+        } => (rate_per_tick.raw(), carry_cap),
+        other => panic!("expected a gather order, got {other:?}"),
+    };
+
+    bank(&mut world, 1, villager, slot("food"), 175);
+    bank(&mut world, 1, villager, slot("wood"), 50);
+    research(&mut world, 1, centre, WHEELBARROW, 75);
+
+    // Speed is entity state, so it moves at once: 0.8 x 1.1 = 0.88.
+    assert_eq!(
+        world.entity(villager).expect("villager").speed.raw(),
+        17_600,
+        "0.88 at scale 20000"
+    );
+
+    // The load in hand keeps the numbers it started with...
+    let after = match world.entity(villager).expect("villager").task {
+        ruage_sim::Task::Gather {
+            rate_per_tick,
+            carry_cap,
+            ..
+        } => (rate_per_tick.raw(), carry_cap),
+        other => panic!("expected the same gather order, got {other:?}"),
+    };
+    assert_eq!(after, before, "a load in hand is not re-priced");
+
+    // ...and the next order is: carry 10 x 1.25 = 12.5, rounded half away from zero.
+    world
+        .submit_checked(Command::Stop { unit: villager })
+        .expect("stop");
+    world.step().expect("step");
+    world
+        .submit_checked(Command::Gather { villager, node })
+        .expect("gather again");
+    world.step().expect("step");
+    match world.entity(villager).expect("villager").task {
+        ruage_sim::Task::Gather { carry_cap, .. } => {
+            assert_eq!(carry_cap, 13, "10 x 1.25 = 12.5, rounded up");
+        }
+        other => panic!("expected a new gather order, got {other:?}"),
+    }
 }

@@ -45,6 +45,9 @@ stone = "stone"
 town_centre = 109
 villager = 83
 
+[tech_role]
+man_at_arms = 222
+
 [start]
 town_centre = "town_centre"
 villager = "villager"
@@ -333,4 +336,22 @@ fn an_empty_role_table_is_refused() {
         .expect_err("no roles means no unit can be named")
         .to_string();
     assert!(err.contains("role"), "got: {err}");
+}
+
+/// Techs have no names in the dat (they are string-ids into the language files), so content that must
+/// name one needs its own vocabulary - the same shape as unit roles (D17).
+#[test]
+fn tech_roles_name_techs_and_must_point_at_real_ones() {
+    let economy = load_economy_file(&repo("config/economy.toml")).expect("economy.toml loads");
+    assert_eq!(
+        economy.tech_role.get("man_at_arms"),
+        Some(&222),
+        "the dat's Man-at-Arms, identified by cost and time in the tests"
+    );
+
+    let zero = GOOD.replace("man_at_arms = 222", "man_at_arms = 0");
+    let err = load_economy_str(&zero, "economy.toml")
+        .expect_err("tech 0 is a real tech, never a role")
+        .to_string();
+    assert!(err.contains("man_at_arms"), "got: {err}");
 }
