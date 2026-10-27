@@ -431,6 +431,10 @@ pub enum SimError {
     TechInProgress {
         tech: u32,
     },
+    /// The target is on the attacker's own team.
+    AlliedTarget {
+        id: EntityId,
+    },
     /// The player's civilisation does not have this unit at all.
     UnitBarred {
         unit: u32,
@@ -582,6 +586,11 @@ impl fmt::Display for SimError {
             SimError::TechInProgress { tech } => write!(
                 f,
                 "tech {tech} is already being researched at another building"
+            ),
+            SimError::AlliedTarget { id } => write!(
+                f,
+                "entity {} is on the attacker's team: allies are not targets",
+                id.0
             ),
             SimError::UnitBarred { unit, civ } => write!(
                 f,
@@ -808,6 +817,12 @@ pub struct World {
     /// civ's tree effect whenever a research is ordered - it is content, so keeping a copy in state
     /// would be a second source of truth for the same fact.
     civs: Option<ruage_data::Civs>,
+    /// Team id per player, resolved from `[start] teams` at seeding. Empty in content means every
+    /// player is their own team, so a free-for-all needs no configuration.
+    team_by_player: [u8; MAX_PLAYERS],
+    /// Whether content named teams at all. Only then are they hashed, so a world with no teams hashes
+    /// exactly as it did before teams existed.
+    teams_named: bool,
     /// Which civilisation each player is, once resolved against the table above. Index 0 is player 1.
     /// Part of state (hashed), because it changes what the world will allow.
     civ_by_player: [Option<u32>; MAX_PLAYERS],
@@ -853,6 +868,8 @@ impl World {
             effects: None,
             civs: None,
             civ_by_player: [None; MAX_PLAYERS],
+            team_by_player: [1, 2, 3, 4, 5, 6, 7, 8],
+            teams_named: false,
             gated_units: BTreeSet::new(),
             upgrade_tech: BTreeMap::new(),
             availability_techs: Vec::new(),
@@ -1154,6 +1171,16 @@ impl World {
             })?;
             next_id += 1;
         }
+        // Teams: content may put players together, otherwise everyone is alone.
+        let teams = economy.start.teams.clone();
+        if !teams.is_empty() {
+            self.teams_named = true;
+            for index in 0..MAX_PLAYERS {
+                let team = teams[index.min(teams.len() - 1)];
+                self.team_by_player[index] = u8::try_from(team).unwrap_or(u8::MAX);
+            }
+        }
+
         // If the tables this needs are already loaded, the opening position belongs to these
         // entities; if they arrive later, the setters apply them then.
         self.apply_start_stock()?;
@@ -1313,6 +1340,10 @@ impl World {
         }
         if source.player == victim.player {
             return Err(SimError::FriendlyFire { id: target });
+        }
+        // Allies are not targets either: two players on one team do not fight each other.
+        if self.team_of(source.player) == self.team_of(victim.player) {
+            return Err(SimError::AlliedTarget { id: target });
         }
         let units = self.units.as_ref().ok_or(SimError::NoTables)?;
         let (attacker_stats, victim_stats) = match (source.unit, victim.unit) {
@@ -2888,6 +2919,15 @@ impl World {
         result
     }
 
+    /// The team a player is on. A player with no team in content is alone on a team of their own, so
+    /// "same team" never accidentally means "everybody".
+    fn team_of(&self, player: u8) -> u8 {
+        let index = usize::from(player).checked_sub(1);
+        index
+            .and_then(|index| self.team_by_player.get(index).copied())
+            .unwrap_or(player)
+    }
+
     /// Which civilisation a player is, once the table is loaded and content has named one.
     fn civ_of(&self, player: u8) -> Option<u32> {
         let index = usize::from(player).checked_sub(1)?;
@@ -3118,6 +3158,10 @@ impl World {
         // The civilisation is hashed because it changes what the world will allow: two runs that
         // differ in it refuse different techs, and a replay that lost it would diverge silently. Only
         // when set, so a world that names no civ hashes exactly as it did before civs existed.
+        if self.teams_named {
+            fnv_bytes(&mut hash, b"teams");
+            fnv_bytes(&mut hash, &self.team_by_player);
+        }
         for (index, civ) in self.civ_by_player.iter().enumerate() {
             if let Some(civ) = civ {
                 fnv_bytes(&mut hash, b"civ");

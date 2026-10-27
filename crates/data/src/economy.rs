@@ -47,6 +47,9 @@ pub struct Start {
     /// player *n+1*, and the last entry covers any further player. Content's words, because the civ
     /// table owns the ids and the effect that lists what each civ cannot research.
     pub civs: Vec<String>,
+    /// Team id per player: entry *n* is player *n+1*, and the last entry covers any further player.
+    /// Empty means nobody has allies - every player is their own team, which is what a free-for-all is.
+    pub teams: Vec<u32>,
     /// Resource *name* -> how much each player begins with. Names, not columns: the pack owns the
     /// stockpile's layout (D17), so a pack with five resources can open with its own four.
     pub stock: BTreeMap<String, u32>,
@@ -189,6 +192,8 @@ struct RawStart {
     stock: BTreeMap<String, u32>,
     #[serde(default)]
     civs: Vec<String>,
+    #[serde(default)]
+    teams: Vec<u32>,
 }
 
 #[derive(Deserialize)]
@@ -445,6 +450,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             techs: raw.start.techs,
             stock: raw.start.stock,
             civs: raw.start.civs,
+            teams: raw.start.teams,
         },
         role: raw.role,
         tech_role: raw.tech_role,

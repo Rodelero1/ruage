@@ -444,3 +444,26 @@ each carried by a tech that *costs* 40 food + 25 wood and takes 15 s (555 and it
 carries an attribute in `c` and a value (0.85) that no enable/disable reading accounts for. Whatever they
 are - a scenario-tool leftover, or a herding special case - they are not a match mechanic, and reading
 them as "disable" would be inventing a rule. They stay uninterpreted and named here.
+
+## D26 - Teams are content, and team bonuses wait for the mechanics their effects touch
+
+Combat already knew one rule that is really a team rule: `FriendlyFire` refuses a target belonging to the
+attacker. That is the one-player case of "allies are not targets", so the general rule went in with
+content behind it:
+
+- `[start] teams = [1, 1]` names a team per player (entry *n* is player *n+1*, the last entry covers the
+  rest). **Empty means a free-for-all** - every player is their own team - so no pack has to say
+  "nobody has allies", and the eight existing combat tests keep the meaning they had.
+- The resolved teams are hashed **only when content named them**, so a world without teams hashes exactly
+  as it did before the feature existed.
+
+**Team bonuses are deliberately not applied yet.** Each civ has a `team_bonus_effect`, and every one
+sampled targets a mechanic this engine does not have: British `[5, 87, -1, 13, 1.2]` is an archery range's
+work rate, Goths the barracks' work rate, French `[4, 569, -1, 1, 2]` is line of sight, Slavs
+`[0, 12, -1, 21, 5]` is garrison capacity, Teutons `[1, 77, 1, -1, 2]` is a farm resource. Applying them
+today would be invisible - a step with tests that cannot fail - so the effect ids stay carried and
+unapplied until the mechanics land, and that is cheaper than pretending.
+
+The same reasoning retires the "implement kinds 0 and 1 next" plan: kind 0's attributes are 19/20/21 (four
+hundred rows of garrison and projectile behaviour) and kind 1's are resource ids including farm food, and
+the sim has **zero** mentions of a farm. Both need mechanics before they need an interpreter.

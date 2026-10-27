@@ -54,6 +54,42 @@ fn rules(fx: &Fixture) -> DamageRules {
 
 /// A world with a spearman of player 1 and a villager of player 2 standing next to each other on
 /// open ground, away from the authored town centres.
+/// A world on a given economy, for tests that vary content (a team, a civ) rather than behaviour.
+fn world_with(fx: &Fixture, economy: &Economy) -> World {
+    let mut world = World::new(&fx.settings, 3).expect("world");
+    world
+        .seed_from(&fx.map, economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    world.load_combat(&fx.combat);
+    world
+}
+
+/// Put a unit somewhere without asking the economy first.
+fn place(world: &mut World, player: u8, id: u32, unit: u32, tile: (i64, i64), hp: i32) -> EntityId {
+    let scale = world.scale();
+    let id = EntityId(id);
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(tile.0 * scale),
+                Fixed::from_raw(tile.1 * scale),
+            ),
+            speed: Fixed::ZERO,
+            hp,
+            amount: 0,
+        })
+        .expect("spawn");
+    world.step().expect("step");
+    id
+}
+
 fn duel(fx: &Fixture) -> (World, EntityId, EntityId) {
     let mut world = World::new(&fx.settings, 3).expect("world");
     world
@@ -301,4 +337,39 @@ fn a_dead_unit_does_not_leave_its_route_behind() {
         "a dead unit's route must be released with it"
     );
     println!("villager died after {steps} ticks, route released");
+}
+
+/// A team is content: `[start] teams` names it per player, and two players on one team cannot attack
+/// each other. Without it every player is their own team, which is what the rest of this suite assumes.
+#[test]
+fn players_on_one_team_cannot_attack_each_other() {
+    let Some(fx) = fixture() else { return };
+    let mut economy = fx.economy.clone();
+    economy.start.teams = vec![1, 1];
+    let mut world = world_with(&fx, &economy);
+    let mine = place(&mut world, 1, 9_900, 74, (10, 10), 40);
+    let theirs = place(&mut world, 2, 9_901, 74, (11, 10), 40);
+
+    let err = world
+        .submit_checked(Command::Attack {
+            attacker: mine,
+            target: theirs,
+        })
+        .expect_err("allies do not fight each other")
+        .to_string();
+    assert!(err.contains("team"), "the refusal says why: {err}");
+}
+
+#[test]
+fn players_without_a_team_are_each_their_own() {
+    let Some(fx) = fixture() else { return };
+    let mut world = world_with(&fx, &fx.economy);
+    let mine = place(&mut world, 1, 9_910, 74, (10, 10), 40);
+    let theirs = place(&mut world, 2, 9_911, 74, (11, 10), 40);
+    world
+        .submit_checked(Command::Attack {
+            attacker: mine,
+            target: theirs,
+        })
+        .expect("with no teams named, everybody is an enemy of everybody");
 }

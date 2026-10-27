@@ -51,6 +51,14 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Fifteenth pass: teams are seed-time and per-attack (2026-10-27)
+
+`team_of` runs inside `check_attack`, and the team array is resolved once at seeding. No tick path, so by
+the thirteenth pass' finding this is not something the idle probe can resolve, and it was not re-measured
+through it. What is measurable: the four-hour probe is **unchanged** at `b30d49d89f8bcf4f`, because the
+teams are hashed only when content names them and no probe does. A world that names teams hashes
+differently by design - the team decides who may attack whom.
+
 ## Fourteenth pass: judged by inspection, because the probe cannot see it (2026-10-27)
 
 Per-player civs add one array to `World` (`[Option<u32>; 8]`, 32 bytes) and change two lookups from

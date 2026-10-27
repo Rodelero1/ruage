@@ -268,6 +268,27 @@ that would otherwise make the assertion about the wrong rule.
 Next: team bonuses (`team_bonus_effect`, carried and unapplied), then the per-civ 211-number tuning array,
 then the remaining effect kinds (0 and 1 modify a named unit's attributes and costs).
 
+## Done next: teams, and a queue that had to be re-ordered (2026-10-27, v0.68)
+
+`[start] teams = [1, 1]`, empty meaning a free-for-all, and `AlliedTarget` refusing an attack on a
+teammate - the general case of `FriendlyFire`, which was always a team rule with one player in it. Teams
+are hashed only when content names them, so a world without teams hashes exactly as before.
+
+**Team bonuses were the announced next step and were deliberately not taken (D26).** Every sampled
+`team_bonus_effect` targets a mechanic this engine lacks: British and Goths modify a building's *work
+rate*, French line of sight, Slavs garrison capacity, Teutons a farm resource. Applying them would produce
+a step whose tests cannot fail - invisible behaviour - so the effect ids stay carried and unapplied until
+the mechanic exists.
+
+That also retired the plan after it: kinds 0 and 1 are the same story. Kind 0's attributes are 19/20/21
+(garrison, projectiles, and four hundred rows of it), kind 1's first field is a *resource* id - the farm
+food line (Horse Collar 75, Heavy Plow 125, Crop Rotation 175) - and the sim has **zero** mentions of a
+farm. The `[farm]` block in `economy.toml` has been parsed and unused for a long time.
+
+So the next honest step is the one this exposed: **farms**, because `[farm]` is dead content, because the
+farm upgrade line is the first kind-1 effect with somewhere to land, and because a gatherable building is
+the first entity that is neither a resource node nor a producer.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

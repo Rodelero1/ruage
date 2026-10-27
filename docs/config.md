@@ -118,6 +118,11 @@ commands, so the importer derives it, and the engine resolves a variant to its r
 names a building: what a tech is researched at, where a carried load may be dropped, what a building
 trains, and what a scenario's `role = "barracks"` means.
 
+`[start] teams = [1, 1]` puts players on teams: entry *n* is player *n+1*, the last entry covers any
+further player, and **empty means a free-for-all** (every player is their own team, so the setting is only
+written by a pack that wants allies). Two players on one team cannot attack each other (`AlliedTarget`);
+the project's own pack names no teams, because its two players are meant to fight.
+
 `[start] civs = ["British", "Huns"]` names the civilisations a match is played as, by the names
 `civs.toml` gives them: entry *n* is player *n+1*, and the last entry covers any further player, so a pack
 that names one civ means "everyone plays this one". The project's own pack names two, which is what the
