@@ -3009,17 +3009,26 @@ impl World {
             if tech.research_time != 0 || !tech.costs.is_empty() || tech.location >= 0 {
                 continue;
             }
-            let Some(effect_id) = tech.effect_id else {
-                continue;
+            // Bookkeeping techs are the ones with nothing to click: no price, no time, no building,
+            // and an effect that either does nothing at all or only makes units available. The dat
+            // spells both kinds of marker this way - "ARRG (make avail)" enables a building, and
+            // "Shadow Barracks -- Age Two" *is* the statement that a barracks exists (tech 122, no
+            // effect, required by 667, which the archery range requires). Without the second kind the
+            // whole Feudal building tree is unreachable: 147 waits on 667, 667 waits on 122, and
+            // nothing would ever grant it (D29).
+            let bookkeeping = match tech.effect_id {
+                None => true,
+                Some(effect_id) => match effects.effects.get(&effect_id) {
+                    None => true,
+                    Some(effect) => {
+                        effect.commands.is_empty()
+                            || effect
+                                .commands
+                                .iter()
+                                .all(|command| command.kind == 2 && command.b == 1)
+                    }
+                },
             };
-            let Some(effect) = effects.effects.get(&effect_id) else {
-                continue;
-            };
-            let bookkeeping = !effect.commands.is_empty()
-                && effect
-                    .commands
-                    .iter()
-                    .all(|command| command.kind == 2 && command.b == 1);
             if bookkeeping {
                 self.availability_techs.push(tech.id);
             }

@@ -327,6 +327,31 @@ the market), so the honest next step is **unit availability by age** - the tech 
 which is what `[train.entry]` is missing and what the farm gate (tech 216, "Farms (make avail)") already
 demonstrates: a free, instant tech whose only job is to make a building available.
 
+## Done next: the tech tree, and why it was unreachable (2026-10-27, v0.71)
+
+Written as tests first, because the machinery looked complete: availability (`unit_available`, kind-2
+`b = 1`), upgrades (kind 3), prerequisites, civ bars. Four of the six tests passed immediately - a Dark Age
+barracks is buildable, a Dark Age archery range is not, a barracks cannot train a spearman before Feudal,
+and it can afterwards.
+
+The fifth failed, and it was not a test bug: **the archery range was unobtainable even in Feudal.** Tech 147
+requires 667, which requires 122 "Shadow Barracks -- Age Two" - an effect with no commands - and 638, which
+has no effect at all. The dat spells "a barracks exists" as a tech, and nothing ever granted it. The same
+mechanism is why every earlier test granted 659 by hand before researching an age: the Feudal Age needs a
+*shadow town centre*.
+
+Fixed by extending `availability_techs` to effects that do nothing, not only effects that enable units. The
+Feudal Age is now reachable by playing - 500 food at the town centre, no hand-granting - and the sixth test
+proves exactly that. Mutation-proved by turning shadow bookkeeping off: the two Feudal-dependent tests fail
+and the four Dark Age ones correctly still pass.
+
+**Known simplification (D29):** the shadows are satisfied up front, so an archery range needs no barracks
+standing. The building's name is in a display string, not in data the engine should parse.
+
+Next: `[train.entry]` per age is now redundant with availability, so the better next step is **presence** -
+a shadow tech that means "you have a barracks" should be granted when the player builds one - which is also
+the hook the known simplification replaces.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

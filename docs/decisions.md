@@ -524,3 +524,29 @@ adds 75 adds it to every plot the player has *that still has food in it* - the g
 benefit a farm already standing. A plot that has given everything stays at zero: its food was eaten, and
 an upgrade that refilled it would be inventing food. Modes other than 0 (set) and 1 (add) exist once
 (`-1`, effect 605) and are carried without interpretation, like `other:` attributes.
+
+## D29 - The dat spells "a barracks exists" as a tech, and the engine has to grant it
+
+The Feudal building tree was unreachable, and the reason is one of the dat's odder habits. The archery
+range is made available by tech 147, which requires **101 (Feudal) and 667**. Tech 667 requires **122 and
+638**. Tech 122 is called "Shadow Barracks -- Age Two" and has an effect with **no commands at all**; 638
+has no effect whatsoever. Nothing would ever research them, so 147 could never apply, and the archery range
+could never be built - in a game where it is an ordinary Feudal building.
+
+The pattern is systematic: 194 techs in this dat have no effect, and a further set have an effect that does
+nothing. The Feudal Age itself needs 659, which needs 120 (a shadow town centre) and 638 - which is why
+every test until now granted 659 by hand before researching an age. That hand-granting was the smell.
+
+So `availability_techs` now includes techs that cost nothing, take no time, have no location, **and** whose
+effect is either absent or does nothing except make units available. They are granted as soon as their own
+prerequisites are met, exactly like the availability techs already were. Two consequences:
+
+- the Feudal Age is reachable by playing (500 food at the town centre) with no help from a test;
+- the archery range, stable and everything else behind the shadow chain arrive with it.
+
+**The simplification, stated plainly:** a shadow tech means "*you have this building*", and the engine
+cannot tell which building - the name that says so lives in a language string ("Shadow Barracks -- Age
+Two") whose text is not data the engine should parse. So the shadows are satisfied up front, and an archery
+range becomes buildable in Feudal **without** a barracks standing. That is wrong against the game, it is
+bounded, and it is cheaper than parsing display strings for structure. It is recorded here so that when
+"requires a building nearby" lands, this is the hook it replaces.

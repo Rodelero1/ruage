@@ -51,6 +51,16 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Eighteenth pass: a load-time list, granted only on a research (2026-10-27)
+
+Shadow techs add roughly two hundred ids to `availability_techs`, and that list is walked by
+`grant_availability`, which runs when a tech is researched - never inside a tick. Nothing was added to
+`World` beyond entries in a set that already existed (`researched`), so the idle probe has nothing to see
+and nothing was claimed from it. The four-hour probe is **unchanged** at `b30d49d89f8bcf4f`, because that
+world loads no tech tables at all and the list is empty there. The scripted run with every table moves to
+`431d5b8fb2076854`: the shadow techs are in `researched`, which is hashed, and a replay that lost them
+would refuse the Feudal buildings.
+
 ## Seventeenth pass: farm food is priced at two moments, not every tick (2026-10-27)
 
 The farm food line adds nothing to the tick: the total is computed when a plot is placed and, for existing
