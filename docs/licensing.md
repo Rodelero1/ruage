@@ -175,3 +175,33 @@ restrictive option and stays the choice.
 "Compatibility" worth engineering is **format** compatibility, not licence compatibility: a documented,
 permissively licensed content-pack format is something other engines and modders can target, and it is
 the one thing the GPL projects cannot offer back.
+
+## What "learn from it" does and does not mean
+
+Yes: **reading a GPL project to understand how something works is lawful, and reimplementing that
+understanding in our own code is lawful.** Copyright protects the *expression* - the particular code,
+comments and structure - not the idea, the algorithm, the file format or the behaviour. Every
+compatible implementation ever written rests on this: Compaq's BIOS, Samba, Wine, ReactOS, the whole
+of the open-source RTS scene.
+
+The line that matters is not "did you look at it" but "did you copy the expression":
+
+- **Allowed**: reading code to learn an approach, reading a *specification* or a format description,
+  measuring behaviour in the original game, and writing our own implementation from that
+  understanding.
+- **Not allowed**: paraphrasing their code - renaming variables, restructuring a function, keeping the
+  same sequence of steps - which is a derivative work regardless of how it is spelled. Nor copying
+  their data files, test corpora, or anything they themselves license from the game's owner.
+- **The practical discipline**: do not write our implementation with their editor open. Write down the
+  *behaviour* first (this repository already does that in `docs/mechanics/`), then implement from the
+  note. Where a piece of our code was informed by reading a GPL project, say so in the module - that
+  record is what makes the provenance defensible years later, and it costs one comment.
+
+Fully clean-room (one person writes a spec from the code, another implements from the spec) is the
+strongest form of this defence, and is worth doing deliberately for anything we copy closely in
+spirit. It is not required for using a published file format.
+
+**Separate from copyright, and not solved by any of this:** patents (software patents exist in some
+jurisdictions; nothing relevant to twenty-five-year-old RTS mechanics is in play here), trademarks
+(the game's name and art are not ours, which is what D8 and D21 already enforce), and the fact that
+those projects' *assets* are licensed to them by the game's owner, not by their GPL.

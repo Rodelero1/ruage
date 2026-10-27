@@ -86,6 +86,9 @@ villagers_per_player = 3
 # What the match opens with. Every tech in the table lists the Dark Age tech as a prerequisite, so a
 # match that did not start with it could research nothing at all.
 techs = ["dark_age"]
+# The standard opening. Every name here must be a column in resources.toml: a starting stockpile of a
+# resource the pack does not have is refused when the match is seeded, not silently dropped.
+stock = { food = 200, wood = 200, gold = 100, stone = 200 }
 # PROVENANCE: dat (ids, hp, speed) + the standard 3-villager start. The count is a match
 # rule, not a dat field, which is exactly why it belongs in config.
 

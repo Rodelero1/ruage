@@ -758,6 +758,9 @@ pub struct World {
     /// them the way damage is resolved against `combat.toml`: once, at order time.
     techs: Option<ruage_data::Techs>,
     effects: Option<Effects>,
+    /// Whether the opening stockpile has been applied. Part of state, because it decides whether a
+    /// later `load_resources` re-applies it and wipes what the players have gathered since.
+    start_stock_applied: bool,
     /// Per player, the techs already researched. Part of state: it decides what a later upgrade
     /// does and what a later order resolves to, so it is hashed.
     researched: BTreeMap<u8, BTreeSet<u32>>,
@@ -783,6 +786,7 @@ impl World {
             economy: None,
             techs: None,
             effects: None,
+            start_stock_applied: false,
             researched: BTreeMap::new(),
             stock: [[0; MAX_RESOURCES]; MAX_PLAYERS],
             walk: None,
@@ -1079,8 +1083,9 @@ impl World {
             })?;
             next_id += 1;
         }
-        // If the research tables are already loaded, the opening techs belong to this position; if
-        // they arrive later, `load_research` grants them then. See `grant_starting_techs`.
+        // If the tables this needs are already loaded, the opening position belongs to these
+        // entities; if they arrive later, the setters apply them then.
+        self.apply_start_stock()?;
         self.grant_starting_techs()?;
         Ok(())
     }
@@ -2602,6 +2607,44 @@ impl World {
         self.grant_starting_techs()
     }
 
+    /// Give each player the resources content says a match opens with (`[start] stock`).
+    ///
+    /// Called from `seed_from` and from `load_resources` for the same reason the starting techs are
+    /// granted in two places: a runner may seed before it loads the pack or after. It runs once -
+    /// `start_stock_applied` says so - because the alternative is a second `load_resources` silently
+    /// wiping whatever the player had gathered by then.
+    fn apply_start_stock(&mut self) -> Result<(), SimError> {
+        if self.start_stock_applied {
+            return Ok(());
+        }
+        let (Some(economy), Some(resources)) = (self.economy.as_ref(), self.resources.as_ref()) else {
+            return Ok(());
+        };
+        let mut wanted: Vec<(usize, u32)> = Vec::new();
+        for (name, amount) in &economy.start.stock {
+            let slot = resources
+                .slot_of(name)
+                .ok_or_else(|| SimError::UnknownResourceName { name: name.clone() })?;
+            wanted.push((slot, *amount));
+        }
+        for player in 1..=u8::try_from(MAX_PLAYERS).unwrap_or(1) {
+            if !self.entities.iter().any(|entity| entity.player == player) {
+                continue;
+            }
+            let index = usize::from(player).wrapping_sub(1);
+            let Some(row) = self.stock.get_mut(index) else {
+                continue;
+            };
+            for (slot, amount) in &wanted {
+                if let Some(cell) = row.get_mut(*slot) {
+                    *cell = *amount;
+                }
+            }
+        }
+        self.start_stock_applied = true;
+        Ok(())
+    }
+
     /// Grant the techs content says a match opens with - the pack names the Dark Age, which every other
     /// tech lists as a prerequisite, so a world that skipped it could research nothing at all.
     ///
@@ -2658,6 +2701,9 @@ impl World {
             });
         }
         self.resources = Some(resources.clone());
+        // The pack is what turns a name in `[start] stock` into a column, so this is the earliest
+        // point the opening stockpile can be applied when the pack is loaded after seeding.
+        self.apply_start_stock()?;
         Ok(())
     }
 
