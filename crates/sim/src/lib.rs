@@ -58,6 +58,9 @@ pub struct EntityId(pub u32);
 pub enum EntityKind {
     Building,
     Unit,
+    /// An arrow in the air. Not a unit: it costs no population, it cannot be attacked, and it exists
+    /// only until it lands (D35).
+    Projectile,
     /// A tree, a berry bush or a mine: a place that holds a quantity and can be worked down. The
     /// payload is the content pack's stockpile column, because that is what a deposit needs and it
     /// is the only thing the engine may know about a resource (D17).
@@ -210,6 +213,11 @@ pub struct Research {
     pub fresh: bool,
 }
 
+/// A shot decided this tick: who fired it, from where, where it will land, what it was aimed at and
+/// what it does when it gets there. Created after the movement pass, because the entity list is
+/// index-stable while positions are applied.
+type Shot = (u8, (Fixed, Fixed), (Fixed, Fixed), EntityId, i32);
+
 /// A training order that passed every check: what it costs, how long it takes, and what comes out.
 struct TrainPlan {
     costs: Vec<Cost>,
@@ -268,6 +276,14 @@ pub enum Task {
     Idle,
     /// Putting up a building at `site`.
     Build { site: EntityId },
+    /// A shot in flight: where it will land, what it does when it gets there, and who it was meant
+    /// for. The aim is a position, not the target, so an arrow at a unit that then walks away lands
+    /// where it was fired - and finds nothing worth hurting.
+    Fly {
+        target: EntityId,
+        damage: i32,
+        aim: (Fixed, Fixed),
+    },
     /// Fighting `target`. Damage and reload are resolved when the order lands, so the tick loop
     /// never reads a table and a replay cannot name its own numbers.
     Attack {
@@ -815,6 +831,10 @@ pub struct World {
     walk: Option<Walk>,
     /// Damage constants from `combat.toml`, set with `load_combat`.
     damage_rules: Option<DamageRules>,
+    /// How fast a shot flies, resolved once at load: zero means the pack shoots instantly.
+    combat_projectile_speed: Option<Fixed>,
+    /// The same speed as a per-tick step, because the tick loop must not divide.
+    projectile_step: i64,
     /// Remaining waypoints per unit, in tiles. Part of state: it decides where the unit goes next.
     paths: BTreeMap<EntityId, Vec<(u16, u16)>>,
     /// The tech and effect tables, when they have been loaded. A research order is resolved against
@@ -892,6 +912,8 @@ impl World {
             stock: [[0; MAX_RESOURCES]; MAX_PLAYERS],
             walk: None,
             damage_rules: None,
+            combat_projectile_speed: None,
+            projectile_step: 0,
             paths: BTreeMap::new(),
             resources: None,
             sim_rng: Pcg32::new(seed, SIM_STREAM),
@@ -1345,6 +1367,12 @@ impl World {
             minimum,
             missing_armour,
         });
+        self.combat_projectile_speed = combat
+            .projectile_speed
+            .resolve(self.scale, "combat.projectile_speed")
+            .ok()
+            .filter(|speed| speed.raw() > 0);
+        self.projectile_step = self.projectile_speed();
     }
 
     /// The checks an attack order has to survive.
@@ -1361,7 +1389,12 @@ impl World {
         if matches!(source.kind, EntityKind::Resource(_)) {
             return Err(SimError::Unarmed { id: attacker });
         }
-        if matches!(victim.kind, EntityKind::Resource(_)) {
+        if matches!(
+            victim.kind,
+            EntityKind::Resource(_) | EntityKind::Projectile
+        ) {
+            // A tree is not a target and neither is an arrow: one cannot bleed and the other is a
+            // consequence, not a combatant.
             return Err(SimError::NotATarget { id: target });
         }
         if source.player == victim.player {
@@ -2270,6 +2303,54 @@ impl World {
     /// Turn a gather order into resolved state: the variant, the per-tick rate and the capacity
     /// are read from the tables here, once, and stored on the entity. Nothing in the tick loop
     /// looks at a table, and a replay cannot name its own numbers.
+    /// How fast a shot flies this tick, in engine units; zero when the pack shoots instantly.
+    fn projectile_speed(&self) -> i64 {
+        let Some(speed) = self.combat_projectile_speed else {
+            return 0;
+        };
+        // Exactness is the D10 invariant: a step that does not divide would drift, so a pack whose
+        // speed does not divide the tick rate gets no flight rather than an accumulating arrow.
+        speed
+            .div_exact(i64::from(self.tick_rate_hz))
+            .map_or(0, |step| step.raw())
+    }
+
+    /// Put a shot in the air. Its ticks-to-land are not stored: the arrow moves by a fixed step every
+    /// tick until it reaches the position it was aimed at, which is exact for any speed that divides
+    /// the tick rate and needs no accumulation.
+    fn spawn_projectile(
+        &mut self,
+        player: u8,
+        from: (Fixed, Fixed),
+        aim: (Fixed, Fixed),
+        target: EntityId,
+        damage: i32,
+    ) -> Result<EntityId, SimError> {
+        let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
+        self.insert(Entity {
+            id,
+            player,
+            kind: EntityKind::Projectile,
+            unit: None,
+            position: from,
+            speed: Fixed::ZERO,
+            velocity: (Fixed::ZERO, Fixed::ZERO),
+            hp: 1,
+            amount: Fixed::ZERO,
+            task: Task::Fly {
+                target,
+                damage,
+                aim,
+            },
+            training: None,
+            construction: None,
+            researching: None,
+            carry: Fixed::ZERO,
+            variant: None,
+        })?;
+        Ok(id)
+    }
+
     /// How many units this player has. Every unit is worth one: the dat has no per-unit population
     /// cost, and neither does the game.
     fn population(&self, player: u8) -> u32 {
@@ -2644,6 +2725,12 @@ impl World {
         let mut deposits: Vec<EntityId> = Vec::new();
         let mut builders: Vec<(EntityId, EntityId)> = Vec::new();
         let mut strikes: Vec<(EntityId, EntityId)> = Vec::new();
+        // Arrows that landed this tick. They are entities, so they leave the list rather than being
+        // turned idle: an idle arrow would sit in the world forever.
+        let mut landed_arrows: Vec<EntityId> = Vec::new();
+        let mut landings: Vec<(EntityId, i32)> = Vec::new();
+        let mut shots: Vec<Shot> = Vec::new();
+        let projectile_step = self.projectile_step;
 
         // Indexed, not id-collected: resolving each id afterwards is a linear scan per entity,
         // which makes the whole tick O(n^2). The entity list does not change during this loop, so
@@ -2796,6 +2883,23 @@ impl World {
                         (Fixed::from_raw(dx), Fixed::from_raw(dy))
                     }
                 }
+                Task::Fly {
+                    target,
+                    damage,
+                    aim,
+                } => {
+                    // The step is resolved once per tick, outside the borrow: `step_towards` needs no
+                    // table, so the only thing to avoid is touching `self` inside the loop.
+                    let (dx, dy) = step_towards(entity.position, aim, projectile_step);
+                    if dx == 0 && dy == 0 {
+                        // Landing is the only thing an arrow does. Whether it hurts anything is
+                        // decided after the loop, against the target as it stands then: an arrow
+                        // whose target died on the way finds nothing and does not pick another.
+                        landings.push((target, damage));
+                        landed_arrows.push(entity.id);
+                    }
+                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                }
                 Task::Idle => {
                     let dx = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
                         SimError::Displacement {
@@ -2928,6 +3032,24 @@ impl World {
         for (attacker, target) in strikes {
             let landed = self.swing(attacker);
             if landed <= 0 {
+                continue;
+            }
+            let flight = self.projectile_speed();
+            let Some(source) = self
+                .find(attacker)
+                .map(|entity| (entity.position, entity.player))
+            else {
+                continue;
+            };
+            let Some(aim) = self.find(target).map(|entity| entity.position) else {
+                continue;
+            };
+            if flight > 0 && source.0 != aim {
+                // The shot exists now and lands later. It carries the damage resolved when the order
+                // was given, so an upgrade that arrives mid-flight changes nothing about it. It is
+                // *recorded* here and created below, because the entity list is index-stable for the
+                // length of this tick and inserting into it mid-pass would shift every later index.
+                shots.push((source.1, source.0, aim, target, landed));
                 continue;
             }
             if let Some(victim) = self.find_mut(target) {
@@ -3094,6 +3216,24 @@ impl World {
             if let Some(path) = self.paths.get_mut(&id) {
                 path.remove(0);
             }
+        }
+
+        // Shots go up, land, and leave the list, all after the movement pass: the entity list is
+        // index-stable for the length of that pass, and every one of these changes its shape.
+        for (player, from, aim, target, damage) in shots {
+            // A full world loses the shot rather than the tick: a battle must not be stopped by the
+            // entity ceiling.
+            let _ = self.spawn_projectile(player, from, aim, target, damage);
+        }
+        for (target, damage) in landings {
+            if let Some(victim) = self.find_mut(target)
+                && victim.hp > 0
+            {
+                victim.hp -= damage;
+            }
+        }
+        for id in landed_arrows {
+            self.entities.retain(|entity| entity.id != id);
         }
 
         // The dead leave the world only at the end of the tick, once every phase has finished with
@@ -3607,6 +3747,7 @@ impl World {
             fnv_bytes(&mut hash, &entity.id.0.to_le_bytes());
             fnv_bytes(&mut hash, &entity.player.to_le_bytes());
             let (tag, resource) = match entity.kind {
+                EntityKind::Projectile => (b'p', 0u8),
                 EntityKind::Building => (b'b', 0u8),
                 EntityKind::Unit => (b'u', 0),
                 // The column, not a kind: a pack that renumbers its resources renumbers this tag
@@ -3648,6 +3789,17 @@ impl World {
             }
             match entity.task {
                 Task::Idle => fnv_bytes(&mut hash, &[0u8]),
+                Task::Fly {
+                    target,
+                    damage,
+                    aim,
+                } => {
+                    fnv_bytes(&mut hash, &[5u8]);
+                    fnv_bytes(&mut hash, &target.0.to_le_bytes());
+                    fnv_bytes(&mut hash, &damage.to_le_bytes());
+                    fnv_bytes(&mut hash, &aim.0.raw().to_le_bytes());
+                    fnv_bytes(&mut hash, &aim.1.raw().to_le_bytes());
+                }
                 Task::Attack {
                     target,
                     damage,

@@ -51,6 +51,19 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Twenty-fourth pass: an arrow costs a scan when it is fired, and nothing per tick (2026-10-27)
+
+A shot is an entity, so it is walked by every per-tick pass like any other - but it does no work of its own
+beyond one `step_towards` and a comparison, and it exists for the eight-ish ticks of its flight. The cost
+that is not obvious is **id allocation**: `spawn_projectile` takes one past the highest id, which is a walk
+of the entity list per shot. Trained units already do exactly this, so it is consistent rather than new, and
+at 126 entities it is a rounding error - but in a fight with thirty archers firing every two seconds it is
+thirty walks of the list per volley. If that ever shows in a profile, the fix is a stored `next_id` on
+`World`, and then the whole engine gets it rather than projectiles alone.
+
+Neither anchor moved: the stability probe is an idle world and the scripted run's first arrow lands before
+its 2,400-tick window in the same shape as before (`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`).
+
 ## Twenty-third pass: the pause costs one scan per producing player per tick (2026-10-27)
 
 The ceiling pause is the first *unconditional* per-tick addition in a while: for every player with a

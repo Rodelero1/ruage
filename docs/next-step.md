@@ -444,6 +444,26 @@ the queue-drain test and by the house and death tests instead.
 
 Next: **projectiles as entities**, which was the instruction this correction interrupted.
 
+## Done next: projectiles as entities (2026-10-27, v0.77)
+
+A shot is an entity now: it flies at `[combat] projectile_speed`, carries the damage resolved when the order
+was given, and lands where it was **aimed** rather than on the unit it was aimed at - so an arrow whose
+target dies on the way finds nothing and does not retarget. It costs no population and cannot be attacked
+(`NotATarget`). Speed zero keeps the old instant behaviour, so old packs are unaffected.
+
+Two shapes of the tick dictated the code, and both were found by breaking them: the entity list is
+index-stable while positions are applied (so shots are recorded during the strike pass and created after
+movement), and `step` already had a `spent` vector for consumed waypoints (so the arrow list had to be
+named something else, or arrows would never be removed).
+
+Mutation-proved: forcing shots back to instant fails both projectile tests.
+
+**Known and recorded:** projectile ids are "one past the highest", an O(n) scan per shot - consistent with
+how trained units are spawned, and the first thing to fix if arrow-heavy fights ever matter in a profile.
+
+Next: **garrison and line of sight**, which is what kind 0 needs before any of its 106 commands can mean
+anything, or **the per-civ 211-number array**, still unread.
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

@@ -7,6 +7,9 @@ use crate::{ConfigError, MaybeFixed, SUPPORTED_SCHEMA};
 #[derive(Debug, Clone)]
 pub struct Combat {
     pub damage: Damage,
+    /// How fast a shot flies, in tiles per second. Zero means shots land where they are aimed with no
+    /// flight at all, which is what a pack written before projectiles existed meant.
+    pub projectile_speed: MaybeFixed,
     pub elevation: Elevation,
     pub attack_timing: AttackTiming,
     pub buildings: Buildings,
@@ -62,6 +65,9 @@ impl Combat {
 struct RawFile {
     schema: u32,
     damage: RawDamage,
+    /// Defaulted to zero: no flight, which is how every shot behaved until this existed.
+    #[serde(default)]
+    projectile_speed: f64,
     elevation: RawElevation,
     attack_timing: RawAttackTiming,
     buildings: RawBuildings,
@@ -145,6 +151,7 @@ pub fn load_combat_str(text: &str, path: &str) -> Result<Combat, ConfigError> {
     }
 
     Ok(Combat {
+        projectile_speed: MaybeFixed::from_f64(raw.projectile_speed),
         damage: Damage {
             minimum: raw.damage.minimum,
             armour_missing_sentinel: MaybeFixed::from_f64(raw.damage.armour_missing_sentinel),

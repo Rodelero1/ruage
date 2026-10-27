@@ -683,3 +683,26 @@ five villagers around a town centre leaves a finished unit nowhere to stand, so 
 the wrong reason. The mutation *is* caught, by `a_queue_can_exceed_the_ceiling_and_drains_later` (which
 expects five alive after eight thousand ticks) and by the two house/death tests. Recorded rather than
 quietly kept: a test whose failure mode is masked by a second rule is worth less than it looks.
+
+## D35 - A shot is an entity, and the tick's shape says where it may be created
+
+Ranged combat landed instant damage at range (D32). A shot is now an entity: it flies at
+`[combat] projectile_speed` tiles per second, carries the damage resolved when the order was given, and
+applies it where it was **aimed** - a position, not the target - so an arrow at a unit that walks or dies
+first finds nothing and does not pick another. The kind is `EntityKind::Projectile`; it is not a unit, so it
+costs no population and cannot be attacked (`NotATarget`). Speed zero means instant damage, which is what
+every pack written before this meant.
+
+**Two shapes of the tick dictated the implementation, and both were discovered by breaking them.**
+
+1. The entity list is **index-stable for the length of a tick**: the movement pass holds indices into it and
+   applies positions afterwards, with a fallback by id and a panic when even that fails. Creating an arrow
+   inside the strike pass shifted every later index and the panic fired inside `step`, in tests that never
+   mentioned projectiles. So shots are *recorded* in the strike pass and created once movement has been
+   applied - the same discipline as `finished`, `switches` and `buried`.
+2. There was already a `spent` vector in `step` (waypoints consumed), so the obvious name for landed arrows
+   bound to the wrong one and arrows were never removed. It is `landed_arrows` now.
+
+The projectile id is "one past the highest", which is an O(n) scan per shot. Training spawns do the same, so
+this is consistent rather than new, and it is recorded in `docs/performance.md` as the thing to fix first if
+arrow-heavy fights ever show up in a profile.

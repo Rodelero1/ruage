@@ -532,3 +532,92 @@ fn fletching_adds_a_tile_of_reach() {
 }
 
 const FLETCHING: u32 = 199;
+
+// --- projectiles --------------------------------------------------------------------------------
+//
+// A shot is an entity that flies: it takes time to land, it can be aimed at something that dies
+// first, and it is not a unit - it does not count towards population and it cannot be attacked.
+
+fn projectiles(world: &World) -> usize {
+    world
+        .entities()
+        .iter()
+        .filter(|e| e.kind == EntityKind::Projectile)
+        .count()
+}
+
+#[test]
+fn an_arrow_takes_time_to_land() {
+    let Some(fx) = fixture() else { return };
+    let mut world = world_with(&fx, &fx.economy);
+    world.load_combat(&fx.combat);
+    let archer = place_moving(&mut world, 1, 9_950, ARCHER, (10, 10), 30, 0.96);
+    let victim = place(&mut world, 2, 9_951, 83, (14, 10), 500);
+    let before = world.entity(victim).expect("victim").hp;
+
+    world
+        .submit_checked(Command::Attack {
+            attacker: archer,
+            target: victim,
+        })
+        .expect("an attack order");
+    world.step().expect("step");
+
+    assert_eq!(
+        world.entity(victim).expect("victim").hp,
+        before,
+        "the first tick of a four-tile shot cannot already have landed"
+    );
+    assert_eq!(projectiles(&world), 1, "there is an arrow in the air");
+    assert_eq!(
+        world
+            .entities()
+            .iter()
+            .find(|e| e.kind == EntityKind::Projectile)
+            .expect("arrow")
+            .player,
+        1,
+        "the arrow belongs to the player who shot it"
+    );
+
+    // Four tiles at ten tiles a second is eight ticks at 20 Hz, plus slack for the reload.
+    for _ in 0..200 {
+        world.step().expect("step");
+    }
+    assert!(
+        world.entity(victim).expect("victim").hp < before,
+        "the arrow landed"
+    );
+}
+
+/// An arrow is not a soldier: it must not be attackable, and it must not cost the shooter population.
+#[test]
+fn an_arrow_is_not_a_unit() {
+    let Some(fx) = fixture() else { return };
+    let mut world = world_with(&fx, &fx.economy);
+    world.load_combat(&fx.combat);
+    let archer = place_moving(&mut world, 1, 9_960, ARCHER, (10, 10), 30, 0.96);
+    let victim = place(&mut world, 2, 9_961, 83, (14, 10), 500);
+    // Player 2's villager exists before the shot is fired, because an arrow takes the next free id.
+    let villager = place(&mut world, 2, 9_962, 83, (14, 11), 25);
+    world
+        .submit_checked(Command::Attack {
+            attacker: archer,
+            target: victim,
+        })
+        .expect("an attack order");
+    world.step().expect("step");
+    let arrow = world
+        .entities()
+        .iter()
+        .find(|e| e.kind == EntityKind::Projectile)
+        .map(|e| e.id)
+        .expect("an arrow in the air");
+    match world.submit_checked(Command::Attack {
+        attacker: villager,
+        target: arrow,
+    }) {
+        Err(SimError::NotATarget { id }) => assert_eq!(id, arrow),
+        other => panic!("expected NotATarget, got {other:?}"),
+    }
+}
