@@ -494,3 +494,183 @@ tech = "bronze_working"
         other => panic!("expected a refusal, got {other:?}"),
     }
 }
+
+/// Purpose-built research content: a free, instant-to-research tech that doubles the health of
+/// buildings. The pack's own health techs are 25 s (Loom, villagers) and 50 s (Masonry, buildings) and
+/// cost resources, so a test that needs a tech to land *during* a 25-second build would be racing them.
+const DOUBLING_TECHS: &str = r#"
+schema = 1
+kind = "techs"
+
+[[tech]]
+id = 900
+effect_id = 900
+research_time = 1
+costs = []
+required = []
+location = 0
+"#;
+
+const DOUBLING_EFFECTS: &str = r#"
+schema = 1
+kind = "effects"
+
+[[effect]]
+id = 900
+name = "Test: buildings double"
+commands = []
+modifiers = [{ op = "multiply", attribute = "hit_points", attribute_class = -1, unit = -1, unit_class = 3, value = 2.0 }]
+"#;
+
+/// A world that uses the real pack but purpose-built research, plus a `doubling` tech role so a step
+/// can name the tech the way content would.
+fn doubling_world(fx: &Fixture, seed: u64) -> World {
+    let techs = ruage_data::load_techs_str(DOUBLING_TECHS, "<doubling techs>").expect("techs");
+    let effects =
+        ruage_data::load_effects_str(DOUBLING_EFFECTS, "<doubling effects>").expect("effects");
+    let text = std::fs::read_to_string(repo("config/economy.toml")).expect("economy.toml");
+    let text = text.replace("[tech_role]", "[tech_role]\ndoubling = 900");
+    let economy = ruage_data::load_economy_str(&text, "<economy with doubling>").expect("economy");
+    let mut world = World::new(&fx.settings, seed).expect("world");
+    world
+        .seed_from(&fx.map, &economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    world.load_combat(&fx.combat);
+    world
+        .load_research(&techs, &effects)
+        .expect("the research tables load");
+    world
+}
+
+fn play_with(world: World, text: &str) -> (World, Runner) {
+    let scenario = load_scenario_str(text, "<scenario>").expect("the scenario parses");
+    let mut world = world;
+    let mut runner = Runner::new(&scenario, world.tick_rate_hz()).expect("a runnable scenario");
+    let ticks =
+        u64::try_from((scenario.duration_seconds * f64::from(world.tick_rate_hz())).round() as i64)
+            .expect("a length in ticks");
+    for _ in 0..ticks {
+        runner.due(&mut world);
+        world.step().expect("step");
+    }
+    (world, runner)
+}
+
+fn houses_of(world: &World, player: u8) -> Vec<(i32, bool)> {
+    world
+        .entities()
+        .iter()
+        .filter(|entity| entity.player == player && entity.unit == Some(70))
+        .map(|entity| (entity.hp, entity.construction.is_some()))
+        .collect()
+}
+
+/// Three villagers on wood, then a house. The house costs 25 wood and takes 25 s.
+const THREE_ON_WOOD: &str = r#"
+[[step]]
+at_seconds = 0.0
+player = 1
+kind = "gather"
+villager = 0
+resource = "wood"
+
+[[step]]
+at_seconds = 0.5
+player = 1
+kind = "gather"
+villager = 1
+resource = "wood"
+nth = 1
+
+[[step]]
+at_seconds = 1.0
+player = 1
+kind = "gather"
+villager = 2
+resource = "wood"
+nth = 2
+"#;
+
+/// A site ordered *after* a health tech must be quoted the new maximum: `check_build` copied the
+/// table's value, so a house put up after the tech finished at the old one.
+#[test]
+fn a_house_ordered_after_a_health_tech_is_quoted_the_new_maximum() {
+    let Some(fx) = fixture() else { return };
+    let text = format!(
+        r#"
+schema = 2
+duration_seconds = 140
+{THREE_ON_WOOD}
+
+[[step]]
+at_seconds = 5.0
+player = 1
+kind = "research"
+building = "town_centre"
+tech = "doubling"
+
+[[step]]
+at_seconds = 60.0
+player = 1
+kind = "build"
+villager = 0
+role = "house"
+"#
+    );
+    let (world, runner) = play_with(doubling_world(&fx, 7), &text);
+    assert!(
+        runner
+            .outcomes
+            .iter()
+            .all(|(_, outcome)| *outcome == Outcome::Ran),
+        "every step ran: {:?}",
+        runner.outcomes
+    );
+    let houses = houses_of(&world, 1);
+    assert_eq!(houses.len(), 1, "one house: {houses:?}");
+    assert_eq!(houses[0], (1100, false), "550 x 2, finished");
+}
+
+/// The same defect one layer down: a building already going up when the tech lands used to finish at
+/// the maximum it was quoted, because the site stores that number and nothing refreshed it.
+#[test]
+fn a_house_finished_after_a_health_tech_reaches_the_new_maximum() {
+    let Some(fx) = fixture() else { return };
+    let text = format!(
+        r#"
+schema = 2
+duration_seconds = 160
+{THREE_ON_WOOD}
+
+[[step]]
+at_seconds = 60.0
+player = 1
+kind = "build"
+villager = 0
+role = "house"
+
+# 1 s of research, landing while the 25 s build is still going.
+[[step]]
+at_seconds = 70.0
+player = 1
+kind = "research"
+building = "town_centre"
+tech = "doubling"
+"#
+    );
+    let (world, runner) = play_with(doubling_world(&fx, 7), &text);
+    assert!(
+        runner
+            .outcomes
+            .iter()
+            .all(|(_, outcome)| *outcome == Outcome::Ran),
+        "every step ran: {:?}",
+        runner.outcomes
+    );
+    let houses = houses_of(&world, 1);
+    assert_eq!(houses.len(), 1, "one house: {houses:?}");
+    assert_eq!(houses[0], (1100, false), "550 x 2, finished");
+}

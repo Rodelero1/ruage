@@ -67,15 +67,22 @@ Two defects the review of this slice found, and what is left of them:
   unit by 0.35 scale units. `scale_fixed` now scales an addition before adding it, and
   `a_speed_addition_arrives_in_tiles_per_second_and_not_in_scale_units` pins it (a free, instant tech
   that gives a 1.2-tile scout +0.35, so the speed must read 31000 at scale 20000).
-- **A build site was quoted the table's health, not the player's** (fixed, **not yet tested**). A house
-  ordered after Masonry used to finish at 550 rather than 605, because `check_build` copied `stats.hp`.
-  It now goes through `max_hp` like everything else. The test is missing for a mechanical reason worth
-  writing down: the seeded fixture refuses a build order from where its villagers stand (`NoPath` on
-  every candidate tile within three tiles), and the scenario runner - which does find a legal site -
-  cannot afford Masonry's 150 food and 175 wood *and* a house on the scripted income. The next slice
-  should drive this through the scenario runner with a purpose-built map. **A building already going up
-  when a health tech lands still keeps the maximum it was quoted**, which is the same defect one layer
-  down and wants the same test.
+- **A build site was quoted the table's health, not the player's** (fixed **and now tested**). A house
+  ordered after a health tech finished at 550 rather than 605, because `check_build` copied `stats.hp`.
+  Both halves are closed, and the tests exist because the test debt was paid by building the content the
+  test needed rather than by lowering the claim: a purpose-built pair of tables (a free, 1-second tech
+  that doubles building health) removes the race against the pack's 50-second Masonry, and the scenario
+  runner supplies the legal build site the seeded fixture would not.
+  - `a_house_ordered_after_a_health_tech_is_quoted_the_new_maximum` - the order-time quote.
+  - `a_house_finished_after_a_health_tech_reaches_the_new_maximum` - and the same defect one layer
+    down: a site already going up when the tech lands used to finish at the maximum it was quoted,
+    because `Construction` stores that number and nothing refreshed it. `finish_research` now updates
+    `construction.max_hp` alongside the entity's health.
+
+**`[[train.entry]]` stopped quoting ids** in the same pass: `building = "town_centre"`,
+`units = ["villager"]`, resolved through `[role]` at load, with an unknown role refused by name and an
+integer refused outright — accepting both spellings is how the numbering creeps back in. A role the
+table lacks is an error the author sees at load, not a building that quietly makes the wrong unit.
 
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

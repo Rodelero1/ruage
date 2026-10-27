@@ -148,8 +148,10 @@ struct RawTrain {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawTrainEntry {
-    building: u32,
-    units: Vec<u32>,
+    /// A role from `[role]`, never a dat id: everything that names a unit in content names it by
+    /// role, and accepting both spellings is how the numbering creeps back in (D17).
+    building: String,
+    units: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -364,12 +366,15 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         train: {
             let mut by_building: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
             for entry in raw.train.entry {
-                if entry.building == 0 {
-                    return Err(ConfigError::Invalid {
-                        key: "train.entry.building".to_owned(),
-                        detail: "unit 0 is not a building".to_owned(),
-                    });
-                }
+                let role_of = |role: &str| {
+                    raw.role.get(role).copied().ok_or_else(|| ConfigError::Invalid {
+                        key: format!("train.entry[{:?}]", entry.building),
+                        detail: format!(
+                            "{role:?} is not a role in this pack's [role] table, so no unit can be \
+                             named by it"
+                        ),
+                    })
+                };
                 if entry.units.is_empty() {
                     return Err(ConfigError::Invalid {
                         key: format!("train.entry[{}].units", entry.building),
@@ -377,13 +382,12 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
                             .to_owned(),
                     });
                 }
-                if entry.units.contains(&0) {
-                    return Err(ConfigError::Invalid {
-                        key: format!("train.entry[{}].units", entry.building),
-                        detail: "unit 0 is scenery, not something to train".to_owned(),
-                    });
+                let building = role_of(&entry.building)?;
+                let mut units = Vec::with_capacity(entry.units.len());
+                for role in &entry.units {
+                    units.push(role_of(role)?);
                 }
-                if by_building.insert(entry.building, entry.units).is_some() {
+                if by_building.insert(building, units).is_some() {
                     return Err(ConfigError::Invalid {
                         key: format!("train.entry[{}]", entry.building),
                         detail: "two entries for one building: the later would silently win"

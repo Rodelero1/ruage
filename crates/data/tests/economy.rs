@@ -30,8 +30,8 @@ forage = 120
 [build]
 repair_hp_per_second = -1.0
 [[train.entry]]
-building = 109
-units = [83]
+building = "town_centre"
+units = ["villager"]
 [decay]
 enabled = true
 rate_from = "dat"
@@ -284,16 +284,20 @@ fn the_real_file_says_who_trains_what() {
 
 #[test]
 fn a_building_listed_twice_is_refused() {
-    let bad = GOOD.to_owned() + "\n[[train.entry]]\nbuilding = 109\nunits = [83]\n";
+    let bad =
+        GOOD.to_owned() + "\n[[train.entry]]\nbuilding = \"town_centre\"\nunits = [\"villager\"]\n";
     let err = load_economy_str(&bad, "economy.toml")
         .expect_err("a duplicate building entry must be refused")
         .to_string();
-    assert!(err.contains("train.entry[109]"), "got: {err}");
+    assert!(
+        err.contains("town_centre"),
+        "the refusal names the role: {err}"
+    );
 }
 
 #[test]
 fn a_building_that_trains_nothing_is_refused() {
-    let bad = GOOD.replace("units = [83]", "units = []");
+    let bad = GOOD.replace("units = [\"villager\"]", "units = []");
     let err = load_economy_str(&bad, "economy.toml")
         .expect_err("an empty unit list must be refused")
         .to_string();
@@ -354,4 +358,33 @@ fn tech_roles_name_techs_and_must_point_at_real_ones() {
         .expect_err("tech 0 is a real tech, never a role")
         .to_string();
     assert!(err.contains("man_at_arms"), "got: {err}");
+}
+
+/// `[[train.entry]]` used to quote dat ids while everything else named roles, which is the one place
+/// content could still be silently wrong about which unit it meant. A role is the only spelling now.
+#[test]
+fn a_train_entry_names_units_by_role() {
+    let economy = load_economy_str(GOOD, "economy.toml").expect("fixture loads");
+    assert!(
+        economy.train.allows(109, 83),
+        "town_centre -> villager, resolved through [role]"
+    );
+
+    let unknown = GOOD.replace("units = [\"villager\"]", "units = [\"militia\"]");
+    let err = load_economy_str(&unknown, "economy.toml")
+        .expect_err("a role the table does not define cannot be trained")
+        .to_string();
+    assert!(err.contains("militia"), "the refusal names it: {err}");
+    assert!(err.contains("[role]"), "and says where roles live: {err}");
+
+    // An id where a role belongs is refused rather than quietly accepted, because accepting both
+    // spellings is how the numbering creeps back in.
+    let numeric = GOOD.replace("units = [\"villager\"]", "units = [83]");
+    let err = load_economy_str(&numeric, "economy.toml")
+        .expect_err("an id is not a role")
+        .to_string();
+    assert!(
+        err.contains("units"),
+        "the refusal points at the field: {err}"
+    );
 }

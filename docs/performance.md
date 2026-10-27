@@ -51,6 +51,26 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Sixth pass: measured against the previous commit, not against a memory (2026-10-27)
+
+The fifth pass could only say "3-8% slower at the larger sizes, but the box was busy", which is not a
+result. This pass fixes the method instead of the code: a **worktree of `HEAD`** built beside the
+working tree, run **interleaved** (base, new, base, new), so the host's load cancels out of the ratio.
+It needs `config/gamedata` copied in - that directory is generated (D8), so it is not in git and a
+worktree starts without it, and a perf probe with no unit table just skips.
+
+| entities | base (HEAD) | new | reading |
+|---|---|---|---|
+| 126 | 2.18, 2.31 | 2.39, 2.43 | noise swamps it: 2.18-2.43 across four runs on a loaded box |
+| 1126 | 19.26, 19.34 | 19.37, 19.30 | identical |
+| 2126 | 36.90, 37.09 | 36.89, 36.51 | identical |
+
+Load average 3.2-4.4 throughout, from outside this container (no process in it was using CPU), which is
+why the interleaved ratio is the only number worth reading. **Nothing in this slice runs per tick**: the
+`[[train.entry]]` roles are resolved when the pack loads, and the construction maximum is refreshed when
+a research completes. Two hashes agree with that: the four-hour probe still prints `936e71d5a641044f`
+and the 600-tick scripted run still prints `0f5eea624d75d87a`, both unchanged from the previous pass.
+
 ## Fifth pass, after health, speed, gather rate and carry (2026-10-26)
 
 Nothing in this slice runs per tick: health and speed are read when a unit spawns, is upgraded or has

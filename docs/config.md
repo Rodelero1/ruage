@@ -111,6 +111,11 @@ and the engine's own free-tile search finds the centre through `start.town_centr
 refuses an empty role table, a role mapped to unit 0 (zero is a real unit id, so it cannot mean
 "unset"), and a `[start]` naming a role the table does not define.
 
+`[[train.entry]]` says which building may create which unit, and it names **roles**, like everything
+else that talks about a unit: `building = "town_centre"`, `units = ["villager"]`. The ids are resolved
+through `[role]` when the pack loads, so an author who mistypes a role is told at load which name was
+unknown; an integer is refused outright rather than accepted as a second spelling.
+
 `[tech_role]` does the same job for **techs**, which the dat does not name at all (a tech carries a
 string-id into the game's language files, so the importer has no word for one): `man_at_arms = 222`,
 `loom = 22`, `feudal_age = 101`. It is optional — a pack with no research needs no table — but a

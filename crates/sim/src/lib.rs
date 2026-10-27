@@ -1842,6 +1842,13 @@ impl World {
             let speed = self.effective_speed(player, unit_id)?;
             let grant = new_max - old_max;
             if let Some(entity) = self.find_mut(id) {
+                // A site that is still going up stores the maximum it will finish at, so it has to
+                // hear about the new one too - otherwise a house whose build overlapped the tech
+                // would finish at the health it was quoted when the order landed.
+                if let Some(mut construction) = entity.construction {
+                    construction.max_hp = new_max;
+                    entity.construction = Some(construction);
+                }
                 entity.hp = entity.hp.saturating_add(grant).clamp(1, new_max);
                 entity.speed = speed;
             }

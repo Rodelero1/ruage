@@ -87,16 +87,17 @@ villagers_per_player = 3
 # rule, not a dat field, which is exactly why it belongs in config.
 
 [[train.entry]]
-building = 109
-units = [83]
+building = "town_centre"
+units = ["villager"]
 # PROVENANCE: authored, not a dat field we read. The dat says what a unit costs and how long it
 # takes, and the tech tree disables units per civ, but nothing we parse says "this building
-# makes that unit". So the mapping is content: 109 = RTWC trains 83 = VMBAS.
+# makes that unit". So the mapping is content - and it names roles, like everything else that has
+# to talk about a unit (D17): a town centre makes villagers, a barracks makes spearmen.
 
 [[train.entry]]
-building = 12
-units = [74]
-# 12 = BRKS trains 74 = SPRMN (40 hp, 0.9 tiles/s, 60 food + 20 gold, 21 s).
+building = "barracks"
+units = ["spearman"]
+# A barracks makes spearmen (40 hp, 0.9 tiles/s, 60 food + 20 gold, 21 s).
 
 [role]
 # A role is the engine's word for a unit: everything that must not quote the dat's numbering uses
