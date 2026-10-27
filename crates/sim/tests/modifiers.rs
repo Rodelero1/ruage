@@ -29,7 +29,9 @@ fn slot(name: &str) -> usize {
 const FORGING: u32 = 67;
 const SCALE_MAIL: u32 = 74;
 const SMITH: u32 = 103;
-const SPEARMAN: u32 = 74;
+/// Unit 74 is the militia (40 hp, 4 attack): the dat names it SPRMN, but the upgrade graph and the
+/// stats both say militia. The spear line is 93 -> 358 -> 359.
+const MILITIA: u32 = 74;
 
 /// The stateful ones: Loom (+15 hp to villagers, at the town centre), Masonry (buildings x1.1 hp, at a
 /// castle), Wheelbarrow (villager speed x1.1 and carry x1.25, at the town centre).
@@ -228,13 +230,13 @@ fn blow(world: &mut World, attacker: EntityId, victim: EntityId) -> i32 {
 
 #[test]
 fn forging_adds_one_melee_attack_to_the_infantry_it_covers() {
-    // Published: Forging is +1 melee attack. A spearman's melee attack is 4, and the target's melee
+    // Published: Forging is +1 melee attack. A militia's melee attack is 4, and the target's melee
     // armour is 0, so the blow goes from 4 to 5 - a number the data and the wiki agree on.
     let Some(fx) = fixture() else { return };
 
     let mut plain = seeded(&fx);
-    let attacker = place(&mut plain, 1, 9_100, SPEARMAN, (10, 10), 40);
-    let victim = place(&mut plain, 2, 9_101, SPEARMAN, (11, 10), 40);
+    let attacker = place(&mut plain, 1, 9_100, MILITIA, (10, 10), 40);
+    let victim = place(&mut plain, 2, 9_101, MILITIA, (11, 10), 40);
     assert_eq!(
         blow(&mut plain, attacker, victim),
         4,
@@ -244,8 +246,8 @@ fn forging_adds_one_melee_attack_to_the_infantry_it_covers() {
     let mut researched = seeded(&fx);
     feudal(&mut researched);
     let smith = place(&mut researched, 1, 9_102, SMITH, (14, 14), 1_000);
-    let attacker = place(&mut researched, 1, 9_103, SPEARMAN, (10, 10), 40);
-    let victim = place(&mut researched, 2, 9_104, SPEARMAN, (11, 10), 40);
+    let attacker = place(&mut researched, 1, 9_103, MILITIA, (10, 10), 40);
+    let victim = place(&mut researched, 2, 9_104, MILITIA, (11, 10), 40);
     let villager = first_villager(&researched);
     bank(&mut researched, 1, villager, slot("food"), 150);
     research(&mut researched, 1, smith, FORGING, 50);
@@ -266,8 +268,8 @@ fn scale_mail_adds_one_melee_and_one_pierce_armour() {
     // the age it needs to be allowed to.
     feudal_for(&mut world, 2);
     let smith = place(&mut world, 2, 9_110, SMITH, (30, 30), 1_000);
-    let attacker = place(&mut world, 1, 9_111, SPEARMAN, (10, 10), 40);
-    let victim = place(&mut world, 2, 9_112, SPEARMAN, (11, 10), 40);
+    let attacker = place(&mut world, 1, 9_111, MILITIA, (10, 10), 40);
+    let victim = place(&mut world, 2, 9_112, MILITIA, (11, 10), 40);
     let villager = world
         .entities()
         .iter()
@@ -307,14 +309,14 @@ fn a_modifier_only_touches_the_unit_class_it_names() {
 
 #[test]
 fn a_modifier_is_the_researching_players_alone() {
-    // Player 1 researches Forging; player 2's identical spearman must still hit player 1's for 4.
+    // Player 1 researches Forging; player 2's identical militia must still hit player 1's for 4.
     // If the adjustment were keyed on the unit rather than its owner, both sides would get it.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     feudal(&mut world);
     let smith = place(&mut world, 1, 9_130, SMITH, (14, 14), 1_000);
-    let mine = place(&mut world, 1, 9_131, SPEARMAN, (20, 20), 40);
-    let theirs = place(&mut world, 2, 9_132, SPEARMAN, (21, 20), 40);
+    let mine = place(&mut world, 1, 9_131, MILITIA, (20, 20), 40);
+    let theirs = place(&mut world, 2, 9_132, MILITIA, (21, 20), 40);
     let villager = first_villager(&world);
     bank(&mut world, 1, villager, slot("food"), 150);
     research(&mut world, 1, smith, FORGING, 50);
@@ -379,8 +381,8 @@ location = 0
         .expect("the tables load");
 
     let smith = place(&mut world, 1, 9_140, SMITH, (14, 14), 1_000);
-    let attacker = place(&mut world, 1, 9_141, SPEARMAN, (10, 10), 40);
-    let victim = place(&mut world, 2, 9_142, SPEARMAN, (11, 10), 40);
+    let attacker = place(&mut world, 1, 9_141, MILITIA, (10, 10), 40);
+    let victim = place(&mut world, 2, 9_142, MILITIA, (11, 10), 40);
     // The custom table's one tech is 222, so that is what this world can research.
     research(&mut world, 1, smith, 222, 0);
 
@@ -414,10 +416,10 @@ fn loom_raises_every_villagers_health_immediately() {
         25,
         "the grant is health, not a reset: 10 + 15"
     );
-    // And it is the villagers', not everything's: a spearman is class 6.
-    let spearman = place(&mut world, 1, 9_203, SPEARMAN, (12, 10), 40);
+    // And it is the villagers', not everything's: a militia is class 6.
+    let militia = place(&mut world, 1, 9_203, MILITIA, (12, 10), 40);
     assert_eq!(
-        world.entity(spearman).expect("spearman").hp,
+        world.entity(militia).expect("militia").hp,
         40,
         "Loom names class 4, so infantry keeps its 40"
     );
@@ -578,8 +580,8 @@ fn an_age_up_does_not_take_the_blacksmith_away() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let smith = place(&mut world, 1, 9_400, SMITH, (14, 14), 1_000);
-    let attacker = place(&mut world, 1, 9_401, SPEARMAN, (10, 10), 40);
-    let victim = place(&mut world, 2, 9_402, SPEARMAN, (11, 10), 40);
+    let attacker = place(&mut world, 1, 9_401, MILITIA, (10, 10), 40);
+    let victim = place(&mut world, 2, 9_402, MILITIA, (11, 10), 40);
     let villager = first_villager(&world);
     bank(&mut world, 1, villager, slot("food"), 150);
     feudal(&mut world);

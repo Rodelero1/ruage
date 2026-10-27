@@ -28,7 +28,18 @@ fn slot(name: &str) -> usize {
 
 /// Man-at-Arms, and the two units it swaps.
 const MAN_AT_ARMS: u32 = 222;
-const SPEARMAN: u32 = 74;
+/// Unit 74 is the **militia** (40 hp, 60 food/20 gold, 21 s) - the dat's name field calls it SPRMN,
+/// but the upgrade graph is decisive: the Man-at-Arms, Long Swordsman, Two-Handed Swordsman and
+/// Champion effects all upgrade *from* 74.
+const MILITIA: u32 = 74;
+/// The spear line: spearman 93 (45 hp), pikeman 358 (55 hp), halberdier 359 (60 hp).
+const SPEARMAN: u32 = 93;
+const PIKEMAN: u32 = 358;
+const HALBERDIER: u32 = 359;
+/// The upgrades: tech 197 (45 s, 215 food + 90 gold, Castle Age) and 429 (50 s, 300 food + 600 gold,
+/// Imperial, and it upgrades spearmen *and* pikemen).
+const PIKEMAN_TECH: u32 = 197;
+const HALBERDIER_TECH: u32 = 429;
 const SWORDSMAN: u32 = 75;
 const BARRACKS: u32 = 12;
 const TOWN_CENTRE: u32 = 109;
@@ -148,6 +159,20 @@ fn free_tile(world: &World, from: EntityId) -> (u16, u16) {
     panic!("nowhere to build");
 }
 
+/// Place an order and step until the tech lands, or fail saying it never did.
+fn research(world: &mut World, player: u8, building: EntityId, tech: u32, seconds: u32) {
+    world
+        .submit_checked(Command::Research { building, tech })
+        .expect("the research order is legal");
+    for _ in 0..u64::from(seconds) * u64::from(world.tick_rate_hz()) + 40 {
+        world.step().expect("step");
+        if world.researched(player).contains(&tech) {
+            return;
+        }
+    }
+    panic!("tech {tech} never landed");
+}
+
 fn first_villager(world: &World) -> EntityId {
     world
         .entities()
@@ -210,7 +235,7 @@ fn place(world: &mut World, player: u8, id: u32, unit: u32, tile: (i64, i64), hp
         .submit_checked(Command::Spawn {
             id,
             player,
-            kind: if unit == SPEARMAN {
+            kind: if unit == MILITIA {
                 EntityKind::Unit
             } else {
                 EntityKind::Building
@@ -264,7 +289,7 @@ fn the_man_at_arms_effect_is_an_upgrade_and_nothing_else() {
     let command = effect.commands[0];
     assert_eq!(
         (command.a, command.b),
-        (SPEARMAN as i16, SWORDSMAN as i16),
+        (MILITIA as i16, SWORDSMAN as i16),
         "74 becomes 75"
     );
 }
@@ -403,10 +428,10 @@ fn research_takes_the_techs_own_time_and_then_upgrades_what_its_owner_has() {
     feudal(&mut world);
     let barracks = place(&mut world, 1, 9_004, BARRACKS, (18, 18), 1200);
     // Two of the player's spearmen: one untouched, one at half health, so the fraction can be seen.
-    let whole = place(&mut world, 1, 9_010, SPEARMAN, (18, 20), 40);
-    let hurt = place(&mut world, 1, 9_011, SPEARMAN, (20, 18), 20);
+    let whole = place(&mut world, 1, 9_010, MILITIA, (18, 20), 40);
+    let hurt = place(&mut world, 1, 9_011, MILITIA, (20, 18), 20);
     // And one of the opponent's, which must not be touched.
-    let enemy = place(&mut world, 2, 9_012, SPEARMAN, (20, 20), 40);
+    let enemy = place(&mut world, 2, 9_012, MILITIA, (20, 20), 40);
 
     let before = world.stock(1, slot("food"));
     let gold_before = world.stock(1, slot("gold"));
@@ -430,7 +455,7 @@ fn research_takes_the_techs_own_time_and_then_upgrades_what_its_owner_has() {
     }
     assert_eq!(
         world.entity(whole).expect("still there").unit,
-        Some(SPEARMAN),
+        Some(MILITIA),
         "one tick before its time, nothing has happened yet"
     );
 
@@ -458,7 +483,7 @@ fn research_takes_the_techs_own_time_and_then_upgrades_what_its_owner_has() {
     // And the opponent's identical unit is untouched.
     assert_eq!(
         world.entity(enemy).expect("still there").unit,
-        Some(SPEARMAN),
+        Some(MILITIA),
         "an upgrade is the researching player's alone"
     );
 }
@@ -802,4 +827,95 @@ fn a_trebuchet_cannot_be_trained_before_the_imperial_age() {
             unit: TREBUCHET,
         })
         .expect("now it can be trained");
+}
+
+/// The spear line end to end, as the game has it: a spearman exists once the Feudal Age brings the
+/// availability tech, a pikeman needs a researched upgrade, and a barracks keeps training "the spear
+/// line" as it advances - but never a unit whose upgrade has not been researched.
+#[test]
+fn a_barracks_trains_the_spear_line_only_as_far_as_it_is_unlocked() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let barracks = place(&mut world, 1, 9_800, BARRACKS, (14, 14), 1200);
+    bank(&mut world, slot("food"), 600);
+    bank(&mut world, slot("gold"), 300);
+
+    // Dark Age: no spearman. The availability tech (87 "Pike") requires the Feudal Age.
+    let err = world
+        .submit_checked(Command::Train {
+            building: barracks,
+            unit: SPEARMAN,
+        })
+        .expect_err("a spearman is not available in the Dark Age")
+        .to_string();
+    assert!(err.contains("93"), "the refusal names the unit: {err}");
+
+    feudal(&mut world);
+    world
+        .submit_checked(Command::Train {
+            building: barracks,
+            unit: SPEARMAN,
+        })
+        .expect("the Feudal Age makes spearmen available");
+
+    // The pikeman is an *upgrade*, not an availability: the barracks may train it only once the
+    // Pikeman tech has been researched, even though it is the same line.
+    feudal(&mut world);
+    world.grant_tech(1, 102).expect("the Castle Age");
+    let err = world
+        .submit_checked(Command::Train {
+            building: barracks,
+            unit: PIKEMAN,
+        })
+        .expect_err("a pikeman needs its upgrade researched")
+        .to_string();
+    assert!(
+        err.contains("358") || err.contains("197"),
+        "the refusal names the unit or its tech: {err}"
+    );
+
+    bank(&mut world, slot("food"), 300);
+    bank(&mut world, slot("gold"), 200);
+    research(&mut world, 1, barracks, PIKEMAN_TECH, 45);
+    world
+        .submit_checked(Command::Train {
+            building: barracks,
+            unit: PIKEMAN,
+        })
+        .expect("after the Pikeman tech the barracks trains pikemen");
+}
+
+/// The other half: the upgrade reaches units that already exist, and the halberdier tech upgrades a
+/// spearman directly - that is how the effect spells it (`[3, 93, 359]` *and* `[3, 358, 359]`).
+#[test]
+fn the_spear_line_upgrades_the_units_the_player_already_has() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    feudal(&mut world);
+    let barracks = place(&mut world, 1, 9_810, BARRACKS, (14, 14), 1200);
+    let spearman = place(&mut world, 1, 9_811, SPEARMAN, (10, 10), 45);
+    assert_eq!(
+        world.entity(spearman).expect("spearman").unit,
+        Some(SPEARMAN)
+    );
+
+    world.grant_tech(1, 102).expect("the Castle Age");
+    bank(&mut world, slot("food"), 400);
+    bank(&mut world, slot("gold"), 200);
+    research(&mut world, 1, barracks, PIKEMAN_TECH, 45);
+    let pikeman = world.entity(spearman).expect("the upgraded unit");
+    assert_eq!(pikeman.unit, Some(PIKEMAN), "the spearman is now a pikeman");
+    assert_eq!(pikeman.hp, 55, "45 of 45 becomes 55 of 55, not a reset");
+
+    world.grant_tech(1, 103).expect("the Imperial Age");
+    bank(&mut world, slot("food"), 400);
+    bank(&mut world, slot("gold"), 700);
+    research(&mut world, 1, barracks, HALBERDIER_TECH, 50);
+    let halberdier = world.entity(spearman).expect("the upgraded unit");
+    assert_eq!(
+        halberdier.unit,
+        Some(HALBERDIER),
+        "and the halberdier tech takes the pikeman on"
+    );
+    assert_eq!(halberdier.hp, 60);
 }

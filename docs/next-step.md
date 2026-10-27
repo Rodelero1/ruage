@@ -207,6 +207,30 @@ direction is not established - they are the last thing keeping a civ's *negative
 model; then **per-player civs**, which is what would let two players be different civilisations and stop
 `[start] civ` being a single name; then the **team bonuses** and the per-civ tuning array.
 
+## Done next: the spear line, and the wrong id that was hiding in it (2026-10-27, v0.65)
+
+Your question - spearmen free with the Feudal Age, pikemen and halberdiers researched - is how the data
+works, and checking it found our content naming the **militia** as a spearman (D25: 74 is 40 hp,
+60 food + 20 gold, and every infantry upgrade starts from it). The line is **93 -> 358 -> 359**: tech 87
+"Pike" makes 93 available (free, instant, requires Feudal), 197 upgrades 93 -> 358 at the Castle Age, 429
+upgrades both 93 -> 359 and 358 -> 359 at the Imperial Age.
+
+So content now says `militia = 74`, `spearman = 93`, `pikeman = 358`, `halberdier = 359`, and the barracks
+trains **militia and spearmen**. Two engine rules made that honest rather than decorative:
+
+- **An upgrade target is not available, it is an upgrade.** `check_train` refuses a unit whose upgrade
+  tech is not researched, so a barracks cannot train halberdiers just because the entry lists the line.
+- **The line counts for the entry check.** A pikeman matches a `[train.entry]` that names spearmen,
+  through the family root - which is the same machinery the buildings use.
+
+The ten-minute scenario now trains **militia**, which is what a Dark Age barracks can make; it does not
+age up, and pretending otherwise would have meant hiding the rule it is meant to exercise.
+
+What is left, in order: the `b = 0/-1` kind-2 rows (the Huns' house and four "enable animal" rows),
+per-player civs, team bonuses, and the per-civ tuning array. One more thing this step taught: **the
+dat's name codes are not identity** - the spear line is evidence for that, and any future role should be
+chosen from stats and the upgrade graph rather than from the name.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

@@ -117,20 +117,22 @@ kind = "gather"
 villager = 2
 resource = "gold"
 
+# A barracks in the Dark Age trains militia: a spearman needs the Feudal Age (the "Pike" tech makes it
+# available), and this script never gets that far - which is exactly what the availability rule says.
 [[step]]
 at_seconds = 500.0
 player = 1
 kind = "train"
 building = "barracks"
-role = "spearman"
+role = "militia"
 
-# The spearman walks to the nearest enemy villager and fights. The opponent is told to stand there,
+# The militia walks to the nearest enemy villager and fights. The opponent is told to stand there,
 # which is what makes this a fair test of time-to-kill rather than of pathing.
 [[step]]
 at_seconds = 525.0
 player = 1
 kind = "attack"
-attacker = "spearman"
+attacker = "militia"
 target = "nearest_enemy"
 
 # --- player 2: the scripted opponent --------------------------------------------------------------

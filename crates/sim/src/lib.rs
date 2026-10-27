@@ -431,6 +431,11 @@ pub enum SimError {
     TechInProgress {
         tech: u32,
     },
+    /// The unit is an upgrade, and the tech that upgrades into it has not been researched.
+    UnitNotUpgraded {
+        unit: u32,
+        tech: u32,
+    },
     /// The player has no way to have this unit yet: some tech makes it available, and that tech has not
     /// been researched.
     UnitUnavailable {
@@ -572,6 +577,10 @@ impl fmt::Display for SimError {
             SimError::TechInProgress { tech } => write!(
                 f,
                 "tech {tech} is already being researched at another building"
+            ),
+            SimError::UnitNotUpgraded { unit, tech } => write!(
+                f,
+                "unit {unit} is an upgrade: tech {tech} has not been researched by this player"
             ),
             SimError::UnitUnavailable { unit } => write!(
                 f,
@@ -795,6 +804,9 @@ pub struct World {
     /// Units that some tech *makes available* (kind-2 rows with a positive flag). Derived from the
     /// effects table at load: content, not state, so it is not hashed.
     gated_units: BTreeSet<u32>,
+    /// Unit id -> the tech whose effect upgrades into it. A pikeman is not "available", it is an
+    /// *upgrade*: the barracks may train one only once the Pikeman tech has been researched.
+    upgrade_tech: BTreeMap<u32, u32>,
     /// Techs that cost nothing, take no time, have no home building and do nothing but make units
     /// available. They are bookkeeping - "the barracks exists now" - so the engine applies them as soon
     /// as their prerequisites are met instead of asking a player to spend a click on them.
@@ -832,6 +844,7 @@ impl World {
             civs: None,
             civ: None,
             gated_units: BTreeSet::new(),
+            upgrade_tech: BTreeMap::new(),
             availability_techs: Vec::new(),
             resolving_availability: false,
             start_stock_applied: false,
@@ -1368,12 +1381,26 @@ impl World {
         if !self.unit_available(entity.player, unit) {
             return Err(SimError::UnitUnavailable { unit });
         }
+        // An upgrade target is not available on its own: a barracks trains pikemen only after the
+        // Pikeman tech. Without this, `[train.entry]` naming the spear line would let a Dark Age
+        // barracks train halberdiers.
+        if let Some(tech) = self.upgrade_tech.get(&unit).copied()
+            && !self.researched(entity.player).contains(&tech)
+        {
+            return Err(SimError::UnitNotUpgraded { unit, tech });
+        }
         // A barracks upgraded by an age is unit 498, and `[train.entry]` names 12.
         let building_root = self
             .units
             .as_ref()
             .map_or(building_unit, |units| units.root(building_unit));
-        if !(economy.train.allows(building_unit, unit) || economy.train.allows(building_root, unit))
+        // The line counts: `[train.entry]` says a barracks trains spearmen, and a barracks keeps doing
+        // that as the line upgrades, so a pikeman matches through the family root.
+        let unit_root = self.units.as_ref().map_or(unit, |units| units.root(unit));
+        if !(economy.train.allows(building_unit, unit)
+            || economy.train.allows(building_root, unit)
+            || economy.train.allows(building_unit, unit_root)
+            || economy.train.allows(building_root, unit_root))
         {
             return Err(SimError::NotTrainableHere {
                 building: building_unit,
@@ -2687,6 +2714,33 @@ impl World {
                 {
                     self.gated_units.insert(unit);
                 }
+            }
+        }
+        // Which tech upgrades into which unit. The lowest tech id wins when two effects could produce
+        // the same unit, so the answer does not depend on iteration order.
+        self.upgrade_tech.clear();
+        for tech in techs.techs.values() {
+            let Some(effect_id) = tech.effect_id else {
+                continue;
+            };
+            let Some(effect) = effects.effects.get(&effect_id) else {
+                continue;
+            };
+            for command in &effect.commands {
+                if command.kind != 3 {
+                    continue;
+                }
+                let (Ok(from), Ok(to)) = (u32::try_from(command.a), u32::try_from(command.b))
+                else {
+                    continue;
+                };
+                if from == to || to == 0 {
+                    continue;
+                }
+                self.upgrade_tech
+                    .entry(to)
+                    .and_modify(|existing| *existing = (*existing).min(tech.id))
+                    .or_insert(tech.id);
             }
         }
         for tech in techs.techs.values() {

@@ -51,6 +51,18 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Twelfth pass: upgrade gating is load-time plus per-order (2026-10-27)
+
+The unit -> upgrade-tech map is built once at table load, and the two gates (available? upgraded?) run on
+`check_train`, i.e. when a player orders a unit. Nothing runs per tick. The interleaved A/B: 126 entities
+2.42 against 2.37-2.38 µs/tick (both rounds), 1,126 19.73-20.30 against 19.53-19.54, 2,126 36.80-37.48
+against 36.91-38.60. That is the same ~2% band recorded since the seventh pass - the one already
+attributed to code layout rather than work - and it is reported rather than treated as free.
+
+The four-hour probe is unchanged again at `b30d49d89f8bcf4f`; the scripted run with all tables hashes
+`470c148c117eae84` at 900 ticks, the difference from the previous pass being the scenario's own change
+(a Dark Age barracks now trains militia, because a spearman needs the Feudal Age).
+
 ## Eleventh pass: availability is load-time and per-order (2026-10-27)
 
 The two availability sets (109 gated units, 81 bookkeeping techs) are derived once when the research

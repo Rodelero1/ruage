@@ -103,9 +103,12 @@ units = ["villager"]
 # makes that unit". So the mapping is content - and it names roles, like everything else that has
 # to talk about a unit (D17): a town centre makes villagers, a barracks makes spearmen.
 
+# A barracks trains the spear line, and it trains it exactly as far as the player has unlocked it: the
+# spearman is availability (kind 2), the pikeman and halberdier are upgrades (kind 3), so the engine
+# refuses the latter two until their techs land.
 [[train.entry]]
 building = "barracks"
-units = ["spearman"]
+units = ["militia", "spearman"]
 
 [[train.entry]]
 building = "castle"
@@ -120,7 +123,13 @@ town_centre = 109   # RTWC, the building a villager drops wood at
 villager = 83       # VMBAS, 25 hp, 0.8 tiles/s
 house = 70          # HOUS, 25 wood, 25 s
 barracks = 12       # BRKS
-spearman = 74       # SPRM, 40 hp, 0.9 tiles/s
+# 74 is the MILITIA, not a spearman: the dat's name field says SPRMN, but its stats are the militia's
+# (40 hp, 60 food/20 gold, 21 s) and every infantry upgrade - Man-at-Arms, Long Swordsman, Two-Handed
+# Swordsman, Champion - upgrades *from* 74. The spear line is 93 -> 358 -> 359.
+militia = 74        # 40 hp, 60 food + 20 gold, 21 s: the Dark Age infantry unit
+spearman = 93       # 45 hp, 35 food + 25 wood, 22 s: available once the Feudal Age lands (tech 87)
+pikeman = 358       # 55 hp: an upgrade, researched (tech 197, Castle Age)
+halberdier = 359    # 60 hp: an upgrade, researched (tech 429, Imperial)
 castle = 82         # CSTL, 4800 hp - available from the Castle Age (tech 137 makes it)
 trebuchet = 331     # PTREB - available from the Imperial Age (tech 256 makes it)
 

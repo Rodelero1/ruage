@@ -408,3 +408,27 @@ Not interpreted: the four `b = 0/-1` rows (the Huns' house, and four "Enable she
 rows with an attribute in `c`). Their direction is not established by anything in the data, and guessing
 would show up as a unit a civilisation mysteriously cannot build. They are recorded here as a known gap
 rather than silently read as "disable".
+
+## D25 - A unit's identity comes from its stats and the upgrade graph, not from its name code
+
+The spear question ("spearman, then a researched pikeman, then a researched halberdier") exposed a wrong
+id in our content: `[role] spearman = 74`, where 74 is the **militia**. Two independent facts say so and
+the name field says otherwise:
+
+- **Stats.** 74 has 40 hp, 60 food + 20 gold, 21 s - published militia numbers. A spearman is 45 hp and
+  35 food + 25 wood, which is unit 93.
+- **The upgrade graph.** Every infantry upgrade starts at 74: `[3, 74, 75]` "Man-at-Arms", `[3, 74, 77]`
+  "Long Swordsman", `[3, 74, 473]` "Two-Handed Swordsman", `[3, 74, 567]` "Champion". Nothing upgrades
+  74 into a spear unit.
+- **The name field** calls 74 "SPRMN" and 93 "PKEMN" - exactly one ahead of what those ids are.
+
+So the rule for content: **trust the stats and the graph.** The name code is an abbreviation, right for
+most units and wrong for this line, and a name is not evidence. The spear line is **93 → 358 → 359**,
+with 87 "Pike" (free, instant, requires Feudal) making 93 available, 197 upgrading 93 → 358 at the Castle
+Age, and 429 upgrading *both* 93 → 359 and 358 → 359 at the Imperial Age.
+
+A second rule fell out of the same chain and is worth stating: **an upgrade target is not "available", it
+is an upgrade.** `[train.entry]` names the line (a barracks trains militia and spearmen), the family root
+means a pikeman matches that entry, and `check_train` refuses a unit whose upgrade tech has not been
+researched - otherwise a Dark Age barracks could train halberdiers the moment someone wrote them into the
+entry list.
