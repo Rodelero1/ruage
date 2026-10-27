@@ -14,6 +14,7 @@ use std::path::Path;
 use ruage_fixed::Fixed;
 use serde::Deserialize;
 
+mod civs;
 mod combat;
 mod cost;
 mod economy;
@@ -22,6 +23,7 @@ mod pack;
 mod resources;
 mod techs;
 mod units;
+pub use civs::{Civ, Civs, load_civs_file, load_civs_str};
 pub use combat::{
     AttackTiming, Buildings, Combat, Damage, Elevation, load_combat_file, load_combat_str,
 };

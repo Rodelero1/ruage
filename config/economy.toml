@@ -86,6 +86,9 @@ villagers_per_player = 3
 # What the match opens with. Every tech in the table lists the Dark Age tech as a prerequisite, so a
 # match that did not start with it could research nothing at all.
 techs = ["dark_age"]
+# Which civilisation the match is played as. The civ table (civs.toml) carries the id and the effect
+# that lists what this civ cannot research, so content names a civ and never an effect id.
+civ = "British"
 # The standard opening. Every name here must be a column in resources.toml: a starting stockpile of a
 # resource the pack does not have is refused when the match is seeded, not silently dropped.
 stock = { food = 200, wood = 200, gold = 100, stone = 200 }

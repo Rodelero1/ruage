@@ -431,6 +431,15 @@ pub enum SimError {
     TechInProgress {
         tech: u32,
     },
+    /// The player's civilisation cannot research the tech at all.
+    TechBarred {
+        tech: u32,
+        civ: String,
+    },
+    /// Content names a civilisation the civ table does not have.
+    UnknownCiv {
+        name: String,
+    },
     /// The tech lists a prerequisite this player has not researched.
     MissingPrerequisite {
         tech: u32,
@@ -558,6 +567,16 @@ impl fmt::Display for SimError {
             SimError::TechInProgress { tech } => write!(
                 f,
                 "tech {tech} is already being researched at another building"
+            ),
+            SimError::TechBarred { tech, civ } => {
+                write!(
+                    f,
+                    "tech {tech} is not available to the {civ}: it is on their restriction list"
+                )
+            }
+            SimError::UnknownCiv { name } => write!(
+                f,
+                "{name:?} is not a civilisation in civs.toml, so no match can be played as it"
             ),
             SimError::MissingPrerequisite {
                 tech,
@@ -758,6 +777,12 @@ pub struct World {
     /// them the way damage is resolved against `combat.toml`: once, at order time.
     techs: Option<ruage_data::Techs>,
     effects: Option<Effects>,
+    /// The civilisations table and the civ this match is played as. The bar list is *derived* from the
+    /// civ's tree effect whenever a research is ordered - it is content, so keeping a copy in state
+    /// would be a second source of truth for the same fact.
+    civs: Option<ruage_data::Civs>,
+    /// Which civilisation, once resolved against the table above.
+    civ: Option<u32>,
     /// Whether the opening stockpile has been applied. Part of state, because it decides whether a
     /// later `load_resources` re-applies it and wipes what the players have gathered since.
     start_stock_applied: bool,
@@ -786,6 +811,8 @@ impl World {
             economy: None,
             techs: None,
             effects: None,
+            civs: None,
+            civ: None,
             start_stock_applied: false,
             researched: BTreeMap::new(),
             stock: [[0; MAX_RESOURCES]; MAX_PLAYERS],
@@ -1699,6 +1726,13 @@ impl World {
                 tech,
             });
         }
+        // A civ's tech tree lists what it *cannot* have, and that outranks "not ready yet": the
+        // British list carries the Hussar, the Eagle line and the Paladin, while no civ's list carries
+        // Loom or an age - so these are restrictions, not permissions (see crates/data/src/civs.rs).
+        // Checked before the prerequisites so a barred tech says so rather than asking for an age.
+        if let Some(civ) = self.barred_by(tech) {
+            return Err(SimError::TechBarred { tech, civ });
+        }
         // Prerequisites: every id a tech lists is a *tech* id (all 614 entries in the table resolve to
         // techs, even where the number also names a building), so the gate is simply "researched".
         for required in &stats.required {
@@ -2607,6 +2641,44 @@ impl World {
         self.grant_starting_techs()
     }
 
+    /// Load the civ table and resolve the civ content plays as. Refused by name when the pack names a
+    /// civ the table does not have: a match would otherwise run with no restrictions at all and give
+    /// the player units their civilisation cannot build.
+    pub fn load_civs(&mut self, civs: &ruage_data::Civs) -> Result<(), SimError> {
+        let wanted = self
+            .economy
+            .as_ref()
+            .and_then(|economy| economy.start.civ.clone());
+        if let Some(name) = wanted {
+            let civ = civs
+                .by_name(&name)
+                .ok_or_else(|| SimError::UnknownCiv { name: name.clone() })?;
+            self.civ = Some(civ.id);
+        }
+        self.civs = Some(civs.clone());
+        Ok(())
+    }
+
+    /// Is this tech on the player's civilisation's restriction list? Returns the civ's name, so a
+    /// refusal can say *whose* rule it is.
+    fn barred_by(&self, tech: u32) -> Option<String> {
+        let civs = self.civs.as_ref()?;
+        let effects = self.effects.as_ref()?;
+        let civ = civs.get(self.civ?)?;
+        let effect = effects.get(civ.tech_tree_effect?)?;
+        // Kind 102 carries the barred id in `value` and leaves the four selectors at -1: the effect
+        // table says "this id is in the tree", with no state field to read a direction from, which is
+        // why the direction had to be settled from the data (see docs/decisions.md D23).
+        let barred = effect.commands.iter().any(|command| {
+            command.kind == 102
+                && command
+                    .value
+                    .resolve(self.scale, "effect.value")
+                    .is_ok_and(|value| value.raw() == i64::from(tech) * self.scale)
+        });
+        barred.then(|| civ.name.clone())
+    }
+
     /// Give each player the resources content says a match opens with (`[start] stock`).
     ///
     /// Called from `seed_from` and from `load_resources` for the same reason the starting techs are
@@ -2807,6 +2879,13 @@ impl World {
     pub fn state_hash(&self) -> u64 {
         let mut hash = FNV_OFFSET_BASIS;
         fnv_bytes(&mut hash, &self.tick.to_le_bytes());
+        // The civilisation is hashed because it changes what the world will allow: two runs that
+        // differ in it refuse different techs, and a replay that lost it would diverge silently. Only
+        // when set, so a world that names no civ hashes exactly as it did before civs existed.
+        if let Some(civ) = self.civ {
+            fnv_bytes(&mut hash, b"civ");
+            fnv_bytes(&mut hash, &civ.to_le_bytes());
+        }
         fnv_bytes(&mut hash, &(self.entities.len() as u32).to_le_bytes());
         for row in &self.stock {
             for value in row {

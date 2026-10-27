@@ -36,6 +36,11 @@ const TOWN_CENTRE: u32 = 109;
 const DARK_AGE: u32 = 104;
 const FEUDAL_AGE: u32 = 101;
 const LOOM: u32 = 22;
+/// The Hussar upgrade (428) and the building it lives in: on the British restriction list.
+const HUSSAR: u32 = 428;
+const STABLE: u32 = 101;
+const SMITH: u32 = 103;
+const FORGING: u32 = 67;
 
 struct Fixture {
     settings: Settings,
@@ -46,6 +51,7 @@ struct Fixture {
     combat: ruage_data::Combat,
     techs: Techs,
     effects: Effects,
+    civs: ruage_data::Civs,
 }
 
 fn fixture() -> Option<Fixture> {
@@ -67,6 +73,7 @@ fn fixture() -> Option<Fixture> {
         combat: ruage_data::load_combat_file(&repo("config/combat.toml")).expect("combat.toml"),
         techs: ruage_data::load_techs_file(&techs).expect("techs.toml"),
         effects: ruage_data::load_effects_file(&effects).expect("effects.toml"),
+        civs: ruage_data::load_civs_file(&repo("config/gamedata/civs.toml")).expect("civs.toml"),
     })
 }
 
@@ -82,6 +89,15 @@ fn seeded(fx: &Fixture) -> World {
     world
         .load_research(&fx.techs, &fx.effects)
         .expect("the tech and effect tables");
+    world.load_civs(&fx.civs).expect("the civ table");
+    world
+}
+
+/// The same, with the civ table supplied by the caller: for the test that gives content a civ the
+/// table does not have.
+fn seeded_with_civs(fx: &Fixture, economy: &ruage_data::Economy, civs: &ruage_data::Civs) -> World {
+    let mut world = seeded_with(fx, economy);
+    world.load_civs(civs).expect("the civ table");
     world
 }
 
@@ -604,4 +620,52 @@ fn starting_techs_arrive_whichever_order_the_tables_are_loaded() {
         world.researched(1).contains(&DARK_AGE),
         "the match opens with the Dark Age even when the tables came first"
     );
+}
+
+/// The British tech tree lists the Hussar upgrade (tech 428, scout 448 -> 441 HUSSAR) among the 31
+/// techs they cannot research - one of the facts that pins the reading of a civ's tree effect as a
+/// list of *restrictions* rather than of permissions.
+#[test]
+fn a_barred_tech_is_refused_by_the_civilisation() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded_with_civs(&fx, &fx.economy, &fx.civs);
+    feudal(&mut world);
+    // A stable is where the Hussar line lives; the civ bar is the reason under test, not the building.
+    let stable = place(&mut world, 1, 9_600, STABLE, (14, 14), 1200);
+    money(&mut world);
+
+    let err = world
+        .submit_checked(Command::Research {
+            building: stable,
+            tech: HUSSAR,
+        })
+        .expect_err("the British cannot research the Hussar")
+        .to_string();
+    assert!(err.contains("British"), "the refusal names the civ: {err}");
+
+    // And it is a bar, not a blanket: a tech the civ does have is allowed through the same door.
+    let smith = place(&mut world, 1, 9_601, SMITH, (16, 16), 1_000);
+    world
+        .submit_checked(Command::Research {
+            building: smith,
+            tech: FORGING,
+        })
+        .expect("Forging is not on the British list");
+}
+
+#[test]
+fn a_pack_naming_a_civilisation_the_table_lacks_is_refused() {
+    let Some(fx) = fixture() else { return };
+    let civs = fx.civs.clone();
+    let mut economy = fx.economy.clone();
+    economy.start.civ = Some("Martian".to_owned());
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    world
+        .seed_from(&fx.map, &economy, &fx.units)
+        .expect("seeding");
+    let err = world
+        .load_civs(&civs)
+        .expect_err("there is no civ called Martian")
+        .to_string();
+    assert!(err.contains("Martian"), "the refusal names it: {err}");
 }

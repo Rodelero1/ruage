@@ -361,3 +361,25 @@ does not claim Microsoft's permission.
 It does not make redistribution of assets lawful, and it does not permit shipping a "convenience" pack
 "for testing". The line is the same one D21 draws: expression we did not create is never ours to
 distribute, whatever the intent.
+
+## D23 - A civ's tech-tree effect lists what the civ *cannot* have
+
+The dat encodes each civilisation's tech tree as an effect whose commands are all **kind 102**, one per
+restricted id, with every selector set to -1 and the id in the value: `[102, -1, -1, -1, 428]`. There is
+no state field, so the file does not say whether an entry permits or forbids. The direction was settled
+from the data rather than assumed:
+
+- **No civ's list contains anything every civ has.** Loom (22), the Feudal/Castle/Imperial ages (101,
+  102, 103), Wheelbarrow (213) and Forging (67) appear in **0 of 32** lists. A list of permissions would
+  have to contain them.
+- **Britain's 31 entries are its real omissions.** 428 upgrades the scout into the **Hussar**; 384 and
+  434 are the **Eagle Warrior** line; 320 upgrades into the **Siege Onager**; 265 upgrades the knight
+  into the **Paladin**. Britain has none of those, and the entries are far too few (31-44 per civ, 97
+  distinct ids in total) to be a permission list, which would run to hundreds.
+
+So a civ's tree effect is a **restriction list**, the engine reads it as such, and the refusal says whose
+rule it is ("not available to the British") rather than pretending to be a generic gate. Barred techs are
+checked **before** prerequisites: a tech the player can never have should say so, not ask for an age.
+
+`team_bonus_effect` is carried and not applied; the per-civ `resources` array (211 numbers of tuning) is
+carried uninterpreted, because naming its entries from the values alone would be guessing.

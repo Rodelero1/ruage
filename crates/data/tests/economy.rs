@@ -53,6 +53,7 @@ town_centre = "town_centre"
 villager = "villager"
 villagers_per_player = 3
 techs = ["man_at_arms"]
+civ = "British"
 
 [population]
 cap_default = 200
@@ -414,4 +415,16 @@ fn a_match_may_start_with_no_research() {
     let plain = GOOD.replace("\ntechs = [\"man_at_arms\"]", "");
     let economy = load_economy_str(&plain, "economy.toml").expect("the field is optional");
     assert!(economy.start.techs.is_empty());
+}
+
+/// Which civilisation a match is played as. The name is content's word for it, and the civ table is
+/// what knows the id and its tech-tree effect, so the economy only carries the name.
+#[test]
+fn the_pack_names_the_civilisation_it_is_played_as() {
+    let economy = load_economy_str(GOOD, "economy.toml").expect("fixture loads");
+    assert_eq!(economy.start.civ.as_deref(), Some("British"));
+
+    let none = GOOD.replace("\nciv = \"British\"", "");
+    let economy = load_economy_str(&none, "economy.toml").expect("the field is optional");
+    assert_eq!(economy.start.civ, None, "a pack may name no civ at all");
 }

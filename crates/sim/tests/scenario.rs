@@ -38,6 +38,7 @@ struct Fixture {
     combat: ruage_data::Combat,
     techs: ruage_data::Techs,
     effects: ruage_data::Effects,
+    civs: ruage_data::Civs,
 }
 
 fn fixture() -> Option<Fixture> {
@@ -63,6 +64,7 @@ fn fixture() -> Option<Fixture> {
             .expect("techs.toml"),
         effects: ruage_data::load_effects_file(&repo("config/gamedata/effects.toml"))
             .expect("effects.toml"),
+        civs: ruage_data::load_civs_file(&repo("config/gamedata/civs.toml")).expect("civs.toml"),
     })
 }
 
@@ -78,6 +80,10 @@ fn world(fx: &Fixture, seed: u64) -> World {
     world
         .load_research(&fx.techs, &fx.effects)
         .expect("the research tables load");
+    // The pack is played as a civilisation, and that is what bars the techs it cannot have.
+    world
+        .load_civs(&fx.civs)
+        .expect("the civ table holds the pack's civilisation");
     world
 }
 

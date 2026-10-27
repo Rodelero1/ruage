@@ -159,6 +159,32 @@ kind-6/kind-101/102 commands decide what a building may train *per age*, which i
 `[train.entry]` means today (it says a barracks trains spearmen, and nothing says a Feudal barracks
 cannot train something else).
 
+## Done next: the civ tech tree as a restriction list (2026-10-27, v0.63)
+
+The dat gives every civilisation a "technology tree" effect whose commands are all kind 102 with nothing
+but an id (`[102, -1, -1, -1, 428]`) — no state field, so the file does not say whether an entry permits
+or forbids. That ambiguity was the last fork worth asking about, and the data answered it (D23):
+
+- **no civ's list contains anything every civ has** — Loom, the ages, Wheelbarrow and Forging appear in
+  **0 of 32** lists, which a permission list could not survive;
+- **Britain's 31 entries are its real omissions** — the Hussar (428), the Eagle line (384, 434), the
+  Siege Onager (320), the Paladin (265).
+
+So a civ's tree is a restriction list. `civs.toml` gains a loader; `[start] civ = "British"` names the
+civilisation by the table's own word; `check_research` refuses a barred tech **before** the prerequisites
+(a tech you can never have should say so, not ask for an age) with a refusal that names the civ; and the
+civ id is hashed, because it changes what the world will allow. Mutation-proved: disabling `barred_by`
+fails `a_barred_tech_is_refused_by_the_civilisation` with the prerequisite message instead.
+
+What that leaves, in the order it now makes sense:
+
+- **unit availability (kind 101 and 6)** — a civ's tree also governs which units and buildings exist for
+  it, and those commands name an id that is *sometimes a unit and sometimes a tech* (U16), so each needs
+  the same evidence treatment the tree effect just had;
+- **per-player civs** — one civ for the match is honest but crude; `[start] civ` should become a list;
+- **team bonuses** (`team_bonus_effect`, carried and unapplied) and the 211-number per-civ `resources`
+  array, both of which need names before they mean anything.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a

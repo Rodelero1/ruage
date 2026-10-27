@@ -23,18 +23,19 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use ruage_data::{
-    load_combat_file, load_economy_file, load_effects_file, load_map_file, load_resources_file,
-    load_sim_file, load_techs_file, load_units_file,
+    load_civs_file, load_combat_file, load_economy_file, load_effects_file, load_map_file,
+    load_resources_file, load_sim_file, load_techs_file, load_units_file,
 };
 use ruage_sim::{Outcome, Runner, World, describe, load_scenario_file};
 
 const USAGE: &str = "usage: ruage-headless --config <sim.toml> --map <map.toml> \
                      --economy <economy.toml> --units <units.toml> \
                      --resources <resources.toml> \
-                     [--combat <combat.toml>] [--script <scenario.toml>] \
-                     [--ticks <n>] [--report <seconds>] --seed <u64>";
+                     [--combat <combat.toml>] [--civs <civs.toml>] \
+                     [--script <scenario.toml>] [--ticks <n>] [--report <seconds>] \
+                     --seed <u64>";
 
-const KNOWN: [&str; 13] = [
+const KNOWN: [&str; 14] = [
     "--config",
     "--map",
     "--economy",
@@ -43,6 +44,7 @@ const KNOWN: [&str; 13] = [
     "--combat",
     "--techs",
     "--effects",
+    "--civs",
     "--script",
     "--seed",
     "--ticks",
@@ -138,6 +140,12 @@ fn run(args: &[String]) -> Result<(), String> {
         world
             .load_research(&techs, &effects)
             .map_err(|err| format!("{err}"))?;
+    }
+    // The civ table is what turns content's civ name into restrictions, so it is optional in the same
+    // way: a run that names a civ but supplies no table is refused rather than played unrestricted.
+    if let Some(path) = parsed.get("--civs") {
+        let civs = load_civs_file(Path::new(path)).map_err(|err| format!("{err}"))?;
+        world.load_civs(&civs).map_err(|err| format!("{err}"))?;
     }
 
     let mut runner = match parsed.get("--script") {

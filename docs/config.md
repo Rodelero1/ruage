@@ -118,6 +118,13 @@ commands, so the importer derives it, and the engine resolves a variant to its r
 names a building: what a tech is researched at, where a carried load may be dropped, what a building
 trains, and what a scenario's `role = "barracks"` means.
 
+`[start] civ = "British"` names the civilisation a match is played as, by the name `civs.toml` gives it.
+The civ table is generated from the dat (`id`, `name`, `tech_tree_effect`, `team_bonus_effect`), and the
+effect it names holds the techs that civ **cannot** research — a restriction list, per D23. Content never
+names the effect id, only the civ; `World::load_civs` resolves the name and refuses an unknown one by
+name. One civ for the whole match for now: per-player civs are a later step, and the civ id is hashed so
+a replay that lost it cannot diverge silently.
+
 `[start] stock = { food = 200, wood = 200, gold = 100, stone = 200 }` is the standard opening: resource
 **names** to amounts, resolved through the pack at load, so a pack with five resources opens with its
 own five. It is applied once - a second `load_resources` does not re-apply it and wipe what the players

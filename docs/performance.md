@@ -51,6 +51,19 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Tenth pass: a civ's bar list is derived per order (2026-10-27)
+
+No tick path changed: the restriction list is resolved inside `check_research`, i.e. when an order is
+placed, and never per tick. The interleaved A/B ran twice; the first pair is parity (1,126 entities 19.73
+against 19.80 µs/tick, 2,126 37.11 against 37.44) and the second was contaminated — base measured 24.79
+and 48.23 on a box whose load average was 4.7, which is the same signature as the false regression in the
+fourth pass. One clean pair plus an a-priori argument that nothing runs per tick is the honest report;
+the contaminated pair is stated rather than quietly dropped.
+
+Hash: the four-hour probe still prints `b30d49d89f8bcf4f` (that world loads no civ, and the civ id is
+hashed only when set, so it hashes exactly as before), while the scripted run **with** `--civs` prints
+`692abe64904f0474` — the intended difference, a world that knows which civilisation it is.
+
 ## Ninth pass: the opening stockpile is seed-time only (2026-10-27)
 
 Interleaved A/B against `HEAD`: 126 entities 2.28-2.35 against base's 2.34-2.38, 1,126 19.05-19.69
