@@ -51,6 +51,16 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Twenty-sixth pass: a rally is read once per finished unit (2026-10-27)
+
+Rally points add nothing per tick: the rally is looked up when a unit finishes training, and `Task::Move` uses
+the movement arm that already existed (a waypoint walk with no work at the end). The state is a `BTreeMap`
+consulted once per unit produced, and the hash walks it - a handful of entries at most.
+
+Both anchors unchanged (`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`). Worth noting for future passes: `Task` grew a
+variant (`Move`), which is the kind of change that moves an idle probe by a few percent for no reason (pass
+thirteen's floor); nothing was claimed from the probe either way.
+
 ## Twenty-fifth pass: garrison is a task, and a building shooting is a unit that stands still (2026-10-27)
 
 Garrison adds no per-tick work: a garrisoned unit's arm of the movement match returns zero movement, and the

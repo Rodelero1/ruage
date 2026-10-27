@@ -525,6 +525,22 @@ test that had been passing off the pierce filter rather than the range check.
 Next: **rally points** (which is what makes production-building garrison usable, and what a scenario wants
 anyway), then kind 0.
 
+## Done next: rally points (2026-10-27, v0.81)
+
+`Command::Rally` with two behaviours: `Some(tile)` sends the finished unit there (`Task::Move`), `None` clears
+it, and `Some` of the *building's own tile* keeps the unit **inside** - which is the half of the
+production-building rule D38 had to leave out. `RallyPoint::Inside` is derived from clicking the building, so no
+second command is needed, and the state lives in a side table (`World.rallies`) that is hashed.
+
+Off-map rallies are refused (`OffMap`); an *unreachable* rally is not, and the unit simply stands where it
+appeared - recorded in D39 as a gap rather than assumed.
+
+Mutation-proved both ways: ignoring the inside arm fails the "stays inside" test, ignoring the tile arm fails the
+"walks there" test.
+
+Next: **kind 0's 106 commands** (garrison capacity is now a real attribute to modify), or the **per-civ
+211-number array**, still unread.
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

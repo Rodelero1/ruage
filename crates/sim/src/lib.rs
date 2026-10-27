@@ -213,6 +213,15 @@ pub struct Research {
     pub fresh: bool,
 }
 
+/// Where a building's finished units go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RallyPoint {
+    /// Walk to this tile and stop.
+    Tile(u16, u16),
+    /// Stay inside the building: the only way a production building holds a unit (D38).
+    Inside,
+}
+
 /// A shot decided this tick: who fired it, from where, where it will land, what it was aimed at and
 /// what it does when it gets there. Created after the movement pass, because the entity list is
 /// index-stable while positions are applied.
@@ -276,6 +285,8 @@ pub enum Task {
     Idle,
     /// Putting up a building at `site`.
     Build { site: EntityId },
+    /// Walking to a place with nothing to do there. The rally point's task: the unit goes, then stops.
+    Move { to: (Fixed, Fixed) },
     /// Inside a building. A garrisoned unit still exists - it costs population and dies with its
     /// shelter - but it is not on the map: it cannot act, and it cannot be attacked.
     Garrisoned { building: EntityId },
@@ -344,6 +355,13 @@ pub enum Command {
     /// Research a tech at a building. Price, duration, where it may happen and what it applies all
     /// come from the tech and effect tables - a replay carries the id, never the numbers.
     Research { building: EntityId, tech: u32 },
+    /// Where a building's finished units go. `Some(tile)` walks them there; `Some` of the building's own
+    /// tile keeps them inside it, which is the only way a production building holds anybody (D38);
+    /// `None` clears the rally and leaves them beside the building.
+    Rally {
+        building: EntityId,
+        point: Option<(u16, u16)>,
+    },
     /// Put a unit inside a building. The capacity is the building's own `garrison` field, so the only
     /// numbers involved are the data's.
     Garrison { unit: EntityId, building: EntityId },
@@ -471,6 +489,10 @@ pub enum SimError {
     /// The unit is too far away to walk into the building: it has to be standing on it or beside it.
     TooFar {
         id: EntityId,
+    },
+    /// A tile outside the map.
+    OffMap {
+        tile: (u16, u16),
     },
     /// Only a building that can fight takes units in from outside.
     CannotGarrisonHere {
@@ -651,6 +673,9 @@ impl fmt::Display for SimError {
             }
             SimError::GarrisonTooDamaged { id } => {
                 write!(f, "entity {} is too badly damaged to hold a garrison", id.0)
+            }
+            SimError::OffMap { tile } => {
+                write!(f, "{tile:?} is not on the map: a place has to be somewhere")
             }
             SimError::CannotGarrisonHere { id } => write!(
                 f,
@@ -919,6 +944,9 @@ pub struct World {
     /// Whether the opening stockpile has been applied. Part of state, because it decides whether a
     /// later `load_resources` re-applies it and wipes what the players have gathered since.
     start_stock_applied: bool,
+    /// Where each building's finished units go, by building. A side table: most buildings have none, and
+    /// `Entity` is walked every tick.
+    rallies: BTreeMap<EntityId, RallyPoint>,
     /// Units waiting behind the one a building is making, by building. A side table rather than a
     /// second field on `Entity`: the entity array is walked every tick, and a `Vec` in it costs every
     /// entity for the sake of a few buildings (docs/performance.md, pass seven).
@@ -952,6 +980,7 @@ impl World {
             civ_by_player: [None; MAX_PLAYERS],
             team_by_player: [1, 2, 3, 4, 5, 6, 7, 8],
             teams_named: false,
+            rallies: BTreeMap::new(),
             queued: BTreeMap::new(),
             gated_units: BTreeSet::new(),
             upgrade_tech: BTreeMap::new(),
@@ -1084,6 +1113,19 @@ impl World {
                 self.check_attack(*attacker, *target)?;
             }
             // Stopping is always legal: there is nothing to be refused.
+            Command::Rally { building, point } => {
+                let entity = self
+                    .find(*building)
+                    .ok_or(SimError::MissingEntity(*building))?;
+                if entity.kind != EntityKind::Building {
+                    return Err(SimError::TrainNeedsABuilding { id: *building });
+                }
+                if let Some((x, y)) = point
+                    && !self.on_map(*x, *y)
+                {
+                    return Err(SimError::OffMap { tile: (*x, *y) });
+                }
+            }
             Command::Garrison { unit, building } => {
                 self.check_garrison(*unit, *building)?;
             }
@@ -1765,6 +1807,38 @@ impl World {
         if inserted.is_err() {
             return false;
         }
+        // Where the finished unit goes: the rally decides, and the default is where it stands.
+        let rally = self.rallies.get(&building).copied();
+        match rally {
+            Some(RallyPoint::Inside) => {
+                // Only a building that can hold units can keep one, and only while there is room.
+                let room = self
+                    .find(building)
+                    .and_then(|entity| entity.unit)
+                    .and_then(|unit| self.units.as_ref().and_then(|units| units.unit(unit)))
+                    .is_some_and(|stats| stats.garrison > 0);
+                if room
+                    && self.check_garrison(id, building).is_ok()
+                    && let Some(entity) = self.find_mut(id)
+                {
+                    entity.task = Task::Garrisoned { building };
+                }
+            }
+            Some(RallyPoint::Tile(x, y)) => {
+                let to = self.tile((x, y));
+                let from = self.find(id).map(|entity| entity.position);
+                if let Some(from) = from
+                    && let Ok(route) = self.plan_path(from, to)
+                {
+                    self.paths.insert(id, route);
+                    if let Some(entity) = self.find_mut(id) {
+                        entity.task = Task::Move { to };
+                    }
+                }
+            }
+            None => {}
+        }
+
         // The next unit in the queue starts where the finished one left off: its own create time was
         // priced when it was ordered, and it begins counting from that total.
         let next = self.queued.get_mut(&building).and_then(|waiting| {
@@ -2703,6 +2777,12 @@ impl World {
         })
     }
 
+    /// Is this tile on the map at all? Free ground is the stricter question, and a rally point may
+    /// legitimately be somewhere with a tree on it.
+    fn on_map(&self, x: u16, y: u16) -> bool {
+        self.walk.as_ref().is_some_and(|walk| walk.contains(x, y))
+    }
+
     /// What may be gathered from an entity, and whether the thing being worked sets the pace: a farm
     /// does (its own work rate), a tree does not (the villager's variant does).
     ///
@@ -2914,6 +2994,28 @@ impl World {
             Command::Train { building, unit } => self.start_train(building, unit),
             Command::Research { building, tech } => self.start_research(building, tech),
             Command::Attack { attacker, target } => self.start_attack(attacker, target),
+            Command::Rally { building, point } => {
+                match point {
+                    None => {
+                        self.rallies.remove(&building);
+                    }
+                    Some(tile) => {
+                        // A rally on the building's own tile means "stay inside". It is the same tile
+                        // the player would click on the building, so no second command is needed.
+                        let inside = self
+                            .find(building)
+                            .map(|entity| self.tile_of(entity.position) == tile)
+                            .unwrap_or(false);
+                        let rally = if inside {
+                            RallyPoint::Inside
+                        } else {
+                            RallyPoint::Tile(tile.0, tile.1)
+                        };
+                        self.rallies.insert(building, rally);
+                    }
+                }
+                Ok(())
+            }
             Command::Garrison { unit, building } => {
                 // Inside, the unit keeps its position and its load: it is sheltered, not teleported.
                 if let Some(entity) = self.find_mut(unit) {
@@ -3152,6 +3254,23 @@ impl World {
                 }
                 // Inside a building: no movement, no work, and no cooldown runs - a sheltered unit is
                 // simply not on the map.
+                Task::Move { to } => {
+                    #[allow(clippy::let_and_return)]
+                    let (dx, dy) = {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        let next = self.next_waypoint(entity.id).unwrap_or(to);
+                        step_towards(entity.position, next, delta.raw())
+                    };
+                    if dx == 0 && dy == 0 && entity.position == to {
+                        finished.push(entity.id);
+                    }
+                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                }
                 Task::Garrisoned { .. } => (Fixed::ZERO, Fixed::ZERO),
                 Task::Idle => {
                     let dx = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
@@ -4001,6 +4120,18 @@ impl World {
         // The civilisation is hashed because it changes what the world will allow: two runs that
         // differ in it refuse different techs, and a replay that lost it would diverge silently. Only
         // when set, so a world that names no civ hashes exactly as it did before civs existed.
+        for (id, rally) in &self.rallies {
+            fnv_bytes(&mut hash, b"rally");
+            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+            match rally {
+                RallyPoint::Inside => fnv_bytes(&mut hash, &[1u8]),
+                RallyPoint::Tile(x, y) => {
+                    fnv_bytes(&mut hash, &[2u8]);
+                    fnv_bytes(&mut hash, &x.to_le_bytes());
+                    fnv_bytes(&mut hash, &y.to_le_bytes());
+                }
+            }
+        }
         for (id, waiting) in &self.queued {
             fnv_bytes(&mut hash, b"queued");
             fnv_bytes(&mut hash, &id.0.to_le_bytes());
@@ -4093,6 +4224,11 @@ impl World {
             }
             match entity.task {
                 Task::Idle => fnv_bytes(&mut hash, &[0u8]),
+                Task::Move { to } => {
+                    fnv_bytes(&mut hash, &[7u8]);
+                    fnv_bytes(&mut hash, &to.0.raw().to_le_bytes());
+                    fnv_bytes(&mut hash, &to.1.raw().to_le_bytes());
+                }
                 Task::Garrisoned { building } => {
                     fnv_bytes(&mut hash, &[6u8]);
                     fnv_bytes(&mut hash, &building.0.to_le_bytes());

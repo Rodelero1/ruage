@@ -783,3 +783,24 @@ The refusal is `CannotGarrisonHere`, and its message says what the rule is rathe
 production building by rallying to the building itself. This engine has no rally points at all - a trained unit
 always appears on the neighbouring tile - so today a barracks holds nobody. That is the correct behaviour for a
 production building under this rule, and the other half arrives with rally points, which is a step of its own.
+
+## D39 - A rally point is a place, and rallying to the building means staying inside
+
+The engine had no rally points at all: a trained unit appeared on a neighbouring tile and stood there, whatever
+the player wanted. `Command::Rally { building, point }` adds them, with two behaviours and one default:
+
+- `Some(tile)` - the unit walks there (`Task::Move`) and stops. `None` clears the rally and restores the
+  default, which is where it appeared. A tile off the map is refused (`OffMap`); a tile with a tree on it is
+  fine, because a rally point is somewhere to walk to, not somewhere to stand.
+- `Some` of the **building's own tile** - the unit stays inside (`Task::Garrisoned`). That is how the game
+  spells "keep them home": you right-click the building itself, and the `RallyPoint::Inside` state is derived
+  from that click rather than needing a second command. This is the half of D38 that needed rally points: a
+  production building can now hold what it has just trained, and it still never takes an outsider.
+
+The state is a side table (`World.rallies`, by building) - most buildings have no rally, and `Entity` is walked
+every tick - and it is hashed, because where a building sends its units is state a replay must keep.
+
+`Check` runs at order time: the building exists and is a building, the tile is on the map. What is *not* checked
+is whether the rally can be reached - a unit ordered to walk somewhere walled off simply stands where it
+appeared, which is the same shape as a villager whose node is gone. Recorded rather than silently assumed: a
+failure to path is not reported to the player yet.
