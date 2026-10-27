@@ -373,3 +373,162 @@ fn players_without_a_team_are_each_their_own() {
         })
         .expect("with no teams named, everybody is an enemy of everybody");
 }
+
+// --- ranged combat -------------------------------------------------------------------------------
+//
+// Attribute 1 is `range`, in tiles: 277 of the 1,166 units have it above zero, and until now every
+// one of them closed to adjacency and fought like a spearman.
+
+const ARCHER: u32 = 4;
+
+/// Put a unit somewhere with a speed, so it can walk to its range.
+fn place_moving(
+    world: &mut World,
+    player: u8,
+    id: u32,
+    unit: u32,
+    tile: (i64, i64),
+    hp: i32,
+    speed_tiles: f64,
+) -> EntityId {
+    let scale = world.scale();
+    let id = EntityId(id);
+    let speed = ruage_fixed::Fixed::from_raw((speed_tiles * scale as f64) as i64);
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(tile.0 * scale),
+                Fixed::from_raw(tile.1 * scale),
+            ),
+            speed,
+            hp,
+            amount: 0,
+        })
+        .expect("spawn");
+    world.step().expect("step");
+    id
+}
+
+fn tiles_between(world: &World, a: EntityId, b: EntityId) -> f64 {
+    let scale = world.scale() as f64;
+    let (pa, pb) = (world.position(a).expect("a"), world.position(b).expect("b"));
+    let dx = (pb.0.raw() - pa.0.raw()) as f64 / scale;
+    let dy = (pb.1.raw() - pa.1.raw()) as f64 / scale;
+    (dx * dx + dy * dy).sqrt()
+}
+
+#[test]
+fn an_archer_shoots_from_four_tiles_and_does_not_close() {
+    let Some(fx) = fixture() else { return };
+    let mut world = world_with(&fx, &fx.economy);
+    world.load_combat(&fx.combat);
+    let archer = place_moving(&mut world, 1, 9_920, ARCHER, (10, 10), 30, 0.96);
+    let victim = place(&mut world, 2, 9_921, 83, (14, 10), 25);
+    let before = world.entity(victim).expect("victim").hp;
+
+    world
+        .submit_checked(Command::Attack {
+            attacker: archer,
+            target: victim,
+        })
+        .expect("four tiles is inside an archer's range");
+    for _ in 0..120 {
+        world.step().expect("step");
+    }
+
+    assert!(
+        world.entity(victim).expect("victim").hp < before,
+        "the arrow landed"
+    );
+    assert_eq!(
+        world.position(archer).expect("archer").0.raw() / world.scale(),
+        10,
+        "the archer did not walk: it was already in range"
+    );
+}
+
+#[test]
+fn an_archer_walks_into_range_and_then_stops() {
+    let Some(fx) = fixture() else { return };
+    let mut world = world_with(&fx, &fx.economy);
+    world.load_combat(&fx.combat);
+    let archer = place_moving(&mut world, 1, 9_930, ARCHER, (6, 10), 30, 0.96);
+    // A villager would be dead long before the archer has finished walking and shooting; the point
+    // here is where it stops, so the target is given health a test can keep looking at.
+    let victim = place(&mut world, 2, 9_931, 83, (14, 10), 500);
+    let before = world.entity(victim).expect("victim").hp;
+
+    world
+        .submit_checked(Command::Attack {
+            attacker: archer,
+            target: victim,
+        })
+        .expect("an attack order");
+    // Eight tiles at 0.96 tiles a second is nine seconds of walking, then it shoots on a two-second
+    // reload; the budget is a wide margin rather than a measured number.
+    for _ in 0..1_600 {
+        world.step().expect("step");
+    }
+
+    assert!(
+        world.entity(victim).expect("victim").hp < before,
+        "the archer got in range and shot"
+    );
+    let gap = tiles_between(&world, archer, victim);
+    assert!(
+        (3.9..5.0).contains(&gap),
+        "the archer stopped at its range, not in melee: {gap} tiles"
+    );
+}
+
+/// Range is attribute 1, so the upgrades that move it are the same kind-4 additions that move attack:
+/// Fletching is +1 range on class 0, which is what an archer is. Five tiles is out of an archer's
+/// reach and inside a Fletching archer's.
+#[test]
+fn fletching_adds_a_tile_of_reach() {
+    let Some(fx) = fixture() else { return };
+    let run = |research: bool| {
+        let mut world = world_with(&fx, &fx.economy);
+        world.load_combat(&fx.combat);
+        if research {
+            let techs = ruage_data::load_techs_file(&repo("config/gamedata/techs.toml"))
+                .expect("techs.toml");
+            let effects = ruage_data::load_effects_file(&repo("config/gamedata/effects.toml"))
+                .expect("effects.toml");
+            world
+                .load_research(&techs, &effects)
+                .expect("research tables");
+            world.grant_tech(1, FLETCHING).expect("Fletching");
+        }
+        let archer = place_moving(&mut world, 1, 9_940, ARCHER, (10, 10), 30, 0.96);
+        let victim = place(&mut world, 2, 9_941, 83, (15, 10), 500);
+        world
+            .submit_checked(Command::Attack {
+                attacker: archer,
+                target: victim,
+            })
+            .expect("an attack order");
+        for _ in 0..200 {
+            world.step().expect("step");
+        }
+        (
+            world.position(archer).expect("archer").0.raw() / world.scale(),
+            world.entity(victim).expect("victim").hp,
+        )
+    };
+
+    let (walked_to, plain_hp) = run(false);
+    let (stayed_at, fletched_hp) = run(true);
+    assert_eq!(walked_to, 11, "without Fletching the archer closes a tile");
+    assert_eq!(
+        stayed_at, 10,
+        "with Fletching it reaches from where it stands"
+    );
+    assert!(plain_hp < 500 && fletched_hp < 500, "both archers shot");
+}
+
+const FLETCHING: u32 = 199;

@@ -608,3 +608,25 @@ taken **waits inside its building** rather than being lost, so a crowd around a 
 - that is the engine being careful, and the test helper now says so instead of asserting an arrival that
 cannot happen. And the population fixture had to load the **effect tables** for the Huns' exemption to
 exist at all: a bar is read from the civ's tech-tree effect, so a world without effects has no exemptions.
+
+## D32 - Reach is a distance, and it is resolved when the order lands
+
+`range` is attribute 1, in tiles, above zero on 277 of the 1,166 units - and until now every one of them
+closed to adjacency and fought like a spearman. Combat now asks one question with two answers:
+
+- a unit with reach strikes from anywhere inside it, and walks only until it is inside;
+- a unit with none strikes from the next tile, diagonals included, which is the rule it always had.
+
+Both are one comparison on squared distance in engine units, so there is no square root in the tick and no
+trigonometry to disagree with itself across platforms. Range is carried on the task, resolved at order time
+like damage and reload, so a tech that lands mid-fight does not extend a shot already in the air - the same
+reasoning as the gather rate in D-v0.58.
+
+**Range is the fourth attribute to ride the existing modifier path**, and the one that finally makes the
+upgrade line visible: Fletching, Bodkin Arrow and Bracer are `range +1` on class 0 (archers), and they now
+actually move the archer's reach rather than being carried and ignored. The test is behavioural rather than
+numeric: an archer five tiles from its target walks a tile without Fletching and does not move with it.
+
+**Not modelled, and named rather than implied:** projectiles (an arrow is instant damage at range, not an
+entity), line of sight (a ranged unit can shoot anything within reach it has a path to, walls included),
+and buildings that shoot (the town centre's arrows need garrisoning, which is a mechanic of its own).

@@ -276,6 +276,10 @@ pub enum Task {
         reload_ticks: u32,
         /// Ticks until the next hit. Zero on the landing tick, so the first blow is immediate.
         cooldown_ticks: u32,
+        /// How far this attacker reaches, in engine fixed point. Zero means melee: adjacency is the
+        /// only place it can strike from. Resolved at order time like damage and reload, so a tech that
+        /// lands mid-fight does not move an arrow already in the air.
+        range: Fixed,
     },
     Gather {
         node: EntityId,
@@ -1349,7 +1353,11 @@ impl World {
     }
 
     /// The checks an attack order has to survive.
-    fn check_attack(&self, attacker: EntityId, target: EntityId) -> Result<(i32, u32), SimError> {
+    fn check_attack(
+        &self,
+        attacker: EntityId,
+        target: EntityId,
+    ) -> Result<(i32, u32, Fixed), SimError> {
         let source = self
             .find(attacker)
             .ok_or(SimError::MissingEntity(attacker))?;
@@ -1392,12 +1400,27 @@ impl World {
             .and_then(|ticks| u32::try_from(ticks).ok())
             .filter(|ticks| *ticks > 0)
             .ok_or(SimError::Unarmed { id: attacker })?;
-        Ok((damage, reload_ticks))
+        // Range is attribute 1, in tiles, and the upgrades that move it (Fletching and its line, +1
+        // each) are kind-4 additions - so it resolves exactly like speed: base, then the owner's
+        // modifiers at the engine scale. Zero stays zero: a melee unit has no reach to extend.
+        let base = attacker_stats
+            .range
+            .resolve(self.scale, "range")
+            .map_err(|err| SimError::Unresolved {
+                id: attacker_stats.id,
+                detail: err.to_string(),
+            })?;
+        let range = scale_fixed(
+            base,
+            self.scale,
+            &self.modifiers_for(source.player, attacker_stats, "range"),
+        );
+        Ok((damage, reload_ticks, range))
     }
 
     /// Resolve the numbers at order time and start swinging.
     fn start_attack(&mut self, attacker: EntityId, target: EntityId) -> Result<(), SimError> {
-        let (damage, reload_ticks) = self.check_attack(attacker, target)?;
+        let (damage, reload_ticks, range) = self.check_attack(attacker, target)?;
         let Some(source) = self.find(attacker) else {
             return Err(SimError::MissingEntity(attacker));
         };
@@ -1413,6 +1436,7 @@ impl World {
                 damage,
                 reload_ticks,
                 cooldown_ticks: 0,
+                range,
             };
         }
         Ok(())
@@ -1642,6 +1666,7 @@ impl World {
             damage,
             reload_ticks,
             mut cooldown_ticks,
+            range,
         } = entity.task
         else {
             return 0;
@@ -1658,6 +1683,7 @@ impl World {
             damage,
             reload_ticks,
             cooldown_ticks,
+            range,
         };
         landed
     }
@@ -2602,7 +2628,7 @@ impl World {
         // an index stays valid and the second pass touches each entity once.
         for (index, entity) in self.entities.iter().enumerate() {
             let (dx, dy) = match entity.task {
-                Task::Attack { target, .. } => {
+                Task::Attack { target, range, .. } => {
                     let Some(victim) = self
                         .find(target)
                         .filter(|v| !matches!(v.kind, EntityKind::Resource(_)))
@@ -2612,10 +2638,23 @@ impl World {
                         finished.push(entity.id);
                         continue;
                     };
+                    // A melee attacker strikes from the tile next to its target; anything with reach
+                    // strikes from as far as that reach goes, and walks until it is inside it. Both
+                    // are measured on the same squared distance, in engine units, so the rule is one
+                    // comparison and no square root.
                     let here = self.tile_of(entity.position);
                     let there = self.tile_of(victim);
                     let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
-                    if adjacent {
+                    let in_reach = if range.raw() > 0 {
+                        let dx = victim.0.raw() - entity.position.0.raw();
+                        let dy = victim.1.raw() - entity.position.1.raw();
+                        dx * dx + dy * dy <= range.raw() * range.raw()
+                    } else {
+                        // A melee attacker keeps the rule it always had: the next tile, diagonals
+                        // included. Comparing distance to one tile would exclude the diagonal.
+                        adjacent
+                    };
+                    if in_reach {
                         strikes.push((entity.id, target));
                         (Fixed::ZERO, Fixed::ZERO)
                     } else {
@@ -3555,12 +3594,14 @@ impl World {
                     damage,
                     reload_ticks,
                     cooldown_ticks,
+                    range,
                 } => {
                     fnv_bytes(&mut hash, &[4u8]);
                     fnv_bytes(&mut hash, &target.0.to_le_bytes());
                     fnv_bytes(&mut hash, &damage.to_le_bytes());
                     fnv_bytes(&mut hash, &reload_ticks.to_le_bytes());
                     fnv_bytes(&mut hash, &cooldown_ticks.to_le_bytes());
+                    fnv_bytes(&mut hash, &range.raw().to_le_bytes());
                 }
                 Task::Build { site } => {
                     fnv_bytes(&mut hash, &[3u8]);

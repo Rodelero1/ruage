@@ -387,7 +387,30 @@ only the construction test, dropping the Huns exemption fails only the Huns test
 Next: **ranged combat** - `range` is attribute 1 and 177 commands, and every unit is melee today. It is the
 largest mechanic left and it touches the tick loop, so it gets the full review budget.
 
-Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
+## Done next: ranged combat (2026-10-27, v0.74)
+
+`range` - attribute 1, above zero on 277 of 1,166 units - is real. A unit with reach strikes from anywhere
+inside it and walks only until it is inside; a unit with none keeps the adjacency rule it always had
+(diagonals included). One comparison on squared distance in engine units, so no square root and no
+trigonometry in the tick. Range rides on the task, resolved at order time like damage and reload.
+
+That made the archer upgrade line visible for the first time: Fletching, Bodkin Arrow and Bracer are
+`range +1` on class 0, and the test is behavioural - an archer five tiles out walks a tile without
+Fletching and stands still with it.
+
+Mutation-proved twice: forcing the melee branch fails all three ranged tests, and dropping the range
+modifiers fails exactly the Fletching one.
+
+**Still not modelled, and now named:** projectiles (a shot is instant damage at range, not an entity), line
+of sight (a unit shoots anything in reach it can path to, walls included), and buildings that shoot (the
+town centre's arrows need garrisoning).
+
+Next, in the order I would take them: **training queue** (one slot per building today, and a crowd stalls
+even that), **projectiles as entities** if the visual/gameplay difference matters, then **kind 0** - which
+is per-unit attribute changes and needs garrison and LOS to land.
+
+Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
+kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a
 comment. After that: `required` gating (a tech that needs its prerequisite), and the tech-tree effects

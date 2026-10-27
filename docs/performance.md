@@ -51,6 +51,18 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Twenty-first pass: one comparison swapped for another, in the tick (2026-10-27)
+
+Ranged combat is the first change in six passes to touch the tick path: the attack branch used to compute
+two `abs_diff`s on tiles and now computes two subtractions and two multiplications on raw positions when
+the attacker has reach. Melee attackers keep the tile comparison, so a world of spearmen runs the code it
+ran before. This is not something the idle probe can resolve - it has no attacking entities at all, which
+is why both anchors are unchanged (`b30d49d89f8bcf4f` four-hour, `05c91e3bff3f9eee` scripted at 2,400
+ticks). Worth stating plainly: the anchors are unchanged because they never enter the code that changed,
+not because the change is free. What can be said is the shape - a handful of integer operations per
+attacking entity per tick, no division, no square root, no allocation - and that it is bounded by the number
+of attackers rather than by the number of entities.
+
 ## Twentieth pass: two scans per order, none per tick (2026-10-27)
 
 Housing adds two walks over the entity list - population, and the finished houses and town centres - to
