@@ -147,11 +147,23 @@ fn apply_scalar(base: f64, modifiers: &[&ruage_data::Modifier]) -> f64 {
     value
 }
 
-/// The same for a fixed-point quantity, which round-trips through `f64` for the arithmetic and back
-/// through `round`, so a rate stays an exact whole number of scale units or it is a bug in the data.
-fn scale_fixed(base: Fixed, modifiers: &[&ruage_data::Modifier]) -> Fixed {
-    let scaled = apply_scalar(base.raw() as f64, modifiers);
-    Fixed::from_raw(scaled.round() as i64)
+/// The same for a fixed-point quantity (speed, gather rate). A multiplier is scale-free, but an
+/// **addition** is stated in the attribute's own unit - tiles per second, work per second - so it has
+/// to be scaled before it is added to a raw value: nine speed additions ship in the data (+0.35 tiles
+/// per second is one), and adding 0.35 to a raw fixed value would move the unit by a twenty-thousandth
+/// of a tile per second and look like nothing happened.
+fn scale_fixed(base: Fixed, scale: i64, modifiers: &[&ruage_data::Modifier]) -> Fixed {
+    let mut raw = base.raw() as f64;
+    for modifier in modifiers.iter().filter(|m| m.op == ruage_data::ModOp::Add) {
+        raw += modifier.value * scale as f64;
+    }
+    for modifier in modifiers
+        .iter()
+        .filter(|m| m.op == ruage_data::ModOp::Multiply)
+    {
+        raw *= modifier.value;
+    }
+    Fixed::from_raw(raw.round() as i64)
 }
 
 /// A unit's maximum health with its hit-point modifiers applied, additions first. Floored at 1: a
@@ -1532,7 +1544,9 @@ impl World {
 
         Ok(BuildPlan {
             total_ticks: total,
-            max_hp: stats.hp,
+            // Derived, not copied: a building ordered after a health tech must be quoted the new
+            // maximum, or it finishes at the old one.
+            max_hp: self.max_hp(worker.player, unit_id).unwrap_or(stats.hp),
             costs: stats.costs.clone(),
             player: worker.player,
         })
@@ -1794,14 +1808,7 @@ impl World {
                 detail: err.to_string(),
             })?;
         let modifiers = self.modifiers_for(player, unit, "speed");
-        let scaled =
-            modifiers
-                .iter()
-                .fold(base.raw() as f64, |value, modifier| match modifier.op {
-                    ruage_data::ModOp::Add => value + modifier.value,
-                    ruage_data::ModOp::Multiply => value * modifier.value,
-                });
-        Ok(Fixed::from_raw(scaled.round() as i64))
+        Ok(scale_fixed(base, self.scale, &modifiers))
     }
 
     /// Apply a researched tech: mark it done and run its effect commands.
@@ -1975,6 +1982,7 @@ impl World {
             // with, which is what "the resources have to be gathered first" means.
             let rate = scale_fixed(
                 rate,
+                self.scale,
                 &self.modifiers_for(worker_player, variant, "gather_rate"),
             );
             let carry = apply_scalar(

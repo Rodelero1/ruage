@@ -34,6 +34,10 @@ const SPEARMAN: u32 = 74;
 /// The stateful ones: Loom (+15 hp to villagers, at the town centre), Masonry (buildings x1.1 hp, at a
 /// castle), Wheelbarrow (villager speed x1.1 and carry x1.25, at the town centre).
 const LOOM: u32 = 22;
+/// Free, instant, and adds +0.35 tiles/s to unit 448 (a scout): the one shipped case of a speed
+/// *addition*, which is a different scale from a multiplier.
+const SCOUT_SPEED: u32 = 20;
+const SCOUT: u32 = 448;
 const MASONRY: u32 = 50;
 const WHEELBARROW: u32 = 213;
 const TOWN_CENTRE: u32 = 109;
@@ -464,4 +468,63 @@ fn wheelbarrow_changes_what_is_gathered_next_and_not_a_load_in_hand() {
         }
         other => panic!("expected a new gather order, got {other:?}"),
     }
+}
+
+/// Nine speed modifiers in the data are additions in tiles per second (this one: +0.35 to unit 448, a
+/// scout at 1.2). The engine stores speed as a fixed-point number at `scale`, so an addition has to be
+/// scaled up before it is added - adding the raw value would move the speed by 0.35/20000 of a tile
+/// per second, which is indistinguishable from not applying it at all.
+fn place_moving(
+    world: &mut World,
+    player: u8,
+    id: u32,
+    unit: u32,
+    tile: (i64, i64),
+    hp: i32,
+    speed: Fixed,
+) -> EntityId {
+    let scale = world.scale();
+    let id = EntityId(id);
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(tile.0 * scale),
+                Fixed::from_raw(tile.1 * scale),
+            ),
+            speed,
+            hp,
+            amount: 0,
+        })
+        .expect("spawn");
+    world.step().expect("step");
+    id
+}
+
+#[test]
+fn a_speed_addition_arrives_in_tiles_per_second_and_not_in_scale_units() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let centre = place(&mut world, 1, 9_230, TOWN_CENTRE, (14, 14), 2400);
+    // 1.2 tiles/s, which is what the table says for this unit.
+    let scout = place_moving(
+        &mut world,
+        1,
+        9_231,
+        SCOUT,
+        (10, 10),
+        45,
+        Fixed::from_raw(24_000),
+    );
+    // 1.2 tiles/s at scale 20000.
+    assert_eq!(world.entity(scout).expect("scout").speed.raw(), 24_000);
+    research(&mut world, 1, centre, SCOUT_SPEED, 0);
+    assert_eq!(
+        world.entity(scout).expect("scout").speed.raw(),
+        31_000,
+        "1.2 + 0.35 = 1.55 tiles/s, which is 31000 at scale 20000 - not 24000.35"
+    );
 }

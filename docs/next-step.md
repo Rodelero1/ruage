@@ -59,6 +59,24 @@ The maximum is not stored per entity: it is derived (`max_hp(player, unit)` = th
 the researching player's modifiers), which keeps `Entity` unchanged — the previous slice learned what
 a wider `Entity` costs.
 
+Two defects the review of this slice found, and what is left of them:
+
+- **Speed and gather-rate additions were applied in the wrong unit** (fixed, tested). The data has nine
+  speed additions and two gather-rate additions in tiles/work per second, while the engine holds those
+  as fixed-point numbers at `scale`; the code added the raw value, so a +0.35 tiles/s modifier moved the
+  unit by 0.35 scale units. `scale_fixed` now scales an addition before adding it, and
+  `a_speed_addition_arrives_in_tiles_per_second_and_not_in_scale_units` pins it (a free, instant tech
+  that gives a 1.2-tile scout +0.35, so the speed must read 31000 at scale 20000).
+- **A build site was quoted the table's health, not the player's** (fixed, **not yet tested**). A house
+  ordered after Masonry used to finish at 550 rather than 605, because `check_build` copied `stats.hp`.
+  It now goes through `max_hp` like everything else. The test is missing for a mechanical reason worth
+  writing down: the seeded fixture refuses a build order from where its villagers stand (`NoPath` on
+  every candidate tile within three tiles), and the scenario runner - which does find a legal site -
+  cannot afford Masonry's 150 food and 175 wood *and* a house on the scripted income. The next slice
+  should drive this through the scenario runner with a purpose-built map. **A building already going up
+  when a health tech lands still keeps the maximum it was quoted**, which is the same defect one layer
+  down and wants the same test.
+
 Still not interpreted, and counted: **range (177 commands)**, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
 exist: resolution is melee-only, so a range modifier would be code no test could distinguish from a
