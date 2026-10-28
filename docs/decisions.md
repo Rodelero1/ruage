@@ -881,3 +881,33 @@ bonus and not the building.
 Not yet consumed: accuracy, ballistics, minimum range, extra projectiles. Each is a real mechanic the engine
 does not have (leading a shot, a minimum range for siege, extra arrows from a tech rather than a garrison), and
 they are counted in `docs/next-step.md` rather than left as an implied "done".
+
+## D42 - An arrow lands where it was aimed, and Ballistics aims further ahead
+
+D35 gave projectiles a flight but not a way to miss: the arrow landed at its aim point and then damaged the
+target wherever the target had got to. That made every shot a hit, and it left the ballistics flag (attribute
+19, D41) with nothing to change. Both halves are now there:
+
+- **A hit needs the target to be where the arrow landed.** On landing, the target takes the damage only if it is
+  within **half a tile** of the aim point - the space a unit occupies - and the arrow leaves the world either
+  way. Half a tile rather than a whole one because an arrow's last step is half a tile at the content's
+  projectile speed, so a wider tolerance would let a stopped arrow count as a hit on a target it never reached.
+- **Ballistics leads the shot.** With attribute 19 set on the shooter's unit, the aim is the intercept, not the
+  target: iterate the time of flight (`distance / projectile_step`, three passes), each pass moving the aim
+  along the target's motion for that many ticks. Integer arithmetic throughout, including an integer square
+  root, so two replays aim at the same point.
+
+The target's motion is **read, not stored**: `Entity.velocity` is a spawn-time field never updated by movement,
+so `motion_of` asks what step the target's own task would take this tick. That keeps the aim honest without
+adding a per-tick write to a hot struct.
+
+**What this changes about existing behaviour**, stated because it is a real change and not an addition: a shot
+at a moving unit can now miss. The scenario anchors do not move because nothing in them fires an arrow, which
+also means they do not exercise this path - the ballistics tests are the whole coverage.
+
+Mutation-proved both ways: removing the landing check makes the runner take arrows without Ballistics (the test
+fails), and disabling the lead makes the Ballistics case miss.
+
+Not modelled: a shot can still hit the ground and vanish with no feedback, there is no chance-to-hit roll (the
+game has an accuracy attribute, 11, now decoded but unconsumed), and a missed arrow does not collide with
+whatever happens to be standing at the landing point.

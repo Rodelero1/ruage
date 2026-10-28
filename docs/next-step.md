@@ -571,6 +571,24 @@ projectiles 102** (Yasama - a tech-granted volley, unlike the garrison's). Two a
 Next: **ballistics**, the one of those four with a mechanism already in place (projectiles fly to an aim
 position, so leading a moving target is a change to where the aim is, not new machinery).
 
+## Done next: ballistics (2026-10-27, v0.84)
+
+Two halves, because either alone is nothing: an arrow **lands where it was aimed** and hurts the target only if
+the target is still within half a tile of that point (before this, every shot hit), and **Ballistics** (attribute
+19, set by a tech) aims at the intercept - the time of flight iterated three times along the target's motion,
+in integer arithmetic including an integer square root.
+
+The target's motion is read from the step its task would take this tick, because `Entity.velocity` is a
+spawn-time field that movement never updates.
+
+Mutation-proved: removing the landing check makes a runner take arrows without Ballistics; disabling the lead
+makes the Ballistics case miss. The anchors do not move, and **do not cover this path** - nothing in the scripted
+scenario fires an arrow.
+
+Next candidates: **accuracy 11** (the missing chance-to-hit roll, which is what a missed arrow's randomness would
+need), **minimum range 20** (a siege engine that cannot shoot what is next to it), or the **per-civ 211-number
+array**, still the largest unread thing in the dat.
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

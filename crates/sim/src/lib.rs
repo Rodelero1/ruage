@@ -966,6 +966,21 @@ pub struct World {
     map_rng: Pcg32,
 }
 
+/// The integer square root, for the one place that needs a distance rather than a squared distance: a
+/// shot's time of flight. Newton's method on integers, so it is exact and identical on every machine.
+fn integer_sqrt(value: i64) -> i64 {
+    if value <= 0 {
+        return 0;
+    }
+    let mut guess = value;
+    let mut next = (guess + 1) / 2;
+    while next < guess {
+        guess = next;
+        next = (guess + value / guess) / 2;
+    }
+    guess
+}
+
 /// Gather the modifiers one effect has for a unit and an attribute into `chosen`.
 ///
 /// A modifier matches on the unit id it names, on the unit's class, or on neither (-1 means
@@ -2730,6 +2745,73 @@ impl World {
         total.min(population.cap_default)
     }
 
+    /// Does this shooter lead its shots? Attribute 19 is the ballistics flag, and content sets it on the
+    /// units a university's Ballistics teaches. Any positive set value counts (D42).
+    fn has_ballistics(&self, shooter: EntityId) -> bool {
+        let (Some(units), Some(entity)) = (self.units.as_ref(), self.find(shooter)) else {
+            return false;
+        };
+        let Some(unit) = entity.unit.and_then(|unit| units.unit(units.root(unit))) else {
+            return false;
+        };
+        self.modifiers_for(entity.player, unit, "ballistics")
+            .iter()
+            .any(|modifier| modifier.value > 0.0)
+    }
+
+    /// Where to aim so that a shot meets a moving target: iterate the time of flight, which depends on the
+    /// distance to the aim, which depends on the time of flight. Three passes settle it for any speed the
+    /// game has, and every step is integer arithmetic on engine units, so two runs aim at the same point.
+    ///
+    /// The target's motion for this tick is read off its own movement rather than stored: `velocity` is a
+    /// spawn-time field, and a unit's real direction is the step it is about to take.
+    fn lead_shot(
+        &self,
+        from: (Fixed, Fixed),
+        victim: (Fixed, Fixed),
+        target: EntityId,
+        projectile_step: i64,
+    ) -> (Fixed, Fixed) {
+        let (step_x, step_y) = self.motion_of(target);
+        if (step_x, step_y) == (0, 0) || projectile_step <= 0 {
+            return victim;
+        }
+        let mut aim = victim;
+        for _ in 0..3 {
+            let dx = aim.0.raw() - from.0.raw();
+            let dy = aim.1.raw() - from.1.raw();
+            let distance = integer_sqrt(dx * dx + dy * dy);
+            let ticks = distance / projectile_step;
+            aim = (
+                Fixed::from_raw(victim.0.raw() + step_x * ticks),
+                Fixed::from_raw(victim.1.raw() + step_y * ticks),
+            );
+        }
+        aim
+    }
+
+    /// How far this entity moves per tick, as a raw-unit delta: the step its own task would take now.
+    fn motion_of(&self, id: EntityId) -> (i64, i64) {
+        let Some(entity) = self.find(id) else {
+            return (0, 0);
+        };
+        let reach = match entity.task {
+            Task::Move { to } => Some(to),
+            Task::Attack { .. }
+            | Task::Gather { .. }
+            | Task::Return { .. }
+            | Task::Build { .. } => self.next_waypoint(id),
+            Task::Idle | Task::Garrisoned { .. } | Task::Fly { .. } => None,
+        };
+        let Some(reach) = reach else {
+            return (0, 0);
+        };
+        let Ok(delta) = entity.speed.div_exact(i64::from(self.tick_rate_hz)) else {
+            return (0, 0);
+        };
+        step_towards(entity.position, reach, delta.raw())
+    }
+
     /// How much population one finished building supports: what content gives its role, unless a
     /// modifier *sets* it to something else.
     ///
@@ -3182,7 +3264,9 @@ impl World {
         // Arrows that landed this tick. They are entities, so they leave the list rather than being
         // turned idle: an idle arrow would sit in the world forever.
         let mut landed_arrows: Vec<EntityId> = Vec::new();
-        let mut landings: Vec<(EntityId, i32)> = Vec::new();
+        // (target, damage, where the arrow was aimed): the aim point decides whether the shot is a hit
+        // or a miss, so it has to survive the flight (D42).
+        let mut landings: Vec<(EntityId, i32, (Fixed, Fixed))> = Vec::new();
         let mut shots: Vec<Shot> = Vec::new();
         // Whoever was hit this tick. A building among them may have crossed the eject threshold, and
         // that is where its garrison comes out (D37).
@@ -3352,7 +3436,7 @@ impl World {
                         // Landing is the only thing an arrow does. Whether it hurts anything is
                         // decided after the loop, against the target as it stands then: an arrow
                         // whose target died on the way finds nothing and does not pick another.
-                        landings.push((target, damage));
+                        landings.push((target, damage, aim));
                         landed_arrows.push(entity.id);
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))
@@ -3518,8 +3602,15 @@ impl World {
             else {
                 continue;
             };
-            let Some(aim) = self.find(target).map(|entity| entity.position) else {
+            let Some(victim_position) = self.find(target).map(|entity| entity.position) else {
                 continue;
+            };
+            // An arrow flies to a point, so the point is the whole of the aim: at the target's feet
+            // without Ballistics, at where it will be with it (D42).
+            let aim = if flight > 0 && self.has_ballistics(attacker) {
+                self.lead_shot(source.0, victim_position, target, flight)
+            } else {
+                victim_position
             };
             if flight > 0 && source.0 != aim {
                 // The shot exists now and lands later. It carries the damage resolved when the order
@@ -3714,9 +3805,19 @@ impl World {
             // entity ceiling.
             let _ = self.spawn_projectile(player, from, aim, target, damage);
         }
-        for (target, damage) in landings {
+        for (target, damage, aim) in landings {
+            // The arrow lands where it was aimed. It hurts the target only if the target is still
+            // there - within half a tile of the landing point, which is the space a unit occupies.
+            // Without this an arrow could not miss, and Ballistics would have nothing to change.
+            let tolerance = self.scale / 2;
+            let reachable = self.find(target).is_some_and(|victim| {
+                let dx = victim.position.0.raw() - aim.0.raw();
+                let dy = victim.position.1.raw() - aim.1.raw();
+                dx * dx + dy * dy <= tolerance * tolerance
+            });
             if let Some(victim) = self.find_mut(target)
                 && victim.hp > 0
+                && reachable
             {
                 victim.hp -= damage;
             }

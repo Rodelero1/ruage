@@ -51,6 +51,19 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Twenty-ninth pass: a square root per shot, a distance per landing (2026-10-27)
+
+Ballistics costs, per **shot with the flag** (not per tick): three integer square roots and the target's next
+step. A landed arrow costs one squared-distance comparison. Neither runs for a unit that is not shooting, and
+neither runs in the movement pass.
+
+The landing check does mean the damage is now conditional on a position, which is one `find` that was already
+being done in that loop.
+
+Both anchors unchanged (`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`) - and worth saying plainly: those worlds contain
+no archers, so this pass says nothing about combat throughput at scale. The honest statement is "no measurable
+cost per shot", not "no cost".
+
 ## Twenty-eighth pass: one more effect list, on the same lookups (2026-10-27)
 
 `modifiers_for` now also walks a player's civ bonus effects - one effect, twelve modifiers, consulted where
