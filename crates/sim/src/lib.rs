@@ -233,6 +233,19 @@ pub enum RallyPoint {
     Inside,
 }
 
+/// How a match ended. A match is undecided until every side but one has lost its **seat** - the
+/// building content names in `[start] town_centre`. This is the conquest rule, and it is the whole
+/// rule: a player who has lost their town centre has lost the match, whatever else they still hold
+/// (D46).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchOutcome {
+    Victory {
+        winner: u8,
+    },
+    /// Every side lost its seat on the same tick.
+    Draw,
+}
+
 /// A shot decided this tick: who fired it, from where, where it will land, what it was aimed at and
 /// what it does when it gets there. Created after the movement pass, because the entity list is
 /// index-stable while positions are applied.
@@ -352,6 +365,9 @@ pub enum Command {
     Gather { villager: EntityId, node: EntityId },
     /// Stand a unit down: drop its path and return it to idle.
     Stop { unit: EntityId },
+    /// Raze something of your own. The player is named because ownership is the only thing there is
+    /// to check: every other command inherits its owner from the actor, and a deletion has no actor.
+    Delete { player: u8, entity: EntityId },
     /// Attack another player's unit or building.
     Attack {
         attacker: EntityId,
@@ -594,6 +610,18 @@ pub enum SimError {
     NotABuilding {
         unit: u32,
     },
+    /// A delete order for something another player owns, or for neutral scenery.
+    NotYours {
+        id: EntityId,
+        player: u8,
+    },
+    /// A delete order for something that is not a unit or a building: an arrow in flight, which is
+    /// not a thing a player owns in any sense worth acting on.
+    NotDeletable {
+        id: EntityId,
+    },
+    /// The match is over: it accepts no further orders.
+    MatchOver,
 }
 
 impl fmt::Display for SimError {
@@ -798,6 +826,13 @@ impl fmt::Display for SimError {
                     "unit {unit} is not a building: it has no build time or it moves"
                 )
             }
+            SimError::NotYours { id, player } => {
+                write!(f, "entity {} does not belong to player {player}", id.0)
+            }
+            SimError::NotDeletable { id } => {
+                write!(f, "entity {} is not a unit or a building", id.0)
+            }
+            SimError::MatchOver => write!(f, "the match is over: no further orders are accepted"),
         }
     }
 }
@@ -965,6 +1000,16 @@ pub struct World {
     /// Whether the opening stockpile has been applied. Part of state, because it decides whether a
     /// later `load_resources` re-applies it and wipes what the players have gathered since.
     start_stock_applied: bool,
+    /// The seat of a player: the unit content names in `[start] town_centre`, resolved at seeding.
+    /// Content, not state - it does not change during a match - so it is not hashed.
+    seat: Option<u32>,
+    /// Who is in this match, set when a player's first entity lands and never cleared. Without it the
+    /// world could not tell "the enemy has lost everything" from "nobody was ever here", and losing
+    /// everything is exactly the case a match has to notice (D46).
+    roster: [bool; MAX_PLAYERS],
+    /// Decided at the end of the tick that took a seat away. Derived from `entities` and `roster`, so
+    /// it is not hashed: two runs that agree on those agree on this.
+    outcome: Option<MatchOutcome>,
     /// Where each building's finished units go, by building. A side table: most buildings have none, and
     /// `Entity` is walked every tick.
     rallies: BTreeMap<EntityId, RallyPoint>,
@@ -1076,6 +1121,9 @@ impl World {
             availability_techs: Vec::new(),
             resolving_availability: false,
             start_stock_applied: false,
+            seat: None,
+            roster: [false; MAX_PLAYERS],
+            outcome: None,
             researched: BTreeMap::new(),
             stock: [[0; MAX_RESOURCES]; MAX_PLAYERS],
             walk: None,
@@ -1171,6 +1219,11 @@ impl World {
     }
 
     fn validate(&self, command: &Command) -> Result<(), SimError> {
+        // A finished match takes no more orders. The check is here as well as in `apply` so the
+        // caller sees the refusal instead of a tick that silently does nothing.
+        if self.outcome.is_some() {
+            return Err(SimError::MatchOver);
+        }
         match command {
             Command::Gather { villager, node } => {
                 let worker = self
@@ -1228,6 +1281,18 @@ impl World {
                 }
             }
             Command::Stop { .. } => {}
+            Command::Delete { player, entity } => {
+                let target = self.find(*entity).ok_or(SimError::MissingEntity(*entity))?;
+                if target.player == 0 || target.player != *player {
+                    return Err(SimError::NotYours {
+                        id: *entity,
+                        player: *player,
+                    });
+                }
+                if !matches!(target.kind, EntityKind::Unit | EntityKind::Building) {
+                    return Err(SimError::NotDeletable { id: *entity });
+                }
+            }
             // The bound belongs in the dry run too, or `submit_checked` accepts a ninth side and
             // the failure only appears a tick later inside the queue.
             Command::Spawn { player, .. } => {
@@ -1299,6 +1364,9 @@ impl World {
     ) -> Result<(), SimError> {
         self.units = Some(units.clone());
         self.economy = Some(economy.clone());
+        // The seat is the building content calls its town centre - the same role the opening is
+        // seeded from, so a pack that calls it "keep" still has one (D17).
+        self.seat = economy.role.get(&economy.start.town_centre).copied();
         self.walk = Some(Walk::from_map(map));
         // The start names roles; the economy's role table is what turns them into units, so this
         // function never learns that a town centre is 109 (D17).
@@ -1442,6 +1510,12 @@ impl World {
             return Err(SimError::TooManyEntities {
                 max: self.max_entities,
             });
+        }
+        // A player is in the match from the moment their first entity exists, and stays in it even
+        // after losing everything: "the enemy is gone" and "nobody was ever here" are different
+        // facts, and only one of them ends a match (D46).
+        if entity.player > 0 && entity.player as usize <= MAX_PLAYERS {
+            self.roster[usize::from(entity.player) - 1] = true;
         }
         let at = self
             .entities
@@ -2765,7 +2839,7 @@ impl World {
 
     /// How many units this player has. Every unit is worth one: the dat has no per-unit population
     /// cost, and neither does the game.
-    fn population(&self, player: u8) -> u32 {
+    pub fn population(&self, player: u8) -> u32 {
         u32::try_from(
             self.entities
                 .iter()
@@ -2781,7 +2855,7 @@ impl World {
     /// A civilisation whose tech tree takes the house away (the Huns) is exempt from house arithmetic
     /// altogether, or it would sit at zero for the whole match. That exemption is read from the same
     /// content the bar itself comes from, so a pack with no civs simply has no exemption (D31).
-    fn population_cap(&self, player: u8) -> u32 {
+    pub fn population_cap(&self, player: u8) -> u32 {
         let Some(economy) = self.economy.as_ref() else {
             return u32::MAX;
         };
@@ -2808,6 +2882,71 @@ impl World {
                 sum.saturating_add(self.population_provided(player, built))
             });
         total.min(population.cap_default)
+    }
+
+    /// Let everyone out of a building, where they stand. Shared by `Ungarrison` and by a player
+    /// demolishing their own building, so the two cannot drift apart.
+    fn ungarrison(&mut self, building: EntityId) {
+        let leaving: Vec<EntityId> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.task == (Task::Garrisoned { building }))
+            .map(|entity| entity.id)
+            .collect();
+        for id in leaving {
+            if let Some(entity) = self.find_mut(id) {
+                entity.task = Task::Idle;
+            }
+        }
+    }
+
+    /// Whether the match has been decided, and how. `None` while it is still being played.
+    pub fn outcome(&self) -> Option<MatchOutcome> {
+        self.outcome
+    }
+
+    /// Whether this player still holds a seat: one living building of the content's town-centre
+    /// family. Family, not id, because an age-up replaces the town centre's id (109 -> 71 -> 141).
+    fn holds_seat(&self, player: u8, seat: u32) -> bool {
+        self.entities.iter().any(|entity| {
+            entity.player == player
+                && entity.kind == EntityKind::Building
+                && entity.hp > 0
+                && entity.unit.is_some_and(|unit| self.is_family(unit, seat))
+        })
+    }
+
+    /// Decide the match, once, from the state this tick left behind.
+    ///
+    /// One pass over the buildings, called only on a tick where something died: a seat cannot
+    /// disappear any other way, so the idle tick pays nothing for it.
+    fn decide_outcome(&mut self) {
+        if self.outcome.is_some() {
+            return;
+        }
+        let Some(seat) = self.seat else {
+            // Content names no town centre, so this pack has no conquest rule to apply.
+            return;
+        };
+        let sides: Vec<u8> = (1..=MAX_PLAYERS as u8)
+            .filter(|player| self.roster[usize::from(*player) - 1])
+            .collect();
+        if sides.len() < 2 {
+            // A one-sided world is a test fixture or a sandbox, not a match.
+            return;
+        }
+        let seated: Vec<u8> = sides
+            .iter()
+            .copied()
+            .filter(|player| self.holds_seat(*player, seat))
+            .collect();
+        self.outcome = match seated.len() {
+            0 => Some(MatchOutcome::Draw),
+            1 => Some(MatchOutcome::Victory { winner: seated[0] }),
+            // Two or more seats still stand: an eliminated side in a three-way match leaves the
+            // other two fighting.
+            _ => None,
+        };
     }
 
     /// How much room two bodies take up between them, in engine units: the sum of their radii. Used to
@@ -3269,6 +3408,9 @@ impl World {
     }
 
     fn apply(&mut self, command: Command) -> Result<(), SimError> {
+        if self.outcome.is_some() {
+            return Err(SimError::MatchOver);
+        }
         match command {
             Command::Spawn {
                 id,
@@ -3342,17 +3484,7 @@ impl World {
                 Ok(())
             }
             Command::Ungarrison { building } => {
-                let leaving: Vec<EntityId> = self
-                    .entities
-                    .iter()
-                    .filter(|entity| entity.task == (Task::Garrisoned { building }))
-                    .map(|entity| entity.id)
-                    .collect();
-                for id in leaving {
-                    if let Some(entity) = self.find_mut(id) {
-                        entity.task = Task::Idle;
-                    }
-                }
+                self.ungarrison(building);
                 Ok(())
             }
             Command::Stop { unit } => {
@@ -3360,6 +3492,28 @@ impl World {
                 if let Some(entity) = self.find_mut(unit) {
                     entity.task = Task::Idle;
                 }
+                Ok(())
+            }
+            Command::Delete { entity, .. } => {
+                // A deletion is a death and takes the death path: health to zero, and the end of the
+                // tick does the rest - the route goes, the population frees. Removing the entity
+                // here would run that path from a place where the entity list is supposed to be
+                // fixed for the length of the tick.
+                //
+                // One deliberate difference from being razed by an enemy: whoever is inside comes
+                // out alive. Demolishing your own town centre is how a player pulls villagers out of
+                // it, and losing them would make the command a trap; an enemy's siege still kills
+                // the garrison, which is what the death sweep does on its own (D46a).
+                let is_building = self
+                    .find(entity)
+                    .is_some_and(|target| target.kind == EntityKind::Building);
+                if let Some(target) = self.find_mut(entity) {
+                    target.hp = 0;
+                }
+                if is_building {
+                    self.ungarrison(entity);
+                }
+                self.paths.remove(&entity);
                 Ok(())
             }
         }
@@ -4047,8 +4201,15 @@ impl World {
         self.entities.retain(|entity| {
             !matches!(entity.task, Task::Garrisoned { building } if razed.contains(&building))
         });
+        let something_died = !buried.is_empty();
         for id in buried {
             self.paths.remove(&id);
+        }
+
+        // A seat can only disappear by dying, so the match is only ever decided on a tick where
+        // something did. The idle tick pays one boolean for it.
+        if something_died {
+            self.decide_outcome();
         }
 
         self.tick += 1;
@@ -4533,6 +4694,14 @@ impl World {
         if self.teams_named {
             fnv_bytes(&mut hash, b"teams");
             fnv_bytes(&mut hash, &self.team_by_player);
+        }
+        // Who is in the match, hashed only when somebody is: a world built by hand for a movement
+        // test has no players and must hash exactly as it did before rosters existed.
+        if self.roster.iter().any(|present| *present) {
+            fnv_bytes(&mut hash, b"roster");
+            for present in self.roster {
+                fnv_bytes(&mut hash, &[u8::from(present)]);
+            }
         }
         for (index, civ) in self.civ_by_player.iter().enumerate() {
             if let Some(civ) = civ {

@@ -1070,3 +1070,37 @@ validated plan each fail exactly the test written for them.
 layer runs once at load), no determinism risk (`BTreeMap` iteration is sorted, so the log and the application order
 are stable), and no leak of the override into the simulation's state hash - an override changes the *tables*, and
 the world already hashes what it derives from them.
+
+## D46 - A match ends when a seat is gone
+
+The prototype list's first item is victory and defeat, and the smallest honest rule is the one the list states:
+destroy the enemy town centre, or lose yours. So **the seat rule** is the whole conquest rule - a side that has no
+living building of the family content names in `[start] town_centre` has lost - and it is enough to decide a
+two-side match, a draw (both seats gone on one tick), and to leave a three-way match running while two seats still
+stand.
+
+Two implementation choices are part of the decision rather than of the code:
+
+- **The side is a family, not an id.** An age-up replaces the town centre 109 -> 71 -> 141, so the check goes
+  through `Units::root`. A rule that compared ids would stop seeing a Castle-Age player's seat.
+- **The roster is hashed, the outcome is not.** "The enemy has lost everything" and "nobody was ever here" are
+  different facts, and only the first ends a match; a world built by hand for a movement test has no players and
+  must hash as it did before. The outcome is derived from `entities` plus `roster` at the end of the tick, so
+  hashing it would be a second source of truth for the same fact - and it is recomputed only on a tick where
+  something died, because a seat cannot disappear any other way. The idle tick pays one boolean.
+
+**Known simplifications.** A town centre *under construction* counts as a seat - you have not lost while you are
+rebuilding. A mode with a different victory condition (relics, wonders, regicide) is content the engine has no
+vocabulary for yet, and the rule is deliberately one rule rather than a switch.
+
+## D46a - Demolishing your own building lets its occupants out; losing it does not
+
+Deleting is a death and takes the death path: health to zero, and the end-of-tick sweep does the rest. The one
+deliberate difference is the garrison. `Command::Delete` of a building you own **ejects** whoever is inside,
+unharmed, where they stand; a building **razed by an enemy** kills them, which is the behaviour the sweep already
+had and which the D37/D38 work was built around.
+
+The reason is not symmetry, it is intent: demolishing your own town centre is how a player pulls villagers out of
+it, and a command that killed them would be a trap. The two paths now share one `ungarrison` helper, so they cannot
+drift apart silently; the eject rule is pinned by `a_deleted_building_releases_its_garrison`, and the older
+`a_garrison_goes_down_with_its_shelter` still pins the enemy case.
