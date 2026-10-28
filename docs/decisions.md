@@ -1136,3 +1136,45 @@ documentation always claimed and no test had pinned.
 whatever is inside the radius, walls included. A hunt that cannot reach its interrupted walk logs
 nothing - it stands down, and `docs/next-step.md` keeps "no feedback for a failed order" as the one
 open gap.
+
+## D48 - A stance is a posture plus the ground it was given on
+
+`Stance` is per unit and lives in a side table with its **post**: the position the unit stood on when the
+stance was set. Aggressive is the absence of an entry, so a world that never sets a stance carries nothing
+extra and behaves exactly as it did before stances existed.
+
+- **Aggressive** chases anywhere (the old behaviour).
+- **Defensive** chases only while the target is inside `aggro_radius` *of the post*, and walks home when it
+  is not. That is what makes it useful for holding a chokepoint rather than for following an army.
+- **Stand ground** never moves to fight and still strikes what is already within reach. It also does not
+  engage at all while attack-moving: a unit that stopped to stare at an enemy beside its road would never
+  arrive, and standing ground is about not *leaving*, not about refusing to go where it was sent.
+- **No attack** refuses an attack order at the validator (`StanceForbidsAttack`) and never auto-engages.
+
+**The validator reads the queue.** With `command_apply = "next_tick"`, a `Stance` and an `Attack` in the same
+tick are validated before the stance lands, so `effective_stance` takes the last pending `Stance` for that
+unit. This is the third appearance of the same trap (training queue, research guard, now stances) and it is
+worth stating as a rule: *any check that reads state a queued command will change must read the queue too.*
+
+**Not modelled:** stances do not affect a unit that is already fighting beyond the chase rule (no
+"aggressive units return fire from further away"), and a defensive post is a position, not a leash length
+that content can set.
+
+## D49 - An entity's bookkeeping dies with it, and the sweep is the one place that knows
+
+Six tables are keyed by entity id: `paths`, `rallies`, `queued`, `patrols`, `resuming`, `stances`. The state
+hash walks every one of them, so an entry for a dead id is a leak that no test sees in play: it costs a little
+state, hides a divergence inside a hash comparison, and never goes away. `paths` had this bug once; adding
+three more tables in one session would have added it three more times.
+
+The rule: **the end-of-tick sweep is the only place an entity leaves the world, so it is the only place that
+prunes.** Two consequences worth writing down:
+
+1. A unit killed *inside* a building is removed by the garrison retain, not by the hp sweep, so its id is
+   collected into `buried` before the pruning loop. Without that, a razed town centre leaves its villagers'
+   stances behind - the rarest case and the easiest to forget.
+2. `bookkeeping_entries()` counts all six tables. It exists because "a dead entity left something behind" is
+   otherwise unfalsifiable: the stability probe samples it, and the tests assert it returns to its baseline.
+
+**Named cost:** the sweep runs per death, not per tick, and the tables are `BTreeMap`s of a handful of
+entries, so the pruning is a handful of removals on a tick that already walks the world to remove entities.

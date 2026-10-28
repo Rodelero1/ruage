@@ -246,6 +246,21 @@ pub enum MatchOutcome {
     Draw,
 }
 
+/// How much of a fight a unit picks on its own. Aggressive is the default and is what every unit did
+/// before stances existed, so a pack that says nothing keeps the behaviour it had (D48).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Stance {
+    /// Chase anything in reach, wherever it goes.
+    #[default]
+    Aggressive,
+    /// Chase, but only near the ground the stance was given on, and go back to it afterwards.
+    Defensive,
+    /// Never move to fight; still strike what is already within reach.
+    StandGround,
+    /// Never fight at all.
+    NoAttack,
+}
+
 /// A shot decided this tick: who fired it, from where, where it will land, what it was aimed at and
 /// what it does when it gets there. Created after the movement pass, because the entity list is
 /// index-stable while positions are applied.
@@ -380,6 +395,9 @@ pub enum Command {
     AttackMove { unit: EntityId, to: (u16, u16) },
     /// Walk to a tile, then back to where the order was given, forever - fighting on the way.
     Patrol { unit: EntityId, to: (u16, u16) },
+    /// How much of a fight this unit picks on its own. The ground it stands on becomes its post, which
+    /// is what a defensive stance returns to.
+    Stance { unit: EntityId, stance: Stance },
     /// Attack another player's unit or building.
     Attack {
         attacker: EntityId,
@@ -632,6 +650,10 @@ pub enum SimError {
     NotDeletable {
         id: EntityId,
     },
+    /// The unit's stance does not allow it to fight.
+    StanceForbidsAttack {
+        id: EntityId,
+    },
     /// The match is over: it accepts no further orders.
     MatchOver,
 }
@@ -844,6 +866,11 @@ impl fmt::Display for SimError {
             SimError::NotDeletable { id } => {
                 write!(f, "entity {} is not a unit or a building", id.0)
             }
+            SimError::StanceForbidsAttack { id } => write!(
+                f,
+                "entity {} is standing down: its stance does not allow it to attack",
+                id.0
+            ),
             SimError::MatchOver => write!(f, "the match is over: no further orders are accepted"),
         }
     }
@@ -1031,6 +1058,9 @@ pub struct World {
     /// The walk a fight interrupted, by unit. Restored when the fight ends, which is the whole point
     /// of attack-move: an order that survives contact (D47).
     resuming: BTreeMap<EntityId, Task>,
+    /// Stance and post, by unit. Only units whose stance is not the default have an entry, so an
+    /// aggressive world - which is every world that does not ask - carries nothing for this (D48).
+    stances: BTreeMap<EntityId, (Stance, (Fixed, Fixed))>,
     /// How far a hunting unit looks for an enemy, in engine units. Zero means it walks past
     /// everything, which is what a pack that says nothing about hunting gets.
     aggro_radius: i64,
@@ -1140,6 +1170,7 @@ impl World {
             rallies: BTreeMap::new(),
             patrols: BTreeMap::new(),
             resuming: BTreeMap::new(),
+            stances: BTreeMap::new(),
             aggro_radius: 0,
             aggro_scan_ticks: 0,
             queued: BTreeMap::new(),
@@ -1310,6 +1341,12 @@ impl World {
             Command::Stop { .. } => {}
             Command::Move { unit, to } => {
                 self.check_order(*unit, *to)?;
+            }
+            Command::Stance { unit, .. } => {
+                let entity = self.find(*unit).ok_or(SimError::MissingEntity(*unit))?;
+                if entity.kind != EntityKind::Unit {
+                    return Err(SimError::NotAUnit { id: *unit });
+                }
             }
             Command::AttackMove { unit, to } | Command::Patrol { unit, to } => {
                 self.check_order(*unit, *to)?;
@@ -1720,6 +1757,9 @@ impl World {
             // target, and the unit goes with it.
             return Err(SimError::NotATarget { id: target });
         }
+        if self.effective_stance(attacker) == Stance::NoAttack {
+            return Err(SimError::StanceForbidsAttack { id: attacker });
+        }
         if source.player == victim.player {
             return Err(SimError::FriendlyFire { id: target });
         }
@@ -1861,6 +1901,35 @@ impl World {
             };
         }
         Ok(())
+    }
+
+    /// The stance an order will meet once the queue has landed.
+    ///
+    /// With `command_apply = "next_tick"` a validator runs against state where earlier orders in the
+    /// same tick have not been applied, so a `Stance` followed by an `Attack` in one tick would be
+    /// judged against the old stance - the same trap the training queue and the research guard each
+    /// fell into once. The last pending stance for the unit wins, as it would when applied.
+    fn effective_stance(&self, id: EntityId) -> Stance {
+        let mut stance = self.stance_of(id);
+        for command in &self.queue {
+            if let Command::Stance {
+                unit,
+                stance: pending,
+            } = command
+                && *unit == id
+            {
+                stance = *pending;
+            }
+        }
+        stance
+    }
+
+    /// This unit's stance. The default is aggressive, which is what every unit did before stances
+    /// existed, so a world that never sets one behaves exactly as it used to.
+    fn stance_of(&self, id: EntityId) -> Stance {
+        self.stances
+            .get(&id)
+            .map_or(Stance::Aggressive, |(stance, _)| *stance)
     }
 
     /// A unit comes to rest when its order ends: no task, and no motion. `velocity` is the fixture
@@ -3046,6 +3115,31 @@ impl World {
         }
     }
 
+    /// How many entries the per-entity side tables hold, all told: routes, rallies, queues, patrol
+    /// ends, interrupted walks and stances.
+    ///
+    /// Nothing in the tick loop needs this; it exists because each of those tables is keyed by an
+    /// entity id and the state hash walks every one of them, so "a dead entity left something behind"
+    /// is a leak that is invisible in play and visible here. The stability probe samples it.
+    pub fn bookkeeping_entries(&self) -> usize {
+        self.paths.len()
+            + self.rallies.len()
+            + self.queued.len()
+            + self.patrols.len()
+            + self.resuming.len()
+            + self.stances.len()
+    }
+
+    /// How many units this building is making: the one in progress plus everything queued behind it.
+    /// A HUD shows it and the death sweep proves it is released; nothing in the tick loop needs it.
+    pub fn pending_orders(&self, building: EntityId) -> usize {
+        let head = usize::from(
+            self.find(building)
+                .is_some_and(|entity| entity.training.is_some()),
+        );
+        head + self.queued.get(&building).map_or(0, Vec::len)
+    }
+
     /// Whether the match has been decided, and how. `None` while it is still being played.
     pub fn outcome(&self) -> Option<MatchOutcome> {
         self.outcome
@@ -3640,6 +3734,28 @@ impl World {
                 self.stand_down(unit);
                 Ok(())
             }
+            Command::Stance { unit, stance } => {
+                let Some(post) = self.find(unit).map(|entity| entity.position) else {
+                    return Err(SimError::MissingEntity(unit));
+                };
+                if stance == Stance::Aggressive {
+                    // The default is the absence of an entry, so an aggressive unit costs nothing.
+                    self.stances.remove(&unit);
+                } else {
+                    self.stances.insert(unit, (stance, post));
+                }
+                // A unit told to stop fighting drops the fight it is in; a unit told to stand its
+                // ground keeps the fight, because it may still be in reach.
+                if stance == Stance::NoAttack
+                    && matches!(
+                        self.find(unit).map(|entity| entity.task),
+                        Some(Task::Attack { .. })
+                    )
+                {
+                    self.stand_down(unit);
+                }
+                Ok(())
+            }
             Command::Move { unit, to } => self.start_walk(unit, to, false, false),
             Command::AttackMove { unit, to } => self.start_walk(unit, to, true, false),
             Command::Patrol { unit, to } => self.start_walk(unit, to, true, true),
@@ -3709,6 +3825,8 @@ impl World {
         let mut engaging: Vec<(EntityId, EntityId)> = Vec::new();
         // Patrols that reached their far end and have to turn round.
         let mut turning: Vec<EntityId> = Vec::new();
+        // Defensive units whose fight left their ground: they go back to the post.
+        let mut homing: Vec<EntityId> = Vec::new();
         let projectile_step = self.projectile_step;
 
         // Indexed, not id-collected: resolving each id afterwards is a linear scan per entity,
@@ -3761,7 +3879,25 @@ impl World {
                     };
                     let dead = min_range.raw() + padding;
                     let too_close = min_range.raw() > 0 && squared < dead * dead;
-                    if too_close {
+                    // A stance decides how much of this fight is the unit's own business: it can refuse
+                    // the chase (stand ground), refuse to leave its post (defensive), or refuse the
+                    // fight altogether (no attack, which the validator already keeps out of here).
+                    let stance = self.stance_of(entity.id);
+                    let off_ground = stance == Stance::Defensive
+                        && self.stances.get(&entity.id).is_some_and(|(_, post)| {
+                            let dx = victim.0.raw() - post.0.raw();
+                            let dy = victim.1.raw() - post.1.raw();
+                            dx * dx + dy * dy > self.aggro_radius * self.aggro_radius
+                        });
+                    if stance == Stance::NoAttack || off_ground {
+                        if off_ground {
+                            homing.push(entity.id);
+                        }
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else if too_close && stance == Stance::StandGround {
+                        // It cannot shoot what is against it, and it may not step back either.
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else if too_close {
                         let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
                             SimError::Displacement {
                                 id: entity.id,
@@ -3778,6 +3914,9 @@ impl World {
                         (Fixed::from_raw(dx), Fixed::from_raw(dy))
                     } else if in_reach {
                         strikes.push((entity.id, target));
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else if stance == Stance::StandGround {
+                        // In reach or not, it does not walk to the fight.
                         (Fixed::ZERO, Fixed::ZERO)
                     } else {
                         let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
@@ -3934,8 +4073,13 @@ impl World {
                 }
                 Task::Hunt { to } => {
                     // Looking for a fight first: an enemy in reach is the order's business, and the
-                    // walk is only how the unit got here.
-                    if let Some(enemy) = self.nearest_enemy(entity) {
+                    // walk is only how the unit got here. Two stances never look: one cannot fight,
+                    // the other does not walk to a fight it was not given.
+                    let may_engage = matches!(
+                        self.stance_of(entity.id),
+                        Stance::Aggressive | Stance::Defensive
+                    );
+                    if let Some(enemy) = may_engage.then(|| self.nearest_enemy(entity)).flatten() {
                         engaging.push((entity.id, enemy));
                         (Fixed::ZERO, Fixed::ZERO)
                     } else {
@@ -4015,6 +4159,27 @@ impl World {
                         entity.task = Task::Idle;
                     }
                 }
+            }
+        }
+
+        // A defensive unit whose fight walked off its ground goes home; that is the difference
+        // between holding a chokepoint and chasing an army across the map.
+        for id in homing {
+            let Some(post) = self.stances.get(&id).map(|(_, post)| *post) else {
+                continue;
+            };
+            let route = self
+                .find(id)
+                .map(|entity| entity.position)
+                .and_then(|from| self.plan_path(from, post).ok());
+            match route {
+                Some(route) => {
+                    self.paths.insert(id, route);
+                    if let Some(entity) = self.find_mut(id) {
+                        entity.task = Task::Move { to: post };
+                    }
+                }
+                None => self.stand_down(id),
             }
         }
 
@@ -4442,14 +4607,29 @@ impl World {
         });
         // A garrison goes down with its shelter: a unit inside a building that dies has nowhere to be,
         // and the alternative - ejecting it onto the rubble - would let a razed town centre disgorge
-        // fifteen villagers.
+        // fifteen villagers. Their ids join `buried`, because they have bookkeeping of their own.
         let razed: BTreeSet<EntityId> = buried.iter().copied().collect();
-        self.entities.retain(|entity| {
-            !matches!(entity.task, Task::Garrisoned { building } if razed.contains(&building))
-        });
+        let inside: BTreeSet<EntityId> = self
+            .entities
+            .iter()
+            .filter(|entity| {
+                matches!(entity.task, Task::Garrisoned { building } if razed.contains(&building))
+            })
+            .map(|entity| entity.id)
+            .collect();
+        self.entities.retain(|entity| !inside.contains(&entity.id));
+        buried.extend(inside);
         let something_died = !buried.is_empty();
+        // Everything keyed by an entity id goes with it. The route was the first of these (a dead
+        // unit kept its waypoints forever); the queue, the rally, the stance, the patrol's far end and
+        // the interrupted walk are the rest, and the state hash walks all of them.
         for id in buried {
             self.paths.remove(&id);
+            self.rallies.remove(&id);
+            self.queued.remove(&id);
+            self.resuming.remove(&id);
+            self.patrols.remove(&id);
+            self.stances.remove(&id);
         }
 
         // A seat can only disappear by dying, so the match is only ever decided on a tick where
@@ -4928,6 +5108,21 @@ impl World {
             fnv_bytes(&mut hash, &id.0.to_le_bytes());
             fnv_bytes(&mut hash, &other.0.raw().to_le_bytes());
             fnv_bytes(&mut hash, &other.1.raw().to_le_bytes());
+        }
+        for (id, (stance, post)) in &self.stances {
+            fnv_bytes(&mut hash, b"stance");
+            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+            fnv_bytes(
+                &mut hash,
+                &[match stance {
+                    Stance::Aggressive => 0u8,
+                    Stance::Defensive => 1,
+                    Stance::StandGround => 2,
+                    Stance::NoAttack => 3,
+                }],
+            );
+            fnv_bytes(&mut hash, &post.0.raw().to_le_bytes());
+            fnv_bytes(&mut hash, &post.1.raw().to_le_bytes());
         }
         for (id, task) in &self.resuming {
             fnv_bytes(&mut hash, b"resume");
