@@ -246,7 +246,7 @@ table, a bucket index for target search, and gates and herds skipped when out of
 tick-driven with no wall clock in the loop, which stays the simpler position.
 
 **halfon and aoe2techtree: DE update 188329, nothing for us.** Both mirrored the balance patch —
-elephant archer 873/874 to 70 food and 220/270 hp, a couple of attack values 3→2, a speed 1.5→1.45,
+elephant archer 873/875 to 70 food and 220/270 hp, a couple of attack values 3→2, a speed 1.5→1.45,
 an armour class pair 1→2. Both track DE exclusively, so neither is evidence about 5.7.2; their value
 is as a DE patch calendar, not as data (D5 keeps the dat authoritative).
 
