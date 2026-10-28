@@ -2418,14 +2418,53 @@ impl World {
         // A finished building on the tile is not a newcomer's to cancel: the race went the other way, and
         // the site that arrived late is the one that goes.
         if theirs.iter().any(|(_, finished)| *finished) {
-            if let Some(entity) = self.find_mut(site) {
-                entity.hp = 0;
-            }
+            self.cancel_site(site);
             return;
         }
         for (victim, _) in theirs {
-            if let Some(entity) = self.find_mut(victim) {
-                entity.hp = 0;
+            self.cancel_site(victim);
+        }
+    }
+
+    /// Cancel a foundation and pay its owner back (D58a). The price is recomputed from content rather than
+    /// carried on the entity: costs are not per-player yet, so what was paid and what is returned cannot
+    /// drift - and the day a discount exists, this is the one place that has to learn about it.
+    fn cancel_site(&mut self, site: EntityId) {
+        let Some((player, unit)) = self.find(site).map(|entity| (entity.player, entity.unit))
+        else {
+            return;
+        };
+        if let Some(unit) = unit {
+            self.refund_unit_cost(player, unit);
+        }
+        if let Some(entity) = self.find_mut(site) {
+            entity.hp = 0;
+        }
+    }
+
+    /// Give `player` back what one of `unit` costs. Saturating, because a refund is not a way to overflow a
+    /// stockpile.
+    fn refund_unit_cost(&mut self, player: u8, unit: u32) {
+        let Some(costs) = self
+            .units
+            .as_ref()
+            .and_then(|units| units.unit(unit))
+            .map(|stats| stats.costs.clone())
+        else {
+            return;
+        };
+        let mut refunds = Vec::with_capacity(costs.len());
+        for cost in &costs {
+            if let Ok(slot) = self.cost_slot(cost) {
+                refunds.push((slot, u32::from(cost.amount)));
+            }
+        }
+        let Some(row) = self.stock.get_mut(usize::from(player).wrapping_sub(1)) else {
+            return;
+        };
+        for (slot, amount) in refunds {
+            if let Some(have) = row.get_mut(slot) {
+                *have = have.saturating_add(amount);
             }
         }
     }

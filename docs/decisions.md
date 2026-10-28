@@ -1366,3 +1366,17 @@ walked to the map edge instead of the site - so the test would have asserted a p
 rule. The branch is four lines and its control (a finished building refuses placement) *is* tested.
 
 **Resource nodes always block**, sighted or not: a node is nobody's foundation to lose.
+
+## D58a - A cancelled foundation is refunded; the winner is not
+
+When an overbuild cancels a foundation, the owner gets its cost back in full. The price is **recomputed from
+content** at the moment of cancellation (`refund_unit_cost`) instead of being carried on the entity, because
+costs are not per-player yet: what was paid and what is returned are then the same number by construction. The
+day a civ discount or an upgrade changes a price, this one function has to learn about it - a `paid` field on
+every entity would spread that knowledge everywhere and change every hash for nothing.
+
+The player who **took** the tile is not refunded. The refund follows the building that went, not the tile.
+
+**Not covered, deliberately:** `Command::Delete` on a foundation still destroys it with no refund. That is a
+different action (the player choosing to abandon work) and the owner has not stated a rule for it; asking is
+cheaper than guessing wrong.

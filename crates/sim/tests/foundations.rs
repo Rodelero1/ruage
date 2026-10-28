@@ -133,6 +133,11 @@ fn wait_for_site(
     None
 }
 
+/// Every resource this player has, by slot. Resource names are content's; the slots are enough here.
+fn stockpile(world: &World, player: u8) -> Vec<u32> {
+    (0..4).map(|slot| world.stock(player, slot)).collect()
+}
+
 fn house(world: &World) -> u32 {
     world.role_unit("house").expect("house")
 }
@@ -199,6 +204,60 @@ fn a_foundation_i_cannot_see_does_not_block_me() {
     assert!(
         placed.is_ok(),
         "a foundation player 1 cannot see refused the order: {placed:?}"
+    );
+}
+
+#[test]
+fn a_cancelled_foundation_refunds_its_owner() {
+    // The owner's rule: a foundation cancelled by an overbuild gives its resources back, so a player whose
+    // town centre was placed in the wrong spot is not ruined, merely delayed.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let theirs = villager(&mut world, 2, (31, 30));
+    let house = house(&world);
+    let before = stockpile(&world, 2);
+
+    world
+        .submit_checked(Command::Build {
+            villager: theirs,
+            unit: house,
+            at: (30, 30),
+        })
+        .expect("their foundation");
+    world.step().expect("step");
+    let paid = stockpile(&world, 2);
+    assert_ne!(paid, before, "the foundation cost its owner nothing");
+
+    let mine = villager(&mut world, 1, (30, 38));
+    let my_before = stockpile(&world, 1);
+    world
+        .submit_checked(Command::Build {
+            villager: mine,
+            unit: house,
+            at: (30, 30),
+        })
+        .expect("a blind foundation");
+    for _ in 0..900 {
+        world.step().expect("step");
+        if site_at(&world, 2, (30, 30)).is_none() {
+            break;
+        }
+    }
+    assert!(
+        site_at(&world, 2, (30, 30)).is_none(),
+        "their foundation was not cancelled, so nothing was refunded"
+    );
+    assert_eq!(
+        stockpile(&world, 2),
+        before,
+        "the cancelled foundation did not give its cost back"
+    );
+    // The winner paid and keeps paying: a refund is for the one whose building went, not for both.
+    let mine_now: u32 = stockpile(&world, 1).iter().sum();
+    let mine_then: u32 = my_before.iter().sum();
+    assert!(
+        mine_now < mine_then,
+        "the overbuilder was paid for its own house"
     );
 }
 

@@ -733,3 +733,30 @@ Until one is chosen, the honest statement is: the engine can be *played* to a fi
 - **Overbuilding a town-centre foundation cancels a seat** (D46 + D58): a blind house on an enemy TC foundation
   that has not been worked yet cancels it, and a player with no seat loses. Faithful to both rules as written
   and probably too sharp in play; it wants a decision, not a patch.
+
+## The defeat rule does not match the original (found 2026-10-28, needs an owner decision)
+
+Our D46 says a match ends when a player's **town-centre family** is gone. The original game says something else,
+twice, in the manual:
+
+> "To defeat a player, you must destroy all units and buildings but the following: towers, walls, gates, relics,
+> Fishing Ships, Fish Traps, Transport Ships, Trade Cogs, Trade Carts, Farms, and sheep."
+
+So, in Age of Kings/Conquerors/DE:
+
+- A player is **eliminated when they have no units and no buildings left** - and the listed things (walls, gates,
+  towers, farms, trade and fishing ships, fish traps, sheep, relics) do not have to be destroyed, so a player left
+  with only those counts as defeated.
+- The **town centre is not special.** Losing it does not lose the match: any villager can rebuild it, and any other
+  building keeps you alive. "Military conquest" is the only condition that always applies, whatever victory
+  setting the lobby chose (Standard adds Wonder and Relic victories, plus Time/Score/Last Man Standing).
+
+The mismatch is not cosmetic. Under D46 a player whose town centre falls has lost even with twenty villagers and a
+barracks across the map, and cannot rebuild. Under the original rule the same player is alive and rebuilding -
+which is also what makes a razed base a setback rather than a defeat.
+
+**Proposed D59** (not implemented, waiting for the owner): replace the seat rule with the original's elimination:
+a player is out when they have no living unit and no standing building, counting only *qualifying* ones - content
+marks which roles count, since "walls and farms do not count" is the same kind of content fact as
+`[build] blocking_roles`. Keep D46's "refuse orders after the match is over" and the draw case. Consider a grace
+window (the DE reverse-engineering notes describe one) if a rebuild race turns out to be the interesting part.
