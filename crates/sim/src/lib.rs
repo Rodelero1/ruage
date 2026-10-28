@@ -908,6 +908,9 @@ pub struct World {
     combat_projectile_speed: Option<Fixed>,
     /// The same speed as a per-tick step, because the tick loop must not divide.
     projectile_step: i64,
+    /// How far off the mark a shot lands when its accuracy roll fails, in engine units. Zero means every
+    /// shot is aimed true (D43).
+    accuracy_scatter: i64,
     /// Fraction of its health (in engine units) at or below which a building ejects its garrison.
     garrison_eject_at: Fixed,
     /// Remaining waypoints per unit, in tiles. Part of state: it decides where the unit goes next.
@@ -964,6 +967,29 @@ pub struct World {
     resources: Option<Resources>,
     sim_rng: Pcg32,
     map_rng: Pcg32,
+}
+
+/// The eight compass directions a scattered shot can land in, as raw multipliers of the scatter distance.
+/// Diagonals are therefore a little farther than a `sqrt(2)` would make them: the scatter is a distance
+/// error, not a geometry, and integer octants keep a replay exact (D43).
+const OCTANTS: [(i64, i64); 8] = [
+    (1, 0),
+    (1, 1),
+    (0, 1),
+    (-1, 1),
+    (-1, 0),
+    (-1, -1),
+    (0, -1),
+    (1, -1),
+];
+
+/// A small, well-mixing integer hash: the accuracy roll's only source of "randomness", so that a replay
+/// and a re-run agree to the miss (D43).
+fn splitmix64(seed: u64) -> u64 {
+    let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
 }
 
 /// The integer square root, for the one place that needs a distance rather than a squared distance: a
@@ -1042,6 +1068,7 @@ impl World {
             damage_rules: None,
             combat_projectile_speed: None,
             projectile_step: 0,
+            accuracy_scatter: 0,
             garrison_eject_at: Fixed::ZERO,
             paths: BTreeMap::new(),
             resources: None,
@@ -1530,6 +1557,12 @@ impl World {
             .garrison_eject_fraction
             .resolve(self.scale, "combat.garrison_eject_fraction")
             .unwrap_or(Fixed::ZERO);
+        self.accuracy_scatter = combat
+            .accuracy_scatter
+            .resolve(self.scale, "combat.accuracy_scatter")
+            .ok()
+            .filter(|scatter| scatter.raw() > 0)
+            .map_or(0, |scatter| scatter.raw());
     }
 
     /// The checks an attack order has to survive.
@@ -2745,6 +2778,56 @@ impl World {
         total.min(population.cap_default)
     }
 
+    /// The point a shot is really aimed at, after the archer's accuracy has had its say.
+    ///
+    /// Accuracy is a percentage (attribute 11): the dat gives an archer 80, a hand cannoneer 65, every
+    /// building that shoots 100, and Thumb Ring sets bowmen to 100. A shot aimed true goes exactly where
+    /// the archer meant; one that is not lands `accuracy_scatter` away, which the landing rule then makes
+    /// a miss. The roll is derived from the tick and the shooter's id rather than drawn from a generator,
+    /// so a replay makes exactly the same misses (D43).
+    fn true_aim(&self, shooter: EntityId, aim: (Fixed, Fixed)) -> (Fixed, Fixed) {
+        if self.accuracy_scatter <= 0 {
+            return aim;
+        }
+        let (Some(units), Some(entity)) = (self.units.as_ref(), self.find(shooter)) else {
+            return aim;
+        };
+        let Some(unit) = entity.unit.and_then(|unit| units.unit(units.root(unit))) else {
+            return aim;
+        };
+        let accuracy = self.accuracy_of(entity.player, unit);
+        if accuracy >= 100 {
+            return aim;
+        }
+        let roll = splitmix64(
+            self.tick()
+                .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                .wrapping_add(u64::from(entity.id.0)),
+        );
+        if accuracy > 0 && roll % 100 < u64::from(accuracy) {
+            return aim;
+        }
+        // Off the mark: one of eight directions, because the scatter is a distance and a direction needs
+        // no trigonometry to be deterministic.
+        let (dx, dy) = OCTANTS[usize::try_from((roll >> 8) % 8).unwrap_or(0)];
+        (
+            Fixed::from_raw(aim.0.raw() + dx * self.accuracy_scatter),
+            Fixed::from_raw(aim.1.raw() + dy * self.accuracy_scatter),
+        )
+    }
+
+    /// This player's accuracy with this unit, in percent: what the dat gives it, unless a tech sets
+    /// attribute 11 to something else (Thumb Ring sets 100, City Rights 87).
+    fn accuracy_of(&self, player: u8, unit: &Unit) -> u16 {
+        let mut accuracy = unit.accuracy;
+        for modifier in self.modifiers_for(player, unit, "accuracy") {
+            if modifier.op == ruage_data::ModOp::Set {
+                accuracy = u16::try_from(modifier.value.clamp(0.0, 100.0) as i64).unwrap_or(0);
+            }
+        }
+        accuracy
+    }
+
     /// Does this shooter lead its shots? Attribute 19 is the ballistics flag, and content sets it on the
     /// units a university's Ballistics teaches. Any positive set value counts (D42).
     fn has_ballistics(&self, shooter: EntityId) -> bool {
@@ -3612,6 +3695,9 @@ impl World {
             } else {
                 victim_position
             };
+            // ... and accuracy decides whether the archer aims *true* at all. A shot that is not aimed
+            // true lands the content's scatter away, which the landing rule turns into a miss (D43).
+            let aim = self.true_aim(attacker, aim);
             if flight > 0 && source.0 != aim {
                 // The shot exists now and lands later. It carries the damage resolved when the order
                 // was given, so an upgrade that arrives mid-flight changes nothing about it. It is

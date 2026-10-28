@@ -589,6 +589,20 @@ Next candidates: **accuracy 11** (the missing chance-to-hit roll, which is what 
 need), **minimum range 20** (a siege engine that cannot shoot what is next to it), or the **per-civ 211-number
 array**, still the largest unread thing in the dat.
 
+## Done next: accuracy (2026-10-28, v0.85)
+
+Attribute 11 is consumed. **Accuracy is the chance a shot is aimed true**: the base comes from the dat (archer
+80, hand cannoneer 65, every building that shoots 100), a tech can set it (Thumb Ring 100), the roll is a hash
+of the tick and the shooter's id so replays agree, and a failed roll moves the aim point `accuracy_scatter`
+(2 tiles, authored) in one of eight directions. The landing rule from the previous step turns that into a miss,
+so accuracy, ballistics and the landing rule compose without any of them knowing about the others.
+
+Mutation-proved: never consulting accuracy fails the test, and making every roll pass fails it too. Two fixtures
+pin the scatter off where the archers shoot at immobile targets - a stated fixture choice, not a gap in coverage.
+
+Next candidates: **minimum range 20** (a siege engine that cannot shoot what stands next to it), or the
+**per-civ 211-number array**, still the largest unread thing in the dat.
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

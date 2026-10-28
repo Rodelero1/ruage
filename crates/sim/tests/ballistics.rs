@@ -73,6 +73,39 @@ resource_modifiers = []
 modifiers = [{ op = "set", attribute = "ballistics", attribute_class = -1, unit = 4, unit_class = -1, value = 1.0 }]
 "#;
 
+/// Accuracy as content: a free, instant tech whose effect **sets** attribute 11 on the archer's unit. Thumb
+/// Ring sets an archer's accuracy to 100; the data's own archer is 80, and a shot that is not aimed true
+/// lands off the mark - which the landing rule (D42) then turns into a miss.
+const ACCURACY_TECHS: &str = r#"
+schema = 1
+kind = "techs"
+[[tech]]
+id = 901
+effect_id = 901
+research_time = 0
+costs = []
+required = []
+min_required = 0
+location = 0
+"#;
+
+fn accuracy_effects(accuracy: u16) -> String {
+    format!(
+        r#"
+schema = 1
+kind = "effects"
+[[effect]]
+id = 901
+name = "Accuracy (test)"
+commands = []
+resource_modifiers = []
+modifiers = [{{ op = "set", attribute = "accuracy", attribute_class = -1, unit = 4, unit_class = -1, value = {accuracy}.0 }}]
+"#
+    )
+}
+
+const ACCURACY: u32 = 901;
+
 const ARCHER: u32 = 4;
 const VILLAGER: u32 = 83;
 const DECOY: u32 = 93;
@@ -93,7 +126,11 @@ fn world_with(fx: &Fixture, ballistics: bool) -> World {
     world
         .load_resources(&fx.resources)
         .expect("the pack fits the stockpile");
-    world.load_combat(&fx.combat);
+    // These tests are about where the arrow is *aimed*, not about whether the archer aimed true: the
+    // accuracy roll is pinned off here so a miss can only come from the geometry under test (D43).
+    let mut combat = fx.combat.clone();
+    combat.accuracy_scatter = ruage_data::MaybeFixed::from_f64(0.0);
+    world.load_combat(&combat);
     let techs = ruage_data::load_techs_str(BALLISTICS_TECHS, "techs.toml").expect("test techs");
     let effects =
         ruage_data::load_effects_str(BALLISTICS_EFFECTS, "effects.toml").expect("test effects");
@@ -101,6 +138,21 @@ fn world_with(fx: &Fixture, ballistics: bool) -> World {
     if ballistics {
         world.grant_tech(1, BALLISTICS).expect("Ballistics");
     }
+    world
+}
+
+/// A world where the archer's accuracy has been set by content. The scatter comes from the real
+/// `combat.toml`, because the point of that test is what a failed roll does.
+fn world_with_accuracy(fx: &Fixture, accuracy: u16) -> World {
+    let mut world = world_with(fx, false);
+    world.load_combat(&fx.combat);
+    let techs = ruage_data::load_techs_str(ACCURACY_TECHS, "techs.toml").expect("test techs");
+    let effects = ruage_data::load_effects_str(&accuracy_effects(accuracy), "effects.toml")
+        .expect("test effects");
+    world
+        .load_research(&techs, &effects)
+        .expect("research tables, again");
+    world.grant_tech(1, ACCURACY).expect("the accuracy tech");
     world
 }
 
@@ -215,4 +267,33 @@ fn an_arrow_still_hits_a_target_that_stands_still() {
         world.entity(victim).expect("victim").hp < 400,
         "a stationary target takes the arrow"
     );
+}
+
+/// Accuracy is the chance that a shot is aimed **true**. One aimed true goes where the archer meant; one that
+/// is not lands the content's scatter away from it, and the landing rule turns that into a miss. So an archer
+/// whose accuracy is 0 never hits a target standing still, and one at 100 always does.
+#[test]
+fn accuracy_decides_whether_the_arrow_goes_where_it_was_aimed() {
+    let Some(fx) = fixture() else { return };
+    for (accuracy, hits) in [(100u16, true), (0u16, false)] {
+        let mut world = world_with_accuracy(&fx, accuracy);
+        let archer = spawn(&mut world, 1, 9_980, ARCHER, (10, 10), 30, 0.96);
+        let victim = place(&mut world, 2, 9_981, VILLAGER, (13, 10), 400);
+        world
+            .submit_checked(Command::Attack {
+                attacker: archer,
+                target: victim,
+            })
+            .expect("an attack order");
+        for _ in 0..40 {
+            world.step().expect("step");
+        }
+        let hp = world.entity(victim).expect("the victim").hp;
+        assert_eq!(
+            hp < 400,
+            hits,
+            "an archer whose accuracy is {accuracy} {} the target",
+            if hits { "hits" } else { "misses" }
+        );
+    }
 }

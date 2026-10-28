@@ -911,3 +911,37 @@ fails), and disabling the lead makes the Ballistics case miss.
 Not modelled: a shot can still hit the ground and vanish with no feedback, there is no chance-to-hit roll (the
 game has an accuracy attribute, 11, now decoded but unconsumed), and a missed arrow does not collide with
 whatever happens to be standing at the landing point.
+
+## D43 - Accuracy is a chance to aim true, and a failed roll scatters the shot
+
+Attribute 11 has been decoded since D41 (Thumb Ring sets an archer to 100, City Rights to 87) and unconsumed.
+It is consumed here, and the data supplies the base: an archer is 80, a hand cannoneer 65, a crossbowman
+lower still, and **every building that shoots is 100** - which is why a town centre's volley never scatters and
+needs no special case.
+
+The model:
+
+- **Accuracy is a percentage chance that the shot is aimed true.** Rolled once per shot from
+  `splitmix( tick * prime + shooter id )`, so there is no generator state to carry and a replay makes the same
+  misses in the same places. A shot that *is* aimed true goes exactly where the archer meant, whether that is
+  the target's feet (D35) or its intercept under Ballistics (D42).
+- **A failed roll moves the aim point** by `[combat] accuracy_scatter` (2 tiles, authored - the data says how
+  accurate a unit is, never how far a miss goes) in one of **eight directions**, since a scatter needs a
+  direction and integer octants need no trigonometry. The landing rule from D42 then does the rest: an arrow
+  that lands two tiles off is a miss, and nothing has to know it was "inaccurate".
+
+Interaction with D42 is the point: accuracy scatters the aim, Ballistics moves the aim, and **one landing rule
+decides the hit** - so the three rules compose without any of them knowing about the others.
+
+**Cost, and where it deliberately is not paid:** the roll is one hash per shot fired, and the whole path is
+skipped when `accuracy_scatter` is zero, which is the default for any pack that says nothing about it. Two test
+fixtures pin the scatter off (`combat.rs`, and the aim-geometry tests in `ballistics.rs`) because their archers
+shoot at immobile targets and a scatter roll would make a hit depend on which tick the test fired on. That is a
+fixture choice, stated here so it does not read as "accuracy is untested": `accuracy_decides_whether_the_arrow_
+goes_where_it_was_aimed` is the test, and it uses the real `combat.toml`.
+
+Mutation-proved twice: never consulting accuracy fails the test, and making every roll pass fails it too.
+
+Still not modelled: accuracy against a target the shooter has to lead (the two are multiplied rather than
+composed), and no "arrow hit the wrong unit" - a missed arrow lands on empty ground even if something stands
+there.

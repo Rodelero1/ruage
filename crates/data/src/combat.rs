@@ -13,6 +13,9 @@ pub struct Combat {
     /// How fast a shot flies, in tiles per second. Zero means shots land where they are aimed with no
     /// flight at all, which is what a pack written before projectiles existed meant.
     pub projectile_speed: MaybeFixed,
+    /// How far off the mark a shot lands, in tiles, when the shooter's accuracy roll fails. Zero means
+    /// every shot is aimed true, which is how a pack written before accuracy existed behaved.
+    pub accuracy_scatter: MaybeFixed,
     pub elevation: Elevation,
     pub attack_timing: AttackTiming,
     pub buildings: Buildings,
@@ -75,6 +78,10 @@ struct RawFile {
     /// Defaulted to zero: no flight, which is how every shot behaved until this existed.
     #[serde(default)]
     projectile_speed: f64,
+    /// Defaulted to zero: a pack that says nothing about accuracy has no scatter, so its shots are
+    /// aimed exactly as they were before accuracy was modelled.
+    #[serde(default)]
+    accuracy_scatter: f64,
     /// Defaulted to a fifth, which is the published rule.
     #[serde(default = "default_eject_fraction")]
     garrison_eject_fraction: f64,
@@ -162,6 +169,7 @@ pub fn load_combat_str(text: &str, path: &str) -> Result<Combat, ConfigError> {
 
     Ok(Combat {
         projectile_speed: MaybeFixed::from_f64(raw.projectile_speed),
+        accuracy_scatter: MaybeFixed::from_f64(raw.accuracy_scatter),
         garrison_eject_fraction: MaybeFixed::from_f64(raw.garrison_eject_fraction),
         damage: Damage {
             minimum: raw.damage.minimum,

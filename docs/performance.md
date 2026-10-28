@@ -51,6 +51,15 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Thirtieth pass: one hash per shot, and a path that is skipped (2026-10-28)
+
+Accuracy costs one `splitmix64` per shot fired and nothing per tick. When `accuracy_scatter` is zero - the
+default for any pack that does not mention it - `true_aim` returns before touching a table, so a pack that does
+not want accuracy pays nothing for it.
+
+Both anchors unchanged (`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`); as with the previous pass, those worlds have
+no archers, so this says nothing about combat throughput at scale.
+
 ## Twenty-ninth pass: a square root per shot, a distance per landing (2026-10-27)
 
 Ballistics costs, per **shot with the flag** (not per tick): three integer square roots and the target's next

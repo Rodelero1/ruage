@@ -63,7 +63,11 @@ fn world_with(fx: &Fixture, economy: &Economy) -> World {
     world
         .load_resources(&fx.resources)
         .expect("the pack fits the stockpile");
-    world.load_combat(&fx.combat);
+    // Accuracy is its own test (`ballistics.rs`): every archer here fires at a target that stands still,
+    // and a scatter roll would make a hit depend on the tick the test happened to fire on.
+    let mut combat = fx.combat.clone();
+    combat.accuracy_scatter = ruage_data::MaybeFixed::from_f64(0.0);
+    world.load_combat(&combat);
     world
 }
 
