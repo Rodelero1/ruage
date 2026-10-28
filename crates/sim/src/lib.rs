@@ -1930,6 +1930,16 @@ impl World {
         fighting: bool,
         patrol: bool,
     ) -> Result<(), SimError> {
+        // A crowd ordered to one tile is a crowd ordered to a *place*: each unit takes a tile of its own
+        // near the one that was clicked, in the order the orders arrive. Without this they all aim at one
+        // tile, and with the last-step rule (D52) all but one stop a step short of it (D53).
+        let already_heading = self
+            .entities
+            .iter()
+            .filter(|entity| entity.id != unit)
+            .filter(|entity| matches!(self.goal_of(entity), Some((tile, true)) if tile == to))
+            .count();
+        let to = self.slot_for(to, already_heading);
         let goal = self.check_order(unit, to)?;
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
         let route = self.plan_path(entity.position, goal)?;
@@ -3238,6 +3248,52 @@ impl World {
         } else {
             (dx, dy)
         }
+    }
+
+    /// The `n`-th tile of a crowd's destination, counting the clicked tile as the first: the tile itself,
+    /// then the ring around it, in a fixed order so two runs agree. Tiles that are not walkable are skipped;
+    /// a target with no room left keeps the wanted tile, and the last-step rule keeps the crowd from
+    /// stacking on it.
+    fn slot_for(&self, wanted: (u16, u16), n: usize) -> (u16, u16) {
+        if n == 0 {
+            return wanted;
+        }
+        let mut seen = 0usize;
+        for radius in 0..=6i32 {
+            for dy in -radius..=radius {
+                for dx in -radius..=radius {
+                    if dx.abs() != radius && dy.abs() != radius {
+                        continue;
+                    }
+                    let (Some(x), Some(y)) = (
+                        u16::try_from(i32::from(wanted.0) + dx).ok(),
+                        u16::try_from(i32::from(wanted.1) + dy).ok(),
+                    ) else {
+                        continue;
+                    };
+                    if radius == 0 {
+                        // The clicked tile is the first slot, which the caller already took.
+                        continue;
+                    }
+                    if !self.is_free_ground(x, y) {
+                        continue;
+                    }
+                    // A tile already claimed by an earlier unit of the same crowd is not free either.
+                    let claimed = self
+                        .entities
+                        .iter()
+                        .any(|entity| matches!(self.goal_of(entity), Some((tile, true)) if tile == (x, y)));
+                    if claimed {
+                        continue;
+                    }
+                    seen += 1;
+                    if seen == n {
+                        return (x, y);
+                    }
+                }
+            }
+        }
+        wanted
     }
 
     /// The tile an entity is trying to stand on, and whether that tile is *its own* - a place it goes to
