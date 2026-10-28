@@ -16,6 +16,12 @@ pub struct Combat {
     /// How far off the mark a shot lands, in tiles, when the shooter's accuracy roll fails. Zero means
     /// every shot is aimed true, which is how a pack written before accuracy existed behaved.
     pub accuracy_scatter: MaybeFixed,
+    /// How far an attack-moving or patrolling unit looks for a fight, in tiles. Zero means it walks
+    /// past everything, which is how a pack written before orders could engage behaved.
+    pub aggro_radius: MaybeFixed,
+    /// How often a hunting unit looks around, in ticks. Zero means every tick; the reference pack says
+    /// five, because a scan is the one order-path cost that grows with the size of the world.
+    pub aggro_scan_ticks: u32,
     pub elevation: Elevation,
     pub attack_timing: AttackTiming,
     pub buildings: Buildings,
@@ -85,6 +91,13 @@ struct RawFile {
     /// Defaulted to a fifth, which is the published rule.
     #[serde(default = "default_eject_fraction")]
     garrison_eject_fraction: f64,
+    /// Defaulted to zero: a pack that says nothing about hunting walks past everything, which is what
+    /// an attack-move did before there were orders that could fight.
+    #[serde(default)]
+    aggro_radius: f64,
+    /// Defaulted to zero, meaning every tick.
+    #[serde(default)]
+    aggro_scan_ticks: u32,
     elevation: RawElevation,
     attack_timing: RawAttackTiming,
     buildings: RawBuildings,
@@ -170,6 +183,8 @@ pub fn load_combat_str(text: &str, path: &str) -> Result<Combat, ConfigError> {
     Ok(Combat {
         projectile_speed: MaybeFixed::from_f64(raw.projectile_speed),
         accuracy_scatter: MaybeFixed::from_f64(raw.accuracy_scatter),
+        aggro_radius: MaybeFixed::from_f64(raw.aggro_radius),
+        aggro_scan_ticks: raw.aggro_scan_ticks,
         garrison_eject_fraction: MaybeFixed::from_f64(raw.garrison_eject_fraction),
         damage: Damage {
             minimum: raw.damage.minimum,

@@ -1104,3 +1104,35 @@ The reason is not symmetry, it is intent: demolishing your own town centre is ho
 it, and a command that killed them would be a trap. The two paths now share one `ungarrison` helper, so they cannot
 drift apart silently; the eject rule is pinned by `a_deleted_building_releases_its_garrison`, and the older
 `a_garrison_goes_down_with_its_shelter` still pins the enemy case.
+
+## D47 - Attack-move and patrol are one walk with two arrival rules
+
+`Command::Move`, `AttackMove` and `Patrol` all plan a route and walk it. What separates them is what
+happens while walking and what happens on arrival, and both are cheaper to express as state beside the
+task than as three tasks:
+
+- **Hunting** is `Task::Hunt { to }`: each tick (on a schedule, see below) it takes the nearest enemy
+  inside `[combat] aggro_radius` and starts the ordinary `Task::Attack`. The walk it interrupted is
+  stored in `World.resuming` and restored when the fight ends - that is the "survives contact"
+  property an attack-move is bought for.
+- **Patrolling** keeps the far end in `World.patrols`, keyed by unit. On arrival the two ends swap, so
+  patrol is a hunt with a memory of where it came from and nothing else.
+
+**Why side tables rather than fields in `Task`.** A patrol needs two positions and a radius, which is
+40 bytes; `Task` is 32 and `Entity` is walked every tick (pass seven: widening it cost 4-6% for no
+behaviour). A map lookup happens on arrival and on order, not per entity per tick.
+
+**Why the scan is decimated.** It is a pass over every entity for every hunting unit - the only
+order-path cost that grows with the world. `[combat] aggro_scan_ticks = 5`, staggered by entity id,
+means four looks a second at 20 Hz, which no player can see, for a fifth of the cost. `0` means every
+tick, and `aggro_radius = 0` means a hunt never engages - the behaviour of a pack that says nothing.
+
+**A defect this slice found rather than added.** A unit that finished an order kept its `velocity`,
+which is the speed `Command::Spawn` gives a fixture mover, so it slid east forever after arriving.
+`stand_down` now clears task *and* motion wherever an order ends, which is what `Entity.velocity`'s
+documentation always claimed and no test had pinned.
+
+**Named limits.** Cover, terrain and stance are not consulted (that is D48's work): a hunt engages
+whatever is inside the radius, walls included. A hunt that cannot reach its interrupted walk logs
+nothing - it stands down, and `docs/next-step.md` keeps "no feedback for a failed order" as the one
+open gap.

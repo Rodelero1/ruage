@@ -311,6 +311,12 @@ pub enum Task {
     Build { site: EntityId },
     /// Walking to a place with nothing to do there. The rally point's task: the unit goes, then stops.
     Move { to: (Fixed, Fixed) },
+    /// Walking to a place *looking for a fight*: attack-move and patrol are the same walk with two
+    /// arrival rules, and the difference between them lives in `World::patrols` rather than in the
+    /// task. What a hunt does in the tick loop is: take the nearest enemy in reach if there is one,
+    /// otherwise step along the route. A fight it starts is an ordinary `Task::Attack`, and the walk
+    /// it interrupted is remembered in `World::resuming` so it can pick the order back up (D47).
+    Hunt { to: (Fixed, Fixed) },
     /// Inside a building. A garrisoned unit still exists - it costs population and dies with its
     /// shelter - but it is not on the map: it cannot act, and it cannot be attacked.
     Garrisoned { building: EntityId },
@@ -368,6 +374,12 @@ pub enum Command {
     /// Raze something of your own. The player is named because ownership is the only thing there is
     /// to check: every other command inherits its owner from the actor, and a deletion has no actor.
     Delete { player: u8, entity: EntityId },
+    /// Walk to a tile and stop. The ordinary order, and the one the rally point uses.
+    Move { unit: EntityId, to: (u16, u16) },
+    /// Walk to a tile, fighting whatever enemy it meets on the way.
+    AttackMove { unit: EntityId, to: (u16, u16) },
+    /// Walk to a tile, then back to where the order was given, forever - fighting on the way.
+    Patrol { unit: EntityId, to: (u16, u16) },
     /// Attack another player's unit or building.
     Attack {
         attacker: EntityId,
@@ -1013,6 +1025,17 @@ pub struct World {
     /// Where each building's finished units go, by building. A side table: most buildings have none, and
     /// `Entity` is walked every tick.
     rallies: BTreeMap<EntityId, RallyPoint>,
+    /// The far end of a patrol, by unit: the end it is *not* walking towards. A side table because a
+    /// patrol is one order on a few units, while `Task` is walked for every entity on the map.
+    patrols: BTreeMap<EntityId, (Fixed, Fixed)>,
+    /// The walk a fight interrupted, by unit. Restored when the fight ends, which is the whole point
+    /// of attack-move: an order that survives contact (D47).
+    resuming: BTreeMap<EntityId, Task>,
+    /// How far a hunting unit looks for an enemy, in engine units. Zero means it walks past
+    /// everything, which is what a pack that says nothing about hunting gets.
+    aggro_radius: i64,
+    /// How often a hunting unit looks around, in ticks. Zero means every tick.
+    aggro_scan_ticks: u64,
     /// Units waiting behind the one a building is making, by building. A side table rather than a
     /// second field on `Entity`: the entity array is walked every tick, and a `Vec` in it costs every
     /// entity for the sake of a few buildings (docs/performance.md, pass seven).
@@ -1115,6 +1138,10 @@ impl World {
             team_by_player: [1, 2, 3, 4, 5, 6, 7, 8],
             teams_named: false,
             rallies: BTreeMap::new(),
+            patrols: BTreeMap::new(),
+            resuming: BTreeMap::new(),
+            aggro_radius: 0,
+            aggro_scan_ticks: 0,
             queued: BTreeMap::new(),
             gated_units: BTreeSet::new(),
             upgrade_tech: BTreeMap::new(),
@@ -1281,6 +1308,12 @@ impl World {
                 }
             }
             Command::Stop { .. } => {}
+            Command::Move { unit, to } => {
+                self.check_order(*unit, *to)?;
+            }
+            Command::AttackMove { unit, to } | Command::Patrol { unit, to } => {
+                self.check_order(*unit, *to)?;
+            }
             Command::Delete { player, entity } => {
                 let target = self.find(*entity).ok_or(SimError::MissingEntity(*entity))?;
                 if target.player == 0 || target.player != *player {
@@ -1651,6 +1684,13 @@ impl World {
             .ok()
             .filter(|scatter| scatter.raw() > 0)
             .map_or(0, |scatter| scatter.raw());
+        self.aggro_radius = combat
+            .aggro_radius
+            .resolve(self.scale, "combat.aggro_radius")
+            .ok()
+            .filter(|radius| radius.raw() > 0)
+            .map_or(0, |radius| radius.raw());
+        self.aggro_scan_ticks = u64::from(combat.aggro_scan_ticks);
     }
 
     /// The checks an attack order has to survive.
@@ -1772,6 +1812,112 @@ impl World {
             };
         }
         Ok(())
+    }
+
+    /// The checks a walk order has to survive: the unit is a unit, the tile is on the map, and there
+    /// is a route to it. Returns the goal as a world position.
+    fn check_order(&self, unit: EntityId, to: (u16, u16)) -> Result<(Fixed, Fixed), SimError> {
+        let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
+        if entity.kind != EntityKind::Unit {
+            return Err(SimError::NotAUnit { id: unit });
+        }
+        if !self.on_map(to.0, to.1) {
+            return Err(SimError::OffMap { tile: to });
+        }
+        let goal = self.tile(to);
+        self.plan_path(entity.position, goal)?;
+        Ok(goal)
+    }
+
+    /// Start a walk: an ordinary move, an attack-move, or a patrol. `patrol` only decides whether the
+    /// tile the unit is standing on is remembered as the other end.
+    ///
+    /// The order is stored as `Task::Hunt` for the two fighting orders and `Task::Move` for a plain
+    /// one, so a plain move stays exactly what it was: a walk that ignores everything on the way.
+    fn start_walk(
+        &mut self,
+        unit: EntityId,
+        to: (u16, u16),
+        fighting: bool,
+        patrol: bool,
+    ) -> Result<(), SimError> {
+        let goal = self.check_order(unit, to)?;
+        let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
+        let route = self.plan_path(entity.position, goal)?;
+        let here = self.tile_of(entity.position);
+        self.paths.insert(unit, route);
+        // Any earlier order is superseded: a new order is not a second one running alongside.
+        self.resuming.remove(&unit);
+        if patrol {
+            self.patrols.insert(unit, self.tile(here));
+        } else {
+            self.patrols.remove(&unit);
+        }
+        if let Some(entity) = self.find_mut(unit) {
+            entity.task = if fighting {
+                Task::Hunt { to: goal }
+            } else {
+                Task::Move { to: goal }
+            };
+        }
+        Ok(())
+    }
+
+    /// A unit comes to rest when its order ends: no task, and no motion. `velocity` is the fixture
+    /// hook `Command::Spawn` uses to make a nameless mover walk, so it must be cleared here or a unit
+    /// that arrives somewhere keeps sliding east for the rest of the match.
+    fn stand_down(&mut self, id: EntityId) {
+        if let Some(entity) = self.find_mut(id) {
+            entity.task = Task::Idle;
+            entity.velocity = (Fixed::ZERO, Fixed::ZERO);
+        }
+    }
+
+    /// The nearest enemy a hunting unit can see and may attack, by id order on a tie.
+    ///
+    /// A hunt scans on a schedule (`combat.aggro_scan_ticks`, staggered by id) because this is the one
+    /// order-path cost that grows with the size of the world: a pass over every entity for every
+    /// hunting unit. Four looks a second at 20 Hz is invisible to a player and a fifth of the cost.
+    fn nearest_enemy(&self, hunter: &Entity) -> Option<EntityId> {
+        if self.aggro_radius <= 0 {
+            return None;
+        }
+        let scan = self.aggro_scan_ticks;
+        if scan > 1 && !(self.tick + u64::from(hunter.id.0)).is_multiple_of(scan) {
+            return None;
+        }
+        let radius_squared = self.aggro_radius * self.aggro_radius;
+        let mut best: Option<(i64, EntityId)> = None;
+        for other in &self.entities {
+            if other.player == hunter.player || other.player == 0 || other.hp <= 0 {
+                continue;
+            }
+            if matches!(other.kind, EntityKind::Resource(_) | EntityKind::Projectile) {
+                continue;
+            }
+            if matches!(other.task, Task::Garrisoned { .. }) {
+                continue;
+            }
+            if self.team_of(other.player) == self.team_of(hunter.player) {
+                continue;
+            }
+            let dx = other.position.0.raw() - hunter.position.0.raw();
+            let dy = other.position.1.raw() - hunter.position.1.raw();
+            let squared = dx * dx + dy * dy;
+            if squared > radius_squared {
+                continue;
+            }
+            let closer = match best {
+                None => true,
+                Some((best_squared, best_id)) => {
+                    squared < best_squared || (squared == best_squared && other.id < best_id)
+                }
+            };
+            if closer {
+                best = Some((squared, other.id));
+            }
+        }
+        best.map(|(_, id)| id)
     }
 
     /// The checks a training order has to survive. Readiness comes before trainability on
@@ -3065,7 +3211,7 @@ impl World {
             return (0, 0);
         };
         let reach = match entity.task {
-            Task::Move { to } => Some(to),
+            Task::Move { to } | Task::Hunt { to } => Some(to),
             Task::Attack { .. }
             | Task::Gather { .. }
             | Task::Return { .. }
@@ -3489,11 +3635,14 @@ impl World {
             }
             Command::Stop { unit } => {
                 self.paths.remove(&unit);
-                if let Some(entity) = self.find_mut(unit) {
-                    entity.task = Task::Idle;
-                }
+                self.patrols.remove(&unit);
+                self.resuming.remove(&unit);
+                self.stand_down(unit);
                 Ok(())
             }
+            Command::Move { unit, to } => self.start_walk(unit, to, false, false),
+            Command::AttackMove { unit, to } => self.start_walk(unit, to, true, false),
+            Command::Patrol { unit, to } => self.start_walk(unit, to, true, true),
             Command::Delete { entity, .. } => {
                 // A deletion is a death and takes the death path: health to zero, and the end of the
                 // tick does the rest - the route goes, the population frees. Removing the entity
@@ -3555,6 +3704,11 @@ impl World {
         // Whoever was hit this tick. A building among them may have crossed the eject threshold, and
         // that is where its garrison comes out (D37).
         let mut ejected: Vec<EntityId> = Vec::new();
+        // (hunter, target): a hunt that found somebody this tick. Started after the pass, because
+        // `start_attack` plans a route and the pass holds the entity list still.
+        let mut engaging: Vec<(EntityId, EntityId)> = Vec::new();
+        // Patrols that reached their far end and have to turn round.
+        let mut turning: Vec<EntityId> = Vec::new();
         let projectile_step = self.projectile_step;
 
         // Indexed, not id-collected: resolving each id afterwards is a linear scan per entity,
@@ -3778,6 +3932,32 @@ impl World {
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))
                 }
+                Task::Hunt { to } => {
+                    // Looking for a fight first: an enemy in reach is the order's business, and the
+                    // walk is only how the unit got here.
+                    if let Some(enemy) = self.nearest_enemy(entity) {
+                        engaging.push((entity.id, enemy));
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        let next = self.next_waypoint(entity.id).unwrap_or(to);
+                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                        if dx == 0 && dy == 0 && entity.position == to {
+                            // Arrival: a patrol turns round, an attack-move stops.
+                            if self.patrols.contains_key(&entity.id) {
+                                turning.push(entity.id);
+                            } else {
+                                finished.push(entity.id);
+                            }
+                        }
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                    }
+                }
                 Task::Garrisoned { .. } => (Fixed::ZERO, Fixed::ZERO),
                 Task::Idle => {
                     let dx = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
@@ -3796,6 +3976,46 @@ impl World {
                 }
             };
             deltas.push((index, entity.id, dx, dy));
+        }
+
+        // A hunt that found somebody starts the fight and remembers the walk it interrupted.
+        for (hunter, target) in engaging {
+            let Some(walk) = self.find(hunter).map(|entity| entity.task) else {
+                continue;
+            };
+            if self.start_attack(hunter, target).is_ok() {
+                self.resuming.insert(hunter, walk);
+            }
+        }
+        // A patrol at its far end swaps ends: the tile it just reached becomes the one to come back
+        // to, and the tile it came from becomes the goal.
+        for id in turning {
+            let Some(Task::Hunt { to }) = self.find(id).map(|entity| entity.task) else {
+                continue;
+            };
+            let Some(other) = self.patrols.insert(id, to) else {
+                continue;
+            };
+            let route = self
+                .find(id)
+                .map(|entity| entity.position)
+                .and_then(|from| self.plan_path(from, other).ok());
+            match route {
+                Some(route) => {
+                    self.paths.insert(id, route);
+                    if let Some(entity) = self.find_mut(id) {
+                        entity.task = Task::Hunt { to: other };
+                    }
+                }
+                // An end it cannot get back to is an order that has run out, not a unit that should
+                // stand there forever pretending to patrol.
+                None => {
+                    self.patrols.remove(&id);
+                    if let Some(entity) = self.find_mut(id) {
+                        entity.task = Task::Idle;
+                    }
+                }
+            }
         }
 
         // Grant takes in id order, each bounded by what the node still holds *at that moment*.
@@ -4048,9 +4268,35 @@ impl World {
                 self.finish_research(player, tech)?;
             }
         }
+        let mut resumed: Vec<EntityId> = Vec::new();
         for id in finished {
-            if let Some(entity) = self.find_mut(id) {
-                entity.task = Task::Idle;
+            if self.resuming.contains_key(&id) {
+                // The fight ended and the unit still has a place to be: attack-move's whole point.
+                resumed.push(id);
+            } else {
+                self.stand_down(id);
+            }
+        }
+        for id in resumed {
+            let Some(task @ Task::Hunt { to }) = self.resuming.remove(&id) else {
+                continue;
+            };
+            let route = self
+                .find(id)
+                .map(|entity| entity.position)
+                .and_then(|from| self.plan_path(from, to).ok());
+            match route {
+                Some(route) => {
+                    self.paths.insert(id, route);
+                    if let Some(entity) = self.find_mut(id) {
+                        entity.task = task;
+                    }
+                }
+                None => {
+                    if let Some(entity) = self.find_mut(id) {
+                        entity.task = Task::Idle;
+                    }
+                }
             }
         }
 
@@ -4677,6 +4923,20 @@ impl World {
                 }
             }
         }
+        for (id, other) in &self.patrols {
+            fnv_bytes(&mut hash, b"patrol");
+            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+            fnv_bytes(&mut hash, &other.0.raw().to_le_bytes());
+            fnv_bytes(&mut hash, &other.1.raw().to_le_bytes());
+        }
+        for (id, task) in &self.resuming {
+            fnv_bytes(&mut hash, b"resume");
+            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+            if let Task::Hunt { to } = task {
+                fnv_bytes(&mut hash, &to.0.raw().to_le_bytes());
+                fnv_bytes(&mut hash, &to.1.raw().to_le_bytes());
+            }
+        }
         for (id, waiting) in &self.queued {
             fnv_bytes(&mut hash, b"queued");
             fnv_bytes(&mut hash, &id.0.to_le_bytes());
@@ -4779,6 +5039,13 @@ impl World {
                 Task::Idle => fnv_bytes(&mut hash, &[0u8]),
                 Task::Move { to } => {
                     fnv_bytes(&mut hash, &[7u8]);
+                    fnv_bytes(&mut hash, &to.0.raw().to_le_bytes());
+                    fnv_bytes(&mut hash, &to.1.raw().to_le_bytes());
+                }
+                Task::Hunt { to } => {
+                    // Its own tag, not `Move`'s: two units walking to the same tile in the same
+                    // position are doing the same thing only if one of them is not looking for a fight.
+                    fnv_bytes(&mut hash, &[8u8]);
                     fnv_bytes(&mut hash, &to.0.raw().to_le_bytes());
                     fnv_bytes(&mut hash, &to.1.raw().to_le_bytes());
                 }

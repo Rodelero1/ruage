@@ -15,6 +15,16 @@ projectile_speed = 10.0
 # stand-in for the dat's per-unit missile speed, which this importer does not read yet. Zero would make
 # every shot land instantly, which is the behaviour before projectiles existed.
 
+aggro_radius = 6.0
+# PROVENANCE: authored. How far an attack-moving or patrolling unit looks for an enemy, in tiles. AoE2's
+# aggressive stance chases a sight beyond its own weapon reach, and six tiles is a stand-in for a number
+# the data does not state. Zero would make attack-move a move with extra steps.
+
+aggro_scan_ticks = 5
+# PROVENANCE: authored. How often a hunting unit looks around. A scan is the only order-path cost that
+# grows with the size of the world (it is a pass over every entity), so it is decimated: at 20 Hz a unit
+# reconsiders its neighbourhood four times a second, which a player cannot see. Zero means every tick.
+
 accuracy_scatter = 2.0
 # PROVENANCE: authored. How far off the mark, in tiles, a shot lands when the shooter's accuracy roll
 # fails. Accuracy itself is per unit and comes from the dat (an archer 80, a hand cannoneer 65, every
