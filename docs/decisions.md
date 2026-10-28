@@ -804,3 +804,25 @@ every tick - and it is hashed, because where a building sends its units is state
 is whether the rally can be reached - a unit ordered to walk somewhere walled off simply stands where it
 appeared, which is the same shape as a villager whose node is gone. Recorded rather than silently assumed: a
 failure to path is not reported to the player yet.
+
+## D40 - A rally point is a place, a resource, or a pocket you cannot enter
+
+D39 treated a rally tile as "walk to exactly this point or stay home", which is wrong twice over, on the
+user's correction:
+
+- **Unreachable is not a refusal.** A rally into a walled pocket or the far side of a forest means *go as close
+  as you can*. `walk_towards` tries the tile, then each ring around it outwards (ten rings), taking the first
+  tile a route exists to, and switches the unit to `Move` there. It stays where it appeared only if nothing at
+  all is reachable - which is now the rare case rather than the default.
+- **A rally onto a resource is a gathering order.** If a resource node stands on the rally tile, the finished
+  unit is given a gather order for *that* node through the ordinary path (`start_gather`), which is why the
+  answer to "rallied onto gold surrounded by wood" is the gold or nothing: the node is chosen by the tile, not
+  by what is nearest, so a tree next door is never substituted. The test builds exactly that map - stone with
+  wood on three sides - and asserts the task names the stone and the stone's amount falls.
+
+Two fallbacks, both deliberate: a unit that cannot *work* the node (a spearman rallied onto a tree) and a node
+it cannot reach both fall back to walking as close as possible, because a rally is an instruction about a place
+first and a job second.
+
+**What is still not reported:** a rally that cannot be reached at all leaves the unit where it appeared, and
+nothing tells the player. That is D39's gap, narrowed but not closed.

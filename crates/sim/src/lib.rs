@@ -1826,14 +1826,21 @@ impl World {
             }
             Some(RallyPoint::Tile(x, y)) => {
                 let to = self.tile((x, y));
-                let from = self.find(id).map(|entity| entity.position);
-                if let Some(from) = from
-                    && let Ok(route) = self.plan_path(from, to)
-                {
-                    self.paths.insert(id, route);
-                    if let Some(entity) = self.find_mut(id) {
-                        entity.task = Task::Move { to };
-                    }
+                // A rally point on a resource is a gathering order: the villager goes there and works
+                // *that* node. Rallied onto gold with wood all round it, it gathers the gold or
+                // nothing - never the nearest tree (D40).
+                let node = self
+                    .entities
+                    .iter()
+                    .find(|entity| {
+                        matches!(entity.kind, EntityKind::Resource(_)) && entity.position == to
+                    })
+                    .map(|entity| entity.id);
+                let gathering = node.is_some_and(|node| self.start_gather(id, node).is_ok());
+                if !gathering {
+                    // Nothing to work there, or this unit cannot work it (a spearman rallied onto a
+                    // tree), or there is no way to reach it: go as close as the map allows.
+                    self.walk_towards(id, to);
                 }
             }
             None => {}
@@ -2775,6 +2782,53 @@ impl World {
             // Free is not the same as reachable: a free tile inside a wall is no place to stand.
             self.plan_path(from, position).ok().map(|_| position)
         })
+    }
+
+    /// Walk a unit towards a place, stopping as close to it as the map allows: the place itself first,
+    /// then the nearest tile on each ring around it that a route exists to. A rally point inside a walled
+    /// pocket is therefore an instruction to stand at the pocket's edge, not to stay home (D40).
+    fn walk_towards(&mut self, unit: EntityId, to: (Fixed, Fixed)) {
+        let Some(from) = self.find(unit).map(|entity| entity.position) else {
+            return;
+        };
+        let mut target = None;
+        if let Ok(route) = self.plan_path(from, to) {
+            self.paths.insert(unit, route);
+            target = Some(to);
+        } else {
+            let scale = self.scale;
+            let x = i32::from(u16::try_from(to.0.raw() / scale).unwrap_or(0));
+            let y = i32::from(u16::try_from(to.1.raw() / scale).unwrap_or(0));
+            'rings: for radius in 1..=10i32 {
+                for dy in -radius..=radius {
+                    for dx in -radius..=radius {
+                        // Only the ring itself: the interior has already been tried.
+                        if dx.abs() != radius && dy.abs() != radius {
+                            continue;
+                        }
+                        let (Some(cx), Some(cy)) =
+                            (u16::try_from(x + dx).ok(), u16::try_from(y + dy).ok())
+                        else {
+                            continue;
+                        };
+                        if !self.is_free_ground(cx, cy) {
+                            continue;
+                        }
+                        let candidate = self.tile((cx, cy));
+                        if let Ok(route) = self.plan_path(from, candidate) {
+                            self.paths.insert(unit, route);
+                            target = Some(candidate);
+                            break 'rings;
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(target) = target
+            && let Some(entity) = self.find_mut(unit)
+        {
+            entity.task = Task::Move { to: target };
+        }
     }
 
     /// Is this tile on the map at all? Free ground is the stricter question, and a rally point may

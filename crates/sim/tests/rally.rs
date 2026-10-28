@@ -75,6 +75,56 @@ fn tile_of(world: &World, id: EntityId) -> (u16, u16) {
     )
 }
 
+/// A small map with a stone tile at (3,1) whose four neighbours are all trees - the "gold surrounded by
+/// wood" case, where a villager rallied to it must gather *stone* or nothing.
+const WALLED_STONE: &str = r#"
+schema = 1
+[map]
+width = 8
+height = 8
+terrain = [
+  "GGFFFGGG",
+  "GGFGFGGG",
+  "GGGGGGGG",
+  "GGGGGGGG",
+  "GGGGGGGG",
+  "GGGGGGGG",
+  "GGGGGGGG",
+  "GGGGGGGG",
+]
+[[map.resource]]
+kind = "stone"
+amount = 300
+tiles = [[3, 1]]
+[[map.resource]]
+kind = "wood"
+amount = 200
+tiles = [[2, 1], [4, 1], [2, 0], [3, 0], [4, 0]]
+[[map.town_centre]]
+player = 1
+x = 1
+y = 5
+[[map.town_centre]]
+player = 2
+x = 6
+y = 6
+"#;
+
+/// The same fixture, on a map of the test's choosing.
+fn seeded_on(fx: &Fixture, map_text: &str) -> World {
+    let mut economy = fx.economy.clone();
+    economy.start.stock = [("food".to_owned(), 4_000), ("wood".to_owned(), 4_000)]
+        .into_iter()
+        .collect();
+    let map = ruage_data::load_map_str(map_text, "map.toml", &fx.resources).expect("the test map");
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    world.seed_from(&map, &economy, &fx.units).expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    world
+}
+
 const VILLAGER: u32 = 83;
 
 #[test]
@@ -255,4 +305,141 @@ fn a_rally_point_outside_the_map_is_refused() {
         Err(ruage_sim::SimError::OffMap { .. }) => {}
         other => panic!("expected OffMap, got {other:?}"),
     }
+}
+
+/// A rally onto a resource tile is a gathering order: the finished villager walks there and starts on that
+/// node. Rallied to stone with wood on every side, it must gather the stone - not the trees it passes.
+#[test]
+fn a_villager_rallied_onto_stone_gathers_stone_not_the_wood_around_it() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded_on(&fx, WALLED_STONE);
+    let centre = town_centre(&world);
+    world
+        .submit_checked(Command::Rally {
+            building: centre,
+            point: Some((3, 1)),
+        })
+        .expect("the stone tile is a legal rally");
+    world.step().expect("step");
+    world
+        .submit_checked(Command::Train {
+            building: centre,
+            unit: VILLAGER,
+        })
+        .expect("train");
+
+    for _ in 0..600 {
+        world.step().expect("step");
+    }
+    // Ids are the world's, not the map file's: the stone is whichever entity sits on that tile.
+    let stone = world
+        .entities()
+        .iter()
+        .find(|e| e.kind != EntityKind::Unit && tile_of(&world, e.id) == (3, 1))
+        .map(|e| e.id)
+        .expect("the stone node is on the map");
+    let gathering = world
+        .entities()
+        .iter()
+        .filter(|e| e.player == 1 && e.kind == EntityKind::Unit)
+        .filter(|e| matches!(e.task, Task::Gather { .. }))
+        .count();
+    assert_eq!(gathering, 1, "the new villager is gathering something");
+    let worker = world
+        .entities()
+        .iter()
+        .find(|e| e.player == 1 && matches!(e.task, Task::Gather { .. }))
+        .expect("the gatherer");
+    match worker.task {
+        Task::Gather { node, .. } => assert_eq!(
+            node, stone,
+            "it is on the stone, not on a tree that happened to be nearer"
+        ),
+        other => panic!("expected a gather order, got {other:?}"),
+    }
+
+    // And the stone moves: the node loses amount while the villager works it.
+    let before = world.entity(stone).expect("stone").amount.raw();
+    for _ in 0..600 {
+        world.step().expect("step");
+    }
+    assert!(
+        world.entity(stone).expect("stone").amount.raw() < before,
+        "the villager is taking from the stone"
+    );
+}
+
+/// A map with one grass tile at (4,4) walled in by forest on all eight sides. Nothing can walk in, so a
+/// rally there is an instruction to stand at the ring's edge.
+const FOREST_POCKET: &str = r#"
+schema = 1
+[map]
+width = 9
+height = 9
+terrain = [
+  "GGGGGGGGG",
+  "GGGGGGGGG",
+  "GGGGGGGGG",
+  "GGGFFFGGG",
+  "GGGFGFGGG",
+  "GGGFFFGGG",
+  "GGGGGGGGG",
+  "GGGGGGGGG",
+  "GGGGGGGGG",
+]
+[[map.resource]]
+kind = "wood"
+amount = 400
+tiles = [[3, 3], [4, 3], [5, 3], [3, 4], [5, 4], [3, 5], [4, 5], [5, 5]]
+[[map.town_centre]]
+player = 1
+x = 1
+y = 1
+[[map.town_centre]]
+player = 2
+x = 7
+y = 7
+"#;
+
+/// An unreachable rally is not a refusal: the unit goes as close to it as the map allows.
+#[test]
+fn a_rally_into_a_forest_pocket_goes_as_close_as_it_can() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded_on(&fx, FOREST_POCKET);
+    let centre = town_centre(&world);
+    let pocket = (4, 4);
+    world
+        .submit_checked(Command::Rally {
+            building: centre,
+            point: Some(pocket),
+        })
+        .expect("the pocket is on the map, even if nothing can walk into it");
+    world.step().expect("step");
+    world
+        .submit_checked(Command::Train {
+            building: centre,
+            unit: VILLAGER,
+        })
+        .expect("train");
+    for _ in 0..2_000 {
+        world.step().expect("step");
+    }
+
+    let newest = world
+        .entities()
+        .iter()
+        .filter(|e| e.player == 1 && e.kind == EntityKind::Unit && e.unit == Some(VILLAGER))
+        .map(|e| e.id)
+        .max()
+        .expect("a villager");
+    let tile = tile_of(&world, newest);
+    assert!(
+        tile != pocket,
+        "it did not walk through the forest to reach the pocket"
+    );
+    let gap = tile.0.abs_diff(pocket.0).max(tile.1.abs_diff(pocket.1));
+    assert_eq!(
+        gap, 2,
+        "it stopped one ring outside the trees: {tile:?} against {pocket:?}"
+    );
 }

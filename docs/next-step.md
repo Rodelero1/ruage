@@ -541,6 +541,21 @@ Mutation-proved both ways: ignoring the inside arm fails the "stays inside" test
 Next: **kind 0's 106 commands** (garrison capacity is now a real attribute to modify), or the **per-civ
 211-number array**, still unread.
 
+## Corrected: rallies that gather, and rallies you cannot reach (2026-10-27, v0.82)
+
+Two corrections to D39, both from the user.
+
+**Unreachable is not a refusal:** a rally into a walled pocket now sends the unit as close as the map allows -
+the tile if there is a route, otherwise the first reachable tile on each ring around it, ten rings out - instead
+of leaving it at home. **A rally onto a resource is a gathering order:** the node is chosen by the tile, through
+the ordinary gather path, so a villager rallied onto stone with wood on three sides gathers the stone (proven on
+a purpose-built map, including that the stone's amount falls) and never substitutes the nearest tree.
+
+Units that cannot work the node, and nodes that cannot be reached, fall back to walking as close as possible.
+
+Mutation-proved: making the rally never gather fails the stone test, and removing the ring search fails the
+pocket test.
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

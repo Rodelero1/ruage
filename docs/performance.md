@@ -51,6 +51,16 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Twenty-seventh pass: a rally can cost up to ten rings of pathfinding, once (2026-10-27)
+
+The nearest-reachable-tile search is bounded at ten rings - up to 440 tiles examined, each with a `plan_path`
+attempt, which is the most expensive thing in this file so far. It happens **once per unit produced**, only
+when the rally is unreachable, and never in a tick. That is the trade recorded rather than hidden: a player who
+rally-points into a forest pays a search on each unit, and the alternative (no fallback) leaves units standing
+at home, which is what the correction was about.
+
+Both anchors unchanged (`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`): neither probe sets a rally.
+
 ## Twenty-sixth pass: a rally is read once per finished unit (2026-10-27)
 
 Rally points add nothing per tick: the rally is looked up when a unit finishes training, and `Task::Move` uses
