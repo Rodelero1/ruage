@@ -2390,9 +2390,59 @@ impl World {
         landed
     }
 
+    /// Cancel every other player's building sharing this site's tile (D58).
+    ///
+    /// Two buildings can only share a tile because one of them was placed blind, and this is where the
+    /// blind one loses: the builder who starts working takes the ground. The victim is killed rather than
+    /// deleted so the ordinary death sweep releases its bookkeeping and its tile - a cancelled wall must
+    /// not keep blocking, and a cancelled site must not keep a `paths` entry.
+    fn cancel_overbuilt(&mut self, site: EntityId) {
+        let Some((position, player)) = self
+            .find(site)
+            .map(|entity| (entity.position, entity.player))
+        else {
+            return;
+        };
+        let theirs: Vec<(EntityId, bool)> = self
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.id != site
+                    && entity.player != player
+                    && entity.player != 0
+                    && entity.position == position
+                    && matches!(entity.kind, EntityKind::Building)
+            })
+            .map(|entity| (entity.id, entity.construction.is_none()))
+            .collect();
+        // A finished building on the tile is not a newcomer's to cancel: the race went the other way, and
+        // the site that arrived late is the one that goes.
+        if theirs.iter().any(|(_, finished)| *finished) {
+            if let Some(entity) = self.find_mut(site) {
+                entity.hp = 0;
+            }
+            return;
+        }
+        for (victim, _) in theirs {
+            if let Some(entity) = self.find_mut(victim) {
+                entity.hp = 0;
+            }
+        }
+    }
+
     /// One tick of work on a site. Returns true when this tick finished the building. HP is
     /// derived from progress rather than accumulated, so a mill's 17.14 HP/s cannot drift.
     fn work_one_tick(&mut self, site: EntityId) -> bool {
+        // The first tick of work takes the tile (D58). A site that stands on an enemy's foundation can
+        // only be there because it was placed blind, and the builder who starts working cancels the one
+        // who did not get there first. Cancelled before the borrow below, which needs `self` whole.
+        let first_tick = self
+            .find(site)
+            .and_then(|entity| entity.construction)
+            .is_some_and(|construction| construction.progress_ticks == 0);
+        if first_tick {
+            self.cancel_overbuilt(site);
+        }
         let Some(building) = self.find_mut(site) else {
             return false;
         };
@@ -2465,11 +2515,22 @@ impl World {
             return Err(SimError::SiteBlocked { tile: at });
         }
         let position = self.tile(at);
-        if self
-            .entities
-            .iter()
-            .any(|entity| entity.position == position)
-        {
+        // One tile holds one building per player, and a building you cannot see does not block you
+        // (D58): the player chooses blind, so the answer has to be the world *as that player sees it*.
+        // Your own foundation always blocks - stacking your own is never what the click meant - and a
+        // resource node blocks whoever is looking, because it is not a player's to lose.
+        // Only a *foundation* can be overbuilt blind. A finished building blocks whoever is looking: the
+        // rule is about a site someone has merely marked out, and letting a house cancel a town centre
+        // through fog is not the game either version plays.
+        let blind = self.vision(worker.player, at) != TileVision::Visible;
+        let blocked = self.entities.iter().any(|entity| {
+            entity.position == position
+                && (entity.player == worker.player
+                    || entity.player == 0
+                    || !blind
+                    || entity.construction.is_none())
+        });
+        if blocked {
             return Err(SimError::SiteOccupied { tile: at });
         }
         // Reachability is part of "can this order run": paying for a site nobody can walk to would
@@ -3580,6 +3641,18 @@ impl World {
             + self.patrols.len()
             + self.resuming.len()
             + self.stances.len()
+    }
+
+    /// Whether any side table still remembers `id`. The removal tests use it to prove a dead entity
+    /// leaves nothing behind - and the overbuild rule uses it in a test to prove a *cancelled* one does
+    /// not either. Nothing in the tick loop needs it, so it costs nothing there.
+    pub fn bookkeeping_touches(&self, id: EntityId) -> bool {
+        self.paths.contains_key(&id)
+            || self.rallies.contains_key(&id)
+            || self.queued.contains_key(&id)
+            || self.resuming.contains_key(&id)
+            || self.patrols.contains_key(&id)
+            || self.stances.contains_key(&id)
     }
 
     /// How many units this building is making: the one in progress plus everything queued behind it.

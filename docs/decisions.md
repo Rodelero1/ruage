@@ -1330,3 +1330,39 @@ enemy, move on ground, rally on a building.
 evidence stands in for the recorded RED: deleting the click's tile filter, letting a band take buildings, and issuing
 no orders each fail exactly their own test. Recorded because a claim of TDD that was not TDD is worse than a named
 exception.
+
+## D58 - Foundations: one per tile, and a blind one is not a claim
+
+The owner's rule, in his words: one player's foundations cannot be placed over one another; a foundation a
+player cannot see does not block that player; and if someone places over a foundation and **starts
+constructing**, the other player's building is cancelled.
+
+**Visibility is read when the order is placed, not when the builder arrives.** That is the whole rule. A player
+choosing a tile in fog is choosing blind - by the time the villager walks over, its own sight has made the tile
+visible, so a check on arrival would refuse every overbuild and the rule would be unobservable. `check_build`
+asks `vision(player, tile)`; if it is not `Visible`, another player's *foundation* on that tile is not in the way.
+
+**Two judgement calls, both beyond the three sentences:**
+
+1. **Only a foundation may be overbuilt.** A *finished* building blocks whoever is looking, fog or no fog. The
+   owner's words are about foundations twice over, and the alternative lets a player cancel a town centre by
+   laying a house in the fog - which is not the game either version plays. A finished building is also what
+   makes the race decidable: if the other player finished before I arrived, my site is the one cancelled, since
+   a newcomer does not raze a completed house by walking up to it.
+2. **The newcomer wins a foundation-versus-foundation race.** The earlier builder does not defend its tile; the
+   builder whose *first* work tick happens after the other foundation was placed takes the ground. That is the
+   owner's sentence read literally ("places his building over mine and starts constructing it, my building gets
+   cancelled"), and it is why cancellation is gated on `progress_ticks == 0`: cancelling on every tick makes the
+   earlier worker defend instead, which is the opposite rule (mutation D, which failed the two cancel tests).
+
+**The cancelled site is killed, not deleted**, so it leaves through the ordinary death sweep: its tile is freed
+by the blocking sweep (`D54`) and its bookkeeping by the removal sweep. `bookkeeping_touches(id)` was added to
+make that provable - the earlier `bookkeeping_entries()` count could not tell one entity's leak from another's.
+
+**Known untested edge, recorded rather than hidden:** the "the other player finished first" branch is
+implemented but not covered by a test. Staging the race needs a builder slower than the other side's build
+time, and the only lever is `Command::Spawn`'s speed, where a tenth of a tile a second produced a villager that
+walked to the map edge instead of the site - so the test would have asserted a pathing oddity rather than the
+rule. The branch is four lines and its control (a finished building refuses placement) *is* tested.
+
+**Resource nodes always block**, sighted or not: a node is nobody's foundation to lose.

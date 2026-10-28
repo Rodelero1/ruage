@@ -721,3 +721,15 @@ Until one is chosen, the honest statement is: the engine can be *played* to a fi
 - **The HUD is data, not pixels** (D57): `Hud` is a struct and a test, and no text is drawn yet - a bitmap font is
   the missing piece, and it is presentation, not simulation.
 - **Selection has no control groups or hotkeys** (list step 25, not in this batch).
+- **The overbuild race is implemented, not tested** (D58): the branch where the other player finishes their
+  building before the newcomer arrives. A test needs a reliably slow builder, and `Command::Spawn`'s speed is
+  the only lever - tenths of a tile a second sent the villager to the map edge instead of the site, which is a
+  pathing question of its own worth a look (see below).
+- **A very slow unit walks the wrong way** (found staging D58's race): a villager spawned at speed 0.1 tiles a
+  second with a build order eight tiles away ended up `Idle` at the map edge, having moved east, and its site
+  finished anyway - so something advanced the site's work without the builder reaching it. Not reproduced at
+  speed 1.0. The site/arrival contract is worth one test: work must happen only when the builder is at the
+  site.
+- **Overbuilding a town-centre foundation cancels a seat** (D46 + D58): a blind house on an enemy TC foundation
+  that has not been worked yet cancels it, and a player with no seat loses. Faithful to both rules as written
+  and probably too sharp in play; it wants a decision, not a patch.
