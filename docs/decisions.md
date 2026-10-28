@@ -826,3 +826,21 @@ first and a job second.
 
 **What is still not reported:** a rally that cannot be reached at all leaves the unit where it appeared, and
 nothing tells the player. That is D39's gap, narrowed but not closed.
+
+**Provenance, asked directly: does the game refuse a rally on a cliff?** No - it accepts the click. Nothing in
+the series wiki, the DE notes or the support forums describes a rally point being *rejected*; the flag is set by
+"right-clicking on the map or mini map" and units "automatically travel to the Gather Point"
+(ageofempires.fandom.com, *Gather Point*), which is only meaningful if the point can be somewhere the unit
+cannot stand. Where a game in the series *does* validate, the wiki says so plainly: AoE IV's rally "cannot be
+set on their own associated building" and not on enemy units. AoE II has no such list, and it does allow a rally
+on the building itself - DE later added an explicit Alt+hotkey to do exactly that, which is D39's `Inside`. The
+"as close as possible" half is corroborated by DE's own pathfinding note that a villager returns to work "from
+the closest point to the gather point" (update 58259), and the resource half by a DE bug report whose expected
+behaviour is that a gather point on a resource has the villager work *that* resource (forums.ageofempires.com,
+build 14512201) - the reported defect being that a mined-out node sends her somewhere near herself instead of
+near the gather point.
+
+So: **accept the placement, send the unit as close as it can get**, which is what D40 does. The one refusal we
+keep is off the map, and no mouse can produce that click. Current limits of the comparison, stated: our terrain
+is only grass and forest (no cliffs, water or elevation yet), so a cliff rally is a forest rally today and takes
+the same ring search.
