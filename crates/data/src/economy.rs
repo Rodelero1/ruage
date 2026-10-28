@@ -39,9 +39,10 @@ pub struct Economy {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Conquest {
-    /// Roles that do not count as a standing thing: walls, farms, and whatever else the manual lists.
-    /// A player with only these is defeated, which is what makes this different from "kill everything".
-    pub ignored_roles: Vec<String>,
+    /// Roles of buildings a villager *deposits* at (a town centre, a mill). Production is not listed here
+    /// because `[train]` already says which buildings make units; everything else - houses, walls, gates,
+    /// towers, farms - keeps nobody in the match (D59).
+    pub gathering_roles: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,7 +165,7 @@ struct RawEconomy {
 #[serde(deny_unknown_fields)]
 struct RawConquest {
     #[serde(default)]
-    ignored_roles: Vec<String>,
+    gathering_roles: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -553,7 +554,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         role: raw.role,
         tech_role: raw.tech_role,
         conquest: Conquest {
-            ignored_roles: raw.conquest.ignored_roles,
+            gathering_roles: raw.conquest.gathering_roles,
         },
     })
 }

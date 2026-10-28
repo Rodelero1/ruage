@@ -760,3 +760,7 @@ a player is out when they have no living unit and no standing building, counting
 marks which roles count, since "walls and farms do not count" is the same kind of content fact as
 `[build] blocking_roles`. Keep D46's "refuse orders after the match is over" and the draw case. Consider a grace
 window (the DE reverse-engineering notes describe one) if a rebuild race turns out to be the interesting part.
+- **The gathering half of D59a is untested** because the pack has one deposit site and it is also production:
+  the town centre. Give the pack roles for a mill, a lumber camp and a mining camp (ids are in the dat), and add
+  "a mill alone keeps a player alive, and a farm does not" - a test that would fail if `gathering_roles` were
+  ignored, which today it would not.

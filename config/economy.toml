@@ -184,6 +184,11 @@ town_centre_population = 5
 # So defeat is a negative condition - nothing *qualifying* left - and the town centre is not special:
 # losing it is a setback, not the end, because a villager can rebuild it.
 #
-# The manual lists classes; this pack can only name the roles it has. Roles named here do not count; add
-# the rest (tower, gate, trade_cart, sheep, the ships, relic) when the pack gains them.
-ignored_roles = ["wall", "farm"]
+# The owner's rule is narrower than the manual's list and easier to hold: a *building* keeps a player in
+# the match only if it can **make something** or **take something in**. Everything else - houses, walls,
+# gates, towers, farms - does not count.
+#
+# Production needs no list: it is `[train]`, the buildings content already says can create a unit.
+# Gathering is a building a villager *deposits* at, which content does not otherwise name, so it is
+# named here. The pack has no mill, lumber camp or mining camp yet; when it gains them, add their roles.
+gathering_roles = ["town_centre"]

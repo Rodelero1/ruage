@@ -1415,3 +1415,27 @@ interesting part of a match.
 *not* end the match, and the match-over tests wipe a side completely instead. Eight new tests in `defeat.rs` cover
 the rule itself: a lone villager survives, the last villager ends it, walls and farms do not count, a house does,
 a foundation does, a double wipe on one tick is a draw, and eliminating every other side wins.
+
+## D59a - A building counts only if it produces or takes in (owner's amendment)
+
+D59 began with the manual's exclusion list, which is a list of *buildings* that do not count. The owner
+narrowed it to a **property**: "farms and any other non-production and non-gathering building don't count for
+survival". That is the better shape - one sentence instead of an enumeration that would have to be kept in step
+with the unit table - and it is what the engine now does:
+
+- a **unit** always counts (it can walk somewhere and make something happen);
+- a **building** counts only if it can **make a unit** or **take a resource in**;
+- everything else - house, wall, gate, tower, farm - keeps nobody in the match.
+
+**Production is derived, not listed.** `[train] by_building` already says which buildings create a unit, so the
+engine asks it rather than being told twice. **Gathering is content**: which buildings a villager may deposit at
+is not otherwise written down, so `[conquest] gathering_roles` names them (today: the town centre).
+
+**Stricter than the manual, on purpose.** The manual's exclusion list does not mention houses, so a literal
+reading keeps a player alive with one house in a corner. The owner's rule does not, and the owner's rule wins:
+a house is not a reason to still be in a match.
+
+**The gathering half is carried but not exercised** - exactly the shape `blast_level` had (D51). The pack's only
+deposit site is the town centre, which is also production, so deleting the gathering loop changes no test. It is
+recorded in `docs/next-step.md` with what would fix it: roles for a mill, a lumber camp and a mining camp, and a
+test that a mill alone keeps a player alive. Written down rather than claimed as covered.

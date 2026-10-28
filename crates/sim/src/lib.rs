@@ -1053,9 +1053,10 @@ pub struct World {
     /// Whether the opening stockpile has been applied. Part of state, because it decides whether a
     /// later `load_resources` re-applies it and wipes what the players have gathered since.
     start_stock_applied: bool,
-    /// The families content says do not keep a player alive (`[conquest] ignored_roles`, D59).
-    /// Content, not state - it does not change during a match - so it is not hashed.
-    conquest_ignored: BTreeSet<u32>,
+    /// The building families that keep a player alive: production (`[train]`) and gathering
+    /// (`[conquest] gathering_roles`), resolved to roots at seeding (D59). Content, not state - it does
+    /// not change during a match - so it is not hashed.
+    conquest_counted: BTreeSet<u32>,
     /// Who is in this match, set when a player's first entity lands and never cleared. Without it the
     /// world could not tell "the enemy has lost everything" from "nobody was ever here", and losing
     /// everything is exactly the case a match has to notice (D46).
@@ -1209,7 +1210,7 @@ impl World {
             availability_techs: Vec::new(),
             resolving_availability: false,
             start_stock_applied: false,
-            conquest_ignored: BTreeSet::new(),
+            conquest_counted: BTreeSet::new(),
             roster: [false; MAX_PLAYERS],
             outcome: None,
             researched: BTreeMap::new(),
@@ -1464,14 +1465,18 @@ impl World {
     ) -> Result<(), SimError> {
         self.units = Some(units.clone());
         self.economy = Some(economy.clone());
-        // Which families do not count towards surviving (D59). Resolved to roots once, here, so the
-        // check after a death is a set lookup rather than a walk through content. A role this pack does
-        // not have yet (a tower, a sheep) is simply absent: the manual's list grows with the pack.
-        self.conquest_ignored.clear();
+        // Which building families keep a player alive (D59): anything that makes a unit, and anything a
+        // villager can deposit at. Resolved to roots once, here, so the check after a death is a set
+        // lookup rather than a walk through content. Everything else - houses, walls, gates, towers,
+        // farms - keeps nobody in the match, which is the owner's rule and stricter than the manual.
+        self.conquest_counted.clear();
         if let Some(units) = self.units.as_ref() {
-            for role in &economy.conquest.ignored_roles {
+            for building in economy.train.by_building.keys() {
+                self.conquest_counted.insert(units.root(*building));
+            }
+            for role in &economy.conquest.gathering_roles {
                 if let Some(unit) = economy.role.get(role) {
-                    self.conquest_ignored.insert(units.root(*unit));
+                    self.conquest_counted.insert(units.root(*unit));
                 }
             }
         }
@@ -3724,17 +3729,19 @@ impl World {
 
     /// Whether this entity keeps its owner in the match (D59).
     ///
-    /// Anything a player owns counts - a unit, a building, a foundation - except the families content
-    /// names in `[conquest] ignored_roles` (walls and farms, per the manual's exclusion list). Family
-    /// rather than id, because an upgrade replaces an id (a town centre is 109 -> 71 -> 141).
+    /// A **unit** always counts - it can walk somewhere and make something happen. A **building** counts
+    /// only if it can make a unit or take a resource in, so a house, a wall, a tower or a farm does not:
+    /// those are the things a player can lose everything else and still be sitting on. Family rather than
+    /// id, because an upgrade replaces an id (a town centre is 109 -> 71 -> 141).
     fn keeps_them_in(&self, entity: &Entity) -> bool {
         if entity.player == 0 || entity.hp <= 0 {
             return false;
         }
         match entity.kind {
-            EntityKind::Unit | EntityKind::Building => entity.unit.is_none_or(|unit| {
+            EntityKind::Unit => true,
+            EntityKind::Building => entity.unit.is_some_and(|unit| {
                 let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
-                !self.conquest_ignored.contains(&family)
+                self.conquest_counted.contains(&family)
             }),
             // An arrow in the air and a resource node keep nobody alive.
             EntityKind::Projectile | EntityKind::Resource(_) => false,

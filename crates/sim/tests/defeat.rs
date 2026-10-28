@@ -184,22 +184,37 @@ fn walls_and_farms_do_not_keep_a_player_alive() {
 }
 
 #[test]
-fn a_house_keeps_a_player_alive() {
-    // Anything not on the exclusion list counts, however useless it is.
+fn a_house_does_not_keep_a_player_alive() {
+    // The owner's rule, and stricter than the manual's list: a building counts only if it can make
+    // something or take something in. A house can do neither.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let house = spawn_building(&mut world, 2, "house", (26, 26));
     reduce_to(&mut world, 2, &[house]);
     assert_eq!(
         world.outcome(),
-        None,
-        "a house did not keep player 2 in the match"
+        Some(MatchOutcome::Victory { winner: 1 }),
+        "a player left with only a house is still in the match"
     );
 }
 
 #[test]
-fn a_foundation_counts_as_a_building() {
-    // A half-built house is a standing building: a player who has just laid one is not out.
+fn a_barracks_keeps_a_player_alive() {
+    // It makes units: that is production, so it counts.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let barracks = spawn_building(&mut world, 2, "barracks", (26, 26));
+    reduce_to(&mut world, 2, &[barracks]);
+    assert_eq!(
+        world.outcome(),
+        None,
+        "a player with a barracks left was eliminated"
+    );
+}
+
+#[test]
+fn a_town_centre_keeps_a_player_alive() {
+    // It makes villagers (production) and it takes wood in (gathering): both halves of the rule.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let centre = world
@@ -208,46 +223,84 @@ fn a_foundation_counts_as_a_building() {
         .find(|entity| entity.player == 2 && entity.kind == EntityKind::Building)
         .map(|entity| entity.id)
         .expect("the enemy town centre");
-    let house = world.role_unit("house").expect("house");
-    let villager = world
-        .entities()
-        .iter()
-        .find(|entity| entity.player == 2 && entity.kind == EntityKind::Unit)
-        .map(|entity| entity.id)
-        .expect("a villager");
-    let (tx, ty) = (26i64, 26i64);
-    world
-        .submit_checked(Command::Build {
-            villager,
-            unit: house,
-            at: (tx as u16, ty as u16),
-        })
-        .expect("a foundation");
-    world.step().expect("step");
-    let site = world
-        .entities()
-        .iter()
-        .find(|entity| entity.player == 2 && entity.construction.is_some())
-        .map(|entity| entity.id)
-        .expect("the foundation");
-
-    // Keep the foundation and nothing else.
-    for id in holdings(&world, 2) {
-        if id != site {
-            world
-                .submit_checked(Command::Delete {
-                    player: 2,
-                    entity: id,
-                })
-                .expect("delete");
-        }
-    }
-    world.step().expect("step");
-    let _ = centre;
+    reduce_to(&mut world, 2, &[centre]);
     assert_eq!(
         world.outcome(),
         None,
-        "a foundation did not count as a standing building"
+        "a player with only a town centre was eliminated"
+    );
+}
+
+/// Lay a foundation of `role` one tile from `player`'s first villager, and return it.
+fn build_site_on(world: &mut World, player: u8, role: &str) -> EntityId {
+    let unit = world.role_unit(role).unwrap_or_else(|| panic!("{role}"));
+    let villager = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == player && entity.kind == EntityKind::Unit)
+        .map(|entity| entity.id)
+        .expect("a villager");
+    let scale = world.scale();
+    let (x, y) = world
+        .entity(villager)
+        .map(|entity| {
+            (
+                entity.position.0.raw() / scale,
+                entity.position.1.raw() / scale,
+            )
+        })
+        .expect("the villager");
+    let mut placed = false;
+    for (dx, dy) in [(1i64, 0i64), (0, 1), (-1, 0), (0, -1)] {
+        let (tx, ty) = (x + dx, y + dy);
+        if tx < 0 || ty < 0 || tx > i64::from(u16::MAX) || ty > i64::from(u16::MAX) {
+            continue;
+        }
+        let order = world.submit_checked(Command::Build {
+            villager,
+            unit,
+            at: (tx as u16, ty as u16),
+        });
+        if order.is_ok() {
+            placed = true;
+            break;
+        }
+    }
+    assert!(placed, "no tile beside the villager would take a {role}");
+    world.step().expect("step");
+    world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == player && entity.construction.is_some())
+        .map(|entity| entity.id)
+        .expect("a foundation")
+}
+
+#[test]
+fn a_production_foundation_counts() {
+    // Work in progress still stands: a player who has just laid a barracks is in the match.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let site = build_site_on(&mut world, 2, "barracks");
+    reduce_to(&mut world, 2, &[site]);
+    assert_eq!(
+        world.outcome(),
+        None,
+        "a barracks foundation did not keep player 2 in the match"
+    );
+}
+
+#[test]
+fn a_house_foundation_does_not_count() {
+    // The same question asked of the building it will become: a house foundation is a house.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let site = build_site_on(&mut world, 2, "house");
+    reduce_to(&mut world, 2, &[site]);
+    assert_eq!(
+        world.outcome(),
+        Some(MatchOutcome::Victory { winner: 1 }),
+        "a house foundation kept a player in the match"
     );
 }
 
