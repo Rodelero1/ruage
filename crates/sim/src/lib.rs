@@ -310,6 +310,9 @@ pub enum Task {
         /// only place it can strike from. Resolved at order time like damage and reload, so a tech that
         /// lands mid-fight does not move an arrow already in the air.
         range: Fixed,
+        /// The dead zone, in engine fixed point: this attacker cannot strike anything closer than this,
+        /// and backs away until it can. Resolved at order time like `range` (D44).
+        min_range: Fixed,
     },
     Gather {
         node: EntityId,
@@ -1570,7 +1573,7 @@ impl World {
         &self,
         attacker: EntityId,
         target: EntityId,
-    ) -> Result<(i32, u32, Fixed), SimError> {
+    ) -> Result<(i32, u32, Fixed, Fixed), SimError> {
         let source = self
             .find(attacker)
             .ok_or(SimError::MissingEntity(attacker))?;
@@ -1638,12 +1641,27 @@ impl World {
             self.scale,
             &self.modifiers_for(source.player, attacker_stats, "range"),
         );
-        Ok((damage, reload_ticks, range))
+        // The dead zone: a siege engine cannot shoot what stands next to it, and the number is the
+        // unit's own (a mangonel 3 tiles, a bombard cannon 5, everything else 0), moved by any tech that
+        // sets attribute 20 (D44).
+        let min_base = attacker_stats
+            .min_range
+            .resolve(self.scale, "min_range")
+            .map_err(|err| SimError::Unresolved {
+                id: attacker_stats.id,
+                detail: err.to_string(),
+            })?;
+        let min_range = scale_fixed(
+            min_base,
+            self.scale,
+            &self.modifiers_for(source.player, attacker_stats, "minimum_range"),
+        );
+        Ok((damage, reload_ticks, range, min_range))
     }
 
     /// Resolve the numbers at order time and start swinging.
     fn start_attack(&mut self, attacker: EntityId, target: EntityId) -> Result<(), SimError> {
-        let (damage, reload_ticks, range) = self.check_attack(attacker, target)?;
+        let (damage, reload_ticks, range, min_range) = self.check_attack(attacker, target)?;
         let Some(source) = self.find(attacker) else {
             return Err(SimError::MissingEntity(attacker));
         };
@@ -1665,6 +1683,7 @@ impl World {
                 reload_ticks,
                 cooldown_ticks: 0,
                 range,
+                min_range,
             };
         }
         Ok(())
@@ -1961,6 +1980,7 @@ impl World {
             reload_ticks,
             mut cooldown_ticks,
             range,
+            min_range,
         } = entity.task
         else {
             return 0;
@@ -1978,6 +1998,7 @@ impl World {
             reload_ticks,
             cooldown_ticks,
             range,
+            min_range,
         };
         landed
     }
@@ -3361,7 +3382,12 @@ impl World {
         // an index stays valid and the second pass touches each entity once.
         for (index, entity) in self.entities.iter().enumerate() {
             let (dx, dy) = match entity.task {
-                Task::Attack { target, range, .. } => {
+                Task::Attack {
+                    target,
+                    range,
+                    min_range,
+                    ..
+                } => {
                     let Some(victim) = self
                         .find(target)
                         .filter(|v| !matches!(v.kind, EntityKind::Resource(_)))
@@ -3378,16 +3404,36 @@ impl World {
                     let here = self.tile_of(entity.position);
                     let there = self.tile_of(victim);
                     let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
+                    let dx = victim.0.raw() - entity.position.0.raw();
+                    let dy = victim.1.raw() - entity.position.1.raw();
+                    let squared = dx * dx + dy * dy;
                     let in_reach = if range.raw() > 0 {
-                        let dx = victim.0.raw() - entity.position.0.raw();
-                        let dy = victim.1.raw() - entity.position.1.raw();
-                        dx * dx + dy * dy <= range.raw() * range.raw()
+                        squared <= range.raw() * range.raw()
                     } else {
                         // A melee attacker keeps the rule it always had: the next tile, diagonals
                         // included. Comparing distance to one tile would exclude the diagonal.
                         adjacent
                     };
-                    if in_reach {
+                    // A siege engine has a dead zone: inside it, the shot is not possible however
+                    // close the target is, so the engine backs away instead of standing there.
+                    let too_close =
+                        min_range.raw() > 0 && squared < min_range.raw() * min_range.raw();
+                    if too_close {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        // Away from the target, along the line it already lies on: the point reflected
+                        // through the attacker's own position.
+                        let away = (
+                            Fixed::from_raw(entity.position.0.raw() * 2 - victim.0.raw()),
+                            Fixed::from_raw(entity.position.1.raw() * 2 - victim.1.raw()),
+                        );
+                        let (dx, dy) = step_towards(entity.position, away, delta.raw());
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                    } else if in_reach {
                         strikes.push((entity.id, target));
                         (Fixed::ZERO, Fixed::ZERO)
                     } else {
@@ -4553,6 +4599,7 @@ impl World {
                     reload_ticks,
                     cooldown_ticks,
                     range,
+                    min_range,
                 } => {
                     fnv_bytes(&mut hash, &[4u8]);
                     fnv_bytes(&mut hash, &target.0.to_le_bytes());
@@ -4560,6 +4607,7 @@ impl World {
                     fnv_bytes(&mut hash, &reload_ticks.to_le_bytes());
                     fnv_bytes(&mut hash, &cooldown_ticks.to_le_bytes());
                     fnv_bytes(&mut hash, &range.raw().to_le_bytes());
+                    fnv_bytes(&mut hash, &min_range.raw().to_le_bytes());
                 }
                 Task::Build { site } => {
                     fnv_bytes(&mut hash, &[3u8]);

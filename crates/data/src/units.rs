@@ -35,6 +35,9 @@ pub struct Unit {
     pub range: MaybeFixed,
     pub reload: MaybeFixed,
     pub accuracy: u16,
+    /// The dead zone: this unit cannot shoot anything closer than this, in tiles. Three for a mangonel,
+    /// five for a bombard cannon, four for a trebuchet, zero for everything that is not siege.
+    pub min_range: MaybeFixed,
     /// The dat's `create_time`: how long this takes to appear. For a unit that is training time;
     /// **for a building it is build time** - one villager finishes a house in 25 s, a barracks in
     /// 50, a farm in 15. -1 on four units means "not creatable", not "instant".
@@ -124,6 +127,10 @@ struct RawUnit {
     range: f64,
     reload: f64,
     accuracy: u16,
+    /// Defaulted to zero: a pack written before siege dead zones existed has none, which is exactly
+    /// what every non-siege unit means.
+    #[serde(default)]
+    min_range: f64,
     train_time: i32,
     #[serde(default)]
     variant_of: Option<u32>,
@@ -227,6 +234,7 @@ pub fn load_units_str(text: &str, path: &str) -> Result<Units, ConfigError> {
             range: MaybeFixed::from_f64(r.range),
             reload: MaybeFixed::from_f64(r.reload),
             accuracy: r.accuracy,
+            min_range: MaybeFixed::from_f64(r.min_range),
             train_time: r.train_time,
             base_id: r.base_id,
             variant_of: r.variant_of,

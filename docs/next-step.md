@@ -603,6 +603,21 @@ pin the scatter off where the archers shoot at immobile targets - a stated fixtu
 Next candidates: **minimum range 20** (a siege engine that cannot shoot what stands next to it), or the
 **per-civ 211-number array**, still the largest unread thing in the dat.
 
+## Done next: minimum range (2026-10-28, v0.86)
+
+`min_range` is imported (it was in the dat all along, beside `max_range`) and consumed: **a unit cannot strike
+inside its own dead zone**, and **the attacker backs away** until the shot is legal. 46 of 1,166 units have a
+dead zone - mangonel 3, bombard cannon 5, trebuchet 4, dock 2 - so the rule is data, not a siege list; an archer's
+is 0 and fires from where a mangonel cannot. Attribute 20 (`set`, Andean Sling) moves it.
+
+The number is resolved at order time like damage, reload and range, and it is hashed.
+
+Mutation-proved: ignoring the dead zone makes the mangonel fire from inside it. Not modelled: blast damage, and
+the retreat does not check terrain - a mangonel backed into a wall keeps trying to step into it.
+
+Next: **blast damage** would complete the siege engine (a shot that hurts a group), or the **per-civ 211-number
+array**, still the largest unread thing in the dat.
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

@@ -51,6 +51,16 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Thirty-first pass: one comparison per attacking entity (2026-10-28)
+
+The dead zone is one extra `squared < min_range²` comparison in the attack arm, which already computed `dx`,
+`dy` and the squared distance for the reach test - so it adds an integer multiply and a compare, not a pass. The
+retreat uses the same `step_towards` the approach uses and allocates nothing.
+
+Both anchors unchanged (`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`). The 126-entity probe is still the only place a
+per-tick change would show, and per pass thirteen it resolves about ±8% between builds, so nothing is claimed
+from it either way.
+
 ## Thirtieth pass: one hash per shot, and a path that is skipped (2026-10-28)
 
 Accuracy costs one `splitmix64` per shot fired and nothing per tick. When `accuracy_scatter` is zero - the

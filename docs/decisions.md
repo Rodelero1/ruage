@@ -945,3 +945,30 @@ Mutation-proved twice: never consulting accuracy fails the test, and making ever
 Still not modelled: accuracy against a target the shooter has to lead (the two are multiplied rather than
 composed), and no "arrow hit the wrong unit" - a missed arrow lands on empty ground even if something stands
 there.
+
+## D44 - Minimum range is a dead zone the unit brings with it, and the engine backs out of it
+
+The dat stores `min_range` per unit beside `max_range`, and it is not a siege-only field: 46 of the 1,166 units
+have one. A mangonel's is 3 tiles, a bombard cannon's 5, a trebuchet's 4, a dock's 2, a heavy scorpion's 1 -
+and an archer's is 0. So the rule is **data**, not a list of siege ids: a unit cannot strike a target inside its
+own dead zone, whatever kind of unit it is.
+
+The engine's half is the part the data cannot state: **the attacker backs away**. A mangonel ordered onto a
+neighbouring unit would otherwise stand there forever, unable to shoot and unable to leave, so inside the dead
+zone the attack task steps *away* from the target - reflected through its own position, so the retreat is along
+the line it already lies on - until the shot is legal, and only then strikes. It is a direct step, not a path,
+so no route has to be invalidated while retreating.
+
+Attribute 20 moves the dead zone and is consumed here as well: it arrives as a kind-0 `set` (Andean Sling sets a
+slinger's minimum range to 0), which is the same shape population and accuracy use.
+
+The number is resolved **at order time** with `range`, `damage` and `reload`, and it is part of the task and of
+the state hash. A tech that lands mid-fight therefore does not change where an attack that has already begun may
+be fired from - the same rule the other three numbers follow.
+
+Mutation-proved: ignoring `too_close` fails the mangonel test, because the engine fires from inside its dead zone
+on the tick the order lands.
+
+Not modelled: blast damage (a mangonel's shot hurts a group, not a point), and the retreat does not reconsider
+terrain - a mangonel backed against a wall will keep trying to step into it, which leaves it unable to fire until
+it can move. Both are recorded rather than assumed.
