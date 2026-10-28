@@ -102,6 +102,29 @@ fn spawn_building(world: &mut World, player: u8, role: &str, tile: (i64, i64)) -
     id
 }
 
+/// Spawn a building by its dat unit id - for the classes the pack has no role for yet (a tower).
+fn spawn_by_unit(world: &mut World, player: u8, unit: u32, tile: (i64, i64)) -> EntityId {
+    let scale = world.scale();
+    let id = EntityId(world.entities().iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player,
+            kind: EntityKind::Building,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(tile.0 * scale),
+                Fixed::from_raw(tile.1 * scale),
+            ),
+            speed: Fixed::ZERO,
+            hp: 500,
+            amount: 0,
+        })
+        .expect("spawn by id");
+    world.step().expect("step");
+    id
+}
+
 #[test]
 fn losing_the_town_centre_is_not_losing_the_match() {
     // The rule the original plays and D46 did not: a razed base is a setback, not a defeat.
@@ -184,17 +207,33 @@ fn walls_and_farms_do_not_keep_a_player_alive() {
 }
 
 #[test]
-fn a_house_does_not_keep_a_player_alive() {
-    // The owner's rule, and stricter than the manual's list: a building counts only if it can make
-    // something or take something in. A house can do neither.
+fn a_house_keeps_a_player_alive() {
+    // The dat's class table, and the manual with it: a house is class 3, the same class as a barracks.
+    // The original counts it, so we count it - D59b replaced the production/gathering property with the
+    // class the data already gives us.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let house = spawn_building(&mut world, 2, "house", (26, 26));
     reduce_to(&mut world, 2, &[house]);
     assert_eq!(
         world.outcome(),
+        None,
+        "a house is class 3 and the original counts it"
+    );
+}
+
+#[test]
+fn a_tower_does_not_keep_a_player_alive() {
+    // Class 52, and the manual's first exclusion. The unit is spawned by dat id because the pack has no
+    // tower role yet - the rule is about the class, not about the role.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let tower = spawn_by_unit(&mut world, 2, 79, (26, 26));
+    reduce_to(&mut world, 2, &[tower]);
+    assert_eq!(
+        world.outcome(),
         Some(MatchOutcome::Victory { winner: 1 }),
-        "a player left with only a house is still in the match"
+        "a player left with only a watch tower is still in the match"
     );
 }
 
@@ -291,16 +330,16 @@ fn a_production_foundation_counts() {
 }
 
 #[test]
-fn a_house_foundation_does_not_count() {
-    // The same question asked of the building it will become: a house foundation is a house.
+fn a_house_foundation_counts() {
+    // The same question asked of the building it will become: class 3 either way.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let site = build_site_on(&mut world, 2, "house");
     reduce_to(&mut world, 2, &[site]);
     assert_eq!(
         world.outcome(),
-        Some(MatchOutcome::Victory { winner: 1 }),
-        "a house foundation kept a player in the match"
+        None,
+        "a house foundation is a class 3 building and should count"
     );
 }
 

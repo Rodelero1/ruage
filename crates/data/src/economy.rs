@@ -39,10 +39,11 @@ pub struct Economy {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Conquest {
-    /// Roles of buildings a villager *deposits* at (a town centre, a mill). Production is not listed here
-    /// because `[train]` already says which buildings make units; everything else - houses, walls, gates,
-    /// towers, farms - keeps nobody in the match (D59).
-    pub gathering_roles: Vec<String>,
+    /// Unit *classes* whose buildings keep a player in the match (D59b). The original's exclusion list is
+    /// a list of classes - towers, walls, gates, farms and relics each have their own - so "class 3
+    /// counts" is the whole rule, and it needs no per-building list to keep in step. Dat numbering, so
+    /// content may quote it and the engine may not (D17).
+    pub surviving_classes: Vec<i16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -165,7 +166,7 @@ struct RawEconomy {
 #[serde(deny_unknown_fields)]
 struct RawConquest {
     #[serde(default)]
-    gathering_roles: Vec<String>,
+    surviving_classes: Vec<i16>,
 }
 
 #[derive(Deserialize)]
@@ -554,7 +555,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         role: raw.role,
         tech_role: raw.tech_role,
         conquest: Conquest {
-            gathering_roles: raw.conquest.gathering_roles,
+            surviving_classes: raw.conquest.surviving_classes,
         },
     })
 }

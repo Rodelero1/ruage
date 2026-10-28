@@ -1439,3 +1439,39 @@ a house is not a reason to still be in a match.
 deposit site is the town centre, which is also production, so deleting the gathering loop changes no test. It is
 recorded in `docs/next-step.md` with what would fix it: roles for a mill, a lumber camp and a mining camp, and a
 test that a mill alone keeps a player alive. Written down rather than claimed as covered.
+
+## D59b - Defeat uses the dat's building classes (supersedes D59a's property)
+
+D59a asked a property - "produces or gathers" - and needed a hand-kept list of gathering roles, whose second
+half no test could observe. The owner chose the other way once the evidence was laid out, and the evidence is
+what made the choice easy:
+
+The manual's exclusion list is not a list of buildings, it is a list of **classes**. The Genie Editor's table
+says it outright - "3 - Building: all buildings except towers, walls, gates and Monument" - and our own parse of
+`empires2_x2_p1.dat` agrees, class by class:
+
+| class | what | our units |
+|---|---|---|
+| 3 | ordinary buildings - **counts** | 129: `HOUS`, `BRKS`, `ARRG`, `BLAC`, `MRKT`, `RTWC/2/3`, `CSTL` |
+| 27 | walls | 13: `WALL`, `TWAL`, `CWAL`, `SWAL`, `Aqueduct` |
+| 39 | gates | 48: `GTAA*`, `GTAB*` … |
+| 49 | farms and fish traps | 6: `FARM`, `FTRAP`, `RFARM` |
+| 52 | towers | 10: `WCTW`, `HTAT`, `HTOF` |
+| 1 | artifacts and relics | 4: `ARTCT`, `KOH-FLAG` |
+
+So the rule is `surviving_classes = [3]` in `[conquest]`, and everything else keeps nobody in the match. The
+consequences, in order of importance:
+
+- **No list to forget.** A mill, a lumber camp or a market counts the moment it exists, because it is class 3.
+  Adding content cannot silently break the rule the way a role list could.
+- **Houses count.** A house is class 3, the same class as a barracks. The original counts it, so we do. This is
+  the place where the owner's earlier property (D59a) was stricter than the game, and it is now the game's rule.
+- **The content list is observed.** Emptying `surviving_classes` fails five tests; the deleted gathering loop
+  of D59a failed none. The gap is closed by construction rather than by a promise.
+
+Units still count unconditionally: the pack has no sheep, livestock or ships, so the manual's unit exclusions
+have nothing to bite on yet. When they arrive, the same idea applies - a class list, not a role list - and the
+test to write is "a sheep does not keep a player alive".
+
+**Not changed:** the roster, the draw, the refusal of orders after the end, `outcome` staying derived, and the
+check still running only on a tick where something died.

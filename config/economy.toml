@@ -184,11 +184,19 @@ town_centre_population = 5
 # So defeat is a negative condition - nothing *qualifying* left - and the town centre is not special:
 # losing it is a setback, not the end, because a villager can rebuild it.
 #
-# The owner's rule is narrower than the manual's list and easier to hold: a *building* keeps a player in
-# the match only if it can **make something** or **take something in**. Everything else - houses, walls,
-# gates, towers, farms - does not count.
+# Which *classes* of building keep a player in the match (D59b). The manual's exclusion list turns out to
+# be a list of classes, not of buildings - the Genie Editor's table calls class 3 "Building: all buildings
+# except towers, walls, gates and Monument", and the dat agrees:
 #
-# Production needs no list: it is `[train]`, the buildings content already says can create a unit.
-# Gathering is a building a villager *deposits* at, which content does not otherwise name, so it is
-# named here. The pack has no mill, lumber camp or mining camp yet; when it gains them, add their roles.
-gathering_roles = ["town_centre"]
+#   3  - 129 units: HOUS, BRKS, ARRG, BLAC, MRKT, RTWC/RTWC2/RTWC3, CSTL ...   counts
+#   27 - walls (WALL, TWAL, CWAL, SWAL, Aqueduct)                              excluded by the manual
+#   39 - gates (GTAA*, GTAB* ...)                                             excluded by the manual
+#   49 - farms and fish traps (FARM, FTRAP, RFARM)                            excluded by the manual
+#   52 - towers (WCTW, HTAT, HTOF ...)                                        excluded by the manual
+#   1  - artifacts and relics (ARTCT, KOH-FLAG)                               excluded by the manual
+#
+# So the rule needs no role list and cannot be forgotten building by building: class 3 counts, everything
+# else does not. The numbers are the dat's (D17): content may quote them, the engine may not - the engine
+# only asks "is this class in the list". A house is class 3, the same class as a barracks, which is why the
+# original counts a house and why this does too.
+surviving_classes = [3]

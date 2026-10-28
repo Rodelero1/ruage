@@ -1053,10 +1053,9 @@ pub struct World {
     /// Whether the opening stockpile has been applied. Part of state, because it decides whether a
     /// later `load_resources` re-applies it and wipes what the players have gathered since.
     start_stock_applied: bool,
-    /// The building families that keep a player alive: production (`[train]`) and gathering
-    /// (`[conquest] gathering_roles`), resolved to roots at seeding (D59). Content, not state - it does
-    /// not change during a match - so it is not hashed.
-    conquest_counted: BTreeSet<u32>,
+    /// The unit classes whose buildings keep a player alive (`[conquest] surviving_classes`, D59b).
+    /// Content, not state - it does not change during a match - so it is not hashed.
+    conquest_classes: BTreeSet<i16>,
     /// Who is in this match, set when a player's first entity lands and never cleared. Without it the
     /// world could not tell "the enemy has lost everything" from "nobody was ever here", and losing
     /// everything is exactly the case a match has to notice (D46).
@@ -1210,7 +1209,7 @@ impl World {
             availability_techs: Vec::new(),
             resolving_availability: false,
             start_stock_applied: false,
-            conquest_counted: BTreeSet::new(),
+            conquest_classes: BTreeSet::new(),
             roster: [false; MAX_PLAYERS],
             outcome: None,
             researched: BTreeMap::new(),
@@ -1465,20 +1464,13 @@ impl World {
     ) -> Result<(), SimError> {
         self.units = Some(units.clone());
         self.economy = Some(economy.clone());
-        // Which building families keep a player alive (D59): anything that makes a unit, and anything a
-        // villager can deposit at. Resolved to roots once, here, so the check after a death is a set
-        // lookup rather than a walk through content. Everything else - houses, walls, gates, towers,
-        // farms - keeps nobody in the match, which is the owner's rule and stricter than the manual.
-        self.conquest_counted.clear();
-        if let Some(units) = self.units.as_ref() {
-            for building in economy.train.by_building.keys() {
-                self.conquest_counted.insert(units.root(*building));
-            }
-            for role in &economy.conquest.gathering_roles {
-                if let Some(unit) = economy.role.get(role) {
-                    self.conquest_counted.insert(units.root(*unit));
-                }
-            }
+        // Which building classes keep a player alive (D59b). The manual's list of things you need not
+        // destroy is a list of *classes* - towers 52, walls 27, gates 39, farms 49, relics 1 - so the
+        // whole rule is "class 3 counts", with no per-building list to keep in step and nothing to
+        // forget when the pack gains a mill.
+        self.conquest_classes.clear();
+        for class in &economy.conquest.surviving_classes {
+            self.conquest_classes.insert(*class);
         }
         // Blast radii, resolved once. The *radius* is the gate: `blast_level` is carried and not
         // consumed, because what its value means is not published and every unit that has one has a
@@ -3740,8 +3732,10 @@ impl World {
         match entity.kind {
             EntityKind::Unit => true,
             EntityKind::Building => entity.unit.is_some_and(|unit| {
-                let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
-                self.conquest_counted.contains(&family)
+                self.units
+                    .as_ref()
+                    .and_then(|units| units.unit(units.root(unit)).or_else(|| units.unit(unit)))
+                    .is_some_and(|stats| self.conquest_classes.contains(&stats.class))
             }),
             // An arrow in the air and a resource node keep nobody alive.
             EntityKind::Projectile | EntityKind::Resource(_) => false,
