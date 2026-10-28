@@ -1497,3 +1497,38 @@ The test does not assume the price: it measures the curve on two fresh worlds - 
 asserts that the half one returns about half of the untouched one. The first version of that test indexed
 "wood" as slot 1 and failed, which was a useful accident: the resource order is content's, so the assertion now
 sums the stockpile instead of trusting a slot.
+
+## D61 - Blind placement, sight, and who wins a tile
+
+Three of the owner's rules, replacing D58's "the newcomer wins" with the game's:
+
+1. **You may lay a foundation where you cannot see.** Fog hides a building, so the click is accepted; the
+   player chose blind and is not refused at the click.
+2. **The placement is cancelled when your own units see the tile.** Not at the click, not when the builder
+   arrives - when any unit of yours can see it. The resources come back (D58a), because the player was never
+   given a chance to know.
+3. **Whoever starts building first wins, and the other building is cancelled.** A site the other side has
+   already put a builder to work on is a settled fact: an untouched foundation loses to the first builder, and
+   a finished building is not something a latecomer can undo.
+
+**Read "your units see it", not "the tile is visible".** A foundation projects sight as soon as it is laid, so
+asking the vision layer had the site see the enemy building on its own tile and cancel itself on the tick it
+was placed - blind placement became impossible. `unit_sees` asks the units only, which is both what the rule
+says and what makes it reachable. That bug cost three failing tests before it was spotted, and it is the reason
+the helper exists rather than an inline `vision()` call.
+
+**Overbill found by the mutation pass:** with the sight rule in place, `cancel_overbuilt`'s "already started"
+branch is effectively unreachable - a builder cannot reach the tile without its own sight reaching it first, and
+at that point the placement is already cancelled by rule 2. The branch stays (it is the rule as stated, and it
+covers two placements on the same tick), but the tests pin the *behaviour*, not that branch: flipping it to
+"finished only" changes no test. Recorded here rather than dressed up as coverage. The refund's `hp > 0` guard is
+in the same position: unreachable in the tested paths, kept because a double refund is the kind of bug that only
+appears when it is expensive.
+
+**Resources, all three cases, as the owner states them:** overbuilt or seen - refunded in full (D58a); deleted
+by its owner while being built - refunded for the unbuilt share (D60); destroyed by an enemy - nothing, however
+little was built. The last one is the ordinary death path, which pays nobody by construction.
+
+Two smaller things fixed on the way: `cancel_site` is now idempotent (a site cancelled earlier in a tick is
+still in the list until the sweep), and the sight check runs only when something is under construction - one
+boolean scan on a map with nothing being built.

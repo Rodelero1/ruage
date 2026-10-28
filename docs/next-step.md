@@ -718,21 +718,24 @@ Until one is chosen, the honest statement is: the engine can be *played* to a fi
 - **No gates** (D54): walls block their owner too, because pathing is one grid.
 - **No unit pushing** (D52): overlap is possible, and a unit already sharing a tile is never moved aside.
 - **Fog without occlusion** (D50): sight is a disc, not a line through terrain.
-- **The HUD is data, not pixels** (D57): `Hud` is a struct and a test, and no text is drawn yet - a bitmap font is
-  the missing piece, and it is presentation, not simulation.
+- **The HUD is data, not pixels, and stays that way** (D57; owner's decision, 2026-10-28): no bitmap font. `Hud`
+  remains a struct with tests; if the screen ever needs to show a number, colour bars are the cheap half and a
+  font is not on the list.
 - **Selection has no control groups or hotkeys** (list step 25, not in this batch).
-- **The overbuild race is implemented, not tested** (D58): the branch where the other player finishes their
-  building before the newcomer arrives. A test needs a reliably slow builder, and `Command::Spawn`'s speed is
-  the only lever - tenths of a tile a second sent the villager to the map edge instead of the site, which is a
-  pathing question of its own worth a look (see below).
+- **The overbuild race is tested, with one branch statically unreachable** (D61): `foundations.rs` covers first
+  builder wins, an untouched foundation losing to it, and a blind placement cancelled on sight. The "already
+  started" clause inside `cancel_overbuilt` cannot be reached, because a builder that can work the tile must
+  have seen it first and the sight rule cancels the placement before work begins. It stays as the rule reads;
+  flipping it changes no test, and D61 says so.
 - **A very slow unit walks the wrong way** (found staging D58's race): a villager spawned at speed 0.1 tiles a
   second with a build order eight tiles away ended up `Idle` at the map edge, having moved east, and its site
   finished anyway - so something advanced the site's work without the builder reaching it. Not reproduced at
   speed 1.0. The site/arrival contract is worth one test: work must happen only when the builder is at the
   site.
-- **Overbuilding a town-centre foundation cancels a seat** (D46 + D58): a blind house on an enemy TC foundation
-  that has not been worked yet cancels it, and a player with no seat loses. Faithful to both rules as written
-  and probably too sharp in play; it wants a decision, not a patch.
+- **Overbuilding a town-centre foundation is now a refund, not a loss** (D59 + D61): the seat rule is gone, a
+  cancelled foundation is paid back in full, and the town centre is class 3 like any other building, so losing
+  one costs time and a walk rather than the match. The old sharp edge (a blind house ending the game) cannot
+  happen any more, which is worth knowing before anyone "fixes" it back.
 
 ## The defeat rule (D59, applied 2026-10-28 - kept here as the reasoning, not as a gap)
 
@@ -756,10 +759,11 @@ barracks across the map, and cannot rebuild. Under the original rule the same pl
 which is also what makes a razed base a setback rather than a defeat.
 
 **Applied as D59** - the seat rule is gone, replaced by the original's elimination:
-a player is out when they have no living unit and no standing building, counting only *qualifying* ones - content
-marks which roles count, since "walls and farms do not count" is the same kind of content fact as
-`[build] blocking_roles`. Keep D46's "refuse orders after the match is over" and the draw case. Consider a grace
-window (the DE reverse-engineering notes describe one) if a rebuild race turns out to be the interesting part.
+a player is out when they have no living unit and no standing building that *qualifies* - and what qualifies is
+a **class**, not a role: `[conquest] surviving_classes = [3]` (D59b). "Walls and farms do not count" turns out to
+be the same statement as "towers are class 52 and walls class 27". D46's "refuse orders after the match is over"
+and the draw case are kept. **The grace window stays out** (owner's decision, 2026-10-28): it is a DE client
+behaviour, not part of the manual's rule.
 - **Defeat uses classes, so the D59a gap is closed** (D59b): `surviving_classes = [3]` is observed by five
   tests. What is *not* yet exercised is the manual's unit half - sheep, livestock, ships, trade carts are
   excluded there and the pack has none of them. When it does, add a class list for units and the test "a sheep

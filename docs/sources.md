@@ -45,3 +45,18 @@ logged as a question (e.g. U11 farming).
 3. **Never assume an id.** The one wrong conclusion in this project so far — "the DBA
    multiplier is missing" — came from assuming tech 200 was Double-Bit Axe. Match by cost
    and research time. This is now a rule, not a note.
+
+## Found via enhansome/enhansome-aoe2 (curated list, checked 2026-10-28)
+
+The repository is an "awesome AoE2" index rather than a tool. Most of it is tournaments, streamers and civ
+pickers; four entries are worth keeping on the watch list, in order of expected use:
+
+| Source | Why it matters | Trust |
+|---|---|---|
+| [AoE2DE UGC Guide](https://ugc.aoe2.rocks/) ([source](https://github.com/Divy1211/AoE2DE_UGC_Guide)) | Divy1211 is the GenieDatParser author, and this documents user-generated content - scenario, AI and data modding. The place to check when a dat field's *behaviour* matters rather than its layout (build categories, class semantics). Python, updated this month. | High - same author and lineage as the parser we already trust |
+| [AoE2 AI Scripting Encyclopedia](https://airef.github.io/) | The game's own AI API: object names, per-object facts, and the commands an AI may issue. Our scenario runner is a poorer cousin of this, so it doubles as a checklist of orders we have not modelled (and its object classes may settle questions like "is a farm a gathering building"). | Medium - documents DE's AI, not the sim |
+| [Build order guide](https://buildorderguide.com/) / [AoE Companion](https://aoecompanion.com/) | Expert build orders with uptime and villager counts. This is what answers "can a player reach Castle in 15 minutes" with numbers instead of guesses - directly relevant to D59b's pending siege decision. | High for timings, community-maintained |
+| [aoe-twools](https://aoetwools.firebaseapp.com/) ([source](https://github.com/Kheyzell/aoe-twools)) | Tech tree per civ, civs per unit and per tech. Useful if the pack ever grows past one civ, since it is the same "which civ may have what" question our `civ_barred_unit` answers for one. | Medium - DE data |
+
+**Not useful yet:** unit-counter charts, civ pickers, replay packers, tournament boards. Recorded here so the
+next session does not re-read the list looking for the same things.

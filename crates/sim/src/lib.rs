@@ -2394,6 +2394,64 @@ impl World {
         landed
     }
 
+    /// Cancel a foundation of mine whose tile turns out to hold an enemy building that is already
+    /// underway, once I can see that tile (D61).
+    ///
+    /// This is the second half of the blind-placement rule: you may lay a foundation in fog where
+    /// something stands, because the player chose blind, and the game cancels the dead placement when
+    /// your own sight reaches it - not at the click, and not when a builder finally arrives. The
+    /// resources come back (D58a), because the player was never given a chance to know.
+    ///
+    /// An enemy *untouched* foundation is not a reason to cancel: two bare foundations are decided by
+    /// whoever puts a builder to work first (`cancel_overbuilt`). Only something already started or
+    /// finished is a settled fact that a late placement cannot undo.
+    fn settle_blind_sites(&mut self) {
+        // Most ticks nothing is under construction; one scan decides whether the rest is worth doing.
+        if !self
+            .entities
+            .iter()
+            .any(|entity| entity.construction.is_some())
+        {
+            return;
+        }
+        let sites: Vec<(EntityId, u8, (Fixed, Fixed))> = self
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::Building
+                    && entity.construction.is_some()
+                    && entity.hp > 0
+            })
+            .map(|entity| (entity.id, entity.player, entity.position))
+            .collect();
+        let mut doomed = Vec::new();
+        for (id, player, position) in sites {
+            let tile = (
+                u16::try_from((position.0.raw() / self.scale).max(0)).unwrap_or(u16::MAX),
+                u16::try_from((position.1.raw() / self.scale).max(0)).unwrap_or(u16::MAX),
+            );
+            if !self.unit_sees(player, tile) {
+                continue;
+            }
+            let taken = self.entities.iter().any(|other| {
+                other.id != id
+                    && other.player != 0
+                    && other.player != player
+                    && other.kind == EntityKind::Building
+                    && other.position == position
+                    && other
+                        .construction
+                        .is_none_or(|construction| construction.progress_ticks > 0)
+            });
+            if taken {
+                doomed.push(id);
+            }
+        }
+        for id in doomed {
+            self.cancel_site(id);
+        }
+    }
+
     /// Cancel every other player's building sharing this site's tile (D58).
     ///
     /// Two buildings can only share a tile because one of them was placed blind, and this is where the
@@ -2417,11 +2475,19 @@ impl World {
                     && entity.position == position
                     && matches!(entity.kind, EntityKind::Building)
             })
-            .map(|entity| (entity.id, entity.construction.is_none()))
+            // "Underway" means started or finished: the owner's rule is that whoever starts building
+            // first wins, so a site the other side has already put a builder to work on is not a
+            // newcomer's to take (D61).
+            .map(|entity| {
+                (
+                    entity.id,
+                    entity
+                        .construction
+                        .is_none_or(|construction| construction.progress_ticks > 0),
+                )
+            })
             .collect();
-        // A finished building on the tile is not a newcomer's to cancel: the race went the other way, and
-        // the site that arrived late is the one that goes.
-        if theirs.iter().any(|(_, finished)| *finished) {
+        if theirs.iter().any(|(_, underway)| *underway) {
             self.cancel_site(site);
             return;
         }
@@ -2434,10 +2500,17 @@ impl World {
     /// carried on the entity: costs are not per-player yet, so what was paid and what is returned cannot
     /// drift - and the day a discount exists, this is the one place that has to learn about it.
     fn cancel_site(&mut self, site: EntityId) {
-        let Some((player, unit)) = self.find(site).map(|entity| (entity.player, entity.unit))
+        let Some((player, unit, alive)) = self
+            .find(site)
+            .map(|entity| (entity.player, entity.unit, entity.hp > 0))
         else {
             return;
         };
+        // Idempotent: a site cancelled earlier in the same tick is still in the list until the sweep,
+        // and refunding it twice would pay its owner for a building that only cost once.
+        if !alive {
+            return;
+        }
         if let Some(unit) = unit {
             self.refund_unit_cost(player, unit);
         }
@@ -2577,10 +2650,7 @@ impl World {
         let blind = self.vision(worker.player, at) != TileVision::Visible;
         let blocked = self.entities.iter().any(|entity| {
             entity.position == position
-                && (entity.player == worker.player
-                    || entity.player == 0
-                    || !blind
-                    || entity.construction.is_none())
+                && (entity.player == worker.player || entity.player == 0 || !blind)
         });
         if blocked {
             return Err(SimError::SiteOccupied { tile: at });
@@ -3726,6 +3796,35 @@ impl World {
     /// Whether the match has been decided, and how. `None` while it is still being played.
     pub fn outcome(&self) -> Option<MatchOutcome> {
         self.outcome
+    }
+
+    /// Whether any **unit** of `player` can see `tile` - a foundation's own sight does not count.
+    ///
+    /// The distinction matters for the blind-placement rule (D61): a building projects sight as soon as
+    /// it is placed, so asking `vision()` would have a foundation see the enemy building on its own tile
+    /// and cancel itself on the tick it was laid, which would make placing blind impossible. What the
+    /// rule means is *your units* looking at it - the villager you sent, or anybody else who walks by.
+    fn unit_sees(&self, player: u8, tile: (u16, u16)) -> bool {
+        let Some(units) = self.units.as_ref() else {
+            return false;
+        };
+        self.entities
+            .iter()
+            .filter(|entity| entity.player == player && entity.kind == EntityKind::Unit)
+            .any(|entity| {
+                let los = entity
+                    .unit
+                    .and_then(|unit| units.unit(units.root(unit)))
+                    .and_then(|stats| stats.los.resolve(self.scale, "los").ok())
+                    .unwrap_or(Fixed::ZERO);
+                let here = self.tile_of(entity.position);
+                let dx = i64::from(here.0.abs_diff(tile.0));
+                let dy = i64::from(here.1.abs_diff(tile.1));
+                let reach = los.raw() / self.scale;
+                let reach = reach.max(0);
+                // A disc, like the vision layer: squared distance against squared radius.
+                dx * dx + dy * dy <= reach * reach
+            })
     }
 
     /// Whether this entity keeps its owner in the match (D59).
@@ -5256,6 +5355,9 @@ impl World {
         // Route bookkeeping dies with its owner. Without this a unit that is killed mid-walk keeps
         // its remaining waypoints forever - a long match accumulates routes nobody walks, and the
         // state hash walks them, so a dead unit's path was part of the hash.
+        // A foundation placed blind over something that is already being built is cancelled the moment
+        // its owner can see the tile (D61). Done before the sweep so the cancellation dies this tick.
+        self.settle_blind_sites();
         let mut buried: Vec<EntityId> = Vec::new();
         // A wall's tile, remembered before the sweep: after `retain` the entity is gone and there is no
         // position left to free.
