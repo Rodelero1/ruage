@@ -27,7 +27,7 @@ behaviour constants are separate keys that never collide with data keys.
 | Layer | Contents | Why it lives there |
 |---|---|---|
 | `gamedata/` | 1,166 units, 801 techs, 798 effects, 32 civs — stats, costs, attack/armour arrays, gather rates, multipliers | It is data. Generated so it is reproducible and cannot drift from the dat. |
-| `overrides.toml` | Anything from `gamedata/`, by path | Experiments. Regenerating must not destroy them. |
+| `overrides.toml` | **Unit fields**, by path: `"units.<id>.<field>"` (D45) | Experiments must survive regeneration. Coverage is units today; the refusal for anything else names what is covered. |
 | `sim.toml` | tick rate, fixed-point scale, RNG, determinism flags | Engine decisions, not game facts. |
 | `combat.toml` | min damage, elevation, sentinels, attack-timing fraction | Constants the dat does not contain. |
 | `economy.toml` | farm rate, build/repair rates, pop values, decay | Constants the dat does not settle. |
@@ -88,12 +88,39 @@ here described that check in the present tense, which was wrong. SPEC §11 alrea
 
 ## Scope of strict loading (corrected 2026-10-23)
 
-**Updated 2026-10-23:** `sim.toml`, `economy.toml`, `map.toml` and `gamedata/units.toml` have
-strict Rust loaders
-(`crates/data/src/{lib,economy,map}.rs`); every loader's tests were written first. `combat.toml`,
-`movement.toml` and `overrides.toml` still have no schema and no loader, and `overrides.toml`'s
-path syntax remains documented but unimplemented — so the rule is enforced for four files of six.
-Do not read a green `cargo test` as "the config layer is complete".
+**Updated 2026-10-28:** every file a match reads now has a strict loader — `sim.toml`, `economy.toml`,
+`map.toml`, `combat.toml`, `resources.toml`, `gamedata/{units,techs,effects,civs}.toml` and `overrides.toml`
+(`crates/data/src/*.rs`), each written test-first. `movement.toml` remains documented and unloaded: nothing
+reads it, because pathing weights are still U5/U7.
+
+### `overrides.toml` (implemented 2026-10-28, D45)
+
+```toml
+schema = 1
+[overrides]
+"units.79.min_range" = 0.0                 # a watch tower that may shoot what stands against it
+"units.83.hp"        = 40
+"units.83.attacks"   = [[4, 3], [3, 1]]    # arrays are replaced wholesale, never merged
+```
+
+Covered fields, all of them numbers a match depends on: `hp`, `los`, `speed`, `carry`, `work_rate`, `range`,
+`reload`, `min_range`, `accuracy`, `garrison`, `train_time`, `attacks`, `armours`.
+
+Three rules, and the first is why the layer exists:
+
+1. **An unsupported path is refused by name**, never ignored. `"techs.202.research_time"` fails with a message
+   saying units are what is covered, because the failure mode this layer exists to prevent is "I edited the
+   config and nothing happened".
+2. **Every applied value is reported** — `override units.79.min_range: 1.0 -> 0.0` — through
+   `ContentPack::load` (`override_log`) and through `ruage-headless --overrides`, which prints one line each.
+3. **The file is part of the pack's identity.** Two peers with different overrides are playing different games,
+   so `overrides.toml` joins the handshake hash **when it exists**; a pack without one hashes exactly as it did
+   before the layer.
+
+A technology that removes a dead zone arrives in two shapes, and both are data: **Andean Sling** is a `set 0` on
+the skirmisher, slinger and genitour; **Murder Holes** is an `add -1` on towers and castles, whose `min_range` is
+1. What an override does is put the value in content's hands, so a pack can change the dead zone without a tech
+at all.
 
 `economy.toml` also carries `[gather.resource_task]`: which gather task a node of each map kind
 presents (our map's food is berries, so `food = "forage"`, while hunting and fishing exist as

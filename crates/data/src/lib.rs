@@ -19,6 +19,7 @@ mod combat;
 mod cost;
 mod economy;
 mod map;
+mod overrides;
 mod pack;
 mod resources;
 mod techs;
@@ -32,6 +33,7 @@ pub use economy::{
     Build, Decay, Economy, Farm, Gather, Population, Start, load_economy_file, load_economy_str,
 };
 pub use map::{Map, ResourceNode, Terrain, TownCentre, load_map_file, load_map_str};
+pub use overrides::{Overrides, load_overrides_file, load_overrides_str};
 pub use pack::{ContentPack, PACK_FILES, pack_path};
 pub use resources::{
     ResourceDef, ResourceSite, Resources, load_resources_file, load_resources_str,

@@ -28,7 +28,10 @@ fn the_project_pack_loads_and_has_an_identity() {
         "an empty hash would compare equal to everything"
     );
     assert_eq!(pack.identity().len(), 16, "hex of a u64");
-    assert_eq!(pack.parts.len(), PACK_FILES.len());
+    // The eight tables, plus `overrides.toml` when the pack has one - it is content too, because two
+    // peers with different overrides are playing different games (D45).
+    let expected = PACK_FILES.len() + usize::from(pack.parts.contains_key("overrides.toml"));
+    assert_eq!(pack.parts.len(), expected);
     assert_eq!(pack.resources.count(), 4);
     assert_eq!(
         pack.techs.techs.len(),
@@ -64,8 +67,11 @@ fn one_changed_byte_changes_the_identity_and_names_the_file() {
     // A copy of the pack with a comment added to one file: same values, different bytes.
     let scratch = repo("build/pack-test");
     std::fs::create_dir_all(&scratch).expect("scratch dir");
-    for name in PACK_FILES {
+    for name in PACK_FILES.iter().copied().chain(["overrides.toml"]) {
         let from = pack_path(&dir, name);
+        if !from.exists() {
+            continue;
+        }
         let to = pack_path(&scratch, name);
         std::fs::create_dir_all(to.parent().expect("a parent")).expect("dir");
         std::fs::copy(&from, &to).expect("copy");

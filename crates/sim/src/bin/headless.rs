@@ -24,7 +24,7 @@ use std::process::ExitCode;
 
 use ruage_data::{
     load_civs_file, load_combat_file, load_economy_file, load_effects_file, load_map_file,
-    load_resources_file, load_sim_file, load_techs_file, load_units_file,
+    load_overrides_file, load_resources_file, load_sim_file, load_techs_file, load_units_file,
 };
 use ruage_sim::{Outcome, Runner, World, describe, load_scenario_file};
 
@@ -32,10 +32,11 @@ const USAGE: &str = "usage: ruage-headless --config <sim.toml> --map <map.toml> 
                      --economy <economy.toml> --units <units.toml> \
                      --resources <resources.toml> \
                      [--combat <combat.toml>] [--civs <civs.toml>] \
+                     [--overrides <overrides.toml>] \
                      [--script <scenario.toml>] [--ticks <n>] [--report <seconds>] \
                      --seed <u64>";
 
-const KNOWN: [&str; 14] = [
+const KNOWN: [&str; 15] = [
     "--config",
     "--map",
     "--economy",
@@ -45,6 +46,7 @@ const KNOWN: [&str; 14] = [
     "--techs",
     "--effects",
     "--civs",
+    "--overrides",
     "--script",
     "--seed",
     "--ticks",
@@ -117,8 +119,19 @@ fn run(args: &[String]) -> Result<(), String> {
         .map_err(|err| format!("{err}"))?;
     let economy = load_economy_file(Path::new(required(&parsed, "--economy")?))
         .map_err(|err| format!("{err}"))?;
-    let units = load_units_file(Path::new(required(&parsed, "--units")?))
+    let mut units = load_units_file(Path::new(required(&parsed, "--units")?))
         .map_err(|err| format!("{err}"))?;
+    // Hand-written overrides, if the run was given them. Every value replaced is printed with its old
+    // and new form: an override nobody can see is indistinguishable from a bug (D45).
+    if let Some(path) = parsed.get("--overrides") {
+        let overrides = load_overrides_file(Path::new(path)).map_err(|err| format!("{err}"))?;
+        for line in overrides
+            .apply_units(&mut units)
+            .map_err(|err| format!("{err}"))?
+        {
+            eprintln!("override {line}");
+        }
+    }
     let seed: u64 = number(&parsed, "--seed")?;
 
     let mut world = World::new(&settings, seed).map_err(|err| format!("{err}"))?;

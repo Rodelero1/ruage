@@ -69,6 +69,12 @@ impl Units {
         self.units.get(&id)
     }
 
+    /// The same lookup, writable: only the override layer (`overrides.rs`) has any business changing a
+    /// loaded table, and it is the one caller.
+    pub fn unit_mut(&mut self, id: u32) -> Option<&mut Unit> {
+        self.units.get_mut(&id)
+    }
+
     /// The unit this id belongs to by *family*: a variant resolves to the unit it was upgraded from,
     /// all the way up. An age-up replaces a building's id (town centre 109 -> 71 -> 141), and every
     /// rule that names a building - what a tech is researched at, where a villager drops wood, what a

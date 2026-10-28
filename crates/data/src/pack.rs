@@ -66,6 +66,9 @@ pub struct ContentPack {
     /// Which files went into the hash, so a handshake can explain a mismatch instead of saying
     /// "different hash".
     pub parts: BTreeMap<String, u64>,
+    /// Hand-written values layered over the generated tables, and one line per value replaced. Empty
+    /// when the pack has no `overrides.toml` (D45).
+    pub override_log: Vec<String>,
 }
 
 impl ContentPack {
@@ -101,10 +104,26 @@ impl ContentPack {
         // into a stockpile column (D17).
         let resources = load_resources_file(&dir.join("resources.toml"))?;
         let map = load_map_file(&dir.join("map.toml"), &resources)?;
-        let units = load_units_file(&pack_path(dir, "units.toml"))?;
+        let mut units = load_units_file(&pack_path(dir, "units.toml"))?;
         let combat = load_combat_file(&dir.join("combat.toml"))?;
         let techs = load_techs_file(&pack_path(dir, "techs.toml"))?;
         let effects = load_effects_file(&pack_path(dir, "effects.toml"))?;
+
+        // Hand-written overrides, applied after everything is loaded. The file is optional - a pack
+        // written before the layer existed has none, and must keep its hash - but when it is there it
+        // is part of the pack's identity: two peers with different overrides are playing different
+        // games, which is exactly what the handshake exists to refuse (D16, D45).
+        let mut override_log = Vec::new();
+        let overrides_path = dir.join("overrides.toml");
+        if overrides_path.exists() {
+            let data = std::fs::read(&overrides_path).map_err(|err| ConfigError::Io {
+                path: overrides_path.display().to_string(),
+                detail: err.to_string(),
+            })?;
+            parts.insert("overrides.toml".to_owned(), fnv1a(&data));
+            let overrides = crate::load_overrides_file(&overrides_path)?;
+            override_log = overrides.apply_units(&mut units)?;
+        }
 
         // The pack hash mixes the per-file hashes *with their names*, so two files swapping
         // contents cannot produce the same pack hash as an honest pack.
@@ -112,6 +131,12 @@ impl ContentPack {
         for name in PACK_FILES {
             hash = fnv1a_update(hash, name.as_bytes());
             let part = parts[name];
+            hash = fnv1a_update(hash, &part.to_le_bytes());
+        }
+        // `overrides.toml` is in the hash only when it exists, so a pack without it hashes exactly as
+        // it did before this layer existed.
+        if let Some(part) = parts.get("overrides.toml") {
+            hash = fnv1a_update(hash, b"overrides.toml");
             hash = fnv1a_update(hash, &part.to_le_bytes());
         }
 
@@ -126,13 +151,14 @@ impl ContentPack {
             effects,
             hash,
             parts,
+            override_log,
         })
     }
 
     /// Files whose hash differs from another pack's. Empty means the two agree.
     pub fn differences(&self, other: &ContentPack) -> Vec<String> {
         let mut out = Vec::new();
-        for name in PACK_FILES {
+        for name in PACK_FILES.iter().copied().chain(["overrides.toml"]) {
             let mine = self.parts.get(name).copied();
             let theirs = other.parts.get(name).copied();
             if mine != theirs {

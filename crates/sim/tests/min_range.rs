@@ -53,14 +53,16 @@ fn fixture() -> Option<Fixture> {
 }
 
 fn world_with(fx: &Fixture) -> World {
+    world_with_units(fx, &fx.units)
+}
+
+fn world_with_units(fx: &Fixture, units: &Units) -> World {
     let mut economy = fx.economy.clone();
     economy.start.stock = [("food".to_owned(), 4_000), ("wood".to_owned(), 4_000)]
         .into_iter()
         .collect();
     let mut world = World::new(&fx.settings, 7).expect("world");
-    world
-        .seed_from(&fx.map, &economy, &fx.units)
-        .expect("seeding");
+    world.seed_from(&fx.map, &economy, units).expect("seeding");
     world
         .load_resources(&fx.resources)
         .expect("the pack fits the stockpile");
@@ -307,5 +309,137 @@ fn a_skirmisher_backs_off_before_shooting_and_andean_sling_lets_it_shoot_at_once
     assert!(
         freed_tick <= blind_tick,
         "and so it lands its first blow no later: {freed_tick} against {blind_tick}"
+    );
+}
+
+const WATCH_TOWER: u32 = 79;
+const CASTLE: u32 = 82;
+/// Murder Holes: the tech that lets towers and castles shoot at what is standing against them.
+const MURDER_HOLES: u32 = 322;
+
+fn place_building(
+    world: &mut World,
+    player: u8,
+    id: u32,
+    unit: u32,
+    tile: (u16, u16),
+    hp: i32,
+) -> EntityId {
+    let scale = world.scale();
+    let id = EntityId(id);
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player,
+            kind: EntityKind::Building,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(i64::from(tile.0) * scale),
+                Fixed::from_raw(i64::from(tile.1) * scale),
+            ),
+            speed: Fixed::ZERO,
+            hp,
+            amount: 0,
+        })
+        .expect("spawn");
+    world.step().expect("step");
+    id
+}
+
+/// A tower cannot shoot the unit standing against it - the data gives it a one-tile dead zone - and **Murder
+/// Holes** takes that away. The technology is a kind-4 `add -1` on attribute 20, not a `set 0`, which is the
+/// other half of the same rule: removals by technology arrive in both shapes.
+#[test]
+fn a_tower_cannot_shoot_what_stands_against_it_until_murder_holes() {
+    let Some(fx) = fixture() else { return };
+    let shot = |murder_holes: bool| -> i32 {
+        let mut world = world_with_research(&fx);
+        if murder_holes {
+            world
+                .grant_tech(1, MURDER_HOLES)
+                .expect("Murder Holes is researchable");
+        }
+        let tower = place_building(&mut world, 1, 9_996, WATCH_TOWER, (10, 10), 1_020);
+        let victim = place_still(&mut world, 2, 9_997, VILLAGER, (11, 10), 500);
+        world
+            .submit_checked(Command::Attack {
+                attacker: tower,
+                target: victim,
+            })
+            .expect("a tower may be told to shoot");
+        for _ in 0..80 {
+            world.step().expect("step");
+        }
+        let _ = tower;
+        world.entity(victim).expect("victim").hp
+    };
+
+    assert_eq!(
+        shot(false),
+        500,
+        "a tower cannot shoot the villager standing against it"
+    );
+    assert!(
+        shot(true) < 500,
+        "with Murder Holes it can: the technology removes the dead zone"
+    );
+}
+
+/// The castle carries the same one-tile dead zone, and Murder Holes lists it too - so the technology is a rule
+/// about buildings that fight, not about one building.
+#[test]
+fn a_castle_has_the_same_dead_zone_and_the_same_technology_removes_it() {
+    let Some(fx) = fixture() else { return };
+    let castle = fx.units.unit(CASTLE).expect("the castle");
+    let tiles = |value: ruage_data::MaybeFixed| {
+        value
+            .resolve(1_000_000, "tiles")
+            .expect("a resolved value")
+            .raw() as f64
+            / 1_000_000.0
+    };
+    assert_eq!(tiles(castle.min_range) as i64, 1);
+    assert_eq!(
+        tiles(fx.units.unit(WATCH_TOWER).expect("tower").min_range) as i64,
+        1
+    );
+    // And the town centre does not: Murder Holes does not list it, and the data agrees.
+    assert_eq!(
+        tiles(fx.units.unit(109).expect("town centre").min_range) as i64,
+        0,
+        "a town centre has no dead zone, which is why Murder Holes does not mention it"
+    );
+}
+
+/// The configuration surface the user asked for, proven end to end: an override in the pack can take a
+/// building's dead zone away with no technology involved. This is `overrides.toml` reaching the simulation,
+/// not just a parser round-trip in `crates/data`.
+#[test]
+fn content_can_take_a_towers_dead_zone_away_without_a_technology() {
+    let Some(fx) = fixture() else { return };
+    let mut units = fx.units.clone();
+    let overrides = ruage_data::Overrides::parse(
+        "schema = 1\n[overrides]\n\"units.79.min_range\" = 0.0\n",
+        "overrides.toml",
+    )
+    .expect("the override file parses");
+    let log = overrides.apply_units(&mut units).expect("and applies");
+    assert_eq!(log.len(), 1, "one value changed: {log:?}");
+
+    let mut world = world_with_units(&fx, &units);
+    let tower = place_building(&mut world, 1, 9_998, WATCH_TOWER, (10, 10), 1_020);
+    let victim = place_still(&mut world, 2, 9_999, VILLAGER, (11, 10), 500);
+    world
+        .submit_checked(Command::Attack {
+            attacker: tower,
+            target: victim,
+        })
+        .expect("a tower may be told to shoot");
+    for _ in 0..80 {
+        world.step().expect("step");
+    }
+    assert!(
+        world.entity(victim).expect("victim").hp < 500,
+        "a tower whose dead zone content removed shoots what stands against it, with no Murder Holes"
     );
 }

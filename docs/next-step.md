@@ -635,6 +635,20 @@ it, taken away by Andean Sling.
 Next: **blast damage** would complete the siege engine, or the **per-civ 211-number array**, still the largest
 unread thing in the dat.
 
+## Done next: `overrides.toml`, and Murder Holes confirmed (2026-10-28, v0.88)
+
+**The override layer now exists** (D45). `"units.<id>.<field>"` in `config/overrides.toml` replaces a unit's
+value after loading; unsupported paths are refused by name rather than ignored; every replacement is logged with
+its old and new form; and the file joins the pack's handshake hash when present. Proven end to end by a test that
+overrides a tower's `min_range` to zero and watches it shoot what stands against it.
+
+**Murder Holes needed no code.** Towers and castles carry `min_range` 1, and the tech is an `add -1` — which the
+modifier path already applies — so the test is the proof rather than the feature: a tower cannot shoot an
+adjacent unit before it, and can after.
+
+Next: **`techs`/`effects` overrides** (the other half of the configuration surface the user described), or
+**blast damage**, or the **per-civ 211-number array**.
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

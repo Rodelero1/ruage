@@ -1009,3 +1009,37 @@ makes the skirmisher step back with the tech as well.
 **What this says about the earlier review:** D44's own mutation check only removed the dead-zone comparison, so it
 could not notice that the *modifier* path was dead. A feature is not covered by testing the branch it enables if
 the input to that branch is never exercised.
+
+## D45 - `overrides.toml` is real: the per-unit configuration surface, and it refuses rather than ignores
+
+D6 promised a hand-written override layer, `docs/config.md` documented its path syntax, and **no code ever read
+the file**. An edit there was a silent no-op — the worst shape a configuration surface can have, because the user
+does everything right and the game ignores them. It is implemented now, test-first.
+
+**Shape.** `"units.<id>.<field>" = value`, applied after every table has loaded. Fields covered: `hp`, `los`,
+`speed`, `carry`, `work_rate`, `range`, `reload`, `min_range`, `accuracy`, `garrison`, `train_time`, `attacks`,
+`armours` — the numbers a match depends on, each written to a field the engine actually reads. Arrays are
+replaced wholesale; a partial merge of two attack arrays would be invisible in the running game.
+
+**Three properties, each a test:**
+
+1. **Refusal, not silence.** `techs.202.research_time` fails with a message saying units are what the layer
+   covers; a unit id that does not exist fails naming the id; a field outside the list fails naming the field and
+   the ones it does cover; a string where a number belongs fails saying what it *found*.
+2. **Every replacement is reported** with its old and new form (`override units.79.min_range: 1.0 -> 0.0`),
+   through `ContentPack::override_log` and through `ruage-headless --overrides`.
+3. **The file is content.** It joins the handshake hash when it exists, so two peers with different overrides
+   refuse each other's match — the whole point of D16's identity. A pack without the file hashes exactly as
+   before, which is why it is not simply appended to `PACK_FILES`.
+
+**Proven end to end, not just parsed:** `content_can_take_a_towers_dead_zone_away_without_a_technology` overrides
+`units.79.min_range` to zero and watches a watch tower shoot the unit standing against it — with no Murder Holes
+researched. That is the user's ask ("each unit would have its own config, and min range would be one of them")
+reaching the simulation.
+
+**Also confirmed while looking:** castles and towers really do carry `min_range` 1, and **Murder Holes is an
+`add -1`**, not a `set 0` — the two shapes a removal arrives in. It needed no code: `scale_fixed` applies
+additions, and the dead zone is data. The town centre has no dead zone, and Murder Holes does not list it.
+
+**Not covered, and said plainly:** `techs` and `effects` overrides. The layer refuses them by name rather than
+pretending, and widening it is a change in `crates/data/src/overrides.rs`.
