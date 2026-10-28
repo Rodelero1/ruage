@@ -1238,3 +1238,34 @@ Three decisions the data does not make for us:
 
 **Not modelled:** damage does not fall off with distance (the game reduces it for secondary targets); buildings take
 the aimed hit only; and the blast is a disc with no line-of-sight check, like vision (D50).
+
+## D52 - Soft avoidance shapes the last step, and only for a place you go to
+
+The owner chose soft avoidance over pushing: units slide past each other, and overlapping remains possible.
+What the engine implements is narrower than "collision", deliberately:
+
+- **An exclusive goal** - `Move`, and the walk inside `AttackMove`/`Patrol` - does not take its **last step** onto a
+  tile another unit already occupies. It stands one step short. That is the stacking a player actually sees: forty
+  units ordered to one tile.
+- **A goal that is a thing to be worked is not exclusive**: gather, build, return, attack. Two villagers must work
+  one tree, two villagers must hand in at one town centre on the same tick, two attackers must reach one target.
+- **Nothing is ever pushed.** A unit that already shares a tile stays there. Pushing is a different mechanic whose
+  cascades are state to hash and tests to write.
+
+## D52a - Three versions failed the suite, and that is what settled the rule
+
+The first version blocked **any** occupied tile a mover's step would enter. Nine gather tests failed at once, and so
+did "a plain move walks past an enemy": a villager could not leave the town centre's crowded doorstep, and a unit
+walking past a standing enemy oscillated beside it forever. The second version cached the tile each entity last
+stamped (`BTreeMap` per entity per tick) and cost 130 us at 2,126 entities - the same mistake the fog pass had just
+made, in a different table. The third version sidestepped by quarter turns when blocked, which is arithmetically
+exact (a 90-degree rotation preserves a step's length in fixed point, where 45 degrees needs a square root) and
+behaviourally wrong: the mover stepped aside, the path pulled it back, and it never arrived.
+
+What survived is the smallest rule that fixes the visible defect and breaks nothing else, and the *shape* of the
+failure is the lesson: **a collision rule that can say "no" to a step must be able to say "yes" to the reason the
+unit was walking in the first place.** Work goals are the ones with a reason beyond standing there.
+
+**Cost:** a bitset of unit tiles, rebuilt on ticks where something moves (an idle world pays one `any` over the
+delta list, and the idle probe confirms nothing is built there: 2.70 us/tick at 126 entities). Not hashed: it is
+derived from positions the hash already covers.

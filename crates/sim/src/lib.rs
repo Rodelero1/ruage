@@ -3166,6 +3166,100 @@ impl World {
         }
     }
 
+    /// Which tiles hold a unit right now, one bit per tile. Rebuilt on the ticks where something moves and
+    /// only then, because a world where nothing moves (which is most of an idle probe, and most of a quiet
+    /// match) has nothing to avoid (D52).
+    fn occupancy(&self) -> Vec<u64> {
+        let (width, height) = self.map_size;
+        let mut grid = vec![0u64; (usize::from(width) * usize::from(height)).div_ceil(64)];
+        if width == 0 {
+            return grid;
+        }
+        for entity in &self.entities {
+            if entity.kind != EntityKind::Unit || matches!(entity.task, Task::Garrisoned { .. }) {
+                continue;
+            }
+            let (x, y) = self.tile_of_raw(entity.position);
+            if x < 0 || y < 0 || x >= i64::from(width) || y >= i64::from(height) {
+                continue;
+            }
+            let bit = usize::try_from(y * i64::from(width) + x).unwrap_or(0);
+            if let Some(word) = grid.get_mut(bit / 64) {
+                *word |= 1u64 << (bit % 64);
+            }
+        }
+        grid
+    }
+
+    /// Soft avoidance: if this step would end on a tile another unit is standing on, try the two quarter
+    /// turns; if those are taken too, stand still for this tick.
+    ///
+    /// Quarter turns rather than 45-degree ones because a rotation by ninety degrees preserves the step's
+    /// length exactly in fixed point, where a diagonal nudge would need a square root. The occupancy grid is
+    /// read as it was at the start of the tick, so two units ordered into one tile on the same tick still
+    /// both arrive - the game allows that, and blocking it would make an order to a crowded place deadlock
+    /// (D52).
+    fn avoid(&self, occupied: &[u64], id: EntityId, dx: Fixed, dy: Fixed) -> (Fixed, Fixed) {
+        if dx == Fixed::ZERO && dy == Fixed::ZERO {
+            return (dx, dy);
+        }
+        let Some(entity) = self.find(id) else {
+            return (dx, dy);
+        };
+        // What is avoided is the *last step onto a place somebody already stands*, not every tile on the
+        // way: a unit must be able to walk past a friend, and a villager must be able to reach the tile
+        // beside a tree that somebody is already working. The first version blocked any occupied tile and
+        // stranded nine gather tests and every walk past a standing unit at once (D52a).
+        let Some((goal, exclusive)) = self.goal_of(entity) else {
+            return (dx, dy);
+        };
+        if !exclusive {
+            return (dx, dy);
+        }
+        let (tx, ty) = (
+            (entity.position.0.raw() + dx.raw()).div_euclid(self.scale),
+            (entity.position.1.raw() + dy.raw()).div_euclid(self.scale),
+        );
+        if (tx, ty) != (i64::from(goal.0), i64::from(goal.1)) {
+            return (dx, dy);
+        }
+        let (width, height) = self.map_size;
+        if tx < 0 || ty < 0 || tx >= i64::from(width) || ty >= i64::from(height) {
+            return (dx, dy);
+        }
+        let bit = usize::try_from(ty * i64::from(width) + tx).unwrap_or(0);
+        let taken = occupied
+            .get(bit / 64)
+            .is_some_and(|word| word & (1u64 << (bit % 64)) != 0);
+        if taken {
+            // Stand where it is: the ground it was sent to is somebody else's for now, and a unit that
+            // shuffled sideways for ever never arrives (which is what the second version did).
+            (Fixed::ZERO, Fixed::ZERO)
+        } else {
+            (dx, dy)
+        }
+    }
+
+    /// The tile an entity is trying to stand on, and whether that tile is *its own* - a place it goes to
+    /// be at, rather than a thing it goes to work.
+    ///
+    /// Only the first kind is exclusive. Two villagers must be able to work one tree and two attackers must
+    /// be able to reach one target, so a goal that is a body to be worked is not avoided; a walk to a place
+    /// is, because that is the stacking a player sees.
+    fn goal_of(&self, entity: &Entity) -> Option<((u16, u16), bool)> {
+        let (goal, exclusive) = match entity.task {
+            Task::Move { to } | Task::Hunt { to } => (to, true),
+            // A drop site is worked, not occupied: two villagers must be able to hand in at one town
+            // centre on the same tick, and a building's own tile is never free ground anyway.
+            Task::Return { drop, .. } => (self.find(drop)?.position, false),
+            Task::Build { site } => (self.find(site)?.position, false),
+            Task::Gather { node, .. } => (self.find(node)?.position, false),
+            Task::Attack { target, .. } => (self.find(target)?.position, false),
+            Task::Idle | Task::Garrisoned { .. } | Task::Fly { .. } => return None,
+        };
+        Some((self.tile_of(goal), exclusive))
+    }
+
     /// Everything a blast catches: units (not the aimed target, which the landing rule already dealt
     /// with, and not one sheltered inside a building), within `radius` of the landing point. Buildings
     /// take the aimed hit only - a mangonel's stone does not demolish a wall it passed near (D51).
@@ -4759,7 +4853,18 @@ impl World {
         let mut reached: Vec<(EntityId, (Fixed, Fixed))> = Vec::new();
         // Whatever actually moved this tick is what can see something new (D50a).
         let mut movers: Vec<EntityId> = Vec::new();
+        // The occupancy grid is only worth building on a tick where something moves; an idle world pays
+        // one `any` over the delta list, which is empty of movement in the common case (D52).
+        let something_moves = deltas
+            .iter()
+            .any(|(_, _, dx, dy)| *dx != Fixed::ZERO || *dy != Fixed::ZERO);
+        let occupied = if something_moves {
+            self.occupancy()
+        } else {
+            Vec::new()
+        };
         for (index, id, dx, dy) in deltas {
+            let (dx, dy) = self.avoid(&occupied, id, dx, dy);
             if dx != Fixed::ZERO || dy != Fixed::ZERO {
                 movers.push(id);
             }
