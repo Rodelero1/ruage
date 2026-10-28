@@ -76,6 +76,7 @@ repair   = 156   # VMREP 12.5   the repair task, likewise not a gather rate
 # PROVENANCE: dat ids (the pack's four wall types are 72/117/119/155).
 blocking_roles = ["wall"]
 
+
 # No build speed here on purpose. A building's HP/second is derived from the unit table:
 # hp / create_time (a house is 550 hp over 25 s). There is no knob, because a knob would be a
 # number we invented - and U15 taught that the number was in the dat all along, under a name
@@ -85,6 +86,14 @@ repair_hp_per_second = -1.0
 # work_rate = 12.5. If that is HP/second it is the answer; the semantics are unverified, so the
 # sentinel stays and the engine still refuses. Testing it is one scenario: damage a building,
 # repair it for 60 s, divide HP restored by villager-seconds.
+
+[build.requires]
+# The game's building prerequisites (D63): role -> the role that must have been built **once**, not
+# "still standing", because destroying the blacksmith does not take the siege workshop away. AoE2's
+# Siege Workshop needs a Blacksmith; the Archery Range the owner remembered is the *first* game's rule
+# (Barracks + Archery Range there). Add the rest as their roles arrive: archery_range/stable =
+# "barracks", market/farm = "mill".
+siege_workshop = "blacksmith"
 
 [decay]
 enabled = true
@@ -164,6 +173,7 @@ halberdier = 359    # 60 hp: an upgrade, researched (tech 429, Imperial)
 castle = 82         # CSTL, 4800 hp - available from the Castle Age (tech 137 makes it)
 trebuchet = 331     # PTREB - available from the Imperial Age (tech 256 makes it)
 siege_workshop = 49 # SIWS, class 3, 1800 hp, 200 wood: the building that makes the siege line
+blacksmith = 103    # BLAC, class 3, 1800 hp, 150 wood: the Feudal Age prerequisite of the siege workshop
 mangonel = 280      # MANGO, class 13: 50 hp, 7 range / 3 minimum, 160 wood + 135 gold, 6 s reload,
                     # 35 vs buildings and 40 vs units - the first thing in the pack that breaks a base
 

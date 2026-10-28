@@ -121,6 +121,11 @@ pub struct Build {
     /// Which roles block movement once built: walls and their kin. Empty means nothing built blocks,
     /// which is how every pack behaved before walls existed (D54).
     pub blocking_roles: Vec<String>,
+    /// Role → the role that must have been **built once** before it may be placed (D63). The game's
+    /// building prerequisites: a siege workshop needs a blacksmith, an archery range needs a barracks.
+    /// "Built once", not "still standing": the game does not take the right away when the prerequisite
+    /// is destroyed, which is why this is a per-player memory rather than a scan of the map.
+    pub requires: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -231,6 +236,9 @@ struct RawBuild {
     /// Defaulted to empty: a pack that says nothing about walls builds nothing that blocks.
     #[serde(default)]
     blocking_roles: Vec<String>,
+    /// Defaulted to empty: a pack with no building prerequisites builds anything anywhere (D63).
+    #[serde(default)]
+    requires: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -533,6 +541,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         build: Build {
             repair_hp_per_second: MaybeFixed::from_f64(raw.build.repair_hp_per_second),
             blocking_roles: raw.build.blocking_roles,
+            requires: raw.build.requires,
         },
         decay: Decay {
             enabled: raw.decay.enabled,

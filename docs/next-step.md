@@ -730,11 +730,9 @@ Until one is chosen, the honest statement is: the engine can be *played* to a fi
   started" clause inside `cancel_overbuilt` cannot be reached, because a builder that can work the tile must
   have seen it first and the sight rule cancels the placement before work begins. It stays as the rule reads;
   flipping it changes no test, and D61 says so.
-- **A very slow unit walks the wrong way** (found staging D58's race): a villager spawned at speed 0.1 tiles a
-  second with a build order eight tiles away ended up `Idle` at the map edge, having moved east, and its site
-  finished anyway - so something advanced the site's work without the builder reaching it. Not reproduced at
-  speed 1.0. The site/arrival contract is worth one test: work must happen only when the builder is at the
-  site.
+- ~~**A very slow unit walks the wrong way**~~ - **fixed** (D64): a builder that finished left its `velocity` set, so
+  an idle body slid at `speed / tick_rate` for ever. Work *is* adjacency-gated (the "work at a distance" reading was
+  wrong), and a slow move order arrives correctly; the bug was velocity, not pathing. Three tests now hold it.
 - **Overbuilding a town-centre foundation is now a refund, not a loss** (D59 + D61): the seat rule is gone, a
   cancelled foundation is paid back in full, and the town centre is class 3 like any other building, so losing
   one costs time and a walk rather than the match. The old sharp edge (a blind house ending the game) cannot

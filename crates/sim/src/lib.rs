@@ -600,6 +600,11 @@ pub enum SimError {
     UnitUnavailable {
         unit: u32,
     },
+    /// A building's prerequisite has never been built by this player (D63): a siege workshop needs a
+    /// blacksmith, and "built once" is enough - the game does not take the right away again.
+    MissingBuilding {
+        need: String,
+    },
     /// The player's civilisation cannot research the tech at all.
     TechBarred {
         tech: u32,
@@ -785,6 +790,9 @@ impl fmt::Display for SimError {
                 f,
                 "unit {unit} is an upgrade: tech {tech} has not been researched by this player"
             ),
+            SimError::MissingBuilding { need } => {
+                write!(f, "this building needs a {need} first")
+            }
             SimError::UnitUnavailable { unit } => write!(
                 f,
                 "unit {unit} is not available yet: a tech that makes it available has not been researched"
@@ -1056,6 +1064,13 @@ pub struct World {
     /// The unit classes whose buildings keep a player alive (`[conquest] surviving_classes`, D59b).
     /// Content, not state - it does not change during a match - so it is not hashed.
     conquest_classes: BTreeSet<i16>,
+    /// What each player has ever **finished building**, by unit family (D63). Building prerequisites are
+    /// about history, not about the map: losing the blacksmith does not take the siege workshop away, so
+    /// the fact has to be remembered. Part of state - it changes what the world will allow.
+    built: BTreeSet<(u8, u32)>,
+    /// Which families require which family to have been built once, resolved from `[build] requires`,
+    /// with the requirement's role name kept for the message.
+    requires_built: BTreeMap<u32, (u32, String)>,
     /// Who is in this match, set when a player's first entity lands and never cleared. Without it the
     /// world could not tell "the enemy has lost everything" from "nobody was ever here", and losing
     /// everything is exactly the case a match has to notice (D46).
@@ -1210,6 +1225,8 @@ impl World {
             resolving_availability: false,
             start_stock_applied: false,
             conquest_classes: BTreeSet::new(),
+            built: BTreeSet::new(),
+            requires_built: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
             outcome: None,
             researched: BTreeMap::new(),
@@ -1472,6 +1489,19 @@ impl World {
         for class in &economy.conquest.surviving_classes {
             self.conquest_classes.insert(*class);
         }
+        // Building prerequisites (D63), resolved once to families: role -> the family that must have been
+        // built first. A pair whose roles the pack does not have is skipped, like every other content name.
+        self.requires_built.clear();
+        if let Some(units) = self.units.as_ref() {
+            for (role, need_role) in &economy.build.requires {
+                if let (Some(unit), Some(needed)) =
+                    (economy.role.get(role), economy.role.get(need_role))
+                {
+                    self.requires_built
+                        .insert(units.root(*unit), (units.root(*needed), need_role.clone()));
+                }
+            }
+        }
         // Blast radii, resolved once. The *radius* is the gate: `blast_level` is carried and not
         // consumed, because what its value means is not published and every unit that has one has a
         // radius with it (D51).
@@ -1648,6 +1678,15 @@ impl World {
         // facts, and only one of them ends a match (D46).
         if entity.player > 0 && entity.player as usize <= MAX_PLAYERS {
             self.roster[usize::from(entity.player) - 1] = true;
+        }
+        // A building that arrives finished - seeded by the opening, or placed by a scenario - has been
+        // "built once" as surely as one a villager raised, so prerequisites treat them the same (D63).
+        if entity.kind == EntityKind::Building
+            && entity.construction.is_none()
+            && let Some(unit) = entity.unit
+        {
+            let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
+            self.built.insert((entity.player, family));
         }
         let at = self
             .entities
@@ -2622,6 +2661,13 @@ impl World {
         }
         if !self.unit_available(worker.player, unit_id) {
             return Err(SimError::UnitUnavailable { unit: unit_id });
+        }
+        // A building prerequisite is about history, not the map (D63): the requirement is that this
+        // player has finished one at some point, so a razed blacksmith does not take the workshop away.
+        if let Some((need, name)) = self.requires_built.get(&units.root(unit_id))
+            && !self.built.contains(&(worker.player, *need))
+        {
+            return Err(SimError::MissingBuilding { need: name.clone() });
         }
         for cost in &stats.costs {
             let slot = self.cost_slot(cost)?;
@@ -4998,12 +5044,21 @@ impl World {
         // 600 HP over 35 s).
         for (builder, site) in builders {
             if self.work_one_tick(site) {
+                let finished = self
+                    .find(site)
+                    .map(|building| (building.player, building.unit));
                 if let Some(building) = self.find_mut(site) {
                     building.construction = None;
                 }
-                if let Some(entity) = self.find_mut(builder) {
-                    entity.task = Task::Idle;
+                // Finished once is finished for good, for the purposes of prerequisites (D63).
+                if let Some((player, Some(unit))) = finished {
+                    let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
+                    self.built.insert((player, family));
                 }
+                // The builder comes to rest *and forgets its route* (D64). Setting the task to idle was
+                // not enough: the waypoints stayed, and a villager that finished a house on its doorstep
+                // kept walking into the building at its own speed for as long as the match ran.
+                self.stand_down(builder);
                 self.paths.remove(&builder);
             }
         }
@@ -5877,6 +5932,11 @@ impl World {
         // The civilisation is hashed because it changes what the world will allow: two runs that
         // differ in it refuse different techs, and a replay that lost it would diverge silently. Only
         // when set, so a world that names no civ hashes exactly as it did before civs existed.
+        // What a player has ever built changes what the world will allow, so it is state (D63).
+        for (player, family) in &self.built {
+            fnv_bytes(&mut hash, &[*player]);
+            fnv_bytes(&mut hash, &family.to_le_bytes());
+        }
         for (id, rally) in &self.rallies {
             fnv_bytes(&mut hash, b"rally");
             fnv_bytes(&mut hash, &id.0.to_le_bytes());

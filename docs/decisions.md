@@ -1556,3 +1556,54 @@ Any future "why does the siege do nothing" question starts here.
 **Still outstanding for this step:** the acceptance test - a scripted match that reaches Castle and breaks a town
 centre inside fifteen minutes. That needs a booming opening (villagers queued from tick 0, farms, ten-plus on food);
 the content is in place, the economy script is not. `docs/next-step.md` carries it as the top item.
+
+## D63 - Building prerequisites are history, not the map
+
+The owner noticed the siege workshop's prerequisite and asked for a check. **Checked, and the memory was of the
+first game**: in Age of Empires II a Siege Workshop requires a **Blacksmith** (Liquipedia's building page, the
+Fandom building table, and a r/AoE2 thread all say so); Barracks + Archery Range is the *Age of Empires I* rule.
+Two AoE2 sources agree, so that is what the pack implements.
+
+**The tense is the whole design.** The requirement is that the building has been built **once**, not that it still
+stands - destroying the blacksmith does not take the siege workshop away (state from the same sources). So the
+engine remembers a per-player set of families that have ever been finished (`built`), rather than scanning the map
+in `check_build`. That set is *state*: it changes what the world will allow, so it is hashed, and a replay that
+lost it would refuse different orders.
+
+Recorded in three places, because "finished" has three shapes: a building raised by a villager (completion in the
+tick loop), one that arrives finished (the opening's town centre, a scenario's building - `insert`), and the
+rejection itself (`SimError::MissingBuilding { need }`, whose message names the role rather than an id).
+
+Content shape is a role pair, not an id pair: `[build.requires] siege_workshop = "blacksmith"` and
+`blacksmith = 103` (`BLAC`, class 3, 1 800 hp, 150 wood). The rest of the game's pairs are written in a comment for
+whoever adds the roles: `archery_range`/`stable` need `barracks`, `market`/`farm` need `mill`.
+
+**Two tests**: a workshop is refused with no blacksmith and allowed once one exists; and a blacksmith that is
+*razed* does not take the right away. Two mutations bite (no check; spawned buildings not counted as built).
+
+**Not modelled:** the Castle Age requirement for the workshop is separate and already handled by availability -
+the workshop's *unit* gate - which is why the test grants the Castle Age first and lets the prerequisite be the
+only variable.
+
+## D64 - A builder comes to rest, and that includes its velocity
+
+The drift, caught at last. A villager that finished a house **on its own doorstep** kept walking into it at its
+own speed for the rest of the match - 0.1 tiles a second, which is exactly `speed / tick_rate`, so it looked like a
+pathing problem and was not one.
+
+What it was: the completion path set the builder's task to `Task::Idle` and cleared its route, but left
+**`velocity`** alone. Velocity is the fixture-grade field used to carry a body's motion (spawn fixtures and the
+order-start path set it), and the integrator adds `velocity / tick_rate` every tick for any entity that still has
+one. With a task of idle and no route, nothing cleared it, so the body kept sliding east for ever. `stand_down`
+already did the right thing - task and velocity - so the fix is one call, and the route clear stays because the
+route is a separate fact.
+
+**Why it took three attempts to find.** The first report was mistaken for "work at a distance" (it is not: building
+work is adjacency-gated), then for a pathing oddity with a slow villager (it was not: a slow *move* order arrives
+correctly, tested). What finally pinned it was writing the state down in a test - *"a unit that finishes its order
+does not move afterwards"* - and noticing that the failing case was the **build** order, with the same unit speed
+producing 100 raw units of movement per tick. The number matching `speed / tick_rate` exactly is what said
+"velocity", not "path".
+
+**Three tests** in `movement.rs`: an arriving unit stops dead, a builder stops when the building is finished (the
+one that failed), and a very slow unit still reaches the tile it was sent to.
