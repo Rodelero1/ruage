@@ -171,7 +171,7 @@ gets crossed.
 Four heads moved: `genie` 74331ec6→f30f36dc (38 commits), `openaok` 092ed1ad→d1b237ed (32), and
 `SiegeEngineers/halfon` plus `aoe2techtree` to DE update 188329. The census this file relies on
 was re-derived rather than trusted: `effects.toml` holds 97 kind-101 and 25 kind-103 commands,
-`b` there is only 0–3 (37/17/1/42), `c` 0/1 (58/39), and the class totals are 0:106, 1:84,
+kind 101's `b` is only 0–3 (37/17/1/42) and its `c` 0/1 (58/39), and the class totals are 0:106, 1:84,
 2:117, 3:227, 4:1091, 5:576, 6:2, 11:2, 15:1, 102:942. The 2026-10-27 findings hold.
 
 **genie: an object update no longer writes the world.** FD-045 has taken the core apart so that
