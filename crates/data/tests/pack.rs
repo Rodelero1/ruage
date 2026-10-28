@@ -132,3 +132,54 @@ fn every_pack_file_is_required() {
     let dir = Path::new(".");
     assert!(dir.exists());
 }
+
+/// **Review finding.** The docs said an override file joins the handshake hash "when it exists", and no test
+/// said so. Two packs alike except for one overridden value must not look like the same game to a peer.
+#[test]
+fn a_pack_with_a_different_override_is_a_different_pack() {
+    let Some(dir) = config_dir() else { return };
+    let pack = ContentPack::load(&dir).expect("the project pack");
+
+    let scratch = repo("build/pack-override-test");
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("scratch dir");
+    for name in PACK_FILES.iter().copied().chain(["overrides.toml"]) {
+        let from = pack_path(&dir, name);
+        if !from.exists() {
+            continue;
+        }
+        let to = pack_path(&scratch, name);
+        std::fs::create_dir_all(to.parent().expect("a parent")).expect("dir");
+        std::fs::copy(&from, &to).expect("copy");
+    }
+    // Same tables, one hand-written value different.
+    std::fs::write(
+        scratch.join("overrides.toml"),
+        "schema = 1\n[overrides]\n\"units.79.min_range\" = 0.0\n",
+    )
+    .expect("write");
+
+    let changed = ContentPack::load(&scratch).expect("the overridden pack loads");
+    assert_ne!(
+        changed.hash, pack.hash,
+        "different overrides are a different game, which is what the handshake is for"
+    );
+    assert_eq!(
+        changed.differences(&pack),
+        vec!["overrides.toml".to_owned()],
+        "and the difference names the file"
+    );
+    assert_eq!(changed.override_log.len(), 1, "the change is logged");
+    assert_eq!(
+        changed
+            .units
+            .unit(79)
+            .expect("the watch tower")
+            .min_range
+            .resolve(1_000_000, "min_range")
+            .expect("resolved")
+            .raw(),
+        0,
+        "and the pack really carries the overridden value"
+    );
+}

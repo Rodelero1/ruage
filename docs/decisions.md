@@ -1043,3 +1043,30 @@ additions, and the dead zone is data. The town centre has no dead zone, and Murd
 
 **Not covered, and said plainly:** `techs` and `effects` overrides. The layer refuses them by name rather than
 pretending, and widening it is a change in `crates/data/src/overrides.rs`.
+
+## D45a - The review of the override layer: one pass wrote half a file, and two refusals were missing
+
+D45 shipped without the adversarial review the project rule calls for. Doing it found three things; two were
+defects and one was an untested promise.
+
+**1. A refused override left the ones above it applied.** `apply_units` validated and wrote in the same loop, so a
+file whose second entry was bad left the first entry applied and *then* returned an error. A half-loaded table is
+exactly the failure a strict loader exists to prevent, and it would have been invisible: the caller sees an error,
+the table is not what it was, and the difference is one number in one unit. Fixed by planning first: every path,
+id, field and value is resolved into a plan without touching the table, and only a complete, valid plan is written.
+
+**2. Nothing stopped `hp = 0`.** Content could set a unit's health to zero or negative, which is a unit that
+cannot exist - dead on arrival, and every maximum-health computation would floor it back up. Health is now refused
+below 1, and accuracy is refused outside 0..100 while the same check is being written.
+
+**3. The hash promise was documented and untested.** "The file joins the pack's identity when it exists" had no
+test behind it. It was true - the new test passed first time - but a claim in a doc is not a claim in a test, and
+the value of finding that out is that the *next* change to the hash cannot quietly break it.
+
+Mutated all three: removing the health check, dropping `overrides.toml` from the hash, and not applying the
+validated plan each fail exactly the test written for them.
+
+**What the review did not find**, said so that the absence is a claim and not an omission: no per-tick cost (the
+layer runs once at load), no determinism risk (`BTreeMap` iteration is sorted, so the log and the application order
+are stable), and no leak of the override into the simulation's state hash - an override changes the *tables*, and
+the world already hashes what it derives from them.

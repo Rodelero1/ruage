@@ -51,6 +51,18 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Thirty-third pass: the review of the override layer found no cost, and three defects (2026-10-28)
+
+Nothing per tick: overrides are applied once, at load, into a `Vec` plan and then written field by field. The
+`unit_mut` lookups are `BTreeMap` gets. The pack hash reads one more file when it exists.
+
+The review found no performance problem and three correctness ones, all fixed test-first: a refused entry left the
+entries above it applied (one pass → two: validate everything, then write); `hp = 0` was accepted, which is a unit
+that cannot exist; and the hash claim was documented without a test. Mutation-proved: removing the health check,
+taking `overrides.toml` out of the hash, and not applying the validated plan each fail their own test.
+
+Both anchors unchanged (`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`).
+
 ## Thirty-second pass: a set lookup and two radius reads, only where a dead zone exists (2026-10-28)
 
 `scale_fixed` gains one reverse scan for a `set` modifier - a handful of comparisions on a list that is usually

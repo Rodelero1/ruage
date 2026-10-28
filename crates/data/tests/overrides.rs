@@ -152,3 +152,43 @@ fn the_repository_override_file_loads() {
     }
     let _: Option<ConfigError> = None;
 }
+
+/// **Review finding.** `apply_units` walked the entries and wrote as it went, so a file whose second entry was
+/// refused left the first one applied - a half-loaded table, which is exactly the sort of state a strict loader
+/// exists to prevent. The layer now validates every path and value first and only then writes.
+#[test]
+fn a_refused_override_applies_nothing_at_all() {
+    let Some(mut table) = units() else { return };
+    let before = table.unit(79).expect("tower").min_range;
+    // Sorted by key, the valid one comes first: `units.79` before `units.83`.
+    let text = "schema = 1\n[overrides]\n\"units.79.min_range\" = 0.0\n\"units.83.nonsense\" = 1\n";
+    let overrides = Overrides::parse(text, "overrides.toml").expect("parsed");
+    overrides
+        .apply_units(&mut table)
+        .expect_err("the unknown field is refused");
+    assert_eq!(
+        table.unit(79).expect("tower").min_range,
+        before,
+        "and the valid entry above it was not applied either: a refused file changes nothing"
+    );
+}
+
+/// **Review finding.** Nothing stopped `"units.83.hp" = 0`, which makes a unit that cannot exist: it would be
+/// dead on arrival, and every max-health computation would floor it. Content may lower a unit's health; it may
+/// not take it away.
+#[test]
+fn an_override_cannot_leave_a_unit_without_health() {
+    let Some(mut table) = units() else { return };
+    for hp in [0, -5] {
+        let text = format!("schema = 1\n[overrides]\n\"units.83.hp\" = {hp}\n");
+        let overrides = Overrides::parse(&text, "overrides.toml").expect("parsed");
+        let error = overrides
+            .apply_units(&mut table)
+            .expect_err("health of zero or less is refused");
+        assert!(
+            format!("{error:?}").contains("units.83.hp"),
+            "the refusal names the key"
+        );
+    }
+    assert_eq!(table.unit(83).expect("villager").hp, 25, "untouched");
+}
