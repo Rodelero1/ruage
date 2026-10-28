@@ -21,6 +21,9 @@ use crate::{ConfigError, MaybeFixed, SUPPORTED_SCHEMA};
 /// What a modifier does to the value it names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModOp {
+    /// Kind 0: the attribute *is* this value. Population is the one the engine consumes - a building
+    /// supports five units rather than five more - and the rest are carried (D41).
+    Set,
     Add,
     Multiply,
 }
@@ -344,12 +347,13 @@ pub fn load_effects_str(text: &str, path: &str) -> Result<Effects, ConfigError> 
         let mut modifiers = Vec::with_capacity(effect.modifiers.len());
         for raw in effect.modifiers {
             let op = match raw.op.as_str() {
+                "set" => ModOp::Set,
                 "add" => ModOp::Add,
                 "multiply" => ModOp::Multiply,
                 other => {
                     return Err(ConfigError::Invalid {
                         key: format!("effect[{}].modifiers.op", effect.id),
-                        detail: format!("{other:?} is neither \"add\" nor \"multiply\""),
+                        detail: format!("{other:?} is none of \"set\", \"add\" or \"multiply\""),
                     });
                 }
             };

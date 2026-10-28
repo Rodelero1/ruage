@@ -844,3 +844,40 @@ So: **accept the placement, send the unit as close as it can get**, which is wha
 keep is off the map, and no mouse can produce that click. Current limits of the comparison, stated: our terrain
 is only grass and forest (no cliffs, water or elevation yet), so a cliff rally is a forest rally today and takes
 the same ring search.
+
+## D41 - Kind 0 sets a unit's attribute, and population is the first one the engine consumes
+
+The dat's effect commands have three namespaces with one layout, `[kind, unit, class, attribute, value]`:
+kind 0 **sets**, 4 **adds**, 5 **multiplies**. Only 4 and 5 pack the value for attack and armour, which is why
+the same attribute arrives as `1025.0` in one and `5.0` in another. The importer already decoded 4 and 5; kind 0
+was carried raw and unread, all 106 commands of it.
+
+It is now decoded (importer `ATTRIBUTE_NAMES` grew, `_modifier` accepts kind 0 with `op = "set"`), and the
+attributes are named only where a tech says what they mean:
+
+- **21 population** - the Slavs' team bonus sets twelve military buildings to 5; the Chinese town centre to 10.
+- **11 accuracy** - Thumb Ring sets 100, City Rights 87.
+- **19 ballistics** - ballistics sets a flag on every bow, gun and galley; Fire Ships auto-ballistics.
+- **20 minimum range** - Andean Sling sets a slinger's to 0, the Koreans' team bonus to 1.
+- **102 extra projectiles** - Yasama sets 3 on towers.
+
+Two stay `other:<id>` (22 on City Rights, 105 on Mercenaries): nothing in the techs pins them, and a guess is
+worse than a hole.
+
+**What the engine consumes: population, and only population.** A building's provided population is now
+`population_provided(player, unit)`: what content gives the role (house 5, town centre 5), unless a `set`
+modifier replaces it. The ceiling sums that per finished building instead of counting role instances, which is
+the shape a team bonus needs - a barracks supports nothing by content and five by the Slavs'.
+
+**Applying a team bonus needed a new path.** A team bonus is an **effect no tech researches**, so
+`modifiers_for` now reads two sources: the effects of researched techs, and a per-player `bonus_effects` list
+filled from the civ's `team_bonus_effect` at `load_civs`. It is derived from `civ_by_player` and not hashed
+separately.
+
+Mutation-proved both new paths: ignoring `set` fails the Slavs test, and never granting the team bonus fails it
+too. The British case in the same test is the control - a British barracks supports nothing, so the five is the
+bonus and not the building.
+
+Not yet consumed: accuracy, ballistics, minimum range, extra projectiles. Each is a real mechanic the engine
+does not have (leading a shot, a minimum range for siege, extra arrows from a tech rather than a garrison), and
+they are counted in `docs/next-step.md` rather than left as an implied "done".

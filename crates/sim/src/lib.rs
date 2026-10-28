@@ -929,6 +929,10 @@ pub struct World {
     /// Which civilisation each player is, once resolved against the table above. Index 0 is player 1.
     /// Part of state (hashed), because it changes what the world will allow.
     civ_by_player: [Option<u32>; MAX_PLAYERS],
+    /// The effect ids a player has by civilisation rather than by research: the team bonus. Derived
+    /// from `civ_by_player`, so it is not hashed separately. The data writes a team bonus with the same
+    /// command shapes as a tech's effect - the Slavs' is twelve kind-0 population sets (D41).
+    bonus_effects: [Vec<u32>; MAX_PLAYERS],
     /// Units that some tech *makes available* (kind-2 rows with a positive flag). Derived from the
     /// effects table at load: content, not state, so it is not hashed.
     gated_units: BTreeSet<u32>,
@@ -962,6 +966,35 @@ pub struct World {
     map_rng: Pcg32,
 }
 
+/// Gather the modifiers one effect has for a unit and an attribute into `chosen`.
+///
+/// A modifier matches on the unit id it names, on the unit's class, or on neither (-1 means
+/// "everything"). Free rather than a method so that both the researched-tech loop and the civ-bonus loop
+/// can share it without borrowing `self` twice.
+fn collect_modifiers<'a>(
+    effects: &'a ruage_data::Effects,
+    effect_id: u32,
+    unit: &Unit,
+    attribute: &str,
+    chosen: &mut Vec<&'a ruage_data::Modifier>,
+) {
+    let Some(effect) = effects.get(effect_id) else {
+        return;
+    };
+    for modifier in &effect.modifiers {
+        if modifier.attribute != attribute {
+            continue;
+        }
+        if modifier.unit >= 0 && u32::try_from(modifier.unit).ok() != Some(unit.id) {
+            continue;
+        }
+        if modifier.unit_class >= 0 && modifier.unit_class != unit.class {
+            continue;
+        }
+        chosen.push(modifier);
+    }
+}
+
 impl World {
     pub fn new(settings: &Settings, seed: u64) -> Result<Self, SimError> {
         Ok(World {
@@ -978,6 +1011,7 @@ impl World {
             effects: None,
             civs: None,
             civ_by_player: [None; MAX_PLAYERS],
+            bonus_effects: std::array::from_fn(|_| Vec::new()),
             team_by_player: [1, 2, 3, 4, 5, 6, 7, 8],
             teams_named: false,
             rallies: BTreeMap::new(),
@@ -2295,29 +2329,21 @@ impl World {
         unit: &Unit,
         attribute: &str,
     ) -> Vec<&ruage_data::Modifier> {
-        let (Some(effects), Some(techs)) = (self.effects.as_ref(), self.techs.as_ref()) else {
+        let Some(effects) = self.effects.as_ref() else {
             return Vec::new();
         };
         let mut chosen = Vec::new();
-        for tech_id in self.researched(player) {
-            let Some(effect_id) = techs.get(*tech_id).and_then(|tech| tech.effect_id) else {
-                continue;
-            };
-            let Some(effect) = effects.get(effect_id) else {
-                continue;
-            };
-            for modifier in &effect.modifiers {
-                if modifier.attribute != attribute {
+        if let Some(techs) = self.techs.as_ref() {
+            for tech_id in self.researched(player) {
+                let Some(effect_id) = techs.get(*tech_id).and_then(|tech| tech.effect_id) else {
                     continue;
-                }
-                if modifier.unit >= 0 && u32::try_from(modifier.unit).ok() != Some(unit.id) {
-                    continue;
-                }
-                if modifier.unit_class >= 0 && modifier.unit_class != unit.class {
-                    continue;
-                }
-                chosen.push(modifier);
+                };
+                collect_modifiers(effects, effect_id, unit, attribute, &mut chosen);
             }
+        }
+        // A civ's team bonus applies without being researched: it is a property of who the player is.
+        for effect_id in &self.bonus_effects[usize::from(player).min(MAX_PLAYERS - 1)] {
+            collect_modifiers(effects, *effect_id, unit, attribute, &mut chosen);
         }
         chosen
     }
@@ -2686,30 +2712,55 @@ impl World {
         {
             return population.cap_default;
         }
-        let count = |role: &str| -> u32 {
-            let Some(unit) = economy.role.get(role).copied() else {
-                return 0;
-            };
-            u32::try_from(
-                self.entities
-                    .iter()
-                    .filter(|entity| {
-                        entity.player == player
-                            && entity.kind == EntityKind::Building
-                            && entity.construction.is_none()
-                            && entity.unit.is_some_and(|built| {
-                                self.units
-                                    .as_ref()
-                                    .map_or(built == unit, |units| units.root(built) == unit)
-                            })
-                    })
-                    .count(),
-            )
-            .unwrap_or(0)
+        // Sum what each finished building supports rather than counting roles: a civilisation's team
+        // bonus can make a building support population that content never listed for it (the Slavs'
+        // military buildings, D41).
+        let total = self
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.player == player
+                    && entity.kind == EntityKind::Building
+                    && entity.construction.is_none()
+            })
+            .filter_map(|entity| entity.unit)
+            .fold(0u32, |sum, built| {
+                sum.saturating_add(self.population_provided(player, built))
+            });
+        total.min(population.cap_default)
+    }
+
+    /// How much population one finished building supports: what content gives its role, unless a
+    /// modifier *sets* it to something else.
+    ///
+    /// Population is attribute 21 and arrives as a kind-0 `set`, which is a different shape from the
+    /// additive attack and armour modifiers: "set" means the building supports this many units, not this
+    /// many more. The vertical is what makes the Slavs' team bonus work (military buildings support five)
+    /// and the Chinese town centre (ten) without either being written into content by hand (D41).
+    fn population_provided(&self, player: u8, built: u32) -> u32 {
+        let Some(economy) = self.economy.as_ref() else {
+            return 0;
         };
-        let houses = count("house").saturating_mul(population.house_population);
-        let centres = count("town_centre").saturating_mul(population.town_centre_population);
-        houses.saturating_add(centres).min(population.cap_default)
+        let units = self.units.as_ref();
+        let root = units.map_or(built, |units| units.root(built));
+        let population = &economy.population;
+        let base = if economy.role.get("house") == Some(&root) {
+            population.house_population
+        } else if economy.role.get("town_centre") == Some(&root) {
+            population.town_centre_population
+        } else {
+            0
+        };
+        let Some(stats) = units.and_then(|units| units.unit(root)) else {
+            return base;
+        };
+        let mut provided = base;
+        for modifier in self.modifiers_for(player, stats, "population") {
+            if modifier.op == ruage_data::ModOp::Set {
+                provided = u32::try_from(modifier.value.max(0.0) as i64).unwrap_or(0);
+            }
+        }
+        provided
     }
 
     /// How much food a new farm plot of this player's is worth: what content gives a farm, plus what
@@ -3844,6 +3895,17 @@ impl World {
                     .by_name(name)
                     .ok_or_else(|| SimError::UnknownCiv { name: name.clone() })?;
                 self.civ_by_player[index] = Some(civ.id);
+            }
+        }
+        // A civ's team bonus is an effect, not a tech: nothing researches it, and every player of that
+        // civ has it from the first tick. Content that names no team bonus simply has an empty list.
+        self.bonus_effects = std::array::from_fn(|_| Vec::new());
+        for index in 0..MAX_PLAYERS {
+            let Some(id) = self.civ_by_player[index] else {
+                continue;
+            };
+            if let Some(bonus) = civs.by_id(id).and_then(|civ| civ.team_bonus_effect) {
+                self.bonus_effects[index].push(bonus);
             }
         }
         self.civs = Some(civs.clone());

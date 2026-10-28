@@ -53,6 +53,10 @@ impl Civs {
 
     /// Look a civ up by the name content uses. Exact match: a near miss is a mistake worth hearing
     /// about, not something to guess at.
+    pub fn by_id(&self, id: u32) -> Option<&Civ> {
+        self.civs.iter().find(|civ| civ.id == id)
+    }
+
     pub fn by_name(&self, name: &str) -> Option<&Civ> {
         self.by_name.get(name).and_then(|id| self.get(*id))
     }

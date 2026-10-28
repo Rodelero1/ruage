@@ -51,6 +51,15 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Twenty-eighth pass: one more effect list, on the same lookups (2026-10-27)
+
+`modifiers_for` now also walks a player's civ bonus effects - one effect, twelve modifiers, consulted where
+modifiers were already consulted (an order, a shot, a build site) and never per tick. `population_cap` is
+computed from the entity list on the same schedule as before (only when a training job is advanced), and the
+per-building sum replaces the per-role count: same order of work, no extra pass.
+
+Both anchors unchanged (`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`).
+
 ## Twenty-seventh pass: a rally can cost up to ten rings of pathfinding, once (2026-10-27)
 
 The nearest-reachable-tile search is bounded at ten rings - up to 440 tiles examined, each with a `plan_path`

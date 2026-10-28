@@ -425,3 +425,52 @@ fn a_queue_can_exceed_the_ceiling_and_drains_later() {
         villagers(&world)
     );
 }
+
+/// The Slavs team bonus is "military buildings provide +5 population", and it arrives in the dat as an
+/// effect command of **kind 0** - a unit-addressed `set` of attribute 21, which is population provided.
+/// This is the first consumer of that kind, and the first thing to apply a civ's *team bonus* effect.
+///
+/// Observed the way a player observes it: the ceiling is what it is, so a Slav who has built a barracks
+/// can support five more units than the same Slav without one - and a Briton gains nothing from theirs.
+#[test]
+fn a_slav_barracks_supports_five_more_units_and_a_british_one_none() {
+    let Some(fx) = fixture() else { return };
+    for (civ, extra) in [("Slavs", 5usize), ("British", 0usize)] {
+        let plain = arrivals(&fx, civ, false);
+        let with_barracks = arrivals(&fx, civ, true);
+        assert_eq!(
+            with_barracks,
+            plain + extra,
+            "{civ}'s barracks is worth {extra} more units at the ceiling"
+        );
+    }
+}
+
+/// How many villagers a player of this civ can add before the ceiling stalls training, optionally with a
+/// finished barracks in the yard. A fresh world each time: a stalled order left queued would be counted as
+/// an arrival by the next measurement.
+fn arrivals(fx: &Fixture, civ: &str, barracks: bool) -> usize {
+    let mut economy = fx.economy.clone();
+    economy.start.civs = vec![civ.to_owned()];
+    let mut world = seeded_with(fx, &economy, true);
+    if barracks {
+        let villager = first_villager(&world);
+        let at = a_free_tile(&world);
+        world.submit(Command::Build {
+            villager,
+            unit: BARRACKS,
+            at,
+        });
+        world.step().expect("step");
+        let site = world
+            .entities()
+            .iter()
+            .find(|e| e.kind == EntityKind::Building && e.unit == Some(BARRACKS))
+            .map(|e| e.id)
+            .expect("the barracks site exists");
+        finish(&mut world, site);
+    }
+    fill_to_the_ceiling(&mut world)
+}
+
+const BARRACKS: u32 = 12;

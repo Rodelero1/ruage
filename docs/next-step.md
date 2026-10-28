@@ -556,6 +556,21 @@ Units that cannot work the node, and nodes that cannot be reached, fall back to 
 Mutation-proved: making the rally never gather fails the stone test, and removing the ring search fails the
 pocket test.
 
+## Done next: kind 0, and population (2026-10-27, v0.83)
+
+Kind 0 is the third namespace of the effect command (`set` against kind 4's `add` and kind 5's `multiply`),
+106 commands, now decoded. **Population (attribute 21) is consumed**: a building supports what content gives its
+role unless a `set` modifier replaces it, and the ceiling sums that per finished building - so the Slavs' team
+bonus (military buildings support five) works, proven against a British control that gains nothing.
+
+The other named attributes are decoded and **not** consumed, each because the mechanic does not exist yet:
+**accuracy 11** (Thumb Ring), **ballistics 19** (leading a shot), **minimum range 20** (Andean Sling), **extra
+projectiles 102** (Yasama - a tech-granted volley, unlike the garrison's). Two attributes stay unnamed
+(`other:22`, `other:105`) because nothing in the data pins them.
+
+Next: **ballistics**, the one of those four with a mechanism already in place (projectiles fly to an aim
+position, so leading a moving target is a change to where the aim is, not new machinery).
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to
