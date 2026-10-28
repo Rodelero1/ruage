@@ -972,3 +972,40 @@ on the tick the order lands.
 Not modelled: blast damage (a mangonel's shot hurts a group, not a point), and the retreat does not reconsider
 terrain - a mangonel backed against a wall will keep trying to step into it, which leaves it unable to fire until
 it can move. Both are recorded rather than assumed.
+
+## D44a - The dead zone is not siege-only, `set` modifiers were being dropped, and it is measured body to body
+
+A review of D44 against the user's knowledge of the game ("skirmisher has minimum range too, and Andean Sling
+removed it") found **three** things wrong. The data was right; the engine was not.
+
+**1. A skirmisher has a dead zone as well.** Unit 7 - the skirmisher, whose name field says `XBOWM` one id ahead
+as usual - carries `min_range` 1 beside its range 4. So do the slinger (185) and the genitour line (583, 596,
+1010, 1012). D44's "mangonel 3, bombard cannon 5" was true but understated: 46 units have a dead zone and they
+are not all siege.
+
+**2. `set` modifiers never reached the value they name - Andean Sling did nothing.** `scale_fixed` applied `Add`
+and `Multiply` and silently ignored `Set`. Population and accuracy handle `Set` themselves (which is why they
+worked), but everything routed through `scale_fixed` - range, speed, gather rate, carry, **minimum range** - lost
+it. So D44's claim that "attribute 20 is consumed" was false: Andean Sling's seven `set 0` commands and the
+Koreans' three `set 1` commands (mangonel, onager, siege onager - their team bonus reduces the minimum range from
+3 to 1) were all ignored. Now the **last** `set` replaces the base before additions and multiplications, in
+research order, which is the rule every other modifier follows.
+
+**3. A one-tile dead zone could never bite on a tile grid.** The comparison was centre to centre, and the closest
+two units can stand is a whole tile - so a skirmisher's 1 was unsatisfiable, while a mangonel's 3 was fine. The
+dead zone is now measured **to the target's edge**: `centre distance < min_range + radius(shooter) + radius
+(target)`. Radii are data the engine already imports (0.2 tiles for a skirmisher and a villager), and reach stays
+centre-to-centre on purpose - a dead zone is about two bodies that cannot share space, a reach is about the range
+of a weapon.
+
+Fixed test-first, with the test rewritten once: the first version asserted that a skirmisher "cannot shoot a
+neighbour", which is wrong - it *can*, after stepping back. The test now says what actually distinguishes the two
+cases: **where the first shot comes from** (1.6 tiles without Andean Sling, 1.0 with it) and **when** (tick 12
+against tick 3).
+
+Mutation-proved twice: dropping `Set` again makes the Andean Sling case fail, and measuring centre-to-centre
+makes the skirmisher step back with the tech as well.
+
+**What this says about the earlier review:** D44's own mutation check only removed the dead-zone comparison, so it
+could not notice that the *modifier* path was dead. A feature is not covered by testing the branch it enables if
+the input to that branch is never exercised.

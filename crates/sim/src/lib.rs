@@ -157,6 +157,17 @@ fn apply_scalar(base: f64, modifiers: &[&ruage_data::Modifier]) -> f64 {
 /// of a tile per second and look like nothing happened.
 fn scale_fixed(base: Fixed, scale: i64, modifiers: &[&ruage_data::Modifier]) -> Fixed {
     let mut raw = base.raw() as f64;
+    // A kind-0 `set` replaces the base rather than adjusting it, and it has to be honoured here or the
+    // attributes that only ever arrive as sets - Andean Sling's removal of a skirmisher's dead zone
+    // (D44), the Koreans' reduction of a mangonel's - would silently do nothing. The last set wins, in
+    // research order, which is the same rule every other modifier follows.
+    if let Some(set) = modifiers
+        .iter()
+        .rev()
+        .find(|modifier| modifier.op == ruage_data::ModOp::Set)
+    {
+        raw = set.value * scale as f64;
+    }
     for modifier in modifiers.iter().filter(|m| m.op == ruage_data::ModOp::Add) {
         raw += modifier.value * scale as f64;
     }
@@ -2799,6 +2810,21 @@ impl World {
         total.min(population.cap_default)
     }
 
+    /// How much room two bodies take up between them, in engine units: the sum of their radii. Used to
+    /// measure a dead zone from body to body rather than from centre to centre (D44).
+    fn body_radii(&self, a: Option<u32>, b: Option<u32>) -> i64 {
+        let Some(units) = self.units.as_ref() else {
+            return 0;
+        };
+        let radius = |id: Option<u32>| -> i64 {
+            id.and_then(|id| units.unit(units.root(id)))
+                .and_then(|unit| unit.radius.first().copied())
+                .and_then(|value| value.resolve(self.scale, "radius").ok())
+                .map_or(0, |value| value.raw())
+        };
+        radius(a) + radius(b)
+    }
+
     /// The point a shot is really aimed at, after the archer's accuracy has had its say.
     ///
     /// Accuracy is a percentage (attribute 11): the dat gives an archer 80, a hand cannoneer 65, every
@@ -3388,10 +3414,10 @@ impl World {
                     min_range,
                     ..
                 } => {
-                    let Some(victim) = self
+                    let Some((victim, victim_unit)) = self
                         .find(target)
                         .filter(|v| !matches!(v.kind, EntityKind::Resource(_)))
-                        .map(|v| v.position)
+                        .map(|v| (v.position, v.unit))
                     else {
                         // The target is gone. The attacker stands down on the next tick.
                         finished.push(entity.id);
@@ -3414,10 +3440,19 @@ impl World {
                         // included. Comparing distance to one tile would exclude the diagonal.
                         adjacent
                     };
-                    // A siege engine has a dead zone: inside it, the shot is not possible however
-                    // close the target is, so the engine backs away instead of standing there.
-                    let too_close =
-                        min_range.raw() > 0 && squared < min_range.raw() * min_range.raw();
+                    // A siege engine - and a skirmisher - has a dead zone: inside it the shot is not
+                    // possible however close the target is, so the shooter backs away instead of
+                    // standing there. The distance is measured **to the target's edge**, because two
+                    // bodies cannot share a tile: a skirmisher's one-tile dead zone would otherwise
+                    // never bite on a tile grid, where the closest a neighbour can stand is one tile
+                    // from centre to centre (D44).
+                    let padding = if min_range.raw() > 0 {
+                        self.body_radii(entity.unit, victim_unit)
+                    } else {
+                        0
+                    };
+                    let dead = min_range.raw() + padding;
+                    let too_close = min_range.raw() > 0 && squared < dead * dead;
                     if too_close {
                         let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
                             SimError::Displacement {

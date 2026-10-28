@@ -51,6 +51,14 @@ a verdict - it is also what a busy machine looks like once the small worlds stop
 Stability, same pass: the four-hour probe (288,000 ticks) ends with the entity count it started
 with (126 - no leak), and the same seed reproduces `hash=508a746d89cc76e1` exactly.
 
+## Thirty-second pass: a set lookup and two radius reads, only where a dead zone exists (2026-10-28)
+
+`scale_fixed` gains one reverse scan for a `set` modifier - a handful of comparisions on a list that is usually
+empty. The edge measurement costs two table lookups per attacking entity, **guarded by `min_range > 0`**, so a
+longsword or an archer pays nothing at all.
+
+Both anchors unchanged (`b30d49d89f8bcf4f`, `05c91e3bff3f9eee`).
+
 ## Thirty-first pass: one comparison per attacking entity (2026-10-28)
 
 The dead zone is one extra `squared < min_range²` comparison in the attack arm, which already computed `dx`,

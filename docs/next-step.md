@@ -618,6 +618,23 @@ the retreat does not check terrain - a mangonel backed into a wall keeps trying 
 Next: **blast damage** would complete the siege engine (a shot that hurts a group), or the **per-civ 211-number
 array**, still the largest unread thing in the dat.
 
+## Corrected: `set` modifiers, the skirmisher's dead zone (2026-10-28, v0.87)
+
+A review found two real defects behind D44's claim, both fixed test-first (D44a):
+
+- **`set` modifiers were dropped** by `scale_fixed`, so Andean Sling (seven `set 0`) and the Koreans' team bonus
+  (three `set 1`, mangonel/onager/siege onager 3 -> 1) did nothing. Population and accuracy had handled `Set`
+  themselves, which is exactly why the gap went unseen.
+- **A one-tile dead zone could never bite** on a tile grid, because the comparison was centre to centre. It is
+  now measured to the target's **edge** (`min_range + both radii`), so a skirmisher's neighbour is genuinely too
+  close. Radii were already imported.
+
+The dead zone is therefore not siege-only: the skirmisher (7), slinger (185) and genitour line have one tile of
+it, taken away by Andean Sling.
+
+Next: **blast damage** would complete the siege engine, or the **per-civ 211-number array**, still the largest
+unread thing in the dat.
+
 Still not interpreted, and counted: **kind 0 (106 commands), kind 6 (2), kind 11 (2), kind 15 (1),
 kind 101 (97, undecidable namespace), kind 103 (25)***, plus the `other:`/`unpacked:`
 attributes the importer could not name and the effect kinds beyond 3/4/5. Range waits for a reason to

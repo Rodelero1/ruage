@@ -23,6 +23,8 @@ struct Fixture {
     resources: ruage_data::Resources,
     units: Units,
     combat: ruage_data::Combat,
+    techs: ruage_data::Techs,
+    effects: ruage_data::Effects,
 }
 
 fn fixture() -> Option<Fixture> {
@@ -43,6 +45,10 @@ fn fixture() -> Option<Fixture> {
         resources,
         units: ruage_data::load_units_file(&units).expect("units.toml"),
         combat: ruage_data::load_combat_file(&repo("config/combat.toml")).expect("combat.toml"),
+        techs: ruage_data::load_techs_file(&repo("config/gamedata/techs.toml"))
+            .expect("techs.toml"),
+        effects: ruage_data::load_effects_file(&repo("config/gamedata/effects.toml"))
+            .expect("effects.toml"),
     })
 }
 
@@ -63,6 +69,38 @@ fn world_with(fx: &Fixture) -> World {
     combat.accuracy_scatter = ruage_data::MaybeFixed::from_f64(0.0);
     world.load_combat(&combat);
     world
+}
+
+/// A target that stands still. `Command::Spawn` is the movement hook - a spawned unit's speed becomes its
+/// velocity and it keeps drifting (`docs/mechanics/combat.md`) - so a target that must not move is spawned
+/// with no speed at all.
+fn place_still(
+    world: &mut World,
+    player: u8,
+    id: u32,
+    unit: u32,
+    tile: (u16, u16),
+    hp: i32,
+) -> EntityId {
+    let scale = world.scale();
+    let id = EntityId(id);
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(i64::from(tile.0) * scale),
+                Fixed::from_raw(i64::from(tile.1) * scale),
+            ),
+            speed: Fixed::ZERO,
+            hp,
+            amount: 0,
+        })
+        .expect("spawn");
+    world.step().expect("step");
+    id
 }
 
 fn place(world: &mut World, player: u8, id: u32, unit: u32, tile: (u16, u16), hp: i32) -> EntityId {
@@ -187,5 +225,87 @@ fn an_archer_fires_from_where_a_mangonel_cannot() {
     assert!(
         tiles_between(&world, archer, victim) < 2.0,
         "and it did not have to back off to do it"
+    );
+}
+
+const SKIRMISHER: u32 = 7;
+/// Andean Sling: the Inca unique tech. Its effect (572) sets minimum range to zero for the skirmisher line,
+/// the slinger and the genitour - "Skirmishers and Slingers have no minimum range".
+const ANDEAN_SLING: u32 = 516;
+
+/// A world with the real research tables, so a tech can be granted the way content names it.
+fn world_with_research(fx: &Fixture) -> World {
+    let mut world = world_with(fx);
+    world
+        .load_research(&fx.techs, &fx.effects)
+        .expect("research tables");
+    world
+}
+
+/// What happens when a skirmisher is ordered onto a target standing next to it, and where it was standing
+/// when the first blow landed. A skirmisher *can* shoot such a target - it has to step back first - so the
+/// thing that changes with Andean Sling is **where the first shot comes from**.
+fn skirmisher_against_a_neighbour(fx: &Fixture, andean_sling: bool) -> (Option<usize>, f64) {
+    let mut world = world_with_research(fx);
+    if andean_sling {
+        world
+            .grant_tech(1, ANDEAN_SLING)
+            .expect("Andean Sling is a researchable tech");
+    }
+    let skirmisher = place(&mut world, 1, 9_994, SKIRMISHER, (10, 10), 30);
+    let victim = place_still(&mut world, 2, 9_995, VILLAGER, (11, 10), 500);
+    world
+        .submit_checked(Command::Attack {
+            attacker: skirmisher,
+            target: victim,
+        })
+        .expect("an attack order");
+    for tick in 0..80 {
+        world.step().expect("step");
+        if world.entity(victim).expect("victim").hp < 500 {
+            return (Some(tick), tiles_between(&world, skirmisher, victim));
+        }
+    }
+    (None, tiles_between(&world, skirmisher, victim))
+}
+
+/// A skirmisher has a minimum range as well - the dat gives unit 7 one tile - and Andean Sling takes it away.
+///
+/// On a tile grid a one-tile dead zone only bites if it is measured to the target's **edge** rather than its
+/// centre (a neighbour is already a whole tile away centre to centre), which is the model the engine uses:
+/// unit radii are data, and two bodies cannot share a tile (D44).
+#[test]
+fn a_skirmisher_backs_off_before_shooting_and_andean_sling_lets_it_shoot_at_once() {
+    let Some(fx) = fixture() else { return };
+    let skirmisher = fx.units.unit(SKIRMISHER).expect("the skirmisher");
+    let tiles = |value: ruage_data::MaybeFixed| {
+        value
+            .resolve(1_000_000, "tiles")
+            .expect("a resolved value")
+            .raw() as f64
+            / 1_000_000.0
+    };
+    assert_eq!(
+        tiles(skirmisher.min_range) as i64,
+        1,
+        "the data gives a skirmisher a one-tile dead zone"
+    );
+
+    let (blind_tick, blind_from) = skirmisher_against_a_neighbour(&fx, false);
+    let blind_tick = blind_tick.expect("a skirmisher can still shoot, once it has room");
+    assert!(
+        blind_from > 1.0,
+        "without Andean Sling it steps back before it shoots: {blind_from} tiles at tick {blind_tick}"
+    );
+
+    let (freed_tick, freed_from) = skirmisher_against_a_neighbour(&fx, true);
+    let freed_tick = freed_tick.expect("Andean Sling removes the dead zone, so it shoots");
+    assert!(
+        freed_from <= 1.0 + 0.01,
+        "with Andean Sling it shoots from where it stands: {freed_from} tiles"
+    );
+    assert!(
+        freed_tick <= blind_tick,
+        "and so it lands its first blow no later: {freed_tick} against {blind_tick}"
     );
 }
