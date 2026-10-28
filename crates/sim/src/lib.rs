@@ -246,6 +246,17 @@ pub enum MatchOutcome {
     Draw,
 }
 
+/// What one player knows about one tile (D50).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TileVision {
+    /// Never looked at.
+    Unseen,
+    /// Looked at once and remembered: no unit sees it now, but the ground is known.
+    Explored,
+    /// Somebody of this player sees it now.
+    Visible,
+}
+
 /// How much of a fight a unit picks on its own. Aggressive is the default and is what every unit did
 /// before stances existed, so a pack that says nothing keeps the behaviour it had (D48).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1061,6 +1072,12 @@ pub struct World {
     /// Stance and post, by unit. Only units whose stance is not the default have an entry, so an
     /// aggressive world - which is every world that does not ask - carries nothing for this (D48).
     stances: BTreeMap<EntityId, (Stance, (Fixed, Fixed))>,
+    /// Per player, one bit per map tile, row-major: ground this player has ever looked at. Part of
+    /// state and hashed, because fog *is* a fact about where a player has been - two runs that
+    /// disagree about it have diverged, and only this table knows (D50).
+    explored: [Vec<u64>; MAX_PLAYERS],
+    /// The map's size in tiles, from the content the world was seeded with. Zero until seeding.
+    map_size: (u16, u16),
     /// How far a hunting unit looks for an enemy, in engine units. Zero means it walks past
     /// everything, which is what a pack that says nothing about hunting gets.
     aggro_radius: i64,
@@ -1171,6 +1188,8 @@ impl World {
             patrols: BTreeMap::new(),
             resuming: BTreeMap::new(),
             stances: BTreeMap::new(),
+            explored: std::array::from_fn(|_| Vec::new()),
+            map_size: (0, 0),
             aggro_radius: 0,
             aggro_scan_ticks: 0,
             queued: BTreeMap::new(),
@@ -1438,6 +1457,9 @@ impl World {
         // seeded from, so a pack that calls it "keep" still has one (D17).
         self.seat = economy.role.get(&economy.start.town_centre).copied();
         self.walk = Some(Walk::from_map(map));
+        self.map_size = (map.width, map.height);
+        let words = (usize::from(map.width) * usize::from(map.height)).div_ceil(64);
+        self.explored = std::array::from_fn(|_| vec![0u64; words]);
         // The start names roles; the economy's role table is what turns them into units, so this
         // function never learns that a town centre is 109 (D17).
         let tc_stats = self.role_unit_in(economy, &economy.start.town_centre)?;
@@ -1553,6 +1575,9 @@ impl World {
         // entities; if they arrive later, the setters apply them then.
         self.apply_start_stock()?;
         self.grant_starting_techs()?;
+        // The opening position is already watched: a player sees their own town centre from tick zero,
+        // rather than from the first tick they happen to move something.
+        self.stamp_all();
         Ok(())
     }
 
@@ -1592,7 +1617,11 @@ impl World {
             .iter()
             .position(|existing| existing.id > entity.id)
             .unwrap_or(self.entities.len());
+        let id = entity.id;
         self.entities.insert(at, entity);
+        // A thing that has just arrived is watched from the tick it arrives: fog follows insertion as
+        // well as movement, and this is the one place both paths can be fed from.
+        self.stamp_entity(id);
         Ok(())
     }
 
@@ -3115,6 +3144,205 @@ impl World {
         }
     }
 
+    /// What this player knows about a tile: never seen, remembered, or watched right now.
+    pub fn vision(&self, player: u8, tile: (u16, u16)) -> TileVision {
+        if player == 0 || usize::from(player) > MAX_PLAYERS {
+            return TileVision::Unseen;
+        }
+        if !self.explored_bit(player, tile) {
+            return TileVision::Unseen;
+        }
+        if self
+            .entities
+            .iter()
+            .any(|entity| entity.player == player && self.covers(entity, tile))
+        {
+            TileVision::Visible
+        } else {
+            TileVision::Explored
+        }
+    }
+
+    /// Whether this player can see that entity: their own always, anybody else's only while it stands
+    /// on ground an entity of theirs is watching.
+    pub fn visible_to(&self, player: u8, entity: EntityId) -> bool {
+        let Some(entity) = self.find(entity) else {
+            return false;
+        };
+        if entity.player == player {
+            return true;
+        }
+        let tile = self.tile_of(entity.position);
+        self.vision(player, tile) == TileVision::Visible
+    }
+
+    /// The tiles this player sees *right now*, as one bit per tile in row-major order. Built from the
+    /// union of the sight discs rather than by asking `vision` per tile, which is what a renderer
+    /// needs: one pass per frame, not one pass per tile.
+    pub fn visible_mask(&self, player: u8) -> Vec<u64> {
+        let (width, height) = self.map_size;
+        let mut mask = vec![0u64; (usize::from(width) * usize::from(height)).div_ceil(64)];
+        if width == 0 || player == 0 || usize::from(player) > MAX_PLAYERS {
+            return mask;
+        }
+        for entity in self.entities.iter().filter(|e| e.player == player) {
+            let radius = self.sight_of(entity);
+            if radius <= 0 {
+                continue;
+            }
+            let (x, y) = self.tile_of_raw(entity.position);
+            for dy in -radius..=radius {
+                let ty = y + dy;
+                if ty < 0 || ty >= i64::from(height) {
+                    continue;
+                }
+                for dx in -radius..=radius {
+                    if dx * dx + dy * dy > radius * radius {
+                        continue;
+                    }
+                    let tx = x + dx;
+                    if tx < 0 || tx >= i64::from(width) {
+                        continue;
+                    }
+                    let bit = usize::try_from(ty * i64::from(width) + tx).unwrap_or(0);
+                    if let Some(word) = mask.get_mut(bit / 64) {
+                        *word |= 1u64 << (bit % 64);
+                    }
+                }
+            }
+        }
+        mask
+    }
+
+    /// The sight radius of an entity in whole tiles: its own unit's `los`, rounded up. Zero for an
+    /// entity with no unit (a handmade mover) or one whose table entry has no sight.
+    fn sight_of(&self, entity: &Entity) -> i64 {
+        let Some(unit) = entity.unit else { return 0 };
+        let Some(units) = self.units.as_ref() else {
+            return 0;
+        };
+        let Some(record) = units.unit(unit) else {
+            return 0;
+        };
+        let Ok(los) = record.los.resolve(self.scale, "los") else {
+            return 0;
+        };
+        let raw = los.raw();
+        if raw <= 0 {
+            return 0;
+        }
+        // `div_ceil` is unsigned-only on stable, and the raw value is positive by the guard above.
+        (raw + self.scale - 1) / self.scale
+    }
+
+    /// Whether this entity's sight covers `tile`.
+    fn covers(&self, entity: &Entity, tile: (u16, u16)) -> bool {
+        if entity.player == 0
+            || matches!(
+                entity.kind,
+                EntityKind::Projectile | EntityKind::Resource(_)
+            )
+            || matches!(entity.task, Task::Garrisoned { .. })
+        {
+            return false;
+        }
+        let radius = self.sight_of(entity);
+        if radius <= 0 {
+            return false;
+        }
+        let (x, y) = self.tile_of_raw(entity.position);
+        let dx = x - i64::from(tile.0);
+        let dy = y - i64::from(tile.1);
+        dx * dx + dy * dy <= radius * radius
+    }
+
+    /// A tile coordinate from an engine position, without the `u16` clamp `tile_of` applies.
+    fn tile_of_raw(&self, position: (Fixed, Fixed)) -> (i64, i64) {
+        (
+            position.0.raw().div_euclid(self.scale),
+            position.1.raw().div_euclid(self.scale),
+        )
+    }
+
+    fn explored_bit(&self, player: u8, tile: (u16, u16)) -> bool {
+        let (width, height) = self.map_size;
+        if tile.0 >= width || tile.1 >= height {
+            return false;
+        }
+        let bit = usize::from(tile.1) * usize::from(width) + usize::from(tile.0);
+        self.explored[usize::from(player) - 1]
+            .get(bit / 64)
+            .is_some_and(|word| word & (1u64 << (bit % 64)) != 0)
+    }
+
+    /// Mark what one entity can see into its player's explored grid.
+    ///
+    /// Called when the entity arrives in the world and again on a tick when it actually moves - never
+    /// in a pass over the whole list. Fog is monotonic (a tile, once seen, stays seen), so an entity
+    /// whose position did not change has nothing to add: the first version of this stamped every disc
+    /// every tick and cost 19x the whole tick at 2,126 units (D50a). A stamp is now 50 ns on a unit
+    /// that moved and zero on one that did not.
+    fn stamp_entity(&mut self, id: EntityId) {
+        let (width, height) = self.map_size;
+        if width == 0 || height == 0 {
+            return;
+        }
+        let Some(entity) = self.find(id) else { return };
+        if entity.player == 0 || usize::from(entity.player) > MAX_PLAYERS {
+            return;
+        }
+        if matches!(
+            entity.kind,
+            EntityKind::Projectile | EntityKind::Resource(_)
+        ) {
+            return;
+        }
+        // Inside a building a unit is not on the map and does not see out of it; the building's own
+        // sight already covers what it can watch.
+        if matches!(entity.task, Task::Garrisoned { .. }) {
+            return;
+        }
+        let radius = self.sight_of(entity);
+        if radius <= 0 {
+            return;
+        }
+        let (x, y) = self.tile_of_raw(entity.position);
+        let row = &mut self.explored[usize::from(entity.player) - 1];
+        for dy in -radius..=radius {
+            let ty = y + dy;
+            if ty < 0 || ty >= i64::from(height) {
+                continue;
+            }
+            for dx in -radius..=radius {
+                if dx * dx + dy * dy > radius * radius {
+                    continue;
+                }
+                let tx = x + dx;
+                if tx < 0 || tx >= i64::from(width) {
+                    continue;
+                }
+                let bit = usize::try_from(ty * i64::from(width) + tx).unwrap_or(0);
+                if let Some(word) = row.get_mut(bit / 64) {
+                    *word |= 1u64 << (bit % 64);
+                }
+            }
+        }
+    }
+
+    /// Stamp every entity that is already in the world. Seeding and tests that hand-place entities use
+    /// this; the tick never does, because it stamps the entities that moved as it moves them.
+    fn stamp_all(&mut self) {
+        let ids: Vec<EntityId> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.player > 0)
+            .map(|entity| entity.id)
+            .collect();
+        for id in ids {
+            self.stamp_entity(id);
+        }
+    }
+
     /// How many entries the per-entity side tables hold, all told: routes, rallies, queues, patrol
     /// ends, interrupted walks and stances.
     ///
@@ -4466,7 +4694,12 @@ impl World {
         }
 
         let mut reached: Vec<(EntityId, (Fixed, Fixed))> = Vec::new();
+        // Whatever actually moved this tick is what can see something new (D50a).
+        let mut movers: Vec<EntityId> = Vec::new();
         for (index, id, dx, dy) in deltas {
+            if dx != Fixed::ZERO || dy != Fixed::ZERO {
+                movers.push(id);
+            }
             // Fast path: the entity at this index is still the one we decided for. If a spawn moved
             // it, fall back to a lookup by id - slower, but correct, and only on ticks where the
             // world changed shape.
@@ -4502,6 +4735,9 @@ impl World {
                 .checked_add(dy)
                 .map_err(|_| SimError::Overflow(id))?;
             reached.push((id, entity.position));
+        }
+        for id in movers {
+            self.stamp_entity(id);
         }
 
         // A waypoint reached is a waypoint spent. Done after the move, so a unit that lands on it
@@ -5152,6 +5388,19 @@ impl World {
         }
         // Who is in the match, hashed only when somebody is: a world built by hand for a movement
         // test has no players and must hash exactly as it did before rosters existed.
+        // Fog is state: a player who has seen a tile knows it forever, so two runs that disagree
+        // about the map they have uncovered have diverged. Hashed only when something has been seen,
+        // so a world built by hand for a movement test hashes exactly as before.
+        for (index, grid) in self.explored.iter().enumerate() {
+            if grid.iter().all(|word| *word == 0) {
+                continue;
+            }
+            fnv_bytes(&mut hash, b"explored");
+            fnv_bytes(&mut hash, &[u8::try_from(index).unwrap_or(u8::MAX)]);
+            for word in grid {
+                fnv_bytes(&mut hash, &word.to_le_bytes());
+            }
+        }
         if self.roster.iter().any(|present| *present) {
             fnv_bytes(&mut hash, b"roster");
             for present in self.roster {

@@ -186,8 +186,9 @@ fn a_dead_unit_releases_its_interrupted_walk() {
     // An enemy house four tiles away, so the attack-move engages without striking: what is being
     // tested is the walk the fight interrupted, not the fight.
     spawn_building(&mut world, 2, 9_404, "house", (24, 20), 550);
-    spawn_unit(&mut world, 1, 9_405, spearman, (20, 20), 45);
+    // The baseline is taken before the unit exists, so "back to where it started" means what it says.
     let quiet = world.bookkeeping_entries();
+    spawn_unit(&mut world, 1, 9_405, spearman, (20, 20), 45);
 
     world
         .submit_checked(Command::AttackMove {

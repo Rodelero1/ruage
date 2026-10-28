@@ -1178,3 +1178,42 @@ prunes.** Two consequences worth writing down:
 
 **Named cost:** the sweep runs per death, not per tick, and the tables are `BTreeMap`s of a handful of
 entries, so the pruning is a handful of removals on a tick that already walks the world to remove entities.
+
+## D50 - Vision is three states, and only one of them is state
+
+Per tile and per player: **unseen** (never looked at), **explored** (looked at once, no longer watched),
+**visible** (watched now). The radius is the entity's own `los` from the dat - 844 units carry one - rounded up
+to whole tiles, so nothing lists which unit sees how far.
+
+`explored` is one bit per tile per player and **is hashed**: it is a record of where a player has been, no other
+table knows it, and a replay that lost it would show a different map. `visible` is derived on demand from the
+positions of the player's entities, so it is not stored; `visible_mask` exists for a renderer, which needs one
+pass per frame rather than one pass per tile.
+
+Two consequences that are rules rather than details:
+
+- **A garrisoned unit does not see out of its building.** It is not on the map; the building's own sight covers
+  what it can watch.
+- **An entity's sight is stamped when it arrives and when it moves**, never in a pass over the world. Fog only
+  grows, so an entity that stood still has nothing to add.
+
+## D50a - The fog pass that cost 19x the tick, and the fix that is a rule
+
+The first version stamped every entity's disc every tick. It measured **2.2 us/tick at 126 entities and 466 us at
+2,126** against a 36 us tick - a 19x regression that the idle probe caught in one run, before anything else was
+built on top of it. Two fixes were tried in order, and the first one is worth recording because it *looked*
+right: a cache of "the tile I last stamped from", checked per entity per tick, still paid a `BTreeMap` lookup and
+a table resolve for every entity on the map (2,126 x ~220 ns = 466 us -> 130 us; better, still 3x the tick).
+
+What worked is not a cache but a deletion: the tick already knows which entities moved (the delta list it is
+about to apply), so the stamp moved **into that loop**, and into `insert` for arrivals. An idle world pays
+nothing; a moving unit pays ~50 ns for the tick it moves, which is the only tick on which its disc can contain
+anything new.
+
+**The hole the tests had:** a building never moves, so it can only be stamped on arrival. Without that, a castle
+built in the dark stays blind for the rest of the match - `a_building_sees_around_itself_when_it_appears` is the
+test, and deleting the arrival stamp fails exactly it while every moving-unit test still passes.
+
+**Known simplification:** sight is a disc and does not check line of sight through terrain - a unit sees over a
+forest. That is the difference between "vision" and "fog with occlusion", and the terrain in this pack is grass
+and forest only. Recorded rather than implied; occlusion belongs with terrain heights.
