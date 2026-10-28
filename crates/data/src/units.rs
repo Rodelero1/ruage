@@ -35,6 +35,12 @@ pub struct Unit {
     pub range: MaybeFixed,
     pub reload: MaybeFixed,
     pub accuracy: u16,
+    /// The blast: a shot that hurts a group, in tiles. 27 of 1,166 units carry one - a mangonel 1.0,
+    /// an onager 1.25, a bombard cannon 0.5 - and everything else is zero, which is a shot at a point.
+    pub blast_radius: MaybeFixed,
+    /// How many rings of the blast bite (`blast_attack_level` in the dat). Carried, and the conservative
+    /// reading is applied: a level of zero means the radius does nothing.
+    pub blast_level: u16,
     /// The dead zone: this unit cannot shoot anything closer than this, in tiles. Three for a mangonel,
     /// five for a bombard cannon, four for a trebuchet, zero for everything that is not siege.
     pub min_range: MaybeFixed,
@@ -133,6 +139,12 @@ struct RawUnit {
     range: f64,
     reload: f64,
     accuracy: u16,
+    /// Defaulted to zero: a pack written before blast damage existed hits one thing, which is what
+    /// every unit but siege means.
+    #[serde(default)]
+    blast_radius: f64,
+    #[serde(default)]
+    blast_level: u16,
     /// Defaulted to zero: a pack written before siege dead zones existed has none, which is exactly
     /// what every non-siege unit means.
     #[serde(default)]
@@ -240,6 +252,8 @@ pub fn load_units_str(text: &str, path: &str) -> Result<Units, ConfigError> {
             range: MaybeFixed::from_f64(r.range),
             reload: MaybeFixed::from_f64(r.reload),
             accuracy: r.accuracy,
+            blast_radius: MaybeFixed::from_f64(r.blast_radius),
+            blast_level: r.blast_level,
             min_range: MaybeFixed::from_f64(r.min_range),
             train_time: r.train_time,
             base_id: r.base_id,

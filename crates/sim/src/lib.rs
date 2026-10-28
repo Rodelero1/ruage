@@ -275,7 +275,7 @@ pub enum Stance {
 /// A shot decided this tick: who fired it, from where, where it will land, what it was aimed at and
 /// what it does when it gets there. Created after the movement pass, because the entity list is
 /// index-stable while positions are applied.
-type Shot = (u8, (Fixed, Fixed), (Fixed, Fixed), EntityId, i32);
+type Shot = (u8, (Fixed, Fixed), (Fixed, Fixed), EntityId, i32, i64);
 
 /// A training order that passed every check: what it costs, how long it takes, and what comes out.
 struct TrainPlan {
@@ -353,6 +353,10 @@ pub enum Task {
         target: EntityId,
         damage: i32,
         aim: (Fixed, Fixed),
+        /// How far the landing hurts everything around it, in engine units. Zero is a point, which is
+        /// what every non-siege unit means, and it rides on the arrow because the arrow is the only
+        /// thing that knows where it came down (D51).
+        blast: Fixed,
     },
     /// Fighting `target`. Damage and reload are resolved when the order lands, so the tick loop
     /// never reads a table and a replay cannot name its own numbers.
@@ -1078,6 +1082,9 @@ pub struct World {
     explored: [Vec<u64>; MAX_PLAYERS],
     /// The map's size in tiles, from the content the world was seeded with. Zero until seeding.
     map_size: (u16, u16),
+    /// Blast radius per unit id, in engine units: resolved once from the table, because a strike must
+    /// not read the content table inside a tick. Only the 27 units that have a radius are here (D51).
+    blast: BTreeMap<u32, i64>,
     /// How far a hunting unit looks for an enemy, in engine units. Zero means it walks past
     /// everything, which is what a pack that says nothing about hunting gets.
     aggro_radius: i64,
@@ -1190,6 +1197,7 @@ impl World {
             stances: BTreeMap::new(),
             explored: std::array::from_fn(|_| Vec::new()),
             map_size: (0, 0),
+            blast: BTreeMap::new(),
             aggro_radius: 0,
             aggro_scan_ticks: 0,
             queued: BTreeMap::new(),
@@ -1456,6 +1464,18 @@ impl World {
         // The seat is the building content calls its town centre - the same role the opening is
         // seeded from, so a pack that calls it "keep" still has one (D17).
         self.seat = economy.role.get(&economy.start.town_centre).copied();
+        // Blast radii, resolved once. The *radius* is the gate: `blast_level` is carried and not
+        // consumed, because what its value means is not published and every unit that has one has a
+        // radius with it (D51).
+        self.blast.clear();
+        for (id, unit) in &units.units {
+            let Ok(radius) = unit.blast_radius.resolve(self.scale, "blast_radius") else {
+                continue;
+            };
+            if radius.raw() > 0 {
+                self.blast.insert(*id, radius.raw());
+            }
+        }
         self.walk = Some(Walk::from_map(map));
         self.map_size = (map.width, map.height);
         let words = (usize::from(map.width) * usize::from(map.height)).div_ceil(64);
@@ -3055,6 +3075,7 @@ impl World {
         aim: (Fixed, Fixed),
         target: EntityId,
         damage: i32,
+        blast: Fixed,
     ) -> Result<EntityId, SimError> {
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
         self.insert(Entity {
@@ -3071,6 +3092,7 @@ impl World {
                 target,
                 damage,
                 aim,
+                blast,
             },
             training: None,
             construction: None,
@@ -3142,6 +3164,30 @@ impl World {
                 entity.task = Task::Idle;
             }
         }
+    }
+
+    /// Everything a blast catches: units (not the aimed target, which the landing rule already dealt
+    /// with, and not one sheltered inside a building), within `radius` of the landing point. Buildings
+    /// take the aimed hit only - a mangonel's stone does not demolish a wall it passed near (D51).
+    fn blast_victims(&self, aim: (Fixed, Fixed), radius: Fixed, aimed: EntityId) -> Vec<EntityId> {
+        if radius.raw() <= 0 {
+            return Vec::new();
+        }
+        let mut hit = Vec::new();
+        for entity in &self.entities {
+            if entity.id == aimed || entity.hp <= 0 || entity.kind != EntityKind::Unit {
+                continue;
+            }
+            if matches!(entity.task, Task::Garrisoned { .. }) {
+                continue;
+            }
+            let dx = entity.position.0.raw() - aim.0.raw();
+            let dy = entity.position.1.raw() - aim.1.raw();
+            if dx * dx + dy * dy <= radius.raw() * radius.raw() {
+                hit.push(entity.id);
+            }
+        }
+        hit
     }
 
     /// What this player knows about a tile: never seen, remembered, or watched right now.
@@ -4043,7 +4089,7 @@ impl World {
         let mut landed_arrows: Vec<EntityId> = Vec::new();
         // (target, damage, where the arrow was aimed): the aim point decides whether the shot is a hit
         // or a miss, so it has to survive the flight (D42).
-        let mut landings: Vec<(EntityId, i32, (Fixed, Fixed))> = Vec::new();
+        let mut landings: Vec<(EntityId, i32, (Fixed, Fixed), Fixed)> = Vec::new();
         let mut shots: Vec<Shot> = Vec::new();
         // Whoever was hit this tick. A building among them may have crossed the eject threshold, and
         // that is where its garrison comes out (D37).
@@ -4267,6 +4313,7 @@ impl World {
                     target,
                     damage,
                     aim,
+                    blast,
                 } => {
                     // The step is resolved once per tick, outside the borrow: `step_towards` needs no
                     // table, so the only thing to avoid is touching `self` inside the loop.
@@ -4275,7 +4322,7 @@ impl World {
                         // Landing is the only thing an arrow does. Whether it hurts anything is
                         // decided after the loop, against the target as it stands then: an arrow
                         // whose target died on the way finds nothing and does not pick another.
-                        landings.push((target, damage, aim));
+                        landings.push((target, damage, aim, blast));
                         landed_arrows.push(entity.id);
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))
@@ -4529,10 +4576,14 @@ impl World {
             let flight = self.projectile_speed();
             let Some(source) = self
                 .find(attacker)
-                .map(|entity| (entity.position, entity.player, entity.kind))
+                .map(|entity| (entity.position, entity.player, entity.kind, entity.unit))
             else {
                 continue;
             };
+            let blast = source
+                .3
+                .and_then(|unit| self.blast.get(&unit).copied())
+                .unwrap_or(0);
             let Some(victim_position) = self.find(target).map(|entity| entity.position) else {
                 continue;
             };
@@ -4561,12 +4612,24 @@ impl World {
                     1
                 };
                 for _ in 0..arrows {
-                    shots.push((source.1, source.0, aim, target, landed));
+                    shots.push((source.1, source.0, aim, target, landed, blast));
                 }
                 continue;
             }
+            // A pack whose shots are instant: the blow lands where it was aimed, and a blast still
+            // splashes around that point rather than hitting one unit (D51).
             if let Some(victim) = self.find_mut(target) {
                 victim.hp -= landed;
+            }
+            let blast = source
+                .3
+                .and_then(|unit| self.blast.get(&unit).copied())
+                .unwrap_or(0);
+            for victim in self.blast_victims(aim, Fixed::from_raw(blast), target) {
+                if let Some(entity) = self.find_mut(victim) {
+                    entity.hp -= landed;
+                }
+                ejected.push(victim);
             }
             ejected.push(target);
         }
@@ -4768,12 +4831,13 @@ impl World {
 
         // Shots go up, land, and leave the list, all after the movement pass: the entity list is
         // index-stable for the length of that pass, and every one of these changes its shape.
-        for (player, from, aim, target, damage) in shots {
+        for (player, from, aim, target, damage, blast) in shots {
             // A full world loses the shot rather than the tick: a battle must not be stopped by the
             // entity ceiling.
-            let _ = self.spawn_projectile(player, from, aim, target, damage);
+            let _ =
+                self.spawn_projectile(player, from, aim, target, damage, Fixed::from_raw(blast));
         }
-        for (target, damage, aim) in landings {
+        for (target, damage, aim, blast) in landings {
             // The arrow lands where it was aimed. It hurts the target only if the target is still
             // there - within half a tile of the landing point, which is the space a unit occupies.
             // Without this an arrow could not miss, and Ballistics would have nothing to change.
@@ -4788,6 +4852,14 @@ impl World {
                 && reachable
             {
                 victim.hp -= damage;
+            }
+            // ... and a shot with a blast hurts what stands around the landing point, its owner's own
+            // units included: a mangonel that could not hit its own line would not need protecting.
+            for victim in self.blast_victims(aim, blast, target) {
+                if let Some(entity) = self.find_mut(victim) {
+                    entity.hp -= damage;
+                }
+                ejected.push(victim);
             }
             ejected.push(target);
         }
@@ -5501,12 +5573,14 @@ impl World {
                     target,
                     damage,
                     aim,
+                    blast,
                 } => {
                     fnv_bytes(&mut hash, &[5u8]);
                     fnv_bytes(&mut hash, &target.0.to_le_bytes());
                     fnv_bytes(&mut hash, &damage.to_le_bytes());
                     fnv_bytes(&mut hash, &aim.0.raw().to_le_bytes());
                     fnv_bytes(&mut hash, &aim.1.raw().to_le_bytes());
+                    fnv_bytes(&mut hash, &blast.raw().to_le_bytes());
                 }
                 Task::Attack {
                     target,

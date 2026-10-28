@@ -1217,3 +1217,24 @@ test, and deleting the arrival stamp fails exactly it while every moving-unit te
 **Known simplification:** sight is a disc and does not check line of sight through terrain - a unit sees over a
 forest. That is the difference between "vision" and "fog with occlusion", and the terrain in this pack is grass
 and forest only. Recorded rather than implied; occlusion belongs with terrain heights.
+
+## D51 - A blast is where the stone lands, and the radius is the gate
+
+The dat carries blast on the unit: `blast_width` (radius in tiles) and `blast_attack_level`. **27 of 1,166 units**
+have a non-zero radius - mangonel 1.0, onager 1.25, bombard cannon 0.5, petard 0.5, scorpion 0 - so this is
+imported data, not a list of siege ids, and the importer emits both fields (its own commit).
+
+Three decisions the data does not make for us:
+
+1. **The radius rides on the projectile, not on the shooter.** `Task::Fly.blast` means the blast belongs to *where
+   the stone landed*, which is what a missed shot does in the game: the stone breaks on the ground somebody did not
+   want it to break on. This also gives the instant-shot pack (`projectile_speed = 0`) the same behaviour through
+   the same helper - a test, because otherwise "instant" and "flying" would silently differ.
+2. **Everything inside takes the shot's damage, including the shooter's own units.** That is why a mangonel needs
+   protecting, and it is the one place in the engine where friendly fire is not filtered.
+3. **`blast_level` is carried and not consumed.** Every unit that has a level has a radius with it, so the radius is
+   sufficient and the level's semantics stay an open question. A guess here would be a rule the data cannot
+   contradict - exactly the kind of thing D44's `set` bug came from.
+
+**Not modelled:** damage does not fall off with distance (the game reduces it for secondary targets); buildings take
+the aimed hit only; and the blast is a disc with no line-of-sight check, like vision (D50).
