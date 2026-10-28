@@ -232,7 +232,9 @@ fn deleting_a_unit_frees_its_population() {
 }
 
 #[test]
-fn razing_the_only_town_centre_loses_the_match() {
+fn razing_the_town_centre_is_not_the_end_of_a_player() {
+    // D59 replaced D46's seat rule: a razed base is a setback, because the villagers who survived it can
+    // build another. The player is out only when nothing that counts is left.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     assert_eq!(world.outcome(), None, "a match at tick zero is undecided");
@@ -248,8 +250,30 @@ fn razing_the_only_town_centre_loses_the_match() {
 
     assert_eq!(
         world.outcome(),
+        None,
+        "player 1 lost the match with villagers still standing to rebuild"
+    );
+
+    // And with the villagers gone too, the match does end.
+    for id in world
+        .entities()
+        .iter()
+        .filter(|entity| entity.player == 1)
+        .map(|entity| entity.id)
+        .collect::<Vec<_>>()
+    {
+        world
+            .submit_checked(Command::Delete {
+                player: 1,
+                entity: id,
+            })
+            .expect("raze");
+    }
+    world.step().expect("step");
+    assert_eq!(
+        world.outcome(),
         Some(MatchOutcome::Victory { winner: 2 }),
-        "player 1 has no seat left and player 2 does"
+        "player 1 was left with nothing and the match did not end"
     );
 }
 
@@ -269,23 +293,22 @@ fn losing_a_house_does_not_end_the_match() {
 }
 
 #[test]
-fn two_seats_lost_on_one_tick_is_a_draw() {
+fn both_sides_wiped_on_one_tick_is_a_draw() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let mine = own_town_centre(&world, 1);
-    let theirs = own_town_centre(&world, 2);
-    world
-        .submit_checked(Command::Delete {
-            player: 1,
-            entity: mine,
-        })
-        .expect("raze");
-    world
-        .submit_checked(Command::Delete {
-            player: 2,
-            entity: theirs,
-        })
-        .expect("raze");
+    for player in [1u8, 2u8] {
+        for id in world
+            .entities()
+            .iter()
+            .filter(|entity| entity.player == player)
+            .map(|entity| entity.id)
+            .collect::<Vec<_>>()
+        {
+            world
+                .submit_checked(Command::Delete { player, entity: id })
+                .expect("raze");
+        }
+    }
     world.step().expect("step");
     assert_eq!(world.outcome(), Some(MatchOutcome::Draw));
 }
@@ -294,19 +317,27 @@ fn two_seats_lost_on_one_tick_is_a_draw() {
 fn an_ended_match_refuses_new_orders() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let mine = own_town_centre(&world, 1);
-    world
-        .submit_checked(Command::Delete {
-            player: 1,
-            entity: mine,
-        })
-        .expect("raze");
+    for id in world
+        .entities()
+        .iter()
+        .filter(|entity| entity.player == 1)
+        .map(|entity| entity.id)
+        .collect::<Vec<_>>()
+    {
+        world
+            .submit_checked(Command::Delete {
+                player: 1,
+                entity: id,
+            })
+            .expect("raze");
+    }
     world.step().expect("step");
 
+    // Player 1 is gone, so the order under test is player 2's: an ended match refuses everyone.
     let villager = world
         .entities()
         .iter()
-        .find(|e| e.player == 1 && e.kind == EntityKind::Unit)
+        .find(|e| e.player == 2 && e.kind == EntityKind::Unit)
         .expect("a starting villager")
         .id;
     let err = world

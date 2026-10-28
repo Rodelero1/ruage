@@ -233,10 +233,9 @@ pub enum RallyPoint {
     Inside,
 }
 
-/// How a match ended. A match is undecided until every side but one has lost its **seat** - the
-/// building content names in `[start] town_centre`. This is the conquest rule, and it is the whole
-/// rule: a player who has lost their town centre has lost the match, whatever else they still hold
-/// (D46).
+/// How a match ended. A side is out when nothing that *counts* of theirs still stands - no unit, no
+/// building - where content names the families that do not count (walls, farms; D59). The town centre
+/// is not special: losing it is a setback, not a defeat, which is what the original game does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatchOutcome {
     Victory {
@@ -1054,9 +1053,9 @@ pub struct World {
     /// Whether the opening stockpile has been applied. Part of state, because it decides whether a
     /// later `load_resources` re-applies it and wipes what the players have gathered since.
     start_stock_applied: bool,
-    /// The seat of a player: the unit content names in `[start] town_centre`, resolved at seeding.
+    /// The families content says do not keep a player alive (`[conquest] ignored_roles`, D59).
     /// Content, not state - it does not change during a match - so it is not hashed.
-    seat: Option<u32>,
+    conquest_ignored: BTreeSet<u32>,
     /// Who is in this match, set when a player's first entity lands and never cleared. Without it the
     /// world could not tell "the enemy has lost everything" from "nobody was ever here", and losing
     /// everything is exactly the case a match has to notice (D46).
@@ -1210,7 +1209,7 @@ impl World {
             availability_techs: Vec::new(),
             resolving_availability: false,
             start_stock_applied: false,
-            seat: None,
+            conquest_ignored: BTreeSet::new(),
             roster: [false; MAX_PLAYERS],
             outcome: None,
             researched: BTreeMap::new(),
@@ -1465,9 +1464,17 @@ impl World {
     ) -> Result<(), SimError> {
         self.units = Some(units.clone());
         self.economy = Some(economy.clone());
-        // The seat is the building content calls its town centre - the same role the opening is
-        // seeded from, so a pack that calls it "keep" still has one (D17).
-        self.seat = economy.role.get(&economy.start.town_centre).copied();
+        // Which families do not count towards surviving (D59). Resolved to roots once, here, so the
+        // check after a death is a set lookup rather than a walk through content. A role this pack does
+        // not have yet (a tower, a sheep) is simply absent: the manual's list grows with the pack.
+        self.conquest_ignored.clear();
+        if let Some(units) = self.units.as_ref() {
+            for role in &economy.conquest.ignored_roles {
+                if let Some(unit) = economy.role.get(role) {
+                    self.conquest_ignored.insert(units.root(*unit));
+                }
+            }
+        }
         // Blast radii, resolved once. The *radius* is the gate: `blast_level` is carried and not
         // consumed, because what its value means is not published and every unit that has one has a
         // radius with it (D51).
@@ -3715,15 +3722,30 @@ impl World {
         self.outcome
     }
 
-    /// Whether this player still holds a seat: one living building of the content's town-centre
-    /// family. Family, not id, because an age-up replaces the town centre's id (109 -> 71 -> 141).
-    fn holds_seat(&self, player: u8, seat: u32) -> bool {
-        self.entities.iter().any(|entity| {
-            entity.player == player
-                && entity.kind == EntityKind::Building
-                && entity.hp > 0
-                && entity.unit.is_some_and(|unit| self.is_family(unit, seat))
-        })
+    /// Whether this entity keeps its owner in the match (D59).
+    ///
+    /// Anything a player owns counts - a unit, a building, a foundation - except the families content
+    /// names in `[conquest] ignored_roles` (walls and farms, per the manual's exclusion list). Family
+    /// rather than id, because an upgrade replaces an id (a town centre is 109 -> 71 -> 141).
+    fn keeps_them_in(&self, entity: &Entity) -> bool {
+        if entity.player == 0 || entity.hp <= 0 {
+            return false;
+        }
+        match entity.kind {
+            EntityKind::Unit | EntityKind::Building => entity.unit.is_none_or(|unit| {
+                let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
+                !self.conquest_ignored.contains(&family)
+            }),
+            // An arrow in the air and a resource node keep nobody alive.
+            EntityKind::Projectile | EntityKind::Resource(_) => false,
+        }
+    }
+
+    /// Whether this player still has anything that counts towards being in the match.
+    fn still_standing(&self, player: u8) -> bool {
+        self.entities
+            .iter()
+            .any(|entity| entity.player == player && self.keeps_them_in(entity))
     }
 
     /// Decide the match, once, from the state this tick left behind.
@@ -3734,10 +3756,6 @@ impl World {
         if self.outcome.is_some() {
             return;
         }
-        let Some(seat) = self.seat else {
-            // Content names no town centre, so this pack has no conquest rule to apply.
-            return;
-        };
         let sides: Vec<u8> = (1..=MAX_PLAYERS as u8)
             .filter(|player| self.roster[usize::from(*player) - 1])
             .collect();
@@ -3745,16 +3763,18 @@ impl World {
             // A one-sided world is a test fixture or a sandbox, not a match.
             return;
         }
-        let seated: Vec<u8> = sides
+        let standing: Vec<u8> = sides
             .iter()
             .copied()
-            .filter(|player| self.holds_seat(*player, seat))
+            .filter(|player| self.still_standing(*player))
             .collect();
-        self.outcome = match seated.len() {
+        self.outcome = match standing.len() {
             0 => Some(MatchOutcome::Draw),
-            1 => Some(MatchOutcome::Victory { winner: seated[0] }),
-            // Two or more seats still stand: an eliminated side in a three-way match leaves the
-            // other two fighting.
+            1 => Some(MatchOutcome::Victory {
+                winner: standing[0],
+            }),
+            // Two or more sides still stand: an eliminated side in a three-way match leaves the other
+            // two fighting.
             _ => None,
         };
     }

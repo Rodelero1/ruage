@@ -734,7 +734,7 @@ Until one is chosen, the honest statement is: the engine can be *played* to a fi
   that has not been worked yet cancels it, and a player with no seat loses. Faithful to both rules as written
   and probably too sharp in play; it wants a decision, not a patch.
 
-## The defeat rule does not match the original (found 2026-10-28, needs an owner decision)
+## The defeat rule (D59, applied 2026-10-28 - kept here as the reasoning, not as a gap)
 
 Our D46 says a match ends when a player's **town-centre family** is gone. The original game says something else,
 twice, in the manual:
@@ -755,7 +755,7 @@ The mismatch is not cosmetic. Under D46 a player whose town centre falls has los
 barracks across the map, and cannot rebuild. Under the original rule the same player is alive and rebuilding -
 which is also what makes a razed base a setback rather than a defeat.
 
-**Proposed D59** (not implemented, waiting for the owner): replace the seat rule with the original's elimination:
+**Applied as D59** - the seat rule is gone, replaced by the original's elimination:
 a player is out when they have no living unit and no standing building, counting only *qualifying* ones - content
 marks which roles count, since "walls and farms do not count" is the same kind of content fact as
 `[build] blocking_roles`. Keep D46's "refuse orders after the match is over" and the draw case. Consider a grace

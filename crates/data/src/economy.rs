@@ -31,6 +31,17 @@ pub struct Economy {
     pub role: BTreeMap<String, u32>,
     /// Tech role → tech id. Techs have no name in the dat, so content that names one needs this.
     pub tech_role: BTreeMap<String, u32>,
+    /// What counts towards a side still being in the match (D59). The original's exclusion list is a
+    /// fact about the game, not about the engine, so it is content: role names that do *not* keep a
+    /// player alive.
+    pub conquest: Conquest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Conquest {
+    /// Roles that do not count as a standing thing: walls, farms, and whatever else the manual lists.
+    /// A player with only these is defeated, which is what makes this different from "kill everything".
+    pub ignored_roles: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,10 +152,19 @@ struct RawEconomy {
     decay: RawDecay,
     population: RawPopulation,
     start: RawStart,
+    #[serde(default)]
+    conquest: RawConquest,
     /// Role name → unit id. Required: content that cannot name a unit at all is not content.
     role: BTreeMap<String, u32>,
     #[serde(default)]
     tech_role: BTreeMap<String, u32>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct RawConquest {
+    #[serde(default)]
+    ignored_roles: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -532,6 +552,9 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         },
         role: raw.role,
         tech_role: raw.tech_role,
+        conquest: Conquest {
+            ignored_roles: raw.conquest.ignored_roles,
+        },
     })
 }
 

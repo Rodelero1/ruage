@@ -1380,3 +1380,38 @@ The player who **took** the tile is not refunded. The refund follows the buildin
 **Not covered, deliberately:** `Command::Delete` on a foundation still destroys it with no refund. That is a
 different action (the player choosing to abandon work) and the owner has not stated a rule for it; asking is
 cheaper than guessing wrong.
+
+## D59 - Defeat is the absence of anything that counts (supersedes D46)
+
+The original rule, from the manual, twice:
+
+> "To defeat a player, you must destroy all units and buildings but the following: towers, walls, gates,
+> relics, Fishing Ships, Fish Traps, Transport Ships, Trade Cogs, Trade Carts, Farms, and sheep."
+
+So a side is out when **nothing qualifying of theirs stands** - no unit, no building, no foundation - and the
+**town centre is not special**. D46 said the opposite: losing the town-centre family ended the match, which made
+a player with twenty villagers and a barracks across the map "dead" and unable to rebuild. The original treats a
+razed base as a setback, and that is now what happens.
+
+**Content names what does not count.** `[conquest] ignored_roles` in `economy.toml`, resolved once at seeding to
+unit *families* (`units.root`, so an upgraded tower or a gated wall is still the same thing). The manual's list is
+by class; this pack can name only the roles it has today - `wall` and `farm` - and the rest (tower, gate, trade
+cart, sheep, the ships, relic) join the list when the pack gains them. A role content does not have is silently
+absent, which is why the list is short and not an error.
+
+**What is deliberately kept from D46:** the `roster` (who was ever in the match, so a world that never had two
+sides is a sandbox and not a one-player win), the draw when every side goes on the same tick, and the refusal of
+orders once the match is over.
+
+**Still derived, still free.** `outcome` is a function of the entity list; nothing new is hashed, and the check
+still runs only on a tick where something died (`something_died`), which was D46's one good performance idea.
+
+**Not implemented:** a grace window. The DE client is described as giving a short window before elimination in
+which a captured town centre or an ungarrisoned unit can save you; that is a client behaviour, not part of the
+manual's rule the owner asked for, so it waits for a decision if a rebuild race ever turns out to be the
+interesting part of a match.
+
+**The three D46 tests were rewritten, not deleted** (`delete.rs`): razing the town centre is now asserted to
+*not* end the match, and the match-over tests wipe a side completely instead. Eight new tests in `defeat.rs` cover
+the rule itself: a lone villager survives, the last villager ends it, walls and farms do not count, a house does,
+a foundation does, a double wipe on one tick is a draw, and eliminating every other side wins.

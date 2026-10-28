@@ -174,3 +174,16 @@ house_population = 5
 town_centre_population = 5
 # PROVENANCE: published. Per-building values are in the dat only indirectly (civ resources
 # array, U8) so they are stated here instead.
+
+[conquest]
+# What keeps a side in the match (D59). The original game's rule, from the manual, twice:
+#
+#   "To defeat a player, you must destroy all units and buildings but the following: towers, walls, gates,
+#    relics, Fishing Ships, Fish Traps, Transport Ships, Trade Cogs, Trade Carts, Farms, and sheep."
+#
+# So defeat is a negative condition - nothing *qualifying* left - and the town centre is not special:
+# losing it is a setback, not the end, because a villager can rebuild it.
+#
+# The manual lists classes; this pack can only name the roles it has. Roles named here do not count; add
+# the rest (tower, gate, trade_cart, sheep, the ships, relic) when the pack gains them.
+ignored_roles = ["wall", "farm"]
