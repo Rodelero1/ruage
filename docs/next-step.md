@@ -699,3 +699,25 @@ original pack can price and build, the tick's cost is unchanged within noise (2.
 effect interpreter inherits that shape directly: a tech's cost is a `Vec<Cost>` that already names
 its resources, and a scenario researches a tech by **role**, both of which would have been dat ids
 two commits ago.
+
+## After the prototype list: what the skirmish cannot settle
+
+`config/skirmish.toml` (step 30) scripts both sides and they fight, but **it does not produce a decided match**.
+Militia do ~3 damage a hit against a 2,400 hp town centre, so a fifteen-minute script ends with two armies
+grinding rather than a result. Two ways out, and the owner should pick one before more time is spent on either:
+
+1. **Siege in the content** - a ram or a mangonel, both of which the dat already describes (blast is in, D51; a
+   ram's bonus against buildings is an attack class). This keeps conquest as the only victory rule.
+2. **A second victory rule** - a time limit, a score, or "destroy all buildings" instead of the seat. Cheaper, but
+   it changes what the engine promises rather than what the content contains.
+
+Until one is chosen, the honest statement is: the engine can be *played* to a fight, not yet *won*.
+
+## Other named gaps, in the order they would be felt
+
+- **No gates** (D54): walls block their owner too, because pathing is one grid.
+- **No unit pushing** (D52): overlap is possible, and a unit already sharing a tile is never moved aside.
+- **Fog without occlusion** (D50): sight is a disc, not a line through terrain.
+- **The HUD is data, not pixels** (D57): `Hud` is a struct and a test, and no text is drawn yet - a bitmap font is
+  the missing piece, and it is presentation, not simulation.
+- **Selection has no control groups or hotkeys** (list step 25, not in this batch).

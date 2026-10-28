@@ -71,6 +71,11 @@ repair   = 156   # VMREP 12.5   the repair task, likewise not a gather rate
 # and using it as a gather rate would make every villager gather 2.5x too fast.
 
 [build]
+# Which roles block movement once built. A wall is a building whose tile nobody can walk through;
+# nothing else this pack builds does, which is why the rule is content's list and not a class id.
+# PROVENANCE: dat ids (the pack's four wall types are 72/117/119/155).
+blocking_roles = ["wall"]
+
 # No build speed here on purpose. A building's HP/second is derived from the unit table:
 # hp / create_time (a house is 550 hp over 25 s). There is no knob, because a knob would be a
 # number we invented - and U15 taught that the number was in the dat all along, under a name
@@ -146,6 +151,7 @@ spearman = 93
 # The building a villager works for food. The engine treats it like any other building except for
 # this one thing: `[farm]` says its work yields the `food` column.
 farm = 50       # 45 hp, 35 food + 25 wood, 22 s: available once the Feudal Age lands (tech 87)
+wall = 72       # WALL (palisade), 250 hp, 2 wood: the segment in [build] blocking_roles
 pikeman = 358       # 55 hp: an upgrade, researched (tech 197, Castle Age)
 halberdier = 359    # 60 hp: an upgrade, researched (tech 429, Imperial)
 castle = 82         # CSTL, 4800 hp - available from the Castle Age (tech 137 makes it)

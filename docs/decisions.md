@@ -1269,3 +1269,64 @@ unit was walking in the first place.** Work goals are the ones with a reason bey
 **Cost:** a bitset of unit tiles, rebuilt on ticks where something moves (an idle world pays one `any` over the
 delta list, and the idle probe confirms nothing is built there: 2.70 us/tick at 126 entities). Not hashed: it is
 derived from positions the hash already covers.
+
+## D53 - An order to one tile is an order to a place
+
+A crowd ordered at one tile spreads over the tiles around it: each unit takes its own, counting the units already
+heading there and searching in ring order. No state is added - the count is answered by asking the units' own
+goals - so there is nothing to release when an order ends, which is what a claims table would have needed.
+
+The planner was never the problem. Five units aiming at one tile was, and with D52's last-step rule all but one
+stopped short of it and never arrived.
+
+## D54 - Walls: content names what blocks, the grid grows a writable layer
+
+`[build] blocking_roles = ["wall"]` with `wall = 72`: a wall is a **content** word and a content id, so the engine
+learns neither a dat class nor a list of wall ids. A blocking building closes its tile on **insertion** (a half-built
+wall is not walk-through) and frees it in the death sweep, where the tile is remembered *before* the sweep because
+after `retain` there is no position left to look at.
+
+Nothing else blocks. A ring of houses is walk-through, which is a deliberate simplification: making every building
+an obstacle changes every path in every existing test, and the visible complaint the step was written for was walls.
+
+**Not modelled:** gates (owner-passable pathing needs a per-player grid), and walls are one tile because every
+building in this slice is.
+
+## D55 - The presentation boundary: a snapshot, a camera, and no window
+
+`crates/view` exists so the simulation never learns what a screen is:
+
+- **`Snapshot`** is a plain description of what one player can see. The visibility filter is the simulation's answer,
+  not a renderer's guess.
+- **`Camera`** is tiles to pixels, flat ground only.
+- **`render`** is a software rasteriser: rectangles for tiles, squares for buildings, dots for units. Colours are the
+  *view's* own constants, and an asset pack later replaces `render`'s entity branch with a sprite lookup - the only
+  function that has to change (D17's asset layer).
+- **No window, no dependency.** A frame is a value; PPM is written by hand and PNG is one conversion away. A window
+  would have needed a display this container does not have and a crate the offline build cannot fetch, and neither
+  would have made the frame testable.
+
+**Floats live here and nowhere else** (D9): pixels are not state.
+
+## D56 - Frames and ticks: an accumulator, a cap, and a dropped backlog
+
+`Clock::ticks_for(frame_ms)` runs a tick for every whole tick period accumulated. Sixty frames a second at 20 Hz is
+exactly 200 ticks in ten seconds (a test asserts it), and `alpha()` gives a renderer the fraction between ticks.
+
+Catch-up is capped at five ticks. A machine that stalls for a second must not then run twenty ticks inside one frame
+- and the backlog is *dropped* rather than repaid, or every later frame would try to catch up for ever.
+
+## D57 - The UI issues orders; it does not execute them
+
+`Selection::order` returns `Vec<Command>`, and the caller submits them. Nothing in `crates/view` calls `step`, and the
+test that matters is the one that hands the produced orders to `World::submit_checked` and watches the villager start
+gathering - the UI cannot invent an order the engine would refuse.
+
+The gestures are the game's: a click takes a unit before a building on the same tile, a band takes units and leaves
+buildings, a double click takes every unit of that kind on screen, and a right click is gather on a node, attack on an
+enemy, move on ground, rally on a building.
+
+**One slice was not written test-first** - these three (22-24) were written test-and-code together - and the mutation
+evidence stands in for the recorded RED: deleting the click's tile filter, letting a band take buildings, and issuing
+no orders each fail exactly their own test. Recorded because a claim of TDD that was not TDD is worse than a named
+exception.

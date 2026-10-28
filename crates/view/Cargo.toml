@@ -1,0 +1,12 @@
+[package]
+name = "ruage-view"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Read-only presentation layer: a snapshot of a match, a camera, and a software rasteriser"
+
+[dependencies]
+ruage-fixed = { path = "../fixed" }
+ruage-data = { path = "../data" }
+ruage-sim = { path = "../sim" }

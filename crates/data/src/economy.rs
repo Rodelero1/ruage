@@ -105,6 +105,9 @@ impl Train {
 #[derive(Debug, Clone)]
 pub struct Build {
     pub repair_hp_per_second: MaybeFixed,
+    /// Which roles block movement once built: walls and their kin. Empty means nothing built blocks,
+    /// which is how every pack behaved before walls existed (D54).
+    pub blocking_roles: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -203,6 +206,9 @@ struct RawTrainEntry {
 #[serde(deny_unknown_fields)]
 struct RawBuild {
     repair_hp_per_second: f64,
+    /// Defaulted to empty: a pack that says nothing about walls builds nothing that blocks.
+    #[serde(default)]
+    blocking_roles: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -504,6 +510,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         },
         build: Build {
             repair_hp_per_second: MaybeFixed::from_f64(raw.build.repair_hp_per_second),
+            blocking_roles: raw.build.blocking_roles,
         },
         decay: Decay {
             enabled: raw.decay.enabled,

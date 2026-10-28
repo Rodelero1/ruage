@@ -1082,6 +1082,9 @@ pub struct World {
     explored: [Vec<u64>; MAX_PLAYERS],
     /// The map's size in tiles, from the content the world was seeded with. Zero until seeding.
     map_size: (u16, u16),
+    /// Unit ids (family roots) that block movement once built, from `[build] blocking_roles` in content.
+    /// A wall is the only one this pack names, and the engine learns the word from the pack (D54).
+    blocking: BTreeSet<u32>,
     /// Blast radius per unit id, in engine units: resolved once from the table, because a strike must
     /// not read the content table inside a tick. Only the 27 units that have a radius are here (D51).
     blast: BTreeMap<u32, i64>,
@@ -1197,6 +1200,7 @@ impl World {
             stances: BTreeMap::new(),
             explored: std::array::from_fn(|_| Vec::new()),
             map_size: (0, 0),
+            blocking: BTreeSet::new(),
             blast: BTreeMap::new(),
             aggro_radius: 0,
             aggro_scan_ticks: 0,
@@ -1477,6 +1481,15 @@ impl World {
             }
         }
         self.walk = Some(Walk::from_map(map));
+        self.blocking.clear();
+        for role in &economy.build.blocking_roles {
+            let unit = economy
+                .role
+                .get(role)
+                .copied()
+                .ok_or_else(|| SimError::NoRole { role: role.clone() })?;
+            self.blocking.insert(units.root(unit));
+        }
         self.map_size = (map.width, map.height);
         let words = (usize::from(map.width) * usize::from(map.height)).div_ceil(64);
         self.explored = std::array::from_fn(|_| vec![0u64; words]);
@@ -1638,6 +1651,21 @@ impl World {
             .position(|existing| existing.id > entity.id)
             .unwrap_or(self.entities.len());
         let id = entity.id;
+        // A wall closes its tile from the moment it stands there - the tile is claimed by the insertion,
+        // not by the completion, because a half-built wall is not walk-through either. The check reads the
+        // entity being inserted rather than looking it up, which is the bug this line had first: an entity
+        // cannot be found before it is in the list.
+        if entity.kind == EntityKind::Building
+            && entity.unit.is_some_and(|unit| {
+                let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
+                self.blocking.contains(&root)
+            })
+        {
+            let tile = self.tile_of(entity.position);
+            if let Some(walk) = self.walk.as_mut() {
+                walk.set_blocked(tile.0, tile.1, true);
+            }
+        }
         self.entities.insert(at, entity);
         // A thing that has just arrived is watched from the tick it arrives: fog follows insertion as
         // well as movement, and this is the one place both paths can be fed from.
@@ -3564,6 +3592,12 @@ impl World {
         head + self.queued.get(&building).map_or(0, Vec::len)
     }
 
+    /// The most health this unit could have for this player, after every research that grants it. Public
+    /// because a HUD and a health bar both need it, and both are outside the simulation (D55).
+    pub fn max_hp_of(&self, player: u8, unit: u32) -> Option<i32> {
+        self.max_hp(player, unit).ok()
+    }
+
     /// Whether the match has been decided, and how. `None` while it is still being played.
     pub fn outcome(&self) -> Option<MatchOutcome> {
         self.outcome
@@ -5066,6 +5100,23 @@ impl World {
         // its remaining waypoints forever - a long match accumulates routes nobody walks, and the
         // state hash walks them, so a dead unit's path was part of the hash.
         let mut buried: Vec<EntityId> = Vec::new();
+        // A wall's tile, remembered before the sweep: after `retain` the entity is gone and there is no
+        // position left to free.
+        let wall_tiles: Vec<(EntityId, (u16, u16))> = if self.blocking.is_empty() {
+            Vec::new()
+        } else {
+            self.entities
+                .iter()
+                .filter(|entity| entity.kind == EntityKind::Building)
+                .filter(|entity| {
+                    entity.unit.is_some_and(|unit| {
+                        let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
+                        self.blocking.contains(&root)
+                    })
+                })
+                .map(|entity| (entity.id, self.tile_of(entity.position)))
+                .collect()
+        };
         self.entities.retain(|entity| {
             let keep =
                 !matches!(entity.kind, EntityKind::Unit | EntityKind::Building) || entity.hp > 0;
@@ -5092,6 +5143,13 @@ impl World {
         // Everything keyed by an entity id goes with it. The route was the first of these (a dead
         // unit kept its waypoints forever); the queue, the rally, the stance, the patrol's far end and
         // the interrupted walk are the rest, and the state hash walks all of them.
+        for (id, tile) in wall_tiles {
+            if buried.contains(&id)
+                && let Some(walk) = self.walk.as_mut()
+            {
+                walk.set_blocked(tile.0, tile.1, false);
+            }
+        }
         for id in buried {
             self.paths.remove(&id);
             self.rallies.remove(&id);

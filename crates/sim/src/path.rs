@@ -37,6 +37,14 @@ impl Walk {
         }
     }
 
+    /// Block or free a tile for the rest of the match. Terrain does not change; what is built on it does
+    /// (a wall), so the grid has a writable layer rather than being rebuilt (D54).
+    pub fn set_blocked(&mut self, x: u16, y: u16, blocked: bool) {
+        if x < self.width && y < self.height {
+            self.blocked[usize::from(y) * usize::from(self.width) + usize::from(x)] = blocked;
+        }
+    }
+
     pub fn blocked(&self, x: u16, y: u16) -> bool {
         if x >= self.width || y >= self.height {
             return true;
