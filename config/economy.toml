@@ -133,6 +133,13 @@ units = ["militia", "spearman"]
 [[train.entry]]
 building = "castle"
 units = ["trebuchet"]
+
+[[train.entry]]
+building = "siege_workshop"
+units = ["mangonel"]
+# PROVENANCE: authored edge, dat numbers. The workshop (49 SIWS) and the mangonel (280 MANGO) are the dat's;
+# which building may make what is content, like every other train edge (D17). The mangonel is class 13
+# (siege), 50 hp, range 7 / minimum 3, 160 wood + 135 gold, 6 s reload, 35 attack against buildings.
 # A barracks makes spearmen (40 hp, 0.9 tiles/s, 60 food + 20 gold, 21 s).
 
 [role]
@@ -156,6 +163,9 @@ pikeman = 358       # 55 hp: an upgrade, researched (tech 197, Castle Age)
 halberdier = 359    # 60 hp: an upgrade, researched (tech 429, Imperial)
 castle = 82         # CSTL, 4800 hp - available from the Castle Age (tech 137 makes it)
 trebuchet = 331     # PTREB - available from the Imperial Age (tech 256 makes it)
+siege_workshop = 49 # SIWS, class 3, 1800 hp, 200 wood: the building that makes the siege line
+mangonel = 280      # MANGO, class 13: 50 hp, 7 range / 3 minimum, 160 wood + 135 gold, 6 s reload,
+                    # 35 vs buildings and 40 vs units - the first thing in the pack that breaks a base
 
 [tech_role]
 # A tech has no name in the dat (names are string-ids into the language files), so content that has
@@ -165,6 +175,9 @@ dark_age = 104      # free, instant, no home building: the prerequisite every ot
 man_at_arms = 222   # 100 food + 40 gold, 40 s: spearmen (74) become swordsmen (75)
 loom = 22           # 50 gold, 25 s, at the town centre: villagers 25 -> 40 health
 feudal_age = 101    # the prerequisite Man-at-Arms lists; its effect is a tech-tree gate, unimplemented
+castle_age = 102    # 800 food + 200 gold, 160 s, at the town centre (location 109). Verified by price and
+                    # time, not by number - and it is what opens the siege workshop's unit.
+imperial_age = 103  # 1000 food + 800 gold, at the town centre: named for completeness, nothing gates on it yet
 
 [population]
 cap_default = 200

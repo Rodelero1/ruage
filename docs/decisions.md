@@ -1532,3 +1532,27 @@ little was built. The last one is the ordinary death path, which pays nobody by 
 Two smaller things fixed on the way: `cancel_site` is now idempotent (a site cancelled earlier in a tick is
 still in the list until the sweep), and the sight check runs only when something is under construction - one
 boolean scan on a map with nothing being built.
+
+## D62 - The Castle Age and the mangonel: content, verified by price
+
+The first step towards a match that can be *won* rather than fought. Three content additions, each identified by the
+dat's own numbers rather than assumed:
+
+| Role | Unit/tech | Evidence |
+|---|---|---|
+| `siege_workshop` | 49 `SIWS` | class 3, 1 800 hp, 200 wood |
+| `mangonel` | 280 `MANGO` | class 13, 50 hp, range 7 / minimum 3, 160 wood + 135 gold, 6 s reload, 35 vs buildings, 40 vs units |
+| `castle_age` | tech 102 | 800 food + 200 gold, 160 s, at the town centre (location 109) |
+
+`[[train.entry]] siege_workshop → mangonel` is the authored edge, like every other train edge (D17). The Castle Age
+opens *availability*: a test asserts the refusal changes from `UnitUnavailable` to a price shortfall once the tech is
+granted, which is the honest claim - content says what may be built, the stockpile says whether it can be paid for.
+
+**A mechanic found while writing the test, worth knowing before tuning any siege.** A mangonel four tiles from a house
+never fires: the dead zone is `min_range + the two bodies' radii` (D44), and a house's radius is large enough that
+4 tiles is *inside* it. The shooter backs away instead - and with no speed, it backs away for ever. Six tiles works.
+Any future "why does the siege do nothing" question starts here.
+
+**Still outstanding for this step:** the acceptance test - a scripted match that reaches Castle and breaks a town
+centre inside fifteen minutes. That needs a booming opening (villagers queued from tick 0, farms, ten-plus on food);
+the content is in place, the economy script is not. `docs/next-step.md` carries it as the top item.

@@ -706,8 +706,11 @@ two commits ago.
 Militia do ~3 damage a hit against a 2,400 hp town centre, so a fifteen-minute script ends with two armies
 grinding rather than a result. Two ways out, and the owner should pick one before more time is spent on either:
 
-1. **Siege in the content** - a ram or a mangonel, both of which the dat already describes (blast is in, D51; a
-   ram's bonus against buildings is an attack class). This keeps conquest as the only victory rule.
+1. ~~**Siege in the content**~~ - **done for the mangonel** (D62): Castle Age 102, siege workshop 49 and mangonel 280
+   are roles, the train edge exists, and a mangonel damages a building in a test. What remains is the *economy*: a
+   scripted opening that reaches Castle inside fifteen minutes (villagers from tick 0, farms, ten-plus on food) and
+   the acceptance test that breaks a town centre with it. A ram is still unbuilt and would be the cheaper second
+   siege unit (attack class 20 against buildings, no dead zone).
 2. **A second victory rule** - a time limit, a score, or "destroy all buildings" instead of the seat. Cheaper, but
    it changes what the engine promises rather than what the content contains.
 
