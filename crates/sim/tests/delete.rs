@@ -313,6 +313,185 @@ fn both_sides_wiped_on_one_tick_is_a_draw() {
     assert_eq!(world.outcome(), Some(MatchOutcome::Draw));
 }
 
+/// Every resource this player has, by slot.
+fn stockpile(world: &World, player: u8) -> Vec<u32> {
+    (0..4).map(|slot| world.stock(player, slot)).collect()
+}
+
+#[test]
+fn deleting_a_foundation_refunds_it_in_full() {
+    // Verified against the game's behaviour (forums, multiple independent statements): a foundation
+    // that has not been worked gives 100% back, and a partially built one gives back the part you have
+    // not built yet. Losing what you have already invested is the rule.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let villein = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
+        .map(|entity| entity.id)
+        .expect("a villager");
+    let before = stockpile(&world, 1);
+    let house = world.role_unit("house").expect("house");
+    // Four tiles away, so the builder is still walking and the site is a bare foundation.
+    let tile = world
+        .entity(villein)
+        .map(|entity| {
+            let scale = world.scale();
+            (
+                entity.position.0.raw() / scale + 4,
+                entity.position.1.raw() / scale,
+            )
+        })
+        .expect("the villager");
+    world
+        .submit_checked(Command::Build {
+            villager: villein,
+            unit: house,
+            at: (tile.0 as u16, tile.1 as u16),
+        })
+        .expect("a foundation");
+    world.step().expect("step");
+
+    let site = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.construction.is_some())
+        .map(|entity| entity.id)
+        .expect("the foundation");
+    assert_eq!(
+        world
+            .entity(site)
+            .and_then(|entity| entity.construction)
+            .map(|construction| construction.progress_ticks),
+        Some(0),
+        "the test's premise is wrong: the foundation has been worked"
+    );
+    let paid = stockpile(&world, 1);
+    assert_ne!(paid, before, "placing the foundation cost nothing");
+
+    world
+        .submit_checked(Command::Delete {
+            player: 1,
+            entity: site,
+        })
+        .expect("delete");
+    world.step().expect("step");
+    assert_eq!(
+        stockpile(&world, 1),
+        before,
+        "an untouched foundation did not refund in full"
+    );
+}
+
+/// Build a house next to a villager, work it until `fraction` of its time has passed, delete it, and
+/// report how much wood came back. Two calls on two fresh worlds give the shape of the refund curve
+/// without the test needing to know what a house costs - content owns that number.
+fn refund_after_work(fx: &Fixture, fraction: f64) -> u32 {
+    let mut world = seeded(fx);
+    let villein = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
+        .map(|entity| entity.id)
+        .expect("a villager");
+    let house = world.role_unit("house").expect("house");
+    let (x, y) = world
+        .entity(villein)
+        .map(|entity| {
+            let scale = world.scale();
+            (
+                entity.position.0.raw() / scale,
+                entity.position.1.raw() / scale,
+            )
+        })
+        .expect("the villager");
+    let mut placed = false;
+    for (dx, dy) in [(1i64, 0i64), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, -1)] {
+        let order = world.submit_checked(Command::Build {
+            villager: villein,
+            unit: house,
+            at: ((x + dx) as u16, (y + dy) as u16),
+        });
+        if order.is_ok() {
+            placed = true;
+            break;
+        }
+    }
+    assert!(placed, "no neighbour of the villager would take a house");
+    world.step().expect("step");
+    let site = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.construction.is_some())
+        .map(|entity| entity.id)
+        .expect("the foundation");
+    for _ in 0..5000 {
+        let Some((done, total)) = world
+            .entity(site)
+            .and_then(|entity| entity.construction)
+            .map(|construction| (construction.progress_ticks, construction.total_ticks))
+        else {
+            break;
+        };
+        if f64::from(done) >= f64::from(total) * fraction {
+            break;
+        }
+        world.step().expect("step");
+    }
+    let before = stockpile(&world, 1);
+    world
+        .submit_checked(Command::Delete {
+            player: 1,
+            entity: site,
+        })
+        .expect("delete");
+    world.step().expect("step");
+    // Whatever slot content puts a house's price in: sum the lot rather than assume an order.
+    let after: u32 = stockpile(&world, 1).iter().sum();
+    let was: u32 = before.iter().sum();
+    after.saturating_sub(was)
+}
+
+#[test]
+fn the_further_a_building_is_built_the_less_deleting_it_returns() {
+    // The game's rule, verified from several independent accounts: you lose what you have already put
+    // in. A foundation gives everything back, a half-built house about half, a finished one nothing.
+    let Some(fx) = fixture() else { return };
+    let untouched = refund_after_work(&fx, 0.0);
+    let half = refund_after_work(&fx, 0.5);
+    assert!(untouched > 0, "an untouched foundation refunded nothing");
+    assert!(half > 0, "a half-built house refunded nothing");
+    assert!(
+        half < untouched,
+        "a half-built house refunded as much as an untouched one: {half} vs {untouched}"
+    );
+    assert!(
+        half.abs_diff(untouched / 2) <= 2,
+        "a half-built house refunded {half}, which is not about half of {untouched}"
+    );
+}
+
+#[test]
+fn deleting_a_finished_building_refunds_nothing() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let house = build(&mut world, 1, 9_100, "house", (21, 21));
+    let before = stockpile(&world, 1);
+    world
+        .submit_checked(Command::Delete {
+            player: 1,
+            entity: house,
+        })
+        .expect("delete");
+    world.step().expect("step");
+    assert_eq!(
+        stockpile(&world, 1),
+        before,
+        "deleting a finished building paid its owner back"
+    );
+}
+
 #[test]
 fn an_ended_match_refuses_new_orders() {
     let Some(fx) = fixture() else { return };

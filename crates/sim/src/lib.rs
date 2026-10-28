@@ -2449,6 +2449,13 @@ impl World {
     /// Give `player` back what one of `unit` costs. Saturating, because a refund is not a way to overflow a
     /// stockpile.
     fn refund_unit_cost(&mut self, player: u8, unit: u32) {
+        self.refund_unit_cost_part(player, unit, 1, 1);
+    }
+
+    /// Give `player` back `left / total` of what one of `unit` costs - the fraction of a site that is not
+    /// built yet. Integer arithmetic floors, so a nearly finished building returns almost nothing and never
+    /// returns more than was paid.
+    fn refund_unit_cost_part(&mut self, player: u8, unit: u32, left: u32, total: u32) {
         let Some(costs) = self
             .units
             .as_ref()
@@ -2457,10 +2464,12 @@ impl World {
         else {
             return;
         };
+        let total = total.max(1);
         let mut refunds = Vec::with_capacity(costs.len());
         for cost in &costs {
             if let Ok(slot) = self.cost_slot(cost) {
-                refunds.push((slot, u32::from(cost.amount)));
+                let amount = u32::from(cost.amount).saturating_mul(left) / total;
+                refunds.push((slot, amount));
             }
         }
         let Some(row) = self.stock.get_mut(usize::from(player).wrapping_sub(1)) else {
@@ -4363,6 +4372,21 @@ impl World {
                 let is_building = self
                     .find(entity)
                     .is_some_and(|target| target.kind == EntityKind::Building);
+                // Demolishing work in progress gives back the part you have not built (D60). Verified
+                // against the game: an untouched foundation refunds in full, a half-built building
+                // refunds about half, a finished one refunds nothing - you lose what you invested.
+                let part = self.find(entity).and_then(|target| {
+                    target
+                        .construction
+                        .map(|construction| (target.player, target.unit, construction))
+                });
+                if let Some((player, Some(unit), construction)) = part {
+                    let total = construction.total_ticks;
+                    if total > 0 {
+                        let left = total.saturating_sub(construction.progress_ticks.min(total));
+                        self.refund_unit_cost_part(player, unit, left, total);
+                    }
+                }
                 if let Some(target) = self.find_mut(entity) {
                     target.hp = 0;
                 }

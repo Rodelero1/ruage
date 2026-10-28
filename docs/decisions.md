@@ -1377,9 +1377,8 @@ every entity would spread that knowledge everywhere and change every hash for no
 
 The player who **took** the tile is not refunded. The refund follows the building that went, not the tile.
 
-**Not covered, deliberately:** `Command::Delete` on a foundation still destroys it with no refund. That is a
-different action (the player choosing to abandon work) and the owner has not stated a rule for it; asking is
-cheaper than guessing wrong.
+**Amended by D60:** `Command::Delete` on a foundation *does* refund, proportionally - see below. The
+cancellation path and the demolition path now agree, which is what the owner asked for.
 
 ## D59 - Defeat is the absence of anything that counts (supersedes D46)
 
@@ -1475,3 +1474,26 @@ test to write is "a sheep does not keep a player alive".
 
 **Not changed:** the roster, the draw, the refusal of orders after the end, `outcome` staying derived, and the
 check still running only on a tick where something died.
+
+## D60 - Demolishing work in progress returns the part that is not built
+
+The owner's rule, and the game's: deleting a foundation returns 100% of its cost; deleting a building while it
+is going up returns the share that is **left to build**; deleting a finished building returns nothing, because
+the resources are in the building.
+
+Verified before implementing, from several independent accounts of the game (the Age of Empires forums thread on
+deleting foundations, and two r/aoe2 threads), which agree on the shape and on two details:
+
+- the refund is tied to **construction progress only**, not to damage - a half-built house that an enemy has
+  beaten down still returns the unbuilt half;
+- a building **destroyed by an enemy** returns nothing, however little was built. `cancel_site` (the overbuild
+  path, D58) and `Delete` (this path) are the only two refunds, and both follow the same arithmetic.
+
+The arithmetic is `cost * (total_ticks - progress_ticks) / total_ticks`, integer, flooring - so a nearly
+finished building returns almost nothing and a refund can never exceed what was paid. One helper does it for
+both paths (`refund_unit_cost_part`), because two refunds with two formulas is how they drift apart.
+
+The test does not assume the price: it measures the curve on two fresh worlds - untouched, then half built - and
+asserts that the half one returns about half of the untouched one. The first version of that test indexed
+"wood" as slot 1 and failed, which was a useful accident: the resource order is content's, so the assertion now
+sums the stockpile instead of trusting a slot.
