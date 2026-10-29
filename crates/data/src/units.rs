@@ -59,6 +59,17 @@ pub struct Unit {
     /// Carried so content can tell what a player may field from what the world places; nothing in the
     /// engine branches on it yet.
     pub gaia: bool,
+    /// What this thing is worth to eat, in food: a sheep 100, a boar 340, a deer 140, everything else
+    /// zero. Read from the dat's `resources` list by type, not from the carry capacity - that is 0 on a
+    /// live sheep and 300 on its corpse, which is a different quantity and would make a sheep worth three
+    /// times what the game gives (D69).
+    pub food: u32,
+    /// The body this leaves when it dies: a sheep 595, a boar 356, a deer 43. Most units have one - a
+    /// knight's is 111 - and only a unit with `food` is worth gathering from the body. `None` where the
+    /// dat says -1.
+    pub dead_unit: Option<u32>,
+    /// How fast it rots: 0.25 for a live sheep, 1.0 for its corpse. Carried, unread by the engine yet.
+    pub decay_rate: MaybeFixed,
 }
 
 #[derive(Debug, Clone)]
@@ -161,6 +172,13 @@ struct RawUnit {
     /// Defaulted to false: a pack written before Gaia's objects were imported only carries citied units.
     #[serde(default)]
     gaia: bool,
+    /// Defaulted to zero: a pack written before the animals were imported has no meat in it.
+    #[serde(default)]
+    food: u32,
+    #[serde(default)]
+    dead_unit: Option<u32>,
+    #[serde(default)]
+    decay_rate: f64,
 }
 
 fn invalid(path: &str, key: String, detail: impl Into<String>) -> ConfigError {
@@ -267,6 +285,9 @@ pub fn load_units_str(text: &str, path: &str) -> Result<Units, ConfigError> {
             base_id: r.base_id,
             variant_of: r.variant_of,
             gaia: r.gaia,
+            food: r.food,
+            dead_unit: r.dead_unit,
+            decay_rate: MaybeFixed::from_f64(r.decay_rate),
         };
 
         if let Some(parent) = r.variant_of {

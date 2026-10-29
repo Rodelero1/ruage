@@ -799,3 +799,15 @@ gate, which is D67 and is done).
 - **Foundations block nobody until worked.** Confirms D61's shape from the other direction: when buildings
   start to block paths, a foundation must not block until a villager first works it, or every placing
   villager's route changes the moment the site goes down.
+
+## The animal slice, in three increments (D69, started 2026-10-29)
+
+1. **Importer** - *done*: `food` from `unit.resources` type 0, `dead_unit` from `dead_unit_id`, `decay_rate`
+   from `resource_decay_rate`. Pinned against sheep 100 / boar 340 / deer 140 and the three body ids.
+2. **Herding** - next: a sheep with no villager near it stands still; a villager within a few tiles makes it
+   walk **toward the nearest drop site of the villager's player (mill or town centre)**, not toward the
+   villager, and it stops when it arrives. Keyed on the animal classes (9, 10, 58) or a content role - never
+   on `food > 0`, which five plants and food piles also satisfy.
+3. **Retaliation and the carcass** - a struck boar turns on whoever struck it (it already carries the attack);
+   a dead animal leaves its `dead_unit`, and that body can be gathered for food until empty. A body that does
+   not exist must be a lookup that finds nothing, not an error: 640 records name 768, which no civ has.

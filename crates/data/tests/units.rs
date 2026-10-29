@@ -64,8 +64,26 @@ fn the_real_unit_table_loads_and_answers_known_values() {
         "1,389 ids: the playable civ and Gaia"
     );
 
+    // The animals, as the importer's own test pins them: meat is read from the dat's resource list by
+    // type, and each one names the body it leaves (D69). A sheep is worth 100, not the 300 its corpse
+    // reports as a carry capacity - that number is a different quantity.
+    let sheep = units.unit(594).expect("sheep");
+    assert_eq!(sheep.food, 100);
+    assert_eq!(sheep.dead_unit, Some(595));
+    // And the flag says where each came from: the sheep is duplicated onto the playable civ (as `SHEEPG`),
+    // the boar exists only on Gaia. That difference is exactly why the missing animals went unnoticed.
+    assert!(!sheep.gaia, "a sheep is on the playable civ");
+    assert!(units.unit(48).expect("boar").gaia, "a boar is Gaia's alone");
+    let boar = units.unit(48).expect("boar");
+    assert_eq!(boar.food, 340);
+    assert_eq!(boar.dead_unit, Some(356));
+    let deer = units.unit(65).expect("deer");
+    assert_eq!(deer.food, 140);
+    assert_eq!(deer.dead_unit, Some(43));
+
     // The knight, as the generator's own integration test pins it.
     let knight = units.unit(38).expect("knight exists");
+    assert_eq!(knight.food, 0, "a knight is not food");
     assert_eq!(knight.name, "KNGHT");
     assert_eq!(knight.hp, 100);
     assert_eq!(knight.speed.resolve(20_000, "speed").unwrap().raw(), 27_000);

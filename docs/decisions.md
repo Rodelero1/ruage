@@ -1730,3 +1730,34 @@ than before. That is the sort of thing a union exposes, and it argues for the un
 
 The size went from 402 KB to 461 KB of generated TOML, which is a price worth paying for a pack that can name
 the animals the researched openings are built on.
+
+## D69 - An animal's meat, its body, and its rot
+
+*The sheep-and-boar slice. The meat is not where the obvious field says it is.*
+
+Three facts per unit now come out of the dat, and only one of them was found where it looked like it would be:
+
+- **Meat** is `unit.resources` filtered by **type 0** - a sheep **100**, a boar **340**, a deer **140**, all
+  matching the game. It is **not** `resource_carry_capacity`, which is 0 on a live sheep and 300 on its
+  corpse; that 300 is resource **type 12**, the corpse's own marker. Reading it as meat would have made a
+  sheep worth three times what it is, and the number would have looked plausible enough to ship.
+- **The body** is `dead_unit_id`: sheep 594 -> 595, boar 48 -> 356, deer 65 -> 43. It is **not** an animal's
+  property - a knight's body is 111. It is the corpse *any* unit leaves; what makes a body edible is the
+  meat, not the body.
+- **Rot** is `resource_decay_rate`: 0.25 for a live sheep, 1.0 for its corpse. Carried, unread by the engine
+  until corpses decay.
+
+**The trap this leaves for the next increment, written down before it bites:** `food > 0` does **not** mean
+"animal". Five non-animal units carry food - the forage bush 59 and its gaia twin (125 each), a food pile
+262 (1), a deer's meat pile 333 (100) and one oddity 544 (100). Herding and retaliation must key on the
+animal classes (**9 and 10 huntable, 58 herdable**) or on a content role, never on "has meat".
+
+**And a dat quirk worth knowing rather than fixing:** 640 unit records name a body that exists in no civ's
+array - the yurts all point at 768. Nothing eats a yurt, and the engine will look a body up and find nothing,
+so it is a lookup that must tolerate absence rather than an import error.
+
+The herding rule is the owner's, in his words: *"villager is herding sheep towards closest mill or town
+centre. So sheep do not close distance to him but move in the direction of mill or town centre."* The real
+game has the sheep flee *from* the villager, which reads as the same thing because you approach from the far
+side; the rule as stated is what gets implemented, and this note exists so nobody "corrects" it back into a
+follow.
