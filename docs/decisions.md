@@ -1804,3 +1804,19 @@ the body. Two consequences:
 - A load can therefore never be "stolen out from under" a villager: the meat exists only after the animal is
   dead, and by then the only thing that could take it is the villager holding it.
 - The window for stealing a herdable is **while it walks**, which is exactly the window conversion lives in.
+
+**D70, increment three: the slaughter and the body.** When a herded animal reaches its drop site the villager
+kills it there, and the animal **becomes its `dead_unit` in place** - same entity, same id, new unit id, no
+health - so the gather task that names it stays valid and the villager simply carries on with a carcass. Content
+names the bodies (`[hunt] carcass_roles` = sheep 595, boar 356, deer 43) rather than the engine inferring "no
+health means edible", and the removal sweep is taught that a body is not a corpse to clear away: a unit with zero
+health survives if its unit id is in that set.
+
+Two things this bought, and one it exposed:
+
+- the villager's load is never "stolen out from under" it, because the meat only exists after death (the owner's
+  rule, D70's addendum);
+- no re-target machinery: the node is the same entity before and after the blow;
+- **exposed:** an animal killed by anything *other* than this slaughter is still swept away, leaving nothing. The
+  last-blow rule and the carcass that a soldier's kill leaves are therefore still missing, and they need the
+  killer to be known at the moment of death - which melee knows and arrows do not.

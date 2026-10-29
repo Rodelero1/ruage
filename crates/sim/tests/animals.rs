@@ -325,3 +325,56 @@ fn a_placed_animal_carries_its_meat() {
         "a sheep is worth the 100 food the pack gives it, in engine units"
     );
 }
+
+/// The slaughter (D70, owner's rule: taking meat means the animal is dead, and the blow lands **on arrival at
+/// the drop site**).
+///
+/// Written before the implementation. Today a villager gathers from a *live* sheep for ever and the sheep is
+/// never killed, which the rule forbids: the animal has to become its `dead_unit` where it stops, and the
+/// gathering that follows is from a body.
+#[test]
+fn a_gathered_sheep_is_slaughtered_at_the_drop_site() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let sheep_unit = world.role_unit("sheep").expect("a sheep role");
+    let (_, villager, centre) = seat(&world);
+    let sheep = a_sheep(&mut world, sheep_unit, centre, 4);
+
+    world
+        .submit_checked(Command::Gather {
+            villager,
+            node: sheep,
+        })
+        .expect("a villager can be sent to a sheep");
+
+    // Long enough to walk the sheep home and let the blow fall.
+    let mut dead_at = None;
+    for tick in 0..2_000 {
+        world.step().expect("stepping");
+        if let Some(entity) = world.entities().iter().find(|entity| entity.id == sheep)
+            && entity.unit != Some(sheep_unit)
+        {
+            dead_at = Some((tick, entity.clone()));
+            break;
+        }
+    }
+
+    let (tick, body) = dead_at.expect("the sheep must be slaughtered, not gathered from for ever");
+    assert_eq!(body.unit, Some(595), "a sheep's body is SHEEP_D (D69)");
+    assert_eq!(body.hp, 0, "a body has no health");
+    assert!(body.amount.raw() > 0, "and it still holds its meat");
+
+    // And the villager is working that body: it is still on the same node, carrying meat.
+    let carrying = world
+        .entities()
+        .iter()
+        .find(|entity| entity.id == villager)
+        .map(|entity| entity.carry.raw())
+        .unwrap_or(0);
+    assert!(
+        carrying > 0 || tick < 2_000,
+        "the villager goes on gathering from the body after the blow"
+    );
+}

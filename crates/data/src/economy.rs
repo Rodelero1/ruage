@@ -53,6 +53,9 @@ pub struct Hunt {
     pub animal_roles: Vec<String>,
     /// The resource an animal yields, by name in the pack's stockpile.
     pub resource: Option<String>,
+    /// Role names of the bodies an animal becomes when slaughtered. A carcass is gathered from, so it has to
+    /// be nameable rather than inferred from "has no health" (D70).
+    pub carcass_roles: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -232,6 +235,8 @@ struct RawHunt {
     animal_roles: Vec<String>,
     #[serde(default)]
     resource: Option<String>,
+    #[serde(default)]
+    carcass_roles: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -651,6 +656,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             herdable_roles: raw.hunt.herdable_roles,
             animal_roles: raw.hunt.animal_roles,
             resource: raw.hunt.resource,
+            carcass_roles: raw.hunt.carcass_roles,
         },
         conquest: Conquest {
             surviving_classes: raw.conquest.surviving_classes,

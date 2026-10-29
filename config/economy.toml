@@ -186,6 +186,9 @@ lumber_camp = 562   # SMIL (the dat's "saw mill"), class 3, 600 hp, 100 wood: a 
 sheep = 594         # SHEEPG, class 58: 7 hp, 100 food, leaves body 595 (D69)
 boar = 48           # BOARX, class 10 (Gaia only): 75 hp, 340 food, leaves body 356
 deer = 65           # DEERX, class 9 (Gaia only): 140 food, leaves body 43
+sheep_carcass = 595 # SHEEP_D, class 11: the body a slaughtered sheep becomes
+boar_carcass = 356  # BOARX_D, class 11
+deer_carcass = 43   # DEERX_D, class 11
 mangonel = 280      # MANGO, class 13: 50 hp, 7 range / 3 minimum, 160 wood + 135 gold, 6 s reload,
                     # 35 vs buildings and 40 vs units - the first thing in the pack that breaks a base
 
@@ -232,6 +235,9 @@ herdable_roles = ["sheep"]
 animal_roles = ["sheep", "boar", "deer"]
 # What an animal yields while it is alive and what its body holds after (D69, D70).
 resource = "food"
+# The bodies: what a slaughtered animal becomes in place, and what may therefore be gathered from a thing
+# with no health. A carcass is a different unit id, not an inference (D70).
+carcass_roles = ["sheep_carcass", "boar_carcass", "deer_carcass"]
 
 [conquest]
 # What keeps a side in the match (D59). The original game's rule, from the manual, twice:

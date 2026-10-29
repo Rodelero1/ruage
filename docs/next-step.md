@@ -1103,3 +1103,23 @@ would be measuring a game we have not built yet.
 
 **The order that follows:** 1 and 2 are small and both close a hole I opened; 3 and 4 are the balance engine and are
 the first things that pay back the owner's stated goal; 5 is the acceptance test that uses 3.
+
+### Step three, part one: the slaughter (done, 2026-10-29)
+
+A herded animal that reaches its drop site becomes its body **in place** (unit 595/356/43, no health, meat
+intact) and the villager gathers from it. Content names the bodies; the sweep is taught to keep them. Seven animal
+tests pass.
+
+**Adversarial review of this change:**
+
+- **A per-tick table clone, found and removed.** The first sweep change cloned the entire unit table once per
+  tick to answer "is this a body"; the set now holds ids *and* families (six entries) so it costs a lookup.
+- **`hp == 0` no longer means "delete" for these units** - a rule the rest of the engine has to know. Anything
+  that treats zero health as gone (target selection, blast victims) already skips them, which is right: a body is
+  not a target.
+- **Still missing, and named:** an animal killed by anything but this slaughter is swept away with nothing left.
+  The last-blow carcass needs the killer, which melee knows and arrows do not - the same fact that parks
+  retaliation.
+- **Open questions kept:** a body belongs to Gaia, so anyone's villager can work an enemy's carcass (probably
+  right, unverified); a body never decays (`decay_rate` is imported and unread); and a body emptied of meat stays
+  on the map for ever.

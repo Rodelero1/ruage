@@ -1078,6 +1078,9 @@ pub struct World {
     /// The smaller list: animals that walk to a drop site when a villager works them, from
     /// `[hunt] herdable_roles`. A boar is food but not herdable (D70).
     herdable: BTreeSet<u32>,
+    /// Bodies: what a slaughtered animal becomes in place, from `[hunt] carcass_roles`. A carcass is gathered
+    /// from, and it is a named unit rather than an inference from having no health (D70).
+    carcasses: BTreeSet<u32>,
     /// Which families require which family to have been built once, resolved from `[build] requires`,
     /// with the requirement's role name kept for the message.
     requires_built: BTreeMap<u32, (u32, String)>,
@@ -1242,6 +1245,7 @@ impl World {
             build_queue: BTreeMap::new(),
             animals: BTreeSet::new(),
             herdable: BTreeSet::new(),
+            carcasses: BTreeSet::new(),
             requires_built: BTreeMap::new(),
             age_needs: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
@@ -1529,6 +1533,15 @@ impl World {
         for role in &economy.hunt.herdable_roles {
             if let Some(unit) = economy.role.get(role).copied() {
                 self.herdable.insert(units.root(unit));
+            }
+        }
+        self.carcasses.clear();
+        for role in &economy.hunt.carcass_roles {
+            if let Some(unit) = economy.role.get(role).copied() {
+                // Both the id and its family: the sweep runs per entity per tick and must not consult the
+                // unit table to answer "is this a body" (D70).
+                self.carcasses.insert(unit);
+                self.carcasses.insert(units.root(unit));
             }
         }
         self.conquest_classes.clear();
@@ -4381,12 +4394,13 @@ impl World {
         // units are animals, so the engine never learns what a sheep is. A body is not a source: only a
         // living animal yields, and what it leaves is the carcass rule's business (level 3 of this slice).
         if entity.kind == EntityKind::Unit
-            && entity.hp > 0
             && let Some(unit) = entity.unit
-            && self
-                .units
-                .as_ref()
-                .is_some_and(|units| self.animals.contains(&units.root(unit)))
+            && self.units.as_ref().is_some_and(|units| {
+                let root = units.root(unit);
+                // Alive, it is an animal; dead, it is a body - and a body is gathered from with no health at
+                // all, which is why the carcass list is content rather than an inference (D70).
+                self.animals.contains(&root) && entity.hp > 0 || self.carcasses.contains(&root)
+            })
         {
             let resource = economy
                 .hunt
@@ -5188,6 +5202,26 @@ impl World {
             let Some(drop_pos) = self.find(drop).map(|entity| entity.position) else {
                 continue;
             };
+            // Arrived: the villager kills it where it stopped (D70, the owner's rule - taking meat means the
+            // animal is dead). The body is the entity itself with a new unit id, so the gather task that names
+            // this id stays valid and the villager simply carries on with a carcass.
+            if self.tile_of(animal_pos) == self.tile_of(drop_pos) {
+                let body = self
+                    .find(animal)
+                    .and_then(|entity| entity.unit)
+                    .and_then(|unit| self.units.as_ref().and_then(|units| units.unit(unit)))
+                    .and_then(|stats| stats.dead_unit);
+                if let Some(body) = body {
+                    if let Some(entity) = self.find_mut(animal) {
+                        entity.unit = Some(body);
+                        entity.hp = 0;
+                        entity.speed = Fixed::ZERO;
+                        entity.task = Task::Idle;
+                    }
+                    self.paths.remove(&animal);
+                }
+                continue;
+            }
             let heading = matches!(
                 self.find(animal).map(|entity| entity.task),
                 Some(Task::Move { to }) if to == drop_pos
@@ -5661,9 +5695,16 @@ impl World {
                 .map(|entity| (entity.id, self.tile_of(entity.position)))
                 .collect()
         };
+        // A body is a unit with no health, and it must survive the pass that removes the dead (D70). The set
+        // holds ids as well as families, so this costs a lookup and no table walk: the first version cloned
+        // the whole unit table here, once per tick.
+        let bodies = self.carcasses.clone();
         self.entities.retain(|entity| {
-            let keep =
-                !matches!(entity.kind, EntityKind::Unit | EntityKind::Building) || entity.hp > 0;
+            let is_body = entity.kind == EntityKind::Unit
+                && entity.unit.is_some_and(|unit| bodies.contains(&unit));
+            let keep = !matches!(entity.kind, EntityKind::Unit | EntityKind::Building)
+                || entity.hp > 0
+                || is_body;
             if !keep {
                 buried.push(entity.id);
             }
