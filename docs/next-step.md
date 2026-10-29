@@ -834,3 +834,24 @@ Two consequences to get right, both testable:
   never had to notice a node moving; a herded sheep moves under the villager's feet.
 - **The villager is not idle while following.** It carries on gathering whenever it is adjacent, so the walk
   and the work interleave rather than alternating wholesale.
+
+### Who is allowed to make meat (owner, 2026-10-29)
+
+*"Also, sheep or any other food animal provides no food if killed by anybody else than villager."*
+
+So the meat is a property of **how the animal died**, not only of what it was. The rule, as it will be
+implemented: when an animal dies, its `dead_unit` becomes edible **only if the killer was a villager** - a
+villager of any player, including an enemy's, because the rule names the role and not the side. Killed by a
+soldier, an arrow, a tower or another animal, the body is still a body, and there is nothing in it.
+
+**Not verified against the game, and said plainly:** my recollection is that in AoE2 a carcass can be gathered
+whoever killed it, and that the "killed by a non-villager means no food" rule is the *first* game's. The
+owner's rule is what gets built - it is his game to specify - but it is exactly the sort of thing to check
+against HD when someone has the game open, so it is written here with the doubt attached rather than as
+settled fact.
+
+**Where it belongs in the code:** the death path already knows who dealt the last blow, because the outcome
+names the killer. The rule is one content switch - `[hunt] meat_requires_villager` - consulted when the corpse
+is created, so the engine asks content rather than knowing that a villager is special (D17). Testable in one
+assertion: the same sheep, killed by a soldier and by a villager, leaves bodies that differ in food and not in
+identity.
