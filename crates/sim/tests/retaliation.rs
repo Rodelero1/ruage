@@ -88,7 +88,12 @@ fn hp_of(world: &World, id: EntityId) -> i32 {
 //
 // The mechanic still wants doing; it wants a test whose attacker is unambiguous first - two units, no
 // buildings in range - rather than a boar parked beside a town centre.
-#[ignore = "retaliation: the test's premise is unproven - see the note above (D70)"]
+// STILL PARKED, with a sharper question than before. `a_villagers_knife_lands_on_a_sheep` proves the knife lands,
+// and this test now places the boar fourteen tiles out so nothing of the town centre can reach it - so the blow is
+// melee and attributable, and `retaliate` runs. The boar still does not turn within two hundred ticks of the blow,
+// and the `start_attack` in there fails silently: that failure is the next thing to look at, before anything else
+// in this file is trusted.
+#[ignore = "retaliation: the boar is struck by melee and does not turn - start_attack's refusal is unchecked (D70)"]
 #[test]
 fn a_struck_boar_turns_on_whoever_struck_it() {
     let Some(fx) = fixture() else {
@@ -127,11 +132,10 @@ fn a_struck_boar_turns_on_whoever_struck_it() {
             kind: EntityKind::Unit,
             unit: Some(boar_unit),
             position: (
-                // Eight tiles out, deliberately: the town centre shoots what comes near it, and a boar
-                // being shot by a building would test the arrow path - which cannot retaliate yet, because
-                // an arrow lands with its damage and not with its shooter.
-                Fixed::from_raw(centre.0.raw() + 8 * scale),
-                Fixed::from_raw(centre.1.raw() + 8 * scale),
+                // Fourteen tiles out, deliberately: at eight the town centre still shot it, so the blow
+                // being waited for was an arrow - and an arrow lands with its damage, not its archer.
+                Fixed::from_raw(centre.0.raw() + 14 * scale),
+                Fixed::from_raw(centre.1.raw() + 14 * scale),
             ),
             speed: Fixed::from_raw(scale / 2),
             hp: 75,
@@ -150,7 +154,7 @@ fn a_struck_boar_turns_on_whoever_struck_it() {
 
     // The villager has to walk in and land a blow first: retaliation is a reaction, not a stance.
     let mut struck = false;
-    for _ in 0..2_000 {
+    for _ in 0..3_000 {
         world.step().expect("stepping");
         if hp_of(&world, boar) < 75 {
             struck = true;
@@ -230,5 +234,78 @@ fn an_animal_that_was_never_struck_stays_idle() {
     assert!(
         !matches!(task_of(&world, boar), Some(Task::Attack { .. })),
         "a boar nobody has touched has no quarrel with anyone"
+    );
+}
+
+/// The premise everything downstream rests on: **a villager's knife lands**. If this fails, the slaughter, the
+/// carcass and the last-blow rule have nothing under them.
+///
+/// The sheep is placed twelve tiles from the town centre on purpose: closer, and the town centre shoots it, and
+/// the blow that lands is an arrow - which is exactly the confusion the instrumented run exposed.
+#[test]
+fn a_villagers_knife_lands_on_a_sheep() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let sheep_unit = world.role_unit("sheep").expect("a sheep role");
+    let scale = world.scale();
+    let centre = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Building)
+        .expect("a town centre")
+        .position;
+    let villager = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
+        .expect("a villager")
+        .id;
+
+    let sheep = EntityId(
+        world
+            .entities()
+            .iter()
+            .map(|entity| entity.id.0)
+            .max()
+            .unwrap_or(0)
+            + 1,
+    );
+    world
+        .submit_checked(Command::Spawn {
+            id: sheep,
+            player: 0,
+            kind: EntityKind::Unit,
+            unit: Some(sheep_unit),
+            position: (
+                Fixed::from_raw(centre.0.raw() + 12 * scale),
+                Fixed::from_raw(centre.1.raw() + 12 * scale),
+            ),
+            speed: Fixed::from_raw(scale / 2),
+            hp: 7,
+            amount: 100 * u32::try_from(scale).expect("fits"),
+        })
+        .expect("a sheep");
+    world.step().expect("one tick");
+
+    world
+        .submit_checked(Command::Attack {
+            attacker: villager,
+            target: sheep,
+        })
+        .expect("the villager can be sent at the sheep");
+
+    let mut struck = false;
+    for _ in 0..3_000 {
+        world.step().expect("stepping");
+        if hp_of(&world, sheep) < 7 {
+            struck = true;
+            break;
+        }
+    }
+    assert!(
+        struck,
+        "the villager walked there and never struck: its blow either never lands or is not melee"
     );
 }

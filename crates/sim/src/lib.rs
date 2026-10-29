@@ -2805,6 +2805,36 @@ impl World {
     /// "Is this a building?" is answered from the data rather than a hard-coded class list: a
     /// building has no speed and a positive creation time. A unit with a speed walks; a unit with
     /// no creation time cannot be put up.
+    /// An animal takes being struck as an order: it turns on whoever hit it (D70). Nothing else does - a
+    /// villager shot at keeps gathering, which is the game's rule and not an oversight here.
+    fn retaliate(&mut self, victim: EntityId, attacker: EntityId) {
+        if attacker == victim {
+            return;
+        }
+        let Some(victim_unit) = self
+            .find(victim)
+            .filter(|entity| entity.hp > 0)
+            .and_then(|entity| entity.unit)
+        else {
+            return;
+        };
+        let is_animal = self.units.as_ref().is_some_and(|units| {
+            let root = units.root(victim_unit);
+            self.animals.contains(&root)
+        });
+        if !is_animal {
+            return;
+        }
+        // Already fighting this one back: re-issuing would reset its cooldown on every blow.
+        if matches!(
+            self.find(victim).map(|entity| entity.task),
+            Some(Task::Attack { target, .. }) if target == attacker
+        ) {
+            return;
+        }
+        let _ = self.start_attack(victim, attacker);
+    }
+
     fn start_build(
         &mut self,
         villager: EntityId,
@@ -5380,6 +5410,8 @@ impl World {
             if let Some(victim) = self.find_mut(target) {
                 victim.hp -= landed;
             }
+            // A blow is an order to an animal (D70): it turns on whoever struck it.
+            self.retaliate(target, attacker);
             let blast = source
                 .3
                 .and_then(|unit| self.blast.get(&unit).copied())
