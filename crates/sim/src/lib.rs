@@ -1116,6 +1116,17 @@ pub struct World {
     /// Bodies: what a slaughtered animal becomes in place, from `[hunt] carcass_roles`. A carcass is gathered
     /// from, and it is a named unit rather than an inference from having no health (D70).
     carcasses: BTreeSet<u32>,
+    /// Animal unit -> the body it leaves, from the pack's own `dead_unit`. Resolved at seed so a death in the
+    /// tick needs a map lookup and not a table read (item 2, D70/D71).
+    animal_bodies: BTreeMap<u32, u32>,
+    /// Unit families whose **last** blow leaves meat: `[hunt] butcher_roles`. Held as ids *and* families, so the
+    /// tick needs no table walk to answer it (D70).
+    butchers: BTreeSet<u32>,
+    /// Animals that carry an attack, ids and families: only these answer a blow with one (item 3).
+    armed_animals: BTreeSet<u32>,
+    /// A shepherd's kill in progress: villager -> the animal it was sent to work and is now striking. The gather
+    /// order is replaced by the fight, so it is remembered here to be resumed on the body (D70, item 3).
+    slaughter: BTreeMap<EntityId, EntityId>,
     /// Which families require which family to have been built once, resolved from `[build] requires`,
     /// with the requirement's role name kept for the message.
     requires_built: BTreeMap<u32, (u32, String)>,
@@ -1300,6 +1311,10 @@ impl World {
             animals: BTreeSet::new(),
             herdable: BTreeSet::new(),
             carcasses: BTreeSet::new(),
+            animal_bodies: BTreeMap::new(),
+            butchers: BTreeSet::new(),
+            armed_animals: BTreeSet::new(),
+            slaughter: BTreeMap::new(),
             requires_built: BTreeMap::new(),
             age_needs: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
@@ -1589,7 +1604,23 @@ impl World {
         self.animals.clear();
         for role in &economy.hunt.animal_roles {
             if let Some(unit) = economy.role.get(role).copied() {
+                // The id as well as the family: the tick asks "is this a living animal" per worker per tick and
+                // must not walk the unit table to answer it (item 3).
+                self.animals.insert(unit);
                 self.animals.insert(units.root(unit));
+            }
+        }
+        // Animals that can fight back. A sheep cannot, so being struck is not a refusal for it - it is simply an
+        // animal that has no quarrel (item 3).
+        self.armed_animals.clear();
+        for role in &economy.hunt.animal_roles {
+            if let Some(unit) = economy.role.get(role).copied()
+                && units
+                    .unit(unit)
+                    .is_some_and(|stats| !stats.attacks.is_empty())
+            {
+                self.armed_animals.insert(unit);
+                self.armed_animals.insert(units.root(unit));
             }
         }
         self.herdable.clear();
@@ -1605,6 +1636,32 @@ impl World {
                 // unit table to answer "is this a body" (D70).
                 self.carcasses.insert(unit);
                 self.carcasses.insert(units.root(unit));
+            }
+        }
+        // What death leaves: each animal's `dead_unit`, and which roles make meat with their last blow. Both are
+        // resolved here so the tick reads two maps and no table (item 2).
+        self.animal_bodies.clear();
+        for role in economy
+            .hunt
+            .animal_roles
+            .iter()
+            .chain(&economy.hunt.herdable_roles)
+        {
+            if let Some(unit) = economy.role.get(role).copied() {
+                let body = units.unit(unit).and_then(|stats| stats.dead_unit);
+                // A body the pack cannot name is a lookup that finds nothing, not an error: 640 records name a
+                // body no civ has (D69). Such an animal is simply swept away as it was before.
+                if let Some(body) = body.filter(|body| units.unit(*body).is_some()) {
+                    self.animal_bodies.insert(unit, body);
+                    self.animal_bodies.insert(units.root(unit), body);
+                }
+            }
+        }
+        self.butchers.clear();
+        for role in &economy.hunt.butcher_roles {
+            if let Some(unit) = economy.role.get(role).copied() {
+                self.butchers.insert(unit);
+                self.butchers.insert(units.root(unit));
             }
         }
         // The leash (D71): content's two numbers, resolved once into ticks and engine units, so the tick
@@ -1972,7 +2029,20 @@ impl World {
         };
         let room = i64::from(carry_cap) * self.scale - worker.carry.raw();
         // `worker` is the villager; the quantity to bound against belongs to a different entity.
-        let left_in_node = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
+        let Some(node_entity) = self.find(node) else {
+            return 0;
+        };
+        // **Meat implies death** (the owner's rule, D70): a live animal's `amount` is what its *body* will hold, not
+        // something it is standing on, so the work while it walks is following and the take is nothing. Without this
+        // the villager ate the sheep on the way home and the slaughter was theatre (item 3).
+        if node_entity.hp > 0
+            && node_entity
+                .unit
+                .is_some_and(|unit| self.animals.contains(&unit))
+        {
+            return 0;
+        }
+        let left_in_node = node_entity.amount.raw();
         rate_per_tick.raw().min(room).min(left_in_node).max(0)
     }
 
@@ -2874,6 +2944,63 @@ impl World {
         })
     }
 
+    /// Death leaves a body: an animal at or below zero health becomes its `dead_unit` **in place**, and it holds
+    /// its meat only if the last blow was a butcher's (D70, item 2).
+    ///
+    /// In place, and on the same id, because the gatherer's task names that id: a villager working a sheep carries
+    /// on with the carcass without a re-target, which is the whole reason the slaughter transform was shaped this
+    /// way. Health, speed, velocity and the variant all go - a body is not a unit that may move or be attacked.
+    fn promote_dead_animals(&mut self, blows: &[(EntityId, EntityId)]) {
+        if self.animal_bodies.is_empty() || blows.is_empty() {
+            return;
+        }
+        // Only this tick's victims can have died on this tick, so the candidates are a handful rather than the
+        // whole entity list: a pass over every entity per tick is exactly the shape a review exists to catch.
+        let mut seen: Vec<EntityId> = Vec::new();
+        for (victim, _) in blows.iter().rev() {
+            if seen.contains(victim) {
+                continue;
+            }
+            seen.push(*victim);
+            let Some(index) = self.entities.iter().position(|entity| entity.id == *victim) else {
+                continue;
+            };
+            let (hp, unit, amount, kind) = {
+                let entity = &self.entities[index];
+                (entity.hp, entity.unit, entity.amount, entity.kind)
+            };
+            if kind != EntityKind::Unit || hp > 0 {
+                continue;
+            }
+            let Some(body) = unit.and_then(|unit| self.animal_bodies.get(&unit).copied()) else {
+                continue;
+            };
+            // The last blow decides: a soldier's or a tower's kill leaves a body with nothing in it.
+            let killer = blows
+                .iter()
+                .rev()
+                .find(|(id, _)| id == victim)
+                .map(|(_, attacker)| *attacker);
+            let butchered = killer.is_some_and(|killer| {
+                self.find(killer)
+                    .and_then(|entity| entity.unit)
+                    .is_some_and(|unit| self.butchers.contains(&unit))
+            });
+            let id = *victim;
+            let entity = &mut self.entities[index];
+            entity.unit = Some(body);
+            entity.amount = if butchered { amount } else { Fixed::ZERO };
+            entity.hp = 0;
+            entity.speed = Fixed::ZERO;
+            entity.velocity = (Fixed::ZERO, Fixed::ZERO);
+            entity.variant = None;
+            entity.task = Task::Idle;
+            // Bookkeeping goes with the animal: a body chases nothing and walks nowhere.
+            self.paths.remove(&id);
+            self.leash.remove(&id);
+        }
+    }
+
     /// Start a building: check the price, pay it, place the site and send the builder.
     ///
     /// "Is this a building?" is answered from the data rather than a hard-coded class list: a
@@ -2897,6 +3024,11 @@ impl World {
             self.animals.contains(&root)
         });
         if !is_animal {
+            return;
+        }
+        // A sheep has nothing to answer with, and trying would record an `Unarmed` refusal for every slaughtered
+        // animal - noise that would bury the refusals that matter (item 3).
+        if !self.armed_animals.contains(&victim_unit) {
             return;
         }
         // Already fighting this one back: re-issuing would reset its cooldown on every blow.
@@ -4147,6 +4279,7 @@ impl World {
             + self.resuming.len()
             + self.stances.len()
             + self.leash.len()
+            + self.slaughter.len()
     }
 
     /// Whether any side table still remembers `id`. The removal tests use it to prove a dead entity
@@ -4161,6 +4294,8 @@ impl World {
             || self.stances.contains_key(&id)
             || self.build_queue.contains_key(&id)
             || self.leash.contains_key(&id)
+            || self.slaughter.contains_key(&id)
+            || self.slaughter.values().any(|animal| *animal == id)
     }
 
     /// How many units this building is making: the one in progress plus everything queued behind it.
@@ -4973,6 +5108,10 @@ impl World {
         let mut deposits: Vec<EntityId> = Vec::new();
         let mut builders: Vec<(EntityId, EntityId)> = Vec::new();
         let mut strikes: Vec<(EntityId, EntityId)> = Vec::new();
+        // Who hit whom this tick, in order: the last blow decides the meat, and the blow that kills is always one
+        // of this tick's (a victim at or below zero health is promoted before the tick ends). Nothing is carried
+        // between ticks, nothing is hashed, and it is empty in any world where nobody is fighting (item 2).
+        let mut blows: Vec<(EntityId, EntityId)> = Vec::new();
         // Arrows that landed this tick. They are entities, so they leave the list rather than being
         // turned idle: an idle arrow would sit in the world forever.
         let mut landed_arrows: Vec<EntityId> = Vec::new();
@@ -5005,10 +5144,13 @@ impl World {
                 } => {
                     let Some((victim, victim_unit)) = self
                         .find(target)
-                        .filter(|v| !matches!(v.kind, EntityKind::Resource(_)))
+                        // A tree cannot bleed, and a **body** cannot be fought: a carcass keeps the entity's
+                        // id, so "the target is gone" stopped being how a fight with an animal ends (item 2).
+                        // Without this an army swings at a corpse for the rest of the match.
+                        .filter(|v| !matches!(v.kind, EntityKind::Resource(_)) && v.hp > 0)
                         .map(|v| (v.position, v.unit))
                     else {
-                        // The target is gone. The attacker stands down on the next tick.
+                        // The target is gone - or is now a body. The attacker stands down on the next tick.
                         finished.push(entity.id);
                         continue;
                     };
@@ -5426,23 +5568,18 @@ impl World {
             let Some(drop_pos) = self.find(drop).map(|entity| entity.position) else {
                 continue;
             };
-            // Arrived: the villager kills it where it stopped (D70, the owner's rule - taking meat means the
-            // animal is dead). The body is the entity itself with a new unit id, so the gather task that names
-            // this id stays valid and the villager simply carries on with a carcass.
+            // Arrived: the shepherd **strikes** it where it stopped (D70, the owner's correction: *"shepherd has
+            // to kill the animal. It doesn't change to corpse itself."*). The kill is an ordinary attack, so the
+            // blow carries its attacker and the last-blow rule decides the meat; death promotes the animal to its
+            // body in place, and the gather order is resumed on that body below. Arriving is not killing.
             if self.tile_of(animal_pos) == self.tile_of(drop_pos) {
-                let body = self
-                    .find(animal)
-                    .and_then(|entity| entity.unit)
-                    .and_then(|unit| self.units.as_ref().and_then(|units| units.unit(unit)))
-                    .and_then(|stats| stats.dead_unit);
-                if let Some(body) = body {
-                    if let Some(entity) = self.find_mut(animal) {
-                        entity.unit = Some(body);
-                        entity.hp = 0;
-                        entity.speed = Fixed::ZERO;
-                        entity.task = Task::Idle;
-                    }
-                    self.paths.remove(&animal);
+                self.slaughter.insert(villager, animal);
+                let already = matches!(
+                    self.find(villager).map(|entity| entity.task),
+                    Some(Task::Attack { target, .. }) if target == animal
+                );
+                if !already && let Err(error) = self.start_attack(villager, animal) {
+                    self.refusal = Some((villager, error, self.tick));
                 }
                 continue;
             }
@@ -5457,6 +5594,44 @@ impl World {
                 }
             }
             self.paths.remove(&villager);
+        }
+        // A shepherd whose blow has landed goes back to the work it was sent to do: the animal it was gathering is
+        // now a body, and the gather order resumes on the same id (D70, item 3).
+        if !self.slaughter.is_empty() {
+            let pairs: Vec<(EntityId, EntityId)> = self
+                .slaughter
+                .iter()
+                .map(|(one, other)| (*one, *other))
+                .collect();
+            for (villager, animal) in pairs {
+                let idle = matches!(
+                    self.find(villager).map(|entity| entity.task),
+                    Some(Task::Idle)
+                );
+                if !idle {
+                    continue;
+                }
+                match self.find(animal).map(|entity| entity.hp) {
+                    // Dead: the body is waiting to be worked.
+                    Some(hp) if hp <= 0 => {
+                        if let Err(error) = self.start_gather(villager, animal) {
+                            self.refusal = Some((villager, error, self.tick));
+                        }
+                        self.slaughter.remove(&villager);
+                    }
+                    // Still alive and no longer swinging: try again, and give up on the entry if it will not start
+                    // (a refusal is recorded; re-issuing it every tick would only bury it).
+                    Some(_) => {
+                        if let Err(error) = self.start_attack(villager, animal) {
+                            self.refusal = Some((villager, error, self.tick));
+                            self.slaughter.remove(&villager);
+                        }
+                    }
+                    None => {
+                        self.slaughter.remove(&villager);
+                    }
+                }
+            }
         }
         // Deposit whole resources; the fraction stays in hand. Dropping the remainder instead
         // would quietly destroy a slice of every trip.
@@ -5622,6 +5797,7 @@ impl World {
             if let Some(victim) = self.find_mut(target) {
                 victim.hp -= landed;
             }
+            blows.push((target, attacker));
             // A blow is an order to an animal (D70): it turns on whoever struck it.
             self.retaliate(target, attacker);
             let blast = source
@@ -5873,6 +6049,7 @@ impl World {
                 && reachable
             {
                 victim.hp -= damage;
+                blows.push((target, shooter));
                 struck = true;
             }
             // A shot is an order to an animal just as a knife is: whoever loosed it is now its quarry.
@@ -5885,6 +6062,7 @@ impl World {
                 if let Some(entity) = self.find_mut(victim) {
                     entity.hp -= damage;
                 }
+                blows.push((victim, shooter));
                 self.retaliate(victim, shooter);
                 ejected.push(victim);
             }
@@ -5954,6 +6132,10 @@ impl World {
                 .map(|entity| (entity.id, self.tile_of(entity.position)))
                 .collect()
         };
+        // An animal that died of a blow leaves its body where it stood, and the body keeps the entity's id so the
+        // gatherer's task stays valid across the blow (D70). Done before the sweep, which then keeps it because its
+        // unit is a named carcass (item 2).
+        self.promote_dead_animals(&blows);
         // A body is a unit with no health, and it must survive the pass that removes the dead (D70). The set
         // holds ids as well as families, so this costs a lookup and no table walk: the first version cloned
         // the whole unit table here, once per tick.
@@ -6003,6 +6185,8 @@ impl World {
             self.stances.remove(&id);
             self.build_queue.remove(&id);
             self.leash.remove(&id);
+            self.slaughter.remove(&id);
+            self.slaughter.retain(|_, animal| *animal != id);
         }
 
         // A seat can only disappear by dying, so the match is only ever decided on a tick where
@@ -6497,6 +6681,11 @@ impl World {
             fnv_bytes(&mut hash, &id.0.to_le_bytes());
             fnv_bytes(&mut hash, &other.0.raw().to_le_bytes());
             fnv_bytes(&mut hash, &other.1.raw().to_le_bytes());
+        }
+        for (villager, animal) in &self.slaughter {
+            fnv_bytes(&mut hash, b"slaughter");
+            fnv_bytes(&mut hash, &villager.0.to_le_bytes());
+            fnv_bytes(&mut hash, &animal.0.to_le_bytes());
         }
         for (id, leash) in &self.leash {
             fnv_bytes(&mut hash, b"leash");

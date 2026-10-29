@@ -1219,3 +1219,102 @@ strikes an animal; the scenario/probe hashes must be re-recorded when next they 
 **What is still not right, named rather than glossed:** blast damage retaliates (the shooter is known now) but a
 *body* cannot, and nothing stops a boar chasing into a wall - it plans a route and gives up only if there is none.
 The leash numbers are judgement calls, not game numbers; a balance run is what will tune them.
+
+## Item 2 - the last blow leaves the body (2026-10-29)
+
+*Compact before the code.*
+
+**Verified:** every animal names its body in the pack (`dead_unit`: sheep 594 -> 595, boar 48 -> 356, deer 65 ->
+43), and the body's own record is a plain unit (`SHEEP_D` class 11, `hp = 0`, `food = 0`, `decay_rate = 1.0`). A
+blow now carries its attacker on **both** damage paths (D71), which is the fact this item was waiting for. The
+sweep already keeps an entity whose unit id is one of `[hunt] carcass_roles`, so a body that exists is not swept.
+
+**Assumed from the owner, and only from him:** the **last blow** decides the meat - soldiers may soften the animal
+and arrows may stick in it, and a villager's final hit still leaves 340 on a boar; anything else's last blow leaves
+a body with nothing in it. The dat has no field for this.
+
+**Unknown, and content's to answer:** *which* roles count as "a villager". That is a role list, not a hard-coded
+id: `[hunt] butcher_roles = ["villager"]`, resolved to unit families at seed like every other content list.
+
+**What is built:** death by damage promotes the animal **in place** to its body - same id, no health, meat kept
+only when the killer is a butcher, task idle, no motion - because the gatherer's task names the id and must stay
+valid across the blow (D70). The killer is recorded per tick (`last_blow`, a `Vec` of `(victim, attacker)` filled
+by both damage sites), because the blow that kills is always the blow of the tick it dies on; nothing is carried
+between ticks and nothing new is hashed.
+
+**Tests this owes:** a villager's last blow leaves the meat; a soldier's last blow leaves an empty body; and a
+soldier who *softens* the boar does not take the meat once a villager finishes it.
+
+## Item 3 - the shepherd kills, and meat only comes out of a body (2026-10-29)
+
+*Compact before the code.*
+
+**The owner's correction, verbatim:** *"No, shepherd has to kill the animal. It doesn't change to corpse itself."*
+So arriving at the drop site is not the kill. What is built today is the right body with the wrong trigger: the
+herding pass promotes the animal the moment it reaches the drop site (a corpse without a blow).
+
+**And a second thing the same rule forbids, which the code does today:** a villager gathering a **live** animal
+takes meat out of it (`take_amount` reads the node's `amount`, and a live animal carries its meat). *Meat implies
+death* (the owner's rule), so a live animal must yield **nothing** while it is being herded; the work during the
+walk is following, not taking.
+
+**The shape:** on arrival at the drop site the villager is **ordered to attack** the animal (the ordinary combat
+path, so the blow carries its attacker and the last-blow rule already decides the meat), the animal dies of that
+damage, and death promotes it to its body in place (item 2). Then the gather order **resumes on the same id** -
+recorded in a side table `slaughter: villager -> animal` - because the villager's original `Gather` task was
+replaced by the fight and the body is what it should be working.
+
+**Numbers, verified from the pack:** a sheep is 7 hp and a villager's blow is 3 damage at a 2 s reload, so three
+blows (six seconds) kill it. The villager stands adjacent, which is where gathering put it.
+
+**Tests this owes:** a live animal yields no meat (a villager beside a boar carries nothing while it lives); the
+shepherd strikes before the body exists (the villager's task is an attack on the sheep, and the sheep's health falls
+while it is still a sheep); and the gathering resumes on the body once the animal is dead.
+
+### Item 2, review: what the body cost (2026-10-29)
+
+**Landed:** death by damage promotes an animal in place to its `dead_unit`; the last blow decides the meat
+(`[hunt] butcher_roles`); the killer is collected per tick from both damage paths.
+
+**Performance.** The first version walked **every entity every tick** to find the dead - the same shape as the
+per-tick unit-table clone the previous session's review caught. It now runs only on a tick where blows landed, and
+only over this tick's *victims*: one lookup per corpse, nothing on a quiet tick, and nothing added to `Entity`.
+
+**Stability.** Nothing new is hashed: the killer record is a local `Vec` in `step`, empty in any world where nobody
+is fighting. The promoted body keeps its id, so every task that names it stays valid - which is the property the
+gatherer depends on.
+
+**The defect the review found in my own change, fixed test-first:** with the body now surviving the sweep, "the
+target is gone" stopped being how a fight with an animal ends, so an army would have swung at a corpse for the rest
+of the match. `an_attacker_stops_swinging_once_its_quarry_is_a_body` failed before the fix (the attack phase now
+requires a target with health) and passes after it.
+
+**The trap in the fixtures, recorded because it will recur:** `Command::Spawn`'s `amount` is in **whole units** and
+scales itself, so a fixture passing `340 * scale` builds a 340-food boar worth 340 x scale x scale. Both new
+fixtures had it; the assertion caught it at 136,000,000,000 against 6,800,000.
+
+### Item 3, review: the slaughter is a real kill (2026-10-29)
+
+**Landed:** on arrival the villager attacks; the animal dies of the blow; the gather order resumes on the body;
+a live animal yields nothing.
+
+**Performance.** No per-tick scan: the herding pass already visits the workers that are gathering an animal, and the
+resume pass costs one map walk that is empty unless a slaughter is in flight. `take_amount` gained one set lookup
+(the animal id is now in `animals` alongside its family precisely so this costs no table read).
+
+**Stability.** `slaughter` is hashed (it decides what the villager does next), joins the bookkeeping tables, and is
+dropped in both directions when either side dies - a dead villager cannot leave its animal behind, and a dead animal
+cannot leave a stale resume behind. No new `Entity` field.
+
+**Two of my own defects, both caught by running rather than by reading:**
+
+1. **The animals fixture never loaded `combat.toml`**, so `check_attack` refused every slaughter with `NoTables` and
+   the villager stood beside a living sheep for 2,000 ticks. Item 1's refusal record named it on the first run.
+2. **A test assertion that was too strict**: it demanded "the villager is swinging *and* the animal is alive" at
+   every tick the task was an attack - but the attack task lingers one tick past the killing blow, so it fired on
+   the tick the body appeared. The assertion now has to see both facts on the *same* tick, which is what the rule
+   means.
+
+**Named as still open:** the villager's first blow lands the moment it is ordered (it is already adjacent), so the
+shepherd spends six seconds beside a sheep; a real one would not need to wait, but the reload is the data's, and
+three blows is what a 7-hp sheep needs.

@@ -64,6 +64,9 @@ pub struct Hunt {
     /// How far from where it was first struck an animal will chase, in whole tiles (D71). Authored for the
     /// same reason: `BOARX` has a line of sight (4.0) and no notion of giving up.
     pub leash_tiles: Option<u32>,
+    /// Roles whose **last** blow leaves meat in the body (D70). Roles, not ids - the engine never learns that a
+    /// villager is 83 - and an empty list means every kill leaves its meat.
+    pub butcher_roles: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -249,6 +252,8 @@ struct RawHunt {
     leash_seconds: Option<u32>,
     #[serde(default)]
     leash_tiles: Option<u32>,
+    #[serde(default)]
+    butcher_roles: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -671,6 +676,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             carcass_roles: raw.hunt.carcass_roles,
             leash_seconds: raw.hunt.leash_seconds,
             leash_tiles: raw.hunt.leash_tiles,
+            butcher_roles: raw.hunt.butcher_roles,
         },
         conquest: Conquest {
             surviving_classes: raw.conquest.surviving_classes,

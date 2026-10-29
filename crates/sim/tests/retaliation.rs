@@ -360,7 +360,8 @@ fn place(
             // At rest: a spawned body carrying a velocity walks east for ever (D64).
             speed: Fixed::ZERO,
             hp,
-            amount: meat * u32::try_from(scale).expect("fits"),
+            // Whole units: `Command::Spawn` scales `amount` itself (D70).
+            amount: meat,
         })
         .expect("the unit can be placed");
     world.step().expect("one tick");

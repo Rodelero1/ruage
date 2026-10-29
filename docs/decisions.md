@@ -1882,3 +1882,51 @@ entry lives in `World.leash`, keyed by id, only for animals that have been struc
   runs out, and only then walks home. That standstill *is* the garrison lure's window.
 - **Bookkeeping:** the leash joins `bookkeeping_entries`/`bookkeeping_touches` and is dropped with the entity, so a
   dead animal leaves nothing behind; and it is hashed when present, because where an animal will go is state.
+
+**D70, increment four: the last blow leaves the body (item 2, 2026-10-29).** Death by damage now promotes an
+animal **in place** to its `dead_unit` - same id, no health, no speed, no variant, idle - so the gatherer's task
+stays valid across the blow, which is the shape the slaughter transform already had and the reason to keep it. What
+is new is *what decides the meat*: the killer of the **last** blow, and nothing about the wound history.
+
+- **The killer is per tick, not per entity.** The blow that kills is always a blow of the tick the animal dies on
+  (a victim at or below zero health is promoted before that tick ends), so `step` collects `(victim, attacker)` for
+  every blow this tick and the promotion reads the last entry for its victim. Nothing is carried between ticks,
+  nothing new is hashed, and the vector is empty in any world where nobody is fighting.
+- **"A villager" is content, not an id**: `[hunt] butcher_roles = ["villager"]`, resolved to families at seed and
+  held as ids *and* families so the tick needs no table walk. An empty list means every kill leaves its meat.
+- **A body the pack cannot name** (640 records point at one no civ has, D69) means no promotion at all: the animal
+  is swept away exactly as before, which is a lookup that finds nothing rather than an error.
+- **A body is not a fight.** With the body surviving the sweep, "the target is gone" stopped being how a fight with
+  an animal ends: an army would have swung at a corpse for the rest of the match. The attack phase now requires a
+  target with health, and a test pins it (`an_attacker_stops_swinging_once_its_quarry_is_a_body`, which failed
+  before the filter existed).
+- **Cost, stated:** promotion runs only on a tick where blows landed and walks only those victims; it does not scan
+  the entity list. A first version did exactly that (a full pass per tick), and the review caught it before commit.
+
+**D70, increment five: the shepherd kills, and a live animal yields nothing (item 3, 2026-10-29).** The owner's
+correction - *"shepherd has to kill the animal. It doesn't change to corpse itself"* - had two halves, and only one
+of them was about the transform.
+
+1. **Arriving is not killing.** On arrival at the drop site the villager is now **ordered to attack** the animal:
+   the ordinary combat path, so the blow carries its attacker (D71), the animal dies of that damage, and death
+   promotes it to its body in place (increment four), where the villager's next blow is not needed and the meat is
+   already decided. A sheep is 7 hp against a villager's 3 damage at a 2 s reload: three blows, six seconds.
+2. **Meat implies death, and the gather pass was breaking that rule.** `take_amount` read the node's `amount`, and a
+   **live** animal carries its meat - so a villager following a sheep home was eating it on the walk. A live animal
+   now yields **nothing**: the work during the walk is following. That is what makes the slaughter a mechanic rather
+   than a formality, and it is pinned by `a_live_animal_yields_no_meat`.
+
+**The gather order survives the fight.** Combat replaces `Task::Gather`, so the pair is remembered in
+`slaughter: villager -> animal`; each tick, a villager in that map whose task has ended is sent back to the same id
+once it is a body. Because the body **keeps the entity's id**, that resume is an ordinary gather order on a node
+that is now a carcass - no re-target machinery, and no window in which a load can be stolen.
+
+**An animal that cannot fight does not try.** `armed_animals` (ids and families, resolved at seed from the pack's
+own attack lists) gates retaliation: a struck sheep has no answer, and attempting one would record an `Unarmed`
+refusal for every slaughtered animal - noise that would bury the refusals that matter. Mutation-proved: removing the
+guard fails the shepherd test on its refusal assertion.
+
+**A fixture defect the new refusal record exposed:** the animals fixture never called `load_combat`, so every
+slaughter refused with `NoTables` and the villager stood beside a living sheep for 2,000 ticks. The refusal was
+readable the moment it existed - the previous session's silent `let _ =` is exactly why this class of bug used to
+take an evening.

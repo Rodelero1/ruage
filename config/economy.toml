@@ -247,6 +247,11 @@ carcass_roles = ["sheep_carcass", "boar_carcass", "deer_carcass"]
 # typically 10-20 tiles, and `leash_tiles` must be larger than the distance a lure has to cover.
 leash_seconds = 10
 leash_tiles = 12
+# Whose blow leaves meat in the body (D70, the owner's rule: *"Villager has to be the one delivering last blow"*).
+# Soldiers may soften the animal and arrows may stick in it; only this role's *last* blow leaves the carcass worth
+# eating. Roles, not ids: the engine never learns that a villager is 83 (D17). An empty list means every kill
+# leaves its meat, which is what a pack that says nothing gets.
+butcher_roles = ["villager"]
 
 [conquest]
 # What keeps a side in the match (D59). The original game's rule, from the manual, twice:
