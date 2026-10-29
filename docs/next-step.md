@@ -983,3 +983,31 @@ the reverted code:
 is unambiguous; then find which of the four `hp -=` sites in the tick actually delivers a melee blow, with a
 print at each, before writing the reaction. The mechanic is still wanted - a boar that does not fight back is
 scenery - but the ordering was wrong: identify the damage path first, write the test second.
+
+### The retaliation test's premise, proved wrong by instrumentation (2026-10-29)
+
+Owner's rule, which the instrumentation then confirmed on screen: *"If Town Centre kills the boar, it doesn't leave
+the carcass with food. Villager has to be the one delivering last blow."*
+
+Printing at both damage sites and running the parked test settled it: the boar was struck **only** by arrows -
+
+```
+ARROW target=EntityId(127) dmg=3   (six times)
+MELEE ...                          (never)
+```
+
+so the town centre shot it, exactly as the owner said it would, and the villager **never landed a single blow** in
+two thousand ticks despite being ordered to attack at eight tiles' distance. Two consequences:
+
+1. The retaliation test was invalid from the start, for the reason now visible rather than guessed: the only
+   attacker was a building, and an arrow carries no attacker.
+2. **A villager ordered to attack an animal may not strike at all.** That is either a pathing problem (it never
+   arrived) or a targeting rule (player 0 is not a valid victim for a villager) - and it matters, because the
+   owner's rule makes the *villager's own blow* the thing that decides whether a carcass holds food. Find out which
+   before building the slaughter: if a villager cannot strike an animal, the slaughter has to be an act of its own
+   rather than a very small fight.
+
+**The damage path, for the record:** melee blows land in the `strikes` loop (`victim.hp -= landed`, which knows its
+attacker); arrows land in the `landings` loop (`victim.hp -= damage`, which does **not** - `Task::Fly` carries the
+target, not the shooter). Anything that needs to know who killed something must either take the melee path or the
+arrow must start carrying its archer.
