@@ -2024,3 +2024,35 @@ centre instead - a target a walk can always reach, and a scratch on the wall tea
 
 Nothing is built against this yet: items 10-14 (animation data, asset pack, sprites, terrain, camera) come first,
 because a window onto rectangles is not the milestone the owner asked for.
+
+## D75 - Rules and shares: the two things the game's own AI does, now done here
+
+*Read from the install, not guessed: `docs/ai-of-the-game.md`. The acceptance script had been a list of timestamps for
+months of game time; HD's own AI never writes one.*
+
+**(1) `[[rule]]`: a condition and one action, re-evaluated.** `Economy/Dark Age.per` trains a villager while food is
+under 400 **or** villagers under 28, and advances the age at 28 villagers with `can-research`. Every guard is a count, an
+amount, a `can-*` predicate or an age. Ours is now the same shape: `when` (villager count, buildings present or absent,
+a researched or un-researched tech, stock thresholds, housing headroom, a unit present) and one `do` action, with a
+cooldown so a satisfied condition is an order rather than a flood. `at_seconds` still exists and is the weaker half -
+it holds a rule back, it does not schedule one.
+
+**It is additive, and the schema stays 2.** A v2 file without rules means exactly what it did, and the schema number is
+for changes that *break* a file. `step` became optional in the same spirit: a scenario that is only rules is legal.
+
+**(2) `[policy]`: shares, not assignments.** `Low-pop Villager Distribution.per` is 76 `set-strategic-number` lines and
+no orders: at ≤8 villagers food is 100%, and wood takes 12/20/28/34% at 9/10/11/12 villagers. `config/economy.toml` now
+carries HD's whole 19-row table (every row sums to 100, which the loader **refuses** to accept otherwise), and the engine
+moves idle villagers to meet the row that applies.
+
+**What the engine will not do: fight the player.** It moves a villager only when that villager is idle - and "idle"
+includes the state 0 A.D. calls `FINDINGNEWTARGET`: standing at a dead node with nothing in hand. That state is the one
+this economy used to freeze in, because the workers *looked* employed. It never re-issues an order to somebody already
+working, and it remembers a villager it has moved and a node it could not reach (`share_moved`, `share_failed` - 0 A.D.
+keeps the same book as `lastFailedGather`), so a second pass cannot cost a second path search for the same nothing.
+
+**The performance lesson, measured rather than argued.** The first version asked reachability of every candidate node,
+once a second, per player: **400 game-seconds went from 319 ms to 11,922 ms** - a 37x tax on the whole run for a check
+that `start_gather` performs anyway. Removing it and drawing a line at "one order per villager per retry window" brought
+the pass back to noise. Two rules came out of it, and both are in the code's comments: reachability is asked **once**,
+by the call that needs it; and a policy pass that can re-issue the same order every second is not a policy.

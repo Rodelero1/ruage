@@ -1568,3 +1568,59 @@ of 50 food, two farms for want of 60 wood each.
 **What is therefore *not* claimed:** the acceptance match does not yet win inside 30:00. The infrastructure that
 measures it does exist, which is what makes the next attempt honest: `ruage-batch` prints where the run stopped, and
 `ruage-headless --report` says which step was refused and why.
+
+## The game's own shape: rules and villager shares (2026-10-29)
+
+*Compact before the code, from `docs/ai-of-the-game.md`.*
+
+**Two things the game's AI does that our scenario format cannot, and both are the reason the acceptance match kept going
+stale:**
+
+1. **Rules, not timestamps.** The AI's Dark Age is five rules whose guards are counts, amounts, `can-*` predicates and
+   an age - re-evaluated forever. Ours is 35 `at_seconds` entries that were measured once and rot the moment the economy
+   changes.
+2. **Shares, not assignments.** The AI never picks a tree; it sets a percentage per resource and the engine moves idle
+   villagers to meet it (`Low-pop Villager Distribution.per` is 76 `set-strategic-number` lines and no orders).
+
+**What is built:** an additive `[[rule]]` block in the scenario format (`when` = conditions, `do` = one action, a
+cooldown so a satisfied rule does not spam orders) and a `[policy]` table of villager shares by villager count, applied
+by the engine to idle villagers. The scenario schema stays **2**: both are optional fields, so a v2 file without them
+means exactly what it did, and a schema bump is for changes that *break* a file, not for additions.
+
+**Tests this owes:** a rule that does not fire until its condition holds and then fires once per cooldown (not once per
+tick); a share table that moves idle villagers to the resource furthest below its target, and moves them again when the
+table changes; and the acceptance match rewritten on both, measured rather than asserted.
+
+## Rules and shares - review (2026-10-29)
+
+*Adversarial, against my own work, in the order the damage would show.*
+
+**The freeze is not fixed, and it is older than this change.** With the rules and the share table in place the run still
+stops dead: **8 units, 125 wood, 147 food, from 300 s to 2400 s**, with the town centre reporting a full queue and food
+in the stockpile. Re-running the *old* timestamp script reproduces it (337 food / 138 wood frozen from 600 s, reported
+last session), so the freeze predates the rules and the policy. What this session did establish is the shape of the
+answer: 0 A.D. enters `FINDINGNEWTARGET` on depletion and **always resolves to some order**, including "walk to the
+dropsite and idle there". Our gather pass has no such fallback, and a worker stuck *inside* a task is invisible to every
+policy above it. That is the next thing to build, and it is a `sim` change, not a script one.
+
+**Performance: two measurements, one lesson.** 400 game-seconds cost **319 ms** with the policy pass doing nothing, and
+**11,922 ms** with the first version of the pass - because it asked `can_reach` (a full path search) of every candidate
+node once a second per player. Reachability is now asked exactly once, by `start_gather`, which needs the answer anyway;
+the pass costs noise. **Cost per path search is ~29 ms**, which is the next performance question in its own right: a
+4,000-tile map should not cost 29 ms to path, and the acceptance run is ~6x slower than real time because of it.
+
+**Tests: the rules were written after their code, and that is recorded rather than hidden.** The compile failures the
+tests were first run against only proved the type names - the discipline's whole point is a *behavioural* failure. Both
+rule tests were then shown to bite by mutation: deleting the cooldown check fails `a_rule_respects_its_cooldown` alone,
+and deleting the `at_seconds` check fails `a_rule_waits_for_its_time_too` alone. The share tests were written first
+(`no method named set_villager_shares`), and the worst-deficit mutation fails all three.
+
+**One refusal the rules produce that a player would not see: "no idle villager to build with".** A rule that builds is
+refused when every villager is working, and it retries on its cooldown. That is honest but noisy, and the next version
+should distinguish "nothing to do" from "nothing free" so a build-order log is only the second kind. The train rule has
+the same problem in a different form: it fires at a full queue, which the game's own AI avoids with `(can-train
+villager)` - a `can_train` condition is the missing guard, and it is a small one.
+
+**What is solid:** `453` tests, clippy `-D warnings`, fmt clean; the scenario format's rules parse, fire once per
+cooldown, respect `at_seconds`, and are reachable from a rule-only file; the share table resolves content's names to
+columns, refuses rows that do not sum to 100, and moves villagers between resources when the row changes.

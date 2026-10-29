@@ -35,6 +35,10 @@ pub struct Economy {
     /// which roles count. The Castle Age's exception - a single Castle also opens the Imperial Age - is
     /// the `single` list.
     pub age: Ages,
+    /// Villager shares by villager count (`[policy]`): the game's own AI shape, which states a percentage per
+    /// resource and lets the engine move idle villagers to meet it (`docs/ai-of-the-game.md`). Empty means "no policy" -
+    /// the engine then never moves anybody on its own.
+    pub policy: Policy,
     /// What counts towards a side still being in the match (D59). The original's exclusion list is a
     /// fact about the game, not about the engine, so it is content: role names that do *not* keep a
     /// player alive.
@@ -223,6 +227,8 @@ struct RawEconomy {
     #[serde(default)]
     metrics: RawMetrics,
     #[serde(default)]
+    policy: RawPolicy,
+    #[serde(default)]
     age: RawAges,
     /// Role name → unit id. Required: content that cannot name a unit at all is not content.
     role: BTreeMap<String, u32>,
@@ -265,6 +271,36 @@ struct RawHunt {
     leash_tiles: Option<u32>,
     #[serde(default)]
     butcher_roles: Vec<String>,
+}
+
+/// `[policy]`: villager shares, in the game's own AI shape. Each row is the share from its `at_villagers` upwards;
+/// the highest row the player has reached applies. Resource names key the shares, so the pack's own vocabulary is
+/// what content writes.
+#[derive(Debug, Clone, Default)]
+pub struct Policy {
+    pub share: Vec<ShareRow>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ShareRow {
+    pub at_villagers: usize,
+    /// Resource name → percent. A resource the row does not name is 0.
+    pub per: BTreeMap<String, u32>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawPolicy {
+    #[serde(default)]
+    share: Vec<RawShare>,
+}
+
+/// One row: `at_villagers` plus any number of `resource = percent` keys beside it.
+#[derive(Debug, Deserialize)]
+struct RawShare {
+    at_villagers: usize,
+    #[serde(flatten)]
+    per: BTreeMap<String, u32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -698,6 +734,33 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         },
         metrics: MetricsSection {
             military_roles: raw.metrics.military_roles,
+        },
+        policy: {
+            // A share row whose percentages do not sum to 100 is a typo, not a policy: the engine would silently
+            // under-serve every resource. Refused at load (D6's rule - a config that cannot mean what it says fails).
+            for row in &raw.policy.share {
+                let total: u32 = row.per.values().sum();
+                if total != 100 {
+                    return Err(ConfigError::Invalid {
+                        key: "[policy]".to_owned(),
+                        detail: format!(
+                            "[policy] row at {0} villagers sums to {1}%, not 100%",
+                            row.at_villagers, total
+                        ),
+                    });
+                }
+            }
+            let mut rows: Vec<ShareRow> = raw
+                .policy
+                .share
+                .into_iter()
+                .map(|row| ShareRow {
+                    at_villagers: row.at_villagers,
+                    per: row.per,
+                })
+                .collect();
+            rows.sort_by_key(|row| row.at_villagers);
+            Policy { share: rows }
         },
         conquest: Conquest {
             surviving_classes: raw.conquest.surviving_classes,

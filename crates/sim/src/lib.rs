@@ -1152,6 +1152,20 @@ pub struct World {
     /// How long a body of each animal lies on the map, in ticks: as long as its **full** carcass would take to rot
     /// (meat / decay rate). Derived from the pack, not invented (item 6).
     animal_span: BTreeMap<u32, u64>,
+    /// Villager shares, by villager count: `(at_villagers, [(stockpile slot, percent)])`, the last row whose
+    /// `at_villagers` the player has reached being the one that applies. This is the game's own AI shape - shares, not
+    /// assignments - and the engine is what moves an idle villager to meet them (2026-10-29).
+    shares: Vec<(usize, Vec<(usize, i32)>)>,
+    /// When the shares were last enforced, so the pass costs a scan once a second rather than every tick.
+    shares_scan_tick: u64,
+    /// Nodes a share assignment failed to reach, and the tick it failed: retried after `share_retry_ticks` rather than
+    /// every second (the `lastFailedGather` bookkeeping 0 A.D. keeps).
+    share_failed: BTreeMap<EntityId, u64>,
+    /// Villagers the policy has already given an order to, and when: the guard that stops the pass re-issuing the same
+    /// gather order - and paying for a path search - every second.
+    share_moved: BTreeMap<EntityId, u64>,
+    /// How long a node that could not be reached is left alone, in ticks (30 s at 20 Hz).
+    share_retry_ticks: u64,
     /// Buildings with a construction in progress, by id. A maintained set rather than a scan: `settle_blind_sites`
     /// needs to know whether any site exists and used to walk the world to ask (item 6).
     foundations: BTreeSet<EntityId>,
@@ -1348,6 +1362,11 @@ impl World {
             rots: BTreeMap::new(),
             animal_rot: BTreeMap::new(),
             animal_span: BTreeMap::new(),
+            shares: Vec::new(),
+            shares_scan_tick: 0,
+            share_failed: BTreeMap::new(),
+            share_moved: BTreeMap::new(),
+            share_retry_ticks: 600,
             foundations: BTreeSet::new(),
             requires_built: BTreeMap::new(),
             age_needs: BTreeMap::new(),
@@ -1384,6 +1403,239 @@ impl World {
     /// Entities in id order. The order is the invariant, not an implementation detail.
     pub fn entities(&self) -> &[Entity] {
         &self.entities
+    }
+
+    /// Resolve content's `[policy]` rows into stockpile columns and install them. A name the pack cannot resolve is
+    /// skipped rather than refused - the pack is authoritative about which resources exist, and a share for a resource
+    /// that is not in the game is a share for nothing.
+    fn install_shares(&mut self) {
+        let Some(economy) = self.economy.as_ref() else {
+            return;
+        };
+        if economy.policy.share.is_empty() {
+            return;
+        }
+        let rows: Vec<(usize, Vec<(usize, i32)>)> = economy
+            .policy
+            .share
+            .iter()
+            .map(|row| {
+                let shares = row
+                    .per
+                    .iter()
+                    .filter_map(|(name, percent)| {
+                        self.slot_of(name)
+                            .map(|slot| (slot, i32::try_from(*percent).unwrap_or(0)))
+                    })
+                    .collect();
+                (row.at_villagers, shares)
+            })
+            .collect();
+        self.set_villager_shares(&rows);
+    }
+
+    /// Set the villager share table: `(at_villagers, [(stockpile slot, percent)])`, in ascending order. Content's
+    /// `[policy]` is resolved into this at seed; a test sets it directly.
+    ///
+    /// The rows are *shares*, not orders: the engine moves a villager only when it is idle (or working a resource that
+    /// the table says is over-manned), so a player's own orders are never fought over.
+    pub fn set_villager_shares(&mut self, rows: &[(usize, Vec<(usize, i32)>)]) {
+        let mut rows = rows.to_vec();
+        rows.sort_by_key(|(at, _)| *at);
+        self.shares = rows;
+    }
+
+    /// Which stockpile column a gather node belongs to: a resource node's own, an animal's `[hunt]` resource, a farm's
+    /// `[farm]` resource. `None` for anything else.
+    fn node_slot(&self, node: EntityId) -> Option<usize> {
+        let entity = self.find(node)?;
+        match entity.kind {
+            EntityKind::Resource(slot) => Some(slot),
+            EntityKind::Unit => {
+                let economy = self.economy.as_ref()?;
+                economy
+                    .hunt
+                    .resource
+                    .as_deref()
+                    .and_then(|name| self.slot_of(name))
+            }
+            EntityKind::Building => {
+                let economy = self.economy.as_ref()?;
+                economy
+                    .farm
+                    .resource
+                    .as_deref()
+                    .and_then(|name| self.slot_of(name))
+            }
+            EntityKind::Projectile => None,
+        }
+    }
+
+    /// Enforce the share table, once a second. One villager per pass - the table is a preference, not a teleport - and
+    /// only idle villagers or ones on an over-manned resource are moved, so a player's own orders survive.
+    ///
+    /// Cost: one walk of the entities per call, gated on a table existing; the walk counts villagers and finds the
+    /// nearest node of the chosen resource in a second pass over the resource nodes only.
+    fn step_shares(&mut self) {
+        if self.shares.is_empty() {
+            return;
+        }
+        let every = u64::from(self.tick_rate_hz).max(1);
+        if !self.tick.is_multiple_of(every) {
+            return;
+        }
+        self.shares_scan_tick = self.tick;
+        let villager_unit = match self.start_villager_unit() {
+            Some(unit) => unit,
+            None => return,
+        };
+        // Who is working what, and who is free.
+        let mut workers: Vec<(EntityId, u8, Option<usize>)> = Vec::new();
+        let mut per_player: [usize; MAX_PLAYERS] = [0; MAX_PLAYERS];
+        for entity in &self.entities {
+            if entity.kind != EntityKind::Unit || entity.player == 0 {
+                continue;
+            }
+            let is_villager = entity
+                .unit
+                .is_some_and(|unit| self.is_family(unit, villager_unit));
+            if !is_villager {
+                continue;
+            }
+            per_player[usize::from(entity.player) - 1] += 1;
+            // A villager standing at a **dead** node with nothing in hand is idle in everything but the name of its
+            // task - 0 A.D. gives that state its own name (`FINDINGNEWTARGET`) and lets it find the next resource. It is
+            // the state this economy used to freeze in: the whole run stopped at 8 units with food in the stockpile,
+            // because the workers *looked* employed. Counting them as idle is what lets the share table move them.
+            let slot = match entity.task {
+                Task::Gather { node, .. } => {
+                    let dead = self
+                        .find(node)
+                        .is_none_or(|target| target.amount.raw() <= 0 || target.hp <= 0);
+                    if dead && entity.carry.raw() <= 0 {
+                        None
+                    } else {
+                        self.node_slot(node)
+                    }
+                }
+                Task::Return { node, .. } => self.node_slot(node),
+                _ => None,
+            };
+            workers.push((entity.id, entity.player, slot));
+        }
+        for player in 1..=MAX_PLAYERS as u8 {
+            let count = per_player[usize::from(player) - 1];
+            if count == 0 {
+                continue;
+            }
+            let Some((_, targets)) = self
+                .shares
+                .iter()
+                .rev()
+                .find(|(at, _)| *at <= count)
+                .cloned()
+            else {
+                continue;
+            };
+            // Actual against target, per slot, in whole villagers. Every column counts, not only the listed ones: a
+            // villager left on a resource the table gives 0% is over-manned and is what gets moved.
+            let slots = self.resources.as_ref().map_or(0, |pack| pack.count());
+            let percent_of = |slot: usize| {
+                targets
+                    .iter()
+                    .find(|(known, _)| *known == slot)
+                    .map_or(0, |(_, percent)| *percent)
+            };
+            let mut deficit: Vec<(i32, usize)> = (0..slots)
+                .map(|slot| {
+                    let percent = percent_of(slot);
+                    let wanted = (i32::try_from(count).unwrap_or(0) * percent) / 100;
+                    let actual = i32::try_from(
+                        workers
+                            .iter()
+                            .filter(|(_, who, slot_of)| *who == player && slot_of == &Some(slot))
+                            .count(),
+                    )
+                    .unwrap_or(0);
+                    (wanted - actual, slot)
+                })
+                .collect();
+            deficit.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+            let Some((need, slot)) = deficit.first().copied().filter(|(need, _)| *need > 0) else {
+                continue;
+            };
+            let _ = need;
+            // **Only an idle villager is moved**, and never twice within the retry window. Moving somebody who is
+            // already working means a fresh path search per second (measured: 29 ms each, 11.7 s over 400 game-seconds
+            // against 319 ms without the pass), and re-issuing the same order every second is not a policy anyway: a
+            // villager who has been told where to go is no longer the engine's business. Shares converge through the
+            // villagers who *arrive* - one per pass - and through training.
+            let Some(worker) = workers
+                .iter()
+                .find(|(_, who, working)| *who == player && working.is_none())
+                .map(|(id, _, _)| *id)
+            else {
+                continue;
+            };
+            if self
+                .share_moved
+                .get(&worker)
+                .is_some_and(|at| self.tick.saturating_sub(*at) < self.share_retry_ticks)
+            {
+                continue;
+            }
+            let here = match self.find(worker) {
+                Some(entity) => entity.position,
+                None => continue,
+            };
+            if let Some(node) = self.nearest_node_of_slot(here, slot) {
+                self.share_moved.insert(worker, self.tick);
+                if let Err(error) = self.start_gather(worker, node) {
+                    self.share_failed.insert(node, self.tick);
+                    self.refusal = Some((worker, error, self.tick));
+                } else {
+                    self.share_failed.remove(&node);
+                }
+            }
+            let _ = need;
+        }
+    }
+
+    /// The nearest node of a stockpile column, by straight-line distance, that a worker could plausibly work.
+    ///
+    /// **No reachability test here, deliberately.** `can_reach` is a full path search; asking it of even six nodes once
+    /// a second per player cost 37x the whole rest of the run (400 game-seconds: 319 ms without this pass, 11.7 s with
+    /// it, 2026-10-29). `start_gather` already plans the walk and is the one authority on whether a node can be worked,
+    /// so this returns the nearest candidate and lets that call answer. A node that fails is remembered for a while
+    /// (`share_failed`) instead of being retried every second - 0 A.D. calls the same bookkeeping `lastFailedGather`.
+    fn nearest_node_of_slot(&self, from: (Fixed, Fixed), slot: usize) -> Option<EntityId> {
+        let mut best: Option<(i64, u32, EntityId)> = None;
+        for entity in &self.entities {
+            if self.node_slot(entity.id) != Some(slot) {
+                continue;
+            }
+            // A farm must be finished to be worked; a node with nothing left is no use; a body is not huntable.
+            if entity.construction.is_some() || entity.amount.raw() <= 0 {
+                continue;
+            }
+            if entity.kind == EntityKind::Unit && entity.hp <= 0 {
+                continue;
+            }
+            if self
+                .share_failed
+                .get(&entity.id)
+                .is_some_and(|at| self.tick.saturating_sub(*at) < self.share_retry_ticks)
+            {
+                continue;
+            }
+            let dx = entity.position.0.raw() - from.0.raw();
+            let dy = entity.position.1.raw() - from.1.raw();
+            let key = (dx * dx + dy * dy, entity.id.0, entity.id);
+            if best.is_none_or(|(distance, id, _)| (key.0, key.1) < (distance, id)) {
+                best = Some(key);
+            }
+        }
+        best.map(|(_, _, id)| id)
     }
 
     /// The last reaction the engine could not start, as `(the entity that tried, why, the tick)`. A
@@ -6487,6 +6739,8 @@ impl World {
         self.step_leashes();
         // ... and a herdable changes hands as soon as somebody's unit can see it (item 5).
         self.step_conversion();
+        // Shares: idle villagers follow the table content gives (the game's own AI shape).
+        self.step_shares();
         // A building at or below its eject fraction throws its garrison out. They are unharmed - the
         // published rule - and they land where they already stand.
         for id in ejected {
@@ -6992,6 +7246,8 @@ impl World {
         // The pack is what turns a name in `[start] stock` into a column, so this is the earliest
         // point the opening stockpile can be applied when the pack is loaded after seeding.
         self.apply_start_stock()?;
+        // ... and the same for the villager shares, whose rows are keyed by resource *name*.
+        self.install_shares();
         Ok(())
     }
 

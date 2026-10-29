@@ -283,3 +283,108 @@ surviving_classes = [3]
 # What a balance run counts as a **military** unit (D17: the engine never learns that a militia is 74). A role that
 # the pack cannot name is skipped rather than refused - a metric is a measurement, not a rule of the game.
 military_roles = ["militia", "spearman", "pikeman", "halberdier", "mangonel", "trebuchet"]
+
+# Villager shares, in the shape the game's own AI uses (`docs/ai-of-the-game.md`): a percentage per resource, per
+# villager count, which the engine applies to idle villagers. The numbers below are read from HD's
+# `Economy/Low-pop Villager Distribution.per`, whose 19 rules cover 1 to 26+ villagers and every row sums to 100;
+# the row with the highest `at_villagers` the player has reached is the one that applies. A resource a row does not
+# name is 0%. Empty (or absent) means "no policy": the engine then never moves a villager on its own.
+[policy]
+
+[[policy.share]]
+at_villagers = 0
+food = 100
+
+[[policy.share]]
+at_villagers = 9
+food = 88
+wood = 12
+
+[[policy.share]]
+at_villagers = 10
+food = 80
+wood = 20
+
+[[policy.share]]
+at_villagers = 11
+food = 72
+wood = 28
+
+[[policy.share]]
+at_villagers = 12
+food = 66
+wood = 34
+
+[[policy.share]]
+at_villagers = 13
+food = 69
+wood = 31
+
+[[policy.share]]
+at_villagers = 14
+food = 71
+wood = 29
+
+[[policy.share]]
+at_villagers = 15
+food = 66
+wood = 34
+
+[[policy.share]]
+at_villagers = 16
+food = 62
+wood = 38
+
+[[policy.share]]
+at_villagers = 17
+food = 58
+wood = 42
+
+[[policy.share]]
+at_villagers = 18
+food = 55
+wood = 45
+
+[[policy.share]]
+at_villagers = 19
+food = 57
+wood = 43
+
+[[policy.share]]
+at_villagers = 20
+food = 60
+wood = 40
+
+[[policy.share]]
+at_villagers = 21
+food = 61
+wood = 39
+
+[[policy.share]]
+at_villagers = 22
+food = 59
+wood = 41
+
+[[policy.share]]
+at_villagers = 23
+food = 55
+wood = 40
+gold = 5
+
+[[policy.share]]
+at_villagers = 24
+food = 53
+wood = 38
+gold = 9
+
+[[policy.share]]
+at_villagers = 25
+food = 52
+wood = 36
+gold = 12
+
+[[policy.share]]
+at_villagers = 26
+food = 60
+wood = 30
+gold = 10

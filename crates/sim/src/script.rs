@@ -7,6 +7,8 @@
 //! tree", "beside my town centre" — because ids belong to seeding order and would rot the moment the
 //! map changed. A step that cannot be resolved is reported, not silently skipped.
 
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 
 use crate::{Command, EntityId, EntityKind, World};
@@ -23,7 +25,106 @@ pub const SCENARIO_SCHEMA: u32 = 2;
 pub struct Scenario {
     pub schema: u32,
     pub duration_seconds: f64,
+    /// Steps are optional: a scenario written entirely as rules has none, and a rule that trains villagers is a whole
+    /// opening on its own.
+    #[serde(default)]
     pub step: Vec<Step>,
+    /// Rules are **additive**: a v2 file without any means exactly what it did, which is why they do not bump the
+    /// schema. A timestamp says *when*; a rule says *while* - which is how the game's own AI writes a build order
+    /// (`docs/ai-of-the-game.md`), and the reason a rule cannot go stale when the economy's speed changes.
+    #[serde(default)]
+    pub rule: Vec<Rule>,
+}
+
+/// One rule: a player, a condition, one action, and a cooldown so a satisfied condition does not spam orders.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Rule {
+    /// Not before this many game seconds. Default 0.
+    #[serde(default)]
+    pub at_seconds: f64,
+    /// How often the rule may fire, in game seconds. Default 5: long enough that a train rule is a queue of one, short
+    /// enough that a building rule reacts while the wood is still in hand.
+    #[serde(default = "default_cooldown")]
+    pub cooldown_seconds: f64,
+    pub player: u8,
+    #[serde(default)]
+    pub when: When,
+    #[serde(flatten)]
+    pub action: RuleAction,
+}
+
+fn default_cooldown() -> f64 {
+    5.0
+}
+
+/// Conditions, all of which must hold. Every field is optional; an empty `When` is always true.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct When {
+    #[serde(default)]
+    pub villagers_at_least: Option<usize>,
+    #[serde(default)]
+    pub villagers_at_most: Option<usize>,
+    /// None of this role exists for the player - a **foundation counts**, so "no market" cannot fire twice while the
+    /// first one is being built.
+    #[serde(default)]
+    pub no_building: Option<String>,
+    /// Every one of these roles must exist for the player. A list, because TOML's inline tables cannot repeat a key and
+    /// "market *and* blacksmith" is the shape a build order needs.
+    #[serde(default)]
+    pub has_building: Vec<String>,
+    /// A `[tech_role]` that must be researched (an age, for a build order).
+    #[serde(default)]
+    pub age: Option<String>,
+    /// A `[tech_role]` that must **not** be researched yet - "Loom, once" needs it, because a research rule with only a
+    /// villager threshold would ask for Loom every cooldown for the rest of the match.
+    #[serde(default)]
+    pub no_tech: Option<String>,
+    /// A role the player must have at least one **unit** of: "send the mangonel" waits for the mangonel.
+    #[serde(default)]
+    pub has_unit: Option<String>,
+    /// Free population before the cap (`cap - population`). A house rule is "somewhere under three", not "no house".
+    #[serde(default)]
+    pub housing_at_most: Option<u32>,
+    #[serde(default)]
+    pub stock: Vec<StockWhen>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StockWhen {
+    pub name: String,
+    #[serde(default)]
+    pub at_least: Option<u32>,
+    #[serde(default)]
+    pub at_most: Option<u32>,
+}
+
+/// What a rule does when it fires. The action picks its own worker (an idle villager) rather than naming one, because a
+/// rule is re-evaluated and the villager it would have named has moved by the second firing.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "do", rename_all = "snake_case")]
+pub enum RuleAction {
+    Train {
+        building: String,
+        role: String,
+    },
+    Research {
+        building: String,
+        tech: String,
+    },
+    Build {
+        role: String,
+        #[serde(default, rename = "where")]
+        where_: Option<String>,
+    },
+    Gather {
+        resource: String,
+        #[serde(default)]
+        node: Option<String>,
+    },
+    Attack {
+        attacker: String,
+        target: String,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -92,6 +193,13 @@ pub enum Outcome {
 pub struct Runner {
     steps: Vec<(u64, u8, StepKind)>,
     next: usize,
+    /// Rules with their resolved timings: not before, cooldown, and the tick each last fired (`u64::MAX` = never).
+    rules: Vec<(u64, u64, Rule)>,
+    /// The tick each rule last fired, by index.
+    fired: BTreeMap<usize, u64>,
+    /// How many times each rule has fired, refusals included: a rule's condition is a question about the world, and a
+    /// count of firings is the only way a run can show that a rule is thrashing or asleep.
+    pub fired_times: Vec<usize>,
     pub outcomes: Vec<(f64, Outcome)>,
 }
 
@@ -117,9 +225,32 @@ impl Runner {
             steps.push((tick, step.player, step.kind.clone()));
         }
         steps.sort_by_key(|(tick, player, _)| (*tick, *player));
+        let mut rules = Vec::with_capacity(scenario.rule.len());
+        for rule in &scenario.rule {
+            if !rule.at_seconds.is_finite() || rule.at_seconds < 0.0 {
+                return Err(format!(
+                    "a rule is not due until {} seconds, which is not a time",
+                    rule.at_seconds
+                ));
+            }
+            if !rule.cooldown_seconds.is_finite() || rule.cooldown_seconds <= 0.0 {
+                return Err(format!(
+                    "a rule has a cooldown of {} seconds, which is not a cooldown",
+                    rule.cooldown_seconds
+                ));
+            }
+            let at = ((rule.at_seconds * f64::from(tick_rate_hz)).round() as i64).max(0) as u64;
+            let cool =
+                ((rule.cooldown_seconds * f64::from(tick_rate_hz)).round() as i64).max(1) as u64;
+            rules.push((at, cool, rule.clone()));
+        }
+        let rules_len = rules.len();
         Ok(Self {
             steps,
             next: 0,
+            rules,
+            fired: BTreeMap::new(),
+            fired_times: vec![0; rules_len],
             outcomes: Vec::new(),
         })
     }
@@ -128,8 +259,58 @@ impl Runner {
         self.next < self.steps.len()
     }
 
-    /// Run every step that is due at or before the current tick.
+    /// Run every step that is due at or before the current tick, then every rule whose condition holds and whose
+    /// cooldown has expired.
     pub fn due(&mut self, world: &mut World) {
+        self.due_steps(world);
+        self.due_rules(world);
+    }
+
+    /// Fire the rules. A rule that fires is *reported* when it could not run, so a build order cannot silently stall.
+    fn due_rules(&mut self, world: &mut World) {
+        let now = world.tick();
+        let second = f64::from(world.tick_rate_hz());
+        let mut refusals: Vec<(f64, Outcome)> = Vec::new();
+        for index in 0..self.rules.len() {
+            let (at, cooldown) = (self.rules[index].0, self.rules[index].1);
+            if now < at {
+                continue;
+            }
+            if let Some(last) = self.fired.get(&index)
+                && now.saturating_sub(*last) < cooldown
+            {
+                continue;
+            }
+            // The condition and the order it resolves to, under one immutable borrow; the borrow ends before the
+            // world is touched mutably.
+            let resolved = {
+                let (_, _, rule) = &self.rules[index];
+                if when_holds(world, rule) {
+                    Some(resolve_rule(world, rule))
+                } else {
+                    None
+                }
+            };
+            let Some(resolved) = resolved else {
+                continue;
+            };
+            self.fired.insert(index, now);
+            if let Some(count) = self.fired_times.get_mut(index) {
+                *count += 1;
+            }
+            match resolved {
+                Ok(command) => {
+                    if let Err(err) = world.submit_checked(command) {
+                        refusals.push((now as f64 / second, Outcome::Refused(err.to_string())));
+                    }
+                }
+                Err(reason) => refusals.push((now as f64 / second, Outcome::Refused(reason))),
+            }
+        }
+        self.outcomes.extend(refusals);
+    }
+
+    fn due_steps(&mut self, world: &mut World) {
         while let Some((at, player, kind)) = self.steps.get(self.next).cloned() {
             if world.tick() < at {
                 return;
@@ -300,54 +481,7 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
             // cannot be walked to, and a step that names it fails the *run* at apply time rather than picking the next
             // one. This became visible when villagers learned to spread through the trees (item 9), which put an enemy
             // villager behind one.
-            let here = world.position(unit);
-            let reachable = |entity: &crate::Entity| match here {
-                Some(from) => world.can_reach(from, entity.position),
-                None => true,
-            };
-            let enemy = match target.as_str() {
-                "nearest_enemy" => world
-                    .entities()
-                    .iter()
-                    .filter(|entity| {
-                        entity.player != player
-                            && entity.kind == EntityKind::Unit
-                            && entity.player != 0
-                    })
-                    .filter(|entity| reachable(entity))
-                    .map(|entity| entity.id)
-                    .next(),
-                "enemy_building" => world
-                    .entities()
-                    .iter()
-                    .filter(|entity| {
-                        entity.player != player
-                            && entity.kind == EntityKind::Building
-                            && entity.player != 0
-                    })
-                    .map(|entity| entity.id)
-                    .next(),
-                "enemy_town_centre" => {
-                    let centre = world.start_town_centre_unit().ok_or_else(|| {
-                        "the pack names no town centre, so there is none to aim at".to_owned()
-                    })?;
-                    world
-                        .entities()
-                        .iter()
-                        .filter(|entity| {
-                            entity.player != player
-                                && entity.kind == EntityKind::Building
-                                && entity
-                                    .unit
-                                    .is_some_and(|unit| world.is_family(unit, centre))
-                        })
-                        .map(|entity| entity.id)
-                        .next()
-                }
-                other => return Err(format!("unknown target selector {other:?}")),
-            };
-            let enemy =
-                enemy.ok_or_else(|| format!("player {player} has no {target} to attack"))?;
+            let enemy = choose_target(world, unit, player, target)?;
             Ok(Command::Attack {
                 attacker: unit,
                 target: enemy,
@@ -533,4 +667,313 @@ impl World {
             .iter()
             .any(|entity| entity.position == position)
     }
+}
+
+/// Does a rule's condition hold? Every field that is present must hold; an empty condition always does.
+fn when_holds(world: &World, rule: &Rule) -> bool {
+    let when = &rule.when;
+    let player = rule.player;
+    let count = villagers_of(world, player).len();
+    if let Some(least) = when.villagers_at_least
+        && count < least
+    {
+        return false;
+    }
+    if let Some(most) = when.villagers_at_most
+        && count > most
+    {
+        return false;
+    }
+    if let Some(role) = when.no_building.as_deref()
+        && building_count(world, player, role).is_none()
+    {
+        // A role the pack cannot name is a bug in the content, not a condition that can be true.
+        return false;
+    }
+    for role in &when.has_building {
+        if building_count(world, player, role).unwrap_or(0) == 0 {
+            return false;
+        }
+    }
+    if let Some(age) = when.age.as_deref() {
+        let Some(tech) = world.tech_role(age) else {
+            return false;
+        };
+        if !world.researched(player).contains(&tech) {
+            return false;
+        }
+    }
+    if let Some(tech) = when.no_tech.as_deref() {
+        match world.tech_role(tech) {
+            Some(tech) if world.researched(player).contains(&tech) => return false,
+            None => return false,
+            _ => {}
+        }
+    }
+    if let Some(role) = when.has_unit.as_deref() {
+        let Some(wanted) = world.role_unit(role) else {
+            return false;
+        };
+        let found = world.entities().iter().any(|entity| {
+            entity.player == player
+                && entity.kind == EntityKind::Unit
+                && entity.unit == Some(wanted)
+        });
+        if !found {
+            return false;
+        }
+    }
+    if let Some(most) = when.housing_at_most {
+        let headroom = world
+            .population_cap(player)
+            .saturating_sub(world.population(player));
+        if headroom > most {
+            return false;
+        }
+    }
+    for stock in &when.stock {
+        let Some(slot) = world.slot_of(&stock.name) else {
+            return false;
+        };
+        let amount = world.stock(player, slot);
+        if let Some(least) = stock.at_least
+            && amount < least
+        {
+            return false;
+        }
+        if let Some(most) = stock.at_most
+            && amount > most
+        {
+            return false;
+        }
+    }
+    true
+}
+
+/// How many buildings of a role a player has, **foundations included**: `None` when the pack cannot name the role,
+/// `Some(0)` when it can and the player has none.
+fn building_count(world: &World, player: u8, role: &str) -> Option<usize> {
+    let wanted = world.role_unit(role)?;
+    Some(
+        world
+            .entities()
+            .iter()
+            .filter(|entity| {
+                entity.player == player
+                    && entity.kind == EntityKind::Building
+                    && entity
+                        .unit
+                        .is_some_and(|unit| world.is_family(unit, wanted))
+            })
+            .count(),
+    )
+}
+
+/// This player's villagers, in seeding order.
+fn villagers_of(world: &World, player: u8) -> Vec<EntityId> {
+    let Some(villager) = world.start_villager_unit() else {
+        return Vec::new();
+    };
+    world
+        .entities()
+        .iter()
+        .filter(|entity| {
+            entity.player == player
+                && entity.kind == EntityKind::Unit
+                && entity
+                    .unit
+                    .is_some_and(|unit| world.is_family(unit, villager))
+        })
+        .map(|entity| entity.id)
+        .collect()
+}
+
+/// An idle villager of this player, or the one that has been idle longest - a rule names no villager because the
+/// villager it would name has moved by the time the rule fires again.
+fn idle_villager(world: &World, player: u8) -> Option<EntityId> {
+    villagers_of(world, player).into_iter().find(|id| {
+        world
+            .entity(*id)
+            .is_some_and(|entity| matches!(entity.task, crate::Task::Idle))
+    })
+}
+
+/// Turn a rule's action into a command. The rules share the steps' resolvers, so a role means the same thing in both.
+fn resolve_rule(world: &World, rule: &Rule) -> Result<Command, String> {
+    let player = rule.player;
+    match &rule.action {
+        RuleAction::Train { building, role } => {
+            let at = finished_building(world, player, building)
+                .ok_or_else(|| format!("player {player} has no finished {building}"))?;
+            let unit = role_of(world, role)?;
+            Ok(Command::Train { building: at, unit })
+        }
+        RuleAction::Research { building, tech } => {
+            let at = finished_building(world, player, building)
+                .ok_or_else(|| format!("player {player} has no finished {building}"))?;
+            let tech = world
+                .tech_role(tech)
+                .ok_or_else(|| format!("the content pack has no tech role {tech:?}"))?;
+            Ok(Command::Research { building: at, tech })
+        }
+        RuleAction::Build { role, where_ } => {
+            let worker = idle_villager(world, player)
+                .ok_or_else(|| format!("player {player} has no idle villager to build with"))?;
+            let unit = role_of(world, role)?;
+            let at = match where_.as_deref() {
+                None | Some("near_town_centre") => free_tile_near(world, player),
+                Some(resource) => {
+                    let slot = world.slot_of(resource).ok_or_else(|| {
+                        format!("the content pack defines no resource called {resource:?}")
+                    })?;
+                    let centre = town_centre_of(world, player).ok_or_else(|| {
+                        format!("player {player} has no town centre to measure a walk from")
+                    })?;
+                    let node = nearest_resource(world, centre, slot, 0).ok_or_else(|| {
+                        format!("player {player} has no {resource} node to build beside")
+                    })?;
+                    free_tile_near_node(world, node)
+                }
+            };
+            let at = at.ok_or_else(|| format!("no free tile for a {role}"))?;
+            Ok(Command::Build {
+                villager: worker,
+                unit,
+                at,
+            })
+        }
+        RuleAction::Gather { resource, node } => {
+            let worker = idle_villager(world, player)
+                .or_else(|| villagers_of(world, player).first().copied())
+                .ok_or_else(|| format!("player {player} has no villager"))?;
+            let target = match node {
+                Some(role) => {
+                    let wanted = role_of(world, role)?;
+                    let here = world.position(worker);
+                    world
+                        .entities()
+                        .iter()
+                        .filter(|entity| {
+                            entity.player == player
+                                && entity.kind == EntityKind::Building
+                                && entity.construction.is_none()
+                                && entity
+                                    .unit
+                                    .is_some_and(|unit| world.is_family(unit, wanted))
+                        })
+                        .min_by_key(|entity| match here {
+                            Some(from) => {
+                                let dx = entity.position.0.raw() - from.0.raw();
+                                let dy = entity.position.1.raw() - from.1.raw();
+                                (dx * dx + dy * dy, entity.id.0)
+                            }
+                            None => (0, entity.id.0),
+                        })
+                        .map(|entity| entity.id)
+                        .ok_or_else(|| format!("player {player} has no finished {role} to work"))?
+                }
+                None => {
+                    let slot = world.slot_of(resource).ok_or_else(|| {
+                        format!("the content pack defines no resource called {resource:?}")
+                    })?;
+                    nearest_resource(world, worker, slot, 0).ok_or_else(|| {
+                        format!("player {player} has no {resource} node to gather")
+                    })?
+                }
+            };
+            Ok(Command::Gather {
+                villager: worker,
+                node: target,
+            })
+        }
+        RuleAction::Attack { attacker, target } => {
+            let attacker_unit = role_of(world, attacker)?;
+            let unit = world
+                .entities()
+                .iter()
+                .filter(|entity| {
+                    entity.player == player
+                        && entity.kind == EntityKind::Unit
+                        && entity.unit == Some(attacker_unit)
+                })
+                .map(|entity| entity.id)
+                .max()
+                .ok_or_else(|| format!("player {player} has no unit {attacker}"))?;
+            let aim = choose_target(world, unit, player, target)?;
+            Ok(Command::Attack {
+                attacker: unit,
+                target: aim,
+            })
+        }
+    }
+}
+
+/// The player's first **finished** building of a role.
+fn finished_building(world: &World, player: u8, role: &str) -> Option<EntityId> {
+    let wanted = role_of(world, role).ok()?;
+    world
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.player == player
+                && entity.kind == EntityKind::Building
+                && entity.construction.is_none()
+                && entity
+                    .unit
+                    .is_some_and(|unit| world.is_family(unit, wanted))
+        })
+        .map(|entity| entity.id)
+}
+
+/// Which enemy an attack step or rule means: a selector, resolved against the world, with reachability part of the
+/// choice so a target behind a wood cluster cannot fail the run at apply time.
+fn choose_target(
+    world: &World,
+    unit: EntityId,
+    player: u8,
+    target: &str,
+) -> Result<EntityId, String> {
+    let here = world.position(unit);
+    let reachable = |entity: &crate::Entity| match here {
+        Some(from) => world.can_reach(from, entity.position),
+        None => true,
+    };
+    let enemy = match target {
+        "nearest_enemy" => world
+            .entities()
+            .iter()
+            .filter(|entity| {
+                entity.player != player && entity.kind == EntityKind::Unit && entity.player != 0
+            })
+            .filter(|entity| reachable(entity))
+            .map(|entity| entity.id)
+            .next(),
+        "enemy_building" => world
+            .entities()
+            .iter()
+            .filter(|entity| {
+                entity.player != player && entity.kind == EntityKind::Building && entity.player != 0
+            })
+            .map(|entity| entity.id)
+            .next(),
+        "enemy_town_centre" => {
+            let centre = world.start_town_centre_unit().ok_or_else(|| {
+                "the pack names no town centre, so there is none to aim at".to_owned()
+            })?;
+            world
+                .entities()
+                .iter()
+                .filter(|entity| {
+                    entity.player != player
+                        && entity.kind == EntityKind::Building
+                        && entity
+                            .unit
+                            .is_some_and(|unit| world.is_family(unit, centre))
+                })
+                .map(|entity| entity.id)
+                .next()
+        }
+        other => return Err(format!("unknown target selector {other:?}")),
+    };
+    enemy.ok_or_else(|| format!("no enemy matches {target:?}"))
 }
