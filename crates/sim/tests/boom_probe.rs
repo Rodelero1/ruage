@@ -145,7 +145,10 @@ fn try_build(
     false
 }
 
+/// Ignored by default: it is a measurement, not a claim, and it prints a timeline instead of asserting one.
+/// Run it with `cargo test --test boom_probe -- --include-ignored --nocapture`.
 #[test]
+#[ignore = "measurement, not an assertion"]
 fn what_a_dark_age_opening_buys() {
     let Some(fx) = fixture() else { return };
     let mut world = World::new(&fx.settings, 7).expect("world");
@@ -431,18 +434,4 @@ fn gather_counts(
     }
     let _ = fx;
     counts
-}
-
-/// Any villager of player 1 - a builder does not need to be idle, only reachable.
-fn idle_or_any(world: &World) -> Option<EntityId> {
-    let mut fallback = None;
-    for entity in world.entities() {
-        if entity.player == 1 && entity.kind == EntityKind::Unit {
-            if matches!(entity.task, Task::Idle) {
-                return Some(entity.id);
-            }
-            fallback.get_or_insert(entity.id);
-        }
-    }
-    fallback
 }
