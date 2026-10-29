@@ -4522,7 +4522,11 @@ impl World {
                     unit,
                     position,
                     speed,
-                    velocity: (speed, Fixed::ZERO),
+                    // A thing that is placed is not a thing that is walking. This was `(speed, ZERO)`: a
+                    // spawned body drifted east at its own speed for ever with `Task::Idle`, taking one
+                    // step of 0.025 tile per tick - which is what the "creep" was. Every other way into
+                    // the world starts at rest, and this one now does too (D64, D70).
+                    velocity: (Fixed::ZERO, Fixed::ZERO),
                     hp,
                     amount: Fixed::from_raw(i64::from(amount) * self.scale),
                     task: Task::Idle,

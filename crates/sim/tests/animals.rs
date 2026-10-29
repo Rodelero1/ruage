@@ -135,7 +135,6 @@ fn distance(world: &World, a: EntityId, b: (Fixed, Fixed)) -> i64 {
 // engine half - `gather_source` accepting a live animal, a spawned animal carrying its `food` as its amount,
 // and the per-tick pass that walks the animal to the drop site and lets the villager follow. Each ignore is
 // one of those, kept so the expectations are not lost between sessions.
-#[ignore = "herding: the engine half is not built yet (D70)"]
 #[test]
 fn a_sheep_nobody_is_gathering_stands_still() {
     let Some(fx) = fixture() else {
