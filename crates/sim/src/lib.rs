@@ -52,6 +52,9 @@ pub const MAX_RESOURCES: usize = 8;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EntityId(pub u32);
 
+/// A villager's waiting sites: unit id and tile, oldest first (D66).
+type BuildQueue = BTreeMap<EntityId, VecDeque<(u32, (u16, u16))>>;
+
 /// A building is a place; a unit is a thing that moves. Splitting them now keeps "villagers
 /// gather into the town centre" from being a special case of "entities with zero speed".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1080,7 +1083,7 @@ pub struct World {
     /// Build orders a villager is waiting to start, in the order they were given (D66). A second `Build`
     /// while one is running queues instead of replacing: without it a builder handed a new site abandons
     /// the half-built one, which is exactly what a scenario or a player would never mean.
-    build_queue: BTreeMap<EntityId, VecDeque<(u32, (u16, u16))>>,
+    build_queue: BuildQueue,
     /// Which families require which family to have been built once, resolved from `[build] requires`,
     /// with the requirement's role name kept for the message.
     requires_built: BTreeMap<u32, (u32, String)>,
