@@ -1058,3 +1058,48 @@ standing in the forest.
   economy reaches Feudal at about 14:30 and Castle does not fit inside twenty minutes without the sheep and boar the
   researched openings rely on. Ten more minutes of game time is ten more seconds of test runtime and removes the
   pressure that was forcing the economy to be faster than it is.
+
+### The boar's leash, and where it goes back to (owner, 2026-10-29)
+
+*"Boar can also lose interest in chasing the hunter and not follow him to the town centre and returns where he was
+before. So another shot with arrow is needed before boar flees too far. I usually wait until 2 arrows are shot and then
+try to flee."*
+
+So an animal's chase is not a commitment, and the garrison method is not a trick that works from any distance:
+
+- it follows **as long as it is interested**, and interest expires - by distance from where it started, or by time
+  spent chasing, or both;
+- when interest expires it **returns to its origin**, which is a place it remembers, so an animal needs a home
+  position in its own entity state (it has none today);
+- **each new blow renews the interest**, which is why a second arrow lands before the hunter runs: the arrow is not
+  aimed at damage, it is aimed at keeping the boar following.
+
+Three states, then, not two: **grazing at home -> chasing a target -> returning home**. Built testably as: a struck
+animal walks toward its attacker; break line or walk far enough and it walks back to where it began; a second blow
+turns it round again.
+
+### Priorities, weighted towards what a simulation can settle (owner, 2026-10-29)
+
+The owner's aim, in his words: *"I intend to keep system, that allows simulations ... when adding new civilizations, it
+would be helpful to use the simulations for game balancing."* That changes what "next" means: work that a headless run
+can measure comes before work that only a person can see.
+
+**Simulation-testable, and wanted:**
+
+1. **The slaughter and the carcass** - in flight. Last blow decides the meat; the body is gathered; the animal becomes
+   its `dead_unit` in place. Every assertion is arithmetic.
+2. **The animal's chase and leash** - the three states above. Timeable, distance-measurable, deterministic.
+3. **A scripted opponent and a scenario format** - steps with times, so a match is reproducible. This is the thing the
+   balance goal actually needs: *"at 2:10 build the mill, at 4:30 send two villagers to wood"* is a build order that
+   can be run for every civ.
+4. **A batch runner with metrics** - N scenarios x M seeds, headless, emitting a table: time to Feudal, time to Castle,
+   food/wood/gold per minute, villagers lost, first military unit, match outcome. Without this, balance is opinion.
+5. **The acceptance match** - fast castle, siege workshop, mangonel, raze the town centre, `Victory { winner: 1 }`
+   inside 30:00. It is the one test that says the whole economy-to-army chain works.
+
+**Not yet simulation-testable, and why:** there is no AI (only scripts), civs are data that nothing branches on beyond
+one building prerequisite (D63), and the market, trade and full counter triangle are absent. Balance work on those
+would be measuring a game we have not built yet.
+
+**The order that follows:** 1 and 2 are small and both close a hole I opened; 3 and 4 are the balance engine and are
+the first things that pay back the owner's stated goal; 5 is the acceptance test that uses 3.
