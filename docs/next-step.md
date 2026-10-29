@@ -1425,3 +1425,49 @@ herdable set joins the bookkeeping tables and is pruned with the entity.
 3. **A fixture ordering trap worth knowing:** ownership is decided the instant anybody sees the animal, so placing
    the sheep before the thieves lets the first thief own it and then its own sight protects it. The tie-break test
    places the watchers first and the animal last. It cost one failing test to see, and it is recorded in the file.
+
+## Item 6 - three known-wrong answers, paid off (2026-10-29)
+
+*Compact before the code.*
+
+**(a) `settle_blind_sites` runs an O(n) scan every tick.** It has a guard, but the guard *is* the scan ("is anything
+under construction?"). A maintained set of foundations makes the guard a set lookup, and a `debug_assert!` that the
+set agrees with the world keeps the maintenance honest - drift in a maintained set is exactly the failure a
+behaviour test cannot see.
+
+**(b) Two count assertions in the data tests follow the pack.** `pack.rs` re-asserts the dat's 801 techs and 798
+effects. That is the *dat* test's business (`techs.rs`, where pinning the census is the point); in a pack test it
+fails the day a civ is added, for a reason that has nothing to do with packing. Replaced with a relationship: the
+pack's tables are the ones its files hold, compared against a direct load of the same file.
+
+**(c) A body with no meat had no lifetime.** A soldier's or a tower's kill leaves a body with nothing in it and - as
+of item 4 - no rot entry either, so it stood on the map for the rest of the match. The lifetime is **derived from the
+pack**, not invented: a body lies as long as its species' *full* carcass would take to rot (meat / decay rate - 850 s
+for a boar, 400 s for a sheep), whether or not it holds meat.
+
+**Tests this owes:** a soldier's kill still leaves a body that can be seen at a minute, and is gone after the span
+the pack implies.
+
+### Item 6, review: the three known-wrong answers (2026-10-29)
+
+**(a) The blind-site guard is a set, not a scan.** `settle_blind_sites` asked "is anything under construction?" by
+walking every entity, every tick, and the answer was "no" in every match that was not being built in. `foundations`
+is maintained where a construction starts, where it finishes and where the entity dies, and a `debug_assert!`
+compares it with the world on every tick it is non-empty - so the drift a maintained set invites fails in debug
+instead of silently skipping a rule.
+
+**Measured, interleaved against a `HEAD` worktree** (2,000 finished buildings, no foundations, release, 1,000 ticks
+each): **68.5-70.1 µs/tick on this tree against 71.5-72.0 on `HEAD`**, and **the state hash is identical**
+(`7a7f41250fdd3ab8`) - so the change is behaviour-neutral and worth 2-4% in a world that never builds anything. It is
+an O(n) -> O(1) change, so the payoff grows with the world; at 2,000 entities it is real but small.
+
+**(b) The pack's counts became a relationship.** `pack.rs` asserted the dat's 801 techs and 798 effects; it now
+compares the pack's tables against a direct load of the same files, which is what a *pack* test can prove (it loaded
+the files it says it loaded) and which survives a pack that grows. The dat's census stays pinned in `techs.rs`, where
+the number is the subject rather than a side effect.
+
+**(c) An empty body has a lifetime, derived rather than invented.** A soldier's kill leaves a carcass with nothing in
+it and - after item 4 - no rot to work with, so it stood on the map for the rest of the match. Every body now carries
+an expiry tick as well as a rot rate: **its species' own meat divided by its species' own rot rate** (850 s for a
+boar, 400 s for a sheep), so a pack whose animals change changes the lifetime with them. Nothing was invented, and
+the test asserts both halves - present at a minute, gone inside eighteen.

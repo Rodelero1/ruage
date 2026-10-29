@@ -1954,3 +1954,20 @@ nothing mechanical.
   still not yours to kill. Both halves are tested.
 - **Cost:** one walk of the units times the herdables alive, returning at once when no herdable stands. `los` is
   squared and resolved at seed, so the tick does no table read and no square root. Not measured with the A/B probe.
+
+## D72 - The blind-site guard, and a body's lifetime
+
+*Two of the three "known-wrong answers" from item 6; the third (pack counts) is a test, not a decision.*
+
+**`settle_blind_sites` was paying O(n) to learn "nothing to do".** The guard was the scan ("is anything under
+construction?"), which every tick walked the whole entity list in every match. `World.foundations` is now the same
+answer as a set lookup, maintained where a construction starts, finishes, and dies, with a `debug_assert!` that
+compares it against the world whenever it is non-empty - because a maintained set's failure mode is silent drift, and
+a behaviour test cannot see it. Measured interleaved against a `HEAD` worktree at 2,000 buildings: 68.5-70.1 µs/tick
+against 71.5-72.0, hash unchanged, so the change is neutral in behaviour and worth 2-4% in a match that never builds.
+
+**A body's lifetime is derived, not chosen.** An empty carcass has nothing to rot, so item 4's rot gave it no way off
+the map. Every body now carries two numbers from the pack: how much meat it loses a tick (zero if it was never
+butchered) and the tick it must be gone by - **its species' own meat divided by its own rot rate**, which is 850 s for
+a boar and 400 s for a sheep. That keeps the rule auditable: change a species' meat or its rot in the dat and its
+corpse's lifetime follows, with nothing to remember.

@@ -449,3 +449,56 @@ fn a_carcass_that_has_rotted_away_leaves_the_map() {
         "and it must leave nothing behind in the side tables"
     );
 }
+
+/// A body is not immortal. A soldier's kill leaves a carcass with **no meat** and therefore no rot - and before this
+/// increment that body stood on the map for the rest of the match. Its lifetime is derived from the pack rather than
+/// invented: a body lies as long as its species' *full* carcass would take to rot (340 food at 0.4 a second for a
+/// boar is 850 s), whether or not it holds anything.
+#[test]
+fn a_soldiers_body_lies_for_a_carcass_span_and_then_goes() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let soldier = place(&mut world, 1, 74, 14, 2, 40, 0);
+    let boar = place(&mut world, 0, boar_unit, 14, 0, 10, 340);
+
+    world
+        .submit_checked(Command::Attack {
+            attacker: soldier,
+            target: boar,
+        })
+        .expect("the soldier can be sent at the boar");
+    for _ in 0..2_000 {
+        world.step().expect("stepping");
+        if hp_of(&world, boar) <= 0 {
+            break;
+        }
+    }
+    assert!(
+        world.entity(boar).is_some(),
+        "a soldier's kill still leaves a body"
+    );
+
+    // A minute later it is still lying there ...
+    for _ in 0..1_200 {
+        world.step().expect("stepping");
+    }
+    assert!(
+        world.entity(boar).is_some(),
+        "an empty body does not vanish the moment it is made"
+    );
+
+    // ... and after the span a full carcass of its species would take to rot, it is gone.
+    let mut gone = false;
+    for _ in 0..17_000 {
+        world.step().expect("stepping");
+        if world.entity(boar).is_none() {
+            gone = true;
+            break;
+        }
+    }
+    assert!(gone, "an empty body must not stay on the map for ever");
+    assert!(!world.bookkeeping_touches(boar));
+}

@@ -33,16 +33,26 @@ fn the_project_pack_loads_and_has_an_identity() {
     let expected = PACK_FILES.len() + usize::from(pack.parts.contains_key("overrides.toml"));
     assert_eq!(pack.parts.len(), expected);
     assert_eq!(pack.resources.count(), 4);
+    // The tables a pack carries are the ones its files hold - compared against a direct load of the same file rather
+    // than against a remembered count. A magic number here fails the day a civ is added, for a reason that has nothing
+    // to do with packing; the dat's own census is `techs.rs`'s business, where pinning 801 is the point.
+    let dir = repo("config");
+    let techs_on_disk = ruage_data::load_techs_file(&ruage_data::pack_path(&dir, "techs.toml"))
+        .expect("techs.toml");
+    let effects_on_disk =
+        ruage_data::load_effects_file(&ruage_data::pack_path(&dir, "effects.toml"))
+            .expect("effects.toml");
     assert_eq!(
         pack.techs.techs.len(),
-        801,
-        "801 techs travel with the pack"
+        techs_on_disk.techs.len(),
+        "the pack carries the techs its own file holds"
     );
     assert_eq!(
         pack.effects.effects.len(),
-        798,
-        "798 effects too: they are content"
+        effects_on_disk.effects.len(),
+        "and the effects its own file holds"
     );
+    assert!(!pack.techs.techs.is_empty() && !pack.effects.effects.is_empty());
     assert!(!pack.units.units.is_empty());
     assert!(!pack.combat.buildings.can_attack || pack.combat.buildings.can_attack);
 }

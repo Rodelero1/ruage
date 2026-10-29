@@ -1029,6 +1029,15 @@ struct Leash {
     chasing: bool,
 }
 
+/// A body's clock (items 4 and 6). `per_tick` is how much meat it loses a tick - zero for a body that was never
+/// butchered - and `expires` is the tick it leaves the map regardless, derived from the species' own meat and rot
+/// rate. Both numbers come from the pack, so a pack whose animals change changes the lifetime with them.
+#[derive(Debug, Clone, Copy)]
+struct Rot {
+    per_tick: i64,
+    expires: u64,
+}
+
 pub struct World {
     tick: u64,
     tick_rate_hz: u32,
@@ -1132,11 +1141,18 @@ pub struct World {
     herdable_ids: BTreeSet<EntityId>,
     /// How far each unit can see, squared, in raw units - `los` from the pack, resolved once at seed (item 5).
     sight: BTreeMap<u32, i64>,
-    /// Rot per body, in raw units per tick (item 4). Fixed at death from the **living animal's** `decay_rate`,
-    /// which is food per second - the body's own record carries a flat 1.0 that is not a rot rate at all.
-    rots: BTreeMap<EntityId, i64>,
+    /// Rot per body (item 4) and the tick it must be gone by whatever happens (item 6). Fixed at death from the
+    /// **living animal's** `decay_rate`, which is food per second - the body's own record carries a flat 1.0 that
+    /// is not a rot rate at all.
+    rots: BTreeMap<EntityId, Rot>,
     /// The same rate per animal unit, ids and families, resolved once at seed so a death never reads a table.
     animal_rot: BTreeMap<u32, i64>,
+    /// How long a body of each animal lies on the map, in ticks: as long as its **full** carcass would take to rot
+    /// (meat / decay rate). Derived from the pack, not invented (item 6).
+    animal_span: BTreeMap<u32, u64>,
+    /// Buildings with a construction in progress, by id. A maintained set rather than a scan: `settle_blind_sites`
+    /// needs to know whether any site exists and used to walk the world to ask (item 6).
+    foundations: BTreeSet<EntityId>,
     /// Which families require which family to have been built once, resolved from `[build] requires`,
     /// with the requirement's role name kept for the message.
     requires_built: BTreeMap<u32, (u32, String)>,
@@ -1329,6 +1345,8 @@ impl World {
             sight: BTreeMap::new(),
             rots: BTreeMap::new(),
             animal_rot: BTreeMap::new(),
+            animal_span: BTreeMap::new(),
+            foundations: BTreeSet::new(),
             requires_built: BTreeMap::new(),
             age_needs: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
@@ -1683,6 +1701,16 @@ impl World {
                 {
                     self.animal_rot.insert(unit, per_tick);
                     self.animal_rot.insert(units.root(unit), per_tick);
+                    // How long its body lies there: its own meat divided by its own rot rate. A boar is 340 food at
+                    // 0.4 a second, so 850 s; a sheep 100 at 0.25, so 400 s. Derived, so a pack whose animals change
+                    // changes the lifetime with them.
+                    let meat =
+                        i64::from(units.unit(unit).map_or(0, |stats| stats.food)) * self.scale;
+                    let span = u64::try_from((meat / per_tick).max(0)).unwrap_or(0);
+                    if span > 0 {
+                        self.animal_span.insert(unit, span);
+                        self.animal_span.insert(units.root(unit), span);
+                    }
                 }
             }
         }
@@ -2734,14 +2762,20 @@ impl World {
     /// whoever puts a builder to work first (`cancel_overbuilt`). Only something already started or
     /// finished is a settled fact that a late placement cannot undo.
     fn settle_blind_sites(&mut self) {
-        // Most ticks nothing is under construction; one scan decides whether the rest is worth doing.
-        if !self
-            .entities
-            .iter()
-            .any(|entity| entity.construction.is_some())
-        {
+        // Nothing under construction: the pass costs one set lookup. It used to cost a walk of every entity to ask the
+        // same question, every tick, in every match (item 6).
+        if self.foundations.is_empty() {
             return;
         }
+        // A maintained set drifts: this is the assertion that catches it, and it costs nothing in release.
+        debug_assert_eq!(
+            self.foundations.len(),
+            self.entities
+                .iter()
+                .filter(|entity| entity.construction.is_some())
+                .count(),
+            "the foundation set disagrees with the world"
+        );
         let sites: Vec<(EntityId, u8, (Fixed, Fixed))> = self
             .entities
             .iter()
@@ -3109,7 +3143,7 @@ impl World {
     fn promote_dead_animals(
         &mut self,
         blows: &[(EntityId, EntityId)],
-        new_rots: &mut Vec<(EntityId, i64)>,
+        new_rots: &mut Vec<(EntityId, Rot)>,
     ) {
         if self.animal_bodies.is_empty() || blows.is_empty() {
             return;
@@ -3160,11 +3194,21 @@ impl World {
             self.paths.remove(&id);
             self.leash.remove(&id);
             self.rots.remove(&id);
-            if butchered
-                && entity.amount.raw() > 0
-                && let Some(per_tick) = unit.and_then(|unit| self.animal_rot.get(&unit).copied())
-            {
-                new_rots.push((id, per_tick));
+            // Every body has a lifetime, meat or no meat: a soldier's kill leaves a carcass with nothing in it, and
+            // before this it stood on the map for the rest of the match (item 6). A body that holds meat rots it
+            // away and goes when it is empty; an empty one simply lies for its species' span and then goes.
+            if let Some(unit) = unit {
+                let rate = self.animal_rot.get(&unit).copied().unwrap_or(0);
+                let span = self.animal_span.get(&unit).copied().unwrap_or(0);
+                if span > 0 {
+                    new_rots.push((
+                        id,
+                        Rot {
+                            per_tick: if butchered { rate } else { 0 },
+                            expires: self.tick.saturating_add(span),
+                        },
+                    ));
+                }
             }
         }
     }
@@ -3394,6 +3438,9 @@ impl World {
             carry: Fixed::ZERO,
             variant: None,
         })?;
+        // A site that exists is a site the blind-placement pass has to look at, and the set is how it knows there is
+        // one without walking the world every tick (item 6).
+        self.foundations.insert(id);
 
         let from = self
             .find(villager)
@@ -5878,6 +5925,7 @@ impl World {
                 if let Some(building) = self.find_mut(site) {
                     building.construction = None;
                 }
+                self.foundations.remove(&site);
                 // Finished once is finished for good, for the purposes of prerequisites (D63).
                 if let Some((player, Some(unit))) = finished {
                     let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
@@ -6320,7 +6368,7 @@ impl World {
         // unit is a named carcass (item 2).
         // Bodies made this tick start rotting on the *next* one: a corpse that lost a tick of food as it appeared
         // would make every arithmetic assertion about meat off by exactly one tick of rot.
-        let mut new_rots: Vec<(EntityId, i64)> = Vec::new();
+        let mut new_rots: Vec<(EntityId, Rot)> = Vec::new();
         self.promote_dead_animals(&blows, &mut new_rots);
         // A body is a unit with no health, and it must survive the pass that removes the dead (D70). The set
         // holds ids as well as families, so this costs a lookup and no table walk: the first version cloned
@@ -6331,15 +6379,23 @@ impl World {
         // caught. `rots` is taken out so the closure does not borrow `self` twice.
         let mut rots = std::mem::take(&mut self.rots);
         let mut rotted: Vec<EntityId> = Vec::new();
+        let now = self.tick;
         self.entities.retain_mut(|entity| {
-            if let Some(per_tick) = rots.get(&entity.id).copied() {
-                entity.amount = Fixed::from_raw((entity.amount.raw() - per_tick).max(0));
+            if let Some(rot) = rots.get(&entity.id).copied()
+                && rot.per_tick > 0
+            {
+                entity.amount = Fixed::from_raw((entity.amount.raw() - rot.per_tick).max(0));
             }
             let is_body = entity.kind == EntityKind::Unit
                 && entity.unit.is_some_and(|unit| bodies.contains(&unit));
             // A body with nothing left in it is gone: nothing eats an empty carcass, and leaving it standing is the
             // "an emptied body stays for ever" hole this closes.
-            let spent = is_body && entity.amount.raw() <= 0 && rots.contains_key(&entity.id);
+            // Spent: empty meat that was rotting away, or a body that has lain for its species' span - which is the
+            // only lifetime an empty carcass has, since there is nothing in it to rot (item 6).
+            let spent = is_body
+                && rots.get(&entity.id).is_some_and(|rot| {
+                    (rot.per_tick > 0 && entity.amount.raw() <= 0) || now >= rot.expires
+                });
             let keep = (!matches!(entity.kind, EntityKind::Unit | EntityKind::Building)
                 || entity.hp > 0
                 || is_body)
@@ -6356,8 +6412,8 @@ impl World {
             rots.remove(&id);
         }
         self.rots = rots;
-        for (id, per_tick) in new_rots {
-            self.rots.insert(id, per_tick);
+        for (id, rot) in new_rots {
+            self.rots.insert(id, rot);
         }
         // A garrison goes down with its shelter: a unit inside a building that dies has nowhere to be,
         // and the alternative - ejecting it onto the rubble - would let a razed town centre disgorge
@@ -6394,6 +6450,7 @@ impl World {
             self.build_queue.remove(&id);
             self.leash.remove(&id);
             self.slaughter.remove(&id);
+            self.foundations.remove(&id);
             self.slaughter.retain(|_, animal| *animal != id);
             self.herdable_ids.remove(&id);
         }
