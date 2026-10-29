@@ -1011,3 +1011,50 @@ two thousand ticks despite being ordered to attack at eight tiles' distance. Two
 attacker); arrows land in the `landings` loop (`victim.hp -= damage`, which does **not** - `Task::Fly` carries the
 target, not the shooter). Anything that needs to know who killed something must either take the melee path or the
 arrow must start carrying its archer.
+
+### Meat is decided by the last blow; hunters shoot, shepherds cut (owner, 2026-10-29)
+
+Two refinements, both narrowing what the earlier notes guessed at:
+
+- *"If soldiers hurt the boar, but villager makes the last hit, then carcass does give the meat."* So nothing about the
+  **history** of the wound matters - soldiers may soften it, arrows may stick in it, and a villager's last blow still
+  leaves a carcass worth 340. Only the **last** blow counts, which means the engine has to record who dealt *that* blow
+  and nothing else.
+- *"Hunter villager also use the bow while shepherd villager uses the knife."* A hunter variant attacks at **range**, a
+  shepherd at melee. That is the likely explanation for a villager never landing a blow on a boar at eight tiles: an
+  attack order with a ranged variant resolves as a **shot**, and a shot lands without carrying its archer - so the
+  victim is hurt by an arrow nobody can name, and the variant that is supposed to make meat is the one whose blow the
+  engine cannot attribute. This is now the first thing to check, before any carcass code is written.
+
+### Boar luring: what the video is, and what we can and cannot take from it (2026-10-29)
+
+The owner's link (`DkFD8bhtFkI`) is **"How to lure a boar in AoE2 shown in 45 seconds or less (garrison method)"** by
+Hjörleif. Its transcript is **disabled**, so the narration could not be read; the title, the description's companion
+links (a "Viper method" and a "basic method"), and general knowledge are what this rests on, and it is labelled as
+such rather than presented as the video's content.
+
+The **garrison method**, in the terms the engine will need: a villager is sent to hit the boar once (or simply come
+close) so that it takes the villager as its target; the villager then walks back toward the town centre with the boar
+following; at the town centre the villager **garrisons**, and the boar - having lost its target - stops in place,
+where the remaining villagers finish it. The trick is that the boar keeps chasing only while it has something to
+chase, so the garrison ends the chase exactly where you want the killing to happen.
+
+Our engine has every part of that except the last: an animal takes no target of its own (retaliation is parked), and
+garrisoning exists. A boar lure is therefore a scenario script that a **retaliation** rule makes work - which is a
+second, practical reason it is not optional.
+
+And the owner's remark that the **factory AI never lures the boar in HD**: our acceptance scenario must script the
+lure explicitly. Nothing in the AI will do it, and a fast-castle script that ignores the boar is leaving 340 food
+standing in the forest.
+
+### The acceptance budget: 30 minutes of game time (owner, 2026-10-29)
+
+*"Can you speed up the simulations instead and then add extra 10 minutes?"* - yes, and the two halves are independent:
+
+- **Speed is already free.** The simulation is headless and deterministic: the Dark Age probe played **20 minutes of
+  game time in about ten seconds** of wall clock. Nothing in the acceptance test waits on real time; a longer match
+  costs seconds, not minutes. There is no speed knob to turn, and none is needed.
+- **The budget is a game-time decision, and it is now 30:00**, up from 20:00. The measured reason: a berries-and-farms
+  economy reaches Feudal at about 14:30 and Castle does not fit inside twenty minutes without the sheep and boar the
+  researched openings rely on. Ten more minutes of game time is ten more seconds of test runtime and removes the
+  pressure that was forcing the economy to be faster than it is.
