@@ -1930,3 +1930,27 @@ guard fails the shepherd test on its refusal assertion.
 slaughter refused with `NoTables` and the villager stood beside a living sheep for 2,000 ticks. The refusal was
 readable the moment it existed - the previous session's silent `let _ =` is exactly why this class of bug used to
 take an evening.
+
+**D70, increment six: conversion by line of sight (item 5, 2026-10-29).** The manual's rule, implemented as written:
+a **unit's** line of sight (a building's does not count, and neither does proximity), immediate, herdables only. An
+unowned animal joins the first player whose unit sees it; an owned one is stolen only when another player sees it and
+**no unit of its owner's** does; a tie goes to the side with **more units near it**, and an exact tie to the lower
+player number so a replay agrees. The Celts' exemption is a civ bonus and stays out of scope while civs decide
+nothing mechanical.
+
+- **Content answers "which animals".** `[hunt] herdable_roles` - the list that already decides which animals *walk* -
+  also decides which ones change hands, because in this pack they are the same animals and a second list could only
+  disagree with the first.
+- **A witness is a unit that is not an animal.** The first version counted animals as seers, and since a sheep has a
+  line of sight of its own, every owned sheep kept itself. `seen = [1, 0, ...]` in a debug print was the tell.
+- **A steal disturbs the herder; a join does not.** An unowned animal becoming yours *because* your villager is
+  walking it is the ordinary case, so its route stays and the gather task survives. A steal drops the animal's route
+  and stands its old herder down: it belongs to somebody else and walks to nobody's drop site. That is the window
+  D70 kept pointing at - the walk, while the animal is alive - and the meat is never in question because it only
+  exists after death.
+- **Friendly fire had to learn about livestock.** Once a sheep joins your player, your own shepherd must be able to
+  kill it, or the slaughter cannot happen for the ordinary case at all. `check_attack` therefore refuses friendly
+  fire for everything *except* livestock, and keeps the allied check for different players: a teammate's sheep is
+  still not yours to kill. Both halves are tested.
+- **Cost:** one walk of the units times the herdables alive, returning at once when no herdable stands. `los` is
+  squared and resolved at seed, so the tick does no table read and no square root. Not measured with the A/B probe.

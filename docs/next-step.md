@@ -1366,3 +1366,62 @@ bookkeeping tables so a rotted body's cleanup is testable (`bookkeeping_touches`
    walk of the world; `retain_mut` plus a taken map is the shape that keeps it to one pass.
 3. **Non-butchered bodies still have no lifetime** - a soldier's kill leaves a body with no meat and no rot entry,
    so it stands there for ever. That is item 6's "emptied body" hole, still open, and now named in one place.
+
+## Item 5 - a herdable changes hands by line of sight (2026-10-29)
+
+*Compact before the code.*
+
+**The rule is the manual's, quoted in D70 and re-checked there:**
+
+> *"Sheep start the game neutral and unowned. As soon as a sheep enters the line of sight of a unit, the sheep is
+> under control of that player. You can steal ownership of another player's sheep if it comes within your unit's
+> line of sight and there are no other players' units near the sheep."*
+
+So: the trigger is **vision** (a *unit's* LOS, not a building's), it is **immediate** (no timer, no adjacency), only
+**herdables** convert, and ties go to whoever has **more units near**. The Celts' exemption is a civ bonus and out of
+scope while civs decide nothing mechanical.
+
+**Content answers "which animals".** `[hunt] herdable_roles` already names the animals that **walk**; the manual's
+sentence and the walking are the same set of animals in this pack, so the list does double duty rather than gaining a
+second list that could disagree with it. Recorded as a decision, not a coincidence.
+
+**What the engine must know cheaply.** Each unit's `los` is a pack value, so it is squared and resolved at seed
+(`sight`), and the herdable *entities* are tracked in a set filled at seed and on spawn - both so the tick can ask
+"who sees this sheep" without walking the unit table.
+
+**What changes when an animal changes hands:** its owner, and nothing else - but the *old* owner's gatherer was
+following it, so any task naming it as a gather node is stood down and its own route is dropped: it belongs to
+somebody else now and walks to nobody's drop site. That is the "window for stealing is the walk" the chicken-and-egg
+earlier slices kept pointing at, and the meat is not in question because meat only exists after death.
+
+**Tests this owes:** an unowned sheep joins the first player whose unit sees it; an owned one is **not** stolen while
+its owner still sees it; it **is** stolen when its owner cannot; a tie between two stealers goes to the side with
+more units near it; and a boar - food, but not herdable - never changes hands.
+
+### Item 5, review: line of sight, and a sheep that kept itself (2026-10-29)
+
+**Landed:** herdables change hands by a **unit's** line of sight; the owner's own sight protects its animal; a tie
+goes to the side with more units near it and then to the lower player number; a boar never converts; and the animal
+that changes hands drops its route and stands its old herder down.
+
+**Performance.** The pass is one walk of the units times the herdables alive - and returns immediately when no
+herdable stands, which is every world whose pack names none. The sight reach is `los` squared, resolved at seed, so
+the tick does no table read and no square root. `sight` is a map over the unit table (~1,389 entries); the
+alternative was a table read per unit per tick, and the map is paid once at seed. **Not measured with the A/B probe**
+- the honest claim is "O(units x herdables) per tick, zero when there are no herdables".
+
+**Stability.** Ownership is state, and it is hashed through the entity. Nothing new is carried in `Entity`. The
+herdable set joins the bookkeeping tables and is pruned with the entity.
+
+**Three defects, all mine, all found by running:**
+
+1. **A sheep is not a witness.** Animals have a line of sight of their own, and the first version counted them as
+   seers - so an owned sheep saw itself and could never be stolen. The debug print showed `seen = [1, 0, ...]`, which
+   is the signature. Animals are now excluded from the seer set.
+2. **The contested test could not test the tie-break.** Its counts were two against one, so the mutation that
+   reverses the comparison (`>` to `>=`) passed it untouched. A second test with two watchers on **each** side was
+   added, and that mutation now fails it. The first test is kept: it pins the count rule, the second pins the
+   ordering rule, and neither implies the other.
+3. **A fixture ordering trap worth knowing:** ownership is decided the instant anybody sees the animal, so placing
+   the sheep before the thieves lets the first thief own it and then its own sight protects it. The tie-break test
+   places the watchers first and the animal last. It cost one failing test to see, and it is recorded in the file.

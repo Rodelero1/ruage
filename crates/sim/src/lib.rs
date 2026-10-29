@@ -1127,6 +1127,11 @@ pub struct World {
     /// A shepherd's kill in progress: villager -> the animal it was sent to work and is now striking. The gather
     /// order is replaced by the fight, so it is remembered here to be resumed on the body (D70, item 3).
     slaughter: BTreeMap<EntityId, EntityId>,
+    /// The herdable animals alive, by entity: the only things that change hands (item 5). Filled at seed and on
+    /// spawn so the tick walks a handful rather than filtering the world every frame.
+    herdable_ids: BTreeSet<EntityId>,
+    /// How far each unit can see, squared, in raw units - `los` from the pack, resolved once at seed (item 5).
+    sight: BTreeMap<u32, i64>,
     /// Rot per body, in raw units per tick (item 4). Fixed at death from the **living animal's** `decay_rate`,
     /// which is food per second - the body's own record carries a flat 1.0 that is not a rot rate at all.
     rots: BTreeMap<EntityId, i64>,
@@ -1320,6 +1325,8 @@ impl World {
             butchers: BTreeSet::new(),
             armed_animals: BTreeSet::new(),
             slaughter: BTreeMap::new(),
+            herdable_ids: BTreeSet::new(),
+            sight: BTreeMap::new(),
             rots: BTreeMap::new(),
             animal_rot: BTreeMap::new(),
             requires_built: BTreeMap::new(),
@@ -1633,6 +1640,9 @@ impl World {
         self.herdable.clear();
         for role in &economy.hunt.herdable_roles {
             if let Some(unit) = economy.role.get(role).copied() {
+                // The id as well as the family: the tick asks "is this livestock" on the damage path and on the
+                // conversion pass, and neither may walk the unit table (items 3 and 5).
+                self.herdable.insert(unit);
                 self.herdable.insert(units.root(unit));
             }
         }
@@ -1681,6 +1691,28 @@ impl World {
             if let Some(unit) = economy.role.get(role).copied() {
                 self.butchers.insert(unit);
                 self.butchers.insert(units.root(unit));
+            }
+        }
+        // How far a unit sees, squared and resolved once (item 5). `los` is a pack column; squaring at seed keeps
+        // the per-tick comparison to a distance test with no root and no table read.
+        self.sight.clear();
+        for unit in units.units.values() {
+            if let Ok(los) = unit.los.resolve(self.scale, "los") {
+                let reach = los.raw();
+                self.sight.insert(unit.id, reach * reach);
+            }
+        }
+        // Which herdables are already standing here (a scenario may place them), and the same question for a body
+        // that content names later: both sets are rebuilt here rather than guessed.
+        self.herdable_ids.clear();
+        for entity in &self.entities {
+            if entity.kind == EntityKind::Unit
+                && entity.player == 0
+                && entity
+                    .unit
+                    .is_some_and(|unit| self.herdable.contains(&unit))
+            {
+                self.herdable_ids.insert(entity.id);
             }
         }
         // The leash (D71): content's two numbers, resolved once into ticks and engine units, so the tick
@@ -2128,11 +2160,20 @@ impl World {
         if self.effective_stance(attacker) == Stance::NoAttack {
             return Err(SimError::StanceForbidsAttack { id: attacker });
         }
-        if source.player == victim.player {
+        // Your own livestock is not friendly fire: once a sheep is yours, your own shepherd has to be able to kill
+        // it, or the slaughter cannot happen at all (D70 item 5 - the animal joins the player whose villager is
+        // walking it, which is the same player). A teammate's sheep is a different matter: that is still a fight.
+        let livestock = victim
+            .unit
+            .is_some_and(|unit| self.herdable.contains(&unit));
+        let same_player = source.player == victim.player;
+        if same_player && !livestock {
             return Err(SimError::FriendlyFire { id: target });
         }
-        // Allies are not targets either: two players on one team do not fight each other.
-        if self.team_of(source.player) == self.team_of(victim.player) {
+        // Allies are not targets either: two players on one team do not fight each other. The check is skipped for
+        // the livestock case above, where "the same side" is the *same player* and the sheep is its shepherd's to
+        // kill; a **teammate's** sheep still needs an ally to be hostile, which it is not.
+        if !same_player && self.team_of(source.player) == self.team_of(victim.player) {
             return Err(SimError::AlliedTarget { id: target });
         }
         let units = self.units.as_ref().ok_or(SimError::NoTables)?;
@@ -2961,6 +3002,102 @@ impl World {
             costs: stats.costs.clone(),
             player: worker.player,
         })
+    }
+
+    /// A herdable changes hands by **line of sight** (D70, item 5): a *unit's* sight, not a building's, immediate,
+    /// herdables only. Unowned animals join the first player who sees them; an owned one is stolen when another
+    /// player sees it and **no unit of its owner's does**; a tie goes to the side with more units near it.
+    ///
+    /// Cost: one walk of the units times the herdables alive, and nothing at all when no herdable stands - which is
+    /// the early return below. The counts are a fixed array per animal, so no allocation happens per player.
+    fn step_conversion(&mut self) {
+        if self.herdable_ids.is_empty() || self.sight.is_empty() {
+            return;
+        }
+        // Copies out of the borrow: the decisions below change tasks and owners.
+        let seers: Vec<(u8, (Fixed, Fixed), i64)> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::Unit && entity.player > 0 && entity.hp > 0)
+            .filter(|entity| !matches!(entity.task, Task::Garrisoned { .. }))
+            // An animal is not a witness: a sheep has a line of sight of its own, and counting it would let every
+            // owned animal keep itself - which is exactly what the first version did (seen = [1, 0, ...]).
+            .filter(|entity| !entity.unit.is_some_and(|unit| self.animals.contains(&unit)))
+            .filter_map(|entity| {
+                let reach = entity.unit.and_then(|unit| self.sight.get(&unit))?;
+                Some((entity.player, entity.position, *reach))
+            })
+            .collect();
+        if seers.is_empty() {
+            return;
+        }
+        let animals: Vec<(EntityId, u8, (Fixed, Fixed))> = self
+            .herdable_ids
+            .iter()
+            .filter_map(|id| {
+                self.find(*id)
+                    .filter(|entity| entity.hp > 0)
+                    .map(|entity| (entity.id, entity.player, entity.position))
+            })
+            .collect();
+        // (animal, new owner, whether it was somebody's already): only a *steal* disturbs the herder, because an
+        // unowned animal joining the player whose villager is already walking it is the ordinary case.
+        let mut taken: Vec<(EntityId, u8, bool)> = Vec::new();
+        for (id, owner, position) in animals {
+            let mut seen: [u32; MAX_PLAYERS] = [0; MAX_PLAYERS];
+            for (player, at, reach) in &seers {
+                let dx = at.0.raw() - position.0.raw();
+                let dy = at.1.raw() - position.1.raw();
+                if dx * dx + dy * dy <= *reach {
+                    seen[usize::from(*player) - 1] += 1;
+                }
+            }
+            // The owner's own sight keeps the animal: that is the manual's second sentence.
+            if owner > 0 && seen[usize::from(owner) - 1] > 0 {
+                continue;
+            }
+            // Among the players who can see it, the one with most units near wins; a tie goes to the lower player
+            // number, so two runs of the same match agree.
+            let mut best: Option<(u8, u32)> = None;
+            for (index, count) in seen.iter().enumerate() {
+                if *count == 0 {
+                    continue;
+                }
+                let player = u8::try_from(index + 1).unwrap_or(u8::MAX);
+                if player == owner {
+                    continue;
+                }
+                if best.is_none_or(|(_, best_count)| *count > best_count) {
+                    best = Some((player, *count));
+                }
+            }
+            if let Some((player, _)) = best {
+                taken.push((id, player, owner > 0));
+            }
+        }
+        for (id, player, stolen) in taken {
+            if let Some(entity) = self.find_mut(id) {
+                entity.player = player;
+            }
+            if stolen {
+                // **Stolen**: it belongs to somebody else now, so it walks to nobody's drop site and the villager
+                // that was herding it stops rather than following a stranger's sheep home. That window - the walk,
+                // while the animal is alive - is the one D70 kept pointing at.
+                self.paths.remove(&id);
+                self.leash.remove(&id);
+                let herders: Vec<EntityId> = self
+                    .entities
+                    .iter()
+                    .filter(|entity| matches!(entity.task, Task::Gather { node, .. } if node == id))
+                    .map(|entity| entity.id)
+                    .collect();
+                for herder in herders {
+                    self.stand_down(herder);
+                    self.slaughter.remove(&herder);
+                }
+            }
+            self.stamp_entity(id);
+        }
     }
 
     /// Death leaves a body: an animal at or below zero health becomes its `dead_unit` **in place**, and it holds
@@ -4972,6 +5109,17 @@ impl World {
                 if usize::from(player) > MAX_PLAYERS {
                     return Err(SimError::PlayerOutOfRange { player });
                 }
+                if kind == EntityKind::Unit
+                    && unit.is_some_and(|unit| {
+                        self.herdable.contains(&unit)
+                            || self
+                                .units
+                                .as_ref()
+                                .is_some_and(|units| self.herdable.contains(&units.root(unit)))
+                    })
+                {
+                    self.herdable_ids.insert(id);
+                }
                 self.insert(Entity {
                     id,
                     player,
@@ -6106,6 +6254,8 @@ impl World {
         }
         // Animals react to the blows this tick landed, so the leash is judged after them (D71).
         self.step_leashes();
+        // ... and a herdable changes hands as soon as somebody's unit can see it (item 5).
+        self.step_conversion();
         // A building at or below its eject fraction throws its garrison out. They are unharmed - the
         // published rule - and they land where they already stand.
         for id in ejected {
@@ -6245,6 +6395,7 @@ impl World {
             self.leash.remove(&id);
             self.slaughter.remove(&id);
             self.slaughter.retain(|_, animal| *animal != id);
+            self.herdable_ids.remove(&id);
         }
 
         // A seat can only disappear by dying, so the match is only ever decided on a tick where
