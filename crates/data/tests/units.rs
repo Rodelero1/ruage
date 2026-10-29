@@ -56,7 +56,13 @@ fn the_real_unit_table_loads_and_answers_known_values() {
 
     assert_eq!(units.civ, 1);
     assert_eq!(units.civ_name, "British");
-    assert_eq!(units.units.len(), 1_166, "1,166 populated ids");
+    // 1,166 on the playable civ plus the 223 that exist only on Gaia - the boar, the deer, the mines,
+    // the carcasses. Content names what it needs; the pack carries the union.
+    assert_eq!(
+        units.units.len(),
+        1_389,
+        "1,389 ids: the playable civ and Gaia"
+    );
 
     // The knight, as the generator's own integration test pins it.
     let knight = units.unit(38).expect("knight exists");

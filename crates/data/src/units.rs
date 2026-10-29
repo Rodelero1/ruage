@@ -54,6 +54,11 @@ pub struct Unit {
     /// this rather than comparing ids. `None` for the 976 units nothing upgrades into.
     pub variant_of: Option<u32>,
     pub base_id: i32,
+    /// True for the world's own objects - the boar, the deer, the mines, the carcass a hunt leaves -
+    /// which live on the dat's Gaia civ and belong to no player. 223 of the 1,389 units are these.
+    /// Carried so content can tell what a player may field from what the world places; nothing in the
+    /// engine branches on it yet.
+    pub gaia: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -153,6 +158,9 @@ struct RawUnit {
     #[serde(default)]
     variant_of: Option<u32>,
     base_id: i32,
+    /// Defaulted to false: a pack written before Gaia's objects were imported only carries citied units.
+    #[serde(default)]
+    gaia: bool,
 }
 
 fn invalid(path: &str, key: String, detail: impl Into<String>) -> ConfigError {
@@ -258,6 +266,7 @@ pub fn load_units_str(text: &str, path: &str) -> Result<Units, ConfigError> {
             train_time: r.train_time,
             base_id: r.base_id,
             variant_of: r.variant_of,
+            gaia: r.gaia,
         };
 
         if let Some(parent) = r.variant_of {

@@ -1705,3 +1705,28 @@ nobody keeps. `crates/sim/tests/no_float.rs` walks `crates/sim/src`, and every l
 footprint, and a building is one tile today), crowd claims at work goals (D52 says work goals are not
 exclusive, and the claims table is exactly what D53 declined), routing round still bodies (needs route
 invalidation), and `genie`'s deferred-write schedule (an order to keep, not an architecture to adopt).
+
+## D68 - The pack is the union of the playable civ and Gaia
+
+*Found while starting the sheep and boar slice: there was no boar in the pack to make angry.*
+
+The dat keeps a playable civ's units on `civilizations[1]` and the world's own objects on
+`civilizations[0]`, which is Gaia. The importer built from civ 1 alone - correctly, for techs and civs -
+and so **silently dropped all 223 units that exist only on Gaia**: the boar (`BOARX`, 48, class 10, 75 hp),
+the deer, the wolf, the hawk, the fish, the mines-as-units, and the carcasses a hunt leaves. Sheep was in the
+pack only because it is duplicated onto the playable civ as `SHEEPG`, which is exactly why the gap went
+unnoticed: every test and every scenario used sheep.
+
+**The rule:** the pack carries the **union**, and Gaia's own records are marked `gaia = true`. The importer's
+job is facts, not curation (D17) - it should not be deciding which of the game's objects are worth having, and
+the engine only builds what content names, so the Age of Empires I leftovers that come with Gaia sit inert.
+1,166 units became **1,389**, of which 223 are Gaia's.
+
+**What it changed that nobody predicted:** a `ruage-data` test asserted "13 kind-101 ids are tech-only" - the
+finding that a unit/tech id range overlaps but does not swallow. With Gaia's units in the pack those 13 ids
+became unit ids too, so every tech id an effect names is now also in the unit table: **ambiguity grew, not
+shrank**, and the test's own conclusion ("an id alone cannot say which table a command means") is stronger
+than before. That is the sort of thing a union exposes, and it argues for the union rather than against it.
+
+The size went from 402 KB to 461 KB of generated TOML, which is a price worth paying for a pack that can name
+the animals the researched openings are built on.

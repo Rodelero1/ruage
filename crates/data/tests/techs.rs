@@ -158,11 +158,19 @@ fn kind_101_is_not_a_clean_unit_command() {
             }
         }
     }
-    // The finding, asserted: no id is unit-only, 84 are in both tables, 13 are tech-only. Unit and
-    // tech ids share a range, so an id alone cannot say which table a command means.
+    // The finding, asserted: no id is unit-only, and nearly all are in both tables. Unit and tech ids
+    // share a range, so an id alone cannot say which table a command means - which is why the reading
+    // is carried by the effect's kind and not guessed from the number.
+    //
+    // It used to read "84 in both, 13 tech-only". Those 13 stopped being tech-only the day Gaia's units
+    // reached the pack: the animals and mines that no civ owns share ids with techs the effects name.
+    // The ambiguity grew, it did not shrink, so the rule the test exists for is if anything stronger.
     assert_eq!(as_unit, 0, "no kind-101 id is unit-only");
     assert!(ambiguous > 50, "{ambiguous} ids are in both tables");
-    assert!(as_tech > 5, "{as_tech} ids are tech-only");
+    assert_eq!(
+        as_tech, 0,
+        "Gaia's units put every tech id in the unit table too"
+    );
     println!("kind 101: {as_unit} unit ids, {as_tech} tech ids, {ambiguous} in both tables");
     for example in examples {
         println!("  {example}");
