@@ -122,7 +122,6 @@ fn try_build(
         .filter(|entity| !busy.contains(&entity.id.0))
         .map(|entity| entity.id)
         .next()
-        .or_else(|| idle_or_any(world))
     else {
         return false;
     };
@@ -168,6 +167,7 @@ fn what_a_dark_age_opening_buys() {
     let house = world.role_unit("house").expect("house");
     let mill = world.role_unit("mill").expect("mill");
     let lumber_camp = world.role_unit("lumber_camp").expect("lumber camp");
+    let farm_unit = world.role_unit("farm").expect("farm");
     let blacksmith = world.role_unit("blacksmith").expect("blacksmith");
     let market = world.role_unit("market").expect("market");
     let mining_camp = world.role_unit("mining_camp").expect("mining camp");
@@ -241,6 +241,19 @@ fn what_a_dark_age_opening_buys() {
                 built.push("lumber_camp");
             }
 
+            // Farms: the researched orders' answer to "the berries ran out". Four at a time, 60 wood each,
+            // beside the town centre; a farmer works the plot and deposits at the TC.
+            if have(&world, "mill") && world.stock(1, wood) >= 60 {
+                let alive = world
+                    .entities()
+                    .iter()
+                    .filter(|entity| entity.player == 1 && entity.unit == Some(farm_unit))
+                    .count();
+                if alive < 4 {
+                    let _ = try_build(&mut world, farm_unit, tc_tile, &mut reserved, &mut busy);
+                }
+            }
+
             // After the Feudal Age: the cheapest pair of Feudal buildings for the Castle Age, and a camp
             // for the gold the Castle Age costs.
             if feudal_at.is_some() {
@@ -273,8 +286,15 @@ fn what_a_dark_age_opening_buys() {
                 } else {
                     (3, 6, 0)
                 };
+                let ripe_farm = world
+                    .entities()
+                    .iter()
+                    .filter(|entity| entity.player == 1 && entity.unit == Some(farm_unit))
+                    .filter(|entity| entity.construction.is_none() && entity.amount.raw() > 0)
+                    .map(|entity| entity.id)
+                    .next();
                 let target = if counts.0 < want_food {
-                    near_node(&world, tc_at, food)
+                    ripe_farm.or_else(|| near_node(&world, tc_at, food))
                 } else if counts.1 < want_wood {
                     near_node(&world, tc_at, wood)
                 } else if counts.2 < want_gold {
