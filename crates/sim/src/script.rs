@@ -45,11 +45,23 @@ pub enum StepKind {
         /// work three different trees instead of queueing on one and idling when it runs out.
         #[serde(default)]
         nth: usize,
+        /// Work a **building** instead of a resource node: a role (`farm`), resolved to this player's nearest finished
+        /// building of that family. Without it a script cannot use a farm at all - `nearest_resource` only finds
+        /// `EntityKind::Resource`, and a farm is a building - which is exactly the food engine a 30-minute opening
+        /// needs once the berries are gone.
+        #[serde(default)]
+        node: Option<String>,
     },
-    /// Put up a building beside one of this player's own buildings of the same type.
+    /// Put up a building: a villager, the building's role, and **where** it goes.
+    ///
+    /// `where` is a resource name (the building lands on the free tile nearest the nearest such node) or
+    /// `"near_town_centre"`, which is the default. The field was parsed and **ignored** before this: `where` was
+    /// written in `scenario.toml`, `deny_unknown_fields` is not set on a step, and nothing read the key - so a script
+    /// that asked for a lumber camp by the wood got a building beside the town centre and no complaint.
     Build {
         villager: usize,
         role: String,
+        #[serde(default, rename = "where")]
         where_: Option<String>,
     },
     /// Train a unit at a named building. Both are roles (`[role]` in economy.toml).
@@ -57,7 +69,9 @@ pub enum StepKind {
     /// Research a tech at a named building. The building is a role; the tech is a `[tech_role]`
     /// entry, because a tech has no name in the dat at all (D17).
     Research { building: String, tech: String },
-    /// Send this player's newest unit of a role at the nearest enemy.
+    /// Send this player's newest unit of a role at something. `target` is a selector: `"nearest_enemy"` (the first
+    /// enemy unit), `"enemy_building"` (their first building), or `"enemy_town_centre"` (the building of the start's
+    /// town-centre family, which is what a mangonel is aimed at).
     Attack { attacker: String, target: String },
     /// Stand a villager down.
     Stop { villager: usize },
@@ -140,6 +154,7 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
             villager,
             resource,
             nth,
+            node,
         } => {
             let unit = nth_villager(world, player, *villager)
                 .ok_or_else(|| format!("player {player} has no villager {villager}"))?;
@@ -149,20 +164,72 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                      nothing a villager could gather"
                 )
             })?;
-            let node = nearest_resource(world, unit, slot, *nth).ok_or_else(|| {
-                format!("player {player} has no {resource} node number {nth} to gather")
-            })?;
+            let node = match node {
+                None => nearest_resource(world, unit, slot, *nth).ok_or_else(|| {
+                    format!("player {player} has no {resource} node number {nth} to gather")
+                })?,
+                Some(role) => {
+                    // A building being worked (a farm): the nearest finished one of that role.
+                    let wanted = role_of(world, role)?;
+                    let here = world.position(unit);
+                    world
+                        .entities()
+                        .iter()
+                        .filter(|entity| {
+                            entity.player == player
+                                && entity.kind == EntityKind::Building
+                                && entity.construction.is_none()
+                                && entity
+                                    .unit
+                                    .is_some_and(|unit| world.is_family(unit, wanted))
+                        })
+                        .min_by_key(|entity| match here {
+                            Some(from) => {
+                                let dx = entity.position.0.raw() - from.0.raw();
+                                let dy = entity.position.1.raw() - from.1.raw();
+                                (dx * dx + dy * dy, entity.id.0)
+                            }
+                            None => (0, entity.id.0),
+                        })
+                        .map(|entity| entity.id)
+                        .ok_or_else(|| format!("player {player} has no finished {role} to work"))?
+                }
+            };
             Ok(Command::Gather {
                 villager: unit,
                 node,
             })
         }
-        StepKind::Build { villager, role, .. } => {
+        StepKind::Build {
+            villager,
+            role,
+            where_,
+        } => {
             let worker = nth_villager(world, player, *villager)
                 .ok_or_else(|| format!("player {player} has no villager {villager}"))?;
             let unit = role_of(world, role)?;
-            let at = free_tile_near(world, player)
-                .ok_or_else(|| format!("player {player} has no free ground by its town centre"))?;
+            let at = match where_.as_deref() {
+                None | Some("near_town_centre") => free_tile_near(world, player),
+                Some(resource) => {
+                    // A building placed for a resource is a building placed *at* that resource: a lumber camp beside
+                    // the wood is the whole point of a lumber camp, and one beside the town centre is wood spent on a
+                    // longer walk.
+                    let slot = world.slot_of(resource).ok_or_else(|| {
+                        format!(
+                            "where = {resource:?} names no resource in the pack, so there is nothing to build beside"
+                        )
+                    })?;
+                    let centre = town_centre_of(world, player).ok_or_else(|| {
+                        format!("player {player} has no town centre to measure a walk from")
+                    })?;
+                    let node = nearest_resource(world, centre, slot, 0).ok_or_else(|| {
+                        format!("player {player} has no {resource} node to build beside")
+                    })?;
+                    free_tile_near_node(world, node)
+                }
+            };
+            let at =
+                at.ok_or_else(|| format!("player {player} has no free ground for a {role}"))?;
             Ok(Command::Build {
                 villager: worker,
                 unit,
@@ -218,9 +285,6 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
         }
         StepKind::Attack { attacker, target } => {
             let attacker_unit = role_of(world, attacker)?;
-            if target.as_str() != "nearest_enemy" {
-                return Err(format!("unknown target selector {target:?}"));
-            }
             let unit = world
                 .entities()
                 .iter()
@@ -232,15 +296,48 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 .map(|entity| entity.id)
                 .max()
                 .ok_or_else(|| format!("player {player} has no unit {attacker}"))?;
-            let enemy = world
-                .entities()
-                .iter()
-                .filter(|entity| {
-                    entity.player != player && entity.kind == EntityKind::Unit && entity.player != 0
-                })
-                .map(|entity| entity.id)
-                .next()
-                .ok_or_else(|| format!("player {player} has no enemy to attack"))?;
+            let enemy = match target.as_str() {
+                "nearest_enemy" => world
+                    .entities()
+                    .iter()
+                    .filter(|entity| {
+                        entity.player != player
+                            && entity.kind == EntityKind::Unit
+                            && entity.player != 0
+                    })
+                    .map(|entity| entity.id)
+                    .next(),
+                "enemy_building" => world
+                    .entities()
+                    .iter()
+                    .filter(|entity| {
+                        entity.player != player
+                            && entity.kind == EntityKind::Building
+                            && entity.player != 0
+                    })
+                    .map(|entity| entity.id)
+                    .next(),
+                "enemy_town_centre" => {
+                    let centre = world.start_town_centre_unit().ok_or_else(|| {
+                        "the pack names no town centre, so there is none to aim at".to_owned()
+                    })?;
+                    world
+                        .entities()
+                        .iter()
+                        .filter(|entity| {
+                            entity.player != player
+                                && entity.kind == EntityKind::Building
+                                && entity
+                                    .unit
+                                    .is_some_and(|unit| world.is_family(unit, centre))
+                        })
+                        .map(|entity| entity.id)
+                        .next()
+                }
+                other => return Err(format!("unknown target selector {other:?}")),
+            };
+            let enemy =
+                enemy.ok_or_else(|| format!("player {player} has no {target} to attack"))?;
             Ok(Command::Attack {
                 attacker: unit,
                 target: enemy,
@@ -301,6 +398,49 @@ fn nearest_resource(world: &World, from: EntityId, slot: usize, nth: usize) -> O
 }
 
 /// The first free tile within two of this player's town centre, in a fixed scan order.
+/// The player's own town centre, by the start's role rather than by an id.
+fn town_centre_of(world: &World, player: u8) -> Option<EntityId> {
+    let centre_unit = world.start_town_centre_unit()?;
+    world
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.player == player
+                && entity.kind == EntityKind::Building
+                && entity
+                    .unit
+                    .is_some_and(|unit| world.is_family(unit, centre_unit))
+        })
+        .map(|entity| entity.id)
+}
+
+/// The free tile nearest a resource node, for a building that exists to shorten a walk to it.
+fn free_tile_near_node(world: &World, node: EntityId) -> Option<(u16, u16)> {
+    let position = world.position(node)?;
+    let scale = world.scale();
+    let origin = (
+        u16::try_from(position.0.raw() / scale).ok()?,
+        u16::try_from(position.1.raw() / scale).ok()?,
+    );
+    for radius in 1..=4u16 {
+        for dy in 0..=radius {
+            for dx in 0..=radius {
+                for (x, y) in [
+                    (origin.0 + dx, origin.1 + dy),
+                    (origin.0 + dx, origin.1.wrapping_sub(dy)),
+                    (origin.0.wrapping_sub(dx), origin.1 + dy),
+                    (origin.0.wrapping_sub(dx), origin.1.wrapping_sub(dy)),
+                ] {
+                    if world.is_free_ground(x, y) {
+                        return Some((x, y));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 fn free_tile_near(world: &World, player: u8) -> Option<(u16, u16)> {
     // The start's own town-centre role, not the word: a pack of our own may call it "keep" (D17).
     let centre_unit = world.start_town_centre_unit()?;

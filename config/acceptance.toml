@@ -1,0 +1,266 @@
+# The acceptance match: a scripted fast castle that ends in a mangonel at a town centre (item 9).
+#
+# Every time is a *game* time in seconds, converted to ticks once by the runner (D16). The order is the researched
+# one, adapted to what this map actually holds: the map's only natural food is six berry bushes (900 food in all), so
+# the opening runs on berries and then **farms**, which are the food engine a 30-minute boom needs and which a script
+# could not use at all until `node = "farm"` existed here.
+#
+# A step names *what*, never an id: `villager = 2` is this player's third villager by id order, and the ones trained
+# afterwards follow it.
+schema = 2
+duration_seconds = 1800.0
+
+[[step]]
+at_seconds = 0
+player = 1
+kind = "gather"
+villager = 0
+resource = "food"
+
+[[step]]
+at_seconds = 0
+player = 1
+kind = "gather"
+villager = 1
+resource = "food"
+nth = 1
+
+[[step]]
+at_seconds = 0
+player = 1
+kind = "gather"
+villager = 2
+resource = "wood"
+
+[[step]]
+at_seconds = 2
+player = 1
+kind = "build"
+villager = 2
+role = "house"
+
+[[step]]
+at_seconds = 5
+player = 1
+kind = "train"
+building = "town_centre"
+role = "villager"
+
+[[step]]
+at_seconds = 31
+player = 1
+kind = "train"
+building = "town_centre"
+role = "villager"
+
+[[step]]
+at_seconds = 57
+player = 1
+kind = "train"
+building = "town_centre"
+role = "villager"
+
+[[step]]
+at_seconds = 83
+player = 1
+kind = "train"
+building = "town_centre"
+role = "villager"
+
+[[step]]
+at_seconds = 109
+player = 1
+kind = "train"
+building = "town_centre"
+role = "villager"
+
+[[step]]
+at_seconds = 135
+player = 1
+kind = "train"
+building = "town_centre"
+role = "villager"
+
+[[step]]
+at_seconds = 161
+player = 1
+kind = "train"
+building = "town_centre"
+role = "villager"
+
+[[step]]
+at_seconds = 187
+player = 1
+kind = "train"
+building = "town_centre"
+role = "villager"
+
+[[step]]
+at_seconds = 50
+player = 1
+kind = "build"
+villager = 3
+role = "house"
+
+[[step]]
+at_seconds = 140
+player = 1
+kind = "build"
+villager = 5
+role = "house"
+
+[[step]]
+at_seconds = 230
+player = 1
+kind = "build"
+villager = 7
+role = "house"
+
+[[step]]
+at_seconds = 100
+player = 1
+kind = "build"
+villager = 0
+role = "mill"
+where = "food"
+
+[[step]]
+at_seconds = 200
+player = 1
+kind = "build"
+villager = 2
+role = "lumber_camp"
+where = "wood"
+
+[[step]]
+at_seconds = 220
+player = 1
+kind = "gather"
+villager = 4
+resource = "wood"
+nth = 1
+
+[[step]]
+at_seconds = 240
+player = 1
+kind = "gather"
+villager = 5
+resource = "wood"
+nth = 2
+
+[[step]]
+at_seconds = 260
+player = 1
+kind = "gather"
+villager = 6
+resource = "wood"
+nth = 3
+
+[[step]]
+at_seconds = 300
+player = 1
+kind = "build"
+villager = 1
+role = "farm"
+
+[[step]]
+at_seconds = 330
+player = 1
+kind = "build"
+villager = 7
+role = "farm"
+
+[[step]]
+at_seconds = 360
+player = 1
+kind = "build"
+villager = 8
+role = "farm"
+
+[[step]]
+at_seconds = 390
+player = 1
+kind = "build"
+villager = 9
+role = "farm"
+
+[[step]]
+at_seconds = 430
+player = 1
+kind = "gather"
+villager = 0
+resource = "food"
+node = "farm"
+
+[[step]]
+at_seconds = 440
+player = 1
+kind = "gather"
+villager = 1
+resource = "food"
+node = "farm"
+
+[[step]]
+at_seconds = 450
+player = 1
+kind = "gather"
+villager = 7
+resource = "food"
+node = "farm"
+
+[[step]]
+at_seconds = 460
+player = 1
+kind = "gather"
+villager = 8
+resource = "food"
+node = "farm"
+
+[[step]]
+at_seconds = 600
+player = 1
+kind = "research"
+building = "town_centre"
+tech = "feudal_age"
+
+[[step]]
+at_seconds = 760
+player = 1
+kind = "build"
+villager = 4
+role = "market"
+
+[[step]]
+at_seconds = 800
+player = 1
+kind = "build"
+villager = 5
+role = "blacksmith"
+
+[[step]]
+at_seconds = 1000
+player = 1
+kind = "research"
+building = "town_centre"
+tech = "castle_age"
+
+[[step]]
+at_seconds = 1150
+player = 1
+kind = "build"
+villager = 6
+role = "siege_workshop"
+
+[[step]]
+at_seconds = 1220
+player = 1
+kind = "train"
+building = "siege_workshop"
+role = "mangonel"
+
+[[step]]
+at_seconds = 1280
+player = 1
+kind = "attack"
+attacker = "mangonel"
+target = "enemy_town_centre"

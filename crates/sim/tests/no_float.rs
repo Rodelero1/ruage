@@ -75,8 +75,10 @@ fn the_simulation_keeps_no_floating_point_in_its_tick() {
             .unwrap_or("")
             .to_owned();
         // Authored rather than simulated: seconds in, ticks out. A scenario is written as "mill at 2:10"
-        // and the harness converts once; nothing in the conversion survives into a match.
-        if name == "script.rs" || name == "headless.rs" {
+        // and the harness converts once; nothing in the conversion survives into a match. `batch.rs` is the same
+        // surface as `headless.rs` - a runner that reads a scenario's duration - and is named here rather than
+        // quietly exempted by pattern.
+        if name == "script.rs" || name == "headless.rs" || name == "batch.rs" {
             continue;
         }
         let text = std::fs::read_to_string(&path).expect("reading a source file");

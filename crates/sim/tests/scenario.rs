@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_sim::{
-    Command, EntityKind, Outcome, Runner, World, load_scenario_file, load_scenario_str,
+    Command, EntityKind, Outcome, Runner, Task, World, load_scenario_file, load_scenario_str,
 };
 
 fn repo(rel: &str) -> PathBuf {
@@ -688,4 +688,248 @@ tech = "doubling"
     let houses = houses_of(&world, 1);
     assert_eq!(houses.len(), 1, "one house: {houses:?}");
     assert_eq!(houses[0], (1100, false), "550 x 2, finished");
+}
+
+/// `where` decides *where*: a building placed for a resource goes to that resource. The field used to be parsed and
+/// ignored - `deny_unknown_fields` is not set on a step, so `where = "wood"` was silently dropped and a lumber camp**
+/// landed beside the town centre, which is wood spent on a longer walk.
+///
+/// **Gold, not wood, and that matters:** player 1's town centre is at (16, 16) and the nearest tree is at (20, 16), so
+/// a camp placed by the *town centre* is within three tiles of a tree anyway - the first version of this test passed
+/// with `where` disabled entirely. The nearest gold is eight tiles out, outside the placement ring, so where the camp
+/// lands can only be explained by the selector.
+#[test]
+fn a_building_placed_where_the_resource_is_lands_by_the_resource() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let text = r#"
+schema = 2
+duration_seconds = 40.0
+
+[[step]]
+at_seconds = 1.0
+player = 1
+kind = "build"
+villager = 0
+role = "mining_camp"
+where = "gold"
+"#;
+    let (world, runner) = play(&fx, text, 7);
+    assert!(
+        runner
+            .outcomes
+            .iter()
+            .all(|(_, outcome)| *outcome == Outcome::Ran),
+        "the step has to run: {:?}",
+        runner.outcomes
+    );
+    let camp = world
+        .entities()
+        .iter()
+        .filter(|entity| entity.player == 1 && entity.kind == EntityKind::Building)
+        .filter(|entity| {
+            entity.unit.is_some_and(|unit| world.is_family(unit, 584)) // mining camp (MINE)
+        })
+        .map(|entity| entity.position)
+        .next()
+        .expect("a mining camp was founded");
+    let scale = world.scale();
+    let camp_tile = (camp.0.raw() / scale, camp.1.raw() / scale);
+    let gold = world.slot_of("gold").expect("gold");
+    let nearest_gold = world
+        .entities()
+        .iter()
+        .filter(|entity| matches!(entity.kind, EntityKind::Resource(slot) if slot == gold))
+        .map(|entity| {
+            let tile = (
+                entity.position.0.raw() / scale,
+                entity.position.1.raw() / scale,
+            );
+            (tile.0 - camp_tile.0)
+                .abs()
+                .max((tile.1 - camp_tile.1).abs())
+        })
+        .min()
+        .expect("gold");
+    assert!(
+        nearest_gold <= 3,
+        "a mining camp belongs within three tiles of gold, not {nearest_gold} tiles away"
+    );
+    let centre = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Building)
+        .map(|entity| entity.position)
+        .expect("a town centre");
+    let centre_tile = (centre.0.raw() / scale, centre.1.raw() / scale);
+    let from_centre = (camp_tile.0 - centre_tile.0)
+        .abs()
+        .max((camp_tile.1 - centre_tile.1).abs());
+    assert!(
+        from_centre > 4,
+        "the camp is {from_centre} tiles from the town centre, which is where the ignored selector put it"
+    );
+}
+
+/// A `where` naming something the pack has no column for is refused with the name, not quietly placed elsewhere.
+#[test]
+fn a_where_selector_naming_nothing_is_refused() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let text = r#"
+schema = 2
+duration_seconds = 10.0
+
+[[step]]
+at_seconds = 1.0
+player = 1
+kind = "build"
+villager = 0
+role = "house"
+where = "fish"
+"#;
+    let (_, runner) = play(&fx, text, 7);
+    let refused = runner
+        .outcomes
+        .iter()
+        .find_map(|(_, outcome)| match outcome {
+            Outcome::Refused(why) => Some(why.clone()),
+            _ => None,
+        })
+        .expect("a step naming a resource the pack lacks has to be refused");
+    assert!(
+        refused.contains("fish"),
+        "the refusal names the word that was wrong: {refused}"
+    );
+}
+
+/// A target selector that names a *building*: the acceptance match's last step is a siege engine aimed at a town
+/// centre, which `nearest_enemy` (a unit) could never express.
+#[test]
+fn an_attack_step_can_name_the_enemy_town_centre() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let text = r#"
+schema = 2
+duration_seconds = 20.0
+
+[[step]]
+at_seconds = 2.0
+player = 1
+kind = "attack"
+attacker = "villager"
+target = "enemy_town_centre"
+"#;
+    let (world, runner) = play(&fx, text, 7);
+    assert!(
+        runner
+            .outcomes
+            .iter()
+            .all(|(_, outcome)| *outcome == Outcome::Ran),
+        "the step has to run: {:?}",
+        runner.outcomes
+    );
+    let centre_unit = world.start_town_centre_unit().expect("a town centre role");
+    let enemy_centre = world
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.player == 2
+                && entity.kind == EntityKind::Building
+                && entity
+                    .unit
+                    .is_some_and(|unit| world.is_family(unit, centre_unit))
+        })
+        .map(|entity| entity.id)
+        .expect("player 2's town centre");
+    let targeted = world.entities().iter().any(|entity| {
+        entity.player == 1
+            && matches!(entity.task, Task::Attack { target, .. } if target == enemy_centre)
+    });
+    assert!(
+        targeted,
+        "the villager's task should name the enemy town centre"
+    );
+}
+
+/// A farm is a **building**, so `nearest_resource` could never find one and a script could not put a villager on the
+/// food engine that a long opening needs. `node = "farm"` names a building by role instead.
+#[test]
+fn a_gather_step_can_put_a_villager_on_a_farm() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let text = r#"
+schema = 2
+duration_seconds = 300.0
+
+[[step]]
+at_seconds = 1.0
+player = 1
+kind = "build"
+villager = 0
+role = "farm"
+
+[[step]]
+at_seconds = 40.0
+player = 1
+kind = "gather"
+villager = 1
+resource = "food"
+node = "farm"
+"#;
+    let (world, runner) = play(&fx, text, 7);
+    let last = runner.outcomes.last().map(|(_, outcome)| outcome.clone());
+    assert_eq!(
+        last,
+        Some(Outcome::Ran),
+        "sending a villager to a farm has to work: {:?}",
+        runner.outcomes
+    );
+    let farm = world
+        .entities()
+        .iter()
+        .filter(|entity| entity.player == 1 && entity.kind == EntityKind::Building)
+        .find(|entity| entity.unit.is_some_and(|unit| world.is_family(unit, 50)))
+        .map(|entity| entity.id)
+        .expect("a farm was built");
+    let gathering = world
+        .entities()
+        .iter()
+        .any(|entity| matches!(entity.task, Task::Gather { node, .. } if node == farm));
+    assert!(gathering, "the villager's gather task names the farm");
+}
+
+/// The acceptance script parses and its opening runs without a refusal: a thirty-minute match whose first minute is
+/// already refused would report a build order that never existed. Its *timings* are not asserted here - they are a
+/// measurement, printed by `ruage-batch`, and a number in a test would go stale the first time the economy changed.
+#[test]
+fn the_acceptance_scenario_parses_and_its_opening_runs() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let scenario =
+        load_scenario_file(&repo("config/acceptance.toml")).expect("config/acceptance.toml parses");
+    let mut world = world(&fx, 7);
+    let mut runner = Runner::new(&scenario, world.tick_rate_hz()).expect("runnable");
+    let rate = u64::from(world.tick_rate_hz());
+    for _ in 0..(60 * rate) {
+        runner.due(&mut world);
+        world.step().expect("step");
+    }
+    let refused: Vec<String> = runner
+        .outcomes
+        .iter()
+        .filter_map(|(at, outcome)| match outcome {
+            Outcome::Refused(why) => Some(format!("{at:.0}s: {why}")),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        refused.is_empty(),
+        "the first minute of the acceptance match is refused: {refused:?}"
+    );
 }

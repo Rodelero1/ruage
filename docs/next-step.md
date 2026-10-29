@@ -1529,3 +1529,42 @@ added to it.
 
 **Performance.** The metrics cost per tick is four array reads; the entity walk is once a second. The batch runner in
 release plays the ten-minute project script (`--release`, one process) in well under a second per seed.
+
+## Item 9 - the acceptance match: what is built, and the two gaps it hit (2026-10-29)
+
+*Compact, measurement and review in one, because the item is not finished and saying so is the honest artefact.*
+
+**Built and tested:** the scenario vocabulary a build order needs - `where = "<resource>"` on a build step (which was
+being **parsed and ignored**: `where` was written in `scenario.toml`, no step has `deny_unknown_fields`, and nothing
+read the key, so a lumber camp asked for beside the wood landed beside the town centre), `target = "enemy_building"` /
+`"enemy_town_centre"` on an attack step, and `node = "farm"` on a gather step (a farm is a **building**, and
+`nearest_resource` only finds `Resource` entities, so a script could not touch the food engine a long opening needs).
+Five tests, three mutations bite: the first `where` test passed with the selector disabled entirely because player 1's
+nearest tree is four tiles from its town centre, so it now uses **gold** - eight tiles out, outside the placement ring,
+where only the selector can explain where the camp lands.
+
+**The script:** `config/acceptance.toml`, 35 steps, 1800 s: berries -> farms -> mill + lumber camp -> Feudal -> Market +
+Blacksmith -> Castle -> siege workshop -> mangonel -> the enemy town centre.
+
+**Measured, not asserted** (`ruage-batch --script config/acceptance.toml --seeds 7`):
+
+```
+script                        seed   feudal   castle food/m wood/m gold/m lost    army    outcome
+acceptance.toml                  7        -        -     12      6      0    0       - open (15 refused)
+```
+
+and the timeline from `ruage-headless --report 200`: food climbs to **328 by 800 s and then stops**, wood to 139, the
+population pins at **11**, and 15 steps are refused - the lumber camp for want of 100 wood, three villagers for want
+of 50 food, two farms for want of 60 wood each.
+
+**The two gaps, and neither is a scripting mistake:**
+
+1. **A villager idles when its node runs dry.** Each tree holds 100 wood, so three lumberjacks exhaust their three
+   trees and stand still for the rest of the match. A thirty-minute boom needs a villager that *seeks the next node of
+   the same kind* - an engine rule, small and well scoped, and the thing standing between this script and Feudal.
+2. **No scripted repeater.** "Keep four on wood" is a policy, not a list of 35 timestamps; without a repeating step the
+   script has to guess every re-tasking time, and every guess goes stale when the economy changes.
+
+**What is therefore *not* claimed:** the acceptance match does not yet win inside 30:00. The infrastructure that
+measures it does exist, which is what makes the next attempt honest: `ruage-batch` prints where the run stopped, and
+`ruage-headless --report` says which step was refused and why.
