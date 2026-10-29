@@ -39,6 +39,16 @@ pub struct Economy {
     /// fact about the game, not about the engine, so it is content: role names that do *not* keep a
     /// player alive.
     pub conquest: Conquest,
+    /// Which animals herd, and where a gathered one walks (D70).
+    pub hunt: Hunt,
+}
+
+/// Herding: the animals that walk to a drop site when a villager works them. Content, because the engine
+/// must not know that a sheep is different from a cow (D17).
+#[derive(Debug, Clone, Default)]
+pub struct Hunt {
+    /// Role names, resolved to unit families at seed time.
+    pub herdable_roles: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -182,6 +192,8 @@ struct RawEconomy {
     #[serde(default)]
     conquest: RawConquest,
     #[serde(default)]
+    hunt: RawHunt,
+    #[serde(default)]
     age: RawAges,
     /// Role name → unit id. Required: content that cannot name a unit at all is not content.
     role: BTreeMap<String, u32>,
@@ -206,7 +218,15 @@ struct RawAgeRequirement {
     single: Vec<String>,
 }
 
-#[derive(Deserialize, Default)]
+/// `[hunt]`: which role names herd. Defaulted, so a pack written before herding existed has none.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawHunt {
+    #[serde(default)]
+    herdable_roles: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawConquest {
     #[serde(default)]
@@ -618,6 +638,9 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
                     )
                 })
                 .collect(),
+        },
+        hunt: Hunt {
+            herdable_roles: raw.hunt.herdable_roles,
         },
         conquest: Conquest {
             surviving_classes: raw.conquest.surviving_classes,

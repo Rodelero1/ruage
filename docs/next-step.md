@@ -855,3 +855,28 @@ names the killer. The rule is one content switch - `[hunt] meat_requires_village
 is created, so the engine asks content rather than knowing that a villager is special (D17). Testable in one
 assertion: the same sheep, killed by a soldier and by a villager, leaves bodies that differ in food and not in
 identity.
+
+### Where increment two actually stands (2026-10-29)
+
+**In place and green:** `[hunt] herdable_roles = ["sheep"]` in `economy.toml`, the `sheep` role (594), and
+`Hunt` in the economy schema (raw + runtime + mapping). Four tests in `crates/sim/tests/animals.rs` say what
+herding means; they are **`#[ignore]`d** because the engine half is not built, and the ignore note lists why.
+
+**Not built, and the three reasons the tests gave:**
+
+1. **`gather_source` refuses a unit.** Sending a villager to a sheep fails with `NotAResource { id }`: the
+   function accepts a resource node or a farm building, and nothing else. The fix is content-shaped - a live
+   animal of a `[hunt] herdable_roles` family yields `[hunt] resource` - but it is a change to the one
+   function every gather order passes through, so it wants its own slice rather than a patch bolted on.
+2. **A placed animal carries no meat.** `Command::Spawn` takes an explicit `amount`, and a sheep placed with
+   `amount: 0` is worth nothing to gather. Either the spawn derives `amount` from the unit's `food` (D69), or
+   whoever places animals must pass it; the first keeps the pack as the single source of the number.
+3. **Nothing walks the animal.** The herd pass is not written: while a villager gathers a herdable animal, the
+   animal should be sent toward the nearest drop site of that villager's player, and the villager's cached
+   route dropped so it follows the moving node instead of a stale path to where the sheep used to be.
+
+**One unexplained observation, recorded rather than forgotten:** in the "a sheep nobody is gathering stands
+still" test the sheep moved **0.025 of a tile** over 600 ticks with no order given - the same *shape* as the
+"very slow unit walks the wrong way" bug that turned out to be a leftover velocity (D64). It may be the same
+class of defect in a path nothing else exercises yet; it is worth a look before the herd pass is written,
+because a standing-still test cannot be written against a body that creeps.
