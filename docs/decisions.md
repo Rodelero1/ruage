@@ -2008,3 +2008,19 @@ next sheep. This is the rule that unblocked a real economy and it exposed two bu
 *villager*. With villagers now spreading through the wood cluster, that villager is sometimes walled in, and the step
 killed the run at apply time. `nearest_enemy` now prefers an enemy it can walk to, and the scenario aims at the town
 centre instead - a target a walk can always reach, and a scratch on the wall teaches more than a refused step.
+
+## D74 - The client: a native window, and text on screen
+
+*The owner's answers, 2026-10-29, to the two questions item 15 was waiting on.*
+
+- **Windowing stack: native.** `winit` with software presentation, i.e. the swap the earlier decision reserved ("a
+  headless rasteriser now, a window later, as a swap"). The reason it is the cheap side of the fork: the
+  rasteriser already produces pixels into a buffer, so the window is a loop around it - while a browser client
+  (wasm + canvas) would drag the whole simulation into a target with a different time source and a different
+  determinism story.
+- **HUD text: allowed.** The earlier decision - *"HUD is data, not pixels; no bitmap font"* - is **superseded**: a
+  playable prototype has to show numbers, so a font comes in with the client. The rule that survives is the layering
+  one: the sim still carries no text, and what the HUD draws stays a *reading* of state, not a second source of it.
+
+Nothing is built against this yet: items 10-14 (animation data, asset pack, sprites, terrain, camera) come first,
+because a window onto rectangles is not the milestone the owner asked for.
