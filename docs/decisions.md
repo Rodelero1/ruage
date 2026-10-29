@@ -1672,3 +1672,36 @@ is how the removal sweep is tested.
 Two tests in `build_queue.rs`: a queued site does not appear until the one in front is finished, and it is
 paid for on the tick it starts rather than when it was ordered. Mutation: removing the queueing branch makes
 both fail - the second order replaces the first, one foundation appears, and no second one ever does.
+
+## D67 - The simulation keeps no floating point in its tick, and a gate says so
+
+*Borrowed from `openaok`, whose `--verify` gate fails on `float`, `double` or `ToFloat()` anywhere in its
+simulation sources.* D9 has said "fixed-point only" since the beginning; a rule with no gate is a rule
+nobody keeps. `crates/sim/tests/no_float.rs` walks `crates/sim/src`, and every line mentioning `f64` or
+`f32` must sit in a function that is allowed one, or the suite fails and names the line.
+
+**Two exemptions, both named in the test rather than silently tolerated:**
+
+- `script.rs` and `headless.rs` - **authoring**: a scenario is written in seconds ("mill at 2:10") and
+  converted to ticks once. Nothing from that conversion survives into a match.
+- **stat derivation at load** - `scale_fixed`, `multiply_class`, `scaled_health`: the dat's percentages are
+  applied once when the world is built and stored as `Fixed`. It is content arithmetic, not tick arithmetic,
+  and it cannot differ between machines because it does not depend on a tick.
+
+**The gate found two real violations, both in the tick path:**
+
+- `pierce_dps` divided damage per second as `f64` to decide how many arrows a garrison adds. It is now
+  integer, stated in **millionths** of a damage per second (`DPS_ONE`). The precision is not vanity: at the
+  first, coarser attempt (raw fixed-point units) the town centre with three archers in it fired **four**
+  arrows instead of three, because truncating each side of a ratio bends it. A finer common scale cancels
+  exactly where a coarse one does not.
+- the **carry cap** went through `apply_scalar`; it now uses `scale_fixed` like speed and gather rate. That
+  one taught the second lesson: a plain integer division truncated 10 x 1.25 to 12 where the game's
+  Wheelbarrow gives 13, so the conversion rounds (`+ scale/2`) rather than truncates. Both mistakes were
+  caught by tests that already existed - which is the argument for the gate being cheap: it cost two
+  one-line fixes, and the suite said which ones.
+
+**Not adopted from the same digest**, recorded in `docs/next-step.md`: box-to-box reach (wants a building
+footprint, and a building is one tile today), crowd claims at work goals (D52 says work goals are not
+exclusive, and the claims table is exactly what D53 declined), routing round still bodies (needs route
+invalidation), and `genie`'s deferred-write schedule (an order to keep, not an architecture to adopt).

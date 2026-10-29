@@ -771,3 +771,31 @@ behaviour, not part of the manual's rule.
   tests. What is *not* yet exercised is the manual's unit half - sheep, livestock, ships, trade carts are
   excluded there and the pack has none of them. When it does, add a class list for units and the test "a sheep
   does not keep a player alive".
+
+## From the prior-art digest of 2026-10-29 (triaged, not yet done)
+
+The daily watch found four things worth acting on eventually and one worth acting on now (the fixed-point
+gate, which is D67 and is done).
+
+- **Reach is measured between boxes, not centres.** `openaok` compares the dat's boxes for every attack:
+  building to its footprint, unit to its size box. We compare centre distance and pad by both radii for
+  `min_range` only, so a skirmisher can hit a town centre from further out than the original, and a
+  building's "8 tiles" is eight tiles from its middle rather than from its wall. For **units** this is nearly
+  free - we already emit `radius`, and a box is `2r` on each axis. For **buildings** it needs a footprint,
+  and a building is one tile (D54). Do the unit half when reach is next touched; the building half when
+  buildings stop being one tile.
+- **Crowd at a work goal.** `openaok` now claims and waits for spots at work as well as at move goals; D52
+  says work goals are deliberately *not* exclusive. Theirs is nearer what a player sees and costs exactly
+  what D53 declined: a claims table released on every order end. Recorded; not adopted.
+- **Routing round still bodies.** Their pather bends round units from a per-tick survey; ours goes through
+  everything except terrain and walls. We already keep the unit-tile bitset, so the layer is nearly free;
+  the cost is invalidating routes when a body moves. Crowd scenes only.
+- **`genie`'s declared schedule.** Twenty steps in `BEFORE_PLAYERS`/`EACH_PLAYER`/`AFTER_PLAYERS`, each
+  naming the DE routine it ports, with deferred writes so a tick's result never depends on which object ran
+  first. Our order is already fixed and deterministic, so this is fidelity, not correctness: keep the
+  checklist, restructure nothing until units start affecting each other. Also: the original's unit AI runs
+  for **one player per tick**, rotating - our per-unit aggro stagger is the wrong shape, and it shows only
+  in large fights.
+- **Foundations block nobody until worked.** Confirms D61's shape from the other direction: when buildings
+  start to block paths, a foundation must not block until a villager first works it, or every placing
+  villager's route changes the moment the site goes down.

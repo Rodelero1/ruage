@@ -52,6 +52,9 @@ pub const MAX_RESOURCES: usize = 8;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EntityId(pub u32);
 
+/// One damage per second, in the integer millionths `pierce_dps` counts in (D67).
+const DPS_ONE: i64 = 1_000_000;
+
 /// A villager's waiting sites: unit id and tile, oldest first (D66).
 type BuildQueue = BTreeMap<EntityId, VecDeque<(u32, (u16, u16))>>;
 
@@ -136,21 +139,6 @@ pub fn damage_between(attacks: &[(i16, i16)], armours: &[(i16, i16)], rules: &Da
         total += i64::from((i32::from(*amount) - armour).max(0));
     }
     i32::try_from(total).unwrap_or(i32::MAX).max(rules.minimum)
-}
-
-/// Apply modifiers to a plain number (a carry cap), additions first.
-fn apply_scalar(base: f64, modifiers: &[&ruage_data::Modifier]) -> f64 {
-    let mut value = base;
-    for modifier in modifiers.iter().filter(|m| m.op == ruage_data::ModOp::Add) {
-        value += modifier.value;
-    }
-    for modifier in modifiers
-        .iter()
-        .filter(|m| m.op == ruage_data::ModOp::Multiply)
-    {
-        value *= modifier.value;
-    }
-    value
 }
 
 /// The same for a fixed-point quantity (speed, gather rate). A multiplier is scale-free, but an
@@ -3350,10 +3338,10 @@ impl World {
             return 1;
         };
         let building_dps = self.pierce_dps(entity.player, stats);
-        if building_dps <= 0.0 {
+        if building_dps <= 0 {
             return 1;
         }
-        let mut garrison_dps = 0.0;
+        let mut garrison_dps = 0i64;
         for occupant in self.entities.iter() {
             if occupant.player != entity.player || occupant.kind != EntityKind::Unit {
                 continue;
@@ -3376,14 +3364,18 @@ impl World {
             }
             garrison_dps += self.pierce_dps(occupant.player, unit);
         }
-        let extra = (garrison_dps / building_dps).floor().max(0.0);
-        let extra = u32::try_from(extra as i64).unwrap_or(0);
+        let extra = u32::try_from(garrison_dps / building_dps).unwrap_or(0);
         1u32.saturating_add(extra)
     }
 
     /// A unit's pierce damage per second, with its owner's upgrades applied: the pierce (class 3)
     /// attack over the reload, both from the data.
-    fn pierce_dps(&self, player: u8, stats: &Unit) -> f64 {
+    ///
+    /// Stated in **millionths** of a damage per second, in integers (D67). The value is only ever used as
+    /// a ratio against another one of these, so a common scale cancels - but the scale has to be fine, or
+    /// truncating each side separately bends the ratio: a town centre with three archers in it came out at
+    /// four arrows instead of three when this was computed at a coarser precision.
+    fn pierce_dps(&self, player: u8, stats: &Unit) -> i64 {
         let pierce: i32 = self
             .adjusted(player, stats, "attack")
             .iter()
@@ -3395,9 +3387,9 @@ impl World {
             .resolve(self.scale, "reload")
             .map_or(0, |r| r.raw());
         if pierce <= 0 || reload <= 0 {
-            return 0.0;
+            return 0;
         }
-        f64::from(pierce) * self.scale as f64 / reload as f64
+        i64::from(pierce) * DPS_ONE / reload
     }
 
     /// How fast a shot flies this tick, in engine units; zero when the pack shoots instantly.
@@ -4444,11 +4436,17 @@ impl World {
                 self.scale,
                 &self.modifiers_for(worker_player, variant, "gather_rate"),
             );
-            let carry = apply_scalar(
-                f64::from(variant.carry),
+            // The carry cap is content arithmetic on a whole number, so it goes through the same
+            // fixed-point helper as speed and gather rate rather than through `apply_scalar` (D67).
+            let carry = scale_fixed(
+                Fixed::from_raw(i64::from(variant.carry) * self.scale),
+                self.scale,
                 &self.modifiers_for(worker_player, variant, "carry"),
             );
-            let carry_cap = u32::try_from(carry.round() as i64).unwrap_or(u32::from(variant.carry));
+            // Rounded, not truncated: 10 x 1.25 is 12.5 and the game's Wheelbarrow gives 13. A
+            // truncating division here would quietly take a villager's load down by one.
+            let carry_cap = u32::try_from((carry.raw() + self.scale / 2) / self.scale)
+                .unwrap_or(u32::from(variant.carry));
             // Exactness is the D10 invariant: a rate that does not split into whole per-tick
             // amounts would drift, so it is an error rather than a rounded accumulation.
             let rate_per_tick = rate
