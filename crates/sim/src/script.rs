@@ -197,6 +197,10 @@ pub struct Runner {
     rules: Vec<(u64, u64, Rule)>,
     /// The tick each rule last fired, by index.
     fired: BTreeMap<usize, u64>,
+    /// A rule that could not run, and why: `(game seconds, reason)`. Separate from `outcomes`, because a rule retries and
+    /// a refusal at 8 seconds is a schedule fact rather than a broken script - a *step* that is refused is the script's
+    /// fault, and that distinction is what makes a refusal list readable.
+    pub rule_refusals: Vec<(f64, String)>,
     /// How many times each rule has fired, refusals included: a rule's condition is a question about the world, and a
     /// count of firings is the only way a run can show that a rule is thrashing or asleep.
     pub fired_times: Vec<usize>,
@@ -251,6 +255,7 @@ impl Runner {
             rules,
             fired: BTreeMap::new(),
             fired_times: vec![0; rules_len],
+            rule_refusals: Vec::new(),
             outcomes: Vec::new(),
         })
     }
@@ -270,7 +275,7 @@ impl Runner {
     fn due_rules(&mut self, world: &mut World) {
         let now = world.tick();
         let second = f64::from(world.tick_rate_hz());
-        let mut refusals: Vec<(f64, Outcome)> = Vec::new();
+        let mut refusals: Vec<(f64, String)> = Vec::new();
         for index in 0..self.rules.len() {
             let (at, cooldown) = (self.rules[index].0, self.rules[index].1);
             if now < at {
@@ -301,13 +306,13 @@ impl Runner {
             match resolved {
                 Ok(command) => {
                     if let Err(err) = world.submit_checked(command) {
-                        refusals.push((now as f64 / second, Outcome::Refused(err.to_string())));
+                        refusals.push((now as f64 / second, err.to_string()));
                     }
                 }
-                Err(reason) => refusals.push((now as f64 / second, Outcome::Refused(reason))),
+                Err(reason) => refusals.push((now as f64 / second, reason)),
             }
         }
-        self.outcomes.extend(refusals);
+        self.rule_refusals.extend(refusals);
     }
 
     fn due_steps(&mut self, world: &mut World) {

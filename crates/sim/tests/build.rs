@@ -510,10 +510,13 @@ fn a_house_is_paid_for_and_finishes_in_its_create_time() {
         world.entity(site_entity).expect("site").kind,
         EntityKind::Building
     );
-    assert_eq!(
-        world.entity(villager).expect("villager").task,
-        Task::Idle,
-        "the builder stops when the house is finished"
+    // The builder stops *building* once the house is finished. It is no longer `Idle` in a world with a share table:
+    // `[policy]` in economy.toml sends a villager who has just been freed to the resource the table wants (D75), so what
+    // this asserts is that the build is over - not that the villager is standing still.
+    let task = world.entity(villager).expect("villager").task;
+    assert!(
+        !matches!(task, Task::Build { .. }),
+        "the builder stops when the house is finished, not {task:?}"
     );
 }
 

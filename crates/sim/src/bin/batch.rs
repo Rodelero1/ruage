@@ -174,6 +174,7 @@ fn run() -> Result<(), String> {
             world
                 .load_resources(&resources)
                 .expect("the pack fits the stockpile");
+            world.apply_content_policy();
             if let Some(combat) = &combat {
                 world.load_combat(combat);
             }

@@ -1624,3 +1624,30 @@ villager)` - a `can_train` condition is the missing guard, and it is a small one
 **What is solid:** `453` tests, clippy `-D warnings`, fmt clean; the scenario format's rules parse, fire once per
 cooldown, respect `at_seconds`, and are reachable from a rule-only file; the share table resolves content's names to
 columns, refuses rows that do not sum to 100, and moves villagers between resources when the row changes.
+
+## Rules and shares - the second pass (2026-10-29)
+
+*Four defects the first version shipped, each found by a test that was already there.*
+
+**The pass picked the same villager every time.** `workers.iter().find(free)` returns the first free villager; the retry
+memo was then consulted *after* the pick, so a villager the policy had just moved was chosen again, rejected, and the
+pass ended - three idle villagers, one of them considered, forever. The whole condition (free, off the retry window, no
+site queued) now lives inside the search. `idle_villagers_follow_the_shares` is the test that caught it, and the fix is
+the reason it passes in a minute of game time rather than in ten seconds: one villager is moved per pass, by design.
+
+**Six `gather.rs` tests and one `build.rs` test changed behaviour, and the loader was wrong, not the tests.** Installing
+`[policy]` from `load_resources` gave every world a second hand on its villagers, including the worlds that exist to
+watch a villager's own behaviour. The share table is content and a **match** is where it applies, so it is now
+`World::apply_content_policy()`, called by the headless and batch runners and by the acceptance test - not by the loader.
+`build.rs`'s "the builder stops when the house is finished" asserted `Task::Idle`, which is no longer what a freed
+villager is; it now asserts that the build is over, which is what it always meant.
+
+**Farms at Feudal starved the run.** A farm is a Dark Age building gated by the mill, and the game's own AI farms
+through the Dark Age; gating the farm rule on `age = "feudal_age"` stopped the economy dead at 18 villagers and 46 food.
+With the guard moved to "a mill stands and the larder is under 120", the run reaches **22 villagers and 13 buildings by
+800 s** instead of freezing at 8 units.
+
+**A rule's refusal is not a step's refusal.** Both used to land in `Runner::outcomes`, so "not enough food at 8 s" - the
+train rule asking before anybody has gathered - read like a broken script. `Runner::rule_refusals` now holds them
+separately, and the acceptance test asserts what actually matters about the opening: no step refused, the rules firing,
+and villagers gathering after a minute.

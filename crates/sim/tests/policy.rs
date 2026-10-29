@@ -105,9 +105,13 @@ fn idle_villagers_follow_the_shares() {
 
     // Everyone on food: three villagers are idle, and the share says food only.
     world.set_villager_shares(&[(0, vec![(food, 100)])]);
-    for _ in 0..200 {
+    // A minute of game time: an order lands on the next tick, a villager the policy has just moved is left alone for a
+    // retry window, and only one villager is moved per pass - so "everyone is working" is a fact about a minute, not
+    // about a second.
+    for _ in 0..1_200 {
         world.step().expect("stepping");
     }
+
     let on_food = working_on(&world)
         .iter()
         .filter(|name| name.as_str() == "food")

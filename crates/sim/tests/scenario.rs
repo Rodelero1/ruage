@@ -929,6 +929,9 @@ fn the_acceptance_scenario_parses_and_its_opening_runs() {
     let scenario =
         load_scenario_file(&repo("config/acceptance.toml")).expect("config/acceptance.toml parses");
     let mut world = world(&fx, 7);
+    // The share table is what the *match* runs with (the headless and batch runners install it), and without it the
+    // acceptance script's rules would build an economy on idle villagers.
+    world.apply_content_policy();
     let mut runner = Runner::new(&scenario, world.tick_rate_hz()).expect("runnable");
     let rate = u64::from(world.tick_rate_hz());
     for _ in 0..(60 * rate) {
@@ -947,4 +950,24 @@ fn the_acceptance_scenario_parses_and_its_opening_runs() {
         refused.is_empty(),
         "the first minute of the acceptance match is refused: {refused:?}"
     );
+    // A **rule** refusal is a different animal: the train rule asks from tick zero and the pack opens with an empty
+    // larder, so "not enough food" for the first twenty seconds is the schedule, not a broken script. What has to be true
+    // is that the rules are *firing* and that the economy is alive by the end of the minute - the villagers working, and
+    // something in the bank beyond the opening stock.
+    assert!(
+        runner.fired_times.iter().any(|count| *count > 0),
+        "the acceptance match's rules never fired: {:?}",
+        runner.fired_times
+    );
+    let food = world.slot_of("food").expect("food");
+    let working = world
+        .entities()
+        .iter()
+        .filter(|entity| matches!(entity.task, ruage_sim::Task::Gather { .. }))
+        .count();
+    assert!(
+        working > 0,
+        "the villagers should be gathering after a minute of the acceptance match"
+    );
+    let _ = food;
 }

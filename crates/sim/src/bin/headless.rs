@@ -141,6 +141,8 @@ fn run(args: &[String]) -> Result<(), String> {
     world
         .load_resources(&resources)
         .expect("the pack fits the stockpile");
+    // The share table is content, and a match is where it applies: `[policy]` in economy.toml, in the game's own AI shape.
+    world.apply_content_policy();
     if let Some(path) = parsed.get("--combat") {
         let combat = load_combat_file(Path::new(path)).map_err(|err| format!("{err}"))?;
         world.load_combat(&combat);

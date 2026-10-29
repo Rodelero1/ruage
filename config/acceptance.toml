@@ -101,11 +101,13 @@ when = { age = "feudal_age", no_building = "blacksmith" }
 do = "build"
 role = "blacksmith"
 
-# Farms once the mill stands: the berries are gone by the time Feudal lands.
+# Farms as soon as the mill stands and the larder is thin - **not** at Feudal. A farm is a Dark Age building gated by the
+# mill, which is why the game's own AI farms through the Dark Age; gating this on `age = "feudal_age"` starved the run at
+# 18 villagers with 46 food, which is exactly the wall the first version hit.
 [[rule]]
 player = 1
 cooldown_seconds = 6.0
-when = { age = "feudal_age", has_building = ["mill"] }
+when = { has_building = ["mill"], stock = [{ name = "food", at_most = 120 }] }
 do = "build"
 role = "farm"
 where = "food"
