@@ -1454,9 +1454,14 @@ impl World {
     /// Spawn a nameless mover at the origin. Movement tests use this; a real entity comes from
     /// `seed_from`, because player, unit id and kind are not things a test should invent.
     /// Panics on a duplicate id or a full world: those are programming errors.
+    /// A body that walks from the moment it exists, with no order - which is what the movement tests need
+    /// and what the engine itself no longer produces: a placed thing starts at rest (D70).
     pub fn spawn_now(&mut self, id: EntityId, speed: Fixed, hp: i32) {
         self.spawn_now_checked(id, speed, hp)
             .unwrap_or_else(|err| panic!("{err}"));
+        if let Some(entity) = self.find_mut(id) {
+            entity.velocity = (speed, Fixed::ZERO);
+        }
     }
 
     pub fn spawn_now_checked(
