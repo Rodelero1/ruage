@@ -1783,3 +1783,9 @@ follow.
 animals worth meat, both kinds) and `herdable_roles` (the ones that walk) - because the owner corrected the
 first of them: a boar is as edible as a sheep. A live animal is a gather source with `[hunt] resource` as what
 it yields, and a placed animal carries the pack's `food` as its amount, so a sheep is worth 100 and not zero.
+
+**D70, increment two: herding works.** While a villager is gathering a herdable animal, a per-tick pass sends
+the **animal** toward the nearest drop site of that villager's player and drops the **villager's** cached route,
+so it steps at where the animal is rather than at where it was when the order was given. The animal's route is
+planned only when it is not already heading there, so a herded sheep costs one path per leg, not one per tick.
+The pass is gated on content: `[hunt] herdable_roles`, so a boar is food but never walks (D70's split).

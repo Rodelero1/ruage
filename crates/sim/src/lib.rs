@@ -1075,6 +1075,9 @@ pub struct World {
     /// Unit families whose meat can be gathered: both animal kinds, from content's `[hunt] animal_roles`.
     /// Resolved at seed so the engine never learns what a sheep is (D17, D70).
     animals: BTreeSet<u32>,
+    /// The smaller list: animals that walk to a drop site when a villager works them, from
+    /// `[hunt] herdable_roles`. A boar is food but not herdable (D70).
+    herdable: BTreeSet<u32>,
     /// Which families require which family to have been built once, resolved from `[build] requires`,
     /// with the requirement's role name kept for the message.
     requires_built: BTreeMap<u32, (u32, String)>,
@@ -1238,6 +1241,7 @@ impl World {
             built: BTreeSet::new(),
             build_queue: BTreeMap::new(),
             animals: BTreeSet::new(),
+            herdable: BTreeSet::new(),
             requires_built: BTreeMap::new(),
             age_needs: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
@@ -1519,6 +1523,12 @@ impl World {
         for role in &economy.hunt.animal_roles {
             if let Some(unit) = economy.role.get(role).copied() {
                 self.animals.insert(units.root(unit));
+            }
+        }
+        self.herdable.clear();
+        for role in &economy.hunt.herdable_roles {
+            if let Some(unit) = economy.role.get(role).copied() {
+                self.herdable.insert(units.root(unit));
             }
         }
         self.conquest_classes.clear();
@@ -4727,6 +4737,8 @@ impl World {
         let mut takes: Vec<(EntityId, i64)> = Vec::new();
         let mut finished: Vec<EntityId> = Vec::new();
         let mut switches: Vec<(EntityId, Task)> = Vec::new();
+        // A villager working a herdable animal, and the animal: herded after the tick's own movement.
+        let mut herds: Vec<(EntityId, EntityId)> = Vec::new();
         let mut deposits: Vec<EntityId> = Vec::new();
         let mut builders: Vec<(EntityId, EntityId)> = Vec::new();
         let mut strikes: Vec<(EntityId, EntityId)> = Vec::new();
@@ -4898,9 +4910,9 @@ impl World {
                     rate_per_tick,
                     carry_cap,
                 } => {
-                    let Some((target, target_is_building)) = self
+                    let Some((target, target_is_building, node_unit)) = self
                         .find(node)
-                        .map(|n| (n.position, n.kind == EntityKind::Building))
+                        .map(|n| (n.position, n.kind == EntityKind::Building, n.unit))
                     else {
                         // The node is gone (a later increment may delete emptied nodes).
                         finished.push(entity.id);
@@ -4914,6 +4926,19 @@ impl World {
                         || (target_is_building
                             && here.0.abs_diff(there.0) <= 1
                             && here.1.abs_diff(there.1) <= 1);
+
+                    // A herdable animal is walked to the drop site by the villager working it (D70). The
+                    // node was already read above, so this costs one family lookup and no second scan of the
+                    // world - the first version re-found the node per gatherer per tick, which is O(units).
+                    if !self.herdable.is_empty()
+                        && node_unit.is_some_and(|unit| {
+                            self.units
+                                .as_ref()
+                                .is_some_and(|units| self.herdable.contains(&units.root(unit)))
+                        })
+                    {
+                        herds.push((entity.id, node));
+                    }
 
                     // Standing still at the thing being worked is what entitles a worker to take
                     // from it.
@@ -5145,6 +5170,35 @@ impl World {
             if let Some(entity) = self.find_mut(id) {
                 entity.task = task;
             }
+        }
+        // Herding (D70): a villager working a herdable animal walks it toward the **nearest drop site of
+        // that villager's player** - not toward itself - and follows it. The animal's route is planned here
+        // rather than every tick, and the villager's cached route is dropped so it steps at where the animal
+        // *is* rather than at where it was when the order was given.
+        for (villager, animal) in herds {
+            let animal_pos = self.find(animal).map(|entity| entity.position);
+            let player = self.find(villager).map(|entity| entity.player);
+            let variant = self.find(villager).and_then(|entity| entity.unit);
+            let (Some(animal_pos), Some(player)) = (animal_pos, player) else {
+                continue;
+            };
+            let Some(drop) = self.nearest_drop_site(player, animal_pos, variant) else {
+                continue;
+            };
+            let Some(drop_pos) = self.find(drop).map(|entity| entity.position) else {
+                continue;
+            };
+            let heading = matches!(
+                self.find(animal).map(|entity| entity.task),
+                Some(Task::Move { to }) if to == drop_pos
+            );
+            if !heading && self.tile_of(animal_pos) != self.tile_of(drop_pos) {
+                self.walk_towards(animal, drop_pos);
+                if let Some(entity) = self.find_mut(animal) {
+                    entity.task = Task::Move { to: drop_pos };
+                }
+            }
+            self.paths.remove(&villager);
         }
         // Deposit whole resources; the fraction stays in hand. Dropping the remainder instead
         // would quietly destroy a slice of every trip.

@@ -930,3 +930,20 @@ with no amount is worth the pack's **100** rather than zero.
 - **Left for the carcass step, deliberately:** when a sheep's meat runs out the villager stands down and the
   sheep stays on the map alive at zero amount. That is wrong in the game and right for now, because killing it
   is the carcass rule's job (step three), not this one's.
+
+### Step two: herding (done, 2026-10-29)
+
+`[hunt] herdable_roles` resolves to families at seed (`World.herdable`). While a villager gathers one, the
+animal is walked to that player's nearest drop site and the villager's cached route is dropped so it follows.
+All six animal tests pass: an unworked sheep stands still, a gathered one walks toward the town centre, the
+villager follows it rather than watching, a sheep stops on arrival, a live animal is a gather source, and a
+placed sheep is worth 100.
+
+**Two things the tests corrected in me:** my "villager follows" assertion compared the wrong two distances
+(the villager starts *at* the town centre, so "closer than it started" is nearly zero) - it now asserts the
+villager moved and stays within six tiles of the sheep; and the first implementation re-found the gather node
+per gatherer per tick, an O(units) scan that the arm had already done - the node's unit is read once now.
+
+**Still open:** the sheep is not killed when its meat runs out (carcass rule, step three), a boar never
+retaliates (step three), and an animal never changes hands (conversion, step four - needs the owner's ruling on
+what a gatherer's load does when its sheep is stolen).

@@ -154,7 +154,6 @@ fn a_sheep_nobody_is_gathering_stands_still() {
     assert_eq!(before, after, "nothing gathers it, so nothing moves it");
 }
 
-#[ignore = "herding: the engine half is not built yet (D70)"]
 #[test]
 fn a_gathered_sheep_walks_toward_the_drop_site() {
     let Some(fx) = fixture() else {
@@ -184,7 +183,6 @@ fn a_gathered_sheep_walks_toward_the_drop_site() {
     );
 }
 
-#[ignore = "herding: the engine half is not built yet (D70)"]
 #[test]
 fn the_villager_follows_the_sheep() {
     let Some(fx) = fixture() else {
@@ -202,25 +200,29 @@ fn the_villager_follows_the_sheep() {
         })
         .expect("a villager can be sent to a sheep");
 
-    // Walk a while, then check the pair moved together: the villager is near the sheep and both have
-    // come closer to the town centre than the villager started.
-    let villager_started = distance(&world, villager, centre);
+    // Walk a while, then check the pair travelled together: the villager has left where it stood, and it is
+    // near the sheep wherever the sheep has got to. The gap is what "follows" means - the sheep's own
+    // distance to the drop site is the other test's business.
+    let started = world.position(villager).expect("the villager");
     for _ in 0..300 {
         world.step().expect("stepping");
     }
+    let now = world.position(villager).expect("the villager");
+    assert_ne!(now, started, "the villager must move, not stand and watch");
 
-    let gap = distance(&world, villager, centre).min(distance(&world, sheep, centre));
-    assert!(
-        gap < villager_started / 4,
-        "the villager trails the sheep toward the drop site rather than standing still"
+    let sheep_at = world.position(sheep).expect("the sheep");
+    let (dx, dy) = (
+        now.0.raw() - sheep_at.0.raw(),
+        now.1.raw() - sheep_at.1.raw(),
     );
+    let scale = world.scale();
+    let gap_tiles_squared = (dx * dx + dy * dy) / (scale * scale);
     assert!(
-        distance(&world, villager, centre) < villager_started,
-        "and the villager itself has moved toward the town centre"
+        gap_tiles_squared <= 36,
+        "the villager stays with the sheep - it is following, not trailing by half the map"
     );
 }
 
-#[ignore = "herding: the engine half is not built yet (D70)"]
 #[test]
 fn a_sheep_stops_at_the_drop_site() {
     let Some(fx) = fixture() else {
