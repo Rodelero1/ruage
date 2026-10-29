@@ -1789,3 +1789,18 @@ the **animal** toward the nearest drop site of that villager's player and drops 
 so it steps at where the animal is rather than at where it was when the order was given. The animal's route is
 planned only when it is not already heading there, so a herded sheep costs one path per leg, not one per tick.
 The pass is gated on content: `[hunt] herdable_roles`, so a boar is food but never walks (D70's split).
+
+**D70, the slaughter (owner, 2026-10-29): on arrival at the drop site.** *"If villager takes meat, it means
+sheep is dead, so it cannot be stolen out from under it"* - and then, asked when the killing blow lands, **"a -
+on arrival at the drop site"**.
+
+So the sequence is **herd -> slaughter -> gather**, and the animal is alive for the whole of the herding:
+the villager walks it to the nearest drop site of its player, kills it there, and only then takes meat from
+the body. Two consequences:
+
+- The gather order points at a **living** animal and stays pointed at the body afterwards, so the sheep
+  becomes its `dead_unit` **in place** - same entity, same id, different unit id and no health - rather than
+  being deleted and re-created. That keeps the gatherer's task valid without a re-target step.
+- A load can therefore never be "stolen out from under" a villager: the meat exists only after the animal is
+  dead, and by then the only thing that could take it is the villager holding it.
+- The window for stealing a herdable is **while it walks**, which is exactly the window conversion lives in.

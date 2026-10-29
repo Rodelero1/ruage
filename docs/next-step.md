@@ -947,3 +947,39 @@ per gatherer per tick, an O(units) scan that the arm had already done - the node
 **Still open:** the sheep is not killed when its meat runs out (carcass rule, step three), a boar never
 retaliates (step three), and an animal never changes hands (conversion, step four - needs the owner's ruling on
 what a gatherer's load does when its sheep is stolen).
+
+### Step three, re-shaped by the slaughter rule (2026-10-29)
+
+The owner's correction - meat implies death, and the killing blow lands **on arrival at the drop site** - means
+step one's shape needs reworking, not just extending: a villager currently gathers from a *live* sheep, which
+the rule forbids. The corrected sequence, and what each part costs:
+
+1. **Slaughter on arrival**: when the herded animal reaches its drop site, the villager kills it. Cheapest
+   faithful form is a transformation in place - the entity's `unit` becomes its `dead_unit`, its health goes to
+   zero, its meat amount stays, and the gatherer's task stays valid because the id did not change.
+2. **Gathering the body**: `gather_source` must accept a carcass (no health, meat in `amount`), which is
+   content-named - `[hunt] carcass_roles` for 595, 356 and 43 - rather than inferred from "no health".
+3. **Retaliation**: a struck animal turns on whoever struck it. Independent of the slaughter work and done
+   first.
+4. **Only a villager makes meat**: the killer decides whether the body holds food.
+5. **Conversion** (step four): line of sight, immediate, and now with a clear window - the animal must be
+   **alive**, which means during the walk and before the killing blow.
+
+### Retaliation: attempted, parked, and what the attempt proved (2026-10-29)
+
+The first attempt is reverted and its tests are `#[ignore]`d. Three things it established, all worth more than
+the reverted code:
+
+- **A boar parked beside the town centre is shot by the town centre.** The blow that lands is an *arrow*, and an
+  arrow lands with its damage but not with its shooter - `Task::Fly` carries no attacker - so an animal cannot
+  retaliate against a building at all today. My test was never testing melee.
+- **Moving the beast to eight tiles changed nothing**, so either the town centre reaches further than I assumed
+  or the blow came from elsewhere again. Either way the test's premise was unproven, which is exactly why it
+  should not have been written that way.
+- **The melee hook never fired**: `retaliate` was called from the melee strike path, its debug print never
+  appeared, and yet the boar lost health - so the damage took a path I had not identified.
+
+**What to do instead, next time:** write the test with two units and no buildings within range, so the attacker
+is unambiguous; then find which of the four `hp -=` sites in the tick actually delivers a melee blow, with a
+print at each, before writing the reaction. The mechanic is still wanted - a boar that does not fight back is
+scenery - but the ordering was wrong: identify the damage path first, write the test second.
