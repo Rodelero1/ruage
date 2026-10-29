@@ -1127,6 +1127,11 @@ pub struct World {
     /// A shepherd's kill in progress: villager -> the animal it was sent to work and is now striking. The gather
     /// order is replaced by the fight, so it is remembered here to be resumed on the body (D70, item 3).
     slaughter: BTreeMap<EntityId, EntityId>,
+    /// Rot per body, in raw units per tick (item 4). Fixed at death from the **living animal's** `decay_rate`,
+    /// which is food per second - the body's own record carries a flat 1.0 that is not a rot rate at all.
+    rots: BTreeMap<EntityId, i64>,
+    /// The same rate per animal unit, ids and families, resolved once at seed so a death never reads a table.
+    animal_rot: BTreeMap<u32, i64>,
     /// Which families require which family to have been built once, resolved from `[build] requires`,
     /// with the requirement's role name kept for the message.
     requires_built: BTreeMap<u32, (u32, String)>,
@@ -1315,6 +1320,8 @@ impl World {
             butchers: BTreeSet::new(),
             armed_animals: BTreeSet::new(),
             slaughter: BTreeMap::new(),
+            rots: BTreeMap::new(),
+            animal_rot: BTreeMap::new(),
             requires_built: BTreeMap::new(),
             age_needs: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
@@ -1654,6 +1661,18 @@ impl World {
                 if let Some(body) = body.filter(|body| units.unit(*body).is_some()) {
                     self.animal_bodies.insert(unit, body);
                     self.animal_bodies.insert(units.root(unit), body);
+                }
+                // How fast its body rots: `decay_rate` is food per second (boar 0.4, sheep and deer 0.25 - the pack
+                // agrees with two published accounts), turned into raw units per tick once, here. A rate the pack
+                // leaves unresolved yields no rot rather than an invented one.
+                if let Some(per_tick) = units
+                    .unit(unit)
+                    .and_then(|stats| stats.decay_rate.resolve(self.scale, "decay_rate").ok())
+                    .map(|per_second| per_second.raw() / i64::from(self.tick_rate_hz))
+                    .filter(|per_tick| *per_tick > 0)
+                {
+                    self.animal_rot.insert(unit, per_tick);
+                    self.animal_rot.insert(units.root(unit), per_tick);
                 }
             }
         }
@@ -2950,7 +2969,11 @@ impl World {
     /// In place, and on the same id, because the gatherer's task names that id: a villager working a sheep carries
     /// on with the carcass without a re-target, which is the whole reason the slaughter transform was shaped this
     /// way. Health, speed, velocity and the variant all go - a body is not a unit that may move or be attacked.
-    fn promote_dead_animals(&mut self, blows: &[(EntityId, EntityId)]) {
+    fn promote_dead_animals(
+        &mut self,
+        blows: &[(EntityId, EntityId)],
+        new_rots: &mut Vec<(EntityId, i64)>,
+    ) {
         if self.animal_bodies.is_empty() || blows.is_empty() {
             return;
         }
@@ -2995,9 +3018,17 @@ impl World {
             entity.velocity = (Fixed::ZERO, Fixed::ZERO);
             entity.variant = None;
             entity.task = Task::Idle;
-            // Bookkeeping goes with the animal: a body chases nothing and walks nowhere.
+            // Bookkeeping goes with the animal: a body chases nothing and walks nowhere. A body that holds meat
+            // starts rotting at its species' rate; an empty one is left to the sweep's business for now.
             self.paths.remove(&id);
             self.leash.remove(&id);
+            self.rots.remove(&id);
+            if butchered
+                && entity.amount.raw() > 0
+                && let Some(per_tick) = unit.and_then(|unit| self.animal_rot.get(&unit).copied())
+            {
+                new_rots.push((id, per_tick));
+            }
         }
     }
 
@@ -4280,6 +4311,7 @@ impl World {
             + self.stances.len()
             + self.leash.len()
             + self.slaughter.len()
+            + self.rots.len()
     }
 
     /// Whether any side table still remembers `id`. The removal tests use it to prove a dead entity
@@ -4296,6 +4328,7 @@ impl World {
             || self.leash.contains_key(&id)
             || self.slaughter.contains_key(&id)
             || self.slaughter.values().any(|animal| *animal == id)
+            || self.rots.contains_key(&id)
     }
 
     /// How many units this building is making: the one in progress plus everything queued behind it.
@@ -6135,22 +6168,47 @@ impl World {
         // An animal that died of a blow leaves its body where it stood, and the body keeps the entity's id so the
         // gatherer's task stays valid across the blow (D70). Done before the sweep, which then keeps it because its
         // unit is a named carcass (item 2).
-        self.promote_dead_animals(&blows);
+        // Bodies made this tick start rotting on the *next* one: a corpse that lost a tick of food as it appeared
+        // would make every arithmetic assertion about meat off by exactly one tick of rot.
+        let mut new_rots: Vec<(EntityId, i64)> = Vec::new();
+        self.promote_dead_animals(&blows, &mut new_rots);
         // A body is a unit with no health, and it must survive the pass that removes the dead (D70). The set
         // holds ids as well as families, so this costs a lookup and no table walk: the first version cloned
         // the whole unit table here, once per tick.
         let bodies = self.carcasses.clone();
-        self.entities.retain(|entity| {
+        // Rot happens here rather than in a pass of its own: the sweep already touches every entity once per tick,
+        // and a second walk of the world to take four food off a carcass would be the same mistake the leash review
+        // caught. `rots` is taken out so the closure does not borrow `self` twice.
+        let mut rots = std::mem::take(&mut self.rots);
+        let mut rotted: Vec<EntityId> = Vec::new();
+        self.entities.retain_mut(|entity| {
+            if let Some(per_tick) = rots.get(&entity.id).copied() {
+                entity.amount = Fixed::from_raw((entity.amount.raw() - per_tick).max(0));
+            }
             let is_body = entity.kind == EntityKind::Unit
                 && entity.unit.is_some_and(|unit| bodies.contains(&unit));
-            let keep = !matches!(entity.kind, EntityKind::Unit | EntityKind::Building)
+            // A body with nothing left in it is gone: nothing eats an empty carcass, and leaving it standing is the
+            // "an emptied body stays for ever" hole this closes.
+            let spent = is_body && entity.amount.raw() <= 0 && rots.contains_key(&entity.id);
+            let keep = (!matches!(entity.kind, EntityKind::Unit | EntityKind::Building)
                 || entity.hp > 0
-                || is_body;
+                || is_body)
+                && !spent;
             if !keep {
+                if spent {
+                    rotted.push(entity.id);
+                }
                 buried.push(entity.id);
             }
             keep
         });
+        for id in rotted {
+            rots.remove(&id);
+        }
+        self.rots = rots;
+        for (id, per_tick) in new_rots {
+            self.rots.insert(id, per_tick);
+        }
         // A garrison goes down with its shelter: a unit inside a building that dies has nowhere to be,
         // and the alternative - ejecting it onto the rubble - would let a razed town centre disgorge
         // fifteen villagers. Their ids join `buried`, because they have bookkeeping of their own.

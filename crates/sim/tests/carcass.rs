@@ -331,3 +331,121 @@ fn an_attacker_stops_swinging_once_its_quarry_is_a_body() {
         "a villager whose quarry is now a carcass must stand down, not swing at a body for ever"
     );
 }
+
+/// A body rots, slowly, at the rate the pack gives its species: `decay_rate` is **food per second** (boar 0.4, sheep
+/// 0.25), which our pack and two published accounts agree on. Ten seconds of a boar's carcass is four food.
+#[test]
+fn a_carcass_rots_at_the_rate_the_pack_gives() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let villager = place(&mut world, 1, 83, 14, 2, 25, 0);
+    let boar = place(&mut world, 0, boar_unit, 14, 0, 10, 340);
+    let scale = world.scale();
+
+    world
+        .submit_checked(Command::Attack {
+            attacker: villager,
+            target: boar,
+        })
+        .expect("the villager can be sent at the boar");
+    for _ in 0..2_000 {
+        world.step().expect("stepping");
+        if hp_of(&world, boar) <= 0 {
+            break;
+        }
+    }
+    assert!(hp_of(&world, boar) <= 0, "the boar has to die first");
+
+    // Nobody works the body: the villager walks off, so what is measured is rot and nothing else.
+    let away = {
+        let scale = world.scale();
+        let start = world.position(villager).expect("a position");
+        (
+            u16::try_from(start.0.raw() / scale).expect("a tile"),
+            u16::try_from(start.1.raw() / scale).expect("a tile"),
+        )
+    };
+    world
+        .submit_checked(Command::Move {
+            unit: villager,
+            to: away,
+        })
+        .expect("the villager can walk away");
+    world.step().expect("one tick");
+    let before = world.entity(boar).expect("a body").amount.raw();
+
+    // Ten seconds at 20 Hz.
+    for _ in 0..200 {
+        world.step().expect("stepping");
+    }
+    let after = world.entity(boar).expect("a body").amount.raw();
+    assert_eq!(
+        before - after,
+        4 * scale,
+        "a boar's body rots 0.4 food a second: ten seconds is four food"
+    );
+}
+
+/// Rot is not decoration: a body that has rotted away is gone from the map, rather than standing there for ever at
+/// zero meat - which is what "an emptied body stays for ever" meant before this increment.
+#[test]
+fn a_carcass_that_has_rotted_away_leaves_the_map() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let sheep_unit = world.role_unit("sheep").expect("a sheep role");
+    let villager = place(&mut world, 1, 83, 14, 2, 25, 0);
+    let sheep = place(&mut world, 0, sheep_unit, 14, 0, 7, 100);
+
+    world
+        .submit_checked(Command::Attack {
+            attacker: villager,
+            target: sheep,
+        })
+        .expect("the villager can be sent at the sheep");
+    for _ in 0..2_000 {
+        world.step().expect("stepping");
+        if hp_of(&world, sheep) <= 0 {
+            break;
+        }
+    }
+    assert!(hp_of(&world, sheep) <= 0, "the sheep has to die first");
+
+    let away = {
+        let scale = world.scale();
+        let start = world.position(villager).expect("a position");
+        (
+            u16::try_from(start.0.raw() / scale).expect("a tile"),
+            u16::try_from(start.1.raw() / scale).expect("a tile"),
+        )
+    };
+    world
+        .submit_checked(Command::Move {
+            unit: villager,
+            to: away,
+        })
+        .expect("the villager can walk away");
+
+    // 100 food at a quarter of a food a second is 400 s, so 8,000 ticks - with a margin.
+    let mut gone = false;
+    for _ in 0..9_000 {
+        world.step().expect("stepping");
+        if world.entity(sheep).is_none() {
+            gone = true;
+            break;
+        }
+    }
+    assert!(
+        gone,
+        "a body with nothing left in it must leave the map: {:?}",
+        world.entity(sheep).map(|body| body.amount.raw())
+    );
+    assert!(
+        !world.bookkeeping_touches(sheep),
+        "and it must leave nothing behind in the side tables"
+    );
+}

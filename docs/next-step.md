@@ -1318,3 +1318,51 @@ cannot leave a stale resume behind. No new `Entity` field.
 **Named as still open:** the villager's first blow lands the moment it is ordered (it is already adjacent), so the
 shepherd spends six seconds beside a sheep; a real one would not need to wait, but the reload is the data's, and
 three blows is what a 7-hp sheep needs.
+
+## Item 4 - a body rots at the rate the pack gives it (2026-10-29)
+
+*Compact before the code.*
+
+**Verified, and from two directions.** `decay_rate` is imported per unit and unread. The numbers are
+**food per second**: `BOARX` 0.4, `SHEEP` 0.25, `DEERX` 0.25 in our own pack, and two independent community accounts
+give the same figures for the game - *"Boar decays at 0.4 Food per second, Deer and Sheep at 0.25"*, and *"sheep and
+deer decay at a rate of 15 food per minute, while boars decay at 24 food per minute"* (15/60 = 0.25, 24/60 = 0.4).
+The pack agreeing with both to the digit is what settles the unit of the field.
+
+**A trap this closes:** the *body's* own record carries `decay_rate = 1.0` for all three bodies (`SHEEP_D`,
+`BOARX_D`, `DEERX_D`), which is not a rot rate at all - it is the same 1.0 on every corpse, while the living
+animal's value is the one that differs per species and matches the published numbers. So the body inherits the
+**living animal's** rate, resolved once at seed.
+
+**What is built:** at promotion the body's rot rate is fixed (`rots: body -> raw per tick`), and a per-tick pass takes
+it out of `amount` until the body is empty, at which point it leaves the map - which closes the "an emptied body
+stays for ever" hole as a side effect rather than as a separate item.
+
+**Cost:** the pass returns immediately unless a body is rotting, and it walks only bodies. Nothing new is hashed: the
+rate is derived from the unit id, which is state already.
+
+**Tests this owes:** ten seconds of rot on a boar's body is exactly four food (0.4 x 10); and a body rotted to
+nothing leaves the map.
+
+### Item 4, review: rot, and the tick a body was born hungry (2026-10-29)
+
+**Landed:** a butchered body rots at its species' `decay_rate` (food per second, resolved to raw units per tick at
+death); a body that rots to nothing leaves the map and leaves nothing in the side tables.
+
+**Performance.** No new pass: the rot is applied **inside the sweep that already walks every entity once per tick**,
+with `rots` taken out with `mem::take` so the closure borrows one field rather than two. `rots` is empty unless a
+body is rotting, and its per-entity cost is one `BTreeMap::get` - bounded by bodies, not by the map.
+
+**Stability.** Nothing new is hashed: the rate is derived from the unit id, which is state already. `rots` joins the
+bookkeeping tables so a rotted body's cleanup is testable (`bookkeeping_touches` is asserted after the body leaves).
+
+**Three of my own defects, all found by running:**
+
+1. **A body lost exactly one tick of food as it appeared** - `the_last_blow_of_a_villager_leaves_the_meat` failed at
+   6,799,600 against 6,800,000, which is precisely one tick of a boar's rot. Promotion happens before the sweep in
+   the same tick, so a body made this tick was already rotting in it. Fixed by collecting the new rot entries during
+   promotion and inserting them **after** the sweep: bodies rot from the tick after they are made.
+2. **The `retain` closure cannot mutate**, so the first rot attempt could not decrement anything without a second
+   walk of the world; `retain_mut` plus a taken map is the shape that keeps it to one pass.
+3. **Non-butchered bodies still have no lifetime** - a soldier's kill leaves a body with no meat and no rot entry,
+   so it stands there for ever. That is item 6's "emptied body" hole, still open, and now named in one place.
