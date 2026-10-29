@@ -903,3 +903,30 @@ current owner has no unit seeing it too. We already have `visible_to`/`unit_sees
 what is new is that **ownership of an existing entity changes**, which nothing does today: every ownership
 change so far is a kill or a spawn. That wants its own decision on what happens to a villager *gathering* a
 sheep that changes hands mid-load, and whether the meat already gathered stays with the gatherer.
+
+### Step one of the animal slice: a live animal is a gather source (done, 2026-10-29)
+
+`gather_source` accepted a resource node or a farm building and refused everything else, so a villager sent to
+a sheep got `NotAResource` before it walked a single tile. It now also accepts a **living unit whose family is
+an animal**, with the resource named by `[hunt] resource` and the amount carried by the animal itself.
+
+Content gained the roles it needed (`sheep` 594, `boar` 48, `deer` 65) and a second list, because herding and
+edibility are two questions: `animal_roles` is everything worth meat (both kinds), `herdable_roles` is the
+subset that walks to a drop site. `Hunt` carries `animal_roles` and `resource`.
+
+Two tests, both RED first: a villager sent to a sheep is accepted and ends up carrying meat; and a sheep placed
+with no amount is worth the pack's **100** rather than zero.
+
+**Adversarial review of this step:**
+
+- `meat_of` is applied to *any* unit the pack gives food to, and five are not animals - the forage bush 59 and
+  its twin, a food pile 262, a deer's meat pile 333, an oddity 544. Harmless today (a placed bush carrying an
+  amount gathers nothing: `gather_source` gates on `animals`, not on food) but it means "lists `food`" and
+  "is an animal" must never be conflated later.
+- The check is on the **order**, not the tick, so this costs one set lookup per gather order and nothing per
+  frame.
+- `animals` is derived at seed from config and is not hashed, like `conquest_classes`: it decides what orders
+  are *refused*, and a replay runs with the same pack.
+- **Left for the carcass step, deliberately:** when a sheep's meat runs out the villager stands down and the
+  sheep stays on the map alive at zero amount. That is wrong in the game and right for now, because killing it
+  is the carcass rule's job (step three), not this one's.

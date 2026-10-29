@@ -1778,3 +1778,8 @@ follow.
   seeing it too; ties go to whoever has more units near it. Celts ignore the second condition (out of scope).
   This is the first mechanic that changes an entity's **owner** rather than killing or spawning it, so it needs
   its own decision on a gatherer mid-load: what happens to the meat already in hand.
+
+**D70, addendum: the first increment.** Herding and edibility are separate content lists - `animal_roles` (all
+animals worth meat, both kinds) and `herdable_roles` (the ones that walk) - because the owner corrected the
+first of them: a boar is as edible as a sheep. A live animal is a gather source with `[hunt] resource` as what
+it yields, and a placed animal carries the pack's `food` as its amount, so a sheep is worth 100 and not zero.

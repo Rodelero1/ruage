@@ -1072,6 +1072,9 @@ pub struct World {
     /// while one is running queues instead of replacing: without it a builder handed a new site abandons
     /// the half-built one, which is exactly what a scenario or a player would never mean.
     build_queue: BuildQueue,
+    /// Unit families whose meat can be gathered: both animal kinds, from content's `[hunt] animal_roles`.
+    /// Resolved at seed so the engine never learns what a sheep is (D17, D70).
+    animals: BTreeSet<u32>,
     /// Which families require which family to have been built once, resolved from `[build] requires`,
     /// with the requirement's role name kept for the message.
     requires_built: BTreeMap<u32, (u32, String)>,
@@ -1234,6 +1237,7 @@ impl World {
             conquest_classes: BTreeSet::new(),
             built: BTreeSet::new(),
             build_queue: BTreeMap::new(),
+            animals: BTreeSet::new(),
             requires_built: BTreeMap::new(),
             age_needs: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
@@ -1482,6 +1486,16 @@ impl World {
         })
     }
 
+    /// An animal's meat is the pack's `food` for that unit, in whole units - 100 for a sheep, 340 for a
+    /// boar, 0 for anything that is not an animal (D69, D70).
+    fn meat_of(&self, unit: Option<u32>) -> u32 {
+        let Some(units) = self.units.as_ref() else {
+            return 0;
+        };
+        unit.and_then(|unit| units.unit(unit))
+            .map_or(0, |stats| stats.food)
+    }
+
     /// Build the opening position: one town centre per player, `villagers_per_player` villagers
     /// around it, stats resolved from the unit table.
     ///
@@ -1499,6 +1513,14 @@ impl World {
         // destroy is a list of *classes* - towers 52, walls 27, gates 39, farms 49, relics 1 - so the
         // whole rule is "class 3 counts", with no per-building list to keep in step and nothing to
         // forget when the pack gains a mill.
+        // Which unit families are animals, so a gather order can be pointed at one (D70). By family, so a
+        // carcass or an upgraded variant answers the same way.
+        self.animals.clear();
+        for role in &economy.hunt.animal_roles {
+            if let Some(unit) = economy.role.get(role).copied() {
+                self.animals.insert(units.root(unit));
+            }
+        }
         self.conquest_classes.clear();
         for class in &economy.conquest.surviving_classes {
             self.conquest_classes.insert(*class);
@@ -4345,6 +4367,27 @@ impl World {
             return Ok((name.to_owned(), None));
         }
         let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
+        // A live animal is a source of food, and its meat is what it carries (D70). Content names which
+        // units are animals, so the engine never learns what a sheep is. A body is not a source: only a
+        // living animal yields, and what it leaves is the carcass rule's business (level 3 of this slice).
+        if entity.kind == EntityKind::Unit
+            && entity.hp > 0
+            && let Some(unit) = entity.unit
+            && self
+                .units
+                .as_ref()
+                .is_some_and(|units| self.animals.contains(&units.root(unit)))
+        {
+            let resource = economy
+                .hunt
+                .resource
+                .clone()
+                .ok_or_else(|| SimError::NoVariant {
+                    task: "hunt".to_owned(),
+                    detail: "[hunt] names no resource for an animal to yield".to_owned(),
+                })?;
+            return Ok((resource, None));
+        }
         let farm_unit = economy
             .farm
             .unit
@@ -4533,7 +4576,15 @@ impl World {
                     // the world starts at rest, and this one now does too (D64, D70).
                     velocity: (Fixed::ZERO, Fixed::ZERO),
                     hp,
-                    amount: Fixed::from_raw(i64::from(amount) * self.scale),
+                    // An animal placed with no amount is worth what the pack says it is worth: a sheep
+                    // carries its 100 food, not zero (D70).
+                    amount: Fixed::from_raw(
+                        i64::from(if amount == 0 {
+                            self.meat_of(unit)
+                        } else {
+                            amount
+                        }) * self.scale,
+                    ),
                     task: Task::Idle,
                     training: None,
                     construction: None,

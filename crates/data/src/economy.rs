@@ -47,8 +47,12 @@ pub struct Economy {
 /// must not know that a sheep is different from a cow (D17).
 #[derive(Debug, Clone, Default)]
 pub struct Hunt {
-    /// Role names, resolved to unit families at seed time.
+    /// Role names, resolved to unit families at seed time: these walk to a drop site when gathered (D70).
     pub herdable_roles: Vec<String>,
+    /// Role names of every animal worth meat - both kinds, herdable and huntable.
+    pub animal_roles: Vec<String>,
+    /// The resource an animal yields, by name in the pack's stockpile.
+    pub resource: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -224,6 +228,10 @@ struct RawAgeRequirement {
 struct RawHunt {
     #[serde(default)]
     herdable_roles: Vec<String>,
+    #[serde(default)]
+    animal_roles: Vec<String>,
+    #[serde(default)]
+    resource: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -641,6 +649,8 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         },
         hunt: Hunt {
             herdable_roles: raw.hunt.herdable_roles,
+            animal_roles: raw.hunt.animal_roles,
+            resource: raw.hunt.resource,
         },
         conquest: Conquest {
             surviving_classes: raw.conquest.surviving_classes,

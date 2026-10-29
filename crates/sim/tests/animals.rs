@@ -258,3 +258,68 @@ fn a_sheep_stops_at_the_drop_site() {
         "a sheep that has arrived should not still have a route to run"
     );
 }
+
+/// Step one of the slice: **a live animal is a gather source**, and it is worth its meat (D70).
+///
+/// Written before the implementation. `gather_source` knew two kinds of source - a resource node and a farm
+/// building - and refused everything else with `NotAResource`, so a villager could not be sent to a sheep at
+/// all. The meat is the animal's own `food` from the pack (100 for a sheep, 340 for a boar), which the spawn
+/// has to carry: a body placed with no amount would be a source of nothing.
+#[test]
+fn a_live_animal_is_a_gather_source() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let sheep_unit = world.role_unit("sheep").expect("a sheep role");
+    let (_, villager, centre) = seat(&world);
+    let sheep = a_sheep(&mut world, sheep_unit, centre, 1);
+
+    world
+        .submit_checked(Command::Gather {
+            villager,
+            node: sheep,
+        })
+        .expect("a villager can be sent to a live animal");
+
+    // Walk in, then work: the villager's load is what says it is taking meat rather than standing there.
+    let mut carried = 0;
+    for _ in 0..600 {
+        world.step().expect("stepping");
+        if let Some(entity) = world.entities().iter().find(|entity| entity.id == villager) {
+            carried = entity.carry.raw();
+        }
+        if carried > 0 {
+            break;
+        }
+    }
+    assert!(
+        carried > 0,
+        "a villager working a sheep must end up carrying meat"
+    );
+}
+
+#[test]
+fn a_placed_animal_carries_its_meat() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let sheep_unit = world.role_unit("sheep").expect("a sheep role");
+    let (_, _, centre) = seat(&world);
+
+    // Placed with no amount, as a scenario would place it: the pack's 100 food is the amount.
+    let sheep = a_sheep(&mut world, sheep_unit, centre, 1);
+    let amount = world
+        .entities()
+        .iter()
+        .find(|entity| entity.id == sheep)
+        .map(|entity| entity.amount.raw())
+        .expect("the sheep exists");
+
+    assert_eq!(
+        amount,
+        100 * world.scale(),
+        "a sheep is worth the 100 food the pack gives it, in engine units"
+    );
+}

@@ -184,6 +184,8 @@ stable = 101        # STBL, class 3, 1500 hp, 175 wood: a Feudal Age building
 archery_range = 87  # ARRG, class 3, 1500 hp, 175 wood: a Feudal Age building
 lumber_camp = 562   # SMIL (the dat's "saw mill"), class 3, 600 hp, 100 wood: a Dark Age building
 sheep = 594         # SHEEPG, class 58: 7 hp, 100 food, leaves body 595 (D69)
+boar = 48           # BOARX, class 10 (Gaia only): 75 hp, 340 food, leaves body 356
+deer = 65           # DEERX, class 9 (Gaia only): 140 food, leaves body 43
 mangonel = 280      # MANGO, class 13: 50 hp, 7 range / 3 minimum, 160 wood + 135 gold, 6 s reload,
                     # 35 vs buildings and 40 vs units - the first thing in the pack that breaks a base
 
@@ -225,6 +227,11 @@ town_centre_population = 5
 # villager's player, and the villager follows it. Which animals herd is content's answer - the engine
 # knows nothing about sheep (D17).
 herdable_roles = ["sheep"]
+# Which animals carry meat at all - both kinds, herdable (58) and huntable (9, 10), because a boar or a deer
+# is as edible as a sheep. Herding and meat are two questions, so they are two lists.
+animal_roles = ["sheep", "boar", "deer"]
+# What an animal yields while it is alive and what its body holds after (D69, D70).
+resource = "food"
 
 [conquest]
 # What keeps a side in the match (D59). The original game's rule, from the manual, twice:
