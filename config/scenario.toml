@@ -133,7 +133,7 @@ at_seconds = 525.0
 player = 1
 kind = "attack"
 attacker = "militia"
-target = "nearest_enemy"
+target = "enemy_town_centre"
 
 # --- player 2: the scripted opponent --------------------------------------------------------------
 

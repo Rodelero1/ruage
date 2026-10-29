@@ -807,3 +807,90 @@ fn an_upgrade_does_not_refill_a_spent_farm() {
 
 const HORSE_COLLAR: u32 = 14;
 const MILL: u32 = 68;
+
+/// *"Villager should continue with the nearest similar source"* (owner, 2026-10-29): a tree that runs out sends the
+/// lumberjack to the next tree, not to a standstill. Before this a villager worked exactly one node and then idled,
+/// which is what stopped the acceptance match with 139 wood in the bank.
+#[test]
+fn a_depleted_node_sends_the_villager_to_the_next_one_of_its_kind() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let wood = slot("wood");
+    let villager = first_villager(&world);
+    let scale = world.scale();
+    let from = world.position(villager).expect("a position");
+
+    // Two trees of our own: a scrap right beside the villager and a full one two tiles further out. The scrap empties
+    // in one trip, so the test measures the re-task rather than a two-hundred-tick walk.
+    let mut place = |offset: i64, amount: u32| -> EntityId {
+        let id = EntityId(
+            world
+                .entities()
+                .iter()
+                .map(|entity| entity.id.0)
+                .max()
+                .unwrap_or(0)
+                + 1,
+        );
+        world
+            .submit_checked(Command::Spawn {
+                id,
+                player: 0,
+                kind: EntityKind::Resource(wood),
+                unit: None,
+                position: (
+                    Fixed::from_raw(from.0.raw() + offset * scale),
+                    Fixed::from_raw(from.1.raw() + offset * scale),
+                ),
+                speed: Fixed::ZERO,
+                hp: 0,
+                amount,
+            })
+            .expect("a tree");
+        world.step().expect("one tick");
+        id
+    };
+    // Three whole units, not one: a sub-unit load cannot be banked (the deposit takes whole resources), so a
+    // one-unit node leaves the villager holding 0.99 of nothing and the test measures the wrong thing.
+    let scrap = place(2, 3);
+    let _plenty = place(4, 100);
+
+    world
+        .submit_checked(Command::Gather {
+            villager,
+            node: scrap,
+        })
+        .expect("a villager can be sent at a tree");
+
+    // The rule is "the nearest source of the same kind", not "the one this test planted": a map tree may well be
+    // nearer, and insisting on the seeded one would fail a correct engine (it did, on the first run).
+    let mut retasked = None;
+    for _ in 0..2_000 {
+        world.step().expect("stepping");
+        if let Some(ruage_sim::Task::Gather { node, .. }) =
+            world.entity(villager).map(|entity| entity.task)
+            && node != scrap
+        {
+            retasked = Some(node);
+            break;
+        }
+    }
+    let next = retasked.unwrap_or_else(|| {
+        panic!(
+            "a lumberjack whose tree ran out walks to the next tree; task is {:?}, refusal {:?}",
+            world.entity(villager).map(|entity| entity.task),
+            world
+                .last_refusal()
+                .map(|(id, why, _)| (id, why.to_string()))
+        )
+    });
+    assert!(
+        matches!(
+            world.entity(next).map(|entity| entity.kind),
+            Some(EntityKind::Resource(slot)) if slot == wood
+        ),
+        "and the next node is wood, not something else: {next:?}"
+    );
+}

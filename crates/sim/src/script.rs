@@ -296,6 +296,15 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 .map(|entity| entity.id)
                 .max()
                 .ok_or_else(|| format!("player {player} has no unit {attacker}"))?;
+            // Reachability is part of the choice, exactly as it is for a resource node: an enemy inside a wood cluster
+            // cannot be walked to, and a step that names it fails the *run* at apply time rather than picking the next
+            // one. This became visible when villagers learned to spread through the trees (item 9), which put an enemy
+            // villager behind one.
+            let here = world.position(unit);
+            let reachable = |entity: &crate::Entity| match here {
+                Some(from) => world.can_reach(from, entity.position),
+                None => true,
+            };
             let enemy = match target.as_str() {
                 "nearest_enemy" => world
                     .entities()
@@ -305,6 +314,7 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                             && entity.kind == EntityKind::Unit
                             && entity.player != 0
                     })
+                    .filter(|entity| reachable(entity))
                     .map(|entity| entity.id)
                     .next(),
                 "enemy_building" => world

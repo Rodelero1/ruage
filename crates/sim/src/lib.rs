@@ -2207,7 +2207,10 @@ impl World {
             return Err(SimError::AlliedTarget { id: target });
         }
         let units = self.units.as_ref().ok_or(SimError::NoTables)?;
-        let (attacker_stats, victim_stats) = match (source.unit, victim.unit) {
+        // The **variant** is what the worker is while it works: a villager on a hunt task is VMHUN, and VMHUN carries a
+        // bow (`range = 3.0`) where the base villager carries a knife (`range = 0.0`). Reading `unit` alone made every
+        // hunter fight at arm's length, which is the owner's first correction (2026-10-29).
+        let (attacker_stats, victim_stats) = match (source.variant.or(source.unit), victim.unit) {
             (Some(a), Some(b)) => (
                 units.unit(a).ok_or(SimError::MissingUnit { id: a })?,
                 units.unit(b).ok_or(SimError::MissingUnit { id: b })?,
@@ -3133,6 +3136,30 @@ impl World {
                 }
             }
             self.stamp_entity(id);
+        }
+    }
+
+    /// What a blow is worth against *this* victim. A **herdable is livestock, not an opponent**: a butcher's strike -
+    /// the shepherd's knife or the hunter's arrow - takes it outright, so a 7-health sheep dies of one blow rather than
+    /// of three (the owner's rule). A boar or a deer is fought, which is what makes a boar dangerous.
+    fn blow_against(&self, attacker: EntityId, target: EntityId, damage: i32) -> i32 {
+        let Some(victim) = self.find(target) else {
+            return damage;
+        };
+        if !victim
+            .unit
+            .is_some_and(|unit| self.herdable.contains(&unit))
+        {
+            return damage;
+        }
+        let butcher = self
+            .find(attacker)
+            .and_then(|entity| entity.unit)
+            .is_some_and(|unit| self.butchers.contains(&unit));
+        if butcher {
+            damage.max(victim.hp)
+        } else {
+            damage
         }
     }
 
@@ -4939,6 +4966,87 @@ impl World {
         self.walk.as_ref().is_some_and(|walk| walk.contains(x, y))
     }
 
+    /// Whether an entity is a **living animal**, and if it is, whether it is herdable. `None` for a tree, a building, a
+    /// carcass or a dead animal: only a live animal is something a villager hunts or herds.
+    fn animal_at(&self, id: EntityId) -> Option<bool> {
+        let entity = self.find(id)?;
+        if entity.kind != EntityKind::Unit || entity.hp <= 0 {
+            return None;
+        }
+        let unit = entity.unit?;
+        if !self.animals.contains(&unit) {
+            return None;
+        }
+        Some(self.herdable.contains(&unit))
+    }
+
+    /// The nearest **other** node of the same kind: the same resource column for a tree or a mine, the same family for
+    /// an animal (the next sheep, not a boar), the same role for a farm with food left in it. Reachability is part of
+    /// the choice, because a node behind a wall is not somewhere a worker can be sent (item 9's rule).
+    fn nearest_like(
+        &self,
+        from: (Fixed, Fixed),
+        old: EntityId,
+        worker: EntityId,
+    ) -> Option<EntityId> {
+        let source = self.find(old)?;
+        let kind = source.kind;
+        let unit = source.unit;
+        let family = unit.and_then(|unit| self.units.as_ref().map(|units| units.root(unit)));
+        let mut best: Option<(i64, u32, EntityId)> = None;
+        for entity in &self.entities {
+            if entity.id == old || entity.id == worker {
+                continue;
+            }
+            let same = match (kind, entity.kind) {
+                (EntityKind::Resource(slot), EntityKind::Resource(other)) => slot == other,
+                (EntityKind::Unit, EntityKind::Unit) => {
+                    // Another animal of the same family, and still alive: a carcass is not something to hunt.
+                    entity.hp > 0
+                        && unit.is_some_and(|unit| {
+                            entity.unit.is_some_and(|other| {
+                                other == unit
+                                    || family.is_some_and(|family| {
+                                        self.units
+                                            .as_ref()
+                                            .is_some_and(|units| units.root(other) == family)
+                                    })
+                            })
+                        })
+                }
+                (EntityKind::Building, EntityKind::Building) => {
+                    // Another finished farm with food left in it.
+                    entity.construction.is_none()
+                        && entity.amount.raw() > 0
+                        && unit.is_some_and(|unit| {
+                            entity.unit.is_some_and(|other| self.is_family(other, unit))
+                        })
+                }
+                _ => false,
+            };
+            // Reachability is part of the choice, and a node's own tile is usually **blocked** (a tree, a mine, a
+            // farm), so the question is whether a worker can reach somewhere it can *work* it - the same tile
+            // `work_position` picks when the gather order is given. Asking `can_reach(node.position)` refused every
+            // tree, which is how the first version sent every lumberjack to Idle.
+            let reachable = self.can_reach(from, entity.position)
+                || self
+                    .work_position(from, entity.position)
+                    .is_some_and(|stand| self.can_reach(from, stand));
+            if !same || !reachable {
+                continue;
+            }
+            let dx = entity.position.0.raw() - from.0.raw();
+            let dy = entity.position.1.raw() - from.1.raw();
+            let key = (dx * dx + dy * dy, entity.id.0, entity.id);
+            if best
+                .is_none_or(|(best_distance, best_id, _)| (key.0, key.1) < (best_distance, best_id))
+            {
+                best = Some(key);
+            }
+        }
+        best.map(|(_, _, id)| id)
+    }
+
     /// What may be gathered from an entity, and whether the thing being worked sets the pace: a farm
     /// does (its own work rate), a tree does not (the villager's variant does).
     ///
@@ -5027,15 +5135,27 @@ impl World {
                 .ok_or_else(|| SimError::UnknownResourceName {
                     name: resource.clone(),
                 })?;
-            let task_name = economy
-                .gather
-                .resource_task
-                .get(&resource)
+            // Which task the node presents. An **animal is hunted** (the hunter's bow: VMHUN carries `range = 3.0`)
+            // and a **herdable is herded** (the shepherd's knife), which is the owner's rule and is why the pack names
+            // both tasks. Everything else comes from content's resource -> task map, and a pack that names no hunt or
+            // herd task falls back to that map rather than refusing the order.
+            let animal_task = match self.find(node).map(|entity| (entity.kind, entity.unit)) {
+                Some((EntityKind::Unit, Some(unit))) if self.herdable.contains(&unit) => {
+                    Some("herd")
+                }
+                Some((EntityKind::Unit, Some(unit))) if self.animals.contains(&unit) => {
+                    Some("hunt")
+                }
+                _ => None,
+            };
+            let task_name = animal_task
+                .filter(|task| economy.gather.variant.contains_key(*task))
+                .map(str::to_owned)
+                .or_else(|| economy.gather.resource_task.get(&resource).cloned())
                 .ok_or_else(|| SimError::NoVariant {
                     task: resource.clone(),
                     detail: "no [gather.resource_task] entry for this resource".to_owned(),
-                })?
-                .clone();
+                })?;
             let variant_id =
                 *economy
                     .gather
@@ -5131,7 +5251,9 @@ impl World {
             rate_per_tick,
             carry_cap,
         };
-        worker.carry = Fixed::ZERO;
+        // The load is the villager's, not the node's: re-tasking onto the next tree (or the next sheep) must not spill
+        // what is already in its hands. It used to be zeroed here, which was invisible until a worker could move on by
+        // itself.
         Ok(())
     }
 
@@ -5338,6 +5460,10 @@ impl World {
         let mut deposits: Vec<EntityId> = Vec::new();
         let mut builders: Vec<(EntityId, EntityId)> = Vec::new();
         let mut strikes: Vec<(EntityId, EntityId)> = Vec::new();
+        // Workers whose node ran dry and who have somewhere else to go, decided in the pass and started after it.
+        let mut retasks: Vec<(EntityId, EntityId)> = Vec::new();
+        // (hunter, animal): a huntable animal in front of a villager, which is an attack rather than a take.
+        let mut hunts: Vec<(EntityId, EntityId)> = Vec::new();
         // Who hit whom this tick, in order: the last blow decides the meat, and the blow that kills is always one
         // of this tick's (a victim at or below zero health is promoted before the tick ends). Nothing is carried
         // between ticks, nothing is hashed, and it is empty in any world where nobody is fighting (item 2).
@@ -5543,6 +5669,14 @@ impl World {
                         herds.push((entity.id, node));
                     }
 
+                    // A **huntable** animal is shot, not gathered from, and the shot is ordered **before** the walk:
+                    // a hunter that first walked onto the boar would be inside knife range at the first swing, and
+                    // the bow (VMHUN, `range = 3.0`) would never matter. A herdable is walked home first and killed at
+                    // the drop site, which is the herding pass's business.
+                    if self.animal_at(node) == Some(false) {
+                        hunts.push((entity.id, node));
+                    }
+
                     // Standing still at the thing being worked is what entitles a worker to take
                     // from it.
                     if at_node {
@@ -5559,7 +5693,12 @@ impl World {
                         let in_hand = entity.carry.raw() + take;
                         let empty_node = node_left - take <= 0;
                         let full = in_hand >= i64::from(carry_cap) * self.scale;
-                        if (take > 0 && (full || empty_node))
+                        // A **full load always goes home**, whether or not anything was taken this tick. Without the
+                        // first clause a villager whose cap was reached by a re-task (a load carried onto the next
+                        // node) stood at that node with no room to take anything, for the rest of the match.
+                        let brimming = entity.carry.raw() >= i64::from(carry_cap) * self.scale;
+                        if brimming
+                            || (take > 0 && (full || empty_node))
                             || (take == 0 && empty_node && in_hand > 0)
                         {
                             switches.extend(
@@ -5568,7 +5707,15 @@ impl World {
                             );
                         }
                         if take == 0 && empty_node && in_hand <= 0 {
-                            finished.push(entity.id);
+                            // Nothing in hand and nothing left here: look for the next node of the same kind before
+                            // standing still. A tree holds 100 wood, so without this a lumberjack works one tree and
+                            // idles for the rest of the match - which is what stopped the acceptance match at 139
+                            // wood (the owner's rule: "move to next tree, next bush, next pile of gold").
+                            let here = entity.position;
+                            match self.nearest_like(here, node, entity.id) {
+                                Some(next) => retasks.push((entity.id, next)),
+                                None => finished.push(entity.id),
+                            }
                         }
                         (Fixed::ZERO, Fixed::ZERO)
                     } else {
@@ -5760,6 +5907,24 @@ impl World {
                 entity.carry = Fixed::from_raw(entity.carry.raw() + granted);
             }
         }
+        // A hunt: the villager attacks the animal, and the gather order is remembered so it resumes on the body.
+        for (hunter, animal) in hunts {
+            self.slaughter.entry(hunter).or_insert(animal);
+            let already = matches!(
+                self.find(hunter).map(|entity| entity.task),
+                Some(Task::Attack { target, .. }) if target == animal
+            );
+            if !already && let Err(error) = self.start_attack(hunter, animal) {
+                self.refusal = Some((hunter, error, self.tick));
+            }
+        }
+        // The next node of the same kind, for a worker whose own ran out. An ordinary gather order: the load in hand is
+        // kept, and the walk is planned by the same code a player's click uses.
+        for (worker, node) in retasks {
+            if let Err(error) = self.start_gather(worker, node) {
+                self.refusal = Some((worker, error, self.tick));
+            }
+        }
         for (id, task) in switches {
             // A worker heading home needs a route to the drop site, not just the final position.
             if let Task::Return { drop, .. } = task {
@@ -5903,17 +6068,29 @@ impl World {
                     self.paths.insert(id, route);
                 }
             }
+            let mut spent = false;
             if let Some(entity) = self.find_mut(id) {
                 entity.carry = Fixed::from_raw(raw - whole * scale);
-                entity.task = if node_left > 0 {
-                    Task::Gather {
+                if node_left > 0 {
+                    entity.task = Task::Gather {
                         node,
                         rate_per_tick,
                         carry_cap,
-                    }
+                    };
                 } else {
-                    Task::Idle
-                };
+                    entity.task = Task::Idle;
+                    spent = true;
+                }
+            }
+            if spent {
+                // The node is finished: go to the next one of the same kind rather than standing down (the owner's
+                // rule). This is where a lumberjack used to stop for the rest of the match after one tree.
+                let here = self.find(id).map(|entity| entity.position);
+                if let Some(next) = here.and_then(|here| self.nearest_like(here, node, id))
+                    && let Err(error) = self.start_gather(id, next)
+                {
+                    self.refusal = Some((id, error, self.tick));
+                }
             }
         }
         // Construction advances one builder-tick per tick of work, so the finish lands exactly on
@@ -5958,7 +6135,8 @@ impl World {
         }
         // Melee: a blow lands on the tick the attacker is in position, then every `reload_ticks`.
         for (attacker, target) in strikes {
-            let landed = self.swing(attacker);
+            let swung = self.swing(attacker);
+            let landed = self.blow_against(attacker, target, swung);
             if landed <= 0 {
                 continue;
             }
@@ -6275,6 +6453,9 @@ impl World {
                 dx * dx + dy * dy <= tolerance * tolerance
             });
             let mut struck = false;
+            // A hunter's arrow is a villager's blow too, so the same slaughter rule applies to it (the owner's second
+            // correction): an arrow that kills a herdable leaves the carcass, exactly as the knife does.
+            let damage = self.blow_against(shooter, target, damage);
             if let Some(victim) = self.find_mut(target)
                 && victim.hp > 0
                 && reachable

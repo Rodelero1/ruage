@@ -200,14 +200,29 @@ fn the_ten_minute_scenario_builds_trains_and_fights() {
         })
         .count();
     assert_eq!(spearmen, 1, "one spearman was trained");
-    let villagers_left = world
+    // The fight happened: the spear was sent at the enemy town centre and the town centre is hurt. It used to be sent
+    // at an opponent *villager*, which stopped being reachable once villagers learned to spread through the wood
+    // cluster (item 9) - the town centre is a target a walk can always reach, and a refusal is a worse teacher than a
+    // scratch on the wall.
+    let centre_unit = world.start_town_centre_unit().expect("a town centre role");
+    let target = world
         .entities()
         .iter()
-        .filter(|entity| entity.player == 2 && entity.kind == EntityKind::Unit)
-        .count();
+        .find(|entity| {
+            entity.player == 2
+                && entity.kind == EntityKind::Building
+                && entity
+                    .unit
+                    .is_some_and(|unit| world.is_family(unit, centre_unit))
+        })
+        .expect("player 2's town centre");
+    let full = world
+        .max_hp_of(2, target.unit.unwrap_or(centre_unit))
+        .unwrap_or(target.hp);
     assert!(
-        villagers_left < 3,
-        "the spearman should have killed an opponent villager, {villagers_left} of 3 remain"
+        target.hp < full,
+        "the spearman should have struck the enemy town centre: {} of {full} health",
+        target.hp
     );
 }
 

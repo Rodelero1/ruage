@@ -1971,3 +1971,40 @@ the map. Every body now carries two numbers from the pack: how much meat it lose
 butchered) and the tick it must be gone by - **its species' own meat divided by its own rot rate**, which is 850 s for
 a boar and 400 s for a sheep. That keeps the rule auditable: change a species' meat or its rot in the dat and its
 corpse's lifetime follows, with nothing to remember.
+
+## D73 - The owner's four corrections: hunters, arrows, one blow, and moving on
+
+*The owner read the last report and corrected four things. All four were real, and three of them were visible in the
+pack already.*
+
+**(1) Hunters shoot, shepherds cut.** The pack says so: **VMHUN 122 and VFHUN 216 carry `range = 3.0`**, every other
+variant carries none. So the engine never needed a new rule - it needed to **choose the task by the node**: an animal
+is *hunted* (`[gather.variant] hunt = 122`, a bow) and a herdable is *herded* (`herd = 592`, a knife). Two things had
+to follow: the stats come from **`variant`, not `unit`** (a villager on a hunt task *is* VMHUN, and reading the base
+villager gave every hunter a knife), and the hunt order is given **before** the walk (a hunter that first walked onto
+the boar would be inside knife range at its first swing, and the bow would never matter).
+
+**(2) A hunter's arrow that lands the last blow keeps the meat.** It already did - the arrow carries its shooter
+(D71) and the shooter is a villager - but nothing tested it, and the rule is only true because of the damage-path fix.
+It is now a test.
+
+**(3) A shepherd kills a sheep in one blow.** A herdable is **livestock, not an opponent**: a butcher's blow takes it
+outright, whatever the swing is worth, so a 7-health sheep is never *seen* wounded. A boar or a deer is still fought,
+which is what makes a boar dangerous. Both damage paths obey it - the knife and the arrow - because the rule is about
+the victim and the killer, not about which loop applied the damage.
+
+**(4) A worker whose source runs out moves to the next one of its kind** - next tree, next bush, next pile of gold,
+next sheep. This is the rule that unblocked a real economy and it exposed two bugs of mine:
+
+- **A full load did not always go home.** The switch to `Return` required `take > 0` on the same tick, so a villager
+  that arrived at a *new* node already carrying a full load stood there with no room to take anything, for ever. It
+  was invisible while every order reset the load (`start_gather` used to zero `carry`, which is itself wrong - the load
+  is the villager's, not the node's) and it is now caught by `Return` being triggered by a brimming load.
+- **Reachability of a node is not `can_reach(node.position)`.** A tree's own tile is usually blocked, so asking that
+  refused every tree and sent every lumberjack to Idle; the question is whether a worker can reach a tile it can
+  *work* the node from, which is what `work_position` answers.
+
+**And one consequence outside the engine:** the ten-minute scenario used to send its spearman at the nearest enemy
+*villager*. With villagers now spreading through the wood cluster, that villager is sometimes walled in, and the step
+killed the run at apply time. `nearest_enemy` now prefers an enemy it can walk to, and the scenario aims at the town
+centre instead - a target a walk can always reach, and a scratch on the wall teaches more than a refused step.

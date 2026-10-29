@@ -118,6 +118,41 @@ fn a_sheep(world: &mut World, unit: u32, near: (Fixed, Fixed), offset: i64) -> E
     id
 }
 
+/// Put an animal of any species on the map with the health the pack gives it, and hand back its id.
+///
+/// A separate helper from `a_sheep` because that one hard-codes 7 health and a sheep's meat: a boar spawned at 7 hp
+/// reads as "already hurt", which made a first version of the hunter test pass on a blow nobody had struck.
+fn an_animal(world: &mut World, unit: u32, near: (Fixed, Fixed), offset: i64, hp: i32) -> EntityId {
+    let scale = world.scale();
+    let id = EntityId(
+        world
+            .entities()
+            .iter()
+            .map(|entity| entity.id.0)
+            .max()
+            .unwrap_or(0)
+            + 1,
+    );
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player: 0,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(near.0.raw() + offset * scale),
+                Fixed::from_raw(near.1.raw() + offset * scale),
+            ),
+            speed: Fixed::ZERO,
+            hp,
+            // Zero means "worth what the pack says": 340 for a boar (D70).
+            amount: 0,
+        })
+        .expect("an animal on the map");
+    world.step().expect("one tick");
+    id
+}
+
 /// What this entity is doing, if it is still on the map.
 fn task_of(world: &World, id: EntityId) -> Option<Task> {
     world
@@ -359,20 +394,28 @@ fn a_live_animal_yields_no_meat() {
         })
         .expect("a villager can be sent to a boar");
 
-    let mut carried_later = 0;
-    for _ in 0..400 {
+    // **While it lives** nothing comes out of it. The villager does end up carrying meat - it hunts the boar and then
+    // works the body, which is the rule working - so the assertion has to be about the window, not the endpoint.
+    let mut carried_while_alive = 0;
+    let mut ticks = 0;
+    while ticks < 400 {
         world.step().expect("stepping");
-        carried_later = world
+        ticks += 1;
+        let alive = world.entity(boar).is_some_and(|entity| entity.hp > 0);
+        if !alive {
+            break;
+        }
+        carried_while_alive = world
             .entity(villager)
             .map(|entity| entity.carry.raw())
             .unwrap_or(0);
-        if carried_later > 0 {
+        if carried_while_alive > 0 {
             break;
         }
     }
     assert_eq!(
-        carried_later, 0,
-        "a live animal must not yield meat: the villager is herding it, not eating it"
+        carried_while_alive, 0,
+        "a live animal must not yield meat: the villager is hunting it, not eating it"
     );
     assert_eq!(
         world.entity(boar).map(|entity| entity.amount.raw()),
@@ -405,34 +448,27 @@ fn the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body() {
         })
         .expect("a villager can be sent to a sheep");
 
-    // The villager has to take a swing at it - and while it swings, the animal is still a sheep with health.
-    let mut struck_while_alive = false;
-    let mut hurt = false;
+    // The villager has to be **ordered to strike** it, and the death has to follow that order. A shepherd kills a sheep
+    // in one blow, so "the animal is still alive while the villager swings" is no longer observable: the swing and the
+    // death are the same tick. What is observable is the order, and the body it leaves.
+    let mut ordered_to_strike = false;
     for _ in 0..2_000 {
         world.step().expect("stepping");
+        if matches!(
+            world.entity(villager).map(|entity| entity.task),
+            Some(Task::Attack { target, .. }) if target == sheep
+        ) {
+            ordered_to_strike = true;
+        }
         let Some(animal) = world.entity(sheep) else {
             break;
         };
-        // The two facts have to hold *on the same tick*: a swing, and the animal still a sheep. (The attack
-        // task lingers for one tick past the killing blow, so an assertion inside this loop would fire on the
-        // tick the body appears - which is the tick after the one that matters.)
-        if animal.unit == Some(sheep_unit)
-            && matches!(
-                world.entity(villager).map(|entity| entity.task),
-                Some(Task::Attack { target, .. }) if target == sheep
-            )
-        {
-            struck_while_alive = true;
-        }
-        if animal.unit == Some(sheep_unit) && animal.hp < 7 {
-            hurt = true;
-        }
         if animal.unit != Some(sheep_unit) {
             break;
         }
     }
     assert!(
-        struck_while_alive,
+        ordered_to_strike,
         "the shepherd has to strike the animal, not have it turn into a corpse on arrival"
     );
     // ... and being struck is not a refusal for a sheep: it has no attack to answer with, so no reaction is
@@ -444,7 +480,6 @@ fn the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body() {
             .last_refusal()
             .map(|(id, why, _)| (id, why.to_string()))
     );
-    assert!(hurt, "and the animal has to die of that damage");
 
     let body = world
         .entity(sheep)
@@ -472,5 +507,142 @@ fn the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body() {
     assert!(
         carried > 0,
         "the villager has to carry on gathering from the body it just made, not stand beside it"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------------
+// The owner's three corrections (2026-10-29): hunters shoot, shepherds cut once, and the last arrow counts.
+// ---------------------------------------------------------------------------------------------------
+
+/// *"Hunter villager also use the bow while shepherd villager uses the knife."* The pack already says so: **VMHUN
+/// 122 has `range = 3.0`** and VMSHE 592 has none, and content maps the `hunt` task to 122 and `herd` to 592. So the
+/// engine only has to **choose the right task for the node**: an animal is hunted, a herdable is herded.
+///
+/// Behaviourally, that means a villager sent at a boar stops three tiles away and shoots it, instead of walking into
+/// tusks.
+#[test]
+fn a_villager_hunting_a_boar_uses_the_bow() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let (_, villager, centre) = seat(&world);
+    // Fourteen tiles out: at six the town centre still shoots, and the blow being measured would be the tower's.
+    let boar = an_animal(&mut world, boar_unit, centre, 14, 75);
+    let scale = world.scale();
+
+    world
+        .submit_checked(Command::Gather {
+            villager,
+            node: boar,
+        })
+        .expect("a villager can be sent at a boar");
+
+    let mut struck_from = None;
+    for _ in 0..3_000 {
+        world.step().expect("stepping");
+        if world.entity(boar).is_some_and(|entity| entity.hp < 75) {
+            let me = world.position(villager).expect("the villager");
+            let it = world.position(boar).expect("the boar");
+            let dx = (me.0.raw() - it.0.raw()).abs() / scale;
+            let dy = (me.1.raw() - it.1.raw()).abs() / scale;
+            struck_from = Some(dx.max(dy));
+            break;
+        }
+    }
+    let tiles = struck_from.unwrap_or_else(|| {
+        panic!(
+            "the hunter has to land a blow; task {:?}, refusal {:?}",
+            world.entity(villager).map(|entity| entity.task),
+            world
+                .last_refusal()
+                .map(|(id, why, _)| (id, why.to_string()))
+        )
+    });
+    assert!(
+        tiles >= 2,
+        "a hunter shoots from the bow's reach, not from {tiles} tile(s) away: the hunt task has to pick VMHUN"
+    );
+}
+
+/// A **hunter's arrow** is a villager's last hit, so the carcass keeps its meat - the owner's second correction. This
+/// only works because the arrow carries its shooter (D71), which is why it belongs beside the melee rule.
+#[test]
+fn a_hunters_arrow_that_kills_leaves_the_meat() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let (_, villager, centre) = seat(&world);
+    // Fourteen tiles out, so the only blow that lands is the hunter's (a town centre shoots at six).
+    let boar = an_animal(&mut world, boar_unit, centre, 14, 75);
+    let scale = world.scale();
+    world
+        .submit_checked(Command::Gather {
+            villager,
+            node: boar,
+        })
+        .expect("a villager can be sent at a boar");
+
+    for _ in 0..3_000 {
+        world.step().expect("stepping");
+        if world.entity(boar).is_some_and(|entity| entity.hp <= 0) {
+            break;
+        }
+    }
+    let body = world.entity(boar).expect("the boar's body has to be there");
+    assert_eq!(
+        body.unit,
+        Some(
+            world
+                .role_unit("boar_carcass")
+                .expect("a boar carcass role")
+        ),
+        "a kill leaves the body"
+    );
+    assert!(
+        body.amount.raw() > 0,
+        "the last blow was a hunter's arrow, which is a villager's: the meat stays (owner's rule)"
+    );
+    assert!(body.amount.raw() <= 340 * scale);
+}
+
+/// *"Shepherd kills the sheep by one blow."* A herdable is livestock, not an opponent: the shepherd's strike takes
+/// it outright, so the animal is never seen wounded.
+#[test]
+fn a_shepherd_kills_a_sheep_with_one_blow() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let sheep_unit = world.role_unit("sheep").expect("a sheep role");
+    let (_, villager, centre) = seat(&world);
+    let sheep = a_sheep(&mut world, sheep_unit, centre, 4);
+
+    world
+        .submit_checked(Command::Gather {
+            villager,
+            node: sheep,
+        })
+        .expect("a villager can be sent to a sheep");
+
+    let mut wounded = 0;
+    for _ in 0..2_000 {
+        world.step().expect("stepping");
+        let Some(entity) = world.entity(sheep) else {
+            break;
+        };
+        if entity.unit == Some(sheep_unit) && entity.hp < 7 {
+            wounded += 1;
+        }
+        if entity.unit != Some(sheep_unit) {
+            break;
+        }
+    }
+    assert_eq!(
+        wounded, 0,
+        "a sheep is killed by one blow, so it is never seen wounded at 1..6 health"
     );
 }
