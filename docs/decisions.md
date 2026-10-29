@@ -1839,3 +1839,46 @@ What survives the correction, and what it costs:
   anything at all.
 - **Follows:** the death path must know *who* killed it, because the last blow decides the meat - villager's kill
   leaves 340 on a boar, a soldier's or a tower's leaves none. Melee knows its attacker; arrows do not.
+
+## D71 - The damage path, the refusal, and the animal's leash
+
+*Found by item 1 of the "everything that needs no verification from the owner" list. The previous session's
+diagnosis was wrong, and the way it was wrong is the lesson.*
+
+**The melee path had never run, so `start_attack`'s "silent refusal" was a misdiagnosis.** `combat.toml` sets
+`projectile_speed = 10.0`, and the strike loop turned **every** blow into a projectile whenever
+`flight > 0 && source.0 != aim`. For an attacker without Ballistics `aim` is the victim's own position, which
+differs from the attacker's for every melee blow - so a villager's knife, a spear and a sword all flew as arrows.
+Melee damage therefore landed in the `landings` loop, which carried `(target, damage, aim, blast)` and **no
+shooter**: `retaliate` was never called (it lives on the instant path), the last blow could not be named, and the
+env-gated `eprintln!` the previous session added could never print because the code it lived in never ran.
+
+**The fix, in two halves.** (1) A blow is a projectile only when the attacker's *resolved* range is above zero;
+a melee blow lands on the tick it is swung, in the loop that knows `(attacker, target)`. (2) `Task::Fly` records
+its `shooter`, the landing carries it, and ranged damage applies damage **and** the reaction. Ranged damage is
+now attributable exactly as melee damage is, which is the single fact three rules were waiting on: retaliation,
+the last-blow carcass, and kill credit.
+
+**A swallowed refusal is now readable.** A reaction is not a command: there is no caller to return the error to,
+so `retaliate` keeps the last refusal (`World::last_refusal()`: entity, error, tick) instead of dropping it. It is
+diagnostic only and is **not hashed** - it changes nothing about the world. A `NoAttack` stance is the one case a
+test can stage deterministically, and it is the control that proves the record works.
+
+**The leash is three states in one entry**, as the owner described: grazing at home (no entry), chasing (an entry),
+returning (the same entry with `chasing` false and an ordinary `Move` task home). `Entity` grows nothing: the
+entry lives in `World.leash`, keyed by id, only for animals that have been struck.
+
+- **The origin is the place of the first blow**, recorded then and kept across a return, so a boar shot on its way
+  home resumes the chase instead of inventing a new home.
+- **Every blow renews the clock** - which is what the owner's second arrow is *for*.
+- **Interest ends** on distance from the origin (`leash_tiles`) or on time since the last blow (`leash_seconds`);
+  both are **authored**, because the dat carries no leash field (`BOARX` has `los = 4.0`, `speed = 0.8` and nothing
+  that means "gives up"). They are whole seconds and whole tiles: a fractional value would only invite back the
+  float the fixed-point rule keeps out of state. The reference pack says 10 s and 12 tiles, which a lure from a
+  boar camp to a town centre needs to fit inside.
+- **Content that states neither** gets the old behaviour - an animal that chases for ever - and pays nothing for
+  it, because no entry is ever made.
+- **Losing the target is not losing interest**: a boar whose quarry garrisoned stands where it is until the clock
+  runs out, and only then walks home. That standstill *is* the garrison lure's window.
+- **Bookkeeping:** the leash joins `bookkeeping_entries`/`bookkeeping_touches` and is dropped with the entity, so a
+  dead animal leaves nothing behind; and it is hashed when present, because where an animal will go is state.

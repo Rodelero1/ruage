@@ -265,7 +265,27 @@ pub enum Stance {
 /// A shot decided this tick: who fired it, from where, where it will land, what it was aimed at and
 /// what it does when it gets there. Created after the movement pass, because the entity list is
 /// index-stable while positions are applied.
-type Shot = (u8, (Fixed, Fixed), (Fixed, Fixed), EntityId, i32, i64);
+/// A blow that has landed: who dealt it, whom it landed on, and where it came down. The shooter rides
+/// along because ranged damage has to be attributable exactly as melee damage is (D71).
+struct Landing {
+    shooter: EntityId,
+    target: EntityId,
+    damage: i32,
+    aim: (Fixed, Fixed),
+    blast: Fixed,
+}
+
+/// A shot leaving the world this tick: who loosed it, from where, at what, and for how much. Recorded
+/// rather than spawned in place, because the entity list is index-stable for the length of the pass.
+struct Shot {
+    player: u8,
+    shooter: EntityId,
+    from: (Fixed, Fixed),
+    aim: (Fixed, Fixed),
+    target: EntityId,
+    damage: i32,
+    blast: Fixed,
+}
 
 /// A training order that passed every check: what it costs, how long it takes, and what comes out.
 struct TrainPlan {
@@ -341,6 +361,9 @@ pub enum Task {
     /// where it was fired - and finds nothing worth hurting.
     Fly {
         target: EntityId,
+        /// Who loosed it. A shot used to carry only its damage, so ranged damage was unattributable:
+        /// retaliation could not answer an archer and the last blow could not be named (D71).
+        shooter: EntityId,
         damage: i32,
         aim: (Fixed, Fixed),
         /// How far the landing hurts everything around it, in engine units. Zero is a point, which is
@@ -994,6 +1017,18 @@ fn free_neighbour(
     None
 }
 
+/// An animal's chase, as three states in one entry (D71): absent means grazing at home, `chasing` means
+/// it has a target of its own, and the same entry with `chasing` false means it is walking back to `home`.
+/// The origin is recorded at the *first* blow, so a blow landed on the way home resumes the chase from
+/// where it stands rather than inventing a new home.
+#[derive(Debug, Clone, Copy)]
+struct Leash {
+    home: (Fixed, Fixed),
+    /// The tick interest expires at. Each blow pushes it out; when it passes, the animal goes home.
+    until: u64,
+    chasing: bool,
+}
+
 pub struct World {
     tick: u64,
     tick_rate_hz: u32,
@@ -1106,6 +1141,21 @@ pub struct World {
     /// Stance and post, by unit. Only units whose stance is not the default have an entry, so an
     /// aggressive world - which is every world that does not ask - carries nothing for this (D48).
     stances: BTreeMap<EntityId, (Stance, (Fixed, Fixed))>,
+    /// The last order the engine gave *itself* - an animal reacting to a blow - and could not start, with
+    /// the tick it was refused. A reaction is not a command from a player, so there is nobody to return
+    /// the error to; dropping it on the floor is what `retaliate`'s `let _ =` did, and it hid a real defect
+    /// for two sessions (D71). Diagnostic only: it changes nothing about the world, so it is not hashed.
+    refusal: Option<(EntityId, SimError, u64)>,
+    /// Where an animal was first struck, and the tick its interest runs out (D71). Absent means grazing.
+    /// Both live in a side table for the same reason `stances` does: `Entity` is walked every tick, and
+    /// the animals that ever chase anything are a handful.
+    leash: BTreeMap<EntityId, Leash>,
+    /// How long an animal stays interested after the last blow, in ticks. `None` means content said
+    /// nothing, and then only the distance rule applies (D71).
+    leash_ticks: Option<u64>,
+    /// How far from where it was first struck an animal will chase, in engine units. `None` means it
+    /// will follow to the map's edge, which is what a pack that says nothing gets.
+    leash_tiles: Option<i64>,
     /// Per player, one bit per map tile, row-major: ground this player has ever looked at. Part of
     /// state and hashed, because fog *is* a fact about where a player has been - two runs that
     /// disagree about it have diverged, and only this table knows (D50).
@@ -1228,6 +1278,10 @@ impl World {
             patrols: BTreeMap::new(),
             resuming: BTreeMap::new(),
             stances: BTreeMap::new(),
+            refusal: None,
+            leash: BTreeMap::new(),
+            leash_ticks: None,
+            leash_tiles: None,
             explored: std::array::from_fn(|_| Vec::new()),
             map_size: (0, 0),
             blocking: BTreeSet::new(),
@@ -1281,6 +1335,15 @@ impl World {
     /// Entities in id order. The order is the invariant, not an implementation detail.
     pub fn entities(&self) -> &[Entity] {
         &self.entities
+    }
+
+    /// The last reaction the engine could not start, as `(the entity that tried, why, the tick)`. A
+    /// reaction has no caller to return an error to, so it is kept rather than dropped - the whole point
+    /// of the field is that a silent refusal is undiagnosable.
+    pub fn last_refusal(&self) -> Option<(EntityId, &SimError, u64)> {
+        self.refusal
+            .as_ref()
+            .map(|(id, why, tick)| (*id, why, *tick))
     }
 
     pub fn position(&self, id: EntityId) -> Option<(Fixed, Fixed)> {
@@ -1544,6 +1607,17 @@ impl World {
                 self.carcasses.insert(units.root(unit));
             }
         }
+        // The leash (D71): content's two numbers, resolved once into ticks and engine units, so the tick
+        // loop never divides and never touches a float. `None` means content said nothing, which is not
+        // zero - a zero-second interest would make every animal give up on the tick it was struck.
+        self.leash_ticks = economy
+            .hunt
+            .leash_seconds
+            .map(|seconds| u64::from(seconds) * u64::from(self.tick_rate_hz));
+        self.leash_tiles = economy
+            .hunt
+            .leash_tiles
+            .map(|tiles| i64::from(tiles) * self.scale);
         self.conquest_classes.clear();
         for class in &economy.conquest.surviving_classes {
             self.conquest_classes.insert(*class);
@@ -2832,7 +2906,116 @@ impl World {
         ) {
             return;
         }
-        let _ = self.start_attack(victim, attacker);
+        // Interest, renewed by every blow (D71). This happens *before* the early return above, because
+        // "already fighting this one" is exactly the case where the clock matters: a boar struck every
+        // two seconds must never lose interest, and one struck again on its way home must turn round.
+        let renewed = self.renew_interest(victim);
+        if renewed {
+            if let Err(error) = self.start_attack(victim, attacker) {
+                self.refusal = Some((victim, error, self.tick));
+            }
+            return;
+        }
+        // A reaction has no caller to return an error to, and dropping it is how a real defect stayed
+        // invisible for two sessions - the old `let _ =` printed only behind an env var nobody set, and
+        // the instrumented `eprintln!` never appeared because this path was never reached at all (D71).
+        if let Err(error) = self.start_attack(victim, attacker) {
+            self.refusal = Some((victim, error, self.tick));
+        }
+    }
+
+    /// Record - or renew - an animal's interest in its attacker. Returns whether this blow *renewed* a
+    /// chase that had already been given up, which is what makes the owner's second arrow turn it round.
+    fn renew_interest(&mut self, victim: EntityId) -> bool {
+        if self.leash_ticks.is_none() && self.leash_tiles.is_none() {
+            // A pack that states neither rule gets an animal that chases for ever, exactly as it did
+            // before the leash existed - and pays nothing for it, because no entry is ever made.
+            return false;
+        }
+        let until = self
+            .leash_ticks
+            .map_or(u64::MAX, |ticks| self.tick.saturating_add(ticks));
+        let position = self.find(victim).map(|entity| entity.position);
+        match self.leash.get_mut(&victim) {
+            Some(entry) => {
+                let was_returning = !entry.chasing;
+                entry.until = until;
+                entry.chasing = true;
+                was_returning
+            }
+            None => {
+                let home = position.unwrap_or((Fixed::ZERO, Fixed::ZERO));
+                self.leash.insert(
+                    victim,
+                    Leash {
+                        home,
+                        until,
+                        chasing: true,
+                    },
+                );
+                false
+            }
+        }
+    }
+
+    /// The animal's interest, once per tick (D71). Three states in one entry: absent is grazing at home,
+    /// an entry with `chasing` is hunting, and the same entry without it is walking back to where it was
+    /// first struck. Costs one walk of the provoked animals and nothing at all in a world at peace.
+    fn step_leashes(&mut self) {
+        if self.leash.is_empty() {
+            return;
+        }
+        let now = self.tick;
+        let ids: Vec<EntityId> = self.leash.keys().copied().collect();
+        for id in ids {
+            let Some(entry) = self.leash.get(&id).copied() else {
+                continue;
+            };
+            let Some(entity) = self.find(id) else {
+                self.leash.remove(&id);
+                continue;
+            };
+            // A body is not an animal any more: nothing chases anything from zero health.
+            if entity.hp <= 0 {
+                self.leash.remove(&id);
+                continue;
+            }
+            if !entry.chasing {
+                // Walking home is an ordinary `Move`; arriving is what ends the matter.
+                if entity.task == Task::Idle {
+                    self.leash.remove(&id);
+                }
+                continue;
+            }
+            let dx = (entity.position.0.raw() - entry.home.0.raw()).abs();
+            let dy = (entity.position.1.raw() - entry.home.1.raw()).abs();
+            let strayed = self.leash_tiles.is_some_and(|tiles| dx.max(dy) > tiles);
+            let bored = now >= entry.until;
+            if !strayed && !bored {
+                continue;
+            }
+            // Out of interest. It stands still for as long as the clock allowed - which is the garrison
+            // lure's window, where a boar that lost its target waits to be finished - and then walks
+            // back to the place it was first struck.
+            let position = entity.position;
+            if let Some(entry) = self.leash.get_mut(&id) {
+                entry.chasing = false;
+            }
+            self.stand_down(id);
+            match self.plan_path(position, entry.home) {
+                Ok(route) => {
+                    self.paths.insert(id, route);
+                    if let Some(entity) = self.find_mut(id) {
+                        entity.task = Task::Move { to: entry.home };
+                    }
+                }
+                Err(_) => {
+                    // No way home: it stays where it stopped rather than walking through a wall. The
+                    // entry goes, so a later blow starts a fresh chase from here.
+                    self.leash.remove(&id);
+                }
+            }
+        }
     }
 
     fn start_build(
@@ -3487,15 +3670,16 @@ impl World {
     /// Put a shot in the air. Its ticks-to-land are not stored: the arrow moves by a fixed step every
     /// tick until it reaches the position it was aimed at, which is exact for any speed that divides
     /// the tick rate and needs no accumulation.
-    fn spawn_projectile(
-        &mut self,
-        player: u8,
-        from: (Fixed, Fixed),
-        aim: (Fixed, Fixed),
-        target: EntityId,
-        damage: i32,
-        blast: Fixed,
-    ) -> Result<EntityId, SimError> {
+    fn spawn_projectile(&mut self, shot: Shot) -> Result<EntityId, SimError> {
+        let Shot {
+            player,
+            shooter,
+            from,
+            aim,
+            target,
+            damage,
+            blast,
+        } = shot;
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
         self.insert(Entity {
             id,
@@ -3509,6 +3693,7 @@ impl World {
             amount: Fixed::ZERO,
             task: Task::Fly {
                 target,
+                shooter,
                 damage,
                 aim,
                 blast,
@@ -3961,6 +4146,7 @@ impl World {
             + self.patrols.len()
             + self.resuming.len()
             + self.stances.len()
+            + self.leash.len()
     }
 
     /// Whether any side table still remembers `id`. The removal tests use it to prove a dead entity
@@ -3974,6 +4160,7 @@ impl World {
             || self.patrols.contains_key(&id)
             || self.stances.contains_key(&id)
             || self.build_queue.contains_key(&id)
+            || self.leash.contains_key(&id)
     }
 
     /// How many units this building is making: the one in progress plus everything queued behind it.
@@ -4791,7 +4978,7 @@ impl World {
         let mut landed_arrows: Vec<EntityId> = Vec::new();
         // (target, damage, where the arrow was aimed): the aim point decides whether the shot is a hit
         // or a miss, so it has to survive the flight (D42).
-        let mut landings: Vec<(EntityId, i32, (Fixed, Fixed), Fixed)> = Vec::new();
+        let mut landings: Vec<Landing> = Vec::new();
         let mut shots: Vec<Shot> = Vec::new();
         // Whoever was hit this tick. A building among them may have crossed the eject threshold, and
         // that is where its garrison comes out (D37).
@@ -5026,6 +5213,7 @@ impl World {
                 }
                 Task::Fly {
                     target,
+                    shooter,
                     damage,
                     aim,
                     blast,
@@ -5037,7 +5225,13 @@ impl World {
                         // Landing is the only thing an arrow does. Whether it hurts anything is
                         // decided after the loop, against the target as it stands then: an arrow
                         // whose target died on the way finds nothing and does not pick another.
-                        landings.push((target, damage, aim, blast));
+                        landings.push(Landing {
+                            shooter,
+                            target,
+                            damage,
+                            aim,
+                            blast,
+                        });
                         landed_arrows.push(entity.id);
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))
@@ -5363,10 +5557,15 @@ impl World {
                 continue;
             }
             let flight = self.projectile_speed();
-            let Some(source) = self
-                .find(attacker)
-                .map(|entity| (entity.position, entity.player, entity.kind, entity.unit))
-            else {
+            let Some(source) = self.find(attacker).map(|entity| {
+                (
+                    entity.position,
+                    entity.player,
+                    entity.kind,
+                    entity.unit,
+                    entity.task,
+                )
+            }) else {
                 continue;
             };
             let blast = source
@@ -5386,7 +5585,12 @@ impl World {
             // ... and accuracy decides whether the archer aims *true* at all. A shot that is not aimed
             // true lands the content's scatter away, which the landing rule turns into a miss (D43).
             let aim = self.true_aim(attacker, aim);
-            if flight > 0 && source.0 != aim {
+            // Only a *ranged* blow flies. The pack's shot speed used to be applied to every blow, so a
+            // knife became an arrow in the air: it landed in the `landings` loop, which carried no
+            // attacker, and melee damage was therefore unattributable (D71). A melee blow lands here,
+            // on the tick it is swung, where `(attacker, target)` is known.
+            let ranged = matches!(source.4, Task::Attack { range, .. } if range > Fixed::ZERO);
+            if ranged && flight > 0 && source.0 != aim {
                 // The shot exists now and lands later. It carries the damage resolved when the order
                 // was given, so an upgrade that arrives mid-flight changes nothing about it. It is
                 // *recorded* here and created below, because the entity list is index-stable for the
@@ -5401,7 +5605,15 @@ impl World {
                     1
                 };
                 for _ in 0..arrows {
-                    shots.push((source.1, source.0, aim, target, landed, blast));
+                    shots.push(Shot {
+                        player: source.1,
+                        shooter: attacker,
+                        from: source.0,
+                        aim,
+                        target,
+                        damage: landed,
+                        blast: Fixed::from_raw(blast),
+                    });
                 }
                 continue;
             }
@@ -5633,13 +5845,19 @@ impl World {
 
         // Shots go up, land, and leave the list, all after the movement pass: the entity list is
         // index-stable for the length of that pass, and every one of these changes its shape.
-        for (player, from, aim, target, damage, blast) in shots {
+        for shot in shots {
             // A full world loses the shot rather than the tick: a battle must not be stopped by the
             // entity ceiling.
-            let _ =
-                self.spawn_projectile(player, from, aim, target, damage, Fixed::from_raw(blast));
+            let _ = self.spawn_projectile(shot);
         }
-        for (target, damage, aim, blast) in landings {
+        for Landing {
+            shooter,
+            target,
+            damage,
+            aim,
+            blast,
+        } in landings
+        {
             // The arrow lands where it was aimed. It hurts the target only if the target is still
             // there - within half a tile of the landing point, which is the space a unit occupies.
             // Without this an arrow could not miss, and Ballistics would have nothing to change.
@@ -5649,11 +5867,17 @@ impl World {
                 let dy = victim.position.1.raw() - aim.1.raw();
                 dx * dx + dy * dy <= tolerance * tolerance
             });
+            let mut struck = false;
             if let Some(victim) = self.find_mut(target)
                 && victim.hp > 0
                 && reachable
             {
                 victim.hp -= damage;
+                struck = true;
+            }
+            // A shot is an order to an animal just as a knife is: whoever loosed it is now its quarry.
+            if struck {
+                self.retaliate(target, shooter);
             }
             // ... and a shot with a blast hurts what stands around the landing point, its owner's own
             // units included: a mangonel that could not hit its own line would not need protecting.
@@ -5661,6 +5885,7 @@ impl World {
                 if let Some(entity) = self.find_mut(victim) {
                     entity.hp -= damage;
                 }
+                self.retaliate(victim, shooter);
                 ejected.push(victim);
             }
             ejected.push(target);
@@ -5668,6 +5893,8 @@ impl World {
         for id in landed_arrows {
             self.entities.retain(|entity| entity.id != id);
         }
+        // Animals react to the blows this tick landed, so the leash is judged after them (D71).
+        self.step_leashes();
         // A building at or below its eject fraction throws its garrison out. They are unharmed - the
         // published rule - and they land where they already stand.
         for id in ejected {
@@ -5775,6 +6002,7 @@ impl World {
             self.patrols.remove(&id);
             self.stances.remove(&id);
             self.build_queue.remove(&id);
+            self.leash.remove(&id);
         }
 
         // A seat can only disappear by dying, so the match is only ever decided on a tick where
@@ -6270,6 +6498,14 @@ impl World {
             fnv_bytes(&mut hash, &other.0.raw().to_le_bytes());
             fnv_bytes(&mut hash, &other.1.raw().to_le_bytes());
         }
+        for (id, leash) in &self.leash {
+            fnv_bytes(&mut hash, b"leash");
+            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+            fnv_bytes(&mut hash, &leash.home.0.raw().to_le_bytes());
+            fnv_bytes(&mut hash, &leash.home.1.raw().to_le_bytes());
+            fnv_bytes(&mut hash, &leash.until.to_le_bytes());
+            fnv_bytes(&mut hash, &[u8::from(leash.chasing)]);
+        }
         for (id, (stance, post)) in &self.stances {
             fnv_bytes(&mut hash, b"stance");
             fnv_bytes(&mut hash, &id.0.to_le_bytes());
@@ -6424,12 +6660,14 @@ impl World {
                 }
                 Task::Fly {
                     target,
+                    shooter,
                     damage,
                     aim,
                     blast,
                 } => {
                     fnv_bytes(&mut hash, &[5u8]);
                     fnv_bytes(&mut hash, &target.0.to_le_bytes());
+                    fnv_bytes(&mut hash, &shooter.0.to_le_bytes());
                     fnv_bytes(&mut hash, &damage.to_le_bytes());
                     fnv_bytes(&mut hash, &aim.0.raw().to_le_bytes());
                     fnv_bytes(&mut hash, &aim.1.raw().to_le_bytes());

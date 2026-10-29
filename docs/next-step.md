@@ -1138,3 +1138,84 @@ The transform-on-arrival in increment three has the right body and the wrong tri
 (the instrumentation showed no `MELEE` line at all, only `ARROW dmg=3` - which the owner's hunter/shepherd split
 predicts: a hunter variant attacks at range, and a shot lands without its archer). Then the death path learns its
 killer, then the body is made at death rather than at arrival.
+
+## Item 1 - the damage path, retaliation, and the boar's leash (2026-10-29)
+
+*This section is the compact for the increment; the review is appended to it when the code lands.*
+
+### Verified before writing anything (and it corrects the previous session's diagnosis)
+
+- **`start_attack` was never called, so "its silent refusal" was a misdiagnosis.** `retaliate` runs only on the
+  *instant* melee path (`lib.rs`, the `strikes` loop's `victim.hp -= landed`), and no blow has taken that path:
+  `combat.toml` sets `projectile_speed = 10.0`, and the loop turns **any** blow into an arrow whenever
+  `flight > 0 && source.0 != aim`. For a non-Ballistics attacker `aim` is the victim's own position, which differs
+  from the attacker's for every melee blow - so a villager's knife, a spear and a militiaman's sword all become
+  arrows in the air. The data says the same from the other side: villager 83 has `range = 0.0, reload = 2.0`, and
+  `check_attack` is happy with it.
+- **Consequence, and it is one defect with three faces:** melee damage lands in the `landings` loop, which carries
+  no attacker, so (a) `retaliate` never fires, (b) the last blow cannot be attributed, and (c) the previous
+  session's "no `MELEE` line" was the whole tick, not one fixture.
+- **The knife test that passes is passing through the arrow path.** `a_villagers_knife_lands_on_a_sheep` asserts the
+  sheep lost health, and it did - by a projectile.
+
+### The fix, in two halves that are separately testable
+
+1. **Melee lands in place.** A blow is a projectile only when the attacker's *resolved* range is above zero. Melee
+   damage applies on the tick it is swung, in the `strikes` loop, which is the path that knows `(attacker, target)`.
+2. **An arrow carries its archer.** `Task::Fly` gains the shooter, the landing carries it, and the landing applies
+   damage *and* the reaction - so ranged damage is attributable too.
+
+Then retaliation is reachable at all, and the leash has something to hang off.
+
+### The leash: three states, and where the numbers come from
+
+**Verified:** the dat carries **no leash field** for animals (`BOARX` 48 has `los = 4.0`, `speed = 0.8`, no
+distance or duration of interest), so the leash cannot be derived from the pack.
+**Assumed, and content-authored with provenance:** an animal chases until it is `leash_tiles` from the place it was
+first struck, or until `leash_seconds` have passed since the last blow - each blow renews the clock. Both live in
+`[hunt]`. These are the knobs balance work will tune; they are judgement calls and are marked as such rather than
+presented as game numbers.
+
+### Tests this increment owes
+
+- `a_struck_boar_turns_on_whoever_struck_it` (parked `#[ignore]` today) - now reachable, so un-ignored.
+- a melee blow never puts a projectile in the world (the fix's own control).
+- an archer's arrow names its archer: a boar shot from range turns on the shooter.
+- the leash: struck -> chases -> out of interest -> walks back to where it started; a second blow turns it round.
+- the refusal record: `retaliate`'s swallowed error is readable instead of invisible.
+
+### Item 1, review: what the change costs, and what it nearly broke (2026-10-29)
+
+**Landed:** melee lands on the tick it is swung; `Task::Fly` carries its `shooter`; retaliation works on both
+damage paths; the animal's leash is built (three states, home recorded at the first blow, each blow renewing the
+clock); a swallowed reaction refusal is recorded and readable. Tests: 8 in `retaliation.rs`, five of them written
+and watched failing first (`a_melee_blow_never_becomes_an_arrow` reported **3 arrows** during a knife fight).
+
+**Performance.** The per-tick cost is unchanged in shape: one `matches!` on an already-loaded task per blow, and
+the leash pass returns immediately when `World.leash` is empty - which is every world where nobody has struck an
+animal. The `landings` vector is one struct wider (a shooter id); it was invented here not at all. No new table
+walk in the tick: the leash numbers are resolved at seed, and the shooter rides on the arrow rather than being
+looked up. **Not measured with the A/B probe yet** - the honest statement is "no new per-entity work", and the
+probe is owed before anyone claims a number.
+
+**Stability.** The state hash gained the leash (only when entries exist) and the shooter on an arrow, so a replay
+that lost either diverges visibly rather than silently. The anchors move for exactly that reason in any world that
+strikes an animal; the scenario/probe hashes must be re-recorded when next they are run.
+
+**Three defects the review found in my own work, all fixed:**
+
+1. **`leash` was left out of the bookkeeping tables.** A dead animal would have left its entry behind for ever, and
+   `bookkeeping_entries` - which exists precisely to make that visible - would not have noticed, because it did not
+   count the table. Added to both `bookkeeping_entries` and `bookkeeping_touches`, and to the removal sweep.
+2. **The no-float gate went red.** The first version converted `10.0` seconds with `f64::from(tick_rate)` inside
+   `seed_from`, in `lib.rs` - a float in the sim crate's tick-adjacent code, which is the exact thing the gate
+   exists to refuse. Fixed by making both numbers **whole seconds and whole tiles in content** (`u32`), so the
+   conversion is integer arithmetic and there is no value a scale could round.
+3. **Two fixture bugs, mine.** A `Move` to a hand-picked `(2, 2)` is `NoPath` on this seeded map, and an archer
+   spawned ten tiles out stood somewhere unreachable and refused its attack order at apply time. Both now use a
+   position the test has already proved reachable (the villager's own start tile), and the archer sits at
+   (12, 1) - recorded here so the next fixture does not repeat either.
+
+**What is still not right, named rather than glossed:** blast damage retaliates (the shooter is known now) but a
+*body* cannot, and nothing stops a boar chasing into a wall - it plans a route and gives up only if there is none.
+The leash numbers are judgement calls, not game numbers; a balance run is what will tune them.

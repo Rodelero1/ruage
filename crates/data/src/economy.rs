@@ -56,6 +56,14 @@ pub struct Hunt {
     /// Role names of the bodies an animal becomes when slaughtered. A carcass is gathered from, so it has to
     /// be nameable rather than inferred from "has no health" (D70).
     pub carcass_roles: Vec<String>,
+    /// How long a struck animal keeps chasing after the last blow, in whole seconds (D71). `None` means
+    /// content states no time limit. The dat carries no leash field, so this is authored, and it is a knob
+    /// a balance run turns - whole seconds because a fractional one would only invite the float the
+    /// fixed-point rule exists to keep out of state.
+    pub leash_seconds: Option<u32>,
+    /// How far from where it was first struck an animal will chase, in whole tiles (D71). Authored for the
+    /// same reason: `BOARX` has a line of sight (4.0) and no notion of giving up.
+    pub leash_tiles: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -237,6 +245,10 @@ struct RawHunt {
     resource: Option<String>,
     #[serde(default)]
     carcass_roles: Vec<String>,
+    #[serde(default)]
+    leash_seconds: Option<u32>,
+    #[serde(default)]
+    leash_tiles: Option<u32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -657,6 +669,8 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             animal_roles: raw.hunt.animal_roles,
             resource: raw.hunt.resource,
             carcass_roles: raw.hunt.carcass_roles,
+            leash_seconds: raw.hunt.leash_seconds,
+            leash_tiles: raw.hunt.leash_tiles,
         },
         conquest: Conquest {
             surviving_classes: raw.conquest.surviving_classes,

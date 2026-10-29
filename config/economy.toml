@@ -238,6 +238,15 @@ resource = "food"
 # The bodies: what a slaughtered animal becomes in place, and what may therefore be gathered from a thing
 # with no health. A carcass is a different unit id, not an inference (D70).
 carcass_roles = ["sheep_carcass", "boar_carcass", "deer_carcass"]
+# The leash (D71): a struck animal chases, loses interest, and walks back to where it was first struck.
+# Every new blow renews the interest, which is what a hunter's second arrow is *for*.
+#
+# PROVENANCE: authored, both numbers. The dat has no leash field - `BOARX` carries `los = 4.0`,
+# `speed = 0.8` and nothing that means "gives up" - so these are judgement calls, not game numbers, and
+# they are the knobs a balance run turns. A lure that has to reach a town centre from a boar camp is
+# typically 10-20 tiles, and `leash_tiles` must be larger than the distance a lure has to cover.
+leash_seconds = 10
+leash_tiles = 12
 
 [conquest]
 # What keeps a side in the match (D59). The original game's rule, from the manual, twice:
