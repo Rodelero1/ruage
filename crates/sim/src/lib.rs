@@ -23,8 +23,10 @@ use ruage_data::{
     Sim as Settings, Unit, Units,
 };
 
+mod metrics;
 mod path;
 mod script;
+pub use metrics::Metrics;
 pub use path::{Walk, find_path};
 use ruage_fixed::Fixed;
 pub use script::{

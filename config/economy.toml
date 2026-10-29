@@ -278,3 +278,8 @@ butcher_roles = ["villager"]
 # only asks "is this class in the list". A house is class 3, the same class as a barracks, which is why the
 # original counts a house and why this does too.
 surviving_classes = [3]
+
+[metrics]
+# What a balance run counts as a **military** unit (D17: the engine never learns that a militia is 74). A role that
+# the pack cannot name is skipped rather than refused - a metric is a measurement, not a rule of the game.
+military_roles = ["militia", "spearman", "pikeman", "halberdier", "mangonel", "trebuchet"]

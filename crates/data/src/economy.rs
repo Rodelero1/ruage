@@ -41,6 +41,8 @@ pub struct Economy {
     pub conquest: Conquest,
     /// Which animals herd, and where a gathered one walks (D70).
     pub hunt: Hunt,
+    /// What the batch runner counts as military (items 7-8).
+    pub metrics: MetricsSection,
 }
 
 /// Herding: the animals that walk to a drop site when a villager works them. Content, because the engine
@@ -67,6 +69,13 @@ pub struct Hunt {
     /// Roles whose **last** blow leaves meat in the body (D70). Roles, not ids - the engine never learns that a
     /// villager is 83 - and an empty list means every kill leaves its meat.
     pub butcher_roles: Vec<String>,
+}
+
+/// `[metrics]`: what a balance run counts as a military unit, by role. Not a rule of the game - a measurement - so a
+/// role the pack cannot name is skipped when it is resolved rather than refused at load.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MetricsSection {
+    pub military_roles: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -212,6 +221,8 @@ struct RawEconomy {
     #[serde(default)]
     hunt: RawHunt,
     #[serde(default)]
+    metrics: RawMetrics,
+    #[serde(default)]
     age: RawAges,
     /// Role name → unit id. Required: content that cannot name a unit at all is not content.
     role: BTreeMap<String, u32>,
@@ -254,6 +265,13 @@ struct RawHunt {
     leash_tiles: Option<u32>,
     #[serde(default)]
     butcher_roles: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawMetrics {
+    #[serde(default)]
+    military_roles: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -677,6 +695,9 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             leash_seconds: raw.hunt.leash_seconds,
             leash_tiles: raw.hunt.leash_tiles,
             butcher_roles: raw.hunt.butcher_roles,
+        },
+        metrics: MetricsSection {
+            military_roles: raw.metrics.military_roles,
         },
         conquest: Conquest {
             surviving_classes: raw.conquest.surviving_classes,

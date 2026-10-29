@@ -1471,3 +1471,61 @@ it and - after item 4 - no rot to work with, so it stood on the map for the rest
 an expiry tick as well as a rot rate: **its species' own meat divided by its species' own rot rate** (850 s for a
 boar, 400 s for a sheep), so a pack whose animals change changes the lifetime with them. Nothing was invented, and
 the test asserts both halves - present at a minute, gone inside eighteen.
+
+## Items 7 and 8 - the balance engine (2026-10-29)
+
+*Compact before the code. Item 7 is verified as already met; item 8 is new.*
+
+**Item 7, verified rather than rebuilt.** The scenario format exists (`config/scenario.toml`, `crates/sim/src/script.rs`,
+schema 2): steps carry `at_seconds` and are **converted to ticks once**, in `Runner::new`, then sorted by
+`(tick, player)` - so the same file means the same match at any tick rate (D16). Selectors name roles, not ids, and
+an unresolvable step is reported rather than skipped. The pass condition the item states is already a test:
+`the_scenario_is_deterministic` runs the project script twice and compares state hashes, with the negative control
+that dropping one step changes the hash. What it does **not** have is the vocabulary a build order needs (place a
+mill by the berries, attack a boar, move home, garrison) - that will be added as the acceptance script demands it,
+in item 9, rather than as speculation here.
+
+**Item 8, new: a batch runner with metrics.** N scripts x M seeds, headless, one row each:
+time to Feudal, time to Castle, resources **delivered** per minute, villagers lost, first military unit, outcome,
+final hash.
+
+- **Delivered, not held.** Stock rises only on a deposit, so "delivered" is the sum of the *increases* per slot; the
+  decreases are spending and are counted separately. Summing final minus initial would confuse a bank that was spent
+  with an economy that gathered nothing.
+- **Cheap to observe.** Stock is four array reads a tick; the entity walks (villagers lost, first military unit, age
+  techs) happen once a second, because a batch run is a measurement tool and not the engine.
+- **Content answers "military".** `[metrics] military_roles`, resolved through `[role]` - the engine never learns that
+  a militia is 74, and a pack of our own names its own soldiers.
+- **The engine gains nothing.** No new state, no new hash field: every number here is derived from what the world
+  already reports, which is what keeps the runner from becoming a second simulation.
+
+**Tests this owes:** a world that gathers for a minute reports delivered wood above zero and no ages, no military and
+no losses; a unit that dies is counted as a loss exactly once; and the same script on the same seed reports the same
+numbers twice.
+
+### Items 7-8, review (2026-10-29)
+
+**Item 7 was already met and is reported as verified, not rebuilt:** steps at `at_seconds`, converted to ticks **once**
+in `Runner::new`, roles rather than ids, refusals reported, and `the_scenario_is_deterministic` as the pass condition
+with its own negative control (drop one step, the hash must move).
+
+**Item 8 landed:** `Metrics` (a library type, 4 tests) and `ruage-batch` (a binary). The first real table:
+
+```
+script                        seed   feudal   castle food/m wood/m gold/m lost    army    outcome
+scenario.toml                    1        -        -     11     23      5    0   522.0 open (0 refused)
+scenario.toml                    2        -        -     11     23      5    0   522.0 open (0 refused)
+```
+
+Two seeds agree to the hash, which is *expected* here and worth saying out loud: the map is authored and the project
+script never draws from the RNG streams, so the seed cannot change this match. A seed sweep only becomes a
+measurement when a script or a map uses the streams.
+
+**A TDD honest note:** this slice's test file and module were written in one pass, so the RED was not watched. The
+mutation evidence stands in for it - folding *spending* into *delivery* fails `buying_something_is_not_a_delivery`,
+and counting a loss on every sample fails `a_dead_villager_is_counted_as_a_loss_once`. The first version of the
+delivery test could not see the spending mutation at all (nothing was bought in it), which is why the purchase was
+added to it.
+
+**Performance.** The metrics cost per tick is four array reads; the entity walk is once a second. The batch runner in
+release plays the ten-minute project script (`--release`, one process) in well under a second per seed.
