@@ -395,3 +395,49 @@ in our own words and our own types. `BoxOf`/`Gap` is nine lines and MIT, and cop
 be copying, and would drag a footprint box into our sim before we have decided buildings are more
 than one tile. openaok stays MIT with LGPL-3.0 `genieutils` confined to build-time tools. "It was
 only a small function" is exactly the sentence this rule exists against.
+
+## How the open-source projects handle "a worker keeps working" (2026-10-29)
+
+*Read for item 9, after the acceptance match stalled with every villager idle. Censused from source, not from memory:
+0 A.D. `master`, OpenRA `bleed`, openage `master`.*
+
+**None of them publishes the test item 9 wants.** 0 A.D. tests components (57 files under
+`simulation/components/tests/test_*.js`), openage tests units and demos (`openage/testing/testlist.py`), OpenRA tests
+traits in NUnit. No project has "play this build order and tabulate the age timings" - balance is a human activity
+there, measured with a bot, not with a test. So our scripted-timing approach is unusual, and it is unusual because
+the owner asked for exactly that; nothing to copy, and nothing to be embarrassed about either.
+
+**What they do solve is the behaviour, and 0 A.D.'s shape is the one worth taking.** `UnitAI.js` has an explicit
+`FINDINGNEWTARGET` state, entered when the supply runs out, and it tries four things in order:
+
+1. **Bank what is in hand first.** If the unit is carrying that resource and the *next* queued order is not a gather
+   of the same resource, a `ReturnResource` order is spliced in front of it. A load is never silently abandoned.
+2. **Find a neighbour, of the same *specific* type.** `FindNearbyResource` takes a filter, and the state's own filter
+   refuses the previous target and keeps the type: *"Don't switch to a different type of huntable animal"* - and for
+   meat, the same template. A hunter whose deer dies keeps hunting deer, not boars. The search itself filters on
+   can-gather, **visible**, *available to this player*, in a 64-tile radius, with a TODO nobody has taken:
+   *"extend this to exclude resources that already have lots of gatherers"*.
+3. **Walk back to where the order started and look again**, on the theory that the next resource may be in fog.
+4. **Give up at the dropsite, not in the field.** If there is still nothing, it walks to the nearest dropsite
+   *"because that's a nice enough place to congregate and idle"* and finishes the order.
+
+**OpenRA answers the same question with an activity that is re-entered every trip**: `Harvester` queues
+`FindAndDeliverResources`, so a harvester never holds a target it has finished with.
+
+**openage answers it with data.** `libopenage/gamestate/activity/` is a node graph - start/end nodes, task nodes,
+`xor` gates, and events like `wait` - and `doc/code/game_simulation/activity.md` states the motivation in almost the
+words of this problem: *"commands do not always translate to a single well-defined action ... branching paths, wait
+states for events, triggers and feedback loops"*. "The resource ran out" is an edge in a definition, not a branch in
+code.
+
+**And the policy half is a bot, not a script.** 0 A.D.'s Petra keeps `targetNumWorkers` and `supportRatio`, derives
+`wantedGatherRates` from its current plans, and each turn calls `pickMostNeededResources` - *"pick the resource which
+most needs another worker"*, by the ratio of wanted to current rate. It also carries `lastFailedGather` per resource,
+so a resource it could not serve is retried *differently* rather than in a loop. That is the "keep four on wood" a
+timestamp script cannot say, and it is a policy over the same `Gather` orders the player uses.
+
+**What we take:** the four-step chain (in that order), the specific-type filter, and a `lastFailedGather` analogue so a
+worker that cannot reach anything stands down *visibly* instead of retrying for ever. **What we can do better than
+them:** the crowding rule they left as a TODO - a node with N gatherers already on it should not attract an N+1st
+while an idle one stands elsewhere. **What we deliberately do not take:** a full activity-graph engine (openage's
+answer, and a rewrite of the tick for a benefit our one worker type cannot use yet).
