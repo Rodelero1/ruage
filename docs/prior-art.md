@@ -269,3 +269,129 @@ were read before that file was regenerated on 2026-10-28 and no longer point at 
 effect they are 626 "T-Bonus, Free Cartography" (`[11, 50, 1, -1, 1.0]` beside
 `[1, 50, 1, -1, 1.0]`), 607 (`[15, 82, -1, 13, 1.25]`) and 669 (`[11, 3, 1, 13, 500.0]`). Cite
 effect ids and command tuples, never lines in a generated file.
+
+## 2026-10-29 — genie makes its tick a schedule and its divergence a field; openaok measures reach to the wall
+
+**genie, 48 commits (`f30f36dc..19a3ed54`): the update became a declared schedule.** The steps now
+live as `BEFORE_PLAYERS`, `EACH_PLAYER` and `AFTER_PLAYERS` arrays over `WorldStep`/`PlayerStep`
+enums in `crates/engine/genie-core/src/world/schedule.rs` — 20 steps, each naming the DE routine it
+ports (`FUN_141552990`, `world+0x18c`, slot 0x100) — and `scripts/schedule.py --check` renders them
+into `docs/ENGINE_SYSTEMS.md`, so the doc cannot drift from the code. `World::tick_observed` runs the
+same steps and shows the world after each one, which is what the new `harness steps` compares against
+the game's state at the same point.
+
+The `Context`/`ObjectOutputs` design from last week survives but is **shrinking**: the regenerated
+`docs/EFFECTS.md` counts 15 world outputs, 15 unit AI effects and **46 hand-offs, down from 51**,
+because stage B moved the hand-offs the game makes *inside* the update to the call site —
+`world/lets.rs` lends the object or the world for a call that may meet it, so a kill reaches the
+world at the hit, a flare at the volley, a promotion where the master changes, and a gate opens and
+shuts within its own update. One such change (a builder's completion) was committed, reverted and
+redone, which is the honest signal that the aliasing they were designing around is real.
+
+**The comparison got a type.** `crates/base/genie-diff` derives `Diff`: two values of the same type
+compared field by field, each difference carrying its path (`life.hp`, `actions[0].to[1]`,
+`garrison.len`) and both sides' text. `#[diff(unsaved)]` marks a field the game's save does not hold;
+`#[diff(gap = "why")]` marks a *known* difference, and the gaps are, in their words, "the work list
+of what the comparison cannot check yet". Their oracle diffs every saved field of every object after
+every step.
+
+Also in this range: `genie-command-codec` reads and writes a recording's command packets as
+genie-core's command structs, each command a struct with one `run` and one dispatch, its fields in
+newtypes; `ActionKind` and `OrderKind` replace the unit AI's numeric action and order codes;
+`scripts/lint_allows.py` fails on any `#[allow]` not registered in `.config/lint-allows.json`.
+
+**openaok, 38 commits (`d1b237ed..c050533c`): it is now the better model of the original's geometry.**
+
+- `58574aa` — **reach is measured between the dat's boxes.** `Combat::BoxOf` gives every entity a box
+  (a building its footprint, anything else the box its dat size spans about its middle) and `Gap` is
+  the straight distance between the two boxes, zero where they overlap. Every attack uses it now, not
+  only the dead zone, and their comment carries a data fact worth having: "the dat's axes are a
+  quarter turn from the grid's: its y extent is the grid's x".
+- `b005beb` — **units pass over one another; nobody is pushed or slid.** A per-tick `Traffic` survey
+  of bodies (`src/ecs/Navigation.h`) lets a route go *round* units standing still, motion ignores
+  other units, and a unit stops when it comes up against a body standing on its goal. A crowd sent at
+  a job takes side-by-side spots and waits for one to free (most of the 180 lines in
+  `WorkerSystem`), checked by a new `src/verify/CrowdCheck.cpp`.
+- `cc23f09` garrisoned archers and villagers each add an arrow, their damage a second over the
+  building's own; `26a721c` an Ungarrison button; `f38a550` a garrison flag.
+- `6c64468` a ship or a trebuchet turns to its target at the dat's turn rate before it shoots.
+- `e357f88`, `1fed548`, `e40e1e3` — placement by the original's rules: uneven ground by the hill
+  rules, a dock's middle on water with beach beside it, a gate's outline along its wall.
+- `c86edbf` — the roadmap gains a seventh step, **The Conquerors**: the expansion's dat, archives,
+  strings, scenarios, random map and AI scripts read from the player's own copy, the 1999 game
+  unchanged. Same direction as us (install data first), arrived at independently.
+- `c050533`, `320983a` — GitHub builds the Android APK and attaches it and the Switch zip to a
+  release. Still no Windows target.
+
+**Divergence — reach, and this one is worth acting on.** Ours compares **centre** distance to the
+range and pads by both bodies' radii only for `min_range` (`crates/sim/src/lib.rs`, the `in_reach`
+branch of `step`). So a skirmisher can hit a town centre from farther out than the original allows,
+because the wall is nearer than the middle, and a building's "8 tiles" is eight tiles from its middle
+rather than from its wall. The fix is bounded: units already carry `radius`
+(`crates/data/src/units.rs:30`) and a square of `2r` is their box; the missing datum is a building's
+footprint, which our schema does not have at all — a building is one tile in `Walk` (D54). **Cost:**
+emit a footprint per building, measure attacks and approaches box-to-box, re-anchor the tests that
+assume centre distance. Do it when buildings stop being one tile, not before.
+
+**Divergence — the crowd at a work goal.** D52 says work goals are *not* exclusive, deliberately:
+two villagers must be able to work one tree. openaok now does the opposite for work too — spots,
+claimed and waited for. That is closer to what a player sees (villagers fan round a tree rather than
+stacking) and it costs exactly the thing D53 declined to build: a claims table with a release on
+every order end, plus a deadlock rule for when the last spot is taken. Recorded as a known
+simplification; revisit if a probe ever shows villagers piling onto one tree.
+
+**Divergence — routing round units.** Their routes bend around still bodies from a survey taken at
+the top of the tick; ours go through anything that is not terrain or a wall (D54). We already keep
+the bitset of unit tiles D52 paid for, so the layer is nearly free; the cost is route invalidation
+when a body moves mid-route. The gain is crowd scenes only, so: noted, not scheduled.
+
+**Better than ours, and cheap — the verify gate.** `docs/VERIFY.md` documents `--verify 3000`: one
+headless run, named scenarios each printing one line, checked line by line, about thirty seconds.
+One of those lines is `fixed point`: **no `float`, `double` or `ToFloat()` in the simulation's
+sources.** Ours has `f64` in `apply_scalar` and the hp setup; if those are load-time only, a grep
+gate over `crates/sim/src` costs one line of CI and catches the first slip into the tick. Worth
+checking before asserting it.
+
+**Same answer, better shape — divergence as data.** genie's `#[diff(gap = "why")]` makes every known
+divergence an annotated field, so the list cannot rot the way a paragraph can. Adopting the *shape*
+for our oracle comparisons (a table of field → why we differ, asserted by a test) costs a small
+registry and no AGPL code.
+
+**U12 has a third corroboration, for the wrong build.**
+`crates/tools/genie-oracle/src/step_runs/tests.rs:18` writes
+`genie_rec::de::Op::Sync { dt: 50 }`: a recording's sync carries its interval in milliseconds and
+genie writes 50, as do its core tests ("the forager's whole updates (50 ms each)",
+`world/tests.rs:12562`). genie reproduces DE build 158041 bit for bit, so 20 Hz is the step of the
+one implementation that would fail if it were wrong — for DE's data, not for our 5.7.2. U12's status
+is unchanged in kind and stronger in weight: two measurements, plus the bit-exact port's step.
+
+**U7's shape is now documented, and it is not one pather.** `docs/ENGINE_SYSTEMS.md`'s systems table
+names the game's pathing as *the tile pathfinder, the long pather, the short pather, the old hull
+pather, the obstruction mesh and the zones* (`path.cpp`, `pathsys.cpp`, `mpathsys.cpp`,
+`zone_map.cpp`). openaok independently ships one integer-cost A* per passability layer, flood-filled
+regions, an `Approachable` test and an `ApproachPlanner` that spreads standing spots along a
+building's sides — and is playable. Read together: exact arrival times would need the original's
+stable of pathers, and a single A* with regions and an approach rule is the bounded-scope answer,
+now with a peer that took it. Neither says *which* algorithm the original uses, so U7 stays open.
+
+**Worth recording, not new: the unit AI runs for one player per tick.** "Only one player's unit AIs
+run their full update in a tick: the player whose turn it is; the other players' only take their
+orders and notifications" — pre-existing in `ENGINE_SYSTEMS.md`, read here beside the schedule. It
+is the answer to why a per-unit stagger (`combat.aggro_scan_ticks`) is the wrong *shape*: the
+original round-robins players, not units. Written into `determinism.md` as a divergence; changing
+ours would shift every existing test's timing for something no player can see.
+
+**Study list.** genie: `docs/ENGINE_SYSTEMS.md` (the generated schedule table, then "One object's
+update"), `crates/base/genie-diff/README.md` with `src/lib.rs` (`Scope`, `SavedWithGaps`),
+`world/schedule.rs` and `world/lets.rs`, `docs/DEBUGGING.md` for `harness steps`. openaok:
+`src/pathing/Pathfinder.h` (regions, approachability, `Standing`), `src/ecs/Navigation.h`
+(`Traffic`), `src/ecs/systems/MovementSystem.cpp:108` (the pass-over rule in three lines of
+comment), `src/ecs/Combat.cpp` `BoxOf`/`Gap`, and `docs/VERIFY.md` as a model for a one-command gate.
+
+**Never copy.** genie is **AGPL-3.0**. The schedule table, the diff derive, the command codec and
+`EFFECTS.md` are its expression, generated from its ports; the facts they encode — the update's 20
+steps and their order, the 50 ms sync, the effect channels — are facts about the game, to be written
+in our own words and our own types. `BoxOf`/`Gap` is nine lines and MIT, and copying it would still
+be copying, and would drag a footprint box into our sim before we have decided buildings are more
+than one tile. openaok stays MIT with LGPL-3.0 `genieutils` confined to build-time tools. "It was
+only a small function" is exactly the sentence this rule exists against.

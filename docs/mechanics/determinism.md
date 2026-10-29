@@ -81,3 +81,16 @@ If the sim is written with floats and fixed later, every test that passed will b
 re-baselined. If it is written fixed-point from the start, the first state hash is already
 the contract. That is the entire argument for deciding this now rather than after the
 vertical slice.
+
+## Where our tick shape differs from the original (2026-10-29)
+
+Two divergences recorded from prior art, neither of them a bug to fix now:
+
+- **The unit AI is per player, not per unit.** genie's `docs/ENGINE_SYSTEMS.md`: "Only one player's
+  unit AIs run their full update in a tick: the player whose turn it is; the other players' only take
+  their orders and notifications." Our aggro scan is staggered per *unit*
+  (`combat.aggro_scan_ticks`), which spreads the same work but on a different rule. Changing it would
+  shift every existing test's timing for something no player can see; record, do not adopt.
+- **One pather, not six.** The original ships a tile pathfinder, a long pather, a short pather, an old
+  hull pather, an obstruction mesh and a zone map (same table). We have one A*, which is a bounded-
+  scope choice (U7), and openaok shows it is a playable one.
