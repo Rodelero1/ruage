@@ -1123,3 +1123,18 @@ tests pass.
 - **Open questions kept:** a body belongs to Gaia, so anyone's villager can work an enemy's carcass (probably
   right, unverified); a body never decays (`decay_rate` is imported and unread); and a body emptied of meat stays
   on the map for ever.
+
+### Corrected: the shepherd kills, then there is a corpse (owner, 2026-10-29)
+
+The transform-on-arrival in increment three has the right body and the wrong trigger. It must become:
+
+1. the herded animal arrives at the drop site;
+2. the villager **attacks** it - the shepherd's knife, melee - and the animal **dies of the damage**;
+3. **death** leaves the body: `dead_unit`, meat intact if the last blow was a villager's, empty if it was anyone
+   else's;
+4. the villager goes on gathering from the body, which is why the body should keep the entity's id.
+
+**Order of work, because 2 is blocked:** establish that a villager's melee blow actually lands on an animal
+(the instrumentation showed no `MELEE` line at all, only `ARROW dmg=3` - which the owner's hunter/shepherd split
+predicts: a hunter variant attacks at range, and a shot lands without its archer). Then the death path learns its
+killer, then the body is made at death rather than at arrival.

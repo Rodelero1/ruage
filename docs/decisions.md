@@ -1820,3 +1820,22 @@ Two things this bought, and one it exposed:
 - **exposed:** an animal killed by anything *other* than this slaughter is still swept away, leaving nothing. The
   last-blow rule and the carcass that a soldier's kill leaves are therefore still missing, and they need the
   killer to be known at the moment of death - which melee knows and arrows do not.
+
+**D70, correction to increment three (owner): the shepherd kills the animal, it does not become a corpse by
+itself.** *"No, shepherd has to kill the animal. It doesn't change to corpse itself."*
+
+So arriving at the drop site is not the kill. The villager **strikes the animal** - the shepherd with the knife -
+the animal **dies of that damage**, and the body is what death leaves. What increment three built was the *shape*
+of the body (a `dead_unit` in place, meat intact, exempt from the sweep) with the wrong *trigger*: it promoted the
+animal the moment it arrived, which is a corpse without a blow and therefore not the game.
+
+What survives the correction, and what it costs:
+
+- **Survives:** death is what makes a body; the body is content-named; it holds the meat; it is not swept; and if the
+  body keeps the entity's id, the gatherer's task stays valid across the blow.
+- **Costs:** a real attack. The villager must deal damage, which means the *melee* path has to be the one that
+  lands - and the hunter/shepherd split (owner: *"Hunter villagers use the bow, shepherd the knife"*) says exactly
+  where the two differ. A villager that never lands a blow, which is what the instrumentation showed, cannot kill
+  anything at all.
+- **Follows:** the death path must know *who* killed it, because the last blow decides the meat - villager's kill
+  leaves 340 on a boar, a soldier's or a tower's leaves none. Melee knows its attacker; arrows do not.
