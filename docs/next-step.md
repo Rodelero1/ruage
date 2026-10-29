@@ -811,3 +811,26 @@ gate, which is D67 and is done).
 3. **Retaliation and the carcass** - a struck boar turns on whoever struck it (it already carries the attack);
    a dead animal leaves its `dead_unit`, and that body can be gathered for food until empty. A body that does
    not exist must be a lookup that finds nothing, not an error: 640 records name 768, which no civ has.
+
+### The herding rule, complete (owner, 2026-10-29)
+
+Two corrections in a row, and the second changes the shape of the increment:
+
+1. *"villager is herding sheep towards closest mill or town centre. So sheep do not close distance to him but
+   move in the direction of mill or town centre."* The sheep's destination is the **nearest drop site of the
+   villager's player**, not the villager.
+2. *"Also the villager follows the sheep herding them towards the gathering point."* The villager **trails the
+   sheep**, so the pair travels to the drop site together.
+
+So herding is **not a separate order**: it is what gathering from a live animal *is*. A villager sent to gather
+a sheep keeps its gather task; the sheep steps toward the drop site; the villager follows it because gathering
+requires adjacency. The loop ends when the sheep reaches the drop site, and gathering continues there until the
+sheep is empty - at which point it dies into its `dead_unit` (D69) and the villager gathers from the body if
+there is anything left.
+
+Two consequences to get right, both testable:
+
+- **The villager must re-path when the node moves.** Every other gather source is static, so the tick loop
+  never had to notice a node moving; a herded sheep moves under the villager's feet.
+- **The villager is not idle while following.** It carries on gathering whenever it is adjacent, so the walk
+  and the work interleave rather than alternating wholesale.
