@@ -221,6 +221,31 @@ fn the_feudal_age_is_reachable_without_granting_its_prerequisites_by_hand() {
         .find(|e| e.player == 1 && e.kind == EntityKind::Building)
         .expect("the town centre")
         .id;
+    // Two Dark Age buildings first: an age needs them (D65). This test is about the hidden prerequisite
+    // chain, so the buildings are placed rather than paid for - what matters here is that the tech itself
+    // needs nobody's help.
+    for role in ["mill", "barracks"] {
+        let at = a_free_tile(&world);
+        let scale = world.scale();
+        let id = EntityId(world.entities().iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
+        let unit = world.role_unit(role).unwrap_or_else(|| panic!("{role}"));
+        world
+            .submit_checked(Command::Spawn {
+                id,
+                player: 1,
+                kind: EntityKind::Building,
+                unit: Some(unit),
+                position: (
+                    ruage_fixed::Fixed::from_raw(i64::from(at.0) * scale),
+                    ruage_fixed::Fixed::from_raw(i64::from(at.1) * scale),
+                ),
+                speed: ruage_fixed::Fixed::ZERO,
+                hp: 600,
+                amount: 0,
+            })
+            .expect("a Dark Age building");
+        world.step().expect("step");
+    }
     world
         .submit_checked(Command::Research {
             building: centre,

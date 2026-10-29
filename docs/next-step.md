@@ -710,7 +710,9 @@ grinding rather than a result. Two ways out, and the owner should pick one befor
    are roles, the train edge exists, and a mangonel damages a building in a test. What remains is the *economy*: a
    scripted opening that reaches Castle inside fifteen minutes (villagers from tick 0, farms, ten-plus on food) and
    the acceptance test that breaks a town centre with it. A ram is still unbuilt and would be the cheaper second
-   siege unit (attack class 20 against buildings, no dead zone).
+   siege unit (attack class 20 against buildings, no dead zone). The boom script now also has to satisfy D65:
+   two Dark Age buildings for the Feudal Age, two Feudal buildings (blacksmith + market is cheapest) for Castle,
+   and the workshop's blacksmith prerequisite (D63).
 2. **A second victory rule** - a time limit, a score, or "destroy all buildings" instead of the seat. Cheaper, but
    it changes what the engine promises rather than what the content contains.
 

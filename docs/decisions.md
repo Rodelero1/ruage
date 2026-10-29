@@ -1607,3 +1607,36 @@ producing 100 raw units of movement per tick. The number matching `speed / tick_
 
 **Three tests** in `movement.rs`: an arriving unit stops dead, a builder stops when the building is finished (the
 one that failed), and a very slow unit still reaches the tile it was sent to.
+
+## D65 - An age wants two buildings of the age you are in
+
+The owner remembered that advancing needs buildings of the current age; checked, and the rule is exactly that,
+with three parts, from the official learn-to-play page and Liquipedia (which agree):
+
+> "Advancement requires you to construct at least two buildings from the current Age."
+
+- **Two buildings of the current age.** Dark Age buildings that count: Lumber Camp, Mining Camp, Mill, Dock,
+  Barracks. Houses, farms, walls and outposts never do.
+- **Feudal Age buildings**, for the Castle Age: Blacksmith, Market, Stable, Archery Range.
+- **The Castle Age's exception**: the Imperial Age needs two Castle Age buildings *or* **a single Castle**.
+
+Content, not engine: `[age.requires]` in `economy.toml` maps a tech role to `count`, `of` (roles that count) and
+`single` (roles that satisfy it alone). Today it names the buildings this pack has: `mill`, `mining_camp`,
+`barracks` for the Feudal Age; `blacksmith`, `market`, `stable`, `archery_range` for the Castle Age; `castle` and
+`siege_workshop` for the Imperial, with `castle` in `single`.
+
+**Only finished, standing buildings count.** A foundation is not an age - a villager has said where a mill will be,
+not that there is a mill - and rubble is not either. That is the opposite tense from D63's prerequisite, and
+deliberately so: a *prerequisite building* is a fact about the player's history, while an *age requirement* is a
+fact about the base as it stands now. Two rules that read similarly and do not share an implementation.
+
+**Checked before the price**, so the player is told what is actually missing ("this age needs 2 buildings of the
+current age and this player has 1") rather than "not enough food" when both are true.
+
+**Three tests** (`ages.rs`): the Feudal Age refused with 0 and with 1 Dark Age building and allowed with 2; a mill
+*foundation* counting for nothing; and a single Castle satisfying the Imperial Age. Four mutations bite (no check,
+foundations counting, the castle exception ignored, one building being enough).
+
+Three roles arrived with this: `mill` (68), `mining_camp` (584), `market` (84), `stable` (101) and `archery_range`
+(87) - all class 3, verified by cost and hp in the dat. Without them a pack could not reach the Feudal Age at all,
+which is also why the acceptance scenario from D62 needs them before it can boom.

@@ -174,6 +174,11 @@ castle = 82         # CSTL, 4800 hp - available from the Castle Age (tech 137 ma
 trebuchet = 331     # PTREB - available from the Imperial Age (tech 256 makes it)
 siege_workshop = 49 # SIWS, class 3, 1800 hp, 200 wood: the building that makes the siege line
 blacksmith = 103    # BLAC, class 3, 1800 hp, 150 wood: the Feudal Age prerequisite of the siege workshop
+mill = 68           # MILL, class 3, 600 hp, 100 wood: a Dark Age building (and the farm prerequisite)
+mining_camp = 584   # MINE, class 3, 600 hp, 100 wood: a Dark Age building
+market = 84         # MRKT, class 3, 1800 hp, 175 wood: a Feudal Age building
+stable = 101        # STBL, class 3, 1500 hp, 175 wood: a Feudal Age building
+archery_range = 87  # ARRG, class 3, 1500 hp, 175 wood: a Feudal Age building
 mangonel = 280      # MANGO, class 13: 50 hp, 7 range / 3 minimum, 160 wood + 135 gold, 6 s reload,
                     # 35 vs buildings and 40 vs units - the first thing in the pack that breaks a base
 
@@ -188,6 +193,18 @@ feudal_age = 101    # the prerequisite Man-at-Arms lists; its effect is a tech-t
 castle_age = 102    # 800 food + 200 gold, 160 s, at the town centre (location 109). Verified by price and
                     # time, not by number - and it is what opens the siege workshop's unit.
 imperial_age = 103  # 1000 food + 800 gold, at the town centre: named for completeness, nothing gates on it yet
+
+[age]
+# Advancing an age needs buildings of the *current* one (D65). The official learn-to-play page and
+# Liquipedia agree, and the game's own summary is the rule in one sentence: "advancement requires you to
+# construct at least two buildings from the current Age". Houses, farms, walls and outposts never count.
+# The Castle Age is the exception: two Castle Age buildings *or* a single Castle reach the Imperial Age.
+#
+# `of` lists the roles that count; `single` lists roles that satisfy the requirement on their own.
+[age.requires]
+feudal_age = { count = 2, of = ["mill", "mining_camp", "barracks"] }
+castle_age = { count = 2, of = ["blacksmith", "market", "stable", "archery_range"] }
+imperial_age = { count = 2, of = ["castle", "siege_workshop"], single = ["castle"] }
 
 [population]
 cap_default = 200

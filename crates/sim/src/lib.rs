@@ -605,6 +605,11 @@ pub enum SimError {
     MissingBuilding {
         need: String,
     },
+    /// An age needs buildings of the current age that the player does not have standing (D65).
+    AgeNeedsBuildings {
+        need: u32,
+        have: u32,
+    },
     /// The player's civilisation cannot research the tech at all.
     TechBarred {
         tech: u32,
@@ -793,6 +798,10 @@ impl fmt::Display for SimError {
             SimError::MissingBuilding { need } => {
                 write!(f, "this building needs a {need} first")
             }
+            SimError::AgeNeedsBuildings { need, have } => write!(
+                f,
+                "this age needs {need} buildings of the current age and this player has {have}"
+            ),
             SimError::UnitUnavailable { unit } => write!(
                 f,
                 "unit {unit} is not available yet: a tech that makes it available has not been researched"
@@ -1071,6 +1080,9 @@ pub struct World {
     /// Which families require which family to have been built once, resolved from `[build] requires`,
     /// with the requirement's role name kept for the message.
     requires_built: BTreeMap<u32, (u32, String)>,
+    /// Age requirements (`[age] requires`), keyed by tech id: how many buildings of the current age,
+    /// which families count, and which families satisfy it alone (D65).
+    age_needs: BTreeMap<u32, (u32, BTreeSet<u32>, BTreeSet<u32>)>,
     /// Who is in this match, set when a player's first entity lands and never cleared. Without it the
     /// world could not tell "the enemy has lost everything" from "nobody was ever here", and losing
     /// everything is exactly the case a match has to notice (D46).
@@ -1227,6 +1239,7 @@ impl World {
             conquest_classes: BTreeSet::new(),
             built: BTreeSet::new(),
             requires_built: BTreeMap::new(),
+            age_needs: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
             outcome: None,
             researched: BTreeMap::new(),
@@ -1499,6 +1512,32 @@ impl World {
                 {
                     self.requires_built
                         .insert(units.root(*unit), (units.root(*needed), need_role.clone()));
+                }
+            }
+        }
+        // Age requirements (D65), resolved once to families and keyed by tech id, because that is what a
+        // research order carries.
+        self.age_needs.clear();
+        if let Some(units) = self.units.as_ref() {
+            for (role, requirement) in &economy.age.requires {
+                let Some(tech) = economy.tech_role.get(role) else {
+                    continue;
+                };
+                let families: BTreeSet<u32> = requirement
+                    .of
+                    .iter()
+                    .filter_map(|name| economy.role.get(name))
+                    .map(|unit| units.root(*unit))
+                    .collect();
+                let singles: BTreeSet<u32> = requirement
+                    .single
+                    .iter()
+                    .filter_map(|name| economy.role.get(name))
+                    .map(|unit| units.root(*unit))
+                    .collect();
+                if requirement.count > 0 {
+                    self.age_needs
+                        .insert(*tech, (requirement.count, families, singles));
                 }
             }
         }
@@ -2926,6 +2965,25 @@ impl World {
                 tech,
             });
         }
+        // An age needs buildings of the current age (D65). Checked before the price so the player is told
+        // what is actually missing, and counted on finished buildings: a foundation is not an age.
+        if let Some((need, families, singles)) = self.age_needs.get(&tech) {
+            let singles_met = !singles.is_empty()
+                && self.entities.iter().any(|other| {
+                    other.player == entity.player
+                        && other.kind == EntityKind::Building
+                        && other.hp > 0
+                        && other.construction.is_none()
+                        && other.unit.is_some_and(|unit| {
+                            let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
+                            singles.contains(&family)
+                        })
+                });
+            let have = self.standing_buildings(entity.player, families);
+            if !singles_met && have < *need {
+                return Err(SimError::AgeNeedsBuildings { need: *need, have });
+            }
+        }
         // A civ's tech tree lists what it *cannot* have, and that outranks "not ready yet": the
         // British list carries the Hussar, the Eagle line and the Paladin, while no civ's list carries
         // Loom or an age - so these are restrictions, not permissions (see crates/data/src/civs.rs).
@@ -3842,6 +3900,27 @@ impl World {
     /// Whether the match has been decided, and how. `None` while it is still being played.
     pub fn outcome(&self) -> Option<MatchOutcome> {
         self.outcome
+    }
+
+    /// How many **finished, standing** buildings of `player` are in `families` (D65). Foundations and
+    /// rubble do not count: an age wants buildings, not holes in the ground with a villager in them.
+    fn standing_buildings(&self, player: u8, families: &BTreeSet<u32>) -> u32 {
+        let mut seen: BTreeSet<u32> = BTreeSet::new();
+        for entity in &self.entities {
+            if entity.player != player
+                || entity.kind != EntityKind::Building
+                || entity.hp <= 0
+                || entity.construction.is_some()
+            {
+                continue;
+            }
+            let Some(unit) = entity.unit else { continue };
+            let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
+            if families.contains(&family) {
+                seen.insert(entity.id.0);
+            }
+        }
+        seen.len() as u32
     }
 
     /// Whether any **unit** of `player` can see `tile` - a foundation's own sight does not count.

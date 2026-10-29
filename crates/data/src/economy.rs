@@ -31,10 +31,30 @@ pub struct Economy {
     pub role: BTreeMap<String, u32>,
     /// Tech role → tech id. Techs have no name in the dat, so content that names one needs this.
     pub tech_role: BTreeMap<String, u32>,
+    /// What each age needs before it can be researched (D65): how many buildings of the current age, and
+    /// which roles count. The Castle Age's exception - a single Castle also opens the Imperial Age - is
+    /// the `single` list.
+    pub age: Ages,
     /// What counts towards a side still being in the match (D59). The original's exclusion list is a
     /// fact about the game, not about the engine, so it is content: role names that do *not* keep a
     /// player alive.
     pub conquest: Conquest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Ages {
+    /// Tech role -> requirement. Keyed by role because a tech has no name in the dat (D17).
+    pub requires: BTreeMap<String, AgeRequirement>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AgeRequirement {
+    /// How many buildings of the current age are needed. Zero means "no building requirement".
+    pub count: u32,
+    /// Roles that count towards the number.
+    pub of: Vec<String>,
+    /// Roles that satisfy the requirement **on their own** - the Castle Age's exception for the Imperial Age.
+    pub single: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -161,10 +181,29 @@ struct RawEconomy {
     start: RawStart,
     #[serde(default)]
     conquest: RawConquest,
+    #[serde(default)]
+    age: RawAges,
     /// Role name → unit id. Required: content that cannot name a unit at all is not content.
     role: BTreeMap<String, u32>,
     #[serde(default)]
     tech_role: BTreeMap<String, u32>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct RawAges {
+    #[serde(default)]
+    requires: BTreeMap<String, RawAgeRequirement>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct RawAgeRequirement {
+    count: u32,
+    #[serde(default)]
+    of: Vec<String>,
+    #[serde(default)]
+    single: Vec<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -563,6 +602,23 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         },
         role: raw.role,
         tech_role: raw.tech_role,
+        age: Ages {
+            requires: raw
+                .age
+                .requires
+                .into_iter()
+                .map(|(role, raw)| {
+                    (
+                        role,
+                        AgeRequirement {
+                            count: raw.count,
+                            of: raw.of,
+                            single: raw.single,
+                        },
+                    )
+                })
+                .collect(),
+        },
         conquest: Conquest {
             surviving_classes: raw.conquest.surviving_classes,
         },
