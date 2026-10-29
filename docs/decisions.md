@@ -1640,3 +1640,35 @@ foundations counting, the castle exception ignored, one building being enough).
 Three roles arrived with this: `mill` (68), `mining_camp` (584), `market` (84), `stable` (101) and `archery_range`
 (87) - all class 3, verified by cost and hp in the dat. Without them a pack could not reach the Feudal Age at all,
 which is also why the acceptance scenario from D62 needs them before it can boom.
+
+## D66 - A second build order queues behind the first
+
+*Asked by the owner: "is build order queuing possible? That means that builder never stops building until
+done and then moves to the next".*
+
+**Yes, and this is how.** `Command::Build` given to a villager who is already building - or who already has
+something waiting - **appends** to that villager's queue instead of replacing its task (`World.build_queue`,
+a `BTreeMap<EntityId, VecDeque<(unit, tile)>>`).
+
+The alternatives, and why not:
+
+- *Replace the task, as before.* That is what the world did, and it is the bug that cost a probe run: a
+  builder handed a second site abandons the half-built first one, which no player and no script ever means.
+- *A general unit order queue* (shift-queue of move/attack/gather/build). The right eventual answer, and too
+  wide for this slice: it touches every task, every interruption and every stance. Builds are the case that
+  is both wanted now and self-contained.
+- *Queue the order but charge for it immediately.* Then a player could order five houses with the money for
+  one and go into debt, or worse, be silently over-charged when a later site is cancelled.
+
+**Two clocks, as usual.** The order is **checked** when given (`check_build`: availability, prerequisites,
+tile), so a site that could never be built is refused at the moment the player asks; it is **paid for** when
+it starts, because that is when the foundation is placed. The next site starts on the very tick the previous
+one finishes, so a villager with a queue never stands idle between buildings.
+
+**State, so it is hashed** (D25): the queue is part of the world and is in `state_hash`. A replay that lost it
+would build a different number of houses. It dies with its builder, and `bookkeeping_touches` sees it, which
+is how the removal sweep is tested.
+
+Two tests in `build_queue.rs`: a queued site does not appear until the one in front is finished, and it is
+paid for on the tick it starts rather than when it was ordered. Mutation: removing the queueing branch makes
+both fail - the second order replaces the first, one foundation appears, and no second one ever does.

@@ -15,7 +15,7 @@
 //! not tunable game values — D6 governs the latter. Everything game-shaped comes from
 //! `ruage_data::Sim`.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 
 use ruage_data::{
@@ -1077,6 +1077,10 @@ pub struct World {
     /// about history, not about the map: losing the blacksmith does not take the siege workshop away, so
     /// the fact has to be remembered. Part of state - it changes what the world will allow.
     built: BTreeSet<(u8, u32)>,
+    /// Build orders a villager is waiting to start, in the order they were given (D66). A second `Build`
+    /// while one is running queues instead of replacing: without it a builder handed a new site abandons
+    /// the half-built one, which is exactly what a scenario or a player would never mean.
+    build_queue: BTreeMap<EntityId, VecDeque<(u32, (u16, u16))>>,
     /// Which families require which family to have been built once, resolved from `[build] requires`,
     /// with the requirement's role name kept for the message.
     requires_built: BTreeMap<u32, (u32, String)>,
@@ -1238,6 +1242,7 @@ impl World {
             start_stock_applied: false,
             conquest_classes: BTreeSet::new(),
             built: BTreeSet::new(),
+            build_queue: BTreeMap::new(),
             requires_built: BTreeMap::new(),
             age_needs: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
@@ -2765,6 +2770,20 @@ impl World {
         unit_id: u32,
         at: (u16, u16),
     ) -> Result<(), SimError> {
+        // Already building, or already waiting? Then this is the next one, not a replacement (D66). It is
+        // checked now - a site that could never be built should be refused when it is ordered - and paid
+        // for when it starts, so the queue cannot spend money a player has not got yet.
+        let busy_building = self
+            .find(villager)
+            .is_some_and(|entity| matches!(entity.task, Task::Build { .. }));
+        if busy_building || self.build_queue.contains_key(&villager) {
+            self.check_build(villager, unit_id, at)?;
+            self.build_queue
+                .entry(villager)
+                .or_default()
+                .push_back((unit_id, at));
+            return Ok(());
+        }
         let BuildPlan {
             total_ticks,
             max_hp,
@@ -3879,6 +3898,7 @@ impl World {
             || self.resuming.contains_key(&id)
             || self.patrols.contains_key(&id)
             || self.stances.contains_key(&id)
+            || self.build_queue.contains_key(&id)
     }
 
     /// How many units this building is making: the one in progress plus everything queued behind it.
@@ -5139,6 +5159,22 @@ impl World {
                 // kept walking into the building at its own speed for as long as the match ran.
                 self.stand_down(builder);
                 self.paths.remove(&builder);
+                // The next queued site starts on the tick the last one finished, so a villager with a
+                // queue never stands idle between buildings (D66).
+                let next = self
+                    .build_queue
+                    .get_mut(&builder)
+                    .and_then(|queue| queue.pop_front());
+                if self
+                    .build_queue
+                    .get(&builder)
+                    .is_some_and(|queue| queue.is_empty())
+                {
+                    self.build_queue.remove(&builder);
+                }
+                if let Some((unit, at)) = next {
+                    let _ = self.start_build(builder, unit, at);
+                }
             }
         }
         // Melee: a blow lands on the tick the attacker is in position, then every `reload_ticks`.
@@ -5550,6 +5586,7 @@ impl World {
             self.resuming.remove(&id);
             self.patrols.remove(&id);
             self.stances.remove(&id);
+            self.build_queue.remove(&id);
         }
 
         // A seat can only disappear by dying, so the match is only ever decided on a tick where
@@ -6012,6 +6049,17 @@ impl World {
         // differ in it refuse different techs, and a replay that lost it would diverge silently. Only
         // when set, so a world that names no civ hashes exactly as it did before civs existed.
         // What a player has ever built changes what the world will allow, so it is state (D63).
+        for (id, queue) in &self.build_queue {
+            fnv_bytes(&mut hash, b"build-queue");
+            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+            for (unit, at) in queue {
+                fnv_bytes(&mut hash, &unit.to_le_bytes());
+                fnv_bytes(
+                    &mut hash,
+                    &[at.0 as u8, (at.0 >> 8) as u8, at.1 as u8, (at.1 >> 8) as u8],
+                );
+            }
+        }
         for (player, family) in &self.built {
             fnv_bytes(&mut hash, &[*player]);
             fnv_bytes(&mut hash, &family.to_le_bytes());
