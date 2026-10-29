@@ -91,9 +91,12 @@ repair_hp_per_second = -1.0
 # The game's building prerequisites (D63): role -> the role that must have been built **once**, not
 # "still standing", because destroying the blacksmith does not take the siege workshop away. AoE2's
 # Siege Workshop needs a Blacksmith; the Archery Range the owner remembered is the *first* game's rule
-# (Barracks + Archery Range there). Add the rest as their roles arrive: archery_range/stable =
-# "barracks", market/farm = "mill".
+# (Barracks + Archery Range there). From the official learn-to-play page: farms and a market need a mill,
+# an archery range or a stable needs a barracks.
 siege_workshop = "blacksmith"
+# market = "mill", farm = "mill", archery_range/stable = "barracks" are the game's too, and are added
+# when the pack's own tests can carry them: a prerequisite this wide changes every opening. What is in
+# the file is what the engine enforces, and only the siege workshop's is enforced today.
 
 [decay]
 enabled = true
@@ -179,6 +182,7 @@ mining_camp = 584   # MINE, class 3, 600 hp, 100 wood: a Dark Age building
 market = 84         # MRKT, class 3, 1800 hp, 175 wood: a Feudal Age building
 stable = 101        # STBL, class 3, 1500 hp, 175 wood: a Feudal Age building
 archery_range = 87  # ARRG, class 3, 1500 hp, 175 wood: a Feudal Age building
+lumber_camp = 562   # SMIL (the dat's "saw mill"), class 3, 600 hp, 100 wood: a Dark Age building
 mangonel = 280      # MANGO, class 13: 50 hp, 7 range / 3 minimum, 160 wood + 135 gold, 6 s reload,
                     # 35 vs buildings and 40 vs units - the first thing in the pack that breaks a base
 

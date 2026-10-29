@@ -167,7 +167,7 @@ fn what_a_dark_age_opening_buys() {
     let villager = world.role_unit("villager").expect("villager");
     let house = world.role_unit("house").expect("house");
     let mill = world.role_unit("mill").expect("mill");
-    let barracks = world.role_unit("barracks").expect("barracks");
+    let lumber_camp = world.role_unit("lumber_camp").expect("lumber camp");
     let blacksmith = world.role_unit("blacksmith").expect("blacksmith");
     let market = world.role_unit("market").expect("market");
     let mining_camp = world.role_unit("mining_camp").expect("mining camp");
@@ -231,24 +231,23 @@ fn what_a_dark_age_opening_buys() {
             {
                 built.push("mill");
             }
+            // The second Dark Age building a fast castle actually builds: a lumber camp, not a barracks.
+            // The researched orders skip the barracks, and the 75 wood is wanted for the market.
             if have(&world, "mill")
-                && !started(&world, "barracks")
-                && world.stock(1, wood) >= 175
-                && try_build(&mut world, barracks, tc_tile, &mut reserved, &mut busy)
+                && !started(&world, "lumber_camp")
+                && world.stock(1, wood) >= 100
+                && try_build(&mut world, lumber_camp, tc_tile, &mut reserved, &mut busy)
             {
-                built.push("barracks");
+                built.push("lumber_camp");
             }
 
             // After the Feudal Age: the cheapest pair of Feudal buildings for the Castle Age, and a camp
             // for the gold the Castle Age costs.
-            if feudal_at.is_some() && have(&world, "barracks") {
+            if feudal_at.is_some() {
                 if !started(&world, "blacksmith") && world.stock(1, wood) >= 150 {
                     let _ = try_build(&mut world, blacksmith, tc_tile, &mut reserved, &mut busy);
                 }
-                if have(&world, "blacksmith")
-                    && !started(&world, "market")
-                    && world.stock(1, wood) >= 175
-                {
+                if !started(&world, "market") && world.stock(1, wood) >= 175 {
                     let _ = try_build(&mut world, market, tc_tile, &mut reserved, &mut busy);
                 }
                 if !started(&world, "mining_camp") && world.stock(1, wood) >= 100 {
@@ -269,7 +268,7 @@ fn what_a_dark_age_opening_buys() {
             for worker in workers {
                 // Three on food, the rest on wood: wood pays for the houses, the mill, the barracks and
                 // everything after them. Filling food first is what starved the first probe run of wood.
-                let (want_food, want_wood, want_gold) = if have(&world, "barracks") {
+                let (want_food, want_wood, want_gold) = if started(&world, "mining_camp") {
                     (4, 5, 2)
                 } else {
                     (3, 6, 0)
@@ -299,7 +298,8 @@ fn what_a_dark_age_opening_buys() {
             // --- ages ------------------------------------------------------------------------
             if feudal_at.is_none()
                 && have(&world, "mill")
-                && have(&world, "barracks")
+                && have(&world, "mill")
+                && have(&world, "lumber_camp")
                 && world.stock(1, food) >= 500
                 && world
                     .submit_checked(Command::Research {
@@ -342,8 +342,8 @@ fn what_a_dark_age_opening_buys() {
                 world.stock(1, gold),
                 started(&world, "mill"),
                 have(&world, "mill"),
-                started(&world, "barracks"),
-                have(&world, "barracks"),
+                started(&world, "lumber_camp"),
+                have(&world, "lumber_camp"),
                 feudal_at.is_some(),
                 castle_at.is_some(),
                 world
