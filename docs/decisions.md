@@ -1761,3 +1761,20 @@ centre. So sheep do not close distance to him but move in the direction of mill 
 game has the sheep flee *from* the villager, which reads as the same thing because you approach from the far
 side; the rule as stated is what gets implemented, and this note exists so nobody "corrects" it back into a
 follow.
+
+## D70 - Herding, meat, and a herdable that changes hands
+
+*The sheep-and-boar slice, as the owner specified it over four corrections.*
+
+- **Herding is gathering from a live animal**, not an order of its own. The animal walks toward the **nearest
+  drop site of the villager's player** - not toward the villager - and the **villager follows it**, so the pair
+  travel together and the work continues on arrival.
+- **Both kinds of animal carry meat**: huntable (classes 9 and 10) and herdable (58). The content key is
+  therefore a list of *roles*, not one `herdable_roles` list that would leave the boar and deer out.
+- **Only a villager makes meat**: an animal killed by anyone else leaves a body with nothing in it (D69's
+  addendum; the owner's rule, with our doubt about HD recorded alongside it).
+- **A herdable changes hands by line of sight, immediately**: an unowned animal joins the first player whose
+  unit sees it, and an owned one is stolen by another player whose unit sees it *and* whose owner has no unit
+  seeing it too; ties go to whoever has more units near it. Celts ignore the second condition (out of scope).
+  This is the first mechanic that changes an entity's **owner** rather than killing or spawning it, so it needs
+  its own decision on a gatherer mid-load: what happens to the meat already in hand.

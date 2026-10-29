@@ -880,3 +880,26 @@ still" test the sheep moved **0.025 of a tile** over 600 ticks with no order giv
 "very slow unit walks the wrong way" bug that turned out to be a leftover velocity (D64). It may be the same
 class of defect in a path nothing else exercises yet; it is worth a look before the herd pass is written,
 because a standing-still test cannot be written against a body that creeps.
+
+### Conversion: how a herdable changes hands (verified, 2026-10-29)
+
+Asked by the owner: *"sheep captured by another player can be recaptured if no unit is nearby (please verify how
+and conditions)"*. Verified against the game's own manual and the wikis; the rule is **line of sight**, not
+adjacency, and it is immediate:
+
+- *"Sheep start the game neutral (gray) and unowned. As soon as a sheep enters the line of sight of a unit, the
+  sheep is under control of that player. You can steal ownership of another player's sheep if it comes within
+  your unit's line of sight and there are no other players' units near the sheep."* (AoE2 manual, sheep entry)
+- *"if the herdable animal subsequently gets in contact with another player's unit without a unit of their
+  current owner nearby, they will immediately fall under the other player's control."* (Food, Fandom)
+- *"If more than one civilization has units near an animal, the animal will be owned by the player who has the
+  most units nearby."* (Herdable animal, Fandom)
+- **Celts** ignore the "no enemy units near" condition entirely. A civ bonus, out of scope until civs decide
+  anything mechanical (D63 is the one place a civ has mattered so far).
+
+**What that means for the engine**, and why it is bigger than it looks: the trigger is our **vision layer**
+(D50), not proximity - a tile a player's unit can see is a tile whose herdables that player takes, provided the
+current owner has no unit seeing it too. We already have `visible_to`/`unit_sees`, so the test is nearly free;
+what is new is that **ownership of an existing entity changes**, which nothing does today: every ownership
+change so far is a kill or a spawn. That wants its own decision on what happens to a villager *gathering* a
+sheep that changes hands mid-load, and whether the meat already gathered stays with the gatherer.
