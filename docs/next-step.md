@@ -1783,3 +1783,17 @@ mill nobody can deliver to, and the placement code already knows how to look for
 adjacent to the drop site, not only from standing on it, which is what the game does and would have saved these 27; (3)
 give a returning villager that cannot make progress for N seconds a way out (drop the load, find work, or idle visibly) -
 0 A.D.'s answer, and the one thing our gather code still has no clock for.
+
+## Two small things the 2026-10-30 prior-art round left behind
+
+Both are cheap and neither touches the tick's design.
+
+1. **One test: a unit killed by an earlier blow still swings.** Our `Sim::step` decides every entity against
+   the state the tick opened with, so two units can trade killing blows in one tick and both die; the
+   original updates objects one at a time and a killed unit's actions are already gone. Nothing pins what we
+   do (U18, `docs/mechanics/determinism.md`). Write the test to find out; do not change the tick for it.
+2. **One key: `clippy::iter_over_hash_type`.** Determinism rule 3 says no collection the sim walks is a hash
+   map, and nothing enforces it: the workspace has no `[workspace.lints]` at all. Verified available on this
+   toolchain (`rustc 1.99.1`: a `HashMap` walk fails the build under that lint) and free today, because
+   `crates/` holds no `HashMap`. Borrowed in shape from `librematch/genie`'s lint set, which also denies a
+   new `#[allow]` without a reason.

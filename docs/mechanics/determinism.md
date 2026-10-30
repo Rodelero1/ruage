@@ -17,6 +17,17 @@ Evidence is indirect but consistent:
   certainly simulates in **floating point** and relies on identical FP behaviour across
   machines.
 
+**Corroborated 2026-10-30, for DE and not yet for 5.7.2.** `librematch/genie` now writes its own
+determinism rules down (`CODING_STYLE.md` §12) from a port that matches DE build 158041 bit for bit,
+and they are the rules *of a float simulation*: keep the game's `f32`/`f64` field by field, round
+each sum and product on its own (no fused multiply-add, no `a * b / c` as `a * (b / c)`), convert
+float to integer through `cvttss2si` rather than Rust's saturating `as`, use the game's own float
+functions. Two of the rules are about data structures rather than arithmetic, and they are facts
+about the original too: a list removal **swaps the last element into the free place** (so list order
+carries a history), and a sort is **MSVC's introsort, which is not stable** (so ties fall as the
+game's do). Nothing here contradicts the inference above; it names the price of reproducing it, which
+is the argument for constraint 1 rather than against it.
+
 **Unknown:** whether the original's sync check is a state hash, a memory checksum, or a
 command-log digest; and at what tick interval.
 
@@ -94,3 +105,29 @@ Two divergences recorded from prior art, neither of them a bug to fix now:
 - **One pather, not six.** The original ships a tile pathfinder, a long pather, a short pather, an old
   hull pather, an obstruction mesh and a zone map (same table). We have one A*, which is a bounded-
   scope choice (U7), and openaok shows it is a playable one.
+
+## Where our tick shape differs from the original (2026-10-30): ours is simultaneous, theirs is ordered
+
+The third divergence, and the largest, found in `librematch/genie`'s `world/step.rs` and the commit that
+emptied its `Context` (`94f902f`): **the original updates its objects one at a time, and a call on another
+object takes effect at once.** Gaia's objects, then players 1 to 8, each player's objects in list (slot)
+order; a later object in a tick sees what an earlier one did in the same tick - a hit that landed, a unit
+that died - because the game's objects read the world's and the players' fields live rather than from a frame
+taken when the tick started. A dead object's actions are torn down in its own life step, so a unit killed
+earlier in the tick does not swing later in it.
+
+Ours is the opposite shape, deliberately: `Sim::step` decides every entity's work in one pass over an
+immutably borrowed list, against the state the tick opened with, and applies what it decided afterwards
+(`strikes`, `shots`, `landings`, `deltas`, `deposits`). Nothing an entity does can change what another
+entity decided in the same tick.
+
+**What it costs us.** Two units can trade killing blows in the same tick and both die here; there, the one
+whose update ran first wins with whatever it has left. Which of the two runs first there is player-and-slot
+order, i.e. a consequence of history nobody can see; ours is id order, i.e. spawn order, also a consequence
+of history, and then it does not matter because both blows land.
+
+**Why we are not changing it now.** The simultaneous tick is order-independent by construction, which is a
+determinism *advantage* and the reason our replay hashes are stable across refactors of the pass; the
+ordered tick would move every fight's outcome by up to one tick and re-baseline the suite. **What is
+missing is the test, not the decision:** nothing in `crates/sim/tests/` pins what happens when two units
+kill each other on the same tick, so the behaviour is real but unexamined. Recorded here and as **U18**.

@@ -1706,6 +1706,17 @@ footprint, and a building is one tile today), crowd claims at work goals (D52 sa
 exclusive, and the claims table is exactly what D53 declined), routing round still bodies (needs route
 invalidation), and `genie`'s deferred-write schedule (an order to keep, not an architecture to adopt).
 
+**The judgement above held, and the project that had the architecture made it for us (2026-10-30).** One
+round of work later `librematch/genie` has deleted its deferred-write design: `world/context.rs` is gone,
+`docs/EFFECTS.md` counts **0 world outputs, 14 unit AI effects and 4 hand-offs** (15, 15 and 46 yesterday,
+down from 51 the day before), and what replaced it is "a call on another object takes effect at once, and
+the acting object is out of its slot for the length of its update, so a call on itself waits". The order it
+was all built around survived the deletion untouched - still 20 steps, 10 world and 10 per player. So the
+split we drew is the right one: the *order* is a fact about the game worth keeping, the *channels* were a
+Rust borrow-checker workaround that a year of work removed. Nothing here changes D67; the no-float gate
+stands, and the same rules file now says why the other choice is expensive - floats reproduced field by
+field, with MSVC's unstable sort and the game's swap-remove list order.
+
 ## D68 - The pack is the union of the playable civ and Gaia
 
 *Found while starting the sheep and boar slice: there was no boar in the pack to make angry.*
