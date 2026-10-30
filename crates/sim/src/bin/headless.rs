@@ -228,11 +228,21 @@ fn run(args: &[String]) -> Result<(), String> {
                 ruage_sim::EntityKind::Resource(slot) => slot,
                 _ => 255,
             };
-            let task = format!("{:?}", entity.task)
+            let mut task = format!("{:?}", entity.task)
                 .split([' ', '{'])
                 .next()
                 .unwrap_or("?")
                 .to_owned();
+            // Which node the work points at, so a jammed economy can be *seen*: nineteen villagers "gathering" at the
+            // same tile is a different bug depending on whether they all point at one dead bush or at nineteen.
+            let target = match entity.task {
+                ruage_sim::Task::Gather { node, .. } => Some(format!("@{node:?}")),
+                ruage_sim::Task::Return { drop, .. } => Some(format!(">{drop:?}")),
+                _ => None,
+            };
+            if let Some(target) = target {
+                task.push_str(&target);
+            }
             out.push_str(&format!(
                 "{kind},{},{},{},{slot},{:.2},{:.2},{:.2},{},{task}\n",
                 entity.player,
