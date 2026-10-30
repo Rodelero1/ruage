@@ -1830,3 +1830,51 @@ columns, two different faults, and the earlier sentence blaming the food crowd f
 **Next, in order:** (a) a partial load that rounds to zero must not keep a `Return` task - bank it or retask it, never
 loop; (b) `nearest_like` must skip a node with nothing left (it currently checks workability, not emptiness); (c) the
 give-up clock for a worker that makes no progress, which would have caught all of this from the outside.
+
+## Items 10-15: the rendering half, and where it stands (handoff, 2026-10-30)
+
+*Items 1-9 were simulation. Items 10-15 are presentation, and none of them has been started: the rule was "if the match is
+won, continue", and it has not been won yet. This section is the compact a fresh session needs.*
+
+**What already exists**, so nothing below starts from zero:
+
+- `crates/view` - `Snapshot::of(&world, &map, player)` (a read-only description: id, content id, position, health
+  fraction, `Pose`, fog bits, stock, population, outcome), `Camera` (tiles → pixels), `render(&snapshot, &camera)` →
+  a frame, `Frame::to_ppm()`, and `crates/view/src/bin/frame.rs`, which writes one frame to a PPM for a given tick. That
+  is a software rasteriser with flat colours, no sprites and no animation.
+- `D55`: the renderer never touches `World`; it reads a `Snapshot`. `D17`: content ids stay out of `crates/`; the view
+  maps them through the pack.
+- `D74`: the window is **native** (`winit`, software presentation), and **HUD text is allowed** (a font is in scope; the
+  old "HUD is data, not pixels" ruling is superseded). The sim still carries no text.
+
+**The six steps, in the order they were scheduled:**
+
+10. **Animation and sprite data.** The dat has per-unit graphic records: `graphic_id`, standing/walking/attack/dying
+    sprite ids, frame counts, frame rate, angle count, mirroring. Extract them into `config/gamedata/graphics.toml` the
+    same way `units.toml` is generated (`build/tools/extract.py`), with a census test like `crates/data/tests/pack.rs`.
+    Nothing renders until this exists, and it is pure data work.
+11. **The asset pack boundary.** A `SpriteRef { graphic: u32, frame: u16, angle: u16, mirror: bool }` resolved from
+    `(entity kind, content id, Pose, tick)` - `Pose` already exists and is derived from `Task`, never stored. The pack
+    returns *references*; the renderer resolves them to pixels. Our own art can replace the install's later without the
+    engine noticing.
+12. **Sprites on screen.** Read the SLP/DRS art: the install stores sprites in `resources/_common/drs/graphics/*.slp`
+    (the `.drs` container plus SLP headers, per `docs/parse-notes.md`). Decode to RGBA once at load into an atlas, draw
+    by `SpriteRef`. Terrain comes from the map's terrain ids and the install's terrain SLPs.
+13. **Terrain and layering.** Draw the tile grid from terrain, then entities sorted by `(y, id)`; shadows last. Fog from
+    `Snapshot.visible`/`explored` (already computed in the sim, D50).
+14. **Camera and input.** Pan, zoom, click-select, right-click order: `Camera` exists; input builds `Command`s and
+    submits them through the same `World::submit_checked` a test uses. No new simulation paths.
+15. **The window and the HUD.** `winit` + a software blit of `Frame` into the window surface; HUD reads `Snapshot`
+    (stock, population, selection, the last refusal from `World::last_refusal()`), with a real font. `D74` settled both
+    questions this needed.
+
+**Definition of done for the six:** a window that shows the acceptance match running, with sprites, terrain, fog and a
+HUD that reports what the sim knows - and no engine change required to get there beyond the `SpriteRef` boundary.
+
+**What blocks nothing:** the match itself. Items 10-15 can proceed in parallel with the economy work: they read state and
+never write it.
+
+**What is still open in item 9** (the reason it is not "done"): the acceptance match reaches Feudal, builds a mill,
+lumber camp, barracks, market and blacksmith with wood flowing (654 wood at 1,200 s in the last full run), but no mangonel
+has ever reached the enemy town centre. The blockers found so far, in order: the market/blacksmith line stalling for
+wood, the felling change (13 s per tree) landing after that run, and the `[footprint]` work (D76) not yet built.
