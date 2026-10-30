@@ -198,26 +198,30 @@ fn the_rate_is_the_variants_work_rate_per_tick() {
     assert_eq!(per_second.raw(), 7_800, "0.390 at scale 20000");
 
     world.submit(Command::Gather { villager, node });
-    // Measure from the **first productive tick**, not from "arrival": a villager works a forest tree from the tile
-    // beside it, so it is within a tile for a moment before it starts taking (the owner's touching rule, 2026-10-29).
-    let mut started = None;
+    // A take is a **whole unit** (0 A.D.'s `GATHER_AMOUNT = 1`), so the rate shows up as *time per unit*: at 390 raw a tick
+    // and a scale of 20,000, one unit takes 51.3 ticks. Measure the first unit's arrival and the third's.
+    let mut takes: Vec<u64> = Vec::new();
+    let mut seen = 0i64;
     for tick in 0..2_000 {
         world.step().expect("step");
-        if world.carry(villager).raw() > 0 {
-            started = Some((tick, world.carry(villager).raw()));
+        let units = world.carry(villager).raw() / world.scale();
+        while seen < units {
+            takes.push(tick);
+            seen += 1;
+        }
+        if takes.len() == 3 {
             break;
         }
     }
-    let (started_at, first) = started.expect("the villager must start taking from the node");
-
-    for _ in 0..20 {
-        world.step().expect("step");
-    }
-    let gained = world.carry(villager).raw() - first;
-    assert_eq!(
-        gained,
-        per_second.raw(),
-        "one second of gathering (first take at tick {started_at}) must be 7800 units, not {gained}"
+    assert!(
+        takes.len() == 3,
+        "three whole units should have been taken: {takes:?}"
+    );
+    let per_unit = (takes[2] - takes[0]) as f64 / 2.0;
+    let expected = world.scale() as f64 / per_second.raw() as f64 * f64::from(world.tick_rate_hz());
+    assert!(
+        (per_unit - expected).abs() <= 2.0,
+        "a unit takes {expected:.1} ticks at this rate, measured {per_unit:.1} ({takes:?})"
     );
 }
 
@@ -463,6 +467,7 @@ fn two_villagers_on_one_node_cannot_take_more_than_it_holds() {
         .collect();
     assert_eq!(villagers.len(), 2, "the fixture has two workers");
 
+    let before = world.stock(1, slot("wood"));
     for villager in &villagers {
         world.submit(Command::Gather {
             villager: *villager,
@@ -473,13 +478,12 @@ fn two_villagers_on_one_node_cannot_take_more_than_it_holds() {
         world.step().expect("step");
     }
 
-    let carried: i64 = villagers.iter().map(|v| world.carry(*v).raw()).sum();
+    // The **bank** is the invariant: a unit taken is a unit carried home, and a one-unit tree can only ever pay one.
+    let banked = world.stock(1, slot("wood")) - before;
     assert_eq!(amount_of(&world, node), Fixed::ZERO, "the tree is empty");
     assert_eq!(
-        carried,
-        world.scale(),
-        "one wood was taken in total, not two: {} units came out of a one-unit tree",
-        carried / world.scale()
+        banked, 1,
+        "one wood was taken in total, not two: {banked} came out of a one-unit tree"
     );
 }
 
