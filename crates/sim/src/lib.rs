@@ -1169,6 +1169,9 @@ pub struct World {
     /// Nodes that have given their last wood: removed once no villager is working them, so the tile they stood on becomes
     /// ground a unit may cross (the owner's rule, 2026-10-30 - a spent tree disappears and frees its tile).
     spent_nodes: BTreeSet<EntityId>,
+    /// A worker the shares have decided to move to another column, and the node waiting for it: the load in its hands is
+    /// banked **first**, at its own drop site, and only then does it take up the new work (the owner's rule, 2026-10-30).
+    pending_gather: BTreeMap<EntityId, EntityId>,
     /// Villagers the policy has already given an order to, and when: the guard that stops the pass re-issuing the same
     /// gather order - and paying for a path search - every second.
     share_moved: BTreeMap<EntityId, u64>,
@@ -1376,6 +1379,7 @@ impl World {
             animal_span: BTreeMap::new(),
             shares: Vec::new(),
             shares_scan_tick: 0,
+            pending_gather: BTreeMap::new(),
             spent_nodes: BTreeSet::new(),
             share_failed: BTreeMap::new(),
             share_moved: BTreeMap::new(),
@@ -1665,20 +1669,45 @@ impl World {
                 Some(entity) => entity.position,
                 None => continue,
             };
-            for node in self.nodes_of_slot(here, slot, 3) {
-                self.share_moved.insert(worker, self.tick);
-                match self.start_gather(worker, node) {
-                    Ok(()) => {
-                        self.share_failed.remove(&node);
-                        break;
+            // The worker may be carrying: then the load goes to a drop site **first** and the new order waits in
+            // `pending_gather`. A villager pulled off wood with ten wood in its arms and sent straight to a farm has
+            // thrown those ten away, which is not what a player sees.
+            let node = match self.nodes_of_slot(here, slot, 3).into_iter().next() {
+                Some(node) => node,
+                None => continue,
+            };
+            self.share_moved.insert(worker, self.tick);
+            if self
+                .find(worker)
+                .is_some_and(|entity| entity.carry.raw() > 0)
+            {
+                let task = self.find(worker).map(|entity| entity.task);
+                if let Some(Task::Gather {
+                    node: old,
+                    rate_per_tick,
+                    carry_cap,
+                    ..
+                }) = task
+                    && let Some(returning) = self.return_task(
+                        self.find(worker).expect("the worker"),
+                        old,
+                        rate_per_tick,
+                        carry_cap,
+                    )
+                {
+                    if let Some(entity) = self.find_mut(worker) {
+                        entity.task = returning;
                     }
-                    Err(error) => {
-                        // Somebody could not walk there: remember it, and try the next one in the same pass rather
-                        // than waiting out the retry window with an idle villager.
-                        self.share_failed.insert(node, self.tick);
-                        self.refusal = Some((worker, error, self.tick));
-                    }
+                    self.pending_gather.insert(worker, node);
+                    let _ = need;
+                    continue;
                 }
+            }
+            if let Err(error) = self.start_gather(worker, node) {
+                self.share_failed.insert(node, self.tick);
+                self.refusal = Some((worker, error, self.tick));
+            } else {
+                self.share_failed.remove(&node);
             }
             let _ = need;
         }
@@ -6606,6 +6635,13 @@ impl World {
                 if let Some(route) = route {
                     self.paths.insert(id, route);
                 }
+            }
+            // The shares moved this worker while it was carrying: the bank has it now, so it takes up the new column.
+            if let Some(next) = self.pending_gather.remove(&id) {
+                if let Err(error) = self.start_gather(id, next) {
+                    self.refusal = Some((id, error, self.tick));
+                }
+                continue;
             }
             let mut spent = false;
             if let Some(entity) = self.find_mut(id) {

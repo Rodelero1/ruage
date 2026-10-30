@@ -190,7 +190,7 @@ fn a_split_share_divides_the_villagers() {
 /// rather than hidden: it is the same family as the poaching bug that made the acceptance match stand still, and it needs
 /// the same instrument (the per-pass trace) to pin down.
 #[test]
-#[ignore = "known defect: the share pass does not pull a villager off an over-manned column when nobody is idle (2026-10-30)"]
+#[ignore = "known defect: the pull never fires in this fixture even though the deficit is computed (2026-10-30)"]
 fn the_share_row_follows_the_villager_count() {
     let Some(fx) = fixture() else {
         return;
