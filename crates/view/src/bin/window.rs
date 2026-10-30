@@ -67,10 +67,15 @@ struct App {
     last_frame: Instant,
     /// Ticks run so far, shown in the title so a screenshot proves the loop is alive.
     ticks: u64,
+    /// Set when a tick failed: the loop keeps drawing the last good state and stops stepping. A sim error is not something
+    /// to retry twenty times a second - it would neither fix itself nor leave the state coherent.
+    failed: bool,
+    /// The seed, so a window session can be reproduced headless.
+    seed: u64,
 }
 
 impl App {
-    fn new(config: Config) -> App {
+    fn new(config: Config, seed: u64) -> App {
         let tick_hz = config.settings.tick_rate_hz.max(1);
         App {
             config,
@@ -83,6 +88,8 @@ impl App {
             accumulated: Duration::ZERO,
             last_frame: Instant::now(),
             ticks: 0,
+            failed: false,
+            seed,
         }
     }
 
@@ -90,7 +97,8 @@ impl App {
     /// a blank window that never explains itself.
     fn step(&mut self) -> Result<(), String> {
         if self.world.is_none() {
-            let mut world = World::new(&self.config.settings, 7).map_err(|err| err.to_string())?;
+            let mut world =
+                World::new(&self.config.settings, self.seed).map_err(|err| err.to_string())?;
             world
                 .seed_from(&self.config.map, &self.config.economy, &self.config.units)
                 .map_err(|err| err.to_string())?;
@@ -142,6 +150,11 @@ impl App {
                 | u32::from(frame.pixels[p + 1]) << 8
                 | u32::from(frame.pixels[p + 2]);
         }
+        // Anything the frame does not cover is cleared: a window bigger than the rasteriser's buffer would otherwise show
+        // whatever the previous resize left behind.
+        if buffer.len() > texels {
+            buffer[texels..].fill(0);
+        }
         let _ = buffer.present();
         window.set_title(&format!(
             "ruage - tick {} ({:.1} s) - {} entities",
@@ -154,6 +167,10 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // Some platforms resume more than once; a second window would leak the first and leave two surfaces drawing.
+        if self.window.is_some() {
+            return;
+        }
         let attributes = Window::default_attributes()
             .with_title("ruage")
             .with_inner_size(winit::dpi::LogicalSize::new(960.0, 720.0));
@@ -186,7 +203,7 @@ impl ApplicationHandler for App {
         self.window = Some(window);
         // The loop never sleeps: the accumulator decides how much work a frame carries, so a slow frame catches up
         // instead of slowing the match down.
-        event_loop.set_control_flow(ControlFlow::Poll);
+        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + self.tick));
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -213,14 +230,22 @@ impl ApplicationHandler for App {
             self.accumulated = ceiling;
         }
         let mut ran = false;
-        while self.accumulated >= self.tick {
+        while self.accumulated >= self.tick && !self.failed {
             self.accumulated -= self.tick;
             if let Err(err) = self.step() {
+                // Freeze: the world may be half-updated, so stop stepping and say so once, in the title.
                 eprintln!("step: {err}");
-                break;
+                self.failed = true;
+                if let Some(window) = self.window.as_ref() {
+                    window.set_title(&format!("ruage - stopped: {err}"));
+                }
             }
             ran = true;
         }
+        // The next wake-up is when the next tick is due, not "immediately": a poll loop here is a core spent idling.
+        _event_loop.set_control_flow(ControlFlow::WaitUntil(
+            Instant::now() + self.tick.saturating_sub(self.accumulated),
+        ));
         if ran {
             if let Some(window) = self.window.as_ref() {
                 window.request_redraw();
@@ -246,7 +271,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let mut app = App::new(config);
+    let seed: u64 = args
+        .iter()
+        .position(|arg| arg == "--seed")
+        .and_then(|at| args.get(at + 1))
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(7);
+    let mut app = App::new(config, seed);
     if let Err(err) = event_loop.run_app(&mut app) {
         eprintln!("run: {err}");
         return ExitCode::FAILURE;

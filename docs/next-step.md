@@ -1964,3 +1964,38 @@ headless path that reproduces the same state hash), and then the rule-AI as the 
 no Wayland compositor), and `sudo` is unavailable to install one. The binary's failure path is verified - it exits with
 *"neither WAYLAND_DISPLAY nor WAYLAND_SOCKET nor DISPLAY is set"* rather than panicking - but nobody has yet **seen** the
 window on this machine. Visual proof needs either `Xvfb` installed here or the same command run on a desktop.
+
+## Review: the window (2026-10-30, before and after)
+
+*First pass - what was wrong with milestone 0, all of it fixed in the same commit:*
+
+1. **`ControlFlow::Poll` burned a core doing nothing.** The loop now sleeps until the next tick is due
+   (`WaitUntil(now + tick - accumulated)`), so an idle window costs no CPU.
+2. **A failed tick left the window drawing a frozen world and logging the error on every frame.** A step error now freezes
+   the simulation, shows the reason once in the title, and stops stepping: a sim error neither fixes itself nor leaves the
+   state coherent enough to retry twenty times a second.
+3. **`resumed` could fire twice** (some platforms) and leak a window and a surface. It returns early if one exists.
+4. **The first frame was blank** because the world was seeded inside `step`. Unchanged by design - the window opens, the
+   first tick seeds, the first redraw shows the town centre - but noted so nobody hunts it as a bug.
+5. **A window larger than the rasteriser's buffer kept stale pixels** from the previous size. The uncovered tail is now
+   cleared.
+6. **The seed was hardcoded**, so a window session could not be reproduced. `--seed N` now sets it, which is the first half
+   of the replay story (the second half is the command stream).
+
+*Measured, not argued:* `crates/view/tests/frame_cost.rs` (ignored; run with `--release -- --ignored --nocapture`) reports
+**634 us per frame** at 960x720 with 126 entities, i.e. `Snapshot::of` + `render` costs about **1.3% of a core** at 20
+ticks a second. The remaining cost is a 2.7 MB `Frame` allocation per frame (about 55 MB/s of churn at 20 fps); it is not
+worth an API change yet, and it is written down rather than forgotten.
+
+*Second pass - what the fixes themselves introduced, and what is still open:*
+
+- The accumulator uses `Instant`, which is monotonic but **not** the simulation's clock: the window can be stepped a
+  different number of times per second than the headless build, so a window session and a headless run of the same seed
+  are comparable only if the *tick count* matches, not the wall clock. The replay format must therefore record **ticks**,
+  never timestamps.
+- `saturating_sub` on `Duration` means a long stall schedules the next wake immediately, which is correct, but the catch-up
+  ceiling (20 ticks) still applies - a 20-second stall loses the excess rather than running it. That is the right choice
+  for a window and the wrong one for a test harness, which is why the harness stays headless.
+- The `failed` freeze has no way back: no "resume" key, no diagnostic overlay. Acceptable while a sim error is a bug to
+  fix rather than a state to recover from.
+- Still missing, and next: input to `Command`, pause/1x/2x/4x, the HUD, the command-stream replay.
