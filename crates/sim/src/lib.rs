@@ -3416,6 +3416,8 @@ impl World {
         // (deposits are made from a touching tile, 2026-10-29). Resources and buildings still block.
         let blocked = self.entities.iter().any(|entity| {
             entity.kind != EntityKind::Unit
+                // A spent farm is not in the way: the whole point of building on it is to replace it.
+                && !self.is_expired_farm(entity.id)
                 && entity.position == position
                 && (entity.player == worker.player || entity.player == 0 || !blind)
         });
@@ -3863,6 +3865,15 @@ impl World {
         // A site that exists is a site the blind-placement pass has to look at, and the set is how it knows there is
         // one without walking the world every tick (item 6).
         self.foundations.insert(id);
+        // A new farm on a spent one replaces it rather than standing beside it.
+        let replaced: Vec<EntityId> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.position == position && self.is_expired_farm(entity.id))
+            .map(|entity| entity.id)
+            .collect();
+        self.entities
+            .retain(|entity| !replaced.contains(&entity.id));
         self.push_units_off(at);
 
         let from = self
@@ -5415,6 +5426,40 @@ impl World {
     /// placeholder is used when the world cannot name one.
     fn entity_of_last_command(&self) -> EntityId {
         EntityId(0)
+    }
+
+    /// A farm whose food is gone. It **stays on the map** - walkable, worth nothing - until a new farm replaces it, and the
+    /// replacement costs the full 60 wood (the owner's rule, 2026-10-30). Content names the farm role; the engine only
+    /// knows that a building with nothing left in it and no construction in progress is not in the way.
+    #[must_use]
+    pub fn is_expired_farm(&self, id: EntityId) -> bool {
+        let Some(entity) = self.find(id) else {
+            return false;
+        };
+        if !self.is_farm_role(entity) {
+            return false;
+        }
+        entity.construction.is_none() && entity.amount.raw() <= 0
+    }
+
+    /// Is this entity a farm, by the role content calls `[farm] unit`? By family, so an upgraded farm counts.
+    fn is_farm_role(&self, entity: &Entity) -> bool {
+        if entity.kind != EntityKind::Building {
+            return false;
+        }
+        let Some(unit) = entity.unit else {
+            return false;
+        };
+        let Some(economy) = self.economy.as_ref() else {
+            return false;
+        };
+        let Some(role) = economy.farm.unit.as_deref() else {
+            return false;
+        };
+        economy
+            .role
+            .get(role)
+            .is_some_and(|farm| self.is_family(unit, *farm))
     }
 
     /// Move any unit standing on a tile that has just been built on to the nearest free tile beside it, and forget its
