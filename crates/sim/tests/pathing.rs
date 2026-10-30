@@ -187,7 +187,17 @@ fn a_villager_walks_around_a_forest_wall_and_never_enters_it() {
             on_the_node || map.terrain_at(tile.0, tile.1) != Some(ruage_data::Terrain::Forest),
             "at tick {tick} the villager stood inside a tree at {tile:?}, which is not the node it was sent to"
         );
-        if position == node_position {
+        // On the node, or **beside** it: a forest tree's own tile is blocked, so a villager works it from a touching
+        // tile (the owner's touching rule, 2026-10-29). What this test is about is the route, which is still asserted.
+        let beside = tile
+            .0
+            .abs_diff(u16::try_from(node_position.0.raw() / scale).unwrap())
+            <= 1
+            && tile
+                .1
+                .abs_diff(u16::try_from(node_position.1.raw() / scale).unwrap())
+                <= 1;
+        if position == node_position || beside {
             arrived = true;
             break;
         }
