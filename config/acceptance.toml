@@ -83,7 +83,8 @@ role = "barracks"
 [[rule]]
 player = 1
 cooldown_seconds = 8.0
-when = { villagers_at_least = 22, has_building = ["mill", "barracks"] }
+# `no_tech`: without it the rule asked 132 more times after the research landed ("tech 101 has already been researched").
+when = { villagers_at_least = 22, has_building = ["mill", "barracks"], no_tech = "feudal_age" }
 do = "research"
 building = "town_centre"
 tech = "feudal_age"
@@ -121,7 +122,7 @@ where = "food"
 [[rule]]
 player = 1
 cooldown_seconds = 10.0
-when = { age = "feudal_age", has_building = ["market", "blacksmith"], villagers_at_least = 28 }
+when = { age = "feudal_age", has_building = ["market", "blacksmith"], villagers_at_least = 28, no_tech = "castle_age" }
 do = "research"
 building = "town_centre"
 tech = "castle_age"

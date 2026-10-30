@@ -667,10 +667,13 @@ impl World {
             ruage_fixed::Fixed::from_raw(i64::from(x) * self.scale),
             ruage_fixed::Fixed::from_raw(i64::from(y) * self.scale),
         );
+        // **A unit does not make ground occupied.** Terrain and what stands on it permanently do; a villager is a person
+        // who is somewhere for a moment, and treating people as obstacles left a player unable to place a market beside
+        // their own town centre - 177 refusals in a row - once villagers started standing there to deposit.
         !self
             .entities()
             .iter()
-            .any(|entity| entity.position == position)
+            .any(|entity| entity.position == position && entity.kind != EntityKind::Unit)
     }
 }
 

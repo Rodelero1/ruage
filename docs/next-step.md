@@ -1797,3 +1797,36 @@ Both are cheap and neither touches the tick's design.
    toolchain (`rustc 1.99.1`: a `HashMap` walk fails the build under that lint) and free today, because
    `crates/` holds no `HashMap`. Borrowed in shape from `librematch/genie`'s lint set, which also denies a
    new `#[allow]` without a reason.
+
+## The owner's three fixes, and what they exposed (2026-10-29, latest)
+
+**Done, each with a test:**
+
+1. **Touching a drop site is enough** - any side, any corner. `Task::Return` banks when the worker's tile is within one of
+   the drop building's tile, instead of waiting for the final step *onto* a tile that is often blocked.
+   `crates/sim/tests/dropoff.rs`.
+2. **A site may be placed where a villager stands**, and the villager is pushed off it. This was forced by (1): villagers
+   now stand around every drop site, and the placement scan counted them as occupied ground - *"no free tile for a
+   market"* was refused **177 times in a row** before this. `crates/sim/tests/placement.rs`.
+3. **A worker beside a node works it** when the node's own tile cannot be stood on (a forest tree). Without it a woodcutter
+   stopped one tile short, `at_node` was false for ever, and - carrying a partial load - the "find the next node" branch
+   did not fire either. `gather.rs` and `forest_edge.rs` updated to assert the distance, not the exact tile.
+
+**Verified as the owner said:** a farm is walked over, not around (`crates/sim/tests/walkable.rs`). Only
+`[build] blocking_roles` - the wall - blocks today, so farms were already soft; the test is what keeps it that way.
+
+**Verified from the dat, and still open:** the town centre's footprint is `radius 2.0` with `selection 2.0` and
+`clearance 2.0`, i.e. **4x4 tiles, uniformly** - the dat carries no field that marks part of a building as walkable. The
+owner's "3/4 of the covered area can be walked over" is therefore not something the install can confirm, and our engine
+blocks **one tile** for every building that blocks at all. Modelling real footprints is the next fidelity item.
+
+**Measured after the three fixes:** buildings 15 -> **22**, food 497 -> **1,402**, Feudal reached, market and blacksmith
+both refused only for wood. Still not winnable, and the reason is now a single, named defect: **eight woodcutters sit on
+the tiles `(19,15)` and `(19,17)` - touching the lumber camp at `(19,16)` - in `Return`, each carrying a load under one
+whole unit (`0.03` to `0.86`)**. A deposit whose load rounds to zero banks nothing and, by the current state machine,
+leaves the worker in `Return` with the same dead node behind it. Wood froze at 121 wood while food reached 1,402: two
+columns, two different faults, and the earlier sentence blaming the food crowd for the wood was wrong.
+
+**Next, in order:** (a) a partial load that rounds to zero must not keep a `Return` task - bank it or retask it, never
+loop; (b) `nearest_like` must skip a node with nothing left (it currently checks workability, not emptiness); (c) the
+give-up clock for a worker that makes no progress, which would have caught all of this from the outside.

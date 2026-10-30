@@ -145,3 +145,100 @@ fn a_crowd_all_banks_its_loads() {
         crew.len()
     );
 }
+
+/// **Touching the drop site is enough** - any side, any corner (the owner's rule, 2026-10-29). A mill is not walked onto;
+/// a villager beside it banks the load.
+///
+/// The drop site here stands on **forest terrain**, which is blocked: nobody can ever step onto its own tile, so the load
+/// can only be banked from a tile that touches it. This is the acceptance match's lumber camp at `(19,16)` - built against
+/// the trees - with five woodcutters parked beside it in `Return` for a thousand seconds.
+///
+/// This is the shape of the acceptance match's freeze seen from the other end: twenty-seven villagers sat eight
+/// hundredths of a tile short of the mill, in `Return`, for a thousand seconds, because arrival was "the final step is
+/// exactly the drop site's tile" and that step is never taken.
+#[test]
+fn a_touching_tile_is_enough_to_bank() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let food = world.slot_of("food").expect("a food column");
+    let mill_role = world.role_unit("mill").expect("a mill role");
+    let villager_role = world.role_unit("villager").expect("a villager role");
+    let scale = world.scale();
+    let before = world.stock(1, food);
+
+    // A mill at (30,30), a bush diagonally beside it at (29,29), a villager at (28,28): the load has to be banked without
+    // anybody ever standing on the mill's own tile.
+    // (21,16) is forest: a drop site whose own tile can never be stood on.
+    let mill = spawn_building(&mut world, mill_role, (21, 16));
+    let bush = next_id(&world);
+    world
+        .submit_checked(Command::Spawn {
+            id: bush,
+            player: 0,
+            kind: EntityKind::Resource(food),
+            unit: None,
+            position: (Fixed::from_raw(20 * scale), Fixed::from_raw(13 * scale)),
+            speed: Fixed::ZERO,
+            hp: 0,
+            amount: 400,
+        })
+        .expect("a bush");
+    world.step().expect("one tick");
+    let pace = world
+        .entities()
+        .iter()
+        .find(|e| e.player == 1 && e.unit.is_some_and(|u| world.is_family(u, villager_role)))
+        .map(|e| e.speed)
+        .expect("a villager speed");
+    let villager = next_id(&world);
+    world
+        .submit_checked(Command::Spawn {
+            id: villager,
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: Some(villager_role),
+            position: (Fixed::from_raw(19 * scale), Fixed::from_raw(13 * scale)),
+            speed: pace,
+            hp: 25,
+            amount: 0,
+        })
+        .expect("a villager");
+    world.step().expect("one tick");
+    world
+        .submit_checked(Command::Gather {
+            villager,
+            node: bush,
+        })
+        .expect("the bush can be worked");
+
+    let _ = mill;
+    for _ in 0..1_200 {
+        world.step().expect("stepping");
+    }
+    let gained = world.stock(1, food) - before;
+    assert!(
+        gained > 0,
+        "a villager beside the drop site banks the load: gained {gained}, task {:?}",
+        world.entity(villager).map(|e| e.task)
+    );
+}
+
+fn spawn_building(world: &mut World, unit: u32, at: (i64, i64)) -> EntityId {
+    let id = next_id(world);
+    let scale = world.scale();
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player: 1,
+            kind: EntityKind::Building,
+            unit: Some(unit),
+            position: (Fixed::from_raw(at.0 * scale), Fixed::from_raw(at.1 * scale)),
+            speed: Fixed::ZERO,
+            hp: 600,
+            amount: 0,
+        })
+        .expect("a building");
+    world.step().expect("one tick");
+    id
+}

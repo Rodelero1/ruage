@@ -3346,8 +3346,12 @@ impl World {
         // rule is about a site someone has merely marked out, and letting a house cancel a town centre
         // through fog is not the game either version plays.
         let blind = self.vision(worker.player, at) != TileVision::Visible;
+        // **Units do not block a site.** The game lets you drop a building on your own villagers and pushes them out;
+        // refusing instead made a site beside a drop site impossible to place, because a villager now stands there
+        // (deposits are made from a touching tile, 2026-10-29). Resources and buildings still block.
         let blocked = self.entities.iter().any(|entity| {
-            entity.position == position
+            entity.kind != EntityKind::Unit
+                && entity.position == position
                 && (entity.player == worker.player || entity.player == 0 || !blind)
         });
         if blocked {
@@ -3794,6 +3798,7 @@ impl World {
         // A site that exists is a site the blind-placement pass has to look at, and the set is how it knows there is
         // one without walking the world every tick (item 6).
         self.foundations.insert(id);
+        self.push_units_off(at);
 
         let from = self
             .find(villager)
@@ -5305,6 +5310,36 @@ impl World {
         self.work_position(position, position).is_some()
     }
 
+    /// Move any unit standing on a tile that has just been built on to the nearest free tile beside it, and forget its
+    /// route: the game pushes units out of the way of a new building, and a player who drops a house on a villager means
+    /// the house, not the villager.
+    fn push_units_off(&mut self, at: (u16, u16)) {
+        let position = self.tile(at);
+        let movers: Vec<EntityId> = self
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::Unit && entity.position == position && entity.player != 0
+            })
+            .map(|entity| entity.id)
+            .collect();
+        for id in movers {
+            let Some(spot) = self.work_position(position, position) else {
+                continue;
+            };
+            if let Some(entity) = self.find_mut(id) {
+                entity.position = spot;
+            }
+            self.paths.remove(&id);
+        }
+    }
+
+    /// How many waypoints are left on this entity's route: 0 means it is standing on its goal (or has none).
+    #[must_use]
+    pub fn path_length(&self, id: EntityId) -> usize {
+        self.paths.get(&id).map_or(0, Vec::len)
+    }
+
     /// Whether a unit may stand on this tile: terrain, walls and buildings, as the walk grid holds them. Exposed because
     /// "can this tile be walked on" is a question a test (and a future UI) asks of the world directly.
     #[must_use]
@@ -5990,12 +6025,21 @@ impl World {
                             detail: err.to_string(),
                         }
                     })?;
-                    let next = self.next_waypoint(entity.id).unwrap_or(target);
-                    let (dx, dy) = step_towards(entity.position, next, delta.raw());
-                    if dx == 0 && dy == 0 && next == target {
+                    // **Touching the drop site is enough** - any side, any corner (the owner's rule, 2026-10-29). Waiting
+                    // for the final step *onto* the building's own tile is what parked twenty-seven villagers beside a
+                    // mill and five woodcutters beside a lumber camp for a thousand game-seconds, each holding a load
+                    // and each with one waypoint left that they never took.
+                    let here = self.tile_of(entity.position);
+                    let there = self.tile_of(target);
+                    let touching = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
+                    if touching {
                         deposits.push(entity.id);
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else {
+                        let next = self.next_waypoint(entity.id).unwrap_or(target);
+                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
                     }
-                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
                 }
                 Task::Gather {
                     node,
@@ -6014,8 +6058,15 @@ impl World {
                     let there = self.tile_of(target);
                     // A node is stood on; a building is worked from the tile beside it, because its
                     // own tile is blocked and a worker that insisted on it would walk forever.
+                    // **Standing beside a node you cannot stand on counts as working it.** A tree in the forest sits on
+                    // blocked terrain, so a villager that walks up to it stops on the adjacent tile with one waypoint
+                    // left and never arrives: `at_node` was false for ever, `take_amount` never ran, and - because the
+                    // villager was carrying a partial load - the "find the next node" branch did not fire either. Four
+                    // woodcutters did this for a thousand game-seconds beside two spent trees (2026-10-29), which is
+                    // why the wood column produced nothing while the food column produced 1,994.
+                    let beside = target_is_building || !self.tile_walkable(there.0, there.1);
                     let at_node = entity.position == target
-                        || (target_is_building
+                        || (beside
                             && here.0.abs_diff(there.0) <= 1
                             && here.1.abs_diff(there.1) <= 1);
 

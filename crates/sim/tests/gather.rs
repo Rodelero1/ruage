@@ -158,10 +158,15 @@ fn the_villager_walks_to_the_node_and_then_takes_from_it() {
         world.step().expect("step");
     }
 
-    assert_eq!(
-        world.position(villager),
-        Some(node_position),
-        "the villager should be standing on the node"
+    // On the node, or beside it: a forest tree stands on blocked ground, so a villager works it from the tile next to it
+    // (the owner's touching rule, 2026-10-29). The distance is the assertion, not the exact tile.
+    let at = world.position(villager).expect("a position");
+    let scale = world.scale();
+    let dx = (at.0.raw() - node_position.0.raw()).abs() / scale;
+    let dy = (at.1.raw() - node_position.1.raw()).abs() / scale;
+    assert!(
+        dx <= 1 && dy <= 1,
+        "the villager should be on or beside the node: at {at:?}, node {node_position:?}"
     );
     let taken = before - amount_of(&world, node).raw();
     assert!(taken > 0, "the node must have been worked");
@@ -193,25 +198,26 @@ fn the_rate_is_the_variants_work_rate_per_tick() {
     assert_eq!(per_second.raw(), 7_800, "0.390 at scale 20000");
 
     world.submit(Command::Gather { villager, node });
-    let mut arrived = None;
+    // Measure from the **first productive tick**, not from "arrival": a villager works a forest tree from the tile
+    // beside it, so it is within a tile for a moment before it starts taking (the owner's touching rule, 2026-10-29).
+    let mut started = None;
     for tick in 0..2_000 {
         world.step().expect("step");
-        if world.position(villager) == world.position(node) {
-            arrived = Some(tick);
+        if world.carry(villager).raw() > 0 {
+            started = Some((tick, world.carry(villager).raw()));
             break;
         }
     }
-    let arrived = arrived.expect("the villager must arrive");
-    let at_arrival = world.carry(villager).raw();
+    let (started_at, first) = started.expect("the villager must start taking from the node");
 
     for _ in 0..20 {
         world.step().expect("step");
     }
-    let gained = world.carry(villager).raw() - at_arrival;
+    let gained = world.carry(villager).raw() - first;
     assert_eq!(
         gained,
         per_second.raw(),
-        "one second of gathering (arrived at tick {arrived}) must be 7800 units, not {gained}"
+        "one second of gathering (first take at tick {started_at}) must be 7800 units, not {gained}"
     );
 }
 

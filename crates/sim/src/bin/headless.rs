@@ -213,7 +213,7 @@ fn run(args: &[String]) -> Result<(), String> {
     // A picture of the world, for a person rather than a test: one line per entity, in tile coordinates, so the map can
     // be drawn outside the engine (the `frame` bin draws pixels; this answers "where is everything").
     if let Some(path) = parsed.get("--dump") {
-        let mut out = String::from("kind,player,id,unit,slot,x,y,amount,hp,task\n");
+        let mut out = String::from("kind,player,id,unit,slot,x,y,amount,hp,carry,path,task\n");
         let scale = world.scale() as f64;
         for entity in world.entities() {
             let kind = match entity.kind {
@@ -244,7 +244,7 @@ fn run(args: &[String]) -> Result<(), String> {
                 task.push_str(&target);
             }
             out.push_str(&format!(
-                "{kind},{},{},{},{slot},{:.2},{:.2},{:.2},{},{task}\n",
+                "{kind},{},{},{},{slot},{:.2},{:.2},{:.2},{},{:.2},{},{task}\n",
                 entity.player,
                 entity.id.0,
                 entity.unit.map_or(0, |unit| unit),
@@ -252,6 +252,8 @@ fn run(args: &[String]) -> Result<(), String> {
                 entity.position.1.raw() as f64 / scale,
                 entity.amount.raw() as f64 / scale,
                 entity.hp,
+                entity.carry.raw() as f64 / scale,
+                world.path_length(entity.id),
             ));
         }
         if let Err(err) = std::fs::write(path, out) {
