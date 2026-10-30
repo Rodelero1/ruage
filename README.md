@@ -64,3 +64,31 @@ the same hash, which is the acceptance test for determinism.
 What is **not** covered, because it is not here: the game's data (never committed — see
 `docs/licensing.md`), the importer (GPL-3.0-or-later, separate repository), and any art (the engine
 points at the install's graphics; original art would be CC-BY-SA, D21).
+
+## Build and run
+
+Needs a Rust toolchain (1.99 or newer; `rustup` is the usual way to get one) and nothing else - no GPU, no system
+libraries, no game install for the simulation to run.
+
+```sh
+make            # what the targets are
+make run        # the game, in a window (needs a desktop session)
+make headless   # the acceptance match, no window, with a report every 400 ticks
+make batch      # that match across seeds, one row each
+make check      # fmt + clippy + every test: the gate before a commit
+```
+
+Or without make, the same things:
+
+```sh
+cargo run --release -p ruage-view --bin window -- config        # the window
+cargo test --workspace                                          # the tests
+cargo run --release -p ruage-sim --bin ruage-headless -- ...     # see `make headless` for the full argument list
+```
+
+The window is **blocks, not sprites**: terrain, units and buildings are drawn as coloured shapes, there is no HUD yet, and
+the art extraction is the next items in `docs/next-step.md`. Left click selects, right click orders, Space pauses, `1`-`4`
+set speed, Escape quits.
+
+On Linux the window needs a session (`DISPLAY` or `WAYLAND_DISPLAY`); a headless server can still run `make headless` and
+`make test`, which is where balance and AI work happen.

@@ -55,7 +55,7 @@ fn spawn(world: &mut World, kind: EntityKind, unit: u32, at: (u16, u16), amount:
     world
         .submit_checked(Command::Spawn {
             id,
-            player: if kind == EntityKind::Building { 1 } else { 1 },
+            player: 1,
             kind,
             unit: Some(unit),
             position: (

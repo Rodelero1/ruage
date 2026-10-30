@@ -12,7 +12,7 @@
 //! What it does not have yet: input (no selection, no orders), a HUD, sprites, terrain art. Those are the next steps in
 //! `docs/next-step.md`, and each of them is additive: the loop stays, the blit stays.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
@@ -34,7 +34,7 @@ struct Config {
     resources: ruage_data::Resources,
 }
 
-fn load(config: &PathBuf) -> Result<Config, String> {
+fn load(config: &Path) -> Result<Config, String> {
     let resources = ruage_data::load_resources_file(&config.join("resources.toml"))
         .map_err(|err| format!("resources.toml: {err}"))?;
     Ok(Config {
@@ -171,10 +171,9 @@ impl App {
                 }
             };
             // A refused order is shown, not swallowed: this is how a player learns why nothing happened.
-            if let Err(err) = world.submit_checked(command) {
-                if let Some(window) = self.window.as_ref() {
-                    window.set_title(&format!("ruage - refused: {err}"));
-                }
+            if let (Err(err), Some(window)) = (world.submit_checked(command), self.window.as_ref())
+            {
+                window.set_title(&format!("ruage - refused: {err}"));
             }
         }
     }
@@ -195,10 +194,9 @@ impl App {
             world.apply_content_policy();
             self.world = Some(world);
         }
-        if let Some(world) = self.world.as_mut() {
-            world.step().map_err(|err| err.to_string())?;
-            self.ticks += 1;
-        }
+        let world = self.world.as_mut().ok_or("the world was not seeded")?;
+        world.step().map_err(|err| err.to_string())?;
+        self.ticks += 1;
         Ok(())
     }
 
@@ -344,9 +342,11 @@ impl ApplicationHandler for App {
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = self.camera.pick((position.x as i32, position.y as i32));
             }
-            WindowEvent::MouseInput { state, button, .. } if state == ElementState::Pressed => {
-                self.click(button);
-            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button,
+                ..
+            } => self.click(button),
             WindowEvent::RedrawRequested => self.draw(),
             _ => {}
         }
@@ -383,10 +383,8 @@ impl ApplicationHandler for App {
         _event_loop.set_control_flow(ControlFlow::WaitUntil(
             Instant::now() + self.tick.saturating_sub(self.accumulated),
         ));
-        if ran {
-            if let Some(window) = self.window.as_ref() {
-                window.request_redraw();
-            }
+        if let (true, Some(window)) = (ran, self.window.as_ref()) {
+            window.request_redraw();
         }
     }
 }

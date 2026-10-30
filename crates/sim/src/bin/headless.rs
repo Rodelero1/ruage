@@ -247,7 +247,7 @@ fn run(args: &[String]) -> Result<(), String> {
                 "{kind},{},{},{},{slot},{:.2},{:.2},{:.2},{},{:.2},{},{task}\n",
                 entity.player,
                 entity.id.0,
-                entity.unit.map_or(0, |unit| unit),
+                entity.unit.unwrap_or(0),
                 entity.position.0.raw() as f64 / scale,
                 entity.position.1.raw() as f64 / scale,
                 entity.amount.raw() as f64 / scale,

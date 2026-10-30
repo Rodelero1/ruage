@@ -159,7 +159,7 @@ fn one_villager_gets_the_last_unit_and_the_other_moves_on() {
         "exactly one unit left the node, and exactly one villager carries it: {took:?}"
     );
     assert!(
-        took.iter().any(|units| *units == 1) && took.iter().any(|units| *units == 0),
+        took.contains(&1) && took.contains(&0),
         "one villager took the last unit and the other got nothing: {took:?}"
     );
 }

@@ -34,6 +34,7 @@ fn fresh() -> Option<World> {
     Some(world)
 }
 
+#[allow(dead_code)] // a shared test helper that not every test in the file uses
 fn next_id(world: &World) -> EntityId {
     EntityId(
         world
@@ -45,7 +46,7 @@ fn next_id(world: &World) -> EntityId {
             + 1,
     )
 }
-
+#[allow(dead_code)] // a shared test helper that not every test in the file uses
 fn place(
     world: &mut World,
     kind: EntityKind,
