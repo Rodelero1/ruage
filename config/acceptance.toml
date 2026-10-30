@@ -61,10 +61,13 @@ do = "build"
 role = "mill"
 where = "food"
 
+# The lumber camp comes **before** the farms, at ten villagers: it is what makes wood income possible, and a farm costs
+# 25 wood. The first version asked for the camp at fourteen and for farms from the mill onwards, so the farms spent the
+# wood the camp needed and the run never had a camp, never mind a barracks - 1,400 seconds of a 200-wood opening.
 [[rule]]
 player = 1
 cooldown_seconds = 5.0
-when = { villagers_at_least = 14, no_building = "lumber_camp" }
+when = { villagers_at_least = 10, no_building = "lumber_camp" }
 do = "build"
 role = "lumber_camp"
 where = "wood"
@@ -107,7 +110,10 @@ role = "blacksmith"
 [[rule]]
 player = 1
 cooldown_seconds = 6.0
-when = { has_building = ["mill"], stock = [{ name = "food", at_most = 120 }] }
+# A farm only when there is wood **to spare**: 25 wood a farm, and the lumber camp and barracks come first. Without this
+# guard the farm rule ate every stick the villagers cut (85 firings in 800 s) and the camp's 100 wood was never banked -
+# the death spiral in one line.
+when = { has_building = ["mill", "lumber_camp"], stock = [{ name = "food", at_most = 120 }, { name = "wood", at_least = 120 }] }
 do = "build"
 role = "farm"
 where = "food"

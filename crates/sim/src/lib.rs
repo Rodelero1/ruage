@@ -1697,6 +1697,11 @@ impl World {
             {
                 continue;
             }
+            // Somewhere to stand, or it is not a candidate at all: an interior tree costs a refusal and a `share_failed`
+            // entry every 30 s for the rest of the match.
+            if !self.node_workable(entity.id) {
+                continue;
+            }
             let dx = entity.position.0.raw() - from.0.raw();
             let dy = entity.position.1.raw() - from.1.raw();
             nodes.push((dx * dx + dy * dy, entity.id.0, entity.id));
@@ -5285,6 +5290,21 @@ impl World {
         self.walk.as_ref().is_some_and(|walk| walk.contains(x, y))
     }
 
+    /// Can this node be worked at all? A node is worked by standing **on** it (a tree) or **beside** it (a mine, a farm),
+    /// so it is workable when its own tile is free ground or one of the eight tiles around it is.
+    ///
+    /// This is a **tile** test, not a path search - which is the whole point: the middle of a forest block is not
+    /// unreachable because a route exists, it is unreachable because there is nowhere to stand. Choosing by distance alone
+    /// put villagers on interior trees, where `start_gather` refused with *"the target is walled off"* (measured at 703 s
+    /// of the acceptance match) and the wood column churned through failures for the rest of the run.
+    #[must_use]
+    pub fn node_workable(&self, id: EntityId) -> bool {
+        let Some(position) = self.position(id) else {
+            return false;
+        };
+        self.work_position(position, position).is_some()
+    }
+
     /// Whether a unit may stand on this tile: terrain, walls and buildings, as the walk grid holds them. Exposed because
     /// "can this tile be walked on" is a question a test (and a future UI) asks of the world directly.
     #[must_use]
@@ -5322,6 +5342,9 @@ impl World {
         let mut best: Option<(i64, u32, EntityId)> = None;
         for entity in &self.entities {
             if entity.id == old || entity.id == worker {
+                continue;
+            }
+            if matches!(entity.kind, EntityKind::Resource(_)) && !self.node_workable(entity.id) {
                 continue;
             }
             let same = match (kind, entity.kind) {
