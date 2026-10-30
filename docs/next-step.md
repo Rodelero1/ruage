@@ -1680,6 +1680,7 @@ gathering pool**. A rule that needs a worker may take one; the shares will rebal
 | 1000 s | 55 | 51 | 70 | 27 | 15 |
 | 1400 s | **5** | 1088 | 300 | 32 | **17** |
 | 1600 s | **5** | 1236 | 410 | 32 | 17 |
+| 2400 s | **5** | 1236 | 850 | 32 | 17 |
 
 **The match does not finish, and it now dies of wood rather than of food.** Seventeen buildings means the mill, the
 barracks, the lumber camp, the market and the blacksmith all went up - the build order works. Food is 1,236 and gold 410;
@@ -1692,6 +1693,13 @@ that node for 30 s, the pass moves to the next one, and within a few passes ever
 column stands empty while food overflows. The test to write is a villager, a lumber camp and a tree on the far side of
 it; if it refuses, the fix is in `work_position` (**which adjacent tile counts as "can work this node"**), not in the
 policy - and `share_failed` should not swallow a whole resource for 30 s when the failure is about a *tile*.
+
+**The run reports zero refusals**, which is the sharpest clue of the night: the build rules are not *failing*, they are
+not *firing*. A rule that cannot afford a building is refused and printed; nothing printed, so every condition was false
+at every check - the castle and siege rules included, with 1,236 food, 850 gold and 32 villagers in hand. The next run
+should print `Runner::fired_times` (already recorded, never displayed) and the current age: that separates "the age did
+not advance" from "the age advanced and the rule's condition is wrong", in one line of output instead of an evening of
+deduction.
 
 **Cost, measured:** the run takes ~4x real time in release, and a single path search is ~29 ms on this map. Both deserve
 attention before the balance runs in item 8's batch harness are cheap enough to sweep civs.
