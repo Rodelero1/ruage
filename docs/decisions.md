@@ -2118,3 +2118,25 @@ boundary is the thing worth proving early, and the art does not need the window 
 authored 64x64 mirrored one); reading `.aoe2scenario` files is a future item, not a prerequisite. Footprints (D76, the
 Town Centre's walkable wings) come **after** the renderer's first milestone, because they cannot make a match win or lose
 and will be far easier to judge once there is something on screen.
+
+## D80-D82 - The look, the art, and the mods (2026-10-30)
+
+**D80 - The camera is the game's projection.** 2:1 isometric diamonds, `project` to the centre of a tile's diamond and
+`pick` as its exact inverse, camera position in tile space so zoom does not move the centre tile. Everything the renderer
+draws and every click it accepts goes through that pair.
+
+**D81 - Assets resolve through a mod chain; the original game is the last link, and its art is never redistributed.**
+The owner's answer to the art-licensing question, and a bigger decision than the question was:
+
+- A mod is a **folder**. The load order is a **priority list**, and the **original game's assets come last** - so a mod
+  overrides the game, never the other way round.
+- Resolution is **by id in the pack, first chain entry that has it wins**. The engine asks for "the graphic for unit 83",
+  not for a path, so a mod can replace any part without the engine knowing a mod exists.
+- The original game's art is **loaded at runtime from the player's install and never committed**. Placeholder shapes remain
+  the in-repo default, so the repository is runnable by someone with no game install - which is also what keeps it legal.
+- Consequence for the content pack: an asset reference is an id plus a chain position, and `SpriteRef` (item 11) must carry
+  the resolved source, not a filesystem path, or the chain cannot work.
+
+**D82 - A bitmap font for the HUD, PNG frames as the yardstick, borderless by default.** The HUD uses a bundled bitmap font
+(no parser, no dependency, licence-clean by construction); every rendering step is shown to the owner as a **PNG rendered
+headlessly**, so nothing waits on a display; fullscreen is **borderless** first, with exclusive as an option.

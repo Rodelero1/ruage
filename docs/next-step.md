@@ -2046,3 +2046,15 @@ changing the picked tile; and the full chain world -> tile -> pixel -> `pick_at`
 disagreement between the `+ ry` in `project` and the `- ry` in `pick` that only shows at non-zero deltas - or rounding, which
 cannot be settled by reading the code. It needs a picture; a picture needs a display. `#[ignore]`d with that reasoning
 rather than patched blind.
+
+## Step 2 of the look: real footprints (2026-10-30, compact before the code)
+
+**The finding that changes the step:** footprints need no extractor work. `crates/data` already carries
+`radius: [MaybeFixed; 3]` for every unit and the generated pack has **2,778** radius entries; for buildings the first radius
+is the half-extent of the footprint (the town centre's `2.0` is its 4x4), which is exactly the silhouette that makes a
+screen read as the game. So step 2 is a *renderer and snapshot* change, not a data change: the snapshot must expose a
+footprint per entity, and the renderer must draw a diamond of that size instead of one tile.
+
+**Order within the step:** footprint in `Snapshot` -> diamond drawing (with the parked edge-picking defect fixed as a
+consequence, because the diamond's outline is what the edge test needed to see) -> a test that the town centre covers 4x4
+tiles and a house 2x2, read from the pack rather than hard-coded -> adversarial review of both, then commit and push.
