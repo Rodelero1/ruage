@@ -25,9 +25,57 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - Cron job `a10883e59b0a` runs the script daily at 09:00 UTC. The script's output is the gate: when
   it is empty the agent replies with one line and does nothing else.
 - State (last head sha, last look) lives in `build/prior-art-state.json`, which is gitignored, so the
-  watch cannot dirty the tree it is watching.
+  watch cannot dirty the tree it is watching. A second state file,
+  `build/prior-art-discovery.json`, dates the monthly **discovery sweep** and remembers which
+  candidates have already been shown.
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
+
+## 2026-10-30 — the watch now discovers, not only diffs
+
+Owner decision: `yanfengliu/aoe2` joins the list, and the gate gains a monthly **discovery sweep**.
+The reason is the shape of the old tool, not a new interest: a closed list of twelve can only ever
+answer "did a project we already know about move?", so "no new relevant project" was an artefact of
+the list rather than a finding. A keyword sweep found a peer project the list had never heard of.
+
+**The sweep.** Once every 30 days the gate queries GitHub's search API (`aoe2 engine`,
+`"age of empires" engine`, `age of empires ii reimplementation`, `topic:aoe2`,
+`aoe2 deterministic simulation`) and prints what it finds as `DISCOVERY` lines: candidates for the
+owner to judge, never report material. Its state is `build/prior-art-discovery.json` (gitignored),
+and it advances **only on a complete sweep** — one dead query is named on stderr as
+`DISCOVERY FAILURE` and fails the run, exactly as a failed `head_commit` does, so a rate-limited
+sweep can never pass as a quiet month. The search endpoint is a separate rate-limit bucket from the
+per-repo commit reads (10/min unauth against 60/hour), so the sweep cannot starve the gate.
+
+**What it filters, and why the filters are shaped that way.** Forks, archived repos, repos with no
+description (nothing to judge), repos untouched for 90 days, curated lists, SEO drill pages, and our
+own account. The query set searches names, descriptions and topics only: measured against live data,
+adding `readme` took the candidate list from 35 to 57 without finding one extra project worth
+watching — the extra 22 were a "point Claude at any game" mod pack, decompilation directories, a
+starred-repos mirror and an emulator.
+
+**Only what was printed is remembered.** The report is capped at eight candidates a month, and the
+cap deliberately bites: candidates beyond it are *not* marked seen, so they surface next month rather
+than vanishing. The first draft marked everything seen and would have discarded the overflow
+permanently.
+
+**Test-first, and what the tests caught.** 45 tests; every behaviour above was watched failing
+first. Three defects were found reviewing the change rather than by running it: the overflow bug
+above; a description containing a tab or newline forging a column (descriptions come from strangers'
+repositories, so their whitespace is flattened); and equal push times reordering the report between
+runs (ties now break by name). A fourth was found by the suite itself — the pre-existing
+`GateTests`/`FailureTests`/`MixedRunTests` classes call `main()`, so the new sweep made the test
+suite a real GitHub client, which showed up as a 7-second run and a written state file. Every class
+that runs `main()` now isolates the discovery state and injects a search stub.
+
+**A pre-existing rot fixed on the way.** `test_unchanged_within_interval_is_silent` failed on
+2026-10-30 for reasons that had nothing to do with this change: it pinned `NOW = 2026-10-27` in the
+test while the gate read the wall clock, so a project "looked at six hours ago" was three days old
+and correctly due. `main()` now takes an injectable clock (`main(now=...)`), and the suite pins it.
+
+**What the sweep found on its first real run.** 31 candidates, none of them a rival engine — replay
+analysers, a Lua scenario tool, a DE patch reverter, a rating chart. The engine-shaped project it was
+built to find was already found by hand the same day; from here on it is the list's job.
 
 ## What is watched
 
@@ -38,6 +86,12 @@ Reference engine:
 Deterministic reimplementation and formats:
 - `librematch/genie` — active; format readers and a DE-targeting deterministic implementation (D13).
 - `Zaydme/openaok` — from-scratch AoK (1999) engine, C++20/SDL2/EnTT, MIT; fixed 16 ms tick, its own pathers, reads `EMPIRES2.DAT` at `VER 5.7`. The nearest sibling to this project, and the one that answers questions about our own dat version.
+- `yanfengliu/aoe2` — TypeScript replica on its own sibling engine `yanfengliu/civ-engine` ("AI-native,
+  civ-scale simulation"); MIT, and **original art by choice** — no AoE assets — which makes it the
+  only watched project working D18's problem from the far side. Ships `design/spec-final.md` as its
+  rules target, a coverage figure derived from its own test suite, and an LLM-vs-AI playtest loop
+  with a recorded findings log. Came in by the discovery sweep's first principle: it was not on any
+  list before 2026-10-30.
 
 Dat modelling we depend on:
 - `SiegeEngineers/genie-rs` — **dormant since November 2022**, so it will not answer U15 or U17; kept
