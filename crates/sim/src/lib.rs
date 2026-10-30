@@ -395,6 +395,11 @@ pub enum Task {
         rate_per_tick: Fixed,
         /// The variant's carry, in whole resources.
         carry_cap: u32,
+        /// The fraction accumulated toward the next **whole** unit, always under one unit. Resources are whole numbers:
+        /// a villager carries `10` wood, never `9.27`, and a node holds `100`, never `87.4` (0 A.D.'s
+        /// `ResourceGatherer` takes `GATHER_AMOUNT = 1` at a time and documents its carry as an *integer* amount). This
+        /// is the accumulator that was missing here, and its absence is where `0.03`-of-a-unit carries came from.
+        progress: Fixed,
     },
     /// Carrying a full load to somewhere that will take it. The node is remembered so the
     /// villager can go back to work once the load is dropped.
@@ -2422,20 +2427,29 @@ impl World {
 
     /// How much a worker takes this tick: the rate, the room left under its cap, and what the
     /// node still holds - the smallest of the three.
-    fn take_amount(&self, worker: &Entity) -> i64 {
+    /// How much this worker takes **this tick**, in whole units at the engine scale, and the fraction it keeps.
+    ///
+    /// Whole units only. The rate is fractional (`0.39/s`), so it accumulates in `progress` and a unit is granted when a
+    /// whole one is ready: `floor((progress + rate) / 1)`. Two villagers on the same node is a race over whole units, and
+    /// the one whose unit is ready first takes it - the other is granted nothing and moves on, which is 0 A.D.'s rule
+    /// (`TakeResources` returns what actually changed; an exhausted supply stops the gatherer and re-targets it).
+    fn take_amount(&self, worker: &Entity) -> (i64, Fixed) {
         let Task::Gather {
             node,
             rate_per_tick,
             carry_cap,
-            ..
+            progress,
         } = worker.task
         else {
-            return 0;
+            return (0, Fixed::ZERO);
         };
         let room = i64::from(carry_cap) * self.scale - worker.carry.raw();
-        // `worker` is the villager; the quantity to bound against belongs to a different entity.
+        // A full load takes nothing, and does not bank progress it cannot use.
+        if room <= 0 {
+            return (0, progress);
+        }
         let Some(node_entity) = self.find(node) else {
-            return 0;
+            return (0, progress);
         };
         // **Meat implies death** (the owner's rule, D70): a live animal's `amount` is what its *body* will hold, not
         // something it is standing on, so the work while it walks is following and the take is nothing. Without this
@@ -2445,10 +2459,17 @@ impl World {
                 .unit
                 .is_some_and(|unit| self.animals.contains(&unit))
         {
-            return 0;
+            return (0, progress);
+        }
+        let accumulated = progress.raw() + rate_per_tick.raw();
+        let whole = accumulated / self.scale;
+        let kept = Fixed::from_raw(accumulated - whole * self.scale);
+        if whole <= 0 {
+            return (0, kept);
         }
         let left_in_node = node_entity.amount.raw();
-        rate_per_tick.raw().min(room).min(left_in_node).max(0)
+        let take = (whole * self.scale).min(room).min(left_in_node).max(0);
+        (take, kept)
     }
 
     /// Read the combat constants. Kept separate from `seed_from` so a world that never fights does
@@ -5648,6 +5669,7 @@ impl World {
             node,
             rate_per_tick,
             carry_cap,
+            progress: Fixed::ZERO,
         };
         // The load is the villager's, not the node's: re-tasking onto the next tree (or the next sheep) must not spill
         // what is already in its hands. It used to be zeroed here, which was invisible until a worker could move on by
@@ -5850,7 +5872,7 @@ impl World {
         // it - the id is what makes that detectable instead of silently moving the wrong entities.
         let mut deltas: Vec<(usize, EntityId, Fixed, Fixed)> =
             Vec::with_capacity(self.entities.len());
-        let mut takes: Vec<(EntityId, i64)> = Vec::new();
+        let mut takes: Vec<(EntityId, i64, Fixed)> = Vec::new();
         let mut finished: Vec<EntityId> = Vec::new();
         let mut switches: Vec<(EntityId, Task)> = Vec::new();
         // A villager working a herdable animal, and the animal: herded after the tick's own movement.
@@ -6045,7 +6067,9 @@ impl World {
                     node,
                     rate_per_tick,
                     carry_cap,
+                    progress,
                 } => {
+                    let _ = progress;
                     let Some((target, target_is_building, node_unit)) = self
                         .find(node)
                         .map(|n| (n.position, n.kind == EntityKind::Building, n.unit))
@@ -6094,11 +6118,9 @@ impl World {
                     // Standing still at the thing being worked is what entitles a worker to take
                     // from it.
                     if at_node {
-                        let take = self.take_amount(entity);
+                        let (take, kept) = self.take_amount(entity);
                         let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
-                        if take > 0 {
-                            takes.push((entity.id, take));
-                        }
+                        takes.push((entity.id, take, kept));
 
                         // Two reasons to head home: the load is full, or the node just gave its
                         // last. The second matters because a partial load on a dead tree never
@@ -6120,7 +6142,7 @@ impl World {
                                     .map(|task| (entity.id, task)),
                             );
                         }
-                        if take == 0 && empty_node && in_hand <= 0 {
+                        if take == 0 && empty_node {
                             // Nothing in hand and nothing left here: look for the next node of the same kind before
                             // standing still. A tree holds 100 wood, so without this a lumberjack works one tree and
                             // idles for the rest of the match - which is what stopped the acceptance match at 139
@@ -6303,11 +6325,16 @@ impl World {
         // Grant takes in id order, each bounded by what the node still holds *at that moment*.
         // Reading the amount before the loop would let two villagers on a one-wood tree take one
         // wood each: the node would clamp at zero and the pair would keep two.
-        for (worker, take) in takes {
+        for (worker, take, kept) in takes {
             let node = match self.find(worker).map(|e| e.task) {
                 Some(Task::Gather { node, .. }) => node,
                 _ => continue,
             };
+            if let Some(entity) = self.find_mut(worker)
+                && let Task::Gather { progress, .. } = &mut entity.task
+            {
+                *progress = kept;
+            }
             let granted = match self.find_mut(node) {
                 Some(target) => {
                     let available = target.amount.raw();
@@ -6490,6 +6517,7 @@ impl World {
                         node,
                         rate_per_tick,
                         carry_cap,
+                        progress: Fixed::ZERO,
                     };
                 } else {
                     entity.task = Task::Idle;
@@ -7765,11 +7793,13 @@ impl World {
                     node,
                     rate_per_tick,
                     carry_cap,
+                    progress,
                 } => {
                     fnv_bytes(&mut hash, &[1u8]);
                     fnv_bytes(&mut hash, &node.0.to_le_bytes());
                     fnv_bytes(&mut hash, &rate_per_tick.raw().to_le_bytes());
                     fnv_bytes(&mut hash, &carry_cap.to_le_bytes());
+                    fnv_bytes(&mut hash, &progress.raw().to_le_bytes());
                 }
             }
             match entity.variant {
