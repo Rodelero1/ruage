@@ -2146,3 +2146,24 @@ woodland of small canopy motifs to the south-east, no seams and nothing misplace
 **Still content's, not the renderer's:** there is no `Dirt` terrain. The map carries `G` and `F` only, so a base has no
 baked yard until `Terrain` grows a variant, the loader accepts its letter and `make_map.py` paints one - a content
 change with a census test, scheduled after the HUD.
+
+## Step 7 of the look: the camera is state, and the wheel is the zoom (2026-10-30, done)
+
+**The defect the step existed to kill was still there.** `draw()` built a fresh `Camera` every frame -
+`Camera::new((width, height)).centred_on((16.0, 16.0))` - so the camera was pinned to one tile, panning could not work,
+and a zoom would have reset on the next frame. It was recorded as fixed in the milestone-0 review and it was not; the
+line survived because nothing in the window could reveal it. Now the camera is created once and `Camera::resized` only
+changes the viewport.
+
+**What landed.** `Camera::resized` (viewport only, never the position), `zoom_in`/`zoom_out` stepping through
+**0.5x / 1x / 2x** (`ZOOM_LEVELS`), arrows panning a tile a press, and the mouse wheel mapped to the zoom levels. A
+wheel notch is a notch: multiplying by a factor accumulates rounding and lands the picture at 0.83x, which is not a zoom
+level anybody asked for.
+
+**Tested** (`crates/view/tests/camera.rs`): a resize keeps the origin tile at the middle of the new viewport and keeps a
+pan intact; zoom steps 1x -> 2x -> 2x -> 1x -> 0.5x -> 0.5x, and the tile under the middle of the screen is the same at
+every level.
+
+**Not verified, and said plainly:** the *drawn* rung. Pan and zoom are input in a binary on a host with no display, so
+what is proven is the camera arithmetic and that the binary builds with the rebuild removed - not that a window pans.
+The owner running `make run` on a desktop is the third rung.

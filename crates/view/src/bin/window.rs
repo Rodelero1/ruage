@@ -20,7 +20,7 @@ use ruage_data::{Economy, Map, Units};
 use ruage_sim::World;
 use ruage_view::{Camera, Snapshot, render};
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
@@ -211,7 +211,10 @@ impl App {
         };
         let size = window.inner_size();
         let (width, height) = (size.width.max(1), size.height.max(1));
-        self.camera = Camera::new((width, height)).centred_on((16.0, 16.0));
+        // The camera is **state**: a resize changes what it looks through, never where it is. Rebuilding it here
+        // re-centred it on a fixed tile every frame, which looks harmless until there is a pan or a zoom key - and then
+        // neither can ever work (`Camera::resized`, pinned by `resizing_the_window_keeps_the_camera_on_its_tile`).
+        self.camera.resized((width, height));
         let frame = render(&Snapshot::of(world, &self.config.map, 1), &self.camera);
         // `softbuffer` wants non-zero dimensions; a minimised window has none, and drawing nothing is correct there.
         let (Some(w), Some(h)) = (
@@ -328,6 +331,12 @@ impl ApplicationHandler for App {
                         self.paused = !self.paused;
                         self.accumulated = Duration::ZERO;
                     }
+                    // Arrows pan the view by a tile a press, in the direction the *screen* moves: left takes the
+                    // camera towards -x, which is up-left in the diamond. A held key autorepeats, which is the pan.
+                    Key::Named(NamedKey::ArrowLeft) => self.camera.scroll((-1.0, 0.0)),
+                    Key::Named(NamedKey::ArrowRight) => self.camera.scroll((1.0, 0.0)),
+                    Key::Named(NamedKey::ArrowUp) => self.camera.scroll((0.0, -1.0)),
+                    Key::Named(NamedKey::ArrowDown) => self.camera.scroll((0.0, 1.0)),
                     // 1..4 are the speed keys; the loop runs one, two, four or eight ticks per tick interval.
                     Key::Character(ref key) => match key.as_str() {
                         "1" => self.speed = 1,
@@ -339,6 +348,12 @@ impl ApplicationHandler for App {
                     _ => {}
                 }
             }
+            // The wheel is the zoom: three levels, a notch each, and the tile under the cursor stays where it is.
+            WindowEvent::MouseWheel { delta, .. } => match delta {
+                MouseScrollDelta::LineDelta(_, up) if up > 0.0 => self.camera.zoom_in(),
+                MouseScrollDelta::LineDelta(_, down) if down < 0.0 => self.camera.zoom_out(),
+                _ => {}
+            },
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = self.camera.pick((position.x as i32, position.y as i32));
             }

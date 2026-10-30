@@ -107,3 +107,53 @@ fn a_click_on_the_screen_reaches_the_entity_under_it() {
         "the town centre is picked through the projection, at {tile:?}"
     );
 }
+
+/// The camera is **state**: a resize changes the viewport it looks through and nothing else, so the tile under the middle
+/// of the window is still the tile the camera is on. Rebuilding a camera per frame is the defect this pins - it looks
+/// identical until there is a pan or a zoom key, and then neither can ever work.
+#[test]
+fn resizing_the_window_keeps_the_camera_on_its_tile() {
+    let mut camera = camera();
+    camera.resized((1280, 800));
+    assert_eq!(camera.viewport, (1280, 800));
+
+    let at = camera.project((16.0, 16.0));
+    assert_eq!(at, (640, 400 + 24), "the origin tile is not at the middle");
+    assert_eq!(camera.pick(at), (16, 16), "and picking still finds it");
+
+    // Panning then resizing keeps the pan: the origin is the camera's position, not something a resize resets.
+    camera.scroll((3.0, -2.0));
+    camera.resized((800, 600));
+    let at = camera.project((19.0, 14.0));
+    assert_eq!(
+        camera.pick(at),
+        (19, 14),
+        "a resize lost the camera's position"
+    );
+    assert_eq!(at.0, 400, "the origin tile is not at the new middle");
+}
+
+/// Zoom is three levels, and stepping past either end stays there. The game has 0.5x/1x/2x, not a continuum, so a wheel
+/// notch is a notch rather than a small multiplication that accumulates rounding.
+#[test]
+fn zoom_steps_through_the_three_levels_and_stops_at_the_ends() {
+    let mut camera = camera();
+    assert_eq!(camera.zoom, 1.0);
+    camera.zoom_in();
+    assert_eq!(camera.zoom, 2.0);
+    camera.zoom_in();
+    assert_eq!(camera.zoom, 2.0, "zoomed past the closest level");
+    camera.zoom_out();
+    assert_eq!(camera.zoom, 1.0);
+    camera.zoom_out();
+    assert_eq!(camera.zoom, 0.5);
+    camera.zoom_out();
+    assert_eq!(camera.zoom, 0.5, "zoomed past the furthest level");
+
+    // And the tile under the middle of the screen is still (16,16) at every level.
+    for level in [0.5f32, 1.0, 2.0] {
+        camera.zoom = level;
+        let at = camera.project((16.0, 16.0));
+        assert_eq!(camera.pick(at), (16, 16), "at {level}x");
+    }
+}

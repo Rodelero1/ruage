@@ -279,6 +279,54 @@ impl Camera {
         self.origin.1 += tiles.1;
     }
 
+    /// The window changed size. **Only the viewport changes**: the camera's position is its own, so a resize must not
+    /// re-centre it - rebuilding a `Camera` on every draw was the defect that made panning and zooming impossible while
+    /// looking perfectly innocent.
+    pub fn resized(&mut self, viewport: (u32, u32)) {
+        self.viewport = viewport;
+    }
+
+    /// The zoom levels the game has, furthest first. A wheel notch is a notch: multiplying by a factor accumulates
+    /// rounding and leaves the picture at 0.83x, which is not a zoom level anybody asked for.
+    pub const ZOOM_LEVELS: [f32; 3] = [0.5, 1.0, 2.0];
+
+    fn step_zoom(&mut self, towards: f32) {
+        let current = self.zoom;
+        let next = Self::ZOOM_LEVELS
+            .iter()
+            .copied()
+            .filter(|level| {
+                if towards > current {
+                    *level > current + f32::EPSILON
+                } else {
+                    *level < current - f32::EPSILON
+                }
+            })
+            .fold(None, |best: Option<f32>, level| {
+                Some(best.map_or(level, |best| {
+                    if (level - current).abs() < (best - current).abs() {
+                        level
+                    } else {
+                        best
+                    }
+                }))
+            });
+        if let Some(next) = next {
+            self.zoom = next;
+        }
+    }
+
+    /// One notch closer, staying at the closest level at the end of the range.
+    pub fn zoom_in(&mut self) {
+        self.step_zoom(f32::INFINITY);
+    }
+
+    /// One notch further out, staying at the furthest level.
+    pub fn zoom_out(&mut self) {
+        self.step_zoom(f32::NEG_INFINITY);
+    }
+
+    /// A free zoom factor, for a probe or an animation. The player's control uses the levels above.
     pub fn zoom_by(&mut self, factor: f32) {
         self.zoom = (self.zoom * factor).clamp(0.25, 4.0);
     }
