@@ -38,26 +38,27 @@ fn the_centre_of_a_diamond_is_its_tile() {
     }
 }
 
-/// **Parked, failing:** where a click falls *inside* a diamond near its edges. `pick(project((16,16)) + (0, 12))` comes
-/// back as `(15, 15)` although the arithmetic says the point is a quarter tile from the centre, so either the `+ ry`
-/// offset in `project` and the `- ry` in `pick` disagree by a whole tile at non-zero deltas, or one of the two is
-/// rounding. Round-trip at tile centres is exact (test above), so this affects **edges only**: an outline of the map, not
-/// the click the player makes. It cannot be settled by reading the code alone - it needs a picture, which needs a display.
+/// Where a click falls *inside* a diamond near its edges. This was parked as a known defect ("needs a picture"),
+/// and the picture was never the question: `project` maps a tile to the **centre** of its diamond, so continuous
+/// tile coordinates run from `tile - 0.5` to `tile + 0.5` inside a diamond and the inverse must **round**, not
+/// floor. Flooring was right for the old top-down camera, where a tile's pixel was its top-left corner; it puts
+/// every click in the upper-left half of a diamond one tile off. Every centre round-trips either way, which is
+/// why this only showed near an edge - and why a quarter tile from the centre is the test that finds it.
 #[test]
-#[ignore = "known defect: diamond-edge picking is off by a tile (2026-10-30)"]
 fn a_click_just_inside_a_diamond_picks_that_tile() {
     let camera = camera();
     let centre = camera.project((16.0, 16.0));
-    assert_eq!(
-        camera.pick((centre.0, centre.1 + 12)),
-        (16, 16),
-        "inside the diamond"
-    );
-    assert_eq!(
-        camera.pick((centre.0, centre.1 - 12)),
-        (16, 16),
-        "and above the centre"
-    );
+    // A quarter tile from the centre, toward all four vertices of the diamond.
+    for offset in [(0, 12), (0, -12), (24, 0), (-24, 0), (18, 6), (-18, -6)] {
+        assert_eq!(
+            camera.pick((centre.0 + offset.0, centre.1 + offset.1)),
+            (16, 16),
+            "a click {offset:?} from the centre of (16,16)'s diamond must pick (16,16)"
+        );
+    }
+    // And clearly outside: past the bottom vertex is the tile below, past the right vertex the tile east and up.
+    assert_eq!(camera.pick((centre.0, centre.1 + 30)), (17, 17));
+    assert_eq!(camera.pick((centre.0 + 54, centre.1)), (17, 15));
 }
 
 /// The camera is state, and zoom scales the diamonds without moving the tile under the centre of the screen.

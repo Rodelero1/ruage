@@ -4980,6 +4980,12 @@ impl World {
         self.max_hp(player, unit).ok()
     }
 
+    /// The tiles a unit occupies, from the pack's own radii. Public for the same reason as `max_hp_of`: a
+    /// renderer draws a building's silhouette and must not carry a table of sizes to do it (D17).
+    pub fn footprint_of(&self, unit: u32) -> Option<(u32, u32)> {
+        self.units.as_ref()?.footprint(unit)
+    }
+
     /// Whether the match has been decided, and how. `None` while it is still being played.
     pub fn outcome(&self) -> Option<MatchOutcome> {
         self.outcome

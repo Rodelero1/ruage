@@ -2140,3 +2140,27 @@ The owner's answer to the art-licensing question, and a bigger decision than the
 **D82 - A bitmap font for the HUD, PNG frames as the yardstick, borderless by default.** The HUD uses a bundled bitmap font
 (no parser, no dependency, licence-clean by construction); every rendering step is shown to the owner as a **PNG rendered
 headlessly**, so nothing waits on a display; fullscreen is **borderless** first, with exclusive as an option.
+
+## D83 - A footprint is anchored at the tile nearest its middle, and picking follows the shape (2026-10-30)
+
+The dat gives `radius_x`/`radius_y` as **half-extents**, so the tiles a building covers are `across = 2 * radius`
+tiles. The engine has to say *which* tiles those are relative to the anchor tile, and the two candidates differ by
+half a tile on screen:
+
+1. **The anchor is the tile nearest the middle** (chosen): a 4x4 building covers `anchor-2 ..= anchor+1`; a 3x3 one
+   covers `anchor-1 ..= anchor+1`; a 2x2 one `anchor-1 ..= anchor`. An even footprint has no middle tile, so the extra
+   tile falls on the +x/+y side. `footprint_tiles(anchor, footprint)` in `crates/view` is the one implementation.
+2. The anchor is the block's north corner, and the footprint extends `+x/+y`. Equivalent to (1) shifted by half a tile.
+
+Why (1): it is the reading that matches "radius is a distance from the position", which is how every other radius in
+the pack is used, and it keeps an odd footprint (a 3x3 barracks) centred on its own tile, which is where a scenario
+places it.
+
+**Picking follows the drawing.** A player aims at the shape on the screen, so `pick_at` accepts any tile of the
+footprint rather than the anchor tile alone; a unit standing on a footprint tile still outranks the building, which is
+the rule that makes clicking a villager on a farm select the villager.
+
+**Open, and not a blocker:** which convention the original uses cannot be read out of the dat (it carries the extent,
+not the anchoring). It is one constant in `footprint_tiles`, and importing a real `.aoe2scenario`, or measuring a
+building's blocked ground in a recorded game, is what would settle it. Nothing else depends on the answer: the
+simulation still blocks one tile per building (D76's masks are recorded and not built).

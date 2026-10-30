@@ -63,6 +63,10 @@ pub struct EntityView {
     pub amount: u32,
     /// Units a building is making, the one in progress included; zero for everything else.
     pub pending: usize,
+    /// The tiles this entity occupies, read from the pack's own radii (D76): a town centre is 4x4, a house 2x2,
+    /// a villager one. The renderer draws this silhouette, so the screen shows the space the simulation
+    /// reserves rather than a square of its own invention.
+    pub footprint: (u32, u32),
 }
 
 /// Everything a renderer needs, and nothing it could use to change the match.
@@ -93,6 +97,16 @@ impl Snapshot {
         let width = map.width;
         let height = map.height;
 
+        // How many units each building holds, counted once: the per-entity scan this replaces was O(n^2) on the
+        // frame path (126 entities is 16k comparisons a frame, and a HUD drawing it twice a second makes an army's
+        // worth of them). Ordered, because nothing in this project walks a hash map (determinism rule 3).
+        let mut inside: std::collections::BTreeMap<u32, u32> = std::collections::BTreeMap::new();
+        for other in world.entities() {
+            if let Task::Garrisoned { building } = other.task {
+                *inside.entry(building.0).or_default() += 1;
+            }
+        }
+
         let mut entities = Vec::new();
         for entity in world.entities() {
             // A player is not shown what they cannot see: that is the only filter here, and it is the
@@ -100,16 +114,7 @@ impl Snapshot {
             if !world.visible_to(player, entity.id) {
                 continue;
             }
-            let garrison = world
-                .entities()
-                .iter()
-                .filter(|other| {
-                    other.task
-                        == (Task::Garrisoned {
-                            building: entity.id,
-                        })
-                })
-                .count() as u32;
+            let garrison = inside.get(&entity.id.0).copied().unwrap_or(0);
             let max_hp = match entity.unit {
                 Some(unit) => world.max_hp_of(player, unit).unwrap_or(entity.hp),
                 None => entity.hp,
@@ -134,6 +139,10 @@ impl Snapshot {
                 garrison,
                 amount: (entity.amount.raw() / scale).max(0) as u32,
                 pending: world.pending_orders(entity.id),
+                footprint: entity
+                    .unit
+                    .and_then(|unit| world.footprint_of(unit))
+                    .unwrap_or((1, 1)),
             });
         }
 
@@ -257,7 +266,12 @@ impl Camera {
         // x - y = sx and x + y = sy.
         let x = (sx + sy) / 2.0 + self.origin.0;
         let y = (sy - sx) / 2.0 + self.origin.1;
-        (x.floor() as i32, y.floor() as i32)
+        // **Round, not floor.** `project` puts a tile at the *centre* of its diamond, so a diamond covers the
+        // continuous range `tile - 0.5 .. tile + 0.5`; flooring is right only for a projection that puts a tile at
+        // its top-left corner, and it sent every click in a diamond's upper-left half one tile off. Every centre
+        // round-trips either way, which is why this hid behind a centre-only test
+        // (`crates/view/tests/camera.rs::a_click_just_inside_a_diamond_picks_that_tile`).
+        (x.round() as i32, y.round() as i32)
     }
 
     pub fn scroll(&mut self, tiles: (f32, f32)) {
@@ -313,6 +327,49 @@ impl Frame {
         }
     }
 
+    /// Fill the **diamond** of the given radii about `centre`, one scanline at a time.
+    ///
+    /// This is the shape the game's grid is made of: at 96-pixel tiles a diamond is 96 wide and 48 tall, and
+    /// neighbouring diamonds meet edge to edge, so a field of them covers the screen with no seams and no
+    /// overlaps. The old renderer filled `step x step` squares at each tile's point, which under the isometric
+    /// projection paints overlapping blocks - one tile drawn over the corner of four others.
+    ///
+    /// Every `put` clips, so a diamond that runs off the frame is cheap rather than wrong.
+    pub fn fill_diamond(&mut self, centre: (i32, i32), radii: (f32, f32), colour: [u8; 4]) {
+        let (rx, ry) = radii;
+        if rx <= 0.0 || ry <= 0.0 || self.width == 0 || self.height == 0 {
+            return;
+        }
+        // Clip to the frame up front, in both directions. A diamond is mostly off-screen more often than not - every
+        // tile at the edge of a 960x720 view is - and a `put` per off-screen pixel cost as much as a visible one:
+        // measured at 2,568 us a frame against 634 us for the square it replaced, which is where this clipping came
+        // from (`crates/view/tests/frame_cost.rs`).
+        let top = (centre.1 - ry.ceil() as i32).max(0);
+        let bottom = (centre.1 + ry.ceil() as i32).min(self.height as i32 - 1);
+        if top > bottom {
+            return;
+        }
+        for y in top..=bottom {
+            let dy = (y - centre.1) as f32;
+            let across = 1.0 - (dy.abs() / ry);
+            if across <= 0.0 {
+                continue;
+            }
+            let half = (rx * across).round() as i32;
+            let left = (centre.0 - half).max(0);
+            let right = (centre.0 + half).min(self.width as i32 - 1);
+            if left > right {
+                continue;
+            }
+            let row = y as usize * self.width as usize;
+            let from = (row + left as usize) * 4;
+            let to = (row + right as usize) * 4 + 4;
+            for pixel in self.pixels[from..to].as_chunks_mut::<4>().0 {
+                *pixel = colour;
+            }
+        }
+    }
+
     /// A binary PPM (P6): no compression, no dependency, and every image tool reads it. PNG is a
     /// conversion away and that conversion is not the renderer's business (D55).
     pub fn to_ppm(&self) -> Vec<u8> {
@@ -326,8 +383,10 @@ impl Frame {
 }
 
 /// The colours. These are the *view's* own: an asset pack replaces the sprite lookup and these become
-/// its fallback, which is why they live here and not in the content pack (D55).
-mod palette {
+/// its fallback, which is why they live here and not in the content pack (D55). Public because a test that
+/// asks "was a building drawn?" needs the colour it is drawn in, and a palette a test cannot name is a
+/// palette whose meaning nobody can assert.
+pub mod palette {
     pub const GRASS: [u8; 4] = [96, 128, 64, 255];
     pub const FOREST: [u8; 4] = [32, 64, 32, 255];
     pub const UNSEEN: [u8; 4] = [8, 8, 12, 255];
@@ -339,6 +398,27 @@ mod palette {
     pub const BUILDING: [u8; 4] = [200, 200, 200, 255];
 }
 
+/// The tiles a footprint covers, given the tile an entity stands on and the pack's footprint.
+///
+/// The dat's radius is a **half-extent about the anchor**, so a 4x4 building covers `anchor-2 ..= anchor+1` and a
+/// 3x3 one covers `anchor-1 ..= anchor+1` - the anchor is the tile nearest the middle, and an even footprint has no
+/// middle tile, which is why the extra tile goes to the +x/+y side. Returns inclusive `(min_x, min_y, max_x, max_y)`
+/// in tiles, which is what a footprint is: a rectangle of ground, drawn as the diamond the projection implies and
+/// clicked as the rectangle it is.
+#[must_use]
+pub fn footprint_tiles(anchor: (i32, i32), footprint: (u32, u32)) -> (i32, i32, i32, i32) {
+    let half_x = (footprint.0 / 2) as i32;
+    let half_y = (footprint.1 / 2) as i32;
+    let across = footprint.0.max(1) as i32;
+    let down = footprint.1.max(1) as i32;
+    (
+        anchor.0 - half_x,
+        anchor.1 - half_y,
+        anchor.0 - half_x + across - 1,
+        anchor.1 - half_y + down - 1,
+    )
+}
+
 pub(crate) fn player_colour(player: u8) -> [u8; 4] {
     match player {
         1 => palette::PLAYER_ONE,
@@ -347,18 +427,30 @@ pub(crate) fn player_colour(player: u8) -> [u8; 4] {
     }
 }
 
-/// Draw a snapshot. Tiles are rectangles, units are dots, and nothing here knows what a unit *is* beyond
-/// its kind and its player (D55).
+/// Draw a snapshot. Everything on the ground is a **diamond** - the game's own 2:1 isometric grid - a building is
+/// a diamond as big as its pack footprint, a unit is a dot in its player's colour, and nothing here knows what a
+/// unit *is* beyond its kind, its player and the space it takes up (D55).
 pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
     let mut frame = Frame::new(camera.viewport.0, camera.viewport.1);
-    let step = camera.scale();
+    let (rx, ry) = camera.radii();
+    let (w, h) = (frame.width as i32, frame.height as i32);
 
-    // Every tile the camera can see, and only those: a 64x64 map at 4x zoom is 4096 tiles, most of them
-    // off screen, and drawing them would be most of the frame's cost.
-    let first = camera.pick((0, 0));
-    let last = camera.pick((frame.width as i32 - 1, frame.height as i32 - 1));
-    for y in first.1.max(0)..=last.1.min(i32::from(snapshot.height) - 1) {
-        for x in first.0.max(0)..=last.0.min(i32::from(snapshot.width) - 1) {
+    // The tiles the camera can see. The visible region of a diamond grid is itself a diamond, so the range comes
+    // from all four corners of the frame (a two-corner box clips the top and bottom of the picture), plus a tile
+    // of margin because a tile's diamond sticks out half a tile past its centre.
+    let corners = [
+        camera.pick((0, 0)),
+        camera.pick((w - 1, 0)),
+        camera.pick((0, h - 1)),
+        camera.pick((w - 1, h - 1)),
+    ];
+    let min_x = corners.iter().map(|c| c.0).min().unwrap_or(0) - 1;
+    let max_x = corners.iter().map(|c| c.0).max().unwrap_or(-1) + 1;
+    let min_y = corners.iter().map(|c| c.1).min().unwrap_or(0) - 1;
+    let max_y = corners.iter().map(|c| c.1).max().unwrap_or(-1) + 1;
+
+    for y in min_y.max(0)..=max_y.min(i32::from(snapshot.height) - 1) {
+        for x in min_x.max(0)..=max_x.min(i32::from(snapshot.width) - 1) {
             let (x, y) = (x as u16, y as u16);
             let forest = snapshot
                 .terrain
@@ -371,33 +463,45 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
                 TileVision::Visible if forest => palette::FOREST,
                 TileVision::Visible => palette::GRASS,
             };
-            let (px, py) = camera.project((x as f32, y as f32));
-            frame.fill_rect(px, py, step.ceil() as i32, step.ceil() as i32, colour);
+            let centre = camera.project((x as f32, y as f32));
+            frame.fill_diamond(centre, (rx, ry), colour);
         }
     }
 
-    // Resources first: they are the ground, a unit standing on one should cover it.
+    // Resources first: they are the ground, and a unit standing on one should cover it.
     for entity in &snapshot.entities {
         if matches!(entity.kind, EntityKind::Resource(_)) {
-            let (px, py) = camera.project(entity.position);
-            let size = (step * 0.6) as i32;
-            frame.fill_rect(px + 2, py + 2, size.max(2), size.max(2), palette::RESOURCE);
+            let centre = camera.project(entity.position);
+            frame.fill_diamond(centre, (rx * 0.6, ry * 0.6), palette::RESOURCE);
         }
     }
     for entity in &snapshot.entities {
         match entity.kind {
             EntityKind::Resource(_) | EntityKind::Projectile => {}
             EntityKind::Building => {
-                let (px, py) = camera.project(entity.position);
-                let size = (step * 0.9) as i32;
-                frame.fill_rect(px + 1, py + 1, size.max(3), size.max(3), palette::BUILDING);
+                // The silhouette is the pack's footprint, drawn as the diamond a block of that many tiles makes:
+                // four tiles across is `4 * rx` half-width and `4 * ry` half-height, centred on the ground the
+                // rectangle covers rather than on its anchor tile (D76).
+                let (across, down) = entity.footprint;
+                let anchor = (
+                    entity.position.0.floor() as i32,
+                    entity.position.1.floor() as i32,
+                );
+                let (min_x, min_y, max_x, max_y) = footprint_tiles(anchor, entity.footprint);
+                let centre =
+                    camera.project(((min_x + max_x) as f32 / 2.0, (min_y + max_y) as f32 / 2.0));
+                frame.fill_diamond(
+                    centre,
+                    (rx * across as f32, ry * down as f32),
+                    palette::BUILDING,
+                );
             }
             EntityKind::Unit => {
-                let (px, py) = camera.project(entity.position);
-                let dot = (step * 0.4).max(2.0) as i32;
+                let centre = camera.project(entity.position);
+                let dot = (rx * 0.4).max(2.0) as i32;
                 frame.fill_rect(
-                    px + dot / 2,
-                    py + dot / 2,
+                    centre.0 - dot / 2,
+                    centre.1 - dot / 2,
                     dot.max(2),
                     dot.max(2),
                     player_colour(entity.player),
@@ -462,10 +566,19 @@ pub fn pick_at(world: &ruage_sim::World, tile: (i32, i32)) -> Option<ruage_sim::
     let scale = world.scale();
     let mut best: Option<(u8, u32, ruage_sim::EntityId)> = None;
     for entity in world.entities() {
-        if entity.position.0.raw() / scale != i64::from(tile.0) {
-            continue;
-        }
-        if entity.position.1.raw() / scale != i64::from(tile.1) {
+        // Anywhere on the footprint, not only on the anchor tile: a 4x4 town centre is drawn four tiles wide, so a
+        // player who clicks the body of the building they can see must select it. The space is the pack's and so is
+        // the size - nothing here knows what a town centre is.
+        let anchor = (
+            (entity.position.0.raw() / scale) as i32,
+            (entity.position.1.raw() / scale) as i32,
+        );
+        let footprint = entity
+            .unit
+            .and_then(|unit| world.footprint_of(unit))
+            .unwrap_or((1, 1));
+        let (min_x, min_y, max_x, max_y) = footprint_tiles(anchor, footprint);
+        if tile.0 < min_x || tile.0 > max_x || tile.1 < min_y || tile.1 > max_y {
             continue;
         }
         let rank = if entity.kind == ruage_sim::EntityKind::Unit {

@@ -2058,3 +2058,43 @@ footprint per entity, and the renderer must draw a diamond of that size instead 
 **Order within the step:** footprint in `Snapshot` -> diamond drawing (with the parked edge-picking defect fixed as a
 consequence, because the diamond's outline is what the edge test needed to see) -> a test that the town centre covers 4x4
 tiles and a house 2x2, read from the pack rather than hard-coded -> adversarial review of both, then commit and push.
+
+## Step 2 of the look: footprints, the diamond grid, and a click that lands (2026-10-30, done)
+
+**What landed.** `Snapshot`/`EntityView` now carry `footprint: (u32, u32)` read from the pack
+(`Units::footprint`, from `radius[0]`/`radius[1]`, which the dat gives as **half-extents**); the renderer draws every
+building as the diamond that block of tiles makes, every terrain tile as the diamond the projection implies, and
+resources as small diamonds; and `pick_at` hits **anywhere on the footprint**, not only the anchor tile, because a
+player aims at the shape they can see. `footprint_tiles(anchor, footprint)` is the one place the rectangle is derived.
+
+**Verified, and read from the pack rather than typed into the test** (`crates/view/tests/footprint.rs`): the town centre
+is 4x4, the house 2x2 and the barracks 3x3 - three different sizes, which is what makes the test bite a hard-coded
+number; the snapshot's footprints equal what `radius` says; the drawn silhouette's top and left vertices are within 2 px
+of where the footprint puts them (mutation-proved: drawing on the anchor tile instead of on the block's ground gives
+71 px against an expected 96); clicking every tile of a 4x4 footprint hits (a villager standing on one outranks the
+building - the documented tie-break); and a field of diamonds leaves **zero unpainted pixels**.
+
+**The parked edge-picking defect is fixed, and it was never a picture.** `project` maps a tile to the **centre** of its
+diamond, so a diamond covers the continuous range `tile - 0.5 .. tile + 0.5` and `pick` must **round**, not `floor`.
+Flooring was correct for the old top-down camera, where a tile's pixel was its top-left corner; under the diamond
+projection it put every click in a diamond's upper-left half one tile off. Every centre round-trips either way, which
+is exactly why a centre-only test hid it. `pick` now rounds and the test covers all four vertices plus two out-of-shape
+points.
+
+**Measured, and the first number was bad** (`crates/view/tests/frame_cost.rs`, release, 960x720, 126 entities): the
+first diamond renderer cost **2,568 us a frame against 634 us** before it - a 4x regression - because every off-screen
+tile was painted pixel by pixel into a clipping `put`. Clipping each scanline to the frame first brought it to
+**572 us**, better than the square renderer it replaced (a diamond is 2*rx*ry pixels, a quarter of a `96x96` square).
+The second finding of the review: `Snapshot::of` counted garrisons with a per-entity scan of every entity (**O(n^2)**
+on the frame path - 16k comparisons at 126 entities, an army's worth at 300); it is one ordered pass now, pinned by
+`the_snapshot_counts_what_is_inside_a_building` written before the refactor.
+
+**D83 - the footprint is anchored at the tile nearest its middle.** The dat's radius is a half-extent *about the
+anchor*, so a 4x4 building covers `anchor-2 ..= anchor+1` and a 3x3 one `anchor-1 ..= anchor+1`: an even footprint has
+no middle tile, and the extra tile goes to the +x/+y side. The alternative (anchor = the block's north corner) would
+move every building half a tile on screen. **Open question for the owner**, not a blocker: which convention the
+original uses - it changes one constant, and `.aoe2scenario` import is where it can be settled from data.
+
+**Next: step 3, depth sorting** - draw the scene in `x + y` order so a unit in front of a building covers it, then
+step 4's terrain content (dirt, forest floor, trees as clusters), step 5 fog, step 6 the HUD, step 7 camera state with
+pan and zoom keys, step 8 selection markers.

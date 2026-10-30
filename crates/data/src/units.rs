@@ -117,6 +117,21 @@ impl Units {
         }
         current
     }
+
+    /// The tiles a unit occupies, from `radius[0]`/`radius[1]` - the dat's radii are **half-extents**, so a town
+    /// centre's `2.0` is 4x4 and a house's `1.0` is 2x2 (D76). Rounded to whole tiles and never below one: a
+    /// villager's `0.2` still stands on the tile it is on, and a renderer handed 0.4 tiles would draw nothing.
+    ///
+    /// A radius the pack leaves unresolved is one tile, which is what the engine blocks for a building today -
+    /// the renderer's placeholder must not be bigger than the space the simulation actually reserves.
+    pub fn footprint(&self, id: u32) -> Option<(u32, u32)> {
+        let unit = self.unit(id)?;
+        let across = |radius: MaybeFixed| -> u32 {
+            let tiles = radius.value().map_or(1.0, |value| (value * 2.0).round());
+            if tiles >= 1.0 { tiles as u32 } else { 1 }
+        };
+        Some((across(unit.radius[0]), across(unit.radius[1])))
+    }
 }
 
 // --- wire format --------------------------------------------------------------------------

@@ -192,6 +192,13 @@ impl MaybeFixed {
             detail: err.to_string(),
         })
     }
+
+    /// The decimal as loaded, or `None` for the `-1.0` sentinel. For a caller that wants a **count** rather than a
+    /// quantity - a footprint is a number of tiles, not simulation state - so it belongs at load time and never
+    /// reaches the tick (D9). Anything that moves or is spent must go through [`MaybeFixed::resolve`] instead.
+    pub fn value(self) -> Option<f64> {
+        self.0
+    }
 }
 
 /// A value still under investigation. Writers put `-1.0`; the loader turns it into a hard

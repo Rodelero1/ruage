@@ -93,7 +93,14 @@ fn main() -> ExitCode {
     }
 
     let snapshot = Snapshot::of(&world, &map, player);
-    let camera = Camera::new((512, 384)).centred_on((20.0, 20.0));
+    // Centre on the player's own base rather than on a fixed corner: with a 4x4 town centre the base fills most of
+    // the frame, and a camera pointed at empty ground proves nothing about what was drawn.
+    let focus = snapshot
+        .entities
+        .iter()
+        .find(|entity| entity.player == player && entity.kind == EntityKind::Building)
+        .map_or((20.0, 20.0), |entity| entity.position);
+    let camera = Camera::new((640, 480)).centred_on(focus);
     let frame = render(&snapshot, &camera);
     if let Err(err) = std::fs::write(&out, frame.to_ppm()) {
         eprintln!("write {}: {err}", out.display());
