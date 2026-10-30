@@ -1878,3 +1878,32 @@ never write it.
 lumber camp, barracks, market and blacksmith with wood flowing (654 wood at 1,200 s in the last full run), but no mangonel
 has ever reached the enemy town centre. The blockers found so far, in order: the market/blacksmith line stalling for
 wood, the felling change (13 s per tree) landing after that run, and the `[footprint]` work (D76) not yet built.
+
+## Where item 9 stands, and why it is not concluded (2026-10-30)
+
+*The last full run of the night: 2,400 game-seconds, seed 7, release.*
+
+| game time | wood | food | gold | pop | buildings |
+|---|---|---|---|---|---|
+| 400 s | 5 | 10 | 50 | 21 | 14 |
+| 800 s | 828 | 280 | 180 | 35 | 20 |
+| 1,200 s | 1,613 | 709 | 450 | 35 | 22 |
+| 2,400 s | **3,523** | **709** | **1,240** | 35 | 22 |
+
+The economy is healthy for the first time: Feudal reached, **market and blacksmith built**, lumber camp, mill, barracks,
+farms and houses all standing, and 3,523 wood in the bank with no refusals for it.
+
+**One number stops the match: food, pinned at 709.** The Castle Age costs 800 food, and the castle rule was refused **160
+times** for exactly that; with no Castle there is no siege workshop and no mangonel, so nothing can ever attack the enemy
+town centre. Food is not being *produced*, it is being *not produced*: the share table wants 60% of 35 villagers on food
+(≈21), the bank sits at 709, and the wood column keeps growing to 3,523 - the pass is not moving workers **between**
+columns. That is the same defect as the parked test `the_share_row_follows_the_villager_count`, and it is now the single
+thing between this match and a result.
+
+**Two crashes found on the way, both fixed in `b63effc`:**
+
+- `free_tile_near` matched the town centre by **unit id**. After the Feudal upgrade the town centre is 463, not 109, so
+  every placement beside it failed - *"no free tile for a market"*, 267 times - with the town centre standing in plain
+  sight. It matches by family now.
+- A command whose tile was taken between submission and the next tick (`something already stands at (18, 17)`, a market
+  and a blacksmith choosing the same square) **ended the match**. A late-impossible order is refused now, not fatal.
