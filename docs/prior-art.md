@@ -582,3 +582,24 @@ transferable is the *facts about the game* it names - lists swap-remove, sorts a
 unstable, the sim is float and depends on exact FP semantics, the update order is Gaia then players then
 objects - and those go into our docs in our words, as ours already do. "It was only a small function" is
 the sentence this rule exists against, and a style guide is larger than a small function.
+
+## Do trees have hit points, and is there a felling phase? (2026-10-30)
+
+Read from the dat (`empires2_x2_p1.dat`, civilisation 0), because the owner remembers trees with hit points that fall when
+they are cut down:
+
+| unit id | what | `hit_points` |
+|---|---|---|
+| 349, 350, 351, 413, 414 | forest trees | **20** |
+| 411 | a tree variant | **30** |
+| 354 | a small tree/plant | **25** |
+| 59 (forage bush), 66 (gold), 102 (stone) | resource nodes that are not trees | **0** |
+
+So the owner's memory is right about the **data**: trees carry hit points and the number varies (20/25/30), while every
+other resource node carries none. What the data cannot say is whether those hit points drive a **felling phase** before
+gathering: nothing in the dat expresses "cut down, then harvest the fallen trunk", and in Age of Empires II the wood
+arrives as the villager chops, with the tree disappearing when its wood reaches zero.
+
+Our engine currently matches the second reading (wood per chop) *except* for the half that the parked tests in
+`crates/sim/tests/depletion.rs` describe: an emptied tree keeps its entity and its blocked tile, when the game removes the
+object and frees the ground.
