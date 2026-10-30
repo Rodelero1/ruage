@@ -1535,9 +1535,14 @@ impl World {
             // because the workers *looked* employed. Counting them as idle is what lets the share table move them.
             let (slot, free) = match entity.task {
                 Task::Gather { node, .. } => {
-                    let dead = self
-                        .find(node)
-                        .is_none_or(|target| target.amount.raw() <= 0 || target.hp <= 0);
+                    // Dead means "nothing left to take". **Not** `hp <= 0`: every resource node on the map is spawned with
+                    // `hp = 0` (a tree is not a thing with health), so testing hp here made every gatherer look idle - and
+                    // the share pass then re-issued a gather order to it once a second for the whole match, which is why
+                    // villagers never settled on a tree. Only a *unit* has death by hp.
+                    let dead = self.find(node).is_none_or(|target| {
+                        target.amount.raw() <= 0
+                            || (target.kind == EntityKind::Unit && target.hp <= 0)
+                    });
                     if dead && entity.carry.raw() <= 0 {
                         (None, true)
                     } else {
