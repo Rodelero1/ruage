@@ -434,3 +434,34 @@ impl Clock {
         (self.accumulator_ms / self.tick_ms).clamp(0.0, 1.0) as f32
     }
 }
+
+/// What stands under a tile: the **unit** if one is there, otherwise a building or resource. Own units win a tie, because
+/// clicking a villager standing on a farm should select the villager.
+///
+/// Here rather than in the window binary for one reason: input is the part of a game that is easiest to get subtly wrong
+/// (off-by-one tiles, wrong tie-breaking) and the hardest to test through a screen. This is a pure function of a world and
+/// a tile, so it can be tested without one.
+#[must_use]
+pub fn pick_at(world: &ruage_sim::World, tile: (i32, i32)) -> Option<ruage_sim::EntityId> {
+    let scale = world.scale();
+    let mut best: Option<(u8, u32, ruage_sim::EntityId)> = None;
+    for entity in world.entities() {
+        if entity.position.0.raw() / scale != i64::from(tile.0) {
+            continue;
+        }
+        if entity.position.1.raw() / scale != i64::from(tile.1) {
+            continue;
+        }
+        let rank = if entity.kind == ruage_sim::EntityKind::Unit {
+            0
+        } else {
+            1
+        };
+        // Same rank: the lower id, so the answer does not depend on iteration order.
+        let key = (rank, entity.id.0);
+        if best.is_none_or(|(best_rank, best_id, _)| key < (best_rank, best_id)) {
+            best = Some((rank, entity.id.0, entity.id));
+        }
+    }
+    best.map(|(_, _, id)| id)
+}

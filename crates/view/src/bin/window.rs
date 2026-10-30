@@ -72,6 +72,14 @@ struct App {
     failed: bool,
     /// The seed, so a window session can be reproduced headless.
     seed: u64,
+    /// What the player has selected. Orders go to these and nothing else, exactly as a test would name them.
+    selected: Vec<ruage_sim::EntityId>,
+    /// Paused freezes the accumulator rather than the loop: the window keeps drawing, the match stops.
+    paused: bool,
+    /// Simulation ticks per tick interval: 1, 2, 4 or 8 (the speed keys).
+    speed: u32,
+    /// The tile under the pointer, in tile space.
+    cursor: (i32, i32),
 }
 
 impl App {
@@ -90,6 +98,84 @@ impl App {
             ticks: 0,
             failed: false,
             seed,
+            selected: Vec::new(),
+            paused: false,
+            speed: 1,
+            cursor: (0, 0),
+        }
+    }
+
+    /// What is under a tile. The decision lives in `ruage_view::pick_at` so it can be tested without a screen.
+    fn pick_entity(&self, tile: (i32, i32)) -> Option<ruage_sim::EntityId> {
+        ruage_view::pick_at(self.world.as_ref()?, tile)
+    }
+
+    /// A press of the left button selects what is under the pointer (empty space clears the selection); the right button
+    /// gives the selection an order. Every order goes through `submit_checked`, so a refusal is reported rather than lost.
+    fn click(&mut self, button: winit::event::MouseButton) {
+        match button {
+            winit::event::MouseButton::Left => {
+                self.selected = self.pick_entity(self.cursor).into_iter().collect();
+            }
+            winit::event::MouseButton::Right => {
+                let tile = self.cursor;
+                self.order_at(tile);
+            }
+            _ => {}
+        }
+    }
+
+    /// Send the selected units an order at a tile: gather from a resource, attack a living thing, otherwise walk. This is
+    /// the same `Command` a test submits through `World::submit_checked`, so nothing here can reach a state a test cannot.
+    fn order_at(&mut self, tile: (i32, i32)) {
+        // Pick first, borrow mutably second: picking reads the world, ordering writes it.
+        let target = self.pick_entity(tile);
+        let target_kind = self
+            .world
+            .as_ref()
+            .and_then(|world| target.and_then(|id| world.entity(id)))
+            .map(|entity| entity.kind);
+        let Some(world) = self.world.as_mut() else {
+            return;
+        };
+        let selected = self.selected.clone();
+        for id in selected {
+            let Some(entity) = world.entity(id) else {
+                continue;
+            };
+            if entity.player != 1 || entity.kind != ruage_sim::EntityKind::Unit {
+                continue;
+            }
+            let command = match (target, target_kind) {
+                (Some(node), Some(ruage_sim::EntityKind::Resource(_))) => {
+                    ruage_sim::Command::Gather { villager: id, node }
+                }
+                (Some(foe), Some(_))
+                    if world.entity(foe).is_some_and(|e| e.player != 1 && e.hp > 0) =>
+                {
+                    ruage_sim::Command::Attack {
+                        attacker: id,
+                        target: foe,
+                    }
+                }
+                _ => {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let (x, y) = (
+                        tile.0.clamp(0, i32::from(u16::MAX)) as u16,
+                        tile.1.clamp(0, i32::from(u16::MAX)) as u16,
+                    );
+                    ruage_sim::Command::Move {
+                        unit: id,
+                        to: (x, y),
+                    }
+                }
+            };
+            // A refused order is shown, not swallowed: this is how a player learns why nothing happened.
+            if let Err(err) = world.submit_checked(command) {
+                if let Some(window) = self.window.as_ref() {
+                    window.set_title(&format!("ruage - refused: {err}"));
+                }
+            }
         }
     }
 
@@ -155,12 +241,39 @@ impl App {
         if buffer.len() > texels {
             buffer[texels..].fill(0);
         }
+        // Selected things get a white cross on top of the frame: without a HUD there is otherwise no way to see what an
+        // order will apply to, and an invisible selection is worse than none.
+        if let Some(world) = self.world.as_ref() {
+            for id in &self.selected {
+                let Some(entity) = world.entity(*id) else {
+                    continue;
+                };
+                let scale = world.scale();
+                #[allow(clippy::cast_precision_loss)]
+                let tile = (
+                    entity.position.0.raw() as f32 / scale as f32,
+                    entity.position.1.raw() as f32 / scale as f32,
+                );
+                let (px, py) = self.camera.project(tile);
+                for offset in -4i32..=4 {
+                    for (x, y) in [(px + offset, py), (px, py + offset)] {
+                        if x >= 0 && y >= 0 && (x as u32) < width && (y as u32) < height {
+                            buffer[(y as usize) * (width as usize) + x as usize] = 0x00FF_FFFF;
+                        }
+                    }
+                }
+            }
+        }
         let _ = buffer.present();
         window.set_title(&format!(
-            "ruage - tick {} ({:.1} s) - {} entities",
+            "ruage - tick {} ({:.1} s) - {}x speed{} - {} entities - {} selected{}",
             self.ticks,
             self.ticks as f64 / f64::from(self.config.settings.tick_rate_hz.max(1)),
-            world.entities().len()
+            self.speed,
+            if self.paused { " (paused)" } else { "" },
+            world.entities().len(),
+            self.selected.len(),
+            if self.failed { " - STOPPED" } else { "" }
         ));
     }
 }
@@ -209,11 +322,30 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::KeyboardInput { event, .. }
-                if event.state == ElementState::Pressed
-                    && matches!(event.logical_key, Key::Named(NamedKey::Escape)) =>
-            {
-                event_loop.exit();
+            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
+                match event.logical_key {
+                    Key::Named(NamedKey::Escape) => event_loop.exit(),
+                    // Space freezes the match, not the window: the camera and the picture stay live.
+                    Key::Named(NamedKey::Space) => {
+                        self.paused = !self.paused;
+                        self.accumulated = Duration::ZERO;
+                    }
+                    // 1..4 are the speed keys; the loop runs one, two, four or eight ticks per tick interval.
+                    Key::Character(ref key) => match key.as_str() {
+                        "1" => self.speed = 1,
+                        "2" => self.speed = 2,
+                        "3" => self.speed = 4,
+                        "4" => self.speed = 8,
+                        _ => {}
+                    },
+                    _ => {}
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor = self.camera.pick((position.x as i32, position.y as i32));
+            }
+            WindowEvent::MouseInput { state, button, .. } if state == ElementState::Pressed => {
+                self.click(button);
             }
             WindowEvent::RedrawRequested => self.draw(),
             _ => {}
@@ -230,14 +362,19 @@ impl ApplicationHandler for App {
             self.accumulated = ceiling;
         }
         let mut ran = false;
-        while self.accumulated >= self.tick && !self.failed {
+        while self.accumulated >= self.tick && !self.failed && !self.paused {
             self.accumulated -= self.tick;
-            if let Err(err) = self.step() {
-                // Freeze: the world may be half-updated, so stop stepping and say so once, in the title.
-                eprintln!("step: {err}");
-                self.failed = true;
-                if let Some(window) = self.window.as_ref() {
-                    window.set_title(&format!("ruage - stopped: {err}"));
+            // Speed is *ticks per interval*, not a shorter interval: the simulation's notion of a tick never changes, which
+            // is why a fast window session and a headless run still agree on every tick boundary.
+            let mut ticks_this_interval = 0;
+            while ticks_this_interval < self.speed && !self.failed {
+                ticks_this_interval += 1;
+                if let Err(err) = self.step() {
+                    eprintln!("step: {err}");
+                    self.failed = true;
+                    if let Some(window) = self.window.as_ref() {
+                        window.set_title(&format!("ruage - stopped: {err}"));
+                    }
                 }
             }
             ran = true;

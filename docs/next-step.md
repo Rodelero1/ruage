@@ -1999,3 +1999,32 @@ worth an API change yet, and it is written down rather than forgotten.
 - The `failed` freeze has no way back: no "resume" key, no diagnostic overlay. Acceptable while a sim error is a bug to
   fix rather than a state to recover from.
 - Still missing, and next: input to `Command`, pause/1x/2x/4x, the HUD, the command-stream replay.
+
+## Input, pause and speed (2026-10-30)
+
+**Compact, before the code:** the window needed the smallest input set that lets a person *drive* the match rather than
+watch it - left click selects what is under the pointer, right click orders the selection (gather a resource, attack a
+living enemy, otherwise walk), Space pauses, 1-4 set speed. The rule that shaped it: **input is not a second way into the
+simulation.** Every order becomes the same `Command` a test submits through `World::submit_checked`, and a refusal is shown
+in the window title instead of being swallowed.
+
+**Implemented.** `ruage_view::pick_at` (a pure function of a world and a tile) decides what a click hits: **units beat
+buildings and resources, and equal ranks go to the lower id**, so the answer never depends on iteration order - clicking a
+villager standing on a farm selects the villager. The window routes left/right clicks through it, orders the whole
+selection, draws a white cross on what is selected (without a HUD there is otherwise no way to see what an order applies
+to), and shows tick, speed, pause, entity and selection counts in the title. Speed is **ticks per interval, never a shorter
+interval**, so a 4x window session still agrees with a headless run on every tick boundary.
+
+**Review, stability:**
+
+- `pick_at` scans every entity on every click - O(n) per click, measured at 126 entities, and a click is a human event:
+  irrelevant. It is *not* on the draw path.
+- The order path clones the selection and re-checks each id: a unit that died between the click and the order is skipped,
+  not acted on.
+- Pause freezes the accumulator (`paused` skips the step loop) but not the window, so the camera and the title stay live;
+  the accumulated time is cleared on pause so unpausing does not fast-forward.
+- Speed multiplies within one interval and keeps the catch-up ceiling, so 8x on a loaded machine degrades to fewer ticks
+  rather than a spiral of a thousand ticks in one frame.
+- Still open: box-select, control groups, a HUD, and the command-stream replay. The replay *format* is now constrained by
+  two facts learned here - it must record ticks, not timestamps, and it must record refusals too, or a replayed session
+  will diverge silently at the first order the engine turned down.

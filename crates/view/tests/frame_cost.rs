@@ -49,3 +49,30 @@ fn a_frame_costs_less_than_a_tick() {
         "a frame should cost far less than a tick"
     );
 }
+
+/// Picking is input logic, and input logic is where a renderer is easiest to get subtly wrong: a click that selects the
+/// tile beside the one clicked, or the farm instead of the villager on it. No display needed.
+#[test]
+fn a_click_picks_the_thing_under_it() {
+    let resources =
+        ruage_data::load_resources_file(&repo("config/resources.toml")).expect("resources");
+    let settings = ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim");
+    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map");
+    let economy = ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy");
+    let units = ruage_data::load_units_file(&repo("config/gamedata/units.toml")).expect("units");
+    let mut world = ruage_sim::World::new(&settings, 7).expect("world");
+    world.seed_from(&map, &economy, &units).expect("seed");
+
+    // Player 1's town centre sits at (16, 16): one tile in is a hit, and its neighbours are not.
+    let hit = ruage_view::pick_at(&world, (16, 16));
+    assert!(hit.is_some(), "the town centre's tile picks something");
+    assert_eq!(
+        ruage_view::pick_at(&world, (30, 30)),
+        None,
+        "open ground picks nothing"
+    );
+    assert!(
+        ruage_view::pick_at(&world, (15, 15)).is_none_or(|id| Some(id) != hit),
+        "the tile beside it picks a different thing"
+    );
+}
