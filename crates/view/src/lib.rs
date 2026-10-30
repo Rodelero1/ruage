@@ -388,14 +388,52 @@ impl Frame {
 /// palette whose meaning nobody can assert.
 pub mod palette {
     pub const GRASS: [u8; 4] = [96, 128, 64, 255];
+    pub const GRASS_LIGHT: [u8; 4] = [110, 144, 72, 255];
+    pub const GRASS_DARK: [u8; 4] = [84, 116, 56, 255];
+    /// The tones a grass tile may take. One per tile, chosen by a hash of the tile, so the ground has texture without
+    /// storing any: it is a function of position, not of state, and two renders of one snapshot stay byte-identical.
+    pub const GRASS_TONES: [[u8; 4]; 3] = [GRASS, GRASS_LIGHT, GRASS_DARK];
     pub const FOREST: [u8; 4] = [32, 64, 32, 255];
     pub const UNSEEN: [u8; 4] = [8, 8, 12, 255];
     pub const EXPLORED: [u8; 4] = [64, 72, 64, 255];
     pub const PLAYER_ONE: [u8; 4] = [48, 96, 220, 255];
     pub const PLAYER_TWO: [u8; 4] = [200, 64, 48, 255];
     pub const NEUTRAL: [u8; 4] = [120, 120, 120, 255];
-    pub const RESOURCE: [u8; 4] = [180, 150, 90, 255];
+    /// A resource node on open ground: a pile of something the map placed.
+    pub const PILE: [u8; 4] = [180, 150, 90, 255];
+    /// A tree's canopy, and the darker clump that gives it some shape.
+    pub const CANOPY: [u8; 4] = [56, 104, 48, 255];
+    pub const CANOPY_SHADE: [u8; 4] = [40, 80, 36, 255];
+    /// A tree that has been worked out: the entity stays, the canopy does not.
+    pub const STUMP: [u8; 4] = [92, 72, 44, 255];
     pub const BUILDING: [u8; 4] = [200, 200, 200, 255];
+}
+
+/// The grass tone of a tile: a hash of its coordinates, folded into the palette. No state, no RNG stream, and the same
+/// answer on every machine - which is what lets a frame be compared byte for byte.
+fn grass_tone(x: u16, y: u16) -> [u8; 4] {
+    let mixed =
+        (u32::from(x).wrapping_mul(73_856_093) ^ u32::from(y).wrapping_mul(19_349_663)) >> 7;
+    palette::GRASS_TONES[(mixed % palette::GRASS_TONES.len() as u32) as usize]
+}
+
+/// Whether the ground under a position is forest. Used to read a resource node as a tree: a wood is where trees are,
+/// and that is the map's answer rather than a table of which stockpile column is timber.
+fn on_forest_ground(snapshot: &Snapshot, position: (f32, f32)) -> bool {
+    let x = position.0.floor();
+    let y = position.1.floor();
+    if x < 0.0 || y < 0.0 {
+        return false;
+    }
+    let (x, y) = (x as usize, y as usize);
+    if x >= usize::from(snapshot.width) || y >= usize::from(snapshot.height) {
+        return false;
+    }
+    snapshot
+        .terrain
+        .get(y * usize::from(snapshot.width) + x)
+        .copied()
+        .unwrap_or(false)
 }
 
 /// The tiles a footprint covers, given the tile an entity stands on and the pack's footprint.
@@ -520,7 +558,7 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
                 TileVision::Unseen => palette::UNSEEN,
                 TileVision::Explored => palette::EXPLORED,
                 TileVision::Visible if forest => palette::FOREST,
-                TileVision::Visible => palette::GRASS,
+                TileVision::Visible => grass_tone(x, y),
             };
             let centre = camera.project((x as f32, y as f32));
             frame.fill_diamond(centre, (rx, ry), colour);
@@ -534,7 +572,22 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
             EntityKind::Projectile => {}
             EntityKind::Resource(_) => {
                 let centre = camera.project(entity.position);
-                frame.fill_diamond(centre, (rx * 0.6, ry * 0.6), palette::RESOURCE);
+                if on_forest_ground(snapshot, entity.position) {
+                    // A tree: a canopy, with a darker clump for shape, or a stump where the wood is gone. The canopy
+                    // is smaller than a tile, so a wood shows the forest floor between its trunks.
+                    if entity.amount == 0 {
+                        frame.fill_diamond(centre, (rx * 0.22, ry * 0.22), palette::STUMP);
+                    } else {
+                        frame.fill_diamond(centre, (rx * 0.55, ry * 0.55), palette::CANOPY);
+                        frame.fill_diamond(
+                            (centre.0 - (rx * 0.3) as i32, centre.1 + (ry * 0.2) as i32),
+                            (rx * 0.35, ry * 0.35),
+                            palette::CANOPY_SHADE,
+                        );
+                    }
+                } else {
+                    frame.fill_diamond(centre, (rx * 0.6, ry * 0.6), palette::PILE);
+                }
             }
             EntityKind::Building => {
                 // The silhouette is the pack's footprint, drawn as the diamond a block of that many tiles makes:

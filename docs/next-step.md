@@ -2123,3 +2123,26 @@ entities, inside the probe's noise - so the sort is O(n log n) on 126 elements, 
 
 **Next: step 4, terrain content** - grass, dirt and forest floor from `map.toml`, and trees drawn as clusters on their
 tiles rather than one square per node.
+
+## Step 4 of the look: terrain and trees (2026-10-30, done)
+
+**What landed.** Grass now has a **tone per tile**, from a hash of its coordinates (`grass_tone`), so the ground reads as
+ground instead of one flat green; forest floor stays the darker colour it was; and a resource node **in the forest is
+drawn as a tree** - a canopy with a darker clump for shape - while a node on open ground is a pile. A tree whose wood is
+gone is a **stump**, which is the picture of the model the engine already has (a spent node keeps its entity).
+
+**The rule carries no AoE2 knowledge:** "is this a tree" is `terrain[position] == Forest`, the map's own answer, not a
+table of which stockpile column is timber - which is what keeps this inside D17.
+
+**Tested** (`crates/view/tests/terrain.rs`, hand-built snapshots so the picture is the only thing under test): the same
+node reads as `CANOPY` in the forest and as `PILE` on grass; a spent node reads as `STUMP`; grass takes at least two
+tones and no colour outside `GRASS_TONES`, and two renders of one snapshot are byte-identical (the tone is a function of
+position, not an RNG); and forest floor's luma is below grass's.
+
+**Measured:** 635 us a frame against 525 before - **+110 us for every canopy in view**, still about 1.3% of a core at
+20 Hz. Rendering the same match to a PNG and looking at it: a grey diamond town centre on a diamond-tiled meadow, a
+woodland of small canopy motifs to the south-east, no seams and nothing misplaced.
+
+**Still content's, not the renderer's:** there is no `Dirt` terrain. The map carries `G` and `F` only, so a base has no
+baked yard until `Terrain` grows a variant, the loader accepts its letter and `make_map.py` paints one - a content
+change with a census test, scheduled after the HUD.
