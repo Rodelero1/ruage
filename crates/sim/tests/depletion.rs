@@ -131,7 +131,7 @@ fn a_standing_tree_blocks_its_tile() {
 
 /// Once a tree is chopped there is nothing left there: the entity is gone and its tile can be walked through.
 #[test]
-#[ignore = "known gap: a spent node keeps its entity and its blocked tile"]
+#[ignore = "known gap: a node spawned by a command is not removed when emptied, though a map node is"]
 fn a_chopped_tree_leaves_no_obstacle() {
     let Some(mut world) = fresh() else {
         return;

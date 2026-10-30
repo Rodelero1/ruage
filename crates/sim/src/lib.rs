@@ -1166,6 +1166,9 @@ pub struct World {
     /// Nodes a share assignment failed to reach, and the tick it failed: retried after `share_retry_ticks` rather than
     /// every second (the `lastFailedGather` bookkeeping 0 A.D. keeps).
     share_failed: BTreeMap<EntityId, u64>,
+    /// Nodes that have given their last wood: removed once no villager is working them, so the tile they stood on becomes
+    /// ground a unit may cross (the owner's rule, 2026-10-30 - a spent tree disappears and frees its tile).
+    spent_nodes: BTreeSet<EntityId>,
     /// Villagers the policy has already given an order to, and when: the guard that stops the pass re-issuing the same
     /// gather order - and paying for a path search - every second.
     share_moved: BTreeMap<EntityId, u64>,
@@ -1373,6 +1376,7 @@ impl World {
             animal_span: BTreeMap::new(),
             shares: Vec::new(),
             shares_scan_tick: 0,
+            spent_nodes: BTreeSet::new(),
             share_failed: BTreeMap::new(),
             share_moved: BTreeMap::new(),
             share_retry_ticks: 600,
@@ -2248,7 +2252,9 @@ impl World {
                 position: self.tile((node.x, node.y)),
                 speed: Fixed::ZERO,
                 velocity: (Fixed::ZERO, Fixed::ZERO),
-                hp: 0,
+                // A tree has to be **felled** before it yields (the owner's rule, 2026-10-30): the dat gives it 20 hit
+                // points (25, 30 for the variants) and a bush or a mine none.
+                hp: node.hp,
                 amount: Fixed::from_raw(i64::from(node.amount) * self.scale),
                 task: Task::Idle,
                 training: None,
@@ -5336,6 +5342,42 @@ impl World {
         self.work_position(position, position).is_some()
     }
 
+    /// Remove every emptied node that nobody is working any more, and free its tile.
+    ///
+    /// A node lingers for a tick or two after its last unit, so the villager that emptied it can still be told where to go
+    /// next (`nearest_like` needs the old node's *kind*), and the ground opens only once the village has moved on.
+    fn step_spent_nodes(&mut self) {
+        if self.spent_nodes.is_empty() || !self.tick.is_multiple_of(4) {
+            return;
+        }
+        let busy: BTreeSet<EntityId> = self
+            .entities
+            .iter()
+            .filter_map(|entity| match entity.task {
+                Task::Gather { node, .. } | Task::Return { node, .. } => Some(node),
+                _ => None,
+            })
+            .collect();
+        let done: Vec<EntityId> = self
+            .spent_nodes
+            .iter()
+            .copied()
+            .filter(|node| !busy.contains(node))
+            .collect();
+        for node in done {
+            if let Some(entity) = self.find(node)
+                && matches!(entity.kind, EntityKind::Resource(_))
+            {
+                let tile = self.tile_of(entity.position);
+                if let Some(walk) = self.walk.as_mut() {
+                    walk.set_blocked(tile.0, tile.1, false);
+                }
+            }
+            self.entities.retain(|entity| entity.id != node);
+            self.spent_nodes.remove(&node);
+        }
+    }
+
     /// Move any unit standing on a tile that has just been built on to the nearest free tile beside it, and forget its
     /// route: the game pushes units out of the way of a new building, and a player who drops a house on a villager means
     /// the house, not the villager.
@@ -5878,6 +5920,8 @@ impl World {
         let mut deltas: Vec<(usize, EntityId, Fixed, Fixed)> =
             Vec::with_capacity(self.entities.len());
         let mut takes: Vec<(EntityId, i64, Fixed)> = Vec::new();
+        // Workers chopping a standing tree, and the hit points they take off it this tick.
+        let mut chops: Vec<EntityId> = Vec::new();
         let mut finished: Vec<EntityId> = Vec::new();
         let mut switches: Vec<(EntityId, Task)> = Vec::new();
         // A villager working a herdable animal, and the animal: herded after the tick's own movement.
@@ -6123,42 +6167,55 @@ impl World {
                     // Standing still at the thing being worked is what entitles a worker to take
                     // from it.
                     if at_node {
-                        let (take, kept) = self.take_amount(entity);
-                        let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
-                        takes.push((entity.id, take, kept));
+                        // **A standing tree is chopped down first.** Until its hit points are gone it yields nothing;
+                        // when they are, it falls where it stands and is then cut for wood (the owner's rule). A bush or
+                        // a mine has no hit points, so this branch never runs for them.
+                        // Only a **resource node** is felled. A farm is a building with hit points of its own, and
+                        // chopping it was how the first version of this left every farmer standing in a field.
+                        let standing = self
+                            .find(node)
+                            .is_some_and(|n| matches!(n.kind, EntityKind::Resource(_)) && n.hp > 0);
+                        if standing {
+                            chops.push(entity.id);
+                            (Fixed::ZERO, Fixed::ZERO)
+                        } else {
+                            let (take, kept) = self.take_amount(entity);
+                            let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
+                            takes.push((entity.id, take, kept));
 
-                        // Two reasons to head home: the load is full, or the node just gave its
-                        // last. The second matters because a partial load on a dead tree never
-                        // reaches the cap - the villager would stand there for the rest of the
-                        // match holding wood nobody can spend.
-                        let in_hand = entity.carry.raw() + take;
-                        let empty_node = node_left - take <= 0;
-                        let full = in_hand >= i64::from(carry_cap) * self.scale;
-                        // A **full load always goes home**, whether or not anything was taken this tick. Without the
-                        // first clause a villager whose cap was reached by a re-task (a load carried onto the next
-                        // node) stood at that node with no room to take anything, for the rest of the match.
-                        let brimming = entity.carry.raw() >= i64::from(carry_cap) * self.scale;
-                        if brimming
-                            || (take > 0 && (full || empty_node))
-                            || (take == 0 && empty_node && in_hand > 0)
-                        {
-                            switches.extend(
-                                self.return_task(entity, node, rate_per_tick, carry_cap)
-                                    .map(|task| (entity.id, task)),
-                            );
-                        }
-                        if take == 0 && empty_node {
-                            // Nothing in hand and nothing left here: look for the next node of the same kind before
-                            // standing still. A tree holds 100 wood, so without this a lumberjack works one tree and
-                            // idles for the rest of the match - which is what stopped the acceptance match at 139
-                            // wood (the owner's rule: "move to next tree, next bush, next pile of gold").
-                            let here = entity.position;
-                            match self.nearest_like(here, node, entity.id) {
-                                Some(next) => retasks.push((entity.id, next)),
-                                None => finished.push(entity.id),
+                            // Two reasons to head home: the load is full, or the node just gave its
+                            // last. The second matters because a partial load on a dead tree never
+                            // reaches the cap - the villager would stand there for the rest of the
+                            // match holding wood nobody can spend.
+                            let in_hand = entity.carry.raw() + take;
+                            let empty_node = node_left - take <= 0;
+                            let full = in_hand >= i64::from(carry_cap) * self.scale;
+                            // A **full load always goes home**, whether or not anything was taken this tick. Without the
+                            // first clause a villager whose cap was reached by a re-task (a load carried onto the next
+                            // node) stood at that node with no room to take anything, for the rest of the match.
+                            let brimming = entity.carry.raw() >= i64::from(carry_cap) * self.scale;
+                            if brimming
+                                || (take > 0 && (full || empty_node))
+                                || (take == 0 && empty_node && in_hand > 0)
+                            {
+                                switches.extend(
+                                    self.return_task(entity, node, rate_per_tick, carry_cap)
+                                        .map(|task| (entity.id, task)),
+                                );
                             }
+                            if take == 0 && empty_node {
+                                // Nothing in hand and nothing left here: look for the next node of the same kind before
+                                // standing still. A tree holds 100 wood, so without this a lumberjack works one tree and
+                                // idles for the rest of the match - which is what stopped the acceptance match at 139
+                                // wood (the owner's rule: "move to next tree, next bush, next pile of gold").
+                                let here = entity.position;
+                                match self.nearest_like(here, node, entity.id) {
+                                    Some(next) => retasks.push((entity.id, next)),
+                                    None => finished.push(entity.id),
+                                }
+                            }
+                            (Fixed::ZERO, Fixed::ZERO)
                         }
-                        (Fixed::ZERO, Fixed::ZERO)
                     } else {
                         let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
                             SimError::Displacement {
@@ -6330,6 +6387,21 @@ impl World {
         // Grant takes in id order, each bounded by what the node still holds *at that moment*.
         // Reading the amount before the loop would let two villagers on a one-wood tree take one
         // wood each: the node would clamp at zero and the pair would keep two.
+        for worker in chops {
+            let node = match self.find(worker).map(|e| e.task) {
+                Some(Task::Gather { node, .. }) => node,
+                _ => continue,
+            };
+            let per_tick = self.economy.as_ref().map_or(0.0, |economy| {
+                economy.gather.fell_hp_per_second / f64::from(self.tick_rate_hz)
+            }) as f32;
+            if let Some(target) = self.find_mut(node) {
+                // Accumulate in whole points so a slow chop still lands: a tree falls when its hit points reach zero and
+                // **stays where it stands** until the wood is gone.
+                let loss = (per_tick.max(1.0)).round() as i32;
+                target.hp = (target.hp - loss).max(0);
+            }
+        }
         for (worker, take, kept) in takes {
             let node = match self.find(worker).map(|e| e.task) {
                 Some(Task::Gather { node, .. }) => node,
@@ -6345,6 +6417,15 @@ impl World {
                     let available = target.amount.raw();
                     let granted = take.min(available);
                     target.amount = Fixed::from_raw(available - granted);
+                    // Only a **resource node** disappears when it is emptied. A farm is a building that content refills
+                    // (Horse Collar and friends), and removing it here deleted the crop instead of the node.
+                    if available - granted <= 0
+                        && self
+                            .find(node)
+                            .is_some_and(|entity| matches!(entity.kind, EntityKind::Resource(_)))
+                    {
+                        self.spent_nodes.insert(node);
+                    }
                     granted
                 }
                 None => 0,
@@ -6936,6 +7017,7 @@ impl World {
         self.step_conversion();
         // Shares: idle villagers follow the table content gives (the game's own AI shape).
         self.step_shares();
+        self.step_spent_nodes();
         // A building at or below its eject fraction throws its garrison out. They are unharmed - the
         // published rule - and they land where they already stand.
         for id in ejected {

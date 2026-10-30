@@ -30,6 +30,10 @@ food_per_farm = 250
 # PROVENANCE: published. Not a dat field found so far.
 
 [gather]
+# How fast a villager takes hit points off a **standing tree**, per second. Trees must be felled before they yield (the
+# owner's rule, 2026-10-30); the dat gives a forest tree 20 hit points, a variant 25 or 30, and a bush or a mine none.
+# Authored pacing - the dat does not say how fast a chop is - and 0 turns felling off.
+fell_hp_per_second = 2.0
 rate_from = "dat"
 # Per-task-variant work_rate: VMLUM 0.390, VMGLD 0.380, VMMIN 0.360, VMSHE 0.330,
 # VMFOR 0.310, VMHUN 0.410 (carry 35), VMFIS 0.430. Validated against published values

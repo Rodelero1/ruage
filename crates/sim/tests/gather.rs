@@ -123,7 +123,12 @@ fn nearest(world: &World, slot: usize, from: (Fixed, Fixed)) -> EntityId {
 }
 
 fn amount_of(world: &World, node: EntityId) -> Fixed {
-    world.entity(node).expect("node").amount
+    // An emptied resource node is **removed** and its tile freed (the owner's rule, 2026-10-30), so "gone" is the same
+    // answer as "empty" here.
+    world
+        .entity(node)
+        .map(|entity| entity.amount)
+        .unwrap_or(Fixed::ZERO)
 }
 
 #[test]

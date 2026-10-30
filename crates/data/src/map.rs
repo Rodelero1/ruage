@@ -26,6 +26,8 @@ pub struct ResourceNode {
     pub x: u16,
     pub y: u16,
     pub amount: u32,
+    /// Hit points to fell before this node yields: a tree has 20 (25, 30 for variants), a bush or a mine has none.
+    pub hp: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +89,10 @@ struct RawResource {
     /// The resource's name, as `config/resources.toml` spells it.
     kind: String,
     amount: u32,
+    /// Hit points, for a node that has to be **felled** before it yields (a tree: 20 in the dat, 25 or 30 for the
+    /// variants). Zero for a bush, a gold mine or a stone mine, which are worked as they stand.
+    #[serde(default)]
+    hp: i32,
     tiles: Vec<[u16; 2]>,
 }
 
@@ -259,6 +265,7 @@ pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, Con
                 x: *x,
                 y: *y,
                 amount: group.amount,
+                hp: group.hp,
             });
         }
     }

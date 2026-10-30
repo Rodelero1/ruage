@@ -156,6 +156,10 @@ pub struct Gather {
     /// name because the engine has no resource kinds of its own (D17): the pack says a node is
     /// "timber", this table says timber is worked by the "wood" task.
     pub resource_task: BTreeMap<String, String>,
+    /// Hit points a villager takes off a **standing tree** per second. Trees are felled before they yield (the owner's
+    /// rule, 2026-10-30): the dat gives them 20 hit points (25, 30 for variants) and no wood until they come down. Authored
+    /// pacing, because the dat does not say how fast a chop is; zero turns felling off and every node yields as it stands.
+    pub fell_hp_per_second: f64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -347,6 +351,8 @@ struct RawGather {
     /// A resource name → the gather task that works it. Free-form keys: which resources exist is the
     /// content pack's business, and this loader can only check the task side of the join.
     resource_task: BTreeMap<String, String>,
+    #[serde(default)]
+    fell_hp_per_second: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -635,6 +641,16 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             drop_sites_from: raw.gather.drop_sites_from,
             variant: raw.gather.variant,
             resource_task,
+            fell_hp_per_second: {
+                let value = raw.gather.fell_hp_per_second.unwrap_or(0.0);
+                if !value.is_finite() || value < 0.0 {
+                    return Err(ConfigError::Invalid {
+                        key: "gather.fell_hp_per_second".to_owned(),
+                        detail: format!("{value} is not a rate of hit points per second"),
+                    });
+                }
+                value
+            },
         },
         train: {
             let mut by_building: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
