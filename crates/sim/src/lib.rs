@@ -1597,7 +1597,7 @@ impl World {
             // belongs inside the search: asking for "the first free one" and then rejecting it spends the pass on the
             // same villager - which is exactly how this pass failed, with three idle villagers and the same one chosen
             // every second while the other two stood there.
-            let Some(worker) = workers
+            let free = workers
                 .iter()
                 .find(|(id, who, _, free)| {
                     *who == player
@@ -1608,8 +1608,43 @@ impl World {
                             .get(id)
                             .is_some_and(|at| self.tick.saturating_sub(*at) < self.share_move_ticks)
                 })
-                .map(|(id, _, _, _)| *id)
-            else {
+                .map(|(id, _, _, _)| *id);
+            // Nobody free: the table can still **rebalance**. Take one villager off the column that is over its share,
+            // bounded by the same retry window. Without this the shares only ever describe the *first* assignment, and a
+            // 32-villager economy sat on 35 wood for 1,000 game-seconds while fourteen villagers fed a granary that
+            // nothing was spending.
+            let poached = free.or_else(|| {
+                let mut over: Vec<(i32, usize)> = (0..slots)
+                    .filter_map(|other| {
+                        let percent = percent_of(other);
+                        let wanted = (i32::try_from(count).unwrap_or(0) * percent) / 100;
+                        let actual = i32::try_from(
+                            workers
+                                .iter()
+                                .filter(|(_, who, slot_of, _)| {
+                                    *who == player && slot_of == &Some(other)
+                                })
+                                .count(),
+                        )
+                        .unwrap_or(0);
+                        (actual > wanted).then_some((actual - wanted, other))
+                    })
+                    .collect();
+                over.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+                let (_, from) = over.first().copied()?;
+                workers
+                    .iter()
+                    .find(|(id, who, slot_of, _)| {
+                        *who == player
+                            && slot_of == &Some(from)
+                            && !self.build_queue.get(id).is_some_and(|q| !q.is_empty())
+                            && !self.share_moved.get(id).is_some_and(|at| {
+                                self.tick.saturating_sub(*at) < self.share_move_ticks
+                            })
+                    })
+                    .map(|(id, _, _, _)| *id)
+            });
+            let Some(worker) = poached else {
                 continue;
             };
             let here = match self.find(worker) {

@@ -1651,3 +1651,47 @@ With the guard moved to "a mill stands and the larder is under 120", the run rea
 train rule asking before anybody has gathered - read like a broken script. `Runner::rule_refusals` now holds them
 separately, and the acceptance test asserts what actually matters about the opening: no step refused, the rules firing,
 and villagers gathering after a minute.
+
+## Rules and shares - the third pass (2026-10-29)
+
+*Two more walls, both of them the same mistake in different clothes: a mechanism that only works once.*
+
+**Shares that only describe the first assignment are not shares.** With the pass restricted to *idle* villagers, the
+table described the opening and then nothing: a **32-villager economy sat on 35 wood for 1,000 game-seconds** while
+fourteen villagers fed a granary nothing was spending, because nobody was ever free again. The pass now also
+**rebalances** - it takes one villager off the column that is over its share, bounded by the same retry window, so the
+cost stays one path search per window and the table keeps meaning what it says for the whole match. 35 units and 16
+buildings by 800 s became reachable in place of 22 and 13.
+
+**A worker the policy keeps busy is a worker a rule can never hire.** Every build rule wants an idle villager; the
+policy makes sure there are none. The run reached 35 villagers, 349 wood, 601 gold and never built its market, with
+every build rule refused for want of a free villager. `idle_villager` (the rules' chooser) now falls back to "anybody
+who is not already building", which is what the game does with `up-assign-builders`: it takes builders **out of the
+gathering pool**. A rule that needs a worker may take one; the shares will rebalance afterwards, because they now can.
+
+## Where the acceptance match stands (2026-10-29, last run of the night)
+
+*Measured, not asserted: `ruage-headless --script config/acceptance.toml --seed 7 --report 200`, release, 2,400 s.*
+
+| game time | wood | food | gold | units | buildings |
+|---|---|---|---|---|---|
+| 200 s | 35 | 18 | 100 | 12 | 6 |
+| 600 s | 32 | 7 | 50 | 20 | 14 |
+| 1000 s | 55 | 51 | 70 | 27 | 15 |
+| 1400 s | **5** | 1088 | 300 | 32 | **17** |
+| 1600 s | **5** | 1236 | 410 | 32 | 17 |
+
+**The match does not finish, and it now dies of wood rather than of food.** Seventeen buildings means the mill, the
+barracks, the lumber camp, the market and the blacksmith all went up - the build order works. Food is 1,236 and gold 410;
+**wood is pinned at 5** with 32 villagers alive, which is the shape of gather orders to trees failing rather than of a
+shortage.
+
+**The hypothesis to test first** (it was not confirmed tonight): a villager ordered to a tree cannot path to a working
+position - the lumber camp stands between the villager and the trunks - so `start_gather` refuses, `share_failed` marks
+that node for 30 s, the pass moves to the next one, and within a few passes every tree in reach is marked and the wood
+column stands empty while food overflows. The test to write is a villager, a lumber camp and a tree on the far side of
+it; if it refuses, the fix is in `work_position` (**which adjacent tile counts as "can work this node"**), not in the
+policy - and `share_failed` should not swallow a whole resource for 30 s when the failure is about a *tile*.
+
+**Cost, measured:** the run takes ~4x real time in release, and a single path search is ~29 ms on this map. Both deserve
+attention before the balance runs in item 8's batch harness are cheap enough to sweep civs.

@@ -796,11 +796,26 @@ fn villagers_of(world: &World, player: u8) -> Vec<EntityId> {
 /// An idle villager of this player, or the one that has been idle longest - a rule names no villager because the
 /// villager it would name has moved by the time the rule fires again.
 fn idle_villager(world: &World, player: u8) -> Option<EntityId> {
-    villagers_of(world, player).into_iter().find(|id| {
-        world
-            .entity(*id)
-            .is_some_and(|entity| matches!(entity.task, crate::Task::Idle))
-    })
+    let all = villagers_of(world, player);
+    // An idle villager first, then anybody who is not already building. The fallback is not a convenience: the share
+    // table keeps every idle villager working within a second, so "find an idle villager" succeeds only at the start of
+    // the game - which is how the acceptance run reached 35 villagers and 349 wood and then never built its market,
+    // with every build rule refused for want of a free villager. The game's own answer is the same shape:
+    // `up-assign-builders` takes builders out of the gathering pool.
+    all.iter()
+        .copied()
+        .find(|id| {
+            world
+                .entity(*id)
+                .is_some_and(|entity| matches!(entity.task, crate::Task::Idle))
+        })
+        .or_else(|| {
+            all.iter().copied().find(|id| {
+                world
+                    .entity(*id)
+                    .is_some_and(|entity| !matches!(entity.task, crate::Task::Build { .. }))
+            })
+        })
 }
 
 /// Turn a rule's action into a command. The rules share the steps' resolvers, so a role means the same thing in both.
