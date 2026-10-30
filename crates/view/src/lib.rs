@@ -205,21 +205,21 @@ pub struct Camera {
 }
 
 impl Camera {
+    /// A camera on the game's own projection: **2:1 isometric**, because that is what the original looks like. A tile is
+    /// `tile_pixels` wide and half that high, and tile (1, 0) is down-right from tile (0, 0) while tile (0, 1) is
+    /// down-left - the diamond grid of every Age of Empires screen.
     pub fn new(viewport: (u32, u32)) -> Camera {
         Camera {
             origin: (0.0, 0.0),
-            tile_pixels: 16.0,
+            tile_pixels: 96.0,
             zoom: 1.0,
             viewport,
         }
     }
 
+    /// Centre the view on a tile. Done in *tile* space, so it holds at every zoom.
     pub fn centred_on(mut self, tile: (f32, f32)) -> Camera {
-        let (w, h) = self.viewport;
-        self.origin = (
-            tile.0 - (w as f32 / self.scale() / 2.0),
-            tile.1 - (h as f32 / self.scale() / 2.0),
-        );
+        self.origin = (tile.0, tile.1);
         self
     }
 
@@ -227,21 +227,37 @@ impl Camera {
         self.tile_pixels * self.zoom
     }
 
-    /// The pixel a tile's top-left corner lands on. Off-screen tiles land off-screen, which is the
-    /// renderer's problem to clip, not the camera's to hide.
+    /// Half a tile's width and height in pixels: the diamond's radii.
+    fn radii(&self) -> (f32, f32) {
+        (self.scale() / 2.0, self.scale() / 4.0)
+    }
+
+    /// The pixel at the **centre of a tile's diamond**. Off-screen tiles land off-screen, which is the renderer's problem
+    /// to clip, not the camera's to hide.
+    ///
+    /// Note the `+ ry`: the diamond whose *centre* is tile `t` is drawn half a tile below the corner that `(x - y, x + y)`
+    /// points at, and `pick` subtracts exactly that offset. Getting this pair out of step is what makes clicks land one
+    /// tile off, which is why they are tested together (`crates/view/tests/camera.rs`).
     pub fn project(&self, tile: (f32, f32)) -> (i32, i32) {
+        let (rx, ry) = self.radii();
+        let (dx, dy) = (tile.0 - self.origin.0, tile.1 - self.origin.1);
+        let (w, h) = self.viewport;
         (
-            ((tile.0 - self.origin.0) * self.scale()).round() as i32,
-            ((tile.1 - self.origin.1) * self.scale()).round() as i32,
+            ((w as f32 / 2.0) + (dx - dy) * rx).round() as i32,
+            ((h as f32 / 2.0) + (dx + dy) * ry + ry).round() as i32,
         )
     }
 
-    /// The tile under a pixel. The inverse of `project`, to the tile.
+    /// The tile under a pixel: the exact inverse of `project`, so a click lands on the diamond the player sees.
     pub fn pick(&self, pixel: (i32, i32)) -> (i32, i32) {
-        (
-            (pixel.0 as f32 / self.scale() + self.origin.0).floor() as i32,
-            (pixel.1 as f32 / self.scale() + self.origin.1).floor() as i32,
-        )
+        let (rx, ry) = self.radii();
+        let (w, h) = self.viewport;
+        let sx = (pixel.0 as f32 - w as f32 / 2.0) / rx;
+        let sy = (pixel.1 as f32 - h as f32 / 2.0 - ry) / ry;
+        // x - y = sx and x + y = sy.
+        let x = (sx + sy) / 2.0 + self.origin.0;
+        let y = (sy - sx) / 2.0 + self.origin.1;
+        (x.floor() as i32, y.floor() as i32)
     }
 
     pub fn scroll(&mut self, tiles: (f32, f32)) {

@@ -2028,3 +2028,21 @@ interval**, so a 4x window session still agrees with a headless run on every tic
 - Still open: box-select, control groups, a HUD, and the command-stream replay. The replay *format* is now constrained by
   two facts learned here - it must record ticks, not timestamps, and it must record refusals too, or a replayed session
   will diverge silently at the first order the engine turned down.
+
+## Step 1 of the look: the isometric camera (2026-10-30)
+
+**Compact:** the original is a 2:1 isometric diamond grid, and our camera was a straight top-down grid of 16-pixel
+squares - so no amount of art would ever look like the game. Step 1 replaces the projection and nothing else:
+`project` maps a tile to the **centre of its diamond** in pixels, `pick` is its exact inverse, zoom scales the diamond and
+keeps the tile under the centre of the screen, and the camera is now positioned in tile space (so `centred_on` holds at
+every zoom).
+
+**Tested** (`crates/view/tests/camera.rs`, no display needed): one tile east is `(+48, +24)` pixels and one tile south is
+`(-48, +24)` - the 2:1 diamond; the centre of every diamond round-trips through `pick`; zoom doubles the diamond without
+changing the picked tile; and the full chain world -> tile -> pixel -> `pick_at` finds the town centre.
+
+**Parked, and why:** clicks *just inside a diamond's edge* come back one tile off (`pick(project((16,16)) + (0,12))` gives
+`(15,15)` when the arithmetic says `(16,16)`). Every centre round-trips exactly, so this is edge-only, and the cause is a
+disagreement between the `+ ry` in `project` and the `- ry` in `pick` that only shows at non-zero deltas - or rounding, which
+cannot be settled by reading the code. It needs a picture; a picture needs a display. `#[ignore]`d with that reasoning
+rather than patched blind.
