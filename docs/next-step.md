@@ -1760,3 +1760,26 @@ a mutation that removes the branch).
 `FINDINGNEWTARGET` fallback with a give-up timeout - the owner's rule names "next bush, next tree, next pile of gold",
 and 0 A.D. adds two things to it: keep the specific type, and if nothing is nearby, walk back to where the order started
 and look again. Ours now finds a farm, but a villager whose route died still has no clock.
+
+## The pile-up at the mill (2026-10-29, latest evidence)
+
+The dump now names the node every worker points at (`Task::Gather@EntityId`), and the freeze reads out of it in one line:
+
+```
+villagers 32   Counter({'Return': 27, 'Gather': 5})
+  Return>EntityId(136) at 13.08 19.92   x27
+```
+
+**Twenty-seven villagers returning, all to the same mill, all stuck eight hundredths of a tile short of it.** The mill at
+`[13,19]` was placed **among farms** (`[12,18]`, `[13,18]`, `[14,18]`, `[14,20]`), so its standable neighbours are built
+over and the deposit - which waits for the final step onto the drop site - never fires. The two live gatherers work trees
+with 19.88 and 43.29 wood left; two more point at spent trees.
+
+**What is ruled out:** a crowd alone is not the cause. `crates/sim/tests/dropoff.rs` puts six villagers on one bush with
+one drop site and every load reaches the bank. The fault needs the drop site to be *walled in by its own buildings*.
+
+**The fix to write next, in this order:** (1) place a drop site with a standable neighbour free - a mill among farms is a
+mill nobody can deliver to, and the placement code already knows how to look for a free tile; (2) accept a deposit from
+adjacent to the drop site, not only from standing on it, which is what the game does and would have saved these 27; (3)
+give a returning villager that cannot make progress for N seconds a way out (drop the load, find work, or idle visibly) -
+0 A.D.'s answer, and the one thing our gather code still has no clock for.
