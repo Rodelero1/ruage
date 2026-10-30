@@ -593,17 +593,25 @@ fn free_tile_near_node(world: &World, node: EntityId) -> Option<(u16, u16)> {
 fn free_tile_near(world: &World, player: u8) -> Option<(u16, u16)> {
     // The start's own town-centre role, not the word: a pack of our own may call it "keep" (D17).
     let centre_unit = world.start_town_centre_unit()?;
+    // **The family, not the id.** A town centre that has been upgraded to its Feudal variant (463) is not unit 109 any
+    // more, and matching the id exactly made every placement beside it fail: *"no free tile for a market"*, 267 times,
+    // with the town centre standing right there.
     let centre = world.entities().iter().find(|entity| {
         entity.player == player
             && entity.kind == EntityKind::Building
-            && entity.unit == Some(centre_unit)
+            && entity
+                .unit
+                .is_some_and(|unit| world.is_family(unit, centre_unit))
     })?;
     let scale = world.scale();
     let origin = (
         u16::try_from(centre.position.0.raw() / scale).ok()?,
         u16::try_from(centre.position.1.raw() / scale).ok()?,
     );
-    for radius in 2..=6u16 {
+    // **Wide enough to still find ground.** Six tiles around a town centre is a base: seven houses, a mill, a lumber camp
+    // and a dozen farms fill it, and then every later building is refused with *"no free tile"* - 267 times each for the
+    // market and the blacksmith in the last full run, with 3,848 wood in the bank. The ring grows to twelve.
+    for radius in 2..=12u16 {
         for dy in 0..=radius {
             for dx in 0..=radius {
                 for (x, y) in [

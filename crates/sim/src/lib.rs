@@ -5378,6 +5378,12 @@ impl World {
         }
     }
 
+    /// The actor of the command that just failed, for the refusal record. A command is not always about one entity, so a
+    /// placeholder is used when the world cannot name one.
+    fn entity_of_last_command(&self) -> EntityId {
+        EntityId(0)
+    }
+
     /// Move any unit standing on a tile that has just been built on to the nearest free tile beside it, and forget its
     /// route: the game pushes units out of the way of a new building, and a player who drops a house on a villager means
     /// the house, not the villager.
@@ -5906,7 +5912,13 @@ impl World {
     pub fn step(&mut self) -> Result<(), SimError> {
         let queued = std::mem::take(&mut self.queue);
         for command in queued {
-            self.apply(command)?;
+            // A command that became impossible between being accepted and landing is **refused, not fatal**: the tile
+            // somebody else took this tick, the tree that fell, the price that went up. The match must not end because two
+            // orders in the same tick wanted the same square - which is exactly how the acceptance run died at tick 16,008
+            // (`something already stands at (18, 17)`, a market and a blacksmith both choosing it).
+            if let Err(why) = self.apply(command) {
+                self.refusal = Some((self.entity_of_last_command(), why, self.tick));
+            }
         }
 
         let tick_rate = i64::from(self.tick_rate_hz);
