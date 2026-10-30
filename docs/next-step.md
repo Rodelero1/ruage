@@ -1907,3 +1907,25 @@ thing between this match and a result.
   sight. It matches by family now.
 - A command whose tile was taken between submission and the next tick (`something already stands at (18, 17)`, a market
   and a blacksmith choosing the same square) **ended the match**. A late-impossible order is refused now, not fatal.
+
+## Compact: the builder and the target (2026-10-30, before the code)
+
+**Where it stands.** The acceptance match reaches the Castle Age, builds a siege workshop site and orders a mangonel, and
+then stops: the mangonel rule is refused 133 times with *"no finished siege_workshop"*, and the attack rule reports *"no
+enemy matches enemy_town_centre"* 64 times. Food is no longer the wall (885 banked, population 42).
+
+**The AI's answer to the first half**, read from `Economy/Feudal Age.per`, `Economy/Castle Age.per` and
+`General Rules.per`: `up-assign-builders c: <role> c: <n>` dedicates builders - market 3, blacksmith 2, house 2, monastery
+3, university 3, a town-centre foundation 6 - and `sn-cap-civilian-builders` caps the builder pool (10 early, 20 by
+Castle). A dedicated builder is **reserved**: the villager manager does not touch it until the building is up.
+
+**What is built:** `Task::Build` is a reservation in the share pass, named in the code rather than implied by the
+classifier, so no future change can poach a builder; and `enemy_town_centre` falls back to any enemy building, then to the
+nearest enemy unit, when the town centre is already gone - which is what "no enemy matches" means once the mangonel has
+done its work but the enemy still has villagers alive.
+
+**Review, adversarial:** the reservation's failure mode is a builder stuck for ever - a site that cannot be reached, or a
+site the player never wants finished - so the reservation must be checked by a timeout in the *build* path, not assumed.
+Cost: the share pass already distinguishes builders (one `matches!` in the classifier), so the reservation adds no scan.
+The target fallback is a second and third pass over `entities` **only when the town centre is absent**, which is the rarest
+case, and it keeps the same deterministic ordering.

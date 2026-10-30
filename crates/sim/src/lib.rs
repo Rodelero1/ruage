@@ -1559,7 +1559,11 @@ impl World {
                 }
                 Task::Return { node, .. } => (self.node_slot(node), false),
                 Task::Idle => (None, true),
-                // Everything else - a build, a walk, a fight - is work in progress and not the table's business.
+                // **A builder is reserved.** This is the AI's `up-assign-builders` (Feudal Age.per assigns three to a
+                // market, two to a blacksmith; Castle Age.per six to a town-centre foundation): once a villager is on a
+                // site it is not free and it is not on a resource column, so neither the idle arm nor the pull arm can
+                // take it. It stays that way until the site finishes, is cancelled, or the build path gives up on it.
+                // Everything else - a walk, a fight - is work in progress and not the table's business either.
                 _ => (None, false),
             };
             workers.push((entity.id, entity.player, slot, free));
@@ -5620,6 +5624,9 @@ impl World {
     }
 
     fn start_gather(&mut self, villager: EntityId, node: EntityId) -> Result<(), SimError> {
+        // A deliberate order supersedes a share reassignment that was waiting on a deposit: without this, a villager told
+        // to do something else would still be yanked to the column it was pulled towards, once its load went in.
+        self.pending_gather.remove(&villager);
         // Whose techs apply: the villager's owner's (a rate modifier is the worker's, not the node's).
         let worker_player = self
             .find(villager)

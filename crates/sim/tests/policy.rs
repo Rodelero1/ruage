@@ -268,3 +268,50 @@ fn the_share_row_follows_the_villager_count() {
         "at eight villagers the second row applies and they go to wood: {eight:?}"
     );
 }
+
+/// **A builder is reserved** (`up-assign-builders` in the game's AI): the shares never take a villager off a site, whatever
+/// the table says, because a half-built market that nobody finishes is 175 wood thrown away.
+#[test]
+fn a_builder_is_never_pulled_off_its_site() {
+    let Some(mut world) = seeded_fixture() else {
+        return;
+    };
+    let house = world.role_unit("house").expect("a house role");
+    let builder = villagers(&world)[0];
+    world
+        .submit_checked(Command::Build {
+            villager: builder,
+            unit: house,
+            at: (18, 22),
+        })
+        .expect("a site can be placed");
+    world.step().expect("one tick");
+    // Every villager is now told to go and chop wood; the builder must not budge.
+    let wood = world.slot_of("wood").expect("wood");
+    world.set_villager_shares(&[(0, vec![(wood, 100)])]);
+    for _ in 0..300 {
+        world.step().expect("stepping");
+        let task = world.entity(builder).map(|entity| entity.task);
+        if matches!(task, Some(ruage_sim::Task::Gather { .. })) {
+            panic!("the shares took the builder off its site: {task:?}");
+        }
+    }
+}
+
+fn seeded_fixture() -> Option<World> {
+    let units = repo("config/gamedata/units.toml");
+    if !units.exists() {
+        return None;
+    }
+    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).ok()?;
+    let settings = ruage_data::load_sim_file(&repo("config/sim.toml")).ok()?;
+    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).ok()?;
+    let economy = ruage_data::load_economy_file(&repo("config/economy.toml")).ok()?;
+    let units = ruage_data::load_units_file(&units).ok()?;
+    let combat = ruage_data::load_combat_file(&repo("config/combat.toml")).ok()?;
+    let mut world = World::new(&settings, 7).ok()?;
+    world.seed_from(&map, &economy, &units).ok()?;
+    world.load_resources(&resources).ok()?;
+    world.load_combat(&combat);
+    Some(world)
+}

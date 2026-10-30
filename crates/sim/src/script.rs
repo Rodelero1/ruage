@@ -998,20 +998,51 @@ fn choose_target(
             let centre = world.start_town_centre_unit().ok_or_else(|| {
                 "the pack names no town centre, so there is none to aim at".to_owned()
             })?;
+            // The town centre first; then **any** enemy building, then the nearest enemy unit. A mangonel that has already
+            // razed the town centre leaves the rule with nothing to aim at - *"no enemy matches enemy_town_centre"*, 64
+            // times in the last run, while the enemy's villagers were still alive and the match was still on. The
+            // selector now degrades instead of failing.
+            let buildings = |family: Option<u32>| -> Option<EntityId> {
+                world
+                    .entities()
+                    .iter()
+                    .filter(|entity| {
+                        entity.player != player
+                            && entity.kind == EntityKind::Building
+                            && entity.hp > 0
+                            && family.is_none_or(|centre| {
+                                entity
+                                    .unit
+                                    .is_some_and(|unit| world.is_family(unit, centre))
+                            })
+                    })
+                    .map(|entity| entity.id)
+                    .next()
+            };
+            buildings(Some(centre)).or_else(|| buildings(None))
+        }
+        other => return Err(format!("unknown target selector {other:?}")),
+    };
+    enemy
+        .or_else(|| {
+            // Last resort: the nearest enemy unit. A side with no buildings but a villager in a corner is still in the
+            // match, and a rule that says "attack" must have something to attack.
+            let here = world.position(unit);
             world
                 .entities()
                 .iter()
                 .filter(|entity| {
-                    entity.player != player
-                        && entity.kind == EntityKind::Building
-                        && entity
-                            .unit
-                            .is_some_and(|unit| world.is_family(unit, centre))
+                    entity.player != player && entity.player != 0 && entity.kind == EntityKind::Unit
+                })
+                .min_by_key(|entity| match here {
+                    Some(from) => {
+                        let dx = entity.position.0.raw() - from.0.raw();
+                        let dy = entity.position.1.raw() - from.1.raw();
+                        (dx * dx + dy * dy, entity.id.0)
+                    }
+                    None => (0, entity.id.0),
                 })
                 .map(|entity| entity.id)
-                .next()
-        }
-        other => return Err(format!("unknown target selector {other:?}")),
-    };
-    enemy.ok_or_else(|| format!("no enemy matches {target:?}"))
+        })
+        .ok_or_else(|| format!("no enemy matches {target:?}"))
 }
