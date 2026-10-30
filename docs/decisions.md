@@ -2067,3 +2067,35 @@ once a second, per player: **400 game-seconds went from 319 ms to 11,922 ms** - 
 that `start_gather` performs anyway. Removing it and drawing a line at "one order per villager per retry window" brought
 the pass back to noise. Two rules came out of it, and both are in the code's comments: reachability is asked **once**,
 by the call that needs it; and a policy pass that can re-issue the same order every second is not a policy.
+
+## D76 - What a building occupies: footprints from the dat, and the Town Centre's walkable wings
+
+*The owner's answer, 2026-10-30, with a diagram of the Town Centre.*
+
+A building's **footprint** comes from the dat: `radius_x`/`radius_y` are half-extents in tiles, so the Town Centre
+(`2.0`) is **4x4**, the mill and lumber camp (`1.0`) are 2x2, the barracks (`1.5`) 3x3, the palisade (`0.5`) 1x1. Until
+now the engine blocked **one tile** per building that blocked at all, which is neither the game's shape nor enough for
+placement rules to mean anything.
+
+**What stands on the footprint is content's business, not the engine's.** The owner's diagram of the Town Centre: the
+building reads as a **diamond**, with the two-storey **back core** solid (impassable) and the **left and right wings plus
+the front courtyard under-hang fully walkable** - three quarters of the covered area, which is what his first message
+said. A farm is the extreme case: `radius 1.5` (3x3) and **entirely walkable**.
+
+So content describes, per role, which tiles of the footprint are solid:
+
+```toml
+[footprint.town_centre]
+# Rows top-to-bottom, columns left-to-right, anchored at the building's own tile.
+# '#' is impassable, '.' is ground a unit may cross. The diamond's core is the back half.
+blocked = ["##..", "##..", "....", "...."]
+```
+
+Rules that follow, and are what will be built next:
+
+1. A building with no `[footprint]` entry blocks **its own tile** - today's behaviour, so nothing regresses.
+2. A `[footprint]` entry blocks exactly the `#` tiles on placement and frees them on destruction or on a cancelled
+   foundation, through the same `Walk` layer walls already use (D54).
+3. A farm names an all-`.` mask, which is the "farms are floors" rule as data rather than as a special case.
+4. Placement and reachability then ask the footprint, not the anchor: a site may not overlap another footprint, and a
+   villager may cross a Town Centre's wings the way the game lets it.
