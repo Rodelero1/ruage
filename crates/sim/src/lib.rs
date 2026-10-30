@@ -4229,7 +4229,15 @@ impl World {
         // it. A spent plot stays spent - its food is eaten, and an upgrade does not bring it back.
         let added = self.farm_food_bonus(player) - food_before;
         if added > 0 {
-            self.grow_plots(player, added);
+            // **Proportionally** (the owner's rule, 2026-10-30): a plot that is half eaten gains half of what the tech
+            // adds. A farm is a budget, not a tank that is refilled - the extra food belongs to the *plot*, and what the
+            // villager has already taken is gone.
+            let was_total = self
+                .economy
+                .as_ref()
+                .map_or(0, |economy| i64::from(economy.farm.food_per_farm))
+                + food_before;
+            self.grow_plots(player, added, was_total);
         }
         Ok(())
     }
@@ -4237,7 +4245,7 @@ impl World {
     /// Add `food` to every plot of this player's that still holds some, in id order so the result is
     /// a function of state. Content decides which building is a plot, exactly as it does everywhere
     /// else; a pack with no farm yields nothing here.
-    fn grow_plots(&mut self, player: u8, food: i64) {
+    fn grow_plots(&mut self, player: u8, food: i64, was_total: i64) {
         let Some(farm_unit) = self
             .economy
             .as_ref()
@@ -4253,7 +4261,14 @@ impl World {
                 && entity.unit == Some(farm_unit)
                 && entity.amount.raw() > 0
             {
-                entity.amount = Fixed::from_raw(entity.amount.raw() + food * scale);
+                // The plot's share of the upgrade, rounded **down**: a quarter-eaten plot gains a quarter of the extra.
+                let remaining = entity.amount.raw() / scale;
+                let gain = if was_total > 0 {
+                    (food * remaining / was_total).max(0)
+                } else {
+                    0
+                };
+                entity.amount = Fixed::from_raw(entity.amount.raw() + gain * scale);
             }
         }
     }

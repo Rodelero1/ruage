@@ -2099,3 +2099,22 @@ Rules that follow, and are what will be built next:
 3. A farm names an all-`.` mask, which is the "farms are floors" rule as data rather than as a special case.
 4. Placement and reachability then ask the footprint, not the anchor: a site may not overlap another footprint, and a
    villager may cross a Town Centre's wings the way the game lets it.
+
+## D77-D79 - The owner's five answers (2026-10-30)
+
+**D77 - Farm upgrades are proportional, not a refill.** Horse Collar (+75), Heavy Plow (+125) and Crop Rotation (+175) are
+resource-36 modifiers in the dat, and the pacing the owner chose is: an upgrade adds its amount **in proportion to what the
+plot has left**. A full plot gains +75; a plot half eaten gains **+37** (rounded down); a spent plot gains nothing, because
+its food is already eaten. The engine adds `added * remaining / was_total` to every plot of the player's that still holds
+food, in id order, so the result is a function of state.
+
+**D78 - Victory is conquest.** The match ends when a side has nothing left that keeps it alive (D59's rule, unchanged). The
+acceptance script's prose said "a mangonel at the enemy town centre" and that is not the same thing: a razed town centre
+with three villagers in a corner is not a victory, in this engine or in the game.
+
+**D79 - The rendering order, the map, and the footprints.** Items 10-15 go **window first**: terrain and coloured blocks
+from the existing rasteriser, with sprites swapping in behind the `SpriteRef` boundary once the art extraction lands - the
+boundary is the thing worth proving early, and the art does not need the window rewritten. The map stays **ours** (the
+authored 64x64 mirrored one); reading `.aoe2scenario` files is a future item, not a prerequisite. Footprints (D76, the
+Town Centre's walkable wings) come **after** the renderer's first milestone, because they cannot make a match win or lose
+and will be far easier to judge once there is something on screen.

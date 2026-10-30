@@ -909,3 +909,60 @@ fn a_depleted_node_sends_the_villager_to_the_next_one_of_its_kind() {
         "and the next node is wood, not something else: {next:?}"
     );
 }
+
+/// Take `units` of food straight out of a plot, as a villager working it would.
+fn eat_from(world: &mut World, farm: EntityId, units: i64) {
+    // The engine has no "spend a farm's food" command, so the plot is drained the way the game drains it: a villager
+    // gathers it. One unit per order keeps the arithmetic exact.
+    let scale = world.scale();
+    let worker = world
+        .entities()
+        .iter()
+        .find(|e| e.player == 1 && e.kind == EntityKind::Unit)
+        .map(|e| e.id)
+        .expect("a villager");
+    world
+        .submit_checked(Command::Gather {
+            villager: worker,
+            node: farm,
+        })
+        .expect("the plot can be worked");
+    for _ in 0..20_000 {
+        let left = world.entity(farm).map(|e| e.amount.raw()).unwrap_or(0) / scale;
+        if left <= 250 - units {
+            break;
+        }
+        world.step().expect("stepping");
+    }
+}
+
+/// **Proportionally** (the owner's rule, 2026-10-30): a plot half eaten gains half of what the tech adds.
+#[test]
+fn an_upgrade_gives_a_half_eaten_farm_half_the_extra() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded_rich(&fx);
+    let farm = a_finished_farm(&mut world);
+    assert_eq!(
+        amount_of(&world, farm).raw(),
+        250 * world.scale(),
+        "250 to start"
+    );
+
+    // Eat half of it: 125 left of 250.
+    eat_from(&mut world, farm, 125);
+    assert_eq!(
+        amount_of(&world, farm).raw(),
+        125 * world.scale(),
+        "half eaten"
+    );
+
+    grant_feudal(&mut world, 1);
+    research(&mut world, HORSE_COLLAR);
+
+    // Horse Collar is +75 on a full plot; a half plot gets half of it, rounded down (37).
+    assert_eq!(
+        amount_of(&world, farm).raw(),
+        (125 + 37) * world.scale(),
+        "a half-eaten farm gains half the upgrade"
+    );
+}
