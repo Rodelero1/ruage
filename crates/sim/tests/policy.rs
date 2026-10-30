@@ -190,7 +190,6 @@ fn a_split_share_divides_the_villagers() {
 /// rather than hidden: it is the same family as the poaching bug that made the acceptance match stand still, and it needs
 /// the same instrument (the per-pass trace) to pin down.
 #[test]
-#[ignore = "known defect: the pull never fires in this fixture even though the deficit is computed (2026-10-30)"]
 fn the_share_row_follows_the_villager_count() {
     let Some(fx) = fixture() else {
         return;
@@ -230,9 +229,12 @@ fn the_share_row_follows_the_villager_count() {
                 player: 1,
                 kind: EntityKind::Unit,
                 unit: Some(villager_unit),
+                // **Open grass, not the forest.** The first version spawned them in a line east of the town centre, which
+                // at y = 16 runs straight into the tree line: three of them stood on blocked tiles, could not path out,
+                // and the share pass - correctly - never assigned them. The bug was in the fixture, not the pass.
                 position: (
-                    Fixed::from_raw(tc.0.raw() + (index as i64 + 2) * 65_536),
-                    tc.1,
+                    Fixed::from_raw(tc.0.raw() - (index as i64 + 2) * 65_536),
+                    Fixed::from_raw(tc.1.raw() + 5 * 65_536),
                 ),
                 speed: pace,
                 hp: 25,
