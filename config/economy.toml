@@ -31,9 +31,13 @@ food_per_farm = 250
 
 [gather]
 # How fast a villager takes hit points off a **standing tree**, per second. Trees must be felled before they yield (the
-# owner's rule, 2026-10-30); the dat gives a forest tree 20 hit points, a variant 25 or 30, and a bush or a mine none.
-# Authored pacing - the dat does not say how fast a chop is - and 0 turns felling off.
-fell_hp_per_second = 2.0
+# owner's rule, 2026-10-30); the dat gives a forest tree 20 hit points (25, 30 for variants), a bush or a mine none.
+#
+# PROVENANCE: dat - villager VMBAS (83) `combat_info.attacks` is [3, 3, 6, 0] and `combat_info.reload_time` is 2.0, so a
+# chop is **3 hit points every 2 seconds** = 1.5/s, and a 20 hp tree falls in 13.3 seconds (seven chops). The owner's
+# recollection of "3 hp a chop, upgradeable" matches the data; whether a tech raises it is a tech-tree question, and the
+# number here is the dark-age base.
+fell_hp_per_second = 1.5
 rate_from = "dat"
 # Per-task-variant work_rate: VMLUM 0.390, VMGLD 0.380, VMMIN 0.360, VMSHE 0.330,
 # VMFOR 0.310, VMHUN 0.410 (carry 35), VMFIS 0.430. Validated against published values
