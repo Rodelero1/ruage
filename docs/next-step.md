@@ -1943,3 +1943,24 @@ finishes instead of losing its builder to the share pass) and the **target fallb
 the town centre is gone; the run ends with `players=1` and 95 orders refused because the match is over).
 
 Item 9's definition - "the acceptance script runs to a result" - is met, measured by the batch runner, not asserted.
+
+## The window exists (2026-10-30, milestone 0)
+
+`crates/view/src/bin/window.rs` builds and runs: `cargo run --release -p ruage-view --bin window -- config`.
+
+- `winit 0.30` + `softbuffer 0.4`, both fetched from crates.io (reachable from this host) - the D74 stack, native and
+  software-presented, no GPU and nothing the headless build can disagree with.
+- One `World`, one window, one accumulator: the simulation runs at `tick_rate_hz` from `sim.toml`, the window draws
+  whatever tick the world has reached, catch-up is capped at a second of ticks so a paused debugger does not fast-forward
+  the match, and Escape or the close button exits cleanly.
+- The picture is the existing rasteriser's blocks, blitted as `0x00RRGGBB` into the softbuffer surface, with the tick
+  count and entity count in the title so a screenshot proves the loop is alive.
+
+**What is not there yet, in order:** input → `Command` (select, box-select, right-click order, control groups), pause and
+1x/2x/4x, the HUD (D74 allows text), the replay writer (seed + config hashes + the `(tick, player, command)` stream, and a
+headless path that reproduces the same state hash), and then the rule-AI as the opponent.
+
+**The verification wall, stated plainly:** this host has no display and no virtual one either (no `DISPLAY`, no `Xvfb`,
+no Wayland compositor), and `sudo` is unavailable to install one. The binary's failure path is verified - it exits with
+*"neither WAYLAND_DISPLAY nor WAYLAND_SOCKET nor DISPLAY is set"* rather than panicking - but nobody has yet **seen** the
+window on this machine. Visual proof needs either `Xvfb` installed here or the same command run on a desktop.

@@ -10,3 +10,7 @@ description = "Read-only presentation layer: a snapshot of a match, a camera, an
 ruage-fixed = { path = "../fixed" }
 ruage-data = { path = "../data" }
 ruage-sim = { path = "../sim" }
+# The window (D74: native, software presentation). `softbuffer` is the blit: the rasteriser already produces a pixel
+# buffer, so the window's whole job is to put it on a surface and drive a fixed-step loop.
+winit = "0.30"
+softbuffer = "0.4"
