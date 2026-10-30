@@ -7,7 +7,7 @@
 use ruage_data::Resources;
 use ruage_sim::{Command, EntityKind};
 
-use crate::{Camera, Frame, Snapshot, player_colour};
+use crate::{Camera, Frame, Snapshot, covers, player_colour};
 
 /// What a player has selected, by entity id, in the order they selected it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -37,12 +37,9 @@ impl Selection {
             .iter()
             .filter(|entity| entity.player == snapshot.player)
             .filter(|entity| matches!(entity.kind, EntityKind::Unit | EntityKind::Building))
-            .filter(|entity| {
-                (
-                    entity.position.0.floor() as i32,
-                    entity.position.1.floor() as i32,
-                ) == tile
-            })
+            // Anywhere on the footprint, the same rule the window's picking uses: clicking the body of a town centre
+            // must select it, not only its anchor tile.
+            .filter(|entity| covers(entity, tile))
             .collect();
         // A unit standing on a building is what the player meant: units first.
         let chosen = own
@@ -104,12 +101,7 @@ impl Selection {
             return Vec::new();
         }
         let (tile_x, tile_y) = (tile.0 as u16, tile.1 as u16);
-        let under = snapshot.entities.iter().find(|entity| {
-            (
-                entity.position.0.floor() as i32,
-                entity.position.1.floor() as i32,
-            ) == tile
-        });
+        let under = snapshot.entities.iter().find(|entity| covers(entity, tile));
 
         let mut orders = Vec::new();
         for id in &self.ids {

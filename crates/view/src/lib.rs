@@ -419,6 +419,65 @@ pub fn footprint_tiles(anchor: (i32, i32), footprint: (u32, u32)) -> (i32, i32, 
     )
 }
 
+/// Whether a tile is inside an entity's footprint. **One rule for one click**: `pick_at` has a `World` and the UI's
+/// selection has a `Snapshot`, and when they each had their own rule a click on the body of a town centre selected
+/// nothing while the window's picking knew better.
+#[must_use]
+pub fn footprint_covers(anchor: (i32, i32), footprint: (u32, u32), tile: (i32, i32)) -> bool {
+    let (min_x, min_y, max_x, max_y) = footprint_tiles(anchor, footprint);
+    tile.0 >= min_x && tile.0 <= max_x && tile.1 >= min_y && tile.1 <= max_y
+}
+
+/// The same rule, for a snapshot's own view of an entity.
+#[must_use]
+pub fn covers(entity: &EntityView, tile: (i32, i32)) -> bool {
+    footprint_covers(
+        (
+            entity.position.0.floor() as i32,
+            entity.position.1.floor() as i32,
+        ),
+        entity.footprint,
+        tile,
+    )
+}
+
+/// How far towards the viewer something stands. A diamond grid has a front - the bottom of the screen - so
+/// `x + y` increases towards it, and a thing with a bigger `x + y` covers whatever is behind it.
+///
+/// A **building** uses the far corner of its footprint rather than its anchor: a 4x4 town centre covers ground up to
+/// `anchor + 3`, so a unit standing at `anchor + 1` is behind the building's mass and only `anchor + 4` is in front of
+/// it. Using the anchor would paint every unit standing in the building's own footprint over the building.
+#[must_use]
+pub fn depth_of(entity: &EntityView) -> f32 {
+    match entity.kind {
+        EntityKind::Building => {
+            let anchor = (
+                entity.position.0.floor() as i32,
+                entity.position.1.floor() as i32,
+            );
+            let (_, _, max_x, max_y) = footprint_tiles(anchor, entity.footprint);
+            (max_x + max_y) as f32
+        }
+        EntityKind::Resource(_) | EntityKind::Unit | EntityKind::Projectile => {
+            entity.position.0 + entity.position.1
+        }
+    }
+}
+
+/// Everything on the ground, **back to front**: depth first, then id, so the order never depends on how the entity
+/// list happened to be built. Sorting is not cosmetic on a diamond grid - without it a villager north of a house is
+/// painted over the house, and the picture flickers as entities are added and removed.
+#[must_use]
+pub fn draw_order(snapshot: &Snapshot) -> Vec<&EntityView> {
+    let mut order: Vec<&EntityView> = snapshot.entities.iter().collect();
+    order.sort_by(|a, b| {
+        depth_of(a)
+            .total_cmp(&depth_of(b))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    order
+}
+
 pub(crate) fn player_colour(player: u8) -> [u8; 4] {
     match player {
         1 => palette::PLAYER_ONE,
@@ -468,16 +527,15 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
         }
     }
 
-    // Resources first: they are the ground, and a unit standing on one should cover it.
-    for entity in &snapshot.entities {
-        if matches!(entity.kind, EntityKind::Resource(_)) {
-            let centre = camera.project(entity.position);
-            frame.fill_diamond(centre, (rx * 0.6, ry * 0.6), palette::RESOURCE);
-        }
-    }
-    for entity in &snapshot.entities {
+    // One pass, back to front: a diamond grid has an unambiguous front, and sorting by depth is what makes a unit
+    // standing in front of a building cover it while one standing behind is covered (`draw_order`).
+    for entity in draw_order(snapshot) {
         match entity.kind {
-            EntityKind::Resource(_) | EntityKind::Projectile => {}
+            EntityKind::Projectile => {}
+            EntityKind::Resource(_) => {
+                let centre = camera.project(entity.position);
+                frame.fill_diamond(centre, (rx * 0.6, ry * 0.6), palette::RESOURCE);
+            }
             EntityKind::Building => {
                 // The silhouette is the pack's footprint, drawn as the diamond a block of that many tiles makes:
                 // four tiles across is `4 * rx` half-width and `4 * ry` half-height, centred on the ground the
@@ -577,8 +635,7 @@ pub fn pick_at(world: &ruage_sim::World, tile: (i32, i32)) -> Option<ruage_sim::
             .unit
             .and_then(|unit| world.footprint_of(unit))
             .unwrap_or((1, 1));
-        let (min_x, min_y, max_x, max_y) = footprint_tiles(anchor, footprint);
-        if tile.0 < min_x || tile.0 > max_x || tile.1 < min_y || tile.1 > max_y {
+        if !footprint_covers(anchor, footprint, tile) {
             continue;
         }
         let rank = if entity.kind == ruage_sim::EntityKind::Unit {

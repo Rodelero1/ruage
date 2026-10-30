@@ -2098,3 +2098,28 @@ original uses - it changes one constant, and `.aoe2scenario` import is where it 
 **Next: step 3, depth sorting** - draw the scene in `x + y` order so a unit in front of a building covers it, then
 step 4's terrain content (dirt, forest floor, trees as clusters), step 5 fog, step 6 the HUD, step 7 camera state with
 pan and zoom keys, step 8 selection markers.
+
+## Step 3 of the look: depth sorting (2026-10-30, done)
+
+**What landed.** `draw_order(snapshot)` paints the ground in one pass, **back to front**: `depth_of` gives a unit,
+resource or projectile `x + y`, and gives a **building the far corner of its footprint**, because a 4x4 town centre
+occupies ground up to `anchor + 3` and everything beyond that is in front of it. Ties go to the lower id, so the order
+never depends on how the entity list was built. Before this the renderer drew every resource, then everything else in
+id order, which painted a villager standing *behind* a house on top of it.
+
+**Tested** (`crates/view/tests/depth.rs`): a hand-built snapshot whose five entities are listed in the wrong order comes
+back as `[behind, tie-by-id, building, tie-by-id, front]`; and in a real world a villager spawned inside the back half
+of the town centre's footprint - with an id higher than the building's, so an id-ordered draw would show it - is covered
+by the building's paint.
+
+**The review's finding, and the fix that followed.** Footprints gave the *window* a new hit test (`pick_at`), and the
+UI's `Selection` kept the old anchor-tile rule: **two rules for one click**. A click on the body of a town centre
+selected nothing through `Selection` while the window's picking knew better. Both now share `covers`/`footprint_covers`,
+and `ui::Selection::click` and the order path were pinned by
+`a_click_on_the_body_of_a_building_selects_it` (written first, watched failing with an empty selection).
+
+**Measured:** `draw_order` costs the frame almost nothing - **525 us** against 572 us before it at 960x720 with 126
+entities, inside the probe's noise - so the sort is O(n log n) on 126 elements, not a budget question.
+
+**Next: step 4, terrain content** - grass, dirt and forest floor from `map.toml`, and trees drawn as clusters on their
+tiles rather than one square per node.

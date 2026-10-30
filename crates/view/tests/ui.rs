@@ -330,3 +330,57 @@ fn the_hud_shows_a_queue() {
     assert_eq!(hud.selected[0].pending, 1, "the HUD cannot see the queue");
     let _ = render(&snapshot, &camera_on((16.0, 16.0)));
 }
+
+/// A click on the **body** of a building selects it. The window's own picking (`ruage_view::pick_at`) learned this
+/// when footprints landed; `Selection` kept the anchor-tile rule, and two rules for one click is how a player ends up
+/// clicking a town centre and selecting nothing.
+#[test]
+fn a_click_on_the_body_of_a_building_selects_it() {
+    let Some(fx) = fixture() else { return };
+    let world = seeded(&fx);
+    let snapshot = Snapshot::of(&world, &fx.map, 1);
+    let town = snapshot
+        .entities
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Building)
+        .expect("the town centre");
+    let (across, down) = town.footprint;
+    let half = (across / 2) as i32;
+    let anchor = (
+        town.position.0.floor() as i32,
+        town.position.1.floor() as i32,
+    );
+    let camera = camera_on(town.position);
+
+    // Every tile of the footprint that no unit stands on: selecting the town centre must not depend on which tile of
+    // its body a player happens to hit.
+    let mut checked = 0;
+    for dx in -half..=(across as i32 - 1 - half) {
+        for dy in -half..=(down as i32 - 1 - half) {
+            let tile = (anchor.0 + dx, anchor.1 + dy);
+            let occupied = snapshot.entities.iter().any(|entity| {
+                entity.kind == EntityKind::Unit
+                    && (
+                        entity.position.0.floor() as i32,
+                        entity.position.1.floor() as i32,
+                    ) == tile
+            });
+            if occupied {
+                continue;
+            }
+            let pixel = camera.project((tile.0 as f32, tile.1 as f32));
+            let mut selection = Selection::new();
+            selection.click(&snapshot, &camera, pixel);
+            assert_eq!(
+                selection.ids,
+                vec![town.id],
+                "clicking tile {tile:?} on a {across}x{down} building selected nothing"
+            );
+            checked += 1;
+        }
+    }
+    assert!(
+        checked >= 2,
+        "no unobstructed tile of the building was clicked"
+    );
+}
