@@ -1734,3 +1734,29 @@ The fix is three lines (`Some(0) => {}`, `Some(_) => return false`), and the tes
 `nearest_like(here, node, id)` is called **from where it stands - the drop site** - which is exactly "the tree nearest the
 drop site". The other path (emptying a tree with an empty hand, never having delivered) measures from the dead tree
 instead, so the two cases differ; only the first matches the game, and that is the one that matters in a normal run.
+
+## "So is the game winnable?" - measured, 2026-10-29 (late)
+
+`ruage-headless --script config/acceptance.toml --seed 7 --ticks 48000 --report 400`, release:
+
+| game time | wood | food | gold | units | buildings |
+|---|---|---|---|---|---|
+| 400 s | 94 | 11 | 50 | 19 | 8 |
+| 800 s | 109 | 51 | 50 | 24 | 14 |
+| 1200 s | 81 | 497 | 240 | 32 | 15 |
+| 2400 s | **81** | **497** | 854 | 32 | 15 |
+
+**No.** At 2,400 s the enemy town centre is untouched at 2,400 hp, player 1 has **no barracks** (so no Feudal, no Castle,
+no siege workshop, no mangonel), and every resource is frozen from 1,200 s. The barracks rule was refused **295 times**
+with *"not enough wood: 175 needed, 81 in the bank"*.
+
+**Why the wood stopped, in one sentence:** eighteen villagers stood on the **empty berry patch around the mill** with a
+`Gather` task and no source left, because `nearest_like` only compared resource nodes with resource nodes - and once the
+berries are gone the next source of food is a **farm**, a building. Fixed: `nearest_like` now crosses the two kinds for
+the column `[farm] resource` fills, with `crates/sim/tests/retarget.rs` written first (watched failing, then biting under
+a mutation that removes the branch).
+
+**What is still owed before the match can be won:** the villager that gets stuck *inside* a task still needs the
+`FINDINGNEWTARGET` fallback with a give-up timeout - the owner's rule names "next bush, next tree, next pile of gold",
+and 0 A.D. adds two things to it: keep the specific type, and if nothing is nearby, walk back to where the order started
+and look again. Ours now finds a farm, but a villager whose route died still has no clock.

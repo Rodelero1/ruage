@@ -5339,6 +5339,14 @@ impl World {
         let kind = source.kind;
         let unit = source.unit;
         let family = unit.and_then(|unit| self.units.as_ref().map(|units| units.root(unit)));
+        // A farm is a **building** that fills the same column a bush does, so "the next source of food" has to cross the
+        // two kinds. Without this a forager whose berries are gone has nowhere to go: eighteen of them stood on the empty
+        // berry patch at 2,400 s and the match never spent another stick of wood.
+        let farm_slot = self
+            .economy
+            .as_ref()
+            .and_then(|economy| economy.farm.resource.as_deref())
+            .and_then(|name| self.slot_of(name));
         let mut best: Option<(i64, u32, EntityId)> = None;
         for entity in &self.entities {
             if entity.id == old || entity.id == worker {
@@ -5349,6 +5357,12 @@ impl World {
             }
             let same = match (kind, entity.kind) {
                 (EntityKind::Resource(slot), EntityKind::Resource(other)) => slot == other,
+                // ... and a finished farm, for the column a farm fills.
+                (EntityKind::Resource(slot), EntityKind::Building) => {
+                    farm_slot == Some(slot)
+                        && entity.construction.is_none()
+                        && entity.amount.raw() > 0
+                }
                 (EntityKind::Unit, EntityKind::Unit) => {
                     // Another animal of the same family, and still alive: a carcass is not something to hunt.
                     entity.hp > 0
