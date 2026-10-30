@@ -603,3 +603,30 @@ arrives as the villager chops, with the tree disappearing when its wood reaches 
 Our engine currently matches the second reading (wood per chop) *except* for the half that the parked tests in
 `crates/sim/tests/depletion.rs` describe: an emptied tree keeps its entity and its blocked tile, when the game removes the
 object and frees the ground.
+
+## Farms and the villager upgrades: what the data says (2026-10-30)
+
+Read from our own generated tables (`config/gamedata/effects.toml`, `techs.toml`) and the dat.
+
+**Farm capacity is a resource modifier on resource 36** (the pack's `[farm] food_resource`), and there are exactly four
+in the game:
+
+| effect | name | resource 36 |
+|---|---|---|
+| 14 | **Horse Collar** | **+75** |
+| 13 | **Heavy Plow** | **+125** |
+| 12 | **Crop Rotation** | **+175** |
+| 402 | Chinese Team Bonus | +45 |
+
+The engine already reads resource 36 for `farm_food_total(player)`, so the farm-upgrade line needs no new data - only the
+rule for *when* an upgraded total applies (a new farm, or the one already standing).
+
+**A farm is worked by standing on it and gathering at a rate** - `[farm] rate = 0.4` per second, `use_villager_rate =
+false` in content, with the mechanism's unresolved note already recorded there. Farms are walkable, pinned by
+`crates/sim/tests/walkable.rs`.
+
+**Not yet verifiable from our tables:** the speed and gather-rate techs (Wheelbarrow, Hand Cart, Double-Bit Axe, Bow Saw,
+Two-Man Saw). `effects.toml` names only a handful of modifier attributes - `attack`, `gather_rate`, `carry`, armour - and
+**`speed` does not appear at all**, so either the dat encodes those upgrades under attribute ids our generator has no name
+for, or the effects carry them as unit *commands* rather than modifiers. This is the same extractor gap that made every
+unit's `attacks` list empty; it needs the attribute-name table completed before any of those numbers can be quoted.
