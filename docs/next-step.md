@@ -2167,3 +2167,31 @@ every level.
 **Not verified, and said plainly:** the *drawn* rung. Pan and zoom are input in a binary on a host with no display, so
 what is proven is the camera arithmetic and that the binary builds with the rebuild removed - not that a window pans.
 The owner running `make run` on a desktop is the third rung.
+
+## Resume point: steps 5, 6 and 8 (2026-10-30, context, not the plan, ran out)
+
+*Steps 1-4 and 7 of the look are landed, reviewed, committed and pushed (`main` level with `origin`). Three remain, in
+this order, each with the compact it needs - they are small, and none of them touches the simulation.*
+
+**Step 5 - fog.** Ground is already three-state on screen (unseen / explored / visible, `tile_vision`), but
+`Snapshot::of` filters entities by **current** visibility only, so a building the player has seen and can no longer watch
+**vanishes**. The game keeps it drawn. Fix: include an entity when its own tile is *explored*, carry `remembered: bool`
+on `EntityView`, and have the renderer dim it (and not draw units that way - only buildings and resource nodes persist in
+memory). Test: a player's view kept after the villager walks away still lists the enemy town centre, marked remembered;
+an unscouted corner still lists nothing.
+
+**Step 6 - the HUD.** `ui::Hud` and `ui::minimap` exist and are tested; nothing draws them in the window. What is
+missing is a **font** (D82: a bundled bitmap font, no parser). Smallest useful form: a 3x5 digit glyph table plus a
+`Frame::draw_text` that scales it, then a resource bar (stock by column, population, selection count, the last refusal
+from `World::last_refusal()`) and the minimap in the corner. Test the glyphs by drawing "0123456789" into a frame and
+counting lit pixels per cell, not by looking.
+
+**Step 8 - selection you can read at a glance.** The white cross is drawn **in the binary**, so it cannot be tested;
+move it into `ruage_view` as `Highlights { selected, order }` and `render_with(...)`: a diamond ring under each selected
+entity, an hp bar over it (green over red, fraction from `hp_fraction`), and a marker where the last order went. Tests:
+a selected villager has ring pixels at the diamond's edge and none without a selection; a half-health unit's bar is half
+green, half red.
+
+**And the one open question for the owner** (does not block any of the above): D83's footprint anchoring - the anchor is
+the tile nearest the middle, with the extra tile of an even footprint on the +x/+y side. The alternative is the block's
+north corner; it is one constant in `footprint_tiles`, and importing a real `.aoe2scenario` is what would settle it.
