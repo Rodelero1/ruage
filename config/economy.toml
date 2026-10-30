@@ -177,7 +177,7 @@ militia = 74        # 40 hp, 60 food + 20 gold, 21 s: the Dark Age infantry unit
 spearman = 93
 # The building a villager works for food. The engine treats it like any other building except for
 # this one thing: `[farm]` says its work yields the `food` column.
-farm = 50       # 45 hp, 35 food + 25 wood, 22 s: available once the Feudal Age lands (tech 87)
+farm = 50       # 45 hp, **60 wood only** (`costs = [[1, 60]]` in units.toml; the old comment here said 35 food + 25 wood and was wrong)
 wall = 72       # WALL (palisade), 250 hp, 2 wood: the segment in [build] blocking_roles
 pikeman = 358       # 55 hp: an upgrade, researched (tech 197, Castle Age)
 halberdier = 359    # 60 hp: an upgrade, researched (tech 429, Imperial)
