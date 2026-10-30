@@ -162,6 +162,24 @@ pub struct Gather {
     pub fell_hp_per_second: f64,
 }
 
+impl Gather {
+    /// Hit points a villager takes off a standing tree **per tick**, rounded up so a slow chop still lands. Here rather
+    /// than in the simulation because this is where the fractional rate lives: the tick only ever sees whole hit points
+    /// (D9 - no floats near the simulation's state).
+    #[must_use]
+    pub fn fell_hp_per_tick(&self, tick_rate_hz: u32) -> i32 {
+        let per_tick = self.fell_hp_per_second * f64::from(tick_rate_hz.max(1));
+        if per_tick <= 0.0 {
+            0
+        } else {
+            #[allow(clippy::cast_possible_truncation)]
+            {
+                per_tick.ceil() as i32
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Train {
     /// Building unit id -> the unit ids it may create.

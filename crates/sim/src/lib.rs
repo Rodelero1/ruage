@@ -6440,13 +6440,13 @@ impl World {
                 Some(Task::Gather { node, .. }) => node,
                 _ => continue,
             };
-            let per_tick = self.economy.as_ref().map_or(0.0, |economy| {
-                economy.gather.fell_hp_per_second / f64::from(self.tick_rate_hz)
-            }) as f32;
+            let per_tick = self.economy.as_ref().map_or(0, |economy| {
+                economy.gather.fell_hp_per_tick(self.tick_rate_hz)
+            });
             if let Some(target) = self.find_mut(node) {
                 // Accumulate in whole points so a slow chop still lands: a tree falls when its hit points reach zero and
                 // **stays where it stands** until the wood is gone.
-                let loss = (per_tick.max(1.0)).round() as i32;
+                let loss = per_tick;
                 target.hp = (target.hp - loss).max(0);
             }
         }

@@ -1929,3 +1929,17 @@ site the player never wants finished - so the reservation must be checked by a t
 Cost: the share pass already distinguishes builders (one `matches!` in the classifier), so the reservation adds no scan.
 The target fallback is a second and third pass over `entities` **only when the town centre is absent**, which is the rarest
 case, and it keeps the same deterministic ordering.
+
+## Item 9 is done: the acceptance match wins (2026-10-30)
+
+```
+script               seed  feudal  castle  food/m wood/m gold/m lost  army  outcome      hash
+acceptance.toml        7   778.0  1324.0    112    117    23    0  1458.0  victory p1  #f91872681ba4a3a8
+```
+
+**Victory, player 1**, on the 2,400-second script: Feudal at **778 s**, Castle at **1,324 s**, no villager lost, an army
+worth 1,458 resources at the end. The last two changes that closed it were the **builder reservation** (the siege workshop
+finishes instead of losing its builder to the share pass) and the **target fallback** (the mangonel finds the enemy after
+the town centre is gone; the run ends with `players=1` and 95 orders refused because the match is over).
+
+Item 9's definition - "the acceptance script runs to a result" - is met, measured by the batch runner, not asserted.
