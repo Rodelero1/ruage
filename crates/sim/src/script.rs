@@ -689,11 +689,18 @@ fn when_holds(world: &World, rule: &Rule) -> bool {
     {
         return false;
     }
-    if let Some(role) = when.no_building.as_deref()
-        && building_count(world, player, role).is_none()
-    {
-        // A role the pack cannot name is a bug in the content, not a condition that can be true.
-        return false;
+    if let Some(role) = when.no_building.as_deref() {
+        match building_count(world, player, role) {
+            // A role the pack cannot name is a bug in the content, not a condition that can be true.
+            None => return false,
+            // The condition: the player has none of them.
+            Some(0) => {}
+            // One stands already. This branch was missing, and it cost a match: the mill rule fired 170 times, the
+            // lumber camp 140 and the barracks 65 in 1,000 game-seconds - each paying for a building it already had, and
+            // each refusal eating the wood the *next* rule needed. `no_building` was only ever checked for "is this a
+            // role at all".
+            Some(_) => return false,
+        }
     }
     for role in &when.has_building {
         if building_count(world, player, role).unwrap_or(0) == 0 {

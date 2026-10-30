@@ -5285,6 +5285,13 @@ impl World {
         self.walk.as_ref().is_some_and(|walk| walk.contains(x, y))
     }
 
+    /// Whether a unit may stand on this tile: terrain, walls and buildings, as the walk grid holds them. Exposed because
+    /// "can this tile be walked on" is a question a test (and a future UI) asks of the world directly.
+    #[must_use]
+    pub fn tile_walkable(&self, x: u16, y: u16) -> bool {
+        self.walk.as_ref().is_some_and(|walk| !walk.blocked(x, y))
+    }
+
     /// Whether an entity is a **living animal**, and if it is, whether it is herdable. `None` for a tree, a building, a
     /// carcass or a dead animal: only a live animal is something a villager hunts or herds.
     fn animal_at(&self, id: EntityId) -> Option<bool> {

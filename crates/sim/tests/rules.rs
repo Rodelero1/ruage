@@ -181,3 +181,37 @@ resource = "food"
         "and it fires once its time comes"
     );
 }
+
+/// `no_building` means "the player has none of these", not "the pack knows this role": a rule that builds a mill must
+/// stop once a mill stands, or it re-orders one every cooldown for the whole match - and pays for it.
+#[test]
+fn a_rule_with_no_building_stops_once_it_stands() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    // Town centres exist from the first tick, so this rule's condition is false immediately and can never fire.
+    let scenario: Scenario = toml::from_str(
+        r#"
+schema = 2
+duration_seconds = 60.0
+
+[[rule]]
+player = 1
+cooldown_seconds = 1.0
+when = { no_building = "town_centre" }
+do = "gather"
+resource = "food"
+"#,
+    )
+    .expect("a rule the format can read");
+    let mut runner = Runner::new(&scenario, 20).expect("a runner");
+    for _ in 0..600 {
+        runner.due(&mut world);
+        world.step().expect("stepping");
+    }
+    assert_eq!(
+        runner.fired_times,
+        vec![0],
+        "a rule whose building already stands must not fire"
+    );
+}

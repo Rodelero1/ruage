@@ -34,9 +34,9 @@ const USAGE: &str = "usage: ruage-headless --config <sim.toml> --map <map.toml> 
                      [--combat <combat.toml>] [--civs <civs.toml>] \
                      [--overrides <overrides.toml>] \
                      [--script <scenario.toml>] [--ticks <n>] [--report <seconds>] \
-                     --seed <u64>";
+                     [--dump <entities.csv>] --seed <u64>";
 
-const KNOWN: [&str; 15] = [
+const KNOWN: [&str; 16] = [
     "--config",
     "--map",
     "--economy",
@@ -51,6 +51,7 @@ const KNOWN: [&str; 15] = [
     "--seed",
     "--ticks",
     "--report",
+    "--dump",
     "--help",
 ];
 
@@ -209,7 +210,63 @@ fn run(args: &[String]) -> Result<(), String> {
         }
     }
 
+    // A picture of the world, for a person rather than a test: one line per entity, in tile coordinates, so the map can
+    // be drawn outside the engine (the `frame` bin draws pixels; this answers "where is everything").
+    if let Some(path) = parsed.get("--dump") {
+        let mut out = String::from("kind,player,id,unit,slot,x,y,amount,hp,task\n");
+        let scale = world.scale() as f64;
+        for entity in world.entities() {
+            let kind = match entity.kind {
+                ruage_sim::EntityKind::Unit => "unit",
+                ruage_sim::EntityKind::Building => "building",
+                ruage_sim::EntityKind::Resource(_) => "resource",
+                ruage_sim::EntityKind::Projectile => "projectile",
+            };
+            // A resource node has no unit id of its own: its identity is the stockpile column it fills, which is what a
+            // picture (and a balance question) needs.
+            let slot = match entity.kind {
+                ruage_sim::EntityKind::Resource(slot) => slot,
+                _ => 255,
+            };
+            let task = format!("{:?}", entity.task)
+                .split([' ', '{'])
+                .next()
+                .unwrap_or("?")
+                .to_owned();
+            out.push_str(&format!(
+                "{kind},{},{},{},{slot},{:.2},{:.2},{:.2},{},{task}\n",
+                entity.player,
+                entity.id.0,
+                entity.unit.map_or(0, |unit| unit),
+                entity.position.0.raw() as f64 / scale,
+                entity.position.1.raw() as f64 / scale,
+                entity.amount.raw() as f64 / scale,
+                entity.hp,
+            ));
+        }
+        if let Err(err) = std::fs::write(path, out) {
+            return Err(format!("dump {path}: {err}"));
+        }
+    }
+
     if let Some((runner, _)) = runner.as_ref() {
+        // Rules are reported separately, and *with their firing counts*: a rule that never fires and a rule that fires
+        // and cannot run are different bugs, and the headless used to be silent about both (2026-10-29).
+        if runner.fired_times.iter().any(|count| *count > 0) {
+            println!("rule firings: {:?}", runner.fired_times);
+        }
+        for (seconds, why) in &runner.rule_refusals {
+            println!("rule at {seconds:>7.1}s refused: {why}");
+        }
+        // The engine's own last refusal: a share assignment that could not start is not a *rule* refusal, and it was
+        // invisible in every report so far.
+        if let Some((id, why, tick)) = world.last_refusal() {
+            println!(
+                "last engine refusal: entity {} at {:.1}s: {why}",
+                id.0,
+                tick as f64 / f64::from(world.tick_rate_hz())
+            );
+        }
         for (seconds, outcome) in &runner.outcomes {
             if *outcome != Outcome::Ran {
                 println!("step at {seconds:>7.1}s {}", describe(outcome));

@@ -1703,3 +1703,34 @@ deduction.
 
 **Cost, measured:** the run takes ~4x real time in release, and a single path search is ~29 ms on this map. Both deserve
 attention before the balance runs in item 8's batch harness are cheap enough to sweep civs.
+
+## The `no_building` bug (2026-10-29, found by printing the firing counts)
+
+*The instrument existed (`Runner::fired_times`) and was never displayed; the headless now prints it, with rule refusals
+and the engine's own last refusal. It paid for itself on the first run.*
+
+```
+rule firings: [500, 6, 14, 170, 140, 65, 0, 0, 0, 142, 0, 0, 0, 0]
+rule at 999.0s refused: not enough wood: 175 needed, 55 in the bank
+```
+
+**The mill rule fired 170 times in 1,000 game-seconds, the lumber camp 140 and the barracks 65** - because `no_building`
+was only ever checked for *"is this a role the pack knows"*, never for *"does one already stand"*. Every 5 seconds each
+of those rules paid for a building it already had, and each refusal spent the wood the next rule needed. That is the
+wood collapse: not a starving forest, a rule that never stopped buying.
+
+The fix is three lines (`Some(0) => {}`, `Some(_) => return false`), and the test -
+`a_rule_with_no_building_stops_once_it_stands` - was written first and watched failing with **30 firings in 30 seconds**.
+
+**The two facts behind the owner's question stay true either way**, and both are parked as failing tests in
+`crates/sim/tests/depletion.rs`:
+
+- a **resource node does not block its own tile** - only terrain does, so a tree on grass is walk-through and a tree in
+  the forest only blocks because the tile under it is `F`;
+- **a spent tree keeps its entity** (`amount 0`) and, on this map, its blocked `F` tile: nothing is removed and no gap
+  opens. In the game the tree object goes away and the ground becomes walkable.
+
+**And the owner's rule for what happens next is already the engine's**: at the drop site the villager is set idle and
+`nearest_like(here, node, id)` is called **from where it stands - the drop site** - which is exactly "the tree nearest the
+drop site". The other path (emptying a tree with an empty hand, never having delivered) measures from the dead tree
+instead, so the two cases differ; only the first matches the game, and that is the one that matters in a normal run.
