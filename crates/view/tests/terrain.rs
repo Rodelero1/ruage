@@ -46,6 +46,7 @@ fn node(id: u32, at: (f32, f32), amount: u32) -> EntityView {
         garrison: 0,
         amount,
         pending: 0,
+        remembered: false,
         footprint: (1, 1),
     }
 }

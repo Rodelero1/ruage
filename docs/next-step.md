@@ -2195,3 +2195,25 @@ green, half red.
 **And the one open question for the owner** (does not block any of the above): D83's footprint anchoring - the anchor is
 the tile nearest the middle, with the extra tile of an even footprint on the +x/+y side. The alternative is the block's
 north corner; it is one constant in `footprint_tiles`, and importing a real `.aoe2scenario` is what would settle it.
+
+## Step 5 of the look: fog remembers buildings and forgets armies (2026-10-30, done)
+
+**What landed.** `Snapshot::of` now keeps a **building or a resource node** whose ground is *explored* after nothing
+watches it, marking it `remembered`; units are still filtered by current visibility only, because an army that walks out
+of sight is gone - that is what scouting is for. The renderer dims what is remembered to 60% brightness, so a memory does
+not read as a live building.
+
+**Tested** (`crates/view/tests/fog.rs`): an enemy house and an enemy villager are spawned in player 1's sight, player 1's
+whole army is then deleted, and the house is still in the view **marked remembered** while the villager is not; an
+unscouted corner of the map still leaks nothing; and the same house is drawn dimmer than it was when watched.
+
+**The review paid for the step twice.** The first version asked `world.vision` per entity, and `vision` scans every
+entity - the same O(n²)-on-the-frame-path mistake as the garrison count last step. Worse, `Snapshot::of` was already
+building its explored grid by asking `vision` **per tile**, which is every entity per tile (4,096 tiles x 126 entities).
+`World::explored_mask` now hands out the grid the simulation already maintains, and both callers use it: the explored
+grid becomes a copy, and `remembered` becomes one bit test. **Measured: 502 us a frame against 635** - the fog work paid
+for itself and left a 133 us gain.
+
+**And a release-only bug the test caught:** `as_memory` multiplied a `u8` by 3, which overflows for 200 (`BUILDING`) -
+in a debug build that panics, in a release build it would have wrapped to a bright wrong colour. Widened before the
+multiply.

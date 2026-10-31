@@ -4749,6 +4749,21 @@ impl World {
         }
     }
 
+    /// The tiles this player has **ever** seen, as one bit per tile in row-major order - the grid the fog keeps, handed
+    /// out so a renderer does not have to ask `vision` per tile (which scans every entity) or per entity (which scans
+    /// every tile). The simulation already maintains it; this is only the door.
+    pub fn explored_mask(&self, player: u8) -> Vec<u64> {
+        let (width, height) = self.map_size;
+        let mut mask = vec![0u64; (usize::from(width) * usize::from(height)).div_ceil(64)];
+        if player == 0 || usize::from(player) > MAX_PLAYERS {
+            return mask;
+        }
+        if let Some(explored) = self.explored.get(usize::from(player) - 1) {
+            mask[..explored.len()].copy_from_slice(explored);
+        }
+        mask
+    }
+
     /// Whether this player can see that entity: their own always, anybody else's only while it stands
     /// on ground an entity of theirs is watching.
     pub fn visible_to(&self, player: u8, entity: EntityId) -> bool {

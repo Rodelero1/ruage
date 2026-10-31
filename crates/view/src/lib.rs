@@ -63,6 +63,11 @@ pub struct EntityView {
     pub amount: u32,
     /// Units a building is making, the one in progress included; zero for everything else.
     pub pending: usize,
+    /// Whether this entity is **remembered** rather than watched: its ground is explored, nothing of the player's can
+    /// see it now, and it is still in the picture because a building the player has seen does not disappear. Units are
+    /// never remembered - an army does not leave a photograph behind - and the renderer dims what is remembered, because
+    /// a memory drawn at full brightness reads as a live building.
+    pub remembered: bool,
     /// The tiles this entity occupies, read from the pack's own radii (D76): a town centre is 4x4, a house 2x2,
     /// a villager one. The renderer draws this silhouette, so the screen shows the space the simulation
     /// reserves rather than a square of its own invention.
@@ -107,11 +112,22 @@ impl Snapshot {
             }
         }
 
+        // One grid for the whole snapshot: the simulation's own record of what this player has ever seen, and the same
+        // bits `explored` below is built from. Asking `vision` per entity would scan every tile per entity, and asking
+        // it per tile - which this used to do - scans every entity per tile.
+        let remembered_ground = world.explored_mask(player);
+
         let mut entities = Vec::new();
         for entity in world.entities() {
-            // A player is not shown what they cannot see: that is the only filter here, and it is the
-            // simulation's answer, not the renderer's guess.
-            if !world.visible_to(player, entity.id) {
+            // A player is not shown what they cannot see: that is the only filter here, and it is the simulation's
+            // answer, not the renderer's guess. A **building or a resource node** the player has seen before stays in
+            // view as a memory once nothing watches it - the ground under it is still explored - while a unit does not:
+            // an army that walks out of sight is gone, which is the whole point of scouting.
+            let seen = world.visible_to(player, entity.id);
+            let remembered = !seen
+                && matches!(entity.kind, EntityKind::Building | EntityKind::Resource(_))
+                && explored_at(&remembered_ground, width, scale, entity.position);
+            if !seen && !remembered {
                 continue;
             }
             let garrison = inside.get(&entity.id.0).copied().unwrap_or(0);
@@ -143,23 +159,14 @@ impl Snapshot {
                     .unit
                     .and_then(|unit| world.footprint_of(unit))
                     .unwrap_or((1, 1)),
+                remembered,
             });
         }
 
         let stock = (0..ruage_sim::MAX_RESOURCES)
             .map(|slot| world.stock(player, slot))
             .collect();
-        let mut explored = vec![0u64; (usize::from(width) * usize::from(height)).div_ceil(64)];
-        for y in 0..height {
-            for x in 0..width {
-                if world.vision(player, (x, y)) != TileVision::Unseen {
-                    let bit = usize::from(y) * usize::from(width) + usize::from(x);
-                    if let Some(word) = explored.get_mut(bit / 64) {
-                        *word |= 1u64 << (bit % 64);
-                    }
-                }
-            }
-        }
+        let explored = world.explored_mask(player);
 
         Snapshot {
             tick: world.tick(),
@@ -465,6 +472,31 @@ fn grass_tone(x: u16, y: u16) -> [u8; 4] {
     palette::GRASS_TONES[(mixed % palette::GRASS_TONES.len() as u32) as usize]
 }
 
+/// Whether the tile an entity stands on is one the player has ever seen. The simulation's explored grid is the answer;
+/// a view that kept its own memory of the map would be a second, silently disagreeing map.
+fn explored_at(mask: &[u64], width: u16, scale: i64, position: (Fixed, Fixed)) -> bool {
+    let scale = scale.max(1);
+    let (x, y) = (
+        position.0.raw().div_euclid(scale),
+        position.1.raw().div_euclid(scale),
+    );
+    if x < 0 || y < 0 || x > i64::from(u16::MAX) || y > i64::from(u16::MAX) {
+        return false;
+    }
+    let bit = y as usize * usize::from(width) + x as usize;
+    mask.get(bit / 64)
+        .is_some_and(|word| word & (1u64 << (bit % 64)) != 0)
+}
+
+/// A remembered thing is drawn at 60% brightness: dim enough to read as memory against the dim ground it stands on, and
+/// bright enough to see what it was.
+fn as_memory(colour: [u8; 4]) -> [u8; 4] {
+    // Widen before multiplying: `200 * 3` overflows a `u8`, and in a release build that would wrap to a bright,
+    // wrong colour rather than fail.
+    let dim = |channel: u8| (u16::from(channel) * 3 / 5) as u8;
+    [dim(colour[0]), dim(colour[1]), dim(colour[2]), 255]
+}
+
 /// Whether the ground under a position is forest. Used to read a resource node as a tree: a wood is where trees are,
 /// and that is the map's answer rather than a table of which stockpile column is timber.
 fn on_forest_ground(snapshot: &Snapshot, position: (f32, f32)) -> bool {
@@ -619,12 +651,19 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
         match entity.kind {
             EntityKind::Projectile => {}
             EntityKind::Resource(_) => {
+                let tint = |colour: [u8; 4]| {
+                    if entity.remembered {
+                        as_memory(colour)
+                    } else {
+                        colour
+                    }
+                };
                 let centre = camera.project(entity.position);
                 if on_forest_ground(snapshot, entity.position) {
                     // A tree: a canopy, with a darker clump for shape, or a stump where the wood is gone. The canopy
                     // is smaller than a tile, so a wood shows the forest floor between its trunks.
                     if entity.amount == 0 {
-                        frame.fill_diamond(centre, (rx * 0.22, ry * 0.22), palette::STUMP);
+                        frame.fill_diamond(centre, (rx * 0.22, ry * 0.22), tint(palette::STUMP));
                     } else {
                         frame.fill_diamond(centre, (rx * 0.55, ry * 0.55), palette::CANOPY);
                         frame.fill_diamond(
@@ -634,7 +673,7 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
                         );
                     }
                 } else {
-                    frame.fill_diamond(centre, (rx * 0.6, ry * 0.6), palette::PILE);
+                    frame.fill_diamond(centre, (rx * 0.6, ry * 0.6), tint(palette::PILE));
                 }
             }
             EntityKind::Building => {
@@ -649,11 +688,12 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
                 let (min_x, min_y, max_x, max_y) = footprint_tiles(anchor, entity.footprint);
                 let centre =
                     camera.project(((min_x + max_x) as f32 / 2.0, (min_y + max_y) as f32 / 2.0));
-                frame.fill_diamond(
-                    centre,
-                    (rx * across as f32, ry * down as f32),
-                    palette::BUILDING,
-                );
+                let colour = if entity.remembered {
+                    as_memory(palette::BUILDING)
+                } else {
+                    palette::BUILDING
+                };
+                frame.fill_diamond(centre, (rx * across as f32, ry * down as f32), colour);
             }
             EntityKind::Unit => {
                 let centre = camera.project(entity.position);
