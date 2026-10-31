@@ -88,6 +88,49 @@ and not a 2013-era 5.7 build. **This is a lead, not a finding**: the dat header 
 authority is the exe's version resource plus a real `.aoe2record` from this install. Do not treat the
 timestamp as resolving it.
 
+## What analysing this binary actually costs (measured, 2026-10-31)
+
+Numbers, because the defaults are wrong for this target and the next session should not rediscover that:
+
+| Measurement | Value |
+|---|---|
+| Ghidra headless, full default analysis of the 7.52 MB PE (`analyzeHeadless`, `-max-cpu 2`, `-Xmx2G`) | **exit 0**, 6 min 30 s wall, 8 min 13 s CPU, peak RSS **1.42 GB** |
+| REA's first query with its default deadline | **`provider_timeout`** at 330 s, no partial analysis, no OOM |
+| REA 6.8.0's MCP surface | 229 tools; registered with `mcp_servers.rea.lazy: true` so the schemas are not injected into every session |
+
+Three consequences:
+
+1. **Raise `REA_GHIDRA_STARTUP_TIMEOUT_MS`** (1,200,000 was enough) before the first query on this target, or
+   the analysis is thrown away five and a half minutes in.
+2. **`REA_GHIDRA_PROJECT_PATH` does not reuse a project you built yourself.** REA's actual invocation is
+   `AnalyzeHeadless <scratch>/project rea-project -import <scratch>/target-<sha>.exe -readOnly -deleteProject`,
+   so a fresh-import query always re-analyses. The supported cache is `--snapshot <path>`.
+3. The 4 GiB / 2 CPU cgroup is the constraint, not the binary: with another session's `cargo test` running,
+   load average sat near 4 and wall time roughly doubled. Time these measurements against a quiet box.
+
+## First findings (2026-10-31, addresses in image-base coordinates)
+
+| Finding | Evidence |
+|---|---|
+| **The dat version is checked as an exact string, not a number** | `FUN_0072d1a0` @ `0x72d1a0`, 1,128 bytes, body `0x72d1a0-0x72d607`. It `strcmp`s an 8-byte local (the version read from the file header) against the literal at `0x9db348` — `VER 5.7\0`. Equal → the success path (virtual `call [ecx+0x74]`, then `FUN_004327c0`); unequal → `FUN_00430a20`, the error path. |
+| **The mismatch message** | `"Database file version missmatch"` @ `0x9db350` (note the game's own spelling), referenced from `0x72d4cf` and `0x72d4d9` — one byte past the literal it is compared against. |
+| **The 9.x line is save/scenario, as `oracle.md` says** | `VER 9.4\0` @ `0x9ca4b4`, `VER 9.3\0` @ `0x9ca4bc`, adjacent in `.rdata`; `aoe2spgame` @ `0x9ca471` sits in the same cluster. |
+| **Dat filename anchor for the loader** | `empires2…p1.dat` @ `0x9c9a64` (file offset `0x5c8e64`); a second copy at `0xaaf538` in `.data`. |
+| **`Inf32Dat` is not data** | section VA `0xde4000`, 44,432 bytes, **every byte zero** (entropy 0, no ASCII runs). Reserved address space, nothing to mine. |
+
+Two consequences worth stating plainly:
+
+1. **This build accepts exactly one dat header string.** `VER 5.7`, byte for byte, including the space. Any
+   attempt to load a different dat line fails at one branch (`0x72d4fc`) with a message, not a parse error.
+   That is the whole of the "version" logic — there is no numeric comparison to satisfy.
+2. **It does not settle the `mgz-fast` 5.8 question, and the two must not be conflated.** The 5.7 literal is
+   the *dat* line. There is no `VER 5.8` literal anywhere in the binary, so what this build writes into a
+   `.aoe2record` is not answerable from strings at all: it needs a real recorded game from this install.
+
+Method note: **none of these strings are in Ghidra's defined-string inventory** (8,966 entries), so
+`rea search` cannot find them — a Python byte scan plus the PE section table did, and Ghidra's own
+`DAT_009db348` operand then confirmed the offset→VA mapping to the byte.
+
 ## The first questions for the binary
 
 These are the rows `oracle.md` marks as *not* answerable from save files, so they are exactly what the
