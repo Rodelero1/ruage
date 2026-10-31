@@ -2217,3 +2217,22 @@ for itself and left a 133 us gain.
 **And a release-only bug the test caught:** `as_memory` multiplied a `u8` by 3, which overflows for 200 (`BUILDING`) -
 in a debug build that panics, in a release build it would have wrapped to a bright wrong colour. Widened before the
 multiply.
+
+## Step 6 of the look: the HUD, and a font to draw it with (2026-10-30, done)
+
+**What landed.** `crates/view/src/font.rs` - a **3x5 bitmap font**: ten digits and a slash, and nothing else, because a
+swatch beside a number says which resource it is and letters are five times the data. `Frame::draw_glyph`,
+`draw_number` and `draw_ratio` place them at a scale, and `ui::hud(frame, snapshot)` draws a dark bar with **one swatch
+and one number per stockpile column** (the pack's order is the display order, so the view never learns their names) and
+population as `have/cap`. The window and the `frame` diagnostic both draw it, so the picture can be looked at.
+
+**Tested** (`crates/view/tests/hud.rs`): a number lights exactly the dots its glyphs say (counted against `font::DIGITS`,
+so the test measures the placer rather than trusting it), 412 and 123 are different pictures, scale 2 is four times the
+pixels, the HUD draws one swatch per column in its colour plus the population, and **it stays in its bar** - every pixel
+below the bar is byte-identical to the frame without a HUD.
+
+**The picture found what the tests could not.** The first HUD drew **eight** swatches, because `Snapshot.stock` was
+always `MAX_RESOURCES` long; four of them were columns this content does not have, all in the fallback colour. `stock`
+is now one entry per column **the pack has** (`Resources::count`), which is also what makes "a pack with no stock draws
+no swatches" mean something. Rendered to a PNG afterwards: brown **200**, red **200**, gold **100**, blue **200**, then
+**3/5** - legible, spaced, not overlapping.

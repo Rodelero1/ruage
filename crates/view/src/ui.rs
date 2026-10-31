@@ -7,7 +7,7 @@
 use ruage_data::Resources;
 use ruage_sim::{Command, EntityKind};
 
-use crate::{Camera, Frame, Snapshot, covers, player_colour};
+use crate::{Camera, Frame, Snapshot, covers, palette, player_colour};
 
 /// What a player has selected, by entity id, in the order they selected it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -252,4 +252,47 @@ pub fn minimap(snapshot: &Snapshot, pixels_per_tile: u32) -> Frame {
         );
     }
     frame
+}
+
+// --- the HUD ---------------------------------------------------------------------------------
+
+/// The height of the HUD bar: the game is drawn below it, never under it.
+pub fn hud_bar_height() -> u32 {
+    26
+}
+
+/// Where a stock column's swatch starts. **The pack's order is the display order**, so a pack with three resources
+/// shows three swatches and the view never learns their names.
+pub fn hud_swatch_x(column: usize) -> u32 {
+    8 + column as u32 * 60
+}
+
+/// Draw the HUD over a frame: one swatch and one number per stockpile column, then population as `have/cap`.
+///
+/// It reads a `Snapshot` and nothing else (D55): the simulation carries no text, and every number here is one the
+/// engine already keeps. D74 allowed this; D82 chose the bitmap font it is drawn with.
+pub fn hud(frame: &mut Frame, snapshot: &Snapshot) {
+    let bar = hud_bar_height().min(frame.height);
+    if bar == 0 {
+        return;
+    }
+    frame.fill_rect(0, 0, frame.width as i32, bar as i32, palette::HUD_BAR);
+    let scale = 3;
+    let text_y = (bar as i32 - crate::font::HEIGHT * scale) / 2;
+    let swatch = 12;
+    for (column, amount) in snapshot.stock.iter().enumerate() {
+        let x = hud_swatch_x(column) as i32;
+        let colour = palette::STOCK[column.min(palette::STOCK.len() - 1)];
+        frame.fill_rect(x, (bar as i32 - swatch) / 2, swatch, swatch, colour);
+        frame.draw_number(x + swatch + 6, text_y, *amount, scale, palette::HUD_TEXT);
+    }
+    let x = hud_swatch_x(snapshot.stock.len()) as i32;
+    frame.draw_ratio(
+        x,
+        text_y,
+        snapshot.population,
+        snapshot.population_cap,
+        scale,
+        palette::HUD_TEXT,
+    );
 }

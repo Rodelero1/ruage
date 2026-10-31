@@ -12,6 +12,7 @@ use std::process::ExitCode;
 
 use ruage_data::{Economy, Map, Units};
 use ruage_sim::{Command, EntityKind, World};
+use ruage_view::ui;
 use ruage_view::{Camera, Snapshot, render};
 
 fn main() -> ExitCode {
@@ -101,7 +102,9 @@ fn main() -> ExitCode {
         .find(|entity| entity.player == player && entity.kind == EntityKind::Building)
         .map_or((20.0, 20.0), |entity| entity.position);
     let camera = Camera::new((640, 480)).centred_on(focus);
-    let frame = render(&snapshot, &camera);
+    let mut frame = render(&snapshot, &camera);
+    // The HUD goes in the diagnostic picture too: a step that draws numbers has to be looked at, not only asserted on.
+    ui::hud(&mut frame, &snapshot);
     if let Err(err) = std::fs::write(&out, frame.to_ppm()) {
         eprintln!("write {}: {err}", out.display());
         return ExitCode::FAILURE;

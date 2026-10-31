@@ -8,6 +8,7 @@
 //!
 //! Floats are allowed here and nowhere near the simulation (D9): pixels are not state.
 
+pub mod font;
 pub mod ui;
 
 use ruage_data::Map;
@@ -163,9 +164,10 @@ impl Snapshot {
             });
         }
 
-        let stock = (0..ruage_sim::MAX_RESOURCES)
-            .map(|slot| world.stock(player, slot))
-            .collect();
+        // One entry per column **the pack has**, not the engine's ceiling of eight: the HUD draws a swatch per entry, and
+        // four swatches for resources this content never heard of is a lie about the game.
+        let columns = world.resources().map_or(0, ruage_data::Resources::count);
+        let stock = (0..columns).map(|slot| world.stock(player, slot)).collect();
         let explored = world.explored_mask(player);
 
         Snapshot {
@@ -425,6 +427,71 @@ impl Frame {
         }
     }
 
+    /// Draw one glyph of the bitmap font: `rows` are its scanlines, `scale` multiplies each font pixel.
+    ///
+    /// Returns the width used, so a caller can place the next thing without keeping the font's metrics in its head.
+    pub fn draw_glyph(
+        &mut self,
+        x: i32,
+        y: i32,
+        rows: &[u8; 5],
+        scale: i32,
+        colour: [u8; 4],
+    ) -> i32 {
+        let scale = scale.max(1);
+        for (row, bits) in rows.iter().enumerate() {
+            for column in 0..font::WIDTH {
+                if bits & (1 << (font::WIDTH - 1 - column)) == 0 {
+                    continue;
+                }
+                self.fill_rect(
+                    x + column * scale,
+                    y + row as i32 * scale,
+                    scale,
+                    scale,
+                    colour,
+                );
+            }
+        }
+        font::WIDTH * scale
+    }
+
+    /// Draw a whole number, left to right. Zero prints one digit, because a blank field reads as a bug.
+    pub fn draw_number(&mut self, x: i32, y: i32, value: u32, scale: i32, colour: [u8; 4]) -> i32 {
+        let scale = scale.max(1);
+        let mut digits = Vec::new();
+        let mut rest = value;
+        loop {
+            digits.push(font::DIGITS[(rest % 10) as usize]);
+            rest /= 10;
+            if rest == 0 {
+                break;
+            }
+        }
+        let mut at = x;
+        for glyph in digits.iter().rev() {
+            self.draw_glyph(at, y, glyph, scale, colour);
+            at += font::WIDTH * scale + font::GAP * scale;
+        }
+        at - x - font::GAP * scale
+    }
+
+    /// Draw "have/cap", which is how a player reads population.
+    pub fn draw_ratio(
+        &mut self,
+        x: i32,
+        y: i32,
+        have: u32,
+        cap: u32,
+        scale: i32,
+        colour: [u8; 4],
+    ) -> i32 {
+        let scale = scale.max(1);
+        let mut at = x + self.draw_number(x, y, have, scale, colour) + font::GAP * scale;
+        at += self.draw_glyph(at, y, &font::SLASH, scale, colour) + font::GAP * scale;
+        at - x + self.draw_number(at, y, cap, scale, colour)
+    }
+
     /// A binary PPM (P6): no compression, no dependency, and every image tool reads it. PNG is a
     /// conversion away and that conversion is not the renderer's business (D55).
     pub fn to_ppm(&self) -> Vec<u8> {
@@ -462,6 +529,15 @@ pub mod palette {
     /// A tree that has been worked out: the entity stays, the canopy does not.
     pub const STUMP: [u8; 4] = [92, 72, 44, 255];
     pub const BUILDING: [u8; 4] = [200, 200, 200, 255];
+    /// The HUD: a dark bar, light text, and one swatch per stockpile column in the pack's own order.
+    pub const HUD_BAR: [u8; 4] = [16, 16, 20, 255];
+    pub const HUD_TEXT: [u8; 4] = [235, 235, 225, 255];
+    pub const STOCK: [[u8; 4]; 4] = [
+        [150, 110, 70, 255],
+        [190, 70, 60, 255],
+        [220, 190, 70, 255],
+        [150, 150, 155, 255],
+    ];
 }
 
 /// The grass tone of a tile: a hash of its coordinates, folded into the palette. No state, no RNG stream, and the same

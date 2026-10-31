@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 
 use ruage_data::{Economy, Map, Units};
 use ruage_sim::World;
+use ruage_view::ui;
 use ruage_view::{Camera, Snapshot, render};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
@@ -215,7 +216,11 @@ impl App {
         // re-centred it on a fixed tile every frame, which looks harmless until there is a pan or a zoom key - and then
         // neither can ever work (`Camera::resized`, pinned by `resizing_the_window_keeps_the_camera_on_its_tile`).
         self.camera.resized((width, height));
-        let frame = render(&Snapshot::of(world, &self.config.map, 1), &self.camera);
+        let snapshot = Snapshot::of(world, &self.config.map, 1);
+        let mut frame = render(&snapshot, &self.camera);
+        // The HUD reads the same snapshot the picture was drawn from - stock, population - so what it reports cannot
+        // drift from what is on the screen (D74).
+        ui::hud(&mut frame, &snapshot);
         // `softbuffer` wants non-zero dimensions; a minimised window has none, and drawing nothing is correct there.
         let (Some(w), Some(h)) = (
             std::num::NonZeroU32::new(width),
