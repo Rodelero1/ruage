@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use ruage_data::{Economy, Map, Units};
 use ruage_sim::World;
 use ruage_view::ui;
-use ruage_view::{Camera, Snapshot, render};
+use ruage_view::{Camera, Highlights, Snapshot, render_with};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -61,6 +61,8 @@ struct App {
     surface: Option<softbuffer::Surface<std::rc::Rc<Window>, std::rc::Rc<Window>>>,
     context: Option<softbuffer::Context<std::rc::Rc<Window>>>,
     camera: Camera,
+    /// Where the last order went, so the picture can show it. A tile, not an entity: the order is a place.
+    order: Option<(f32, f32)>,
     /// How long one simulation tick takes in wall-clock terms: the accumulator's unit.
     tick: Duration,
     /// Time not yet spent on a tick.
@@ -93,6 +95,7 @@ impl App {
             surface: None,
             context: None,
             camera: Camera::new((960, 720)).centred_on((16.0, 16.0)),
+            order: None,
             tick: Duration::from_nanos(1_000_000_000 / u64::from(tick_hz)),
             accumulated: Duration::ZERO,
             last_frame: Instant::now(),
@@ -129,6 +132,7 @@ impl App {
     /// Send the selected units an order at a tile: gather from a resource, attack a living thing, otherwise walk. This is
     /// the same `Command` a test submits through `World::submit_checked`, so nothing here can reach a state a test cannot.
     fn order_at(&mut self, tile: (i32, i32)) {
+        self.order = Some((tile.0 as f32, tile.1 as f32));
         // Pick first, borrow mutably second: picking reads the world, ordering writes it.
         let target = self.pick_entity(tile);
         let target_kind = self
@@ -217,7 +221,17 @@ impl App {
         // neither can ever work (`Camera::resized`, pinned by `resizing_the_window_keeps_the_camera_on_its_tile`).
         self.camera.resized((width, height));
         let snapshot = Snapshot::of(world, &self.config.map, 1);
-        let mut frame = render(&snapshot, &self.camera);
+        // Selection rings, health bars and the last order's marker are `ruage_view`'s work, not the binary's: a marker
+        // nobody can test is a marker that is wrong for a month without anyone noticing.
+        let selected: Vec<u32> = self.selected.iter().map(|id| id.0).collect();
+        let mut frame = render_with(
+            &snapshot,
+            &self.camera,
+            &Highlights {
+                selected: &selected,
+                order: self.order,
+            },
+        );
         // The HUD reads the same snapshot the picture was drawn from - stock, population - so what it reports cannot
         // drift from what is on the screen (D74).
         ui::hud(&mut frame, &snapshot);
@@ -246,29 +260,6 @@ impl App {
         // whatever the previous resize left behind.
         if buffer.len() > texels {
             buffer[texels..].fill(0);
-        }
-        // Selected things get a white cross on top of the frame: without a HUD there is otherwise no way to see what an
-        // order will apply to, and an invisible selection is worse than none.
-        if let Some(world) = self.world.as_ref() {
-            for id in &self.selected {
-                let Some(entity) = world.entity(*id) else {
-                    continue;
-                };
-                let scale = world.scale();
-                #[allow(clippy::cast_precision_loss)]
-                let tile = (
-                    entity.position.0.raw() as f32 / scale as f32,
-                    entity.position.1.raw() as f32 / scale as f32,
-                );
-                let (px, py) = self.camera.project(tile);
-                for offset in -4i32..=4 {
-                    for (x, y) in [(px + offset, py), (px, py + offset)] {
-                        if x >= 0 && y >= 0 && (x as u32) < width && (y as u32) < height {
-                            buffer[(y as usize) * (width as usize) + x as usize] = 0x00FF_FFFF;
-                        }
-                    }
-                }
-            }
         }
         let _ = buffer.present();
         window.set_title(&format!(

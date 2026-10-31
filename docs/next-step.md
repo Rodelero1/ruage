@@ -2236,3 +2236,23 @@ always `MAX_RESOURCES` long; four of them were columns this content does not hav
 is now one entry per column **the pack has** (`Resources::count`), which is also what makes "a pack with no stock draws
 no swatches" mean something. Rendered to a PNG afterwards: brown **200**, red **200**, gold **100**, blue **200**, then
 **3/5** - legible, spaced, not overlapping.
+
+## Step 8 of the look: selection you can read at a glance (2026-10-30, done)
+
+**What landed.** `Highlights { selected, order }` and `render_with`/`draw_highlights` in `ruage_view`: a **white ring**
+outline under everything selected - the whole footprint for a building - a **health bar** above the silhouette (green for
+what is left, red for what is gone, from `hp_fraction`), and a **marker** where the last order went. The window now draws
+`render_with` and keeps one `order: Option<(f32, f32)>`; its own white cross loop is deleted. `Highlights` carries **ids,
+not entities**, because the selection outlives a frame: a unit can die between the click and the next draw, and a
+highlight holding an entity would paint a ghost.
+
+**Tested** (`crates/view/tests/selection.rs`): nothing is ringed with an empty selection; a selected unit is ringed and its
+neighbour is not (marker pixels counted near each); a full-health bar is all green, a half-health one is green **and** red
+and shorter than a full one; and an order marker is drawn where the order went and nowhere when there is no order.
+
+**Why it moved out of the binary:** the cross was in `window.rs`, so it could not be tested at all - and it was the only
+way to see what an order applied to. Anything on screen with a wrong answer belongs in the library (D55); only wiring
+stays in the binary.
+
+**The picture:** rendered and read - a white ring round the selected villager, a green bar over it, the HUD across the
+top.

@@ -427,6 +427,26 @@ impl Frame {
         }
     }
 
+    /// Draw the **outline** of a diamond: two pixels per scanline, so a marker never hides what it marks.
+    pub fn outline_diamond(&mut self, centre: (i32, i32), radii: (f32, f32), colour: [u8; 4]) {
+        let (rx, ry) = radii;
+        if rx <= 0.0 || ry <= 0.0 {
+            return;
+        }
+        let top = centre.1 - ry.ceil() as i32;
+        let bottom = centre.1 + ry.ceil() as i32;
+        for y in top..=bottom {
+            let dy = (y - centre.1) as f32;
+            let across = 1.0 - (dy.abs() / ry);
+            if across <= 0.0 {
+                continue;
+            }
+            let half = (rx * across).round() as i32;
+            self.put(centre.0 - half, y, colour);
+            self.put(centre.0 + half, y, colour);
+        }
+    }
+
     /// Draw one glyph of the bitmap font: `rows` are its scanlines, `scale` multiplies each font pixel.
     ///
     /// Returns the width used, so a caller can place the next thing without keeping the font's metrics in its head.
@@ -532,6 +552,11 @@ pub mod palette {
     /// The HUD: a dark bar, light text, and one swatch per stockpile column in the pack's own order.
     pub const HUD_BAR: [u8; 4] = [16, 16, 20, 255];
     pub const HUD_TEXT: [u8; 4] = [235, 235, 225, 255];
+    /// Selection: a white ring under what is selected, a health bar over it, and where the last order went.
+    pub const SELECTION: [u8; 4] = [255, 255, 255, 255];
+    pub const HP_GREEN: [u8; 4] = [80, 200, 80, 255];
+    pub const HP_RED: [u8; 4] = [200, 60, 60, 255];
+    pub const ORDER: [u8; 4] = [240, 220, 90, 255];
     pub const STOCK: [[u8; 4]; 4] = [
         [150, 110, 70, 255],
         [190, 70, 60, 255],
@@ -785,6 +810,66 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
         }
     }
     frame
+}
+
+/// What the player has picked, and where they last sent it. The renderer's second input: `render` draws the world,
+/// `render_with` draws the world and what the player is doing with it.
+///
+/// It carries **ids, not entities**, because the selection outlives a frame - a unit can die between the click and the
+/// next draw, and a highlight that kept a copy of the entity would paint a ghost.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Highlights<'a> {
+    pub selected: &'a [u32],
+    pub order: Option<(f32, f32)>,
+}
+
+/// Draw a snapshot and the player's marks over it: a ring around every selected thing (its footprint for a building),
+/// its health bar, and where the last order went.
+pub fn render_with(snapshot: &Snapshot, camera: &Camera, highlights: &Highlights) -> Frame {
+    let mut frame = render(snapshot, camera);
+    draw_highlights(&mut frame, snapshot, camera, highlights);
+    frame
+}
+
+/// The marks themselves, drawn over an existing frame. Rings are **outlines** so they never hide what they mark, and a
+/// health bar sits above the silhouette, clear of the ring.
+pub fn draw_highlights(
+    frame: &mut Frame,
+    snapshot: &Snapshot,
+    camera: &Camera,
+    highlights: &Highlights,
+) {
+    let (rx, ry) = camera.radii();
+    for entity in &snapshot.entities {
+        if !highlights.selected.contains(&entity.id) {
+            continue;
+        }
+        let (across, down) = entity.footprint;
+        let anchor = (
+            entity.position.0.floor() as i32,
+            entity.position.1.floor() as i32,
+        );
+        let (min_x, min_y, max_x, max_y) = footprint_tiles(anchor, entity.footprint);
+        let centre = camera.project(((min_x + max_x) as f32 / 2.0, (min_y + max_y) as f32 / 2.0));
+        let half = (rx * across as f32 * 0.9, ry * down as f32 * 0.9);
+        frame.outline_diamond(centre, half, palette::SELECTION);
+        // A health bar above the top vertex, green for what is left and red for what is gone.
+        let bar_width = (rx * 0.6).max(8.0) as i32;
+        let bar_x = centre.0 - bar_width / 2;
+        let bar_y = centre.1 - half.1 as i32 - 8;
+        let filled = (bar_width as f32 * entity.hp_fraction.clamp(0.0, 1.0)).round() as i32;
+        frame.fill_rect(bar_x, bar_y, bar_width, 3, palette::HP_RED);
+        if filled > 0 {
+            frame.fill_rect(bar_x, bar_y, filled, 3, palette::HP_GREEN);
+        }
+    }
+    if let Some(at) = highlights.order {
+        let centre = camera.project(at);
+        for offset in -4i32..=4 {
+            frame.put(centre.0 + offset, centre.1, palette::ORDER);
+            frame.put(centre.0, centre.1 + offset, palette::ORDER);
+        }
+    }
 }
 
 /// The clock that keeps a 20 Hz simulation and a free-running render apart (D56).
