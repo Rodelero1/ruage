@@ -2195,3 +2195,16 @@ insert path, keyed on content rather than on `hp > 0`.
 and right corner is walkable sheltered yard"* - is the Town Centre's diamond read from its **north corner**, so the
 footprint's anchor tile is that corner and the block extends `+x/+y`. D83's "tile nearest the middle" is superseded; the
 change is one constant in `footprint_tiles`, and D76's mask rows already assume the corner order.
+
+## D85 - A trained unit that cannot be placed is garrisoned, and a full building pauses its queue (2026-10-31)
+
+The owner's rule, after the footprint masks exposed it (`838235d`: the Huns train 18 of 20 villagers and two are lost):
+
+1. When a finished unit has **no free tile beside its building**, put it **inside that building** instead - the garrison
+   path the engine already has.
+2. When there is **no garrison room either**, **pause training at that building** and show the reason **beside the training
+   queue** in the HUD, rather than dropping the unit or silently retrying.
+
+This replaces "find a free tile, else lose the unit", which is what the spawn search does today. The observable rule to
+test: 20 villagers trained at a surrounded town centre end up 20 alive (in the building or beside it), and a queue that
+cannot place anything stops with a reason a HUD can draw - never a recruit that vanishes.
