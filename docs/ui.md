@@ -15,9 +15,8 @@ We have, in `crates/view/src/ui.rs`: `Selection` (click, rubber band, double-cli
 population), `minimap`, and a 3x5 bitmap font holding **digits only** (`font.rs`, D82). The window draws the world, a HUD
 bar and selection marks; it draws **no panel, no portrait, no buttons and no queue**.
 
-> The screenshot the owner linked could not be read on this host - the image tool timed out three times on it (1440x900,
-> 306 KB, and again halved). The layout above is from the game itself, not from that image; if the panel differs in a way
-> that matters, the difference is a layout constant, not a design.
+> **The screenshot was read on the second attempt** (the owner re-sent it; the first three fetches timed out). What it
+> settles is below, and two of the details change the plan.
 
 ## What the panel needs from the simulation, which `Snapshot` does not carry yet
 
@@ -80,3 +79,29 @@ The panel is a **pure function of the snapshot plus the selection plus the conte
 
 Each step is its own commit with a review note, as `AGENTS.md` requires. Steps 1-3 are the gate: until the snapshot carries
 a queue and a reason, no message can be drawn and no rule can be tested.
+
+## What the screenshot settles (Age of Empires II HD, a Castle screen)
+
+Read off the image rather than remembered:
+
+- **The "cannot train" message is not inside the panel.** *"Not enough food!"* is drawn in **red text in the world view,
+  immediately above the panel**, roughly under the selected building. So the panel needs a **message line above it**, not a
+  label inside it - which is also why it can be drawn before any button exists.
+- **The panel has five regions**, left to right: the **selection block** (portraits of the selected units, here three
+  villagers, plus one small button); the **building's own block** (its name in text - *Castle*; its portrait with a green
+  health bar and `4800/4800`; `0/20` garrison; `11 (4)` attack with its bonus; `8` line of sight); the **queue**
+  (`Creating - 21%`, the unit's name *Teutonic Knight*, a segmented progress bar, then the queued icons in order); the
+  **command buttons** (one row of unit buttons at the bottom of the queue area, in blue frames); and the **minimap** in its
+  own ornamental frame at the right.
+- **The resource bar** carries an icon per resource, the numbers, and population as `449/120` behind a population icon;
+  the middle tab shows the **current age** (*Imperial Age*) - worth copying, since the engine knows the age.
+- **Progress is a segmented bar** (red where the item is not yet made, green for the part that is), which is the same
+  `fill_rect` pair the health bar already uses.
+- **The panel is parchment, not dark**: a light background with an ornamental border. Our palette is dark for the HUD bar,
+  so the panel gets its own two colours rather than borrowing the HUD's.
+- **An instruction line sits at the panel's bottom-left** (*"Click a villager to gather wood from this tree."*) - the
+  place for hints and, later, for the engine's own refusals.
+
+`docs/ui.md`'s data list is unchanged (the panel still needs the queue, the pause reason, the trainable list,
+affordability and a name); what changed is **where the message goes** (above the panel, red, world-space) and that the
+panel needs its own palette and a text line for hints.
