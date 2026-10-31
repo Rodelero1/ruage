@@ -630,3 +630,108 @@ Two-Man Saw). `effects.toml` names only a handful of modifier attributes - `atta
 **`speed` does not appear at all**, so either the dat encodes those upgrades under attribute ids our generator has no name
 for, or the effects carry them as unit *commands* rather than modifiers. This is the same extractor gap that made every
 unit's `attacks` list empty; it needs the attribute-name table completed before any of those numbers can be quoted.
+
+## 2026-10-31 — genie makes every id a type; openaok puts the computer players in and lays the blows apart
+
+**genie, 87 commits (`e7cc7766..10af9143`), and the theme has one name: T9.** Nearly every commit in the range
+turns one meaning that had been an integer into its own type: `ObjectId`, `MasterId`, `TechId`, `PlayerId`,
+`GroupId`, `AttributeId`, `MasterKind`, `MasterAttribute`, `ActionType`, `ClassId`, `OrderTargetType`,
+`AttackCategory`, `GatherGroup`, `NotifyKind`, `ObstructionType`, `ObstructionClass`, `FormationKind`,
+`EventKind`, `PlayerType`, `Relation`/`UnitRelation`; and on the map `Point`, `GroundOffset`, `Rect`,
+`Segment`, `GridSize`, `Tile`, `TileOffset`, `TileRect`, `Radii`, `Footprint`, `Axis`. `ObjectId::raw` and
+`impl ObjectKey for i32` are deleted - the raw value survives only at outgoing boundaries (the codec's encoder,
+notify parameters, report lines, sort keys, sums of the game's integers). `CODING_STYLE.md` §5 states the rules:
+one sweep per type, the raw value only at the boundary, an enum for each of the game's unions of an integer and
+a flag (`Issuer`, `NearestAttacker`, `UnloadPick`, `GroupTarget`), and "parse, don't validate".
+
+**And the sweep found a bug no one had asked for.** `Entry`'s derived `Default` gave a production-queue slot
+`master: None`, which the game writes as −1; but a slot that the buffer's growth adds is *zeroed*, and the save
+holds `master 0` there. `oracle_farm`'s comparison of an Empire Wars start against the game's own farms failed
+on the empty slots. The fix is a written-out `Entry::default` (master 0, technology 0, no costs, button 0), and
+the lesson generalises past genie: **`None` and zeroed memory are different values, and comparing against the
+original's own output is the only thing that tells you which one it meant.** We hold several `Option`s whose
+`None` stands for the game's −1 (`target`, `drop_site`, `inside`); nothing in `crates/sim` pins what a *saved*
+world has in a slot the game would have zeroed.
+
+**The combat read got a name.** `combat/victim_reads.rs` (new, 175 lines) is "what a hit reads of its victim":
+`victim_of` (the master's values and the unit's own, the player's elevation attributes, the terrain defence of
+its tile, the game's `mode_680`) and `victim_in` (both directions of alliance, whether the victim's place is a
+guess, its place in its tile's list, a building's annexes). `victims.rs` gave up 246 lines to it. It is a
+read-model, not a snapshot: it reads at the moment the hit lands.
+
+**Nothing under `world/` moved.** `world/step.rs`, `after_step.rs` and `objects/unit/update.rs` carry no change
+in this range, so yesterday's finding stands as written (U18: the original's tick is a sequence of objects, ours
+is simultaneous).
+
+**openaok, 104 commits (`c050533c..49d4c9b7`): the computer players, then a performance pass.** About forty
+commits are AI, and not toy AI: walls on perimeters with other buildings kept off the line, attack groups made,
+filled, gathered on a leader and sent once the enemy is known, the game's target evaluation (each known enemy
+thing scored out of 100 for how soon the group would destroy it and how near it is, economic buildings after the
+rest, walls last), Monks fetching relics, fishing ships and warship groups, allied computer players sharing what
+they find and answering calls for help, difficulty scaling (the Hardest is given 500 of each resource with every
+age), spies and Treason. `src/ai/` gains `Knowledge`, `Relics`, `Walls`, `Costs`. Then about thirty commits of
+*measured* optimisation behind a `--perf` flag and a stress scenario (eight computer players, giant map, Imperial
+Age, armies and fleets, ~3,000 units and buildings): **about a third of a millisecond a tick, ~100 ns an
+entity**. Our own probe is 15-19 ns/entity at 2,126 entities with no AI, no route load and no rendering, so their
+figure is a full-game budget to hold ours against later, not a target now.
+
+The techniques worth opening: one packed sort key per unit in the tick's spatial survey, then **re-sorting last
+tick's order instead of sorting afresh** (nearly-sorted, so insertion); a landmark-based A* estimate (terrain
+landmarks costed with the map, re-costed only when terrain changes what a layer may cross) so the search no
+longer floods the land behind water and cliffs; a search budget tied to the route's length ("a chase into a
+crowd walks as far as the search got and plans again"); and a square root that starts from the hardware's and is
+corrected to the exact integer floor, "the same result on every machine, many times faster".
+
+**Two combat-timing facts, both new.** "A blow begun lands on its target" - the swing remembers its victim, so a
+scout between two wolves wounds the one it swings at. And **volleys are spread on purpose**: soldiers set on the
+same enemy begin their first blow up to six tenths of a second apart, so a line of archers does not loose every
+arrow on one instant. That second one is a recorded deviation from the original (`docs/IMPROVEMENTS.md`), and it
+is the other answer to the problem our simultaneous tick leaves open: they kept an ordered 60 Hz tick and broke
+the simultaneity by hand; we broke the order and left the simultaneity.
+
+**Their tick is 60 Hz and has always been fixed point.** `docs/ARCHITECTURE.md`: 32.32 fixed point on a fixed
+16 ms tick (the README says 60 Hz), where genie's DE port is 50 ms. Two projects that both claim the original's
+feel, at 20 Hz and at 60, is the strongest evidence yet that **the tick rate is a quantisation choice rather
+than a fidelity requirement** - which is also what our scenario format already assumes (D16: seconds, never
+ticks).
+
+**Platform: they now ship Windows**, which leaves no host we name and not this one. MinGW-w64 build, SDL
+included as `<SDL2/...>`, Winsock linked, runtimes linked in, `windows/build.sh` laying out the zip,
+`OpenAoK.bat` preparing the data and starting the game, CI publishing on a tag; the data tools gained UTF-8 and
+plain newlines so Windows prepares the same files. Their data preparation is a **build-time** step - unpack the
+CD's cabinet, dump the dat, play from a folder - where ours is D81's runtime chain resolved by id. Simpler for
+them; no mod can override an id for them.
+
+**Verification is a product in itself.** `--verify` builds its own world from a fixed seed in about forty
+scenarios and compares each printed line: a golden world hash over 3,000 ticks, "no `float`, `double` or
+`ToFloat()`" in `src/ecs`, `src/pathfinding`, `src/physics`, `src/ai`, a lockstep host and client over loopback
+*with a desync caught on purpose*, and one scenario per mechanic - `foundations` alone covers refunds, footprint
+sight, overlapping sites, hill rules and a half-ashore dock. Our `crates/sim/tests/no_float.rs` came from this
+gate; the inventory is a checklist to measure our own coverage against, not a file to port.
+
+**yanfengliu/aoe2, first look (`61758598`), and it is not what the watchlist assumed.** A TypeScript browser
+AoE2-style prototype on a *sibling* engine, `yanfengliu/civ-engine` (MIT, "an AI-native, AI-first game engine
+built for civilization scale simulation games"), rendered by another sibling package (`voxel`) in Three.js, with
+all art procedural and original, bit-exact replays, and an LLM-agent playtest campaign loop whose bundles replay
+in the app. Its own commits this month are "canon sync" against a fleet governance repository, not engine work,
+so the repository worth reading is `civ-engine` - and it is TypeScript. Keep it on the list for one reason: it
+is the only project here that took D18's B-case first, and its answer to the cost of original assets is a
+renderer, not an engine.
+
+**aoc-reference-data:** one commit, five lines in `data/players.yaml`. Nothing.
+
+**Study list.** `crates/engine/genie-core/src/combat/victim_reads.rs` (the two functions and their doc comments,
+175 lines); commit `4feb5099` (a default that was −1 where the game's memory was 0, and the oracle that said
+so); `CODING_STYLE.md` §5 in full (the boundary rule and the union-enums) after `62afd442`; openaok's
+`docs/ARCHITECTURE.md` (especially "Passability per terrain restriction" - one passability layer per terrain
+set, each with its connected regions, the asking player's key in the upper bits so a gate opens to its owner and
+allies) and `docs/VERIFY.md`'s table; `src/core/Costs.h` with `src/verify/Stress.cpp` for the per-system budget.
+
+**Never copy.** genie is **AGPL-3.0**. The newtype list is the tempting part and it is the dangerous part: the
+*decision* (which meanings deserve types) is a design fact anyone would arrive at, but the names, the boundary
+rule, the union-enums and the commit-by-commit order of the sweep are their expression, and §5 is a style guide,
+not a small function. openaok is **MIT**, which makes it licence-compatible and therefore the *easier* mistake:
+its dat reader is not. `THIRD_PARTY_NOTICES.md` names `genieutils` as **LGPL-3.0** (used only by the data
+tools, with GPL-3.0 beside it), and the Indeo 5 decoder as LGPL-2.1 - so "openaok is MIT, I can lift its `.dat`
+parsing" is wrong twice over. `yanfengliu/*` is MIT throughout and the cleanest of the four, which still does
+not make its TypeScript a design we can copy into a Rust sim.

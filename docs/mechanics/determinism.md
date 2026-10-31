@@ -131,3 +131,17 @@ determinism *advantage* and the reason our replay hashes are stable across refac
 ordered tick would move every fight's outcome by up to one tick and re-baseline the suite. **What is
 missing is the test, not the decision:** nothing in `crates/sim/tests/` pins what happens when two units
 kill each other on the same tick, so the behaviour is real but unexamined. Recorded here and as **U18**.
+
+## The other way out of the simultaneous volley (2026-10-31)
+
+`Zaydme/openaok` proves a second answer to the same problem, and it is worth naming before anyone reopens the
+tick. It keeps an **ordered** tick (60 Hz, 32.32 fixed point) and removes the simultaneity *by hand*, as a
+recorded deviation from the original: soldiers set on the same enemy begin their first blow up to six tenths of
+a second apart (`docs/IMPROVEMENTS.md`, "Volleys spread out"), pinned by a scenario that makes ten archers loose
+at one target together and checks the first arrows land on a spread of ticks. It also pins the swing to its
+victim at the moment the blow begins, so a scout standing between two wolves wounds the one it swings at.
+
+So there are three positions and each is internally consistent: the original resolves blows in object order; we
+resolve them simultaneously and let two units trade killing blows; openaok resolves them in order and then
+deliberately desynchronises them. If U18 is ever decided by "fights look wrong" rather than by fidelity, the
+spread is the cheap lever - it changes the look without changing the tick's shape or the apply pass.
