@@ -21,38 +21,62 @@ const DIAGONAL: u32 = 14;
 pub struct Walk {
     width: u16,
     height: u16,
-    blocked: Vec<bool>,
+    /// Impassable **terrain**. Nothing in this content is impassable (D84), but water will be, and terrain never changes
+    /// during a match, so it is a separate immutable layer.
+    terrain: Vec<bool>,
+    /// How many things stand on each tile - a wall, a tree, a building's solid part. **Counted, not flagged**: a tree and
+    /// a wall can share a tile, and with one `bool` whichever was removed first freed the ground the other still held.
+    occupants: Vec<u16>,
 }
 
 impl Walk {
     pub fn from_map(map: &Map) -> Self {
+        let blocked = map
+            .terrain
+            .iter()
+            // Terrain is **ground, not an obstacle** (the owner's rule, 2026-10-31): what blocks a tile is the tree or the
+            // solid part of a building standing on it. Forest floor is walkable, so a felled wood leaves a clearing
+            // instead of a permanent invisible wall.
+            .map(|tile| !tile.walkable())
+            .collect::<Vec<bool>>();
         Walk {
             width: map.width,
             height: map.height,
-            blocked: map
-                .terrain
-                .iter()
-                // Terrain is **ground, not an obstacle** (the owner's rule, 2026-10-31): what blocks a tile is the tree
-                // or the solid part of a building standing on it, added through `set_blocked`. Forest floor is walkable,
-                // so a felled wood leaves a clearing instead of a permanent invisible wall.
-                .map(|tile| !tile.walkable())
-                .collect(),
+            occupants: vec![0; blocked.len()],
+            terrain: blocked,
         }
     }
 
-    /// Block or free a tile for the rest of the match. Terrain does not change; what is built on it does
-    /// (a wall), so the grid has a writable layer rather than being rebuilt (D54).
-    pub fn set_blocked(&mut self, x: u16, y: u16, blocked: bool) {
-        if x < self.width && y < self.height {
-            self.blocked[usize::from(y) * usize::from(self.width) + usize::from(x)] = blocked;
+    fn index(&self, x: u16, y: u16) -> Option<usize> {
+        self.contains(x, y)
+            .then(|| usize::from(y) * usize::from(self.width) + usize::from(x))
+    }
+
+    /// Something now stands on this tile. Every occupant must be counted, or the first one to leave frees the ground.
+    pub fn block(&mut self, x: u16, y: u16) {
+        if let Some(at) = self.index(x, y)
+            && let Some(count) = self.occupants.get_mut(at)
+        {
+            *count = count.saturating_add(1);
+        }
+    }
+
+    /// Something that stood here has gone. Saturating at zero: an unbalanced call must not wrap a tile into "blocked by
+    /// 65,535 things" - a stuck tile is worse than a missing one, and the counter is the only thing between the two.
+    pub fn unblock(&mut self, x: u16, y: u16) {
+        if let Some(at) = self.index(x, y)
+            && let Some(count) = self.occupants.get_mut(at)
+        {
+            *count = count.saturating_sub(1);
         }
     }
 
     pub fn blocked(&self, x: u16, y: u16) -> bool {
-        if x >= self.width || y >= self.height {
+        let Some(at) = self.index(x, y) else {
             return true;
-        }
-        self.blocked[usize::from(y) * usize::from(self.width) + usize::from(x)]
+        };
+        self.terrain.get(at).copied().unwrap_or(false)
+            || self.occupants.get(at).copied().unwrap_or(0) > 0
     }
 
     pub fn contains(&self, x: u16, y: u16) -> bool {

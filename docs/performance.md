@@ -522,3 +522,26 @@ Fixed by collecting the buried ids in the same `retain` that removes them and dr
 Nothing kills entities over a long run, so the hours-long probe exercises the idle backbone only. A
 long *fighting* run - scripted production on both sides for four hours - is the missing stability
 test, and it needs a scenario that keeps making units.
+
+## 2026-10-31 - the tile count, and a baseline that had gone stale
+
+*Measured while reviewing "terrain is ground" (D84), with the standard probe:
+`cargo test --release -p ruage-sim --test perf -- --include-ignored --nocapture`.*
+
+| entities | now (ns/entity/tick) | previous commit `acd8744` |
+|---|---|---|
+| 126 | 27.1 | 26.5 |
+| 376 | 26.2 | 37.0 (probe noise at this size) |
+| 626 | 26.4 | 25.5 |
+| 1,126 | 26.1 | 25.4 |
+| 2,126 | 28.5 | 25.0 |
+
+**The change is performance-neutral**, which is what it should be: the counted block layer touches the *insert* path and
+the once-per-4-ticks spent-node pass, never the per-tick loop. The 376-entity row improved by 29% in the same run the 126
+row got 2% worse, which is the probe's between-build sensitivity, not a result - treat differences under ~10% as
+unresolved unless the change runs per tick.
+
+**The finding worth keeping:** the 15-19 ns/entity figure recorded earlier in this file is **stale by about 40%** - the
+previous commit measures 25-27 ns/entity with the same probe on the same machine. Something between then and now cost
+~10 ns per entity per tick and nobody priced it, which is exactly the kind of drift a recorded number is supposed to
+catch. The next pass that touches the tick should A/B against `acd8744` before and after and say what it finds.
