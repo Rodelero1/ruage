@@ -84,9 +84,10 @@ a queue and a reason, no message can be drawn and no rule can be tested.
 
 Read off the image rather than remembered:
 
-- **The "cannot train" message is not inside the panel.** *"Not enough food!"* is drawn in **red text in the world view,
-  immediately above the panel**, roughly under the selected building. So the panel needs a **message line above it**, not a
-  label inside it - which is also why it can be drawn before any button exists.
+- **The example's message is a transient flash, and ours is not.** *"Not enough food!"* in that screenshot is the game's
+  one-off notification in the world view. The owner's correction (2026-10-31): ours is a **sticky status shown beside the
+  queue, while the block lasts** - e.g. *"Building blocked"* - and it clears the moment training can continue. That is a
+  different object: not an event line in the world, but state the panel reads every frame.
 - **The panel has five regions**, left to right: the **selection block** (portraits of the selected units, here three
   villagers, plus one small button); the **building's own block** (its name in text - *Castle*; its portrait with a green
   health bar and `4800/4800`; `0/20` garrison; `11 (4)` attack with its bonus; `8` line of sight); the **queue**
@@ -105,3 +106,21 @@ Read off the image rather than remembered:
 `docs/ui.md`'s data list is unchanged (the panel still needs the queue, the pause reason, the trainable list,
 affordability and a name); what changed is **where the message goes** (above the panel, red, world-space) and that the
 panel needs its own palette and a text line for hints.
+
+## The queue's message is state, not an event
+
+*"Building blocked"* is not a notification that scrolls past; it is the panel's rendering of `paused`, so:
+
+- `EntityView::paused: Option<TrainingPause>` is the **only** source of the words. A message the UI tracks separately from
+  the queue would eventually disagree with the queue, and a player reading "Building blocked" beside a unit that is being
+  made is worse than no message.
+- It is drawn **beside the queue**, in the queue's own block, in the warning colour, for exactly as long as `paused` is
+  `Some` - and it disappears the frame the reason goes away (a tile frees up, a garrison empties, the resource returns).
+- The wording is per reason, from a small table the view owns: `NoRoom` -> *"Building blocked"*, `Unaffordable` ->
+  *"Not enough <resource>"*. The engine says **which** reason; the view says it in words, which is the same split as
+  everywhere else (the simulation carries no text, D55/D74).
+- A test, and it is the point of the feature: with a surrounded town centre the message is drawn, and after a tile frees up
+  and stepping resumes, **the same frame has no message and the queue advances** - state, not event.
+
+This replaces the earlier placement note: the world-space line in the screenshot was the original's transient notification,
+which we do not copy. There is one message line, it lives beside the queue, and it is sticky.
