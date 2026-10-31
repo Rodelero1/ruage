@@ -124,3 +124,47 @@ panel needs its own palette and a text line for hints.
 
 This replaces the earlier placement note: the world-space line in the screenshot was the original's transient notification,
 which we do not copy. There is one message line, it lives beside the queue, and it is sticky.
+
+## What the install's own UI data settles (probed 2026-10-31)
+
+The owner's hypothesis - *the UI decorations may be civilisation-specific and already in the game's SLP files* - is half
+right, and the half that is wrong changes the plan in our favour.
+
+**What is in the install.** `Age2HD/resources/_common/drs/interface/` holds **354 files, 44 MB**: 170 `.slp`, 134 `.bina`,
+50 `.wav`. The `.bina` files are **three formats under one extension** (a trap worth remembering: the extension lies):
+- **60 screen definitions**, text, each naming the screen's `background1_files` SLP, `palette_file`, `cursor_file`,
+  `button_file` and giving the **six bevel colours** (`243 220 207 169 117 84` - three light, three dark), `text_color1/2`,
+  `focus_color1/2`, `state_color1/2` and a `shade_amount`. That block *is* the UI skin as data - the same six-value bevel
+  the original's panels and buttons are drawn from.
+- **32 JASC-PAL palettes** (`50500`-`50509`, `50530`-`50533`); 50500 is the default drawing palette.
+- **42 others**: BMP images under numeric ids (magic `BM`) and small text tables.
+
+**What is not in the install: the panel itself.** Across all **1,938** SLPs in `graphics` and `interface`, **zero frames**
+measure 700-1100 x 60-170 - there is no wide panel strip to swap in - and none of the 60 screen definitions is the in-game
+HUD (they are `dlg*`, `scr*`, `main*`, `cam*`, `psel`, `credits`, `tml_bck`, `dlg_gam`). So the original **composes** the
+panel from small pieces plus the bevel colours, which is why so many definitions read `background1_files none` and still
+name a bevel.
+
+**Civ-specific: the icons, not the decorations.** Two readings were falsified by the data, in this order:
+- The four-identical-size families (`53161`-`53164`, `53171`-`53174`, `53101`-`53104`, `50235`-`50238`) looked like
+  per-icon-set variants. They are **campaigns 1-4**: `53121.bina` names `53101` as `xcam1`, `53141` names `53161` as
+  `xcamdlg1`, `53151` names `53171` as `camdlg1`, and `50251`-`50254` name `50235`-`50238` as `cam1`-`cam4`. Pixel-diffing
+  frame 0 across each family puts them **98%+ different**: different pictures, not recolours.
+- What *is* per-civ is `icon_set` in the dat - **five values across 32 civs** (1: 6 civs, 2: 7, 3: 4, 4: 12, 5: 3). That
+  selects **icon art** (the unit and building buttons the panel shows), never the frame. The 36x36 icon sheets exist
+  (`50705`-`50708`, 52 frames each) and are pixel-identical on frame 0, so an icon set is not yet a separate sheet family;
+  that question is answered when the sprite binding lands, not now.
+
+**What it changes here.**
+1. The panel's **frame is drawn, not assembled** - a bevel from six values, which is what the original does. No asset work;
+   our `fill_rect` can do it.
+2. The panel's **colours are data with provenance, not invented**: a `[ui]` table (bevel light/mid/dark, text, warning)
+   carrying the values above tagged `PROVENANCE: install interface .bina`, so "no numeric literals in code" and D74's
+   "the simulation carries no text" both hold.
+3. The panel's **portraits and button icons are install art** through `SpriteRef` and the mod chain (D81), civ-selected by
+   `icon_set` when the sprite binding lands - the boundary already exists, so the panel does not change shape.
+4. **A validated SLP decoder now exists as a throwaway probe** (format from openage's `doc/media/slp-files.md`, read not
+   copied): it checks every row against its outline budget and the row's end-of-row `0x0F`, and decoded thirty-odd
+   interface frames without one mismatch - which is how the pixel claims above are trusted. It is scratch, not committed
+   (`build/` and scratch are excluded), and it belongs in `ruage-tools` when the sprite slice lands rather than written
+   twice: it is the decode half of `SpriteRef`.
