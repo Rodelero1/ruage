@@ -2249,3 +2249,19 @@ blind-overbuild rules (D58) and their tests, which is its own slice.
 
 **Verified:** the acceptance match still wins (`players=1`, 48,000 ticks); its state hash moved
 `f91872681ba4a3a8` -> `91e869fcc92d606c`, which is expected when pathing changes.
+
+## The command panel comes before the "cannot train" message (2026-10-31, compact written)
+
+The owner's correction, and it reorders the work: **the message about being unable to train a unit has to be drawn
+somewhere, so the panel comes first.** `docs/ui.md` is the compact - the layout, the five things `Snapshot` must carry that
+it does not (queue with progress, a pause reason, the trainable list with availability, affordability, a name), the drawing
+primitives (a panel frame, a portrait, buttons with a dim state, the queue, a message line, and **letters** in `font.rs`),
+and the six tests that need no display.
+
+**So D85 is blocked on the panel, not the other way round.** The simulation half of D85 - garrison the unit that cannot be
+placed, pause the queue when there is no room - can land first and be tested headless; the message then has a place to
+appear when the panel exists. That is the order I take: D85 in the sim, then the panel, then the message.
+
+**Where the masks stand** (`838235d`, parked): D76's footprint content is in and reviewed, and the one open defect is the
+dropped unit that D85 exists to fix - `a_civilisation_that_cannot_build_houses_gets_the_whole_cap` is `#[ignore]`d with its
+numbers and is the acceptance test for D85.
