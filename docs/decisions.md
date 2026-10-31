@@ -2208,3 +2208,21 @@ The owner's rule, after the footprint masks exposed it (`838235d`: the Huns trai
 This replaces "find a free tile, else lose the unit", which is what the spawn search does today. The observable rule to
 test: 20 villagers trained at a surrounded town centre end up 20 alive (in the building or beside it), and a queue that
 cannot place anything stops with a reason a HUD can draw - never a recruit that vanishes.
+
+## D86 - REA runs on this container; the Windows box is a target, not an analyst (2026-10-31)
+
+The owner asked whether a Windows Hermes running REA could act as a slave delivering findings here. Measured
+first, then decided; the numbers, versions and install traps are in `docs/re-toolchain.md`.
+
+1. **REA is an MCP tool server, not an agent**, and its Windows support is an experimental read-only boundary:
+   27 Ghidra inventory/memory/function operations on native PE, x64-first, 32-bit PE admission only on its
+   `main` branch, and a transport that is authenticated IPv4 loopback with a Job Object - deliberately not
+   reachable from another host.
+2. **The target is a 32-bit i386 PE** (`AoK HD.exe`, 7,521,280 bytes, PE timestamp 2018-08-22), which is the
+   one cell that boundary admits worst, while Ghidra on Linux decompiles it with no restriction at all.
+3. **So the analyser runs here**, beside the engine and the dat; the Windows machine keeps the job `oracle.md`
+   gave it - run the game, produce save files. If a Windows agent is ever added for live-process work, A2A is
+   the transport, and its output is artifacts plus provenance, never a mechanic asserted from a machine this
+   one cannot re-derive it from.
+
+Nothing in `crates/` changes for this: it is a toolchain decision, not an engine one.

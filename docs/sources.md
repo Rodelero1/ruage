@@ -34,6 +34,9 @@ logged as a question (e.g. U11 farming).
 | [SiegeEngineers/genie-rs](https://github.com/SiegeEngineers/genie-rs) | Cross-check oracle for block counts (GPL-3.0) |
 | [Tapsa/genieutils](https://github.com/Tapsa/genieutils) | Read as the format *specification* (LGPL-3.0) |
 | [AoE forums — sharing saves](https://forums.ageofempires.com/t/how-to-find-and-share-save-game-and-recorded-game-files/84162) | Confirms `.aoe2spgame` = full state, `.aoe2record` = replay |
+| [morluto/rea](https://github.com/morluto/rea) | The MCP reverse-engineering server (6.8.0) that returns Ghidra/IDA pseudocode with evidence. Its [`docs/windows-ghidra-p0.md`](https://github.com/morluto/rea/blob/main/docs/windows-ghidra-p0.md) is the authority on the Windows boundary — see `docs/re-toolchain.md` (D86) |
+| [Ghidra 12.1.4](https://github.com/NationalSecurityAgency/ghidra/releases/tag/Ghidra_12.1.4_build) | The decompiler REA drives on this box, pinned: REA 6.8.0 rejects 12.2 as `config_drift` |
+| `Age2HD/AoK HD.exe` (the install) | The authority for behaviour the saves cannot show. Measured: i386 PE, 7,521,280 bytes, PE timestamp 2018-08-22T18:26:19Z |
 
 ## Rules for using these
 

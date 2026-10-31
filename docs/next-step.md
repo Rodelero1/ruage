@@ -2265,3 +2265,62 @@ appear when the panel exists. That is the order I take: D85 in the sim, then the
 **Where the masks stand** (`838235d`, parked): D76's footprint content is in and reviewed, and the one open defect is the
 dropped unit that D85 exists to fix - `a_civilisation_that_cannot_build_houses_gets_the_whole_cap` is `#[ignore]`d with its
 numbers and is the acceptance test for D85.
+
+## D85's simulation half: a unit that cannot be placed is garrisoned, and a queue says why (2026-10-31, compact)
+
+**Where the code stands, read not remembered.** `spawn_from_building` already *tries* to place a finished unit on a free tile
+in a 5x5 box round its building and returns `false` when it cannot - and the caller leaves the job in `training` with
+`remaining_ticks == 0`, so it retries every tick for ever. What the Huns test actually measures, then, is not a unit being
+deleted: **the queue stalls on a building whose yard is full**, the two recruits behind it never start, and 200,000 ticks do
+not help because the villagers that block the yard never move. Eighteen of twenty is a stalled queue, not a lost unit.
+
+**The rule being implemented (D85, the owner's words).**
+1. No free tile beside the building -> the finished unit is **garrisoned inside it** (the garrison the engine already has).
+2. No garrison room either -> **training pauses at that building with a reason in state**, never dropped and never silently
+   retried. The reason is engine state; the words are the view's (`docs/ui.md`).
+
+**The shape.** A new `TrainingPause { NoRoom }` in `crates/sim`, held in a `World` side map
+(`training_pauses: BTreeMap<EntityId, TrainingPause>`) for the same reason `queued` and `rallies` are side maps - it keeps
+`Entity`'s sixteen fields alone, and the hash can carry it as an ordered map. Set on the failed attempt, cleared on the
+successful one, so it is a fact about *now* rather than an event. `NoRoom` is the only variant built: `Unaffordable` exists
+in `docs/ui.md`'s plan but **no code path can produce it today** (the queue pays when the order is placed), and inventing a
+variant no test can drive is exactly the guess this project refuses - it goes in when a rule creates it.
+
+**The search gets cheaper as it gets longer.** The existing loop tests `entities.iter().any(..)` per candidate - 25 scans of
+the whole world on the tick nothing is free, which is the tick that now repeats. One pass marks which of the 25 tiles a unit
+stands on (skipping garrisoned ones, who are inside), then candidates are read from that mask: O(n) per attempt, not 25n.
+
+**Tests, written before the code (D7).**
+1. `a_unit_with_nowhere_to_stand_is_garrisoned_not_dropped` - fill every free tile of the town centre's 5x5 box with units,
+   train a villager, step: one more villager exists and its task is `Garrisoned { town centre }`.
+2. `a_building_with_no_room_and_nowhere_to_stand_pauses_with_a_reason` - a market given a `[train]` row (garrison 0, so
+   there is nowhere to shelter) with its yard full: `training_pause == Some(NoRoom)`, the job stays, no recruit appears.
+3. `the_reason_clears_the_tick_a_tile_frees` - delete one blocker, step: the villager appears beside the building and the
+   pause is `None` - the same frame, state not event.
+4. `population.rs::a_civilisation_that_cannot_build_houses_gets_the_whole_cap` is **un-ignored** and is the acceptance test:
+   the Huns, 20 of 20.
+
+**Out of scope, deliberately:** the snapshot's `queue`/`paused` fields and the message itself (step 2 of `docs/ui.md`'s
+order), and `Unaffordable`.
+
+## The RE track: Ghidra on this box, the Windows machine as the oracle (2026-10-31, compact)
+
+A second track beside the effect interpreter, and it touches no engine code. The question put to this session
+was whether a Windows Hermes running REA should deliver findings here; the answer is no, for measured reasons
+rather than by preference, and the record is `docs/re-toolchain.md` with the decision as D86.
+
+**What is installed and green** (`rea doctor`, 2026-10-31): REA 6.8.0 at `/opt/data/tools/npm/bin/rea`, Ghidra
+12.1.4, Temurin 25.0.5, Node 26.13.0, project cache `REA_GHIDRA_PROJECT_PATH=/opt/data/tools/rea/ghidra-project`,
+env in `/opt/data/tools/rea/env.sh`. Three install traps are written down there because each cost a cycle:
+Ghidra 12.2 is rejected (pin 12.1.4), REA refuses Node 26.7.0 (it wants 26.12.1+ or 22/24 LTS), and
+`python -m zipfile` strips the exec bit off `analyzeHeadless` and the native decompiler.
+
+**The binary under study** is `Age2HD/AoK HD.exe`, read from the read-only install and never written: i386 PE,
+7,521,280 bytes, PE timestamp 2018-08-22T18:26:19Z. That timestamp fits the HD 5.8 line and not a 2013 build,
+which bears on `oracle.md`'s open question about `mgz-fast` - but it is a lead, not a finding, until the exe's
+version resource or a real `.aoe2record` agrees.
+
+**The three questions it exists to answer** are exactly the rows `oracle.md` marks as unanswerable from saves:
+damage order (where armour is subtracted, where bonus classes multiply, what the min-1 clamp wraps), the
+per-tick unit update order (speed, attack reload, gather tick), and age-up timing at the tick boundary. Each
+must come back as an address plus a number a fixture can test - not as a paragraph of pseudocode.
