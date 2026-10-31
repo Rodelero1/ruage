@@ -14,7 +14,22 @@ use crate::{ConfigError, ResourceSite, Resources, SUPPORTED_SCHEMA};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Terrain {
     Grass,
+    /// Bare ground: a yard, a clearing, and the ground a felled wood leaves behind.
+    Dirt,
+    /// Forest **floor**. Walkable on its own - what blocks a wood is the tree standing on it, which is an entity, not a
+    /// terrain (the owner's rule, 2026-10-31: a tree blocks until it is cut and fully harvested, and the dirt under it is
+    /// walkable afterwards).
     Forest,
+}
+
+impl Terrain {
+    /// Whether land units may cross this terrain. Terrain is **ground, not an obstacle** in this model; obstacles are
+    /// entities (a tree, a solid part of a building), which is what lets a felled wood leave a passable clearing.
+    pub fn walkable(self) -> bool {
+        match self {
+            Terrain::Grass | Terrain::Dirt | Terrain::Forest => true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -158,13 +173,14 @@ pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, Con
         for (x, ch) in chars.into_iter().enumerate() {
             let tile = match ch {
                 'G' => Terrain::Grass,
+                'D' => Terrain::Dirt,
                 'F' => Terrain::Forest,
                 other => {
                     return Err(invalid(
                         path,
                         "map.terrain",
                         format!(
-                            "row {y}, column {x}: unknown terrain {other:?} (expected 'G' or 'F')"
+                            "row {y}, column {x}: unknown terrain {other:?} (expected 'G', 'D' or 'F')"
                         ),
                     ));
                 }

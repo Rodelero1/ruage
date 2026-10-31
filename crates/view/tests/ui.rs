@@ -345,19 +345,21 @@ fn a_click_on_the_body_of_a_building_selects_it() {
         .find(|entity| entity.player == 1 && entity.kind == EntityKind::Building)
         .expect("the town centre");
     let (across, down) = town.footprint;
-    let half = (across / 2) as i32;
     let anchor = (
         town.position.0.floor() as i32,
         town.position.1.floor() as i32,
     );
+    // The rectangle comes from the one function that defines a footprint, not from arithmetic repeated here: repeating it
+    // is exactly how the two rules for one click drifted apart (D84).
+    let (min_x, min_y, max_x, max_y) = ruage_view::footprint_tiles(anchor, town.footprint);
     let camera = camera_on(town.position);
 
     // Every tile of the footprint that no unit stands on: selecting the town centre must not depend on which tile of
     // its body a player happens to hit.
     let mut checked = 0;
-    for dx in -half..=(across as i32 - 1 - half) {
-        for dy in -half..=(down as i32 - 1 - half) {
-            let tile = (anchor.0 + dx, anchor.1 + dy);
+    for x in min_x..=max_x {
+        for y in min_y..=max_y {
+            let tile = (x, y);
             let occupied = snapshot.entities.iter().any(|entity| {
                 entity.kind == EntityKind::Unit
                     && (

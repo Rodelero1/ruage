@@ -82,7 +82,14 @@ terrain = [
 [[map.resource]]
 kind = "wood"
 amount = 100
+hp = 20
 tiles = [[6, 1]]
+# The wall is **trees**, not forest floor: terrain is ground in this model, and what blocks is the tree standing on it.
+[[map.resource]]
+kind = "wood"
+amount = 100
+hp = 20
+tiles = [[4, 0], [4, 1], [4, 2], [4, 3], [4, 4], [4, 5]]
 [[map.town_centre]]
 player = 1
 x = 1
@@ -112,7 +119,45 @@ terrain = [
 [[map.resource]]
 kind = "wood"
 amount = 100
+hp = 20
 tiles = [[4, 2]]
+# Every tile of the ring is a tree, so the node inside it cannot be reached: with terrain as ground, only trees close a way.
+[[map.resource]]
+kind = "wood"
+amount = 100
+hp = 20
+tiles = [[3, 1], [4, 1], [5, 1], [3, 2], [5, 2], [3, 3], [4, 3], [5, 3]]
+[[map.town_centre]]
+player = 1
+x = 1
+y = 1
+[[map.town_centre]]
+player = 2
+x = 7
+y = 7
+"#;
+
+/// A band of **dirt** down the middle, and a gold pile behind it. Dirt is ground: if it blocked the way the villager
+/// could never get there, and if it were grass the test would prove nothing about terrain mattering.
+const DIRT_MAP: &str = r#"
+schema = 1
+[map]
+width = 8
+height = 8
+terrain = [
+  "GGGGDGGG",
+  "GGGGDGGG",
+  "GGGGDGGG",
+  "GGGGDGGG",
+  "GGGGDGGG",
+  "GGGGDGGG",
+  "GGGGDGGG",
+  "GGGGDGGG",
+]
+[[map.resource]]
+kind = "gold"
+amount = 400
+tiles = [[6, 1]]
 [[map.town_centre]]
 player = 1
 x = 1
@@ -258,4 +303,39 @@ fn a_node_with_no_path_is_refused_at_order_time() {
         Err(SimError::NoPath { .. }) => {}
         other => panic!("expected NoPath, got {other:?}"),
     }
+}
+
+/// Dirt does not block, and it is not a detour either: a villager sent across a band of it arrives.
+#[test]
+fn a_villager_walks_straight_over_dirt() {
+    let Some(fx) = fixture() else { return };
+    let (mut world, map) = world_with(&fx, DIRT_MAP);
+    assert_eq!(
+        map.terrain_at(4, 1),
+        Some(ruage_data::Terrain::Dirt),
+        "the fixture's band must be dirt"
+    );
+    let villager = first_villager(&world);
+    let node = world
+        .entities()
+        .iter()
+        .find(|e| matches!(e.kind, EntityKind::Resource(s) if s == slot("gold")))
+        .expect("the gold pile")
+        .id;
+    let target = world.position(node).expect("position");
+    let scale = world.scale();
+
+    world.submit(Command::Gather { villager, node });
+    let mut arrived = false;
+    for _ in 0..4_000 {
+        world.step().expect("step");
+        let position = world.position(villager).expect("position");
+        let beside = (position.0.raw() - target.0.raw()).abs() <= scale
+            && (position.1.raw() - target.1.raw()).abs() <= scale;
+        if beside {
+            arrived = true;
+            break;
+        }
+    }
+    assert!(arrived, "the villager never crossed the dirt band");
 }

@@ -2379,6 +2379,16 @@ impl World {
                 walk.set_blocked(tile.0, tile.1, true);
             }
         }
+        // A **tree** blocks the tile it stands on, from the tick it stands there (the owner's rule, 2026-10-31: it blocks
+        // until it is cut and fully harvested, and the ground under it - dirt - is walkable afterwards). Key it on the hit
+        // points the node carries, which is what a tree has and a bush, a mine or a pile does not: those are worked where
+        // they stand and never blocked anybody. `step_spent_nodes` frees the tile when the wood is gone.
+        if matches!(entity.kind, EntityKind::Resource(_)) && entity.hp > 0 {
+            let tile = self.tile_of(entity.position);
+            if let Some(walk) = self.walk.as_mut() {
+                walk.set_blocked(tile.0, tile.1, true);
+            }
+        }
         self.entities.insert(at, entity);
         // A thing that has just arrived is watched from the tick it arrives: fog follows insertion as
         // well as movement, and this is the one place both paths can be fed from.

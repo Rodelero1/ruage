@@ -11,7 +11,7 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap};
 
-use ruage_data::{Map, Terrain};
+use ruage_data::Map;
 
 const CARDINAL: u32 = 10;
 const DIAGONAL: u32 = 14;
@@ -32,7 +32,10 @@ impl Walk {
             blocked: map
                 .terrain
                 .iter()
-                .map(|tile| *tile != Terrain::Grass)
+                // Terrain is **ground, not an obstacle** (the owner's rule, 2026-10-31): what blocks a tile is the tree
+                // or the solid part of a building standing on it, added through `set_blocked`. Forest floor is walkable,
+                // so a felled wood leaves a clearing instead of a permanent invisible wall.
+                .map(|tile| !tile.walkable())
                 .collect(),
         }
     }

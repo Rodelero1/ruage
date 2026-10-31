@@ -2193,3 +2193,34 @@ selection rings with health bars. `make check` is the gate and it is green.*
 
 **Still open for the owner:** D83's anchoring (one constant), and whether the plans (2)-(4) are the next three, or whether
 the rule AI as an opponent comes first now that a screen can show it.
+
+## Terrain is ground, and what stands on it blocks (2026-10-31, done)
+
+**The owner's rule, implemented in his words.** "A tree blocks passage until cut and fully harvested. Then dirt remains
+but it is walkable." So `Terrain` gained `Dirt` and `walkable()` (true for grass, dirt and **forest floor**), `Walk::from_map`
+now reads `!walkable()` instead of `!= Grass`, and blocking became a property of **entities**: a resource node that carries
+hit points - a tree - closes its tile from the moment it is inserted, and `step_spent_nodes` frees the tile and removes
+the node once the wood is gone and nobody is working it.
+
+**Two parked defects closed by it**, both un-ignored rather than deleted: `a_standing_tree_blocks_its_tile` (which needed
+the fixture to stop faking a tree with `hp: 0` - a node without hit points is a thing you walk past, which is right for
+everything that is not a tree) and `a_chopped_tree_leaves_no_obstacle`.
+
+**The traps it set, each found by a red test:** four fixtures had built walls out of `F` terrain and now let the villager
+walk straight through - `WALLED_MAP`, `WALL_MAP`, `SEALED_MAP` and the forest-pocket rally map - so each wall became a
+**row of trees**, mirrored where the loader demands it. A fixture that lists wood **without `hp`** no longer blocks, which
+is the tell that it was leaning on terrain.
+
+**And it settles D83's anchor.** Your follow-up - "top corner is the centre, bottom corner is walkable yard, left and
+right corner is walkable sheltered yard" - reads the Town Centre from its **north corner**, so `footprint_tiles` now
+anchors there and the block extends `+x/+y` (D84). Two tests in `depth.rs` and one in `ui.rs` moved with it, and the
+`ui` test now takes its rectangle from `footprint_tiles` instead of repeating the arithmetic, which is how the two click
+rules drifted apart the first time.
+
+**Verified:** the acceptance match still wins with the **same state hash** `#f91872681ba4a3a8` (`players=1`, 48,000 ticks)
+- the terrain change is sim-visible but path-equivalent on a map whose woods are dense, which is the regression signal
+that matters.
+
+**Next: D76's footprint masks** - the Town Centre's solid back core and walkable wings as content (`[footprint.<role>]`),
+blocking through the same `Walk` layer, freed on destruction or a cancelled foundation, with placement and reachability
+asking the footprint instead of the anchor tile. Then sprites.

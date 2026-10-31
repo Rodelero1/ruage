@@ -64,7 +64,10 @@ fn a_small_tree(world: &mut World, at: (i32, i32)) -> EntityId {
                 Fixed::from_raw(i64::from(at.1) * scale),
             ),
             speed: Fixed::ZERO,
-            hp: 0,
+            // A tree is a thing that must be **felled**: its hit points are what make it an obstacle as well as a source
+            // (the dat gives a forest tree 20). A fixture that spawned a tree with none was asking the engine about a
+            // node that stands nowhere.
+            hp: 20,
             // Enough for one trip by the villager's cap: the tree must run out inside the test's lifetime.
             amount: 10,
         })
@@ -111,7 +114,7 @@ fn a_villager_near(world: &mut World, at: (i32, i32)) -> EntityId {
 /// **resource entity** block its own tile? It does not, which is the second half of why a chopped tree leaves no gap:
 /// there was never a wall there in the first place.
 #[test]
-#[ignore = "known gap: a resource node does not block its own tile; only terrain does"]
+
 fn a_standing_tree_blocks_its_tile() {
     let Some(mut world) = fresh() else {
         return;
@@ -131,7 +134,7 @@ fn a_standing_tree_blocks_its_tile() {
 
 /// Once a tree is chopped there is nothing left there: the entity is gone and its tile can be walked through.
 #[test]
-#[ignore = "known gap: a node spawned by a command is not removed when emptied, though a map node is"]
+
 fn a_chopped_tree_leaves_no_obstacle() {
     let Some(mut world) = fresh() else {
         return;
@@ -160,6 +163,14 @@ fn a_chopped_tree_leaves_no_obstacle() {
         emptied,
         "the tree should have been gathered out inside 45 s"
     );
+    // Removal waits until nobody is working the node - a worker must not lose the tree it is carrying from - so give the
+    // engine the few ticks that takes rather than demanding it the instant the wood runs out.
+    for _ in 0..1_200 {
+        if world.entity(tree).is_none() {
+            break;
+        }
+        world.step().expect("stepping");
+    }
     assert!(
         world.entity(tree).is_none(),
         "a spent tree is gone from the world, not left standing as an invisible wall"

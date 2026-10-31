@@ -31,6 +31,7 @@ terrain = [
 [[map.resource]]
 kind = "wood"
 amount = 100
+hp = 20
 tiles = [[1, 1], [2, 1]]
 [[map.resource]]
 kind = "gold"
@@ -236,4 +237,55 @@ fn a_resource_the_pack_leaves_on_open_ground_cannot_stand_in_a_forest() {
         .expect_err("clay inside a forest must be refused")
         .to_string();
     assert!(err.contains("forest"), "got: {err}");
+}
+
+/// A yard of dirt around a base is terrain of its own, and ground is ground: the map says what it is and whether it can
+/// be walked on, not the pather's guess.
+const DIRT: &str = r#"
+schema = 1
+[map]
+width = 3
+height = 3
+terrain = [
+  "GDG",
+  "DDG",
+  "GGG",
+]
+[[map.town_centre]]
+player = 1
+x = 0
+y = 0
+[[map.town_centre]]
+player = 2
+x = 2
+y = 2
+"#;
+
+#[test]
+fn dirt_is_terrain_of_its_own_and_it_is_ground_you_can_walk_on() {
+    let map = load_map_str(DIRT, "dirt.toml", &project()).expect("a map with dirt");
+    assert_eq!(map.terrain_at(1, 0), Some(Terrain::Dirt));
+    assert_eq!(map.terrain_at(1, 1), Some(Terrain::Dirt));
+
+    // **Terrain is ground, not an obstacle**: the owner's rule (2026-10-31) is that a tree blocks its tile until it has
+    // been cut and fully harvested, and that the ground under it - dirt - is walkable afterwards. So forest floor is
+    // walkable too, and what blocks is the *tree standing on it*, which is an entity.
+    assert!(Terrain::Grass.walkable(), "grass is ground");
+    assert!(Terrain::Dirt.walkable(), "dirt is ground");
+    assert!(
+        Terrain::Forest.walkable(),
+        "forest floor is ground: the tree blocks, not the terrain"
+    );
+}
+
+#[test]
+fn an_unknown_terrain_letter_names_the_ones_that_exist() {
+    let broken = DIRT.replace("GGG", "GXG");
+    let err = load_map_str(&broken, "dirt.toml", &project()).expect_err("X is not terrain");
+    let text = err.to_string();
+    let names = |letter: char| text.contains(letter);
+    assert!(
+        names('G') && names('D') && names('F'),
+        "the error must name the letters that exist: {text}"
+    );
 }

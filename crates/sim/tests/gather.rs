@@ -86,6 +86,7 @@ terrain = [
 [[map.resource]]
 kind = "wood"
 amount = 5
+hp = 20
 tiles = [[3, 1]]
 [[map.town_centre]]
 player = 1

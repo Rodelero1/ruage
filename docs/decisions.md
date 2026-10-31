@@ -2164,3 +2164,34 @@ the rule that makes clicking a villager on a farm select the villager.
 not the anchoring). It is one constant in `footprint_tiles`, and importing a real `.aoe2scenario`, or measuring a
 building's blocked ground in a recorded game, is what would settle it. Nothing else depends on the answer: the
 simulation still blocks one tile per building (D76's masks are recorded and not built).
+
+## D84 - Terrain is ground; what stands on it blocks (2026-10-31)
+
+The owner's rule, in his words: **"a tree blocks passage until cut and fully harvested. Then dirt remains but it is
+walkable."** So the model splits in two, where it used to be one thing:
+
+1. **Terrain never blocks.** `Terrain::walkable()` is true for grass, dirt and forest *floor* (`Map::terrain` gained
+   `Dirt`, letter `D`, for bare ground - a yard, a clearing, the ground a felled wood leaves behind). `Walk::from_map`
+   now reads `!walkable()` instead of `!= Grass`, so the change is a property of the data rather than a negation.
+2. **An entity blocks its own tile.** A **tree** - a resource node carrying hit points, which is what a tree has and a
+   bush, a mine or a pile does not (`hp = 20` in `map.toml`) - closes the tile it stands on from the tick it is inserted,
+   and `step_spent_nodes` frees the tile and removes the entity once the wood is gone and nobody is working it any more.
+
+Two defects closed by the same change, both previously parked `#[ignore]`d with their reasons written down:
+`a_standing_tree_blocks_its_tile` and `a_chopped_tree_leaves_no_obstacle`. The first needed one thing the fixture had
+been faking: a spawned tree with `hp: 0` is not a tree, so the fixture now spawns one with 20 hit points - a node without
+them is a thing you walk past, which is right for every node that is not a tree.
+
+**Consequence for content, and the traps it sets:** a wall in a fixture is now a **row of trees**, not a column of `F`.
+Four fixtures said otherwise and were corrected (the `WALLED_MAP`, `WALL_MAP`, `SEALED_MAP` and the forest-pocket rally
+map), each by adding the wood group that actually closes the way - and a fixture that lists wood without `hp` no longer
+blocks, which is the tell that it was leaning on terrain.
+
+**Not carried over:** "a resource node does not block its own tile" was never a general rule - bushes and mines are still
+walked over, as they were, and only trees block. If that turns out to be wrong for a mine, it is one predicate in the
+insert path, keyed on content rather than on `hp > 0`.
+
+**And it settles D83's anchor.** The owner's follow-up - *"top corner is the centre, bottom corner is walkable yard, left
+and right corner is walkable sheltered yard"* - is the Town Centre's diamond read from its **north corner**, so the
+footprint's anchor tile is that corner and the block extends `+x/+y`. D83's "tile nearest the middle" is superseded; the
+change is one constant in `footprint_tiles`, and D76's mask rows already assume the corner order.

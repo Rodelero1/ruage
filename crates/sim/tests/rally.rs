@@ -99,6 +99,7 @@ tiles = [[3, 1]]
 [[map.resource]]
 kind = "wood"
 amount = 200
+hp = 20
 tiles = [[2, 1], [4, 1], [2, 0], [3, 0], [4, 0]]
 [[map.town_centre]]
 player = 1
@@ -390,6 +391,7 @@ terrain = [
 [[map.resource]]
 kind = "wood"
 amount = 400
+hp = 20
 tiles = [[3, 3], [4, 3], [5, 3], [3, 4], [5, 4], [3, 5], [4, 5], [5, 5]]
 [[map.town_centre]]
 player = 1

@@ -590,7 +590,21 @@ terrain = [
 [[map.resource]]
 kind = "wood"
 amount = 200
+hp = 20
 tiles = [[2, 2], [2, 3], [3, 2], [3, 3], [12, 12], [12, 13], [13, 12], [13, 13]]
+
+# The wall is **trees**, not forest terrain: terrain is ground in this model (the owner's rule, 2026-10-31), so only a tree
+# closes a tile. Mirrored across the two centre columns, which is what the loader's symmetry check wants.
+[[map.resource]]
+kind = "wood"
+amount = 200
+hp = 20
+tiles = [
+  [7, 0], [8, 0], [7, 1], [8, 1], [7, 2], [8, 2], [7, 3], [8, 3],
+  [7, 4], [8, 4], [7, 5], [8, 5], [7, 6], [8, 6], [7, 7], [8, 7],
+  [7, 8], [8, 8], [7, 9], [8, 9], [7, 10], [8, 10], [7, 11], [8, 11],
+  [7, 12], [8, 12], [7, 13], [8, 13], [7, 14], [8, 14], [7, 15], [8, 15],
+]
 
 [[map.town_centre]]
 x = 3

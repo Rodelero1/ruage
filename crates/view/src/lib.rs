@@ -634,22 +634,20 @@ fn on_forest_ground(snapshot: &Snapshot, position: (f32, f32)) -> bool {
 
 /// The tiles a footprint covers, given the tile an entity stands on and the pack's footprint.
 ///
-/// The dat's radius is a **half-extent about the anchor**, so a 4x4 building covers `anchor-2 ..= anchor+1` and a
-/// 3x3 one covers `anchor-1 ..= anchor+1` - the anchor is the tile nearest the middle, and an even footprint has no
-/// middle tile, which is why the extra tile goes to the +x/+y side. Returns inclusive `(min_x, min_y, max_x, max_y)`
-/// in tiles, which is what a footprint is: a rectangle of ground, drawn as the diamond the projection implies and
-/// clicked as the rectangle it is.
+/// The anchor is the **north corner of the diamond** and the block extends `+x/+y`: the owner's reading of the Town
+/// Centre on 2026-10-31 - *"top corner is the centre, bottom corner is walkable yard, left and right corner is walkable
+/// sheltered yard"* - which supersedes D83's middle anchoring. Returns inclusive `(min_x, min_y, max_x, max_y)` in tiles,
+/// which is what a footprint is: a rectangle of ground, drawn as the diamond the projection implies and clicked as the
+/// rectangle it is.
 #[must_use]
 pub fn footprint_tiles(anchor: (i32, i32), footprint: (u32, u32)) -> (i32, i32, i32, i32) {
-    let half_x = (footprint.0 / 2) as i32;
-    let half_y = (footprint.1 / 2) as i32;
     let across = footprint.0.max(1) as i32;
     let down = footprint.1.max(1) as i32;
     (
-        anchor.0 - half_x,
-        anchor.1 - half_y,
-        anchor.0 - half_x + across - 1,
-        anchor.1 - half_y + down - 1,
+        anchor.0,
+        anchor.1,
+        anchor.0 + across - 1,
+        anchor.1 + down - 1,
     )
 }
 

@@ -80,7 +80,8 @@ fn entity(id: u32, kind: EntityKind, at: (f32, f32), footprint: (u32, u32)) -> E
 #[test]
 fn things_are_painted_from_the_back_of_the_diamond_to_the_front() {
     let building = entity(10, EntityKind::Building, (16.0, 16.0), (4, 4));
-    // The footprint runs x,y = 14..17, so its far corner is (17,17) - depth 34.
+    // The anchor is the diamond's north corner (D84), so the footprint runs x,y = 16..19 and its far corner is (19,19) -
+    // depth 38. Everything between 38 and the back of the diamond is painted before the building.
     let behind = entity(20, EntityKind::Unit, (14.0, 14.0), (1, 1));
     let level = entity(21, EntityKind::Unit, (17.0, 17.0), (1, 1));
     let in_front = entity(22, EntityKind::Unit, (18.0, 18.0), (1, 1));
@@ -113,9 +114,9 @@ fn things_are_painted_from_the_back_of_the_diamond_to_the_front() {
         .collect();
     assert_eq!(
         order,
-        vec![20, 9, 10, 21, 22],
-        "expected back (20), then the building's depth-34 tie by id (9, 21), then the building (10), then the \
-         front (22); got the front of a diamond drawn over the back of it"
+        vec![20, 9, 21, 22, 10],
+        "expected back (20), then the depth-34 pair by id (9, 21), then the depth-36 unit (22), then the building whose \
+         far corner is 38 - got the front of a diamond drawn over the back of it"
     );
 }
 
@@ -141,8 +142,9 @@ fn a_unit_behind_a_building_is_covered_by_it() {
         )
         .expect("a footprint from the pack");
     // Inside the footprint but in its back half, and with an id higher than the town centre's, so an id-ordered draw
-    // paints it on top: exactly the mistake depth sorting exists to prevent.
-    let behind = (15, 15);
+    // paints it on top: exactly the mistake depth sorting exists to prevent. The footprint runs 16..19 from the anchor,
+    // so (17,17) is inside it and behind its far corner at (19,19).
+    let behind = (17, 17);
     world
         .submit_checked(Command::Spawn {
             id: EntityId(9_001),
