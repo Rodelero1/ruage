@@ -327,14 +327,11 @@ fn a_dead_unit_lets_a_paused_unit_arrive() {
 
 /// The Huns cannot build houses at all (their tech tree takes the house away), so a cap that counts
 /// houses would leave them at zero for the whole match. Content's ceiling is their ceiling.
-/// **Parked, failing, by the footprint masks (2026-10-31).** The Huns train **18 of 20** villagers, and doubling the tick
-/// budget to 200,000 does not add the last two - so two units are *dropped*, not delayed. The likely cause is the spawn
-/// search: a finished unit is placed on a free tile beside its building, and a building whose solid core now occupies four
-/// tiles (D76's `##..`/`##..`), with villagers crowded round the yard, has fewer places to put one. This is a real economy
-/// bug and the masks are not finished until it is fixed; it is `#[ignore]`d so the rest of the suite stays honest about
-/// what it proves.
+/// **The acceptance test for D85.** It read 18 of 20 until a recruit with nowhere to stand was garrisoned in its
+/// building instead of stalling the queue: the two missing villagers were never dropped, they were stuck behind a
+/// building whose whole 5x5 yard the crowd filled - the finished job waited with `remaining_ticks == 0` and retried for
+/// ever, so the queue behind it never started. Twenty of twenty is the fix.
 #[test]
-#[ignore = "known defect from the footprint masks: the Huns train 18 of 20 - units are dropped, not delayed"]
 fn a_civilisation_that_cannot_build_houses_gets_the_whole_cap() {
     let Some(fx) = fixture() else { return };
     let mut economy = fx.economy.clone();

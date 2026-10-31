@@ -2324,3 +2324,36 @@ version resource or a real `.aoe2record` agrees.
 damage order (where armour is subtracted, where bonus classes multiply, what the min-1 clamp wraps), the
 per-tick unit update order (speed, attack reload, gather tick), and age-up timing at the tick boundary. Each
 must come back as an address plus a number a fixture can test - not as a paragraph of pseudocode.
+
+## D85 landed: the recruit is garrisoned, and the queue says why (2026-10-31, done)
+
+**What was actually wrong, now proven.** The Huns' two missing villagers were never deleted: a finished job with nowhere
+to stand stayed in its building with `remaining_ticks == 0` and retried every tick for ever, so **the queue behind it never
+started**. `a_civilisation_that_cannot_build_houses_gets_the_whole_cap` is un-ignored and passes at 20 of 20.
+
+**The shapes now in the tree.** `spawn_from_building` decides in D85's order - a free tile in the 5x5 yard; failing that,
+inside the building on its own `garrison` field; failing that, `TrainingPause::NoRoom` in state and the job left where it is.
+The reason is a `World` side map beside `queued` and `rallies`, cleared the tick placement succeeds, removed with the
+building, and hashed (state, not event). `free_spot_near` replaces the per-candidate rescan with one pass: **the blocked
+case is the one that now repeats every tick**, and the old shape cost twenty-five scans of the world per tick there.
+`garrison_room` refuses a building at its eject threshold (D37) and a building with no capacity at all.
+
+**Four findings from the review** (`docs/reviews/2026-10-31-d85-no-room.md`), all fixed test-first:
+1. The tile mask marked only *units*, so a market's own square read as free and a recruit stood on its roof; it also means
+   the old scan kept a **garrisoned** unit's stale tile reserved for ever.
+2. A building past its eject threshold sheltered a recruit - test watched failing (22 against 21) before the guard.
+3. The fixture's `next_id` was read from a world whose spawns had not been applied, so every blocker got one id and `step`
+   swallowed the duplicates; the tell was "the yard is full" failing with every tile still free.
+4. **`[decay] enabled` ate a spawned, unattended market inside five game-minutes**, freeing its own yard. That is very
+   probably the "mill and barracks vanished by 17:00" nobody could explain: an unattended building does not merely get
+   damaged, it goes.
+
+**Still owed, in order.**
+1. **The ceiling pauses a queue and says nothing** (D34): `TrainingPause` needs a second reason (`AtCeiling`) or the panel
+   will show a stopped queue with no words - **the owner's call**, since `docs/ui.md` names only `NoRoom` and
+   `Unaffordable`, and `Unaffordable` has no path that can produce it today.
+2. **Decay: is a building supposed to vanish?** `[decay] rate_from = "dat"` with `resource_decay_rate` semantics
+   unverified, and the acceptance match loses a mill and a barracks to it. Either the rate is wrong or the rule is; it is a
+   probe, then a test, then (if the data says so) a fix.
+3. The snapshot's `queue`/`paused`/trainable list, then letters in `font.rs`, then the message beside the queue
+   (`docs/ui.md`'s order, unchanged).

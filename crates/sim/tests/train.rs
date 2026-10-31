@@ -168,7 +168,40 @@ fn a_building_that_is_still_going_up_cannot_train() {
     let scale = world.scale();
     let x = u16::try_from(world.position(villager).expect("p").0.raw() / scale).unwrap();
     let y = u16::try_from(world.position(villager).expect("p").1.raw() / scale).unwrap();
-    let site = (x + 2, y + 2);
+    // The site is **found, not assumed**. A fixed `+2,+2` offset used to work and stopped when the footprint masks
+    // changed where the seeded villagers stand: the offset landed inside the tree line and the order was refused with
+    // `SiteOccupied { tile: (17, 17) }`. That was a stale fixture, not an engine fault - the engine was right to refuse
+    // a house on a tree - so the fixture looks for ground a 2x2 house can stand on.
+    let site = |dx: i32, dy: i32| -> Option<(u16, u16)> {
+        let (tx, ty) = (
+            u16::try_from(i32::from(x) + dx).ok()?,
+            u16::try_from(i32::from(y) + dy).ok()?,
+        );
+        for cx in tx..tx + 2 {
+            for cy in ty..ty + 2 {
+                if !world.tile_walkable(cx, cy) {
+                    return None;
+                }
+                let taken = world.entities().iter().any(|e| {
+                    (
+                        u16::try_from(e.position.0.raw() / scale).unwrap_or(u16::MAX),
+                        u16::try_from(e.position.1.raw() / scale).unwrap_or(u16::MAX),
+                    ) == (cx, cy)
+                });
+                if taken {
+                    return None;
+                }
+            }
+        }
+        Some((tx, ty))
+    };
+    let site = (2..8)
+        .find_map(|d| {
+            [(d, d), (d, 0), (0, d), (d, -d), (-d, d), (d, 0), (0, -d)]
+                .into_iter()
+                .find_map(|(dx, dy)| site(dx, dy))
+        })
+        .expect("somewhere near the villager to put a house");
     world
         .submit_checked(Command::Build {
             villager,

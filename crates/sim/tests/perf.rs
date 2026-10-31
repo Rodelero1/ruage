@@ -110,3 +110,116 @@ fn a_ten_minute_match_in_release() {
         elapsed.as_secs_f64() / f64::from(ticks) * 1e6
     );
 }
+
+/// What a **blocked** production queue costs per tick (D85). A building with nowhere to put its finished unit retries
+/// every tick until a tile frees, so this is the shape that repeats; the probe prints the price with the yard full and
+/// the same world without a queue, which is the difference the pause actually costs.
+#[test]
+#[ignore = "prints timings; run explicitly with --ignored --nocapture"]
+fn a_blocked_queue_costs_this_much_per_tick() {
+    let Some(fx) = fixture() else { return };
+    let (settings, map, economy, units, resources) = &fx;
+    let mut economy = economy.clone();
+    economy.start.stock = [
+        ("food".to_owned(), 4_000),
+        ("wood".to_owned(), 4_000),
+        ("gold".to_owned(), 1_000),
+    ]
+    .into_iter()
+    .collect();
+    economy.population.cap_default = 1_000;
+    economy.population.town_centre_population = 500;
+    economy.decay.enabled = false;
+    economy.train.by_building.insert(84, vec![83]);
+    let mut world = World::new(settings, 11).expect("world");
+    world.seed_from(map, &economy, units).expect("seeding");
+    world
+        .load_resources(resources)
+        .expect("the pack fits the stockpile");
+    let scale = world.scale();
+    let market = EntityId(world.entities().iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
+    world
+        .submit_checked(Command::Spawn {
+            id: market,
+            player: 1,
+            kind: EntityKind::Building,
+            unit: Some(84),
+            position: (Fixed::from_raw(20 * scale), Fixed::from_raw(20 * scale)),
+            speed: Fixed::ZERO,
+            hp: 1_800,
+            amount: 0,
+        })
+        .expect("a market");
+    world.step().expect("step");
+    // Every tile a recruit could be placed on, filled by a unit of the same player.
+    let mut id = EntityId(world.entities().iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
+    let mut blocked = 0;
+    for dy in -2i64..=2 {
+        for dx in -2i64..=2 {
+            let (x, y) = (20 + dx, 20 + dy);
+            let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
+                continue;
+            };
+            if !world.tile_walkable(x, y) {
+                continue;
+            }
+            let taken = world.entities().iter().any(|e| {
+                (e.position.0.raw() / scale, e.position.1.raw() / scale)
+                    == (i64::from(x), i64::from(y))
+            });
+            if taken {
+                continue;
+            }
+            world
+                .submit_checked(Command::Spawn {
+                    id,
+                    player: 1,
+                    kind: EntityKind::Unit,
+                    unit: Some(83),
+                    position: (
+                        Fixed::from_raw(i64::from(x) * scale),
+                        Fixed::from_raw(i64::from(y) * scale),
+                    ),
+                    speed: Fixed::ZERO,
+                    hp: 25,
+                    amount: 0,
+                })
+                .expect("a blocker");
+            id = EntityId(id.0 + 1);
+            blocked += 1;
+        }
+    }
+    world.step().expect("step");
+    // Best of five samples of 500 ticks in each half, and a warmup before the first: this machine's timings are bimodal
+    // (a shared 2-CPU box), and a single sample of a probe that compares two halves is measuring the noise.
+    let sample = |world: &mut World, ticks: u32| {
+        let mut best = f64::MAX;
+        for _ in 0..5 {
+            let start = Instant::now();
+            for _ in 0..ticks {
+                world.step().expect("step");
+            }
+            best = best.min(start.elapsed().as_secs_f64() / f64::from(ticks) * 1e6);
+        }
+        best
+    };
+    for _ in 0..500 {
+        world.step().expect("warmup");
+    }
+    let quiet = sample(&mut world, 500);
+    world
+        .submit_checked(Command::Train {
+            building: market,
+            unit: 83,
+        })
+        .expect("train");
+    for _ in 0..500 {
+        world.step().expect("warmup");
+    }
+    let paused = sample(&mut world, 500);
+    println!(
+        "{} entities, {blocked} blockers, queue {:?}: quiet {quiet:.2} us/tick, blocked {paused:.2} us/tick",
+        world.entities().len(),
+        world.training_pause(market)
+    );
+}

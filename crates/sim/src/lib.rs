@@ -226,6 +226,20 @@ pub enum RallyPoint {
     Inside,
 }
 
+/// Why a building's production queue is stopped (D85).
+///
+/// Engine state, never words: the view owns the wording (`docs/ui.md`), so a mod changes what the player reads without
+/// touching the simulation. It is a fact about *now* rather than an event - set while the reason holds, cleared the
+/// tick it stops holding, which is what lets the panel draw it for exactly as long as it is true.
+///
+/// `Unaffordable` is in `docs/ui.md`'s plan and is **not** here: the queue pays when the order is placed, so no code
+/// path can produce it today, and a variant no test can drive is a guess.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrainingPause {
+    /// Nowhere to stand beside the building and no room inside it to shelter the recruit.
+    NoRoom,
+}
+
 /// How a match ended. A side is out when nothing that *counts* of theirs still stands - no unit, no
 /// building - where content names the families that do not count (walls, farms; D59). The town centre
 /// is not special: losing it is a setback, not a defeat, which is what the original game does.
@@ -1247,6 +1261,10 @@ pub struct World {
     /// second field on `Entity`: the entity array is walked every tick, and a `Vec` in it costs every
     /// entity for the sake of a few buildings (docs/performance.md, pass seven).
     queued: BTreeMap<EntityId, Vec<Training>>,
+    /// Why a building's production is stopped, by building (D85). A side table for the same reason as `queued`: it is
+    /// a fact about a handful of buildings, not a field every entity pays for. Cleared on the tick production can
+    /// continue, so a stale reason can never outlive its cause.
+    training_pauses: BTreeMap<EntityId, TrainingPause>,
     /// Per player, the techs already researched. Part of state: it decides what a later upgrade
     /// does and what a later order resolves to, so it is hashed.
     researched: BTreeMap<u8, BTreeSet<u32>>,
@@ -1360,6 +1378,7 @@ impl World {
             aggro_radius: 0,
             aggro_scan_ticks: 0,
             queued: BTreeMap::new(),
+            training_pauses: BTreeMap::new(),
             gated_units: BTreeSet::new(),
             upgrade_tech: BTreeMap::new(),
             availability_techs: Vec::new(),
@@ -3023,9 +3042,12 @@ impl World {
         Ok(())
     }
 
-    /// Put a finished unit on the first free tile next to its building, in a fixed scan order so
-    /// the result is deterministic. Returns false when there is nowhere to stand, in which case
-    /// the unit waits inside the building rather than being lost.
+    /// Put a finished unit somewhere, in the order D85 sets out: a free tile beside the building; if there is none,
+    /// **inside the building** (its own `garrison` field, the number its garrison orders read); if there is no room
+    /// there either, leave the job where it is and **say why** - the queue pauses with `TrainingPause::NoRoom` until
+    /// the reason goes away. A recruit is never dropped and never quietly retried for ever.
+    ///
+    /// Returns true when the job left the building (so the queue behind it advances) and false when it could not.
     fn spawn_from_building(&mut self, building: EntityId) -> bool {
         let Some(job) = self.find(building).and_then(|e| e.training) else {
             return true;
@@ -3034,47 +3056,30 @@ impl World {
             return true;
         };
         let player = source.player;
-        // Health and speed are resolved when the unit appears, so a tech researched while it was in
-        // the queue still counts.
-        let hp = self.max_hp(player, job.unit).unwrap_or(job.hp);
-        let speed = self.effective_speed(player, job.unit).unwrap_or(job.speed);
         let unit = job.unit;
         let scale = self.scale;
         let origin = (
             u16::try_from(source.position.0.raw() / scale).unwrap_or(0),
             u16::try_from(source.position.1.raw() / scale).unwrap_or(0),
         );
-        let walk = match self.walk.as_ref() {
-            Some(walk) => walk,
-            None => return false,
+        // Somewhere to stand, or somewhere to shelter. A building with no garrison capacity (a market, a smith)
+        // gives no second chance: the rule is "inside it or say why", and content decides which buildings can hold
+        // anybody.
+        let placement = match self.free_spot_near(origin) {
+            Some(tile) => Some((tile, false)),
+            None if self.garrison_room(building, player) => Some((origin, true)),
+            None => None,
         };
-        let mut spot = None;
-        'search: for dy in 0..=2i32 {
-            for dx in 0..=2i32 {
-                for (sx, sy) in [(dx, dy), (-dx, dy), (dx, -dy), (-dx, -dy)] {
-                    let cand = (i32::from(origin.0) + sx, i32::from(origin.1) + sy);
-                    if cand.0 < 0 || cand.1 < 0 {
-                        continue;
-                    }
-                    let (cx, cy) = (
-                        u16::try_from(cand.0).unwrap_or(u16::MAX),
-                        u16::try_from(cand.1).unwrap_or(u16::MAX),
-                    );
-                    if !walk.contains(cx, cy) || walk.blocked(cx, cy) {
-                        continue;
-                    }
-                    let position = self.tile((cx, cy));
-                    if self.entities.iter().any(|e| e.position == position) {
-                        continue;
-                    }
-                    spot = Some((cx, cy));
-                    break 'search;
-                }
-            }
-        }
-        let Some(spot) = spot else {
+        let Some((spot, inside)) = placement else {
+            self.training_pauses.insert(building, TrainingPause::NoRoom);
             return false;
         };
+        // Health and speed are resolved when the unit appears, so a tech researched while it was in the queue still
+        // counts - and only once placement is decided: a blocked building re-enters this function every tick, and
+        // resolving modifiers per tick for a recruit that cannot be placed was two thirds of the pause's cost (measured,
+        // docs/reviews/2026-10-31-d85-no-room.md).
+        let hp = self.max_hp(player, unit).unwrap_or(job.hp);
+        let speed = self.effective_speed(player, unit).unwrap_or(job.speed);
         let position = self.tile(spot);
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
         let inserted = self.insert(Entity {
@@ -3097,43 +3102,51 @@ impl World {
         if inserted.is_err() {
             return false;
         }
-        // Where the finished unit goes: the rally decides, and the default is where it stands.
-        let rally = self.rallies.get(&building).copied();
-        match rally {
-            Some(RallyPoint::Inside) => {
-                // Only a building that can hold units can keep one, and only while there is room.
-                let room = self
-                    .find(building)
-                    .and_then(|entity| entity.unit)
-                    .and_then(|unit| self.units.as_ref().and_then(|units| units.unit(unit)))
-                    .is_some_and(|stats| stats.garrison > 0);
-                if room
-                    && self.check_garrison(id, building).is_ok()
-                    && let Some(entity) = self.find_mut(id)
-                {
-                    entity.task = Task::Garrisoned { building };
-                }
+        self.training_pauses.remove(&building);
+        if inside {
+            // Sheltered on the tick it was finished: it exists, it costs population, it dies with the building.
+            if let Some(entity) = self.find_mut(id) {
+                entity.task = Task::Garrisoned { building };
             }
-            Some(RallyPoint::Tile(x, y)) => {
-                let to = self.tile((x, y));
-                // A rally point on a resource is a gathering order: the villager goes there and works
-                // *that* node. Rallied onto gold with wood all round it, it gathers the gold or
-                // nothing - never the nearest tree (D40).
-                let node = self
-                    .entities
-                    .iter()
-                    .find(|entity| {
-                        matches!(entity.kind, EntityKind::Resource(_)) && entity.position == to
-                    })
-                    .map(|entity| entity.id);
-                let gathering = node.is_some_and(|node| self.start_gather(id, node).is_ok());
-                if !gathering {
-                    // Nothing to work there, or this unit cannot work it (a spearman rallied onto a
-                    // tree), or there is no way to reach it: go as close as the map allows.
-                    self.walk_towards(id, to);
+        } else {
+            // Where the finished unit goes: the rally decides, and the default is where it stands.
+            let rally = self.rallies.get(&building).copied();
+            match rally {
+                Some(RallyPoint::Inside) => {
+                    // Only a building that can hold units can keep one, and only while there is room.
+                    let room = self
+                        .find(building)
+                        .and_then(|entity| entity.unit)
+                        .and_then(|unit| self.units.as_ref().and_then(|units| units.unit(unit)))
+                        .is_some_and(|stats| stats.garrison > 0);
+                    if room
+                        && self.check_garrison(id, building).is_ok()
+                        && let Some(entity) = self.find_mut(id)
+                    {
+                        entity.task = Task::Garrisoned { building };
+                    }
                 }
+                Some(RallyPoint::Tile(x, y)) => {
+                    let to = self.tile((x, y));
+                    // A rally point on a resource is a gathering order: the villager goes there and works
+                    // *that* node. Rallied onto gold with wood all round it, it gathers the gold or
+                    // nothing - never the nearest tree (D40).
+                    let node = self
+                        .entities
+                        .iter()
+                        .find(|entity| {
+                            matches!(entity.kind, EntityKind::Resource(_)) && entity.position == to
+                        })
+                        .map(|entity| entity.id);
+                    let gathering = node.is_some_and(|node| self.start_gather(id, node).is_ok());
+                    if !gathering {
+                        // Nothing to work there, or this unit cannot work it (a spearman rallied onto a
+                        // tree), or there is no way to reach it: go as close as the map allows.
+                        self.walk_towards(id, to);
+                    }
+                }
+                None => {}
             }
-            None => {}
         }
 
         // The next unit in the queue starts where the finished one left off: its own create time was
@@ -3152,6 +3165,107 @@ impl World {
             self.queued.remove(&building);
         }
         true
+    }
+
+    /// The first tile a finished unit can stand on, in a 5x5 box round its building and in a fixed scan order, or
+    /// `None` when the box is full.
+    ///
+    /// One pass over the world marks the box's occupied tiles and the candidates are read from that mask. The older
+    /// shape asked `entities.iter().any(..)` once per candidate, so a *blocked* building - the case that now repeats
+    /// every tick until a tile frees - cost twenty-five scans of the whole world per tick. A garrisoned unit is inside
+    /// and occupies nothing.
+    fn free_spot_near(&self, origin: (u16, u16)) -> Option<(u16, u16)> {
+        const SIDE: i32 = 5;
+        let mut taken = [false; (SIDE * SIDE) as usize];
+        // The box in raw units, checked before any division: `tile_of_raw` divides, and the whole world is outside this
+        // five-tile square, so comparing raw coordinates first is the difference between two divisions per entity per
+        // tick and two per entity *in* the box (measured: the pause cost 2.4 us/tick at 148 entities before this).
+        let scale = self.scale;
+        let (lo_x, hi_x) = (
+            (i64::from(origin.0) - 2) * scale,
+            (i64::from(origin.0) + 3) * scale,
+        );
+        let (lo_y, hi_y) = (
+            (i64::from(origin.1) - 2) * scale,
+            (i64::from(origin.1) + 3) * scale,
+        );
+        for entity in &self.entities {
+            // Anything standing somewhere holds that square: a building's own tile, a tree, another unit. A
+            // garrisoned entity is inside and its position is where it went in, so it holds nothing.
+            if matches!(entity.task, Task::Garrisoned { .. }) {
+                continue;
+            }
+            let (px, py) = (entity.position.0.raw(), entity.position.1.raw());
+            if px < lo_x || px >= hi_x || py < lo_y || py >= hi_y {
+                continue;
+            }
+            let (dx, dy) = (
+                px / scale - i64::from(origin.0),
+                py / scale - i64::from(origin.1),
+            );
+            taken[((dy + 2) * i64::from(SIDE) + (dx + 2)) as usize] = true;
+        }
+        let walk = self.walk.as_ref()?;
+        for dy in 0..=2i32 {
+            for dx in 0..=2i32 {
+                for (sx, sy) in [(dx, dy), (-dx, dy), (dx, -dy), (-dx, -dy)] {
+                    let cand = (i32::from(origin.0) + sx, i32::from(origin.1) + sy);
+                    if cand.0 < 0 || cand.1 < 0 {
+                        continue;
+                    }
+                    let (cx, cy) = (
+                        u16::try_from(cand.0).unwrap_or(u16::MAX),
+                        u16::try_from(cand.1).unwrap_or(u16::MAX),
+                    );
+                    if !walk.contains(cx, cy) || walk.blocked(cx, cy) {
+                        continue;
+                    }
+                    if taken[((sy + 2) * SIDE + (sx + 2)) as usize] {
+                        continue;
+                    }
+                    return Some((cx, cy));
+                }
+            }
+        }
+        None
+    }
+
+    /// Whether this building can shelter one more of its owner's units. The capacity is the building's own `garrison`
+    /// field - the same number its garrison orders are checked against - and the count is what it already holds. A
+    /// building whose capacity is zero (a market, a smith, a house) shelters nobody, whatever it can produce.
+    fn garrison_room(&self, building: EntityId, player: u8) -> bool {
+        let Some(shelter) = self.find(building) else {
+            return false;
+        };
+        let Some(stats) = shelter
+            .unit
+            .and_then(|unit| self.units.as_ref().and_then(|units| units.unit(unit)))
+        else {
+            return false;
+        };
+        let capacity = u32::from(stats.garrison);
+        if capacity == 0 {
+            return false;
+        }
+        // A building at or below its eject threshold has already turned its garrison out, so sheltering a new recruit
+        // in it would put one back where the rule just took them out (D37). The arithmetic is the garrison order's.
+        let max = self.max_hp(shelter.player, stats.id).unwrap_or(stats.hp);
+        let floor = (i64::from(max) * self.garrison_eject_at.raw()) / self.scale;
+        if i64::from(shelter.hp) <= floor {
+            return false;
+        }
+        let inside = u32::try_from(
+            self.entities
+                .iter()
+                .filter(|entity| {
+                    entity.player == player
+                        && entity.kind == EntityKind::Unit
+                        && entity.task == (Task::Garrisoned { building })
+                })
+                .count(),
+        )
+        .unwrap_or(u32::MAX);
+        inside < capacity
     }
 
     /// One tick of swinging: count the reload down and land a blow when it reaches zero.
@@ -5050,6 +5164,12 @@ impl World {
                 .is_some_and(|entity| entity.training.is_some()),
         );
         head + self.queued.get(&building).map_or(0, Vec::len)
+    }
+
+    /// Why this building's production is stopped, if it is (D85). The view draws the reason it is given; the
+    /// simulation never says it in words.
+    pub fn training_pause(&self, building: EntityId) -> Option<TrainingPause> {
+        self.training_pauses.get(&building).copied()
     }
 
     /// The most health this unit could have for this player, after every research that grants it. Public
@@ -7353,6 +7473,7 @@ impl World {
             self.paths.remove(&id);
             self.rallies.remove(&id);
             self.queued.remove(&id);
+            self.training_pauses.remove(&id);
             self.resuming.remove(&id);
             self.patrols.remove(&id);
             self.stances.remove(&id);
@@ -7906,6 +8027,13 @@ impl World {
                 fnv_bytes(&mut hash, &job.unit.to_le_bytes());
                 fnv_bytes(&mut hash, &job.remaining_ticks.to_le_bytes());
             }
+        }
+        // A stopped queue is state, not an event: two runs that disagree about *why* production is halted have
+        // diverged, and a replay that dropped the reason would draw a different panel from the same commands.
+        for (id, reason) in &self.training_pauses {
+            fnv_bytes(&mut hash, b"paused");
+            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+            fnv_bytes(&mut hash, &[*reason as u8]);
         }
         if self.teams_named {
             fnv_bytes(&mut hash, b"teams");
