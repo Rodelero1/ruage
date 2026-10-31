@@ -1233,6 +1233,8 @@ pub struct World {
     /// Unit ids (family roots) that block movement once built, from `[build] blocking_roles` in content.
     /// A wall is the only one this pack names, and the engine learns the word from the pack (D54).
     blocking: BTreeSet<u32>,
+    /// Family root → the solid cells of that building's footprint (D76). A role with no entry blocks its own tile.
+    footprints: BTreeMap<u32, ruage_data::Footprint>,
     /// Blast radius per unit id, in engine units: resolved once from the table, because a strike must
     /// not read the content table inside a tick. Only the 27 units that have a radius are here (D51).
     blast: BTreeMap<u32, i64>,
@@ -1353,6 +1355,7 @@ impl World {
             explored: std::array::from_fn(|_| Vec::new()),
             map_size: (0, 0),
             blocking: BTreeSet::new(),
+            footprints: BTreeMap::new(),
             blast: BTreeMap::new(),
             aggro_radius: 0,
             aggro_scan_ticks: 0,
@@ -2183,6 +2186,13 @@ impl World {
             }
         }
         self.walk = Some(Walk::from_map(map));
+        self.footprints.clear();
+        for (role, mask) in &economy.footprint {
+            if let Some(unit) = economy.role.get(role) {
+                let root = units.root(*unit);
+                self.footprints.insert(root, mask.clone());
+            }
+        }
         self.blocking.clear();
         for role in &economy.build.blocking_roles {
             let unit = economy
@@ -2368,15 +2378,11 @@ impl World {
         // not by the completion, because a half-built wall is not walk-through either. The check reads the
         // entity being inserted rather than looking it up, which is the bug this line had first: an entity
         // cannot be found before it is in the list.
-        if entity.kind == EntityKind::Building
-            && entity.unit.is_some_and(|unit| {
-                let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
-                self.blocking.contains(&root)
-            })
-        {
-            let tile = self.tile_of(entity.position);
-            if let Some(walk) = self.walk.as_mut() {
-                walk.block(tile.0, tile.1);
+        if entity.kind == EntityKind::Building {
+            for tile in self.solid_tiles(&entity) {
+                if let Some(walk) = self.walk.as_mut() {
+                    walk.block(tile.0, tile.1);
+                }
             }
         }
         // A **tree** blocks the tile it stands on, from the tick it stands there (the owner's rule, 2026-10-31: it blocks
@@ -2454,6 +2460,35 @@ impl World {
     }
 
     /// The tile a world position sits on.
+    /// The tiles a building occupies **solidly**: its `[footprint.<role>]` `#` cells if content names a mask, otherwise
+    /// its own tile if it is a blocking role, otherwise nothing (D76). One function answers both "what to block" and "what
+    /// to free", so placement and demolition can never disagree.
+    fn solid_tiles(&self, entity: &Entity) -> Vec<(u16, u16)> {
+        let Some(unit) = entity.unit else {
+            return Vec::new();
+        };
+        let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
+        let anchor = self.tile_of(entity.position);
+        match self.footprints.get(&root) {
+            Some(mask) => mask
+                .blocked
+                .iter()
+                .enumerate()
+                .filter(|(_, blocked)| **blocked)
+                .map(|(index, _)| {
+                    let column = (index % mask.width) as u16;
+                    let row = (index / mask.width) as u16;
+                    (
+                        anchor.0.saturating_add(column),
+                        anchor.1.saturating_add(row),
+                    )
+                })
+                .collect(),
+            None if self.blocking.contains(&root) => vec![anchor],
+            None => Vec::new(),
+        }
+    }
+
     fn tile_of(&self, position: (Fixed, Fixed)) -> (u16, u16) {
         (
             u16::try_from(position.0.raw() / self.scale).unwrap_or(0),
@@ -3412,8 +3447,23 @@ impl World {
             }
         }
         let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
-        if !walk.contains(at.0, at.1) || walk.blocked(at.0, at.1) {
+        if !walk.contains(at.0, at.1) {
             return Err(SimError::SiteBlocked { tile: at });
+        }
+        if walk.blocked(at.0, at.1) {
+            // A **building's footprint mask** puts its solid core into the walk layer (D76), where a blocked tile would
+            // otherwise be reported as "not open ground" - a message about terrain, for a building the player can see.
+            // Say what is actually there: one tile refuses as the building it holds, everything else as ground.
+            let held = self.entities.iter().any(|entity| {
+                entity.kind == EntityKind::Building
+                    && !self.is_expired_farm(entity.id)
+                    && self.solid_tiles(entity).contains(&at)
+            });
+            return Err(if held {
+                SimError::SiteOccupied { tile: at }
+            } else {
+                SimError::SiteBlocked { tile: at }
+            });
         }
         let position = self.tile(at);
         // One tile holds one building per player, and a building you cannot see does not block you
@@ -7211,21 +7261,17 @@ impl World {
         let mut buried: Vec<EntityId> = Vec::new();
         // A wall's tile, remembered before the sweep: after `retain` the entity is gone and there is no
         // position left to free.
-        let wall_tiles: Vec<(EntityId, (u16, u16))> = if self.blocking.is_empty() {
-            Vec::new()
-        } else {
-            self.entities
-                .iter()
-                .filter(|entity| entity.kind == EntityKind::Building)
-                .filter(|entity| {
-                    entity.unit.is_some_and(|unit| {
-                        let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
-                        self.blocking.contains(&root)
-                    })
-                })
-                .map(|entity| (entity.id, self.tile_of(entity.position)))
-                .collect()
-        };
+        let wall_tiles: Vec<(EntityId, (u16, u16))> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::Building)
+            .flat_map(|entity| {
+                let id = entity.id;
+                self.solid_tiles(entity)
+                    .into_iter()
+                    .map(move |tile| (id, tile))
+            })
+            .collect();
         // An animal that died of a blow leaves its body where it stood, and the body keeps the entity's id so the
         // gatherer's task stays valid across the blow (D70). Done before the sweep, which then keeps it because its
         // unit is a named carcass (item 2).

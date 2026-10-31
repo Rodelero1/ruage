@@ -431,3 +431,56 @@ fn the_pack_names_the_civilisation_it_is_played_as() {
         "a pack may name no civ at all"
     );
 }
+
+/// The project names the Town Centre's footprint, and a farm is a floor (D76). Read from the real content, because the
+/// point of the mask is that content decides it.
+#[test]
+fn the_project_names_the_town_centres_footprint() {
+    let economy =
+        ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml");
+    let town = economy
+        .footprint
+        .get("town_centre")
+        .expect("a footprint for the town centre");
+    assert_eq!((town.width, town.height), (4, 4), "the town centre is 4x4");
+    assert_eq!(
+        town.blocked.iter().filter(|blocked| **blocked).count(),
+        4,
+        "the back core is the top half: four solid cells"
+    );
+    let farm = economy
+        .footprint
+        .get("farm")
+        .expect("a footprint for the farm");
+    assert!(
+        farm.blocked.iter().all(|blocked| !*blocked),
+        "a farm is a floor: every cell walkable"
+    );
+}
+
+/// A mask content cannot have written is refused rather than guessed: ragged rows, an unknown cell, an empty mask.
+#[test]
+fn a_mask_that_is_not_a_rectangle_is_refused() {
+    use ruage_data::Footprint;
+    let rows = |pieces: &[&str]| {
+        pieces
+            .iter()
+            .map(|row| (*row).to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert!(
+        Footprint::from_rows(&rows(&["##..", "#"])).is_err(),
+        "ragged rows"
+    );
+    assert!(
+        Footprint::from_rows(&rows(&["##x."])).is_err(),
+        "an unknown cell"
+    );
+    assert!(Footprint::from_rows(&rows(&[])).is_err(), "an empty mask");
+    assert_eq!(
+        Footprint::from_rows(&rows(&["#.", ".."]))
+            .expect("a rectangle")
+            .blocked,
+        vec![true, false, false, false]
+    );
+}

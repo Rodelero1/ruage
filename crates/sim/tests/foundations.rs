@@ -375,24 +375,24 @@ fn a_foundation_i_can_see_blocks_me() {
         .submit_checked(Command::Build {
             villager: theirs,
             unit: house,
-            at: (17, 16),
+            at: (19, 16),
         })
         .expect("their foundation");
-    wait_for_site(&mut world, 2, (17, 16), 200).expect("their foundation");
+    wait_for_site(&mut world, 2, (19, 16), 200).expect("their foundation");
 
-    let mine = villager(&mut world, 1, (18, 16));
+    let mine = villager(&mut world, 1, (20, 16));
     assert_eq!(
-        world.vision(1, (17, 16)),
+        world.vision(1, (19, 16)),
         TileVision::Visible,
         "the test's own premise is wrong: player 1 cannot see the tile"
     );
     let refused = world.submit_checked(Command::Build {
         villager: mine,
         unit: house,
-        at: (17, 16),
+        at: (19, 16),
     });
     assert!(
-        matches!(refused, Err(SimError::SiteOccupied { tile }) if tile == (17, 16)),
+        matches!(refused, Err(SimError::SiteOccupied { tile }) if tile == (19, 16)),
         "a foundation player 1 can see did not block the order: {refused:?}"
     );
 }

@@ -13,6 +13,59 @@ use serde::Deserialize;
 
 use crate::{ConfigError, MaybeFixed, SUPPORTED_SCHEMA};
 
+/// Which cells of a building's footprint are **solid** (D76). Content describes it per role; the engine only asks which
+/// tiles block.
+///
+/// Rows run top-to-bottom and columns left-to-right from the building's **anchor tile**, which is the north corner of its
+/// diamond (D84), so a 4x4 Town Centre with `["##..", "##..", "....", "...."]` keeps its back core solid and its wings and
+/// courtyard walkable - the owner's diagram of the building, as data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Footprint {
+    pub width: usize,
+    pub height: usize,
+    /// Row-major, `true` where the cell is impassable.
+    pub blocked: Vec<bool>,
+}
+
+impl Footprint {
+    /// Parse the rows content writes. Refused rather than guessed: a ragged mask is a typo in a block that decides where
+    /// units can walk, and a silent default would make a building hollow on one axis.
+    pub fn from_rows(rows: &[String]) -> Result<Footprint, String> {
+        if rows.is_empty() {
+            return Err("a footprint needs at least one row".to_owned());
+        }
+        let width = rows[0].chars().count();
+        if width == 0 {
+            return Err("a footprint row cannot be empty".to_owned());
+        }
+        let mut blocked = Vec::with_capacity(width * rows.len());
+        for (index, row) in rows.iter().enumerate() {
+            if row.chars().count() != width {
+                return Err(format!(
+                    "row {index} is {} characters wide, expected {width}",
+                    row.chars().count()
+                ));
+            }
+            for cell in row.chars() {
+                match cell {
+                    '#' => blocked.push(true),
+                    '.' => blocked.push(false),
+                    other => {
+                        return Err(format!(
+                            "row {index}: unknown cell {other:?} (expected '#' or '.')"
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(Footprint {
+            width,
+            height: rows.len(),
+            blocked,
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Economy {
     /// Which buildings may create which units. Authored (see `config/economy.toml`): the dat
@@ -26,6 +79,9 @@ pub struct Economy {
     pub population: Population,
     /// What a match begins with, by role name. Config, never code (D6).
     pub start: Start,
+    /// Role name → the solid cells of its building's footprint (D76). A role with no entry blocks only its own tile, which
+    /// is what every building did before masks existed.
+    pub footprint: std::collections::BTreeMap<String, Footprint>,
     /// Role name → unit id. One vocabulary for everything that must not quote the dat's numbering:
     /// the start of a match, the scenario format, and the engine's own seeding (D17).
     pub role: BTreeMap<String, u32>,
@@ -233,6 +289,12 @@ pub struct Population {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RawFootprint {
+    blocked: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawEconomy {
     schema: u32,
     farm: RawFarm,
@@ -252,6 +314,9 @@ struct RawEconomy {
     policy: RawPolicy,
     #[serde(default)]
     age: RawAges,
+    /// `[footprint.<role>] blocked = ["##..", ...]`. Optional: a building without one blocks its own tile.
+    #[serde(default)]
+    footprint: BTreeMap<String, RawFootprint>,
     /// Role name → unit id. Required: content that cannot name a unit at all is not content.
     role: BTreeMap<String, u32>,
     #[serde(default)]
@@ -739,6 +804,15 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             teams: raw.start.teams,
         },
         role: raw.role,
+        footprint: raw
+            .footprint
+            .iter()
+            .map(|(role, raw)| {
+                Footprint::from_rows(&raw.blocked)
+                    .map(|mask| (role.clone(), mask))
+                    .map_err(|detail| invalid("economy.footprint", role, detail))
+            })
+            .collect::<Result<_, _>>()?,
         tech_role: raw.tech_role,
         age: Ages {
             requires: raw

@@ -84,11 +84,6 @@ repair   = 156   # VMREP 12.5   the repair task, likewise not a gather rate
 # PROVENANCE: dat ids (the pack's four wall types are 72/117/119/155).
 blocking_roles = ["wall"]
 
-
-# No build speed here on purpose. A building's HP/second is derived from the unit table:
-# hp / create_time (a house is 550 hp over 25 s). There is no knob, because a knob would be a
-# number we invented - and U15 taught that the number was in the dat all along, under a name
-# that did not look like "build time".
 repair_hp_per_second = -1.0
 # PROVENANCE: unknown, with a dat CANDIDATE: the repair variant VMREP (id 156) carries
 # work_rate = 12.5. If that is HP/second it is the answer; the semantics are unverified, so the
@@ -396,3 +391,21 @@ at_villagers = 26
 food = 60
 wood = 30
 gold = 10
+
+# What stands on a footprint is content's business, not the engine's (D76). Rows run top-to-bottom from the building's
+# anchor tile, which is the diamond's **north corner** (D84); '#' is impassable, '.' is ground a unit may cross. A role with
+# no entry blocks its own tile, which is what every building did before masks existed.
+[footprint.town_centre]
+# The owner's Town Centre: the two-storey back core is solid, the left and right wings and the front courtyard are
+# under-hang and walkable - three quarters of the covered area.
+blocked = ["##..", "##..", "....", "...."]
+
+[footprint.farm]
+# A farm is a floor: three by three, all of it walkable, which is the rule as data rather than as a special case.
+blocked = ["...", "...", "..."]
+
+
+# No build speed here on purpose. A building's HP/second is derived from the unit table:
+# hp / create_time (a house is 550 hp over 25 s). There is no knob, because a knob would be a
+# number we invented - and U15 taught that the number was in the dat all along, under a name
+# that did not look like "build time".

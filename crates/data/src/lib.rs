@@ -30,7 +30,8 @@ pub use combat::{
 };
 pub use cost::{Cost, CostResource};
 pub use economy::{
-    Build, Decay, Economy, Farm, Gather, Population, Start, load_economy_file, load_economy_str,
+    Build, Decay, Economy, Farm, Footprint, Gather, Population, Start, load_economy_file,
+    load_economy_str,
 };
 pub use map::{Map, ResourceNode, Terrain, TownCentre, load_map_file, load_map_str};
 pub use overrides::{Overrides, load_overrides_file, load_overrides_str};
