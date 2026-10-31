@@ -38,3 +38,12 @@ Known and accepted, stated rather than hidden:
 
 One defect found in my own script during this review: a `--all` flag that did nothing. Removed rather than left as a lie
 about what the tool can do.
+
+**Proof that it fires, and two stumbles of my own.** A probe commit (one comment line added to `crates/view/src/lib.rs`,
+staged, no review) was refused with *"no review: this change touches code"*; the file was then restored. The restore itself
+was botched in the obvious way - `git checkout --` ran **before** `git restore --staged`, so it restored the probe from the
+index and left the tree dirty for one command. The same class of mistake as committing from a stale index, and worth
+writing down: **unstage first, then check out.**
+
+- The **cron job** commits here too. It commits docs only, so it passes; a code commit from it would now be refused, which
+  is intended - an unattended writer owes the same review as an attended one.
