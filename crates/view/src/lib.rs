@@ -428,14 +428,15 @@ impl Frame {
     }
 
     /// Draw the **outline** of a diamond: two pixels per scanline, so a marker never hides what it marks.
+    ///
+    /// Both axes are walked, not just the rows: a row at a time leaves the edge **dashed**, because a shallow slope moves
+    /// the edge by two or three pixels between rows and the tests (and the eye) read the gaps as a broken ring.
     pub fn outline_diamond(&mut self, centre: (i32, i32), radii: (f32, f32), colour: [u8; 4]) {
         let (rx, ry) = radii;
         if rx <= 0.0 || ry <= 0.0 {
             return;
         }
-        let top = centre.1 - ry.ceil() as i32;
-        let bottom = centre.1 + ry.ceil() as i32;
-        for y in top..=bottom {
+        for y in (centre.1 - ry.ceil() as i32)..=(centre.1 + ry.ceil() as i32) {
             let dy = (y - centre.1) as f32;
             let across = 1.0 - (dy.abs() / ry);
             if across <= 0.0 {
@@ -444,6 +445,20 @@ impl Frame {
             let half = (rx * across).round() as i32;
             self.put(centre.0 - half, y, colour);
             self.put(centre.0 + half, y, colour);
+            self.put(centre.0 - half + 1, y, colour);
+            self.put(centre.0 + half - 1, y, colour);
+        }
+        for x in (centre.0 - rx.ceil() as i32)..=(centre.0 + rx.ceil() as i32) {
+            let dx = (x - centre.0) as f32;
+            let down = 1.0 - (dx.abs() / rx);
+            if down <= 0.0 {
+                continue;
+            }
+            let half = (ry * down).round() as i32;
+            self.put(x, centre.1 - half, colour);
+            self.put(x, centre.1 + half, colour);
+            self.put(x, centre.1 - half + 1, colour);
+            self.put(x, centre.1 + half - 1, colour);
         }
     }
 
@@ -856,7 +871,10 @@ pub fn draw_highlights(
         // A health bar above the top vertex, green for what is left and red for what is gone.
         let bar_width = (rx * 0.6).max(8.0) as i32;
         let bar_x = centre.0 - bar_width / 2;
-        let bar_y = centre.1 - half.1 as i32 - 8;
+        let bar_y = centre.1 - half.1 as i32 - 9;
+        // A dark border first: a three-pixel bar in green over grass is invisible, which the rendered picture showed and
+        // no pixel-count test could.
+        frame.fill_rect(bar_x - 1, bar_y - 1, bar_width + 2, 5, palette::HUD_BAR);
         let filled = (bar_width as f32 * entity.hp_fraction.clamp(0.0, 1.0)).round() as i32;
         frame.fill_rect(bar_x, bar_y, bar_width, 3, palette::HP_RED);
         if filled > 0 {

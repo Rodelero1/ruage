@@ -13,7 +13,7 @@ use std::process::ExitCode;
 use ruage_data::{Economy, Map, Units};
 use ruage_sim::{Command, EntityKind, World};
 use ruage_view::ui;
-use ruage_view::{Camera, Snapshot, render};
+use ruage_view::{Camera, Highlights, Snapshot, render_with};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -96,13 +96,38 @@ fn main() -> ExitCode {
     let snapshot = Snapshot::of(&world, &map, player);
     // Centre on the player's own base rather than on a fixed corner: with a 4x4 town centre the base fills most of
     // the frame, and a camera pointed at empty ground proves nothing about what was drawn.
-    let focus = snapshot
+    // Centre on the selected unit when there is one, so the ring and the bar are in the picture; otherwise on the
+    // player's base.
+    let selected_unit = snapshot
         .entities
         .iter()
-        .find(|entity| entity.player == player && entity.kind == EntityKind::Building)
-        .map_or((20.0, 20.0), |entity| entity.position);
+        .find(|entity| entity.player == player && entity.kind == EntityKind::Unit)
+        .map(|entity| entity.position);
+    let focus = selected_unit.or_else(|| {
+        snapshot
+            .entities
+            .iter()
+            .find(|entity| entity.player == player && entity.kind == EntityKind::Building)
+            .map(|entity| entity.position)
+    });
+    let focus = focus.unwrap_or((20.0, 20.0));
     let camera = Camera::new((640, 480)).centred_on(focus);
-    let mut frame = render(&snapshot, &camera);
+    // The player's first unit, selected, so the diagnostic picture shows the ring and the health bar too.
+    let selected: Vec<u32> = snapshot
+        .entities
+        .iter()
+        .filter(|entity| entity.player == player && entity.kind == EntityKind::Unit)
+        .map(|entity| entity.id)
+        .take(1)
+        .collect();
+    let mut frame = render_with(
+        &snapshot,
+        &camera,
+        &Highlights {
+            selected: &selected,
+            order: None,
+        },
+    );
     // The HUD goes in the diagnostic picture too: a step that draws numbers has to be looked at, not only asserted on.
     ui::hud(&mut frame, &snapshot);
     if let Err(err) = std::fs::write(&out, frame.to_ppm()) {

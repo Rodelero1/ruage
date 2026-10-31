@@ -2168,91 +2168,28 @@ every level.
 what is proven is the camera arithmetic and that the binary builds with the rebuild removed - not that a window pans.
 The owner running `make run` on a desktop is the third rung.
 
-## Resume point: steps 5, 6 and 8 (2026-10-30, context, not the plan, ran out)
+## All eight steps of the look are in (2026-10-30)
 
-*Steps 1-4 and 7 of the look are landed, reviewed, committed and pushed (`main` level with `origin`). Three remain, in
-this order, each with the compact it needs - they are small, and none of them touches the simulation.*
+*Steps 1-8 are landed, reviewed, committed and pushed: the 2:1 projection, real footprints from the dat, depth sorting,
+terrain and trees, fog that remembers buildings, the HUD and its bitmap font, the camera as state with pan and zoom, and
+selection rings with health bars. `make check` is the gate and it is green.*
 
-**Step 5 - fog.** Ground is already three-state on screen (unseen / explored / visible, `tile_vision`), but
-`Snapshot::of` filters entities by **current** visibility only, so a building the player has seen and can no longer watch
-**vanishes**. The game keeps it drawn. Fix: include an entity when its own tile is *explored*, carry `remembered: bool`
-on `EntityView`, and have the renderer dim it (and not draw units that way - only buildings and resource nodes persist in
-memory). Test: a player's view kept after the villager walks away still lists the enemy town centre, marked remembered;
-an unscouted corner still lists nothing.
+**What looking at the pictures found that the tests could not** (three of them, each fixed in the same commit):
 
-**Step 6 - the HUD.** `ui::Hud` and `ui::minimap` exist and are tested; nothing draws them in the window. What is
-missing is a **font** (D82: a bundled bitmap font, no parser). Smallest useful form: a 3x5 digit glyph table plus a
-`Frame::draw_text` that scales it, then a resource bar (stock by column, population, selection count, the last refusal
-from `World::last_refusal()`) and the minimap in the corner. Test the glyphs by drawing "0123456789" into a frame and
-counting lit pixels per cell, not by looking.
+1. The HUD drew **eight** swatches - four for resources this content does not have - because `Snapshot.stock` was always
+   `MAX_RESOURCES` long. It now carries one entry per column the pack has.
+2. A selection ring drawn a scanline at a time came out **dashed**, because a shallow slope moves the edge two or three
+   pixels between rows. `outline_diamond` walks both axes now.
+3. A three-pixel green health bar over grass was **invisible**. It has a dark border.
 
-**Step 8 - selection you can read at a glance.** The white cross is drawn **in the binary**, so it cannot be tested;
-move it into `ruage_view` as `Highlights { selected, order }` and `render_with(...)`: a diamond ring under each selected
-entity, an hp bar over it (green over red, fraction from `hp_fraction`), and a marker where the last order went. Tests:
-a selected villager has ring pixels at the diamond's edge and none without a selection; a half-health unit's bar is half
-green, half red.
+**What is left, and the order I would take it:**
 
-**And the one open question for the owner** (does not block any of the above): D83's footprint anchoring - the anchor is
-the tile nearest the middle, with the extra tile of an even footprint on the +x/+y side. The alternative is the block's
-north corner; it is one constant in `footprint_tiles`, and importing a real `.aoe2scenario` is what would settle it.
+1. **`Dirt` terrain.** The map carries `G` and `F` only, so a base has no baked yard. `Terrain` grows a variant, the loader
+   accepts its letter, `make_map.py` paints one, and `map.rs`'s census test follows - content work, no engine change.
+2. **Sprites** (items 10-13): `graphics.toml` from the dat's graphic records, the `SpriteRef` boundary, then SLP decoding
+   behind it (D81's mod chain, install art last, never committed).
+3. **`.aoe2scenario` import**, which is also what settles D83's footprint anchoring from data.
+4. **A second seed and map for the acceptance match** - item 9 wins on one seed on one map today.
 
-## Step 5 of the look: fog remembers buildings and forgets armies (2026-10-30, done)
-
-**What landed.** `Snapshot::of` now keeps a **building or a resource node** whose ground is *explored* after nothing
-watches it, marking it `remembered`; units are still filtered by current visibility only, because an army that walks out
-of sight is gone - that is what scouting is for. The renderer dims what is remembered to 60% brightness, so a memory does
-not read as a live building.
-
-**Tested** (`crates/view/tests/fog.rs`): an enemy house and an enemy villager are spawned in player 1's sight, player 1's
-whole army is then deleted, and the house is still in the view **marked remembered** while the villager is not; an
-unscouted corner of the map still leaks nothing; and the same house is drawn dimmer than it was when watched.
-
-**The review paid for the step twice.** The first version asked `world.vision` per entity, and `vision` scans every
-entity - the same O(n²)-on-the-frame-path mistake as the garrison count last step. Worse, `Snapshot::of` was already
-building its explored grid by asking `vision` **per tile**, which is every entity per tile (4,096 tiles x 126 entities).
-`World::explored_mask` now hands out the grid the simulation already maintains, and both callers use it: the explored
-grid becomes a copy, and `remembered` becomes one bit test. **Measured: 502 us a frame against 635** - the fog work paid
-for itself and left a 133 us gain.
-
-**And a release-only bug the test caught:** `as_memory` multiplied a `u8` by 3, which overflows for 200 (`BUILDING`) -
-in a debug build that panics, in a release build it would have wrapped to a bright wrong colour. Widened before the
-multiply.
-
-## Step 6 of the look: the HUD, and a font to draw it with (2026-10-30, done)
-
-**What landed.** `crates/view/src/font.rs` - a **3x5 bitmap font**: ten digits and a slash, and nothing else, because a
-swatch beside a number says which resource it is and letters are five times the data. `Frame::draw_glyph`,
-`draw_number` and `draw_ratio` place them at a scale, and `ui::hud(frame, snapshot)` draws a dark bar with **one swatch
-and one number per stockpile column** (the pack's order is the display order, so the view never learns their names) and
-population as `have/cap`. The window and the `frame` diagnostic both draw it, so the picture can be looked at.
-
-**Tested** (`crates/view/tests/hud.rs`): a number lights exactly the dots its glyphs say (counted against `font::DIGITS`,
-so the test measures the placer rather than trusting it), 412 and 123 are different pictures, scale 2 is four times the
-pixels, the HUD draws one swatch per column in its colour plus the population, and **it stays in its bar** - every pixel
-below the bar is byte-identical to the frame without a HUD.
-
-**The picture found what the tests could not.** The first HUD drew **eight** swatches, because `Snapshot.stock` was
-always `MAX_RESOURCES` long; four of them were columns this content does not have, all in the fallback colour. `stock`
-is now one entry per column **the pack has** (`Resources::count`), which is also what makes "a pack with no stock draws
-no swatches" mean something. Rendered to a PNG afterwards: brown **200**, red **200**, gold **100**, blue **200**, then
-**3/5** - legible, spaced, not overlapping.
-
-## Step 8 of the look: selection you can read at a glance (2026-10-30, done)
-
-**What landed.** `Highlights { selected, order }` and `render_with`/`draw_highlights` in `ruage_view`: a **white ring**
-outline under everything selected - the whole footprint for a building - a **health bar** above the silhouette (green for
-what is left, red for what is gone, from `hp_fraction`), and a **marker** where the last order went. The window now draws
-`render_with` and keeps one `order: Option<(f32, f32)>`; its own white cross loop is deleted. `Highlights` carries **ids,
-not entities**, because the selection outlives a frame: a unit can die between the click and the next draw, and a
-highlight holding an entity would paint a ghost.
-
-**Tested** (`crates/view/tests/selection.rs`): nothing is ringed with an empty selection; a selected unit is ringed and its
-neighbour is not (marker pixels counted near each); a full-health bar is all green, a half-health one is green **and** red
-and shorter than a full one; and an order marker is drawn where the order went and nowhere when there is no order.
-
-**Why it moved out of the binary:** the cross was in `window.rs`, so it could not be tested at all - and it was the only
-way to see what an order applied to. Anything on screen with a wrong answer belongs in the library (D55); only wiring
-stays in the binary.
-
-**The picture:** rendered and read - a white ring round the selected villager, a green bar over it, the HUD across the
-top.
+**Still open for the owner:** D83's anchoring (one constant), and whether the plans (2)-(4) are the next three, or whether
+the rule AI as an opponent comes first now that a screen can show it.
