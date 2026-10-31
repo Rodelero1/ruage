@@ -26,7 +26,7 @@ PACK = --config $(CONFIG)/sim.toml \
        --effects $(CONFIG)/gamedata/effects.toml \
        --civs $(CONFIG)/gamedata/civs.toml
 
-.PHONY: help build window run headless batch test check fmt clippy clean
+.PHONY: help build window run headless batch test check review fmt clippy clean
 
 help:
 	@echo "make build      - build everything, release"
@@ -35,6 +35,7 @@ help:
 	@echo "make batch      - the acceptance match across seeds (SEEDS=$(SEEDS))"
 	@echo "make test       - every test"
 	@echo "make check      - fmt + clippy + tests: the pre-commit gate"
+	@echo "make review     - the review gate: does the staged change carry its review?"
 	@echo "make clean      - remove target/"
 
 build:
@@ -67,6 +68,14 @@ fmt:
 
 clippy:
 	$(CARGO) clippy --workspace --all-targets -- -D warnings
+
+# The review gate, runnable by hand; `.githooks/pre-commit` runs the same script and refuses the commit.
+review:
+	python3 tools/review_check.py
+
+# The gate's own tests: the file the gate is written in is the file most likely to rot.
+review-test:
+	python3 -m unittest discover -s tools -p 'test_*.py'
 
 clean:
 	$(CARGO) clean

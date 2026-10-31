@@ -16,4 +16,10 @@ if [ -n "$bad" ]; then
     exit 1
 fi
 
+# The review gate (AGENTS.md): a change to engine, content or tooling must carry its adversarial review, staged with it.
+# This is the one rule that kept being stated and skipped, so it is checked rather than remembered.
+if ! python3 tools/review_check.py; then
+    exit 1
+fi
+
 exit 0
