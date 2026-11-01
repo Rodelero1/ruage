@@ -97,6 +97,8 @@ Numbers, because the defaults are wrong for this target and the next session sho
 | Ghidra headless, full default analysis of the 7.52 MB PE (`analyzeHeadless`, `-max-cpu 2`, `-Xmx2G`) | **exit 0**, 6 min 30 s wall, 8 min 13 s CPU, peak RSS **1.42 GB** |
 | REA's first query with its default deadline | **`provider_timeout`** at 330 s, no partial analysis, no OOM |
 | REA 6.8.0's MCP surface | 229 tools; registered with `mcp_servers.rea.lazy: true` so the schemas are not injected into every session |
+| **Whole-binary pseudocode export, scripted against the persistent project** (2026-11-01) | **15,465 functions, 72 MB, 10 min 15 s** - 39 ms per function average. **~150x faster than `rea decompile-all`** (which costs ~6 s per function: 20 in 824 s, including a 7 min import each time). Recipe: a `GhidraScript` that opens a `DecompInterface` and walks `getFunctions(true)`, run as `analyzeHeadless <proj> AoKHD -process "AoK HD.exe" -noanalysis -postScript ExportPseudocode.java <outdir> <limit>` |
+| Assertion sites as an identification map | the original asserts through `FUN_005404f0(path, line)`, so **939 path references / 931 distinct `(file, line)` sites across 84 source files** name the module a function came from - `move_obj.cpp` (159), `motion.cpp` (81), `basegame.cpp` (44), `com_sync.cpp` (38). There is no `combat.cpp`: damage is inlined or in `stat_obj.cpp` |
 
 Three consequences:
 
