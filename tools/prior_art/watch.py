@@ -88,6 +88,7 @@ WATCHLIST: list[tuple[str, str]] = [
     ("SiegeEngineers/halfon", "unit/building reference"),
     ("SiegeEngineers/aoe2techtree", "tech tree reference"),
     ("SiegeEngineers/rms-check", "random map script language"),
+    ("Divy1211/AoE2DE_UGC_Guide", "RM scripting and data-modding reference; found by the first discovery sweep"),
     ("SiegeEngineers/rms-doc", "random map script language reference"),
 ]
 

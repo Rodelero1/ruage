@@ -108,6 +108,9 @@ Published-value cross-checks for open questions:
 
 Later steps:
 - `SiegeEngineers/rms-check`, `SiegeEngineers/rms-doc` — the random map script language.
+- `Divy1211/AoE2DE_UGC_Guide` — RM scripting and data modding, and it states it covers older versions.
+  The only candidate from the first discovery sweep (2026-10-31) worth adding: the rest were replay
+  viewers, a LAN server, an iPad port and a rating chart.
 
 ## What a report must contain
 

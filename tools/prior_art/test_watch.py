@@ -234,6 +234,10 @@ class MixedRunTests(unittest.TestCase):
 class WatchlistTests(unittest.TestCase):
     """The list itself is behaviour: a project the owner asked for must be on it, with its role."""
 
+    def test_the_rm_scripting_guide_from_the_first_sweep_is_watched(self):
+        roles = dict(watch.WATCHLIST)
+        self.assertIn("Divy1211/AoE2DE_UGC_Guide", roles)
+
     def test_the_original_art_replica_is_watched_with_its_engine_named(self):
         roles = dict(watch.WATCHLIST)
         self.assertIn("yanfengliu/aoe2", roles)
