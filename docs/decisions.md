@@ -2251,5 +2251,5 @@ Consequences, and they are what future sessions should act on:
    row outright. The capture set is therefore record + periodic saves + event screenshots.
 4. **Nothing install-derived is committed** (D8/D22) - recordings and saves stay out of the repo; the finding and a SHA-256
    go in.
-5. Still unverified and worth stating plainly: whether HD will run a match with no human player at all (no spectate mode)
-   - to be confirmed on the machine before the farm generates volume.
+5. **Settled 2026-11-01, by the owner: both player slots can be set to AI.** The farm is a plain all-AI match, with no
+   workaround and no passive human slot - which is what makes it a data source rather than a chore.

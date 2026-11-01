@@ -269,12 +269,25 @@ static reading cannot (`docs/behaviour-diff.md` rows 3-5, 8, 10). The mode matte
 | `.aoe2spgame` | exact state at one instant - every unit, position, HP, stockpile, tick. **Two saves five minutes apart answer the decay row outright**, and the gather rows by differencing |
 | screenshot | the visual and HUD record: does the screen look like the game. Its numbers are far coarser than a save's, so it closes no register row on its own |
 
-**The one step nobody has verified here**: whether HD runs a match with no human player. HD has no spectate mode, so the
-two workable shapes are (a) a scenario with both sides set to Computer and player 1 given nothing - which ends the match by
-defeat - or (b) player 1 parks a single villager out of the way so the match continues while the two AIs fight. **Confirm
-which works on the machine before generating volume**; if neither does, run the match with the human slot as a passive
-third party and read data from the two AI players only.
+**Settled 2026-11-01, by the owner: both player slots can be set to AI**, so the farm is a plain all-AI match - no scenario
+trick, no parked villager, no passive human third slot. (The shapes this file first guessed at - a scenario with player 1
+given nothing, or one hidden villager keeping the match alive - are kept only as fallbacks if a particular build refuses an
+all-AI lobby. An unanswered question is cheaper than a wrong workaround written as procedure.)
 
 **Naming and storage.** `<date>-<map>-<seed>-<civs>.aoe2record` plus its saves, one folder per match, and **never
 committed**: these are install-derived artifacts (D8/D22). What is committed is the finding and the artifact's SHA-256, so
 a later session can prove which file a number came from.
+
+### The first match to capture (checklist, 2026-11-01)
+
+The one that answers the most rows per hour, and the one to compare our headless run against:
+
+- **Random Map, Arabia, small, two players, both set to AI** (settled: both slots can be AI).
+- **Mirror civilisation** on both sides; **hardest** AI; **conquest**; **population 200**; standard speed.
+- **Record it**; **save at 5, 10, 15 and 20 game-minutes and at every age-up**; **screenshot** the age-ups, the first
+  military unit, the first engagement and any moment a building completes.
+- Write the seed, map and civs into the filename: `<date>-arabia-small-<seed>-<civs>`.
+
+What it answers: the AI's real build order and age timings (recording), the decay row (two saves five minutes apart), the
+gather rows (differenced saves), and the HUD/vibe check (screenshots). What it cannot answer: per-tick order and pathing
+tie-breaks - those stay `needs-oracle` until a recording's SYNC stream or instrumentation is used.
