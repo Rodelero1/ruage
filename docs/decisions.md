@@ -2226,3 +2226,30 @@ first, then decided; the numbers, versions and install traps are in `docs/re-too
    one cannot re-derive it from.
 
 Nothing in `crates/` changes for this: it is a toolchain decision, not an engine one.
+
+## D87 - How ruage is compared to the original: a register ruled by reading, closed by recorded AI-vs-AI games (2026-11-01)
+
+The owner's question was whether the disassembly can give the **complete** behavioural difference between ruage and
+`AoK HD.exe`, "to rule one", with functional gaps deferred. The answer, written down rather than carried in a conversation
+(`docs/behaviour-diff.md`), is that completeness is not computable - 15,766 unnamed procedures with no PDB names, no
+completion criterion for "have we found every rule", and code that is not behaviour. What replaces it is a **register**:
+one row per rule ruage implements, each ruled *same / different / unknown-static / needs-oracle* with the original's address
+and our file:line. The count is honest and small: **1 of 12 ruled today**.
+
+The owner then stated the other half of the method: **two AIs playing each other, the match recorded, with captures taken as
+it runs** - "then we have a multitude of the data points". That is the oracle D2 already defined, pointed at a match nobody
+has to play by hand.
+
+Consequences, and they are what future sessions should act on:
+
+1. **Static reading proposes, the game disposes.** Rows that are local arithmetic can be ruled from the binary alone; rows
+   about tick order, pathing tie-breaks, decay and the age-up boundary cannot, and are marked `needs-oracle` rather than
+   guessed.
+2. **The mode is Random Map, not Death Match** - RM exercises the economy and age ramp that our timings differ on, and DM's
+   AI is unrepresentative because it never earns anything. DM is kept for the combat rows later.
+3. **Saves matter more than screenshots.** A screenshot closes no register row; two saves five minutes apart close the decay
+   row outright. The capture set is therefore record + periodic saves + event screenshots.
+4. **Nothing install-derived is committed** (D8/D22) - recordings and saves stay out of the repo; the finding and a SHA-256
+   go in.
+5. Still unverified and worth stating plainly: whether HD will run a match with no human player at all (no spectate mode)
+   - to be confirmed on the machine before the farm generates volume.

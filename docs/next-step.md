@@ -2357,3 +2357,24 @@ case is the one that now repeats every tick**, and the old shape cost twenty-fiv
    probe, then a test, then (if the data says so) a fix.
 3. The snapshot's `queue`/`paused`/trainable list, then letters in `font.rs`, then the message beside the queue
    (`docs/ui.md`'s order, unchanged).
+
+## Comparing ruage to the original: the register, and the AI-vs-AI farm (2026-11-01, method recorded)
+
+**Two documents, and they are the resume point.** `docs/behaviour-diff.md` is the **register**: one row per rule ruage
+implements, each ruled `same / different / unknown-static / needs-oracle` with the original's address and our file:line -
+**1 of 12 ruled** (the dat version gate: exact string equality against `VER 5.7` in `FUN_0072d1a0`). `docs/oracle.md` gained
+the farm protocol: Random Map, mirror civs, hardest AI, conquest, 200 pop, record + save every five game-minutes + event
+screenshots.
+
+**The first three static questions** are already scoped in `docs/re-toolchain.md` (damage order and the minimum-1 clamp; the
+per-tick unit update's order; the age-up kind-102 boundary) and are the wedge: each comes back as an address plus a number
+that a fixture can test, and each closes or opens a register row.
+
+**Cheap enabling step, not yet done:** the bulk pseudocode corpus. `rea decompile-all` writes every function's pseudocode
+and **~6 s per function was measured** (20 in 824 s including a 7 min import), so a full run is ~26 wall-hours through REA -
+a Ghidra post-script against the persistent `AoKHD.gpr` should be much cheaper, and should be measured before the work
+starts rather than assumed.
+
+**Open and owner-facing:** (a) whether HD will run a match with **no human player** (no spectate mode) - two recipes in
+`oracle.md`, to be confirmed on the machine; (b) the certificate "rule one" needs - `same` means "found and read", never
+"proved equivalent", and any stronger claim needs the oracle.

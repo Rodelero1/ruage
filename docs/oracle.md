@@ -232,3 +232,49 @@ The working artifact is `build/tools/save.py` (inflate + version + name records 
 framing is clean), output in `build/derived/saves-header.json`. It is a real tool, it is
 just not an oracle.
 
+
+## The AI-vs-AI farm: what to capture, and in what mode (2026-11-01)
+
+The owner's plan - two AIs playing each other, recorded, with periodic captures - is the right way to close the rows that
+static reading cannot (`docs/behaviour-diff.md` rows 3-5, 8, 10). The mode matters, and the answer is not "either".
+
+**Random Map, not Death Match.**
+
+- **RM exercises the pipeline ruage actually implements** - the dark-age economy, the age ramp, the tech path, the first
+  army. Those are where our timings differ (the probe puts our Feudal at ~14:30 against the game's ~9:30), and they are
+  exactly rows 2, 3, 5 and 6 of the register.
+- **DM deletes that ramp by design**: instant resources, a post-Imperial start, no villager economy under pressure. Its
+  number would be the *combat* rows only, and its AI plays unrepresentatively because it never has to earn anything.
+- **DM is the better instrument for one class later**: targeting, formations, damage exchanges, because engagements start
+  in the first minute and there are many per hour. Use it when the combat rows are the ones being worked, not now.
+
+**Settings that make the data comparable**
+
+- **Map**: Arabia (or a simple land map), **small**, two players - big enough for a real build order, small enough that
+  games finish inside the hour.
+- **Both AIs the same civilisation** (a mirror match). A civ difference is a confound in every row; the AI's build order at
+  the hardest difficulty is already documented in `references/ai-of-the-game.md`.
+- **Victory: conquest** (our rule, D78). **Population 200** - the AI's boom depends on it, so it must match the rule our
+  cap models. **Standard speed**: the recording is tick-stamped, so speed changes only how much wall time a game costs.
+- **Note the seed and the map** in the filename; a rerun of the same seed is what makes two artifacts comparable.
+- **Record the game** (`.aoe2record`), **save every five game-minutes**, and screenshot at events (age-up, first military
+  unit, first engagement, a building completing) rather than on a timer - an event screenshot carries a fact, a timed one
+  carries wallpaper.
+
+**What each artifact answers**
+
+| Artifact | Answers |
+|---|---|
+| `.aoe2record` | the command stream with tick stamps: what the AI built, trained, researched and attacked, and when. HD 5.7 layout verified: `VER 9.4` header, 68,011 ops, 31,104 `SYNC` in 51 game-minutes |
+| `.aoe2spgame` | exact state at one instant - every unit, position, HP, stockpile, tick. **Two saves five minutes apart answer the decay row outright**, and the gather rows by differencing |
+| screenshot | the visual and HUD record: does the screen look like the game. Its numbers are far coarser than a save's, so it closes no register row on its own |
+
+**The one step nobody has verified here**: whether HD runs a match with no human player. HD has no spectate mode, so the
+two workable shapes are (a) a scenario with both sides set to Computer and player 1 given nothing - which ends the match by
+defeat - or (b) player 1 parks a single villager out of the way so the match continues while the two AIs fight. **Confirm
+which works on the machine before generating volume**; if neither does, run the match with the human slot as a passive
+third party and read data from the two AI players only.
+
+**Naming and storage.** `<date>-<map>-<seed>-<civs>.aoe2record` plus its saves, one folder per match, and **never
+committed**: these are install-derived artifacts (D8/D22). What is committed is the finding and the artifact's SHA-256, so
+a later session can prove which file a number came from.
