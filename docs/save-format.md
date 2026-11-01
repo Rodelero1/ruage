@@ -99,6 +99,51 @@ aliases rather than reporting one field twice.
 readable - the interval was the precondition and it is paid. It does **not** replace the section walk: the clock is
 found empirically, so every new match needs its own series (or a recording, which supplies the same anchor).
 
+## The archive's timestamps, and what they confirm (2026-11-01)
+
+`SaveGame.zip` arrived from the owner and carries the **original** modification times (a copy loses them; an archive
+keeps them). All 32 entries are byte-identical to the files already here - **32 identical, 0 differing, 0 missing** - so
+nothing that was measured before this archive existed changed, and the timestamps are now available:
+
+| save | written | wall gap | in-file clock | game gap | game / wall |
+|---|---|---|---|---|---|
+| `brit1` | 14:22:00 | - | 10 s | - | - |
+| `brit2` | 14:24:04 | 124 s | 181 s | 171 s | 1.38 |
+| `brit3` | 14:25:30 | 86 s | 295 s | 114 s | 1.33 |
+| `brit4` | 14:26:32 | 62 s | 380 s | 85 s | 1.37 |
+| `brit5` | 14:28:16 | 104 s | 526 s | 146 s | 1.40 |
+| `brit6` | 14:29:46 | 90 s | 648 s | 122 s | 1.36 |
+| `brit7` | 14:33:30 | 224 s | 964 s | 316 s | 1.41 |
+| `brit8` | 14:35:50 | 140 s | 1 156 s | 192 s | 1.37 |
+| `brit9` | 14:36:06 | 16 s | 1 171 s | 15 s | 0.94 |
+| `brit10` | 14:39:08 | 182 s | 1 429 s | 258 s | 1.42 |
+| `brit11` | 14:45:02 | 354 s | 1 941 s | 512 s | 1.45 |
+| `brit12` | 14:48:24 | 202 s | 2 226 s | 285 s | 1.41 |
+| `brit13` | **16:44:48** | (6 984 s) | 2 681 s | 455 s | - |
+
+**This is a second, independent confirmation of the clock** - the wall clock and the in-file clock were produced by
+different things (the filesystem and the game) and they agree on the *shape* of every interval: ten of eleven ratios
+sit in **1.33-1.45**, mean **1.39**. A field that was wall time would read 1.00 there; a field that was anything else
+would not track eleven independent gaps. It also says the match ran at a little under the nominal 1.5x - consistent
+with the save menu pausing the simulation and with frame slips, and not separable from either without a controlled run.
+
+**Two timestamps are not save times, and the archive says so plainly:** `brit13` reads **16:44:48** and the recording
+`142146` **16:44:58** - the minute the archive itself was written - so both were touched (re-written or copied) long
+after the match. Every other file in the set is coherent. Their *content* is still dated: `brit13`'s clock is 2 681 s
+and the recording's op stream is 2 681.1 s, which is why the clock was confirmed before the archive arrived.
+
+**And one correction to how the recordings were read.** Their filenames are the moment the recording **began**, not when
+it ended: `SP Replay v5.8 @2026.11.01 142146` started at 14:21:46 and runs 44.7 game-minutes, so it ends around 14:53 -
+and `brit1` (game clock 10 s) was written at 14:22:00, seconds after that recording started. The recording and the save
+series are the same match from the same starting moment, which is the third thing this archive settles.
+
+**The other dates name the install's history** - the previous owner's campaigns, two years before this one: `1` and
+`ETHIOP` 2015-11-07, `Persia` and `Magyars` 2015-11-25, `Magyars1` 2015-12-12, `portuguese` 2015-12-17, `malinese`
+2016-01-18, `Berber` 2016-08-13, `khmer` 2016-12-23, `Bari` 2017-11-21, `Alaric` 2019-03-23, `sforza` 2019-04-17,
+`Random_map` 2020-06-10. **The save-version split is a build split and it tracks the dates**: all eight `12.36` saves are
+2015-11 to 2016-01, and the `12.5` saves run from `khmer` (2016-12) forward - so a patch between January and December
+2016 raised the header to 12.5, which is what "version-dependent header" means in practice.
+
 ## The recordings walk to exact EOF (2026-11-01)
 
 The op stream after the deflated header is: a **28-byte meta block** (log version, checksum interval, multiplayer,
