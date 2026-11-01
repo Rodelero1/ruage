@@ -131,6 +131,84 @@ def iter_strings(body: bytes, start: int = 0) -> Iterator[tuple[int, str]]:
         yield record, raw.decode("ascii")
 
 
+# A save's clock is a match, not a day: the field the game writes is whole seconds times 1000, so a value past
+# 24 hours at a fixed offset is some other counter that happens to increase.
+CLOCK_MAX_MS = 24 * 60 * 60 * 1000
+CLOCK_MIN_MS = 1000
+
+
+def find_game_clock(bodies: list[bytes], min_ms: int = CLOCK_MIN_MS, max_ms: int = CLOCK_MAX_MS):
+    """Every offset whose `u32` advances across `bodies` in whole seconds, as `(offset, values)`.
+
+    This is how the clock was found and how it is re-found for a new match: the offset is **not** portable between
+    matches (a second match in the set has unrelated bytes there), so it is discovered from a series rather than
+    written down as a constant. The rules are the format's own - the value is game time in whole seconds, so every
+    value is a multiple of 1000 - plus the order the caller supplies, which has to be chronological.
+
+    Cost is linear in the first body and cheap afterwards: the second body is only consulted where the first one
+    already looks like a clock.
+    """
+    if len(bodies) < 2:
+        return []
+    limit = min(len(body) for body in bodies) - 4
+    found = []
+    for offset in range(0, limit + 1):
+        value = struct.unpack_from("<I", bodies[0], offset)[0]
+        if not min_ms <= value <= max_ms or value % 1000:
+            continue
+        values = [value]
+        for body in bodies[1:]:
+            value = struct.unpack_from("<I", body, offset)[0]
+            if not min_ms <= value <= max_ms or value % 1000 or value <= values[-1]:
+                break
+            values.append(value)
+        else:
+            found.append((offset, values))
+    return _without_byte_shifts(found)
+
+
+def _without_byte_shifts(found):
+    """Drop the byte-shifted aliases of a field: reading the same bytes one or two positions early sees `v << 8` or
+    `v << 16`, which is also "increasing" and also a multiple of 1000 whenever `v` is a multiple of 125. They are the
+    same field, and reporting both would let a caller count one clock as two.
+    """
+    def shifted(small, big):
+        return len(small) == len(big) and all(b == s * 256 or b == s * 65536 for s, b in zip(small, big))
+
+    return [
+        (offset, values)
+        for offset, values in found
+        if not any(other_values != values and other_values[0] < values[0] and shifted(other_values, values)
+                   for _, other_values in found)
+    ]
+
+
+def gaps(values: list[int]) -> list[int]:
+    """The differences between consecutive values - the interval between two saves, once the clock is known."""
+    return [later - earlier for earlier, later in zip(values, values[1:])]
+
+
+def show_series(paths: list[str]) -> int:
+    """Report the clock and the interval between saves, for one match's saves given in chronological order."""
+    bodies = []
+    for path in paths:
+        with open(path, "rb") as handle:
+            bodies.append(inflate(handle.read()))
+    found = find_game_clock(bodies)
+    if len(found) != 1:
+        print(f"{len(paths)} files: {len(found)} offsets advance in whole seconds, expected exactly 1", file=sys.stderr)
+        for offset, values in found:
+            print(f"  {offset:#08x}: {values}", file=sys.stderr)
+        return 1
+    offset, values = found[0]
+    print(f"{len(paths)} files, clock at {offset:#08x}")
+    for index, (path, value) in enumerate(zip(paths, values)):
+        step = "" if index == 0 else f"  +{(value - values[index - 1]) / 1000:8.1f} s"
+        print(f"  {value / 1000:9.1f} s  {path}{step}")
+    print(f"  span {values[-1] / 1000:.1f} s")
+    return 0
+
+
 def describe(path: str) -> None:
     with open(path, "rb") as handle:
         body = inflate(handle.read())
@@ -146,7 +224,18 @@ def describe(path: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Read the container and named records of a save game.")
     parser.add_argument("files", nargs="+", help="one or more .aoe2spgame files")
+    parser.add_argument(
+        "--series",
+        action="store_true",
+        help="the files are one match's saves in chronological order: report the clock and the interval between them",
+    )
     args = parser.parse_args(argv)
+    if args.series:
+        try:
+            return show_series(args.files)
+        except (OSError, NotASave) as error:
+            print(error, file=sys.stderr)
+            return 1
     failed = 0
     for path in args.files:
         try:

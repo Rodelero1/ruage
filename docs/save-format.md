@@ -22,6 +22,7 @@ the user's own install.
 | The save line is **9.3/9.4**, and that is what distinguishes a save from a `.dat` | `empires2_x2_p1.dat` is raw DEFLATE too and its body starts `VER 5.7`: 2.26 MB on disk, 13.7 MB inflated. A reader that accepts any `VER ` prefix calls the database a save (it did, until this test) - `test_a_dat_file_that_inflates_is_not_mistaken_for_a_save` |
 | The world clock is **not** `old_time` | `FUN_00730600` (the BaseWorld loader, `baseworld.cpp`) reads `&old_time` into the world object and then **overwrites it with `timeGetTime()`** when it is non-zero. It is a wall clock for pause accounting, not a game clock. Chasing it produces a number that looks plausible and is wrong |
 | The world's own turn counter is read 4 bytes at a time, early in the world section, into `world+0x100` | same function, line ~448 (`(**(code **)(*param_2 + 0xc))(&local_b0, world + 0x40, 4)`, in `int` units); the debug print two hundred lines later labels exactly that field `pturn` (`"load (temp_pause=%d, old_time=%d, pturn=%d)"`) |
+| **The game clock is a `u32` in game milliseconds, whole seconds only** | found at **`0x270f52`** in the `brit` match by `find_game_clock`, and confirmed three ways - see "The clock" below. It is *not* at a portable offset: a second match in the same set has unrelated bytes there |
 
 ## The corpus, measured
 
@@ -50,6 +51,74 @@ is not known - only that this framing finds nothing in them, which is a statemen
 - A `PTR` to the string table is not the string table: `Alaric`, `Bari` and `sforza` carry 15 framed records and
   `Random_map` 6, so a count of records is not a count of players.
 
+## The clock, and the recordings that confirm it (2026-11-01)
+
+**A timed series, from the files themselves.** The COPY destroyed the save files' timestamps (all 31 are stamped
+`2026-11-01 15:00:18.17`-`.26`, in alphabetical order - that is the moment they were copied here, not the moment they
+were written), so the interval could not come from the filesystem. It did not have to: `find_game_clock` looks for a
+`u32` that advances across the series in **whole seconds**, and exactly one offset survives for the thirteen `brit`
+saves:
+
+| build | clock | interval from the previous save |
+|---|---|---|
+| `brit1` | 10.0 s | - |
+| `brit2` | 181.0 s | +171.0 s |
+| `brit3` | 295.0 s | +114.0 s |
+| `brit4` | 380.0 s | +85.0 s |
+| `brit5` | 526.0 s | +146.0 s |
+| `brit6` | 648.0 s | +122.0 s |
+| `brit7` | 964.0 s | +316.0 s |
+| `brit8` | 1 156.0 s | +192.0 s |
+| `brit9` | 1 171.0 s | +15.0 s |
+| `brit10` | 1 429.0 s | +258.0 s |
+| `brit11` | 1 941.0 s | +512.0 s |
+| `brit12` | 2 226.0 s | +285.0 s |
+| `brit13` | 2 681.0 s | +455.0 s |
+
+**Three independent confirmations that this is the game clock and not a counter that happens to rise:**
+
+1. **The recording's own length.** `SP Replay v5.8 @2026.11.01 142146.aoe2record` is the same match, and its op stream
+   sums to **2 681 138 ms**. `brit13` reads **2 681 000 ms** - 138 ms apart, i.e. the save was taken 0.14 s before the
+   recording's last op. Two artifacts, one number.
+2. **The AI's chat timeline.** The recording's first chat line is at **852.4 s** ("Military level: 0."). No save from
+   `brit1` (10 s) to `brit6` (648 s) contains a single chat string; `brit7` (964 s) contains exactly one. A clock that
+   was wrong by minutes would put a chat in a file that cannot have it.
+3. **A discriminator that only the last two saves can pass.** The `Build-town-size` lines first appear at 1 664.9 s and
+   reach 24/26/28/30/32 at **2 277-2 597 s**. `brit12` (2 226 s) contains **none** of them; `brit13` (2 681 s) contains
+   all five. That pair is the check that no window-based or size-based coincidence explains, because the two files are
+   one save apart.
+
+**Two things it is not.** The offset is **not portable between matches**: `britXhuns` - a different match - holds
+`0x01000000` there, which is neither seconds nor increasing, and adding it to the set makes the candidate disappear
+(`test_a_second_match_in_the_set_removes_the_candidate`). And a byte-shifted read of the same four bytes also looks
+like a clock (`v << 8` is still a multiple of 1000 whenever `v` is a multiple of 125), so `find_game_clock` drops
+aliases rather than reporting one field twice.
+
+**What this unblocks, and what it does not.** Any two consecutive saves now have a known interval, so gather rates
+(row 6), the age-up times (row 4) and decay-by-absence (row 5) can be read as soon as stockpiles and entities are
+readable - the interval was the precondition and it is paid. It does **not** replace the section walk: the clock is
+found empirically, so every new match needs its own series (or a recording, which supplies the same anchor).
+
+## The recordings walk to exact EOF (2026-11-01)
+
+The op stream after the deflated header is: a **28-byte meta block** (log version, checksum interval, multiplayer,
+rec owner, reveal map, sequence numbers, chapters) then `[u32 op][payload]`, with the payload grammar mgz documents
+(MIT, `mgz/body/__init__.py`): action = `u32 length` + `length+4` bytes; sync = `u32 increment` + (if the next word is
+zero) a 28-byte checksum record, +332 bytes when its sequence is non-zero; viewlock = two floats + a player id;
+chat = 4 pad + `u32 length` + text. All four files consume to **exact EOF**:
+
+| recording | ops | game time |
+|---|---|---|
+| `141408` | 652 | 24.7 s |
+| `141505` | 261 | 9.6 s |
+| `141539` | 9 664 | 372.9 s |
+| `142146` | 111 494 | 2 681.1 s |
+
+`mgz` 1.8.51 itself **fails** on these HD 5.8 files (`could not parse: unpack requires a buffer of 2 bytes`) because it
+expects a different meta preamble - the grammar above is what its own body spec says, driven by hand and validated by
+the EOF check. A recording therefore needs no save reader to be useful, which is what dates a series and what supplies
+the "known interval" when the copies have lost their timestamps.
+
 ## What is still unknown, and where the code that answers it lives
 
 The world follows the scenario and the map in the same byte stream, in this order. All addresses are image-base
@@ -63,11 +132,13 @@ coordinates in `AoK HD.exe` (32-bit PE, 2018-08-22) and all quotes are from the 
 | 3 | map / tiles | `FUN_00836830` | `map_width`, `map_height`, `world_width`, `tilesizes`, `num_borders`, `max_terrain`, then the per-tile arrays |
 | 4 | world (BaseWorld) | `FUN_00730600` (1,418 lines, `baseworld.cpp`) | a version word, `mLocalPlayerIndex`, `numPlayers`, `tempGameState`, three campaign indices, **`pturn` at +0x100**, then the object loop |
 
-**The clock is in section 4**, 4 bytes at `world+0x100`; what is missing is only its **byte offset in the file**, and
-that needs sections 1-3 walked (`&player_info[i].Food` and friends are in section 2, which is what makes the stockpile
-question the same walk).
+**The world's turn counter is in section 4**, 4 bytes at `world+0x100`. Its byte offset in the file is still unknown,
+and that needs sections 1-3 walked (`&player_info[i].Food` and friends are in section 2, which is what makes the
+stockpile question the same walk) - but note that **the clock itself no longer needs it**: `find_game_clock` finds the
+game time in milliseconds from a series alone (see "The clock" above). What the walk still buys is everything the
+clock does not: stockpiles, population and the entity list.
 
-**A scan that finds nothing usable, with the numbers.** Looking for a `u32` - and separately a finite `float32` - that
+**The scan that found it, and the two times it was dismissed.** Looking for a `u32` or a finite `float32` that
 increases across `brit1`..`brit13` at one fixed offset, over the common 3.96 MB and at **all four byte phases**:
 
 | byte phase | increasing `u32` | increasing `float32` |
@@ -77,15 +148,26 @@ increases across `brit1`..`brit13` at one fixed offset, over the common 3.96 MB 
 | 2 | 9 | 9 |
 | 3 | 2 | 2 |
 
-So the honest statement is **not** "there is no such field" - it is that every hit is a coincidence of alignment. The
-layouts shift between saves, so the same offset holds a different structure in `brit1` and in `brit13`: the three hits
-inspected (`0x224c52`, `0x270f52`, `0x22662e`) each have a *different* neighbourhood in the two files, and the 17
-increasing values are unrelated binary that happened to land in order. **Do not build on them.**
+**One of those phase-2 hits was the clock, and I had called it a coincidence.** `0x270f52` appeared in that list with
+the values that are now the table above; I inspected its neighbourhood, saw different bytes in `brit1` and `brit13`,
+and concluded that the layouts shift so the hit must be noise. The neighbourhood *does* differ - that is what a live
+field in a growing world looks like - and the conclusion was wrong. Two lessons, both paid for:
 
+- **"Increasing at a fixed offset" is evidence, not noise.** What it needs is a second, independent filter, not
+  dismissal. The filter that separates the clock from the rest is that the game writes **whole seconds** (`v % 1000 ==
+  0` at *every* file), which leaves exactly one candidate out of 5,466; and the confirmation is a second artifact (the
+  recording's length), not a reading of the neighbourhood.
+- **A shifting layout does not mean fixed offsets are meaningless.** It means a fixed offset cannot be *trusted* - so
+  it is found per match and then checked, which is what `find_game_clock` does.
 
-**The experiment that settles the clock in one run**, and it is cheaper than the rest of the walk: two saves from one
-match a known interval apart (60 s of game time, nothing else changing). The differential then has one field that moved
-by exactly `60 x tick_rate` and the guesswork disappears. The owner can produce this; nothing on this box can.
+The other phase hits did not survive: `0x224c52`/`0x224d1a` rise in milliseconds rather than whole seconds, and
+`0x270f51` reaches 686,336,020 ms - 7.9 days, past the 24-hour ceiling on a match. Those are the coincidences.
+
+**For a new match, the anchor is one of two things** - and the `brit` set needed neither, because the recording was
+already there: either a series of saves from that match (13 was enough; the whole-second filter leaves one candidate),
+or a recording of it, whose total length pins the last save. **The old ask - two saves a known interval apart - is no
+longer needed.** What is still owed is the *content* of the state: stockpiles, population and entities, which the
+clock cannot supply and sections 2-4 do.
 
 ## The tool
 

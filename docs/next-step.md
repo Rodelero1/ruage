@@ -2470,15 +2470,22 @@ register: verified facts with the address of the code that settled each, the err
 saves that yielded no name records are exactly the eight at 12.36, which closes the "campaign vs random-map" guess in
 `oracle.md`.
 
-**The next three steps, in order, and the first is the cheapest thing anyone can do:**
+**The clock is found, and the series is a timeline (v1.48).** `tools/savegame.py --series` locates the field that
+advances in whole seconds (exactly one candidate of 5,466 for `brit1`..`brit13`) and prints the interval between saves:
+10, 181, 295, 380, 526, 648, 964, 1,156, 1,171, 1,429, 1,941, 2,226, 2,681 s. Confirmed three ways - the recording
+`142146` sums to 2,681,138 ms against brit13's 2,681,000, the AI's first chat is at 852.4 s and no save before 964 s
+holds a chat string, and the `Build-town-size` lines from 2,277 s are in brit13 and in nothing earlier. `docs/save-format.md`
+carries the whole derivation, including the correction that I had dismissed this exact field one commit earlier.
 
-1. **Ask the owner for two saves from one match a known interval apart** (60 s of game time, nothing else moving).
-   The differential then has exactly one field that moved by `60 x tick_rate`, and the clock falls out without walking a
-   section. This is a five-minute job for him and saves a session of static reading. Failing that:
-2. **Walk section 2 (the scenario, `FUN_00545460` / `FUN_00567630`)** and then section 3 (the map, `FUN_00836830`), which
+**So the interval is paid. What is left is the content, in this order:**
+
+1. **Walk section 2 (the scenario, `FUN_00545460` / `FUN_00567630`)** and then section 3 (the map, `FUN_00836830`), which
    hands you `&player_info[i].{Food,Wood,Gold,Stone}` on the way - register row 6 - and ends at section 4's start.
-3. **Read `pturn`** (`world+0x100`, read 4 bytes at a time in `FUN_00730600` around line 448). With it the `brit` series
-   becomes a timeline and rows 4-6 open.
+2. **Read `pturn`** (`world+0x100`, read 4 bytes at a time in `FUN_00730600` around line 448) and then the object loop,
+   which is what turns the series into build orders and the decay row.
+3. **Put the recording walker in `tools/`**: the op grammar is documented and walks to exact EOF on all four files
+   (`docs/save-format.md`), so command streams become readable without any save parsing - actions carry timestamps, so
+   "what did the AI do, and when" is one file away.
 
 **Do not chase `old_time`.** It is `timeGetTime()` - a wall clock for pause accounting - and it is overwritten on load.
 That trap is written down in `docs/save-format.md` because it would have cost a session: the value looks like a clock and

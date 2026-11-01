@@ -157,3 +157,67 @@ class OldSaveFixtureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClockScanTests(unittest.TestCase):
+    def _bodies(self, values, offset=100, unit=1):
+        return [b"\x00" * offset + struct.pack("<I", v * unit) + b"\x00" * 32 for v in values]
+
+    def test_a_field_that_advances_in_whole_seconds_is_found(self):
+        found = savegame.find_game_clock(self._bodies([1000, 5000, 9000]))
+        self.assertEqual(found, [(100, [1000, 5000, 9000])])
+
+    def test_a_byte_shifted_read_of_the_same_field_is_not_a_second_clock(self):
+        # Reading one byte early sees `v << 8`: 1000 -> 256000, still increasing and still a multiple of 1000.
+        found = savegame.find_game_clock(self._bodies([1000, 5000, 9000]))
+        self.assertNotIn(99, [offset for offset, _ in found])
+
+    def test_a_field_that_advances_in_milliseconds_is_not_a_save_clock(self):
+        # The saves store whole seconds times 1000; a ms-precise counter at a fixed offset is a different quantity, and
+        # accepting it is how a candidate that is not the clock gets adopted.
+        found = savegame.find_game_clock(self._bodies([1001, 5002, 9003]))
+        self.assertEqual(found, [])
+
+    def test_a_field_that_does_not_advance_is_not_found(self):
+        self.assertEqual(savegame.find_game_clock(self._bodies([5000, 5000, 9000])), [])
+
+    def test_a_value_past_a_day_is_not_a_clock(self):
+        self.assertEqual(savegame.find_game_clock(self._bodies([1000, 5000, 90_000_000])), [])
+
+    def test_gaps_are_the_differences_in_order(self):
+        self.assertEqual(savegame.gaps([1000, 3000, 3000 + 45000]), [2000, 45000])
+
+
+@unittest.skipUnless(
+    all((SAVES / f"brit{i}.aoe2spgame").exists() for i in range(1, 14)),
+    "no install: the series lives in the user's own save folder",
+)
+class SeriesClockTests(unittest.TestCase):
+    """The clock, and the check that says it is the clock.
+
+    These numbers are not a guess about the format: they are what the thirteen saves of one match hold at one offset,
+    and `docs/save-format.md` records the three independent confirmations (monotone across the series, the recording's
+    total length of 2,681,138 ms against brit13's 2,681,000, and the AI chat lines that cannot exist before they are
+    spoken).
+    """
+
+    def setUp(self):
+        self.bodies = [savegame.inflate((SAVES / f"brit{i}.aoe2spgame").read_bytes()) for i in range(1, 14)]
+
+    def test_the_series_has_exactly_one_field_that_advances_in_whole_seconds(self):
+        found = savegame.find_game_clock(self.bodies)
+        self.assertEqual([offset for offset, _ in found], [0x270F52])
+
+    def test_the_clock_reads_what_the_series_is(self):
+        _, values = savegame.find_game_clock(self.bodies)[0]
+        self.assertEqual(
+            [v // 1000 for v in values], [10, 181, 295, 380, 526, 648, 964, 1156, 1171, 1429, 1941, 2226, 2681]
+        )
+        self.assertEqual(savegame.gaps(values), [171000, 114000, 85000, 146000, 122000, 316000,
+                                                 192000, 15000, 258000, 512000, 285000, 455000])
+
+    def test_a_second_match_in_the_set_removes_the_candidate(self):
+        # britXhuns is a different match: its layout at that offset is 0x01000000, which is neither seconds nor
+        # increasing. That is the check which says the offset is not portable and must be found, not hardcoded.
+        bodies = self.bodies + [savegame.inflate((SAVES / "britXhuns.aoe2spgame").read_bytes())]
+        self.assertEqual(savegame.find_game_clock(bodies), [])
