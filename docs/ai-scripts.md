@@ -29,6 +29,53 @@ Two things already exist that this design leans on, and neither is AI code:
 - **`World::vision(player, tile)`** returns never / remembered / watched, and `explored_mask(player)` hands out the grid.
   Per-player knowledge exists; per-player *memory of what was seen* does not.
 
+## How a script is written, and why not `.per` (2026-11-01)
+
+**The question:** would our AI scripts be the same as AoE2's, plus some functionality? **No - the same concepts, a
+different surface.** The install's own AI files are `.per`: `(defrule (condition...) (condition...) => (action ARG)...)`,
+with facts like `(food-amount < 200)`, `(unit-type-count my-unique-unit >= 10)`, nesting via `(or ...)` / `(and ...)`,
+and `(set-goal NAME VALUE)` as the only way to remember anything between rules. Ours is TOML:
+
+```toml
+[[rule]]
+player = 1
+cooldown_seconds = 5.0
+at_seconds = 120.0
+when = { villagers_at_least = 12, no_tech = "loom" }
+do = "research"
+building = "town_centre"
+tech = "loom"
+```
+
+Same three parts - player, when, do - and the same re-evaluation with a cooldown. What differs is what the engine is
+allowed to be: our rules are **data**, loaded strictly (`deny_unknown_fields`), evaluated by the engine, hashed, and
+refused into `last_refusal` when they cannot fire. A `.per` file is a program for the game's own AI VM, and the VM is
+the part we are not reimplementing.
+
+**Why not adopt `.per` itself.** Its value is not the parentheses, it is the fact database behind them: hundreds of
+facts (`sn-*` strategic numbers, target points, attack groups, per-unit-type counts) bound to AoE2's data model. D17
+keeps AoE2 knowledge out of `crates/`, so a `.per` interpreter would either carry that model in the engine or need an
+adapter for every fact - and the adapter is the work. The parser and error reporting are the cheap part; the fact layer
+is where the weeks go, and the payoff would be running community scripts, which is a different goal from *our* AI being
+readable and deterministic.
+
+**What we take from it, concept by concept:**
+
+| AoE2 | ours today | what to add |
+|---|---|---|
+| `(defconst NAME n)` | `[role]` / `[tech_role]` name the ids | a `[const]` table for numbers, so a rule never quotes one |
+| facts (`food-amount`, `unit-type-count`) | `stock`, `has_unit`, `villagers_at_least` | `enemy_share`, `enemy_at_least`, `army_at_least` (D92/D93) |
+| `(set-goal)` - the only memory | **nothing** | **goals**: a named integer slot per player, set by a rule and read by `when.goal`. This is the biggest missing piece: without it a rule cannot remember that it already reacted |
+| `(enable-timer)` | `cooldown_seconds`, `at_seconds` | a `once = true` rule (the `disable-self` idiom) |
+| `sn-*` strategic numbers | nothing | a `[tuning]` table of named numbers, so "aggression 0.6" is content, not a literal in a rule |
+| `(or ...)` / `(and ...)` | implicit all-of | `any_of` / `not` when a script actually needs them - not before, because a boolean language in TOML is where readability dies |
+| `(train ...)`, `(build ...)`, `(research ...)` | same | same |
+| `(attack-now)`, `(set-attack-group)`, `(scout)` | `attack` (one order) | `scout`, `defend`, `retreat` - each an action over state the memory already holds |
+
+**The recommendation in one line:** keep TOML, add **goals** and **tuning numbers** first (they are what makes a script
+feel like a program), then the memory conditions (D93), and only then consider `any_of`/`not`. A `.per` importer stays
+on the shelf with the price written above it, so nobody re-opens it casually.
+
 ## The gap, stated as two missing inputs
 
 Countering is not a new kind of AI behaviour. It is the same rule shape with two inputs it does not have:
