@@ -2484,6 +2484,8 @@ saves that yielded no name records are exactly the eight at 12.36, which closes 
 That trap is written down in `docs/save-format.md` because it would have cost a session: the value looks like a clock and
 is not one.
 
-**A negative result to keep:** no `u32`/`float32` at a fixed offset increases across `brit1`..`brit13` (all four byte
-phases), because the layout shifts between saves. Candidates at `0x224c52`, `0x270f52` and `0x22662e` were produced by
-that scan and none survives a look at the neighbourhood - they are coincidences, not fields.
+**A negative result to keep, stated precisely:** scanning for a `u32`/`float32` that increases across `brit1`..`brit13`
+at one fixed offset produced **0 hits at byte phase 0 and 20 at phases 1-3**, and every hit is a coincidence of
+alignment - the layouts shift between saves, so the same offset holds a different structure in `brit1` and `brit13`.
+The three inspected candidates (`0x224c52`, `0x270f52`, `0x22662e`) all fail that neighbourhood check. A value scan
+cannot find this clock; the section walk or the differential pair can.

@@ -67,11 +67,21 @@ coordinates in `AoK HD.exe` (32-bit PE, 2018-08-22) and all quotes are from the 
 that needs sections 1-3 walked (`&player_info[i].Food` and friends are in section 2, which is what makes the stockpile
 question the same walk).
 
-**A negative result worth keeping:** no `u32` and no `float32` at a fixed offset increases across `brit1`..`brit13`
-(checked at all four byte phases, over the common 3.96 MB). The layout shifts between saves, so a value scan cannot
-find the clock and any candidate it does produce is a coincidence - three were produced, at `0x224c52`, `0x270f52` and
-`0x22662e`, and none of them survives a look at the neighbourhood, which is a different structure in `brit1` and
-`brit13`. Do not build on them.
+**A scan that finds nothing usable, with the numbers.** Looking for a `u32` - and separately a finite `float32` - that
+increases across `brit1`..`brit13` at one fixed offset, over the common 3.96 MB and at **all four byte phases**:
+
+| byte phase | increasing `u32` | increasing `float32` |
+|---|---|---|
+| 0 | 0 | 0 |
+| 1 | 9 | 9 |
+| 2 | 9 | 9 |
+| 3 | 2 | 2 |
+
+So the honest statement is **not** "there is no such field" - it is that every hit is a coincidence of alignment. The
+layouts shift between saves, so the same offset holds a different structure in `brit1` and in `brit13`: the three hits
+inspected (`0x224c52`, `0x270f52`, `0x22662e`) each have a *different* neighbourhood in the two files, and the 17
+increasing values are unrelated binary that happened to land in order. **Do not build on them.**
+
 
 **The experiment that settles the clock in one run**, and it is cheaper than the rest of the walk: two saves from one
 match a known interval apart (60 s of game time, nothing else changing). The differential then has one field that moved
