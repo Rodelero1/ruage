@@ -7318,6 +7318,15 @@ impl World {
                 let dy = victim.position.1.raw() - aim.1.raw();
                 dx * dx + dy * dy <= tolerance * tolerance
             });
+            // **A missile whose launcher died while it was in the air does no damage** (D90, the owner's rule: "if
+            // trebuchet goes missile and dies, missile causes 0 damage"). The shot keeps its flight - it is an entity
+            // with its own lifetime and it lands where it was aimed - but the blow it carries is worth nothing. The
+            // launcher may be gone (a death sweeps the entity) or still present at or below zero (killed earlier in
+            // this same tick), so both are checked.
+            if self.find(shooter).is_none_or(|entity| entity.hp <= 0) {
+                ejected.push(target);
+                continue;
+            }
             let mut struck = false;
             // A hunter's arrow is a villager's blow too, so the same slaughter rule applies to it (the owner's second
             // correction): an arrow that kills a herdable leaves the carcass, exactly as the knife does.

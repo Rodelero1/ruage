@@ -2347,3 +2347,20 @@ The owner: **"adopt adoptable"**, and **"3 adopt"** for tech cost/time. Recorded
   save writer yet; a test cannot be written against a format that does not exist. It joins the save-format slice.
 - **Deferred: openaok's per-tick pathing budget and landmark A\* estimate.** Real, cheap and MIT-clean as *facts*, but they
   are the pathing slice's business, not this round's.
+
+## D90 - A missile whose launcher died does no damage (2026-11-01)
+
+The owner's second combat rule, verbatim: **"For projectiles also cause zero damage once launcher died in original game. If
+trebuchet goes missile and dies, missile causes 0 damage."**
+
+This closes the gap D88 deliberately left open - D88 ordered melee blows and left arrows in flight alone, with the note that
+ordering arrows was "a second decision the owner has not given". He has given it, and the answer is not "order the arrows"
+but **"the arrow lands and is worth nothing"**.
+
+Implemented as: the landing checks its shooter, and if the launcher is gone (swept on death) or at/below zero (killed earlier
+in the same tick) the landing resolves nothing - no damage, no blast, no retaliation, no carcass. The arrow still flies and
+still disappears; only its blow is void.
+
+Consequences worth naming: a razed tower's volley already in the air hits nothing (same rule, no special case); a dead
+hunter's arrow leaves no carcass; and the rule is invisible in the acceptance match (its hash did not move), which means the
+case does not arise there rather than that the rule does nothing.

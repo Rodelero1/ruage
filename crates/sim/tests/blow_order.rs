@@ -63,6 +63,17 @@ fn seeded(fx: &Fixture) -> World {
 }
 
 fn place(world: &mut World, player: u8, id: u32, tile: (i64, i64), hp: i32) -> EntityId {
+    place_unit(world, player, id, VILLAGER, tile, hp)
+}
+
+fn place_unit(
+    world: &mut World,
+    player: u8,
+    id: u32,
+    unit: u32,
+    tile: (i64, i64),
+    hp: i32,
+) -> EntityId {
     let scale = world.scale();
     let id = EntityId(id);
     world
@@ -70,7 +81,7 @@ fn place(world: &mut World, player: u8, id: u32, tile: (i64, i64), hp: i32) -> E
             id,
             player,
             kind: EntityKind::Unit,
-            unit: Some(VILLAGER),
+            unit: Some(unit),
             position: (
                 Fixed::from_raw(tile.0 * scale),
                 Fixed::from_raw(tile.1 * scale),
@@ -84,6 +95,7 @@ fn place(world: &mut World, player: u8, id: u32, tile: (i64, i64), hp: i32) -> E
 }
 
 const VILLAGER: u32 = 83;
+const ARCHER: u32 = 4;
 
 /// One blow each, in id order: the first kills, so the second never swings.
 #[test]
@@ -123,5 +135,47 @@ fn a_unit_killed_by_an_earlier_blow_does_not_swing() {
     assert!(
         world.entity(first).is_some(),
         "the unit killed before its turn never swung, so the first is still standing"
+    );
+}
+
+/// D90, the owner's second rule: a missile whose launcher died while it was in the air does **no damage** - the
+/// trebuchet case, where the stone is already flying when the trebuchet falls.
+#[test]
+fn a_missile_from_a_dead_launcher_does_no_damage() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let archer = place_unit(&mut world, 1, 900, ARCHER, (30, 30), 30);
+    let victim = place(&mut world, 2, 901, (33, 30), 25);
+    world.step().expect("both exist");
+
+    world
+        .submit_checked(Command::Attack {
+            attacker: archer,
+            target: victim,
+        })
+        .expect("the archer shoots");
+    // Two ticks: the arrow exists and is in the air, the villager is untouched.
+    world.step().expect("step");
+    world.step().expect("step");
+    assert_eq!(
+        world.entity(victim).expect("victim").hp,
+        25,
+        "the arrow has not landed yet"
+    );
+
+    world
+        .submit_checked(Command::Delete {
+            player: 1,
+            entity: archer,
+        })
+        .expect("the launcher dies");
+    for _ in 0..200 {
+        world.step().expect("step");
+    }
+
+    assert_eq!(
+        world.entity(victim).expect("victim").hp,
+        25,
+        "a missile from a dead launcher does no damage"
     );
 }
