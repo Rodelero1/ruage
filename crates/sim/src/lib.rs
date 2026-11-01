@@ -263,6 +263,17 @@ pub enum TileVision {
     Visible,
 }
 
+/// What one player last observed of one unit type: how many were in sight, and the tick that sighting happened.
+///
+/// This is a **memory**, not a view (D92): the count is what was there when it was seen, and the stamp does not move
+/// until something is seen again, so a rule can decide for itself how stale is too stale. Nothing reads the world's
+/// real state through it, which is what makes an unscouted army genuinely unknown rather than merely distant.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Sighting {
+    pub count: u16,
+    pub at: u64,
+}
+
 /// How much of a fight a unit picks on its own. Aggressive is the default and is what every unit did
 /// before stances existed, so a pack that says nothing keeps the behaviour it had (D48).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1242,6 +1253,13 @@ pub struct World {
     /// state and hashed, because fog *is* a fact about where a player has been - two runs that
     /// disagree about it have diverged, and only this table knows (D50).
     explored: [Vec<u64>; MAX_PLAYERS],
+    /// Per player, what they have watched of other players' units, by unit id (D92). `BTreeMap` because iteration
+    /// order is hashed and a hash map would make the state hash depend on insertion order.
+    memory: [BTreeMap<u32, Sighting>; MAX_PLAYERS],
+    /// Which players keep a memory at all. **Installed by the match, not by the loader** - a bare world stays bare, so
+    /// a test that never asks for a memory pays nothing for it; the rules of a scenario switch it on for the players
+    /// they belong to.
+    observers: [bool; MAX_PLAYERS],
     /// The map's size in tiles, from the content the world was seeded with. Zero until seeding.
     map_size: (u16, u16),
     /// Unit ids (family roots) that block movement once built, from `[build] blocking_roles` in content.
@@ -1371,6 +1389,8 @@ impl World {
             leash_ticks: None,
             leash_tiles: None,
             explored: std::array::from_fn(|_| Vec::new()),
+            memory: std::array::from_fn(|_| BTreeMap::new()),
+            observers: [false; MAX_PLAYERS],
             map_size: (0, 0),
             blocking: BTreeSet::new(),
             footprints: BTreeMap::new(),
@@ -4907,6 +4927,106 @@ impl World {
         hit
     }
 
+    /// What `player` last observed of `unit`: the count that was in sight and the tick that sighting happened.
+    /// `None` means never seen - which is the whole point of a memory rather than a view (D92).
+    pub fn sighting(&self, player: u8, unit: u32) -> Option<(u16, u64)> {
+        if player == 0 || usize::from(player) > MAX_PLAYERS {
+            return None;
+        }
+        self.memory[usize::from(player) - 1]
+            .get(&unit)
+            .map(|sighting| (sighting.count, sighting.at))
+    }
+
+    /// Take this tick's sightings: for every player, count the enemy units that player's own units and buildings can
+    /// watch right now, and stamp each count with the tick.
+    ///
+    /// One pass over the entities with a per-player visibility mask, not a `vision` call per entity: `vision` scans
+    /// every entity to answer for one tile, so asking it per entity is quadratic and was the shape that cost 37x in the
+    /// share pass. The mask is the same one the renderer builds, and it is built once per player here.
+    ///
+    /// **Only sightings are written.** A unit that walks out of sight keeps the count and stamp it had, so a rule can
+    /// ask "seen within thirty seconds" and get an honest answer; the alternative - clearing when nothing is in sight -
+    /// would make the memory a view with extra steps.
+    /// Switch the memory on for a player. Called by whatever installs behaviour - a scenario's rules - so a world
+    /// nobody has given an AI does not pay for one (the same shape as `apply_content_policy`, D75).
+    pub fn observe_for(&mut self, player: u8) {
+        if player >= 1 && usize::from(player) <= MAX_PLAYERS {
+            self.observers[usize::from(player) - 1] = true;
+        }
+    }
+
+    /// Whether this player keeps a memory at all.
+    pub fn observes(&self, player: u8) -> bool {
+        player >= 1 && usize::from(player) <= MAX_PLAYERS && self.observers[usize::from(player) - 1]
+    }
+
+    fn observe(&mut self) {
+        // Nothing to record unless somebody is watching, and no rule needs an answer fresher than once a game second:
+        // building the sight masks costs O(entities x sight area), which is the only part of this that is not free.
+        if !self.observers.iter().any(|watching| *watching) {
+            return;
+        }
+        if !self.tick.is_multiple_of(u64::from(self.tick_rate_hz)) {
+            return;
+        }
+        // A player can only learn about somebody else, so a world where fewer than two players hold anything has
+        // nothing to record - and finding that out costs one pass over the entities and no masks at all. Most tests,
+        // and every single-player scenario, take this branch.
+        let mut active = [false; MAX_PLAYERS];
+        let mut holders = 0;
+        for entity in &self.entities {
+            let player = usize::from(entity.player);
+            if entity.hp > 0 && (1..=MAX_PLAYERS).contains(&player) && !active[player - 1] {
+                active[player - 1] = true;
+                holders += 1;
+            }
+        }
+        if holders < 2 {
+            return;
+        }
+        let masks: Vec<(u8, Vec<u64>)> = (1..=MAX_PLAYERS as u8)
+            .filter(|player| {
+                active[usize::from(*player) - 1] && self.observers[usize::from(*player) - 1]
+            })
+            .map(|player| (player, self.visible_mask(player)))
+            .collect();
+        if masks.is_empty() {
+            return;
+        }
+        let width = usize::from(self.map_size.0);
+        let tick = self.tick;
+        let mut seen: Vec<BTreeMap<u32, u16>> = (0..MAX_PLAYERS).map(|_| BTreeMap::new()).collect();
+        for entity in &self.entities {
+            if entity.kind != EntityKind::Unit || entity.hp <= 0 || entity.player == 0 {
+                continue;
+            }
+            let Some(unit) = entity.unit else { continue };
+            let tile = self.tile_of(entity.position);
+            let index = usize::from(tile.1) * width + usize::from(tile.0);
+            let (word, bit) = (index / 64, 1u64 << (index % 64));
+            for (player, mask) in &masks {
+                if *player == entity.player {
+                    continue;
+                }
+                if mask.get(word).is_some_and(|w| w & bit != 0) {
+                    *seen[usize::from(*player) - 1].entry(unit).or_insert(0) += 1;
+                }
+            }
+        }
+        for (player, sightings) in seen.iter().enumerate() {
+            for (unit, count) in sightings {
+                self.memory[player].insert(
+                    *unit,
+                    Sighting {
+                        count: *count,
+                        at: tick,
+                    },
+                );
+            }
+        }
+    }
+
     /// What this player knows about a tile: never seen, remembered, or watched right now.
     pub fn vision(&self, player: u8, tile: (u16, u16)) -> TileVision {
         if player == 0 || usize::from(player) > MAX_PLAYERS {
@@ -7520,6 +7640,10 @@ impl World {
         }
 
         self.tick += 1;
+
+        // What each player saw this tick, stamped with the tick that has just become current, so that
+        // `sighting(..).1 == tick()` means "watched right now" and the age of a belief is `tick() - at`.
+        self.observe();
         Ok(())
     }
 
@@ -7969,6 +8093,23 @@ impl World {
     pub fn state_hash(&self) -> u64 {
         let mut hash = FNV_OFFSET_BASIS;
         fnv_bytes(&mut hash, &self.tick.to_le_bytes());
+        // What a player has watched changes what a rule may do, so it is state (D92). Iterated through `BTreeMap`s
+        // for the same reason everything else is: a hash-order walk would make two identical matches hash apart.
+        for (player, watching) in self.observers.iter().enumerate() {
+            if *watching {
+                fnv_bytes(&mut hash, b"observer");
+                fnv_bytes(&mut hash, &[player as u8]);
+            }
+        }
+        for (player, sightings) in self.memory.iter().enumerate() {
+            for (unit, sighting) in sightings {
+                fnv_bytes(&mut hash, b"sighting");
+                fnv_bytes(&mut hash, &[player as u8]);
+                fnv_bytes(&mut hash, &unit.to_le_bytes());
+                fnv_bytes(&mut hash, &sighting.count.to_le_bytes());
+                fnv_bytes(&mut hash, &sighting.at.to_le_bytes());
+            }
+        }
         // The civilisation is hashed because it changes what the world will allow: two runs that
         // differ in it refuse different techs, and a replay that lost it would diverge silently. Only
         // when set, so a world that names no civ hashes exactly as it did before civs existed.

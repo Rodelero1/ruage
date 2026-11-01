@@ -223,3 +223,30 @@ fn a_blocked_queue_costs_this_much_per_tick() {
         world.training_pause(market)
     );
 }
+
+/// The same idle world with a **memory switched on** for every player, which is what a match with rules for all eight
+/// seats pays (D92). Sightings are taken once a game second, so ten of these two hundred ticks do the mask work.
+#[test]
+#[ignore = "prints timings; run explicitly with --ignored --nocapture"]
+fn idle_world_with_a_memory_costs_this_much() {
+    let Some(fx) = fixture() else { return };
+    let ticks = 200u32;
+    for extra in [0usize, 250, 500, 1000, 2000] {
+        let mut world = world_with(&fx, extra);
+        for player in 1..=8u8 {
+            world.observe_for(player);
+        }
+        let entities = world.entities().len();
+        let start = Instant::now();
+        for _ in 0..ticks {
+            world.step().expect("step");
+        }
+        let elapsed = start.elapsed();
+        let per_tick = elapsed.as_secs_f64() / f64::from(ticks);
+        let per_tick_us = per_tick * 1e6;
+        let per_entity_ns = per_tick_us * 1e3 / entities as f64;
+        println!(
+            "{entities:>5} entities  {per_tick_us:>9.2} us/tick  {per_entity_ns:>7.1} ns/entity/tick  (memory on)"
+        );
+    }
+}

@@ -2495,13 +2495,16 @@ The owner agreed to all three proposals in `docs/ai-scripts.md`. In order:
 1. **D91 - the counter report: done** (`tools/counters.py`, v1.51). Damage, dps and damage per resource-second between
    any roles the pack names, using the engine's formula, with the "class the target does not list contributes nothing"
    trap pinned by a test. This is an *authoring* tool: with D93 the engine does not need the table at runtime yet.
-2. **D92 - the per-player memory of what was seen.** The next engine slice, and the one that needs care: counts of
-   enemy units by role with a last-seen tick, filled only from `World::vision`, updated in entity-id order, hashed with
-   state. **Ship the gate with it** - a test that walks the condition variants and fails any that reads ground truth.
-   Without the gate, "does not cheat" is a promise.
-3. **D93 - the conditions** (`enemy_share`, `enemy_at_least`, `army_at_least`, `health_share_below`) over that memory,
-   then a scenario test whose negative half is the anti-cheat check: the rules switch **after** the enemy composition is
-   seen and **not before**.
+2. **D92 - the memory: done** (v1.52). `World::sighting(player, unit)` returns what that player last watched and when;
+   filled once a second from the per-player sight masks, hashed, and **off unless the match installs it**
+   (`observe_for`), so a world without an AI pays one `any()` a tick and the acceptance hash did not move.
+   Measured: +20 ns/entity/tick at 2,126 entities with it on, and the first version was 16x worse (380 ns) until
+   observation moved to once a second. Review: `docs/reviews/2026-11-01-memory.md`.
+   **Still owed from D92: the gate.** It belongs with the conditions, because there is nothing yet to walk.
+3. **D93 - the conditions, next** (`enemy_share`, `enemy_at_least`, `army_at_least`, `health_share_below`) over that
+   memory, wired so a scenario's rules call `observe_for` for the players they serve, plus **the gate** (a test that
+   walks the condition variants and fails any that reads ground truth) and the scenario test whose negative half is the
+   anti-cheat check: the rules switch **after** the enemy composition is seen and **not before**.
 4. **Scouting** follows from (2): a `scout` action and a chooser for unexplored ground, or the memory only fills when
    the armies already meet.
 
