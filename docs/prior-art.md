@@ -735,3 +735,112 @@ its dat reader is not. `THIRD_PARTY_NOTICES.md` names `genieutils` as **LGPL-3.0
 tools, with GPL-3.0 beside it), and the Indeo 5 decoder as LGPL-2.1 - so "openaok is MIT, I can lift its `.dat`
 parsing" is wrong twice over. `yanfengliu/*` is MIT throughout and the cleanest of the four, which still does
 not make its TypeScript a design we can copy into a Rust sim.
+
+## 2026-11-01 — genie ends the newtype sweep with one real fix; openaok decides where a unit stands
+
+**genie, 130 commits (`10af9143..2f0ac827`; 612 files, +51,688 / -24,762), and 129 of them begin `T9:`.** The
+sweep continues to the end of the type list rather than changing course: the clock and every timer
+(`WorldTime`, `Millis`, `Seconds`), the map's `Tile`/`TileRect`/`GridSize`/`Distance`/`FixedPoint`, the pathers'
+`NodeIndex`/`Cell`/`CellEdges`/`RayFraction`/`WalkResult`, the states (`ObjectState` and one enum per action:
+`AttackState`, `GatherState`, `BuildState`, ...), `EffectCommand` by kind, `TechType`, `CivId`, `ClassMask`,
+`ClassAmount` of a `DamageClass`, `AttackPriority`, `UnitStance`, and on the player's side `PlayerSet` and
+`VisionBits` as `bitflags`. `CODING_STYLE.md` gained the bitflags rule that this half of the sweep needed: a set
+of bits is a `bitflags` type, the bits that have a meaning are named, `const _ = !0;` so no operation can drop one,
+and a word read from the save is built with `from_bits_retain`, never `from_bits_truncate`. The codec and the
+oracle moved with it (39 files of `genie-oracle`, the command codec's encoder), which is what "the raw value only
+at the boundary" costs when the boundary is a save format.
+
+**One commit is not a rename, and it is the one to read: `d9280ea5`.** `Player::resources` (attributes 0-3) and
+`Player::construction_rate` (attribute 195) were two copies of one thing, filled from the save's attribute array at
+import. Every add and store wrote 0-3 into `resources`, so `attributes[0..4]` went stale; nothing wrote
+`construction_rate` at all after the import, so **a change of attribute 195 never reached a builder's work or the
+planner**. `Player::attributes` is now the one column (player+0x100, count at +0x90), `resources()` and
+`construction_rate()` derive their four values and 195 where they are read, and the store, escrow, tribute,
+treason, BUILD cost, repair payment and the forced replay all read it. A cost in an attribute past the four now
+pays from that attribute, which closes their "a cost in a resource other than the four" gap. The lesson is the same
+shape as last week's `Entry` default, seen from the other side: last week a *derived* default was wrong for a
+zeroed slot; this week a *copied* field was stale because two places held one meaning.
+
+**Two more defects the sweep surfaced, both derived defaults.** `5d11a8ea`: the dying building's annex test read
+sprite 0 - the old i16 field's derived default - where `SpriteId`'s `None` now stands; it reads the master's
+destruction sprite, which is the game's path, and the note carries a dat fact for the asset pack: **111 of the
+447 buildings have no destruction sprite.** `ab8d99fa`: `GameVector` and `BVector` were one meaning written twice
+in the game's (x, height, y) order, and are now one type.
+
+**What that costs us, measured.** `crates/sim` holds no player attribute column at all: stockpiles are fixed rows
+of `MAX_RESOURCES` and there is no 195. Two measurements against our own dat, because genie's column is DE's:
+
+- **No effect in 5.7.2 touches attribute 195.** Of 798 effects and 3,306 commands, the decoded modifiers name 25
+  distinct attributes and 195 is not among them; no raw command of kind 0/4/5 carries `a = 195` either. So 5.7's
+  builders-work-faster bonus (the Spanish one, if 5.7 has it) **cannot come from the dat**, and our content pack
+  has to carry it as an override - the same shape as the other hardcoded civ bonuses. Verify by oracle before
+  writing it: build the same barracks with a Spanish and a British villager on the same ground, and time it.
+- **The per-civ `resources` array is 211 long in all 32 rows, holds 30 non-zero values, and the 31 playable civs
+  differ from each other in exactly one slot: index 34, where the Aztecs have `2.0` and everyone else `0.0`.**
+  (Gaia differs from all of them at 36, 62, 63, 78 - `175`, `20`, `32000`, `0.3` - which are the playable civs'
+  values.) Index 195 is `0.0` in every row, Gaia included. That is U8 shrunk from "190 entries to map" to "one
+  index with a civ-level difference and four entries that are the same for everyone", and it agrees with U13:
+  civ identity is in `tech_tree_effect_id`, not in this array.
+
+**openaok, 13 commits (`49d4c9b7..6c9e64c5`; 25 files, +395 / -46): the last of the computer players, and where a
+unit stands.** Two clusters matter to us, and the first lands on this week's work (D85's garrisoned recruit, D76's
+footprints).
+
+**`src/pathfinding/ApproachPlanner.h/.cpp` - `FindStandingSpot`.** Each caller asks for itself, from where it is:
+the planner walks the target's perimeter at a `standoff` (the worker's reach plus its own half-width), starts at
+the point of the caller's own face nearest to it, and steps outward +1, -1, +2, -2 so the answer is always the
+nearest usable spot. Two passes: the caller's own face at quarter-worker grain, then the whole perimeter by whole
+worker-widths - "a crowd fills the wall in front of it before anyone is sent round a corner". Three rules here
+are worth more than the code:
+
+- **A walker counts by its destination, never its position**, so the taken list does not change under a replan and
+  a villager on its way to a wall does not keep losing the spot it was given.
+- **Each taken spot is tested against that body's own room**, not one fixed clearance: `8e2cef5` changed
+  `gap < clearance` to `gap < taken_room[i]` so a large body and a small one can each stand as close as they
+  actually allow.
+- **The spot is a function of the asker and the taken list, not a reservation in the world.** There is no
+  placement pass to keep in sync; the same inputs give the same spot on every machine, which is why it survives
+  their determinism gate.
+
+`4b7ab96` extends the same planner to soldiers set on a building, spread along its walls; `d3d9857` adds
+`KeepLane`, the march: a group of three or more on one far target has each unit's waypoints shifted sideways by
+its lateral offset from the group's centroid, **tapered to zero within 6 tiles of the target**, and each shifted
+point is kept only if it is passable and clear of bodies for that unit's own radius - so a group goes round a
+corner abreast instead of in file, and closes up as it arrives.
+
+**The search budget became a tick budget.** `AStar::Searched()` returns a running count of expansions (incremented
+in both `FindPath` and `FindRoute`), and `src/ecs/Combat.cpp` stops a tick's chase replanning at either 8 plans or
+**6,000 tiles expanded past the first plan** - so an army ordered at one far target replans over a few ticks
+instead of stalling the one. Last week the budget was per search (a route's own length); this is the same idea
+applied to the tick's total, and it is deterministic because expansions are. It is the cheapest answer we have
+seen to "pathing is fine per unit and ruinous for an army", and it costs one counter.
+
+**Their determinism gate moved with the behaviour, visibly.** The golden hash in `tools/check_determinism.sh` went
+`7627c023a5957619` -> `221acd07913e73ac`, i.e. a behaviour change is a deliberate edit to the gate rather than a
+tolerated drift, and a new `walkers` scenario runs four computer players for ten minutes on Arabia *and* Islands
+and fails if a villager stands still on its way to work for ten seconds. Population limits reach 1,000 and the
+computer players play above 200 by scaling their plan for 200, which is a content-side answer to a limit we have
+in the engine as a constant.
+
+**Divergence that matters.** Placement is the live one. They decide a spot by a deterministic scan of a target's
+perimeter with a taken list, at the moment the order is given; we decide on the map (footprint masks, and garrison
+when the tile is blocked). Theirs has no global placement pass at all and no cost when nothing moves; ours has to
+answer "who else is coming" where they simply carry it in the request. Adopting it would mean a per-order spot
+pick plus a per-target taken list, and it would replace D85's garrison fallback with a weaker one only when the
+whole perimeter is full - which is the behaviour the game appears to have. Everything else stands as recorded: the
+tick is still 16 ms fixed point, the engine still knows the dat's particulars (D17 unchanged on both sides), and
+neither project has moved on assets (D18).
+
+**Study list.** `src/pathfinding/ApproachPlanner.h` (the `ApproachRequest` comment block names every input and why)
+with `FindStandingSpot` below it - about 120 lines in total, and the only thing this week that would change a
+design of ours; `src/ecs/Combat.cpp` around `kChaseSearchPerPass` and `KeepLane`; genie's `d9280ea5` commit body
+(one column, and the list of every reader that had to move); `5d11a8ea` for the destruction-sprite count;
+`CODING_STYLE.md`'s bitflags rule after this range.
+
+**Never copy.** genie is **AGPL-3.0** (and now carries `LICENSE-GPL-3.0` beside it) - the one-column fix is a
+*model* fact we can re-derive, not a diff to port, and the sweep's value is the list of meanings, which is
+theirs. openaok is **MIT**, and this is exactly the week the "it is only a small function" thought arrives: 120
+lines of perimeter scan is the most liftable-looking code either project has produced. The rules above (destination
+not position, a body's own room, the spot a function of asker and taken list) are what we would take; the file is
+not, because its `standoff`/`clearance` numbers and its two-pass grain are the game's feel arrived at by their own
+tuning, and copying them would give us their tuning without their evidence.
