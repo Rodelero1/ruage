@@ -1,5 +1,9 @@
 # The effect interpreter, priced from the data
 
+> **2026-11-01: three owner decisions are queued at the end of this file — D88 (fights are ordered, follow the
+> original), D89 (`tech_cost`/`tech_time` adopted), D90 (deny hash iteration and a bare `#[allow]`). Read that
+> section first; it states the order to write them in.**
+
 Written 2026-10-26, after the resource enum and the unit roles became content (SPEC v0.54).
 **Kind 3 landed the same day** (v0.55): research plus "every unit `a` becomes unit `b`". This file
 keeps the census that decided the order of work and records what is left - the question it answers
@@ -2378,3 +2382,31 @@ starts rather than assumed.
 **Open and owner-facing:** (a) whether HD will run a match with **no human player** (no spectate mode) - two recipes in
 `oracle.md`, to be confirmed on the machine; (b) the certificate "rule one" needs - `same` means "found and read", never
 "proved equivalent", and any stronger claim needs the oracle.
+
+## The 2026-11-01 prior-art round: three decisions, and what to write first (2026-11-01)
+
+Settled by the owner from `docs/prior-art.md`'s findings: **D88** (fights are ordered - follow the original),
+**D89** (adopt `tech_cost` / `tech_time`), **D90** (deny hash iteration and a bare `#[allow]`). The order below is the
+order they should be *written*, which is not the order they were decided: the cheap ones first, because they change no
+behaviour, and the engine change last, because it re-baselines fights.
+
+1. **`[workspace.lints]` (D90).** One config change, no code. Verify it by introducing a `HashMap` walk in a scratch
+   test and watching the build fail, then delete the probe and record the failure in the review. It goes first because
+   D88 makes iteration order a contract, and the enforcement should be in place before the code that depends on it.
+2. **The two combat-order tests (D88's first step).** `a unit killed by an earlier blow still swings` must *pass* against
+   the current loop (pinning what we do), and `the later unit does not swing` must *fail* - that failing run is the
+   permission to change `Sim::step`. Do not change the loop until the second test exists and fails for the right reason.
+3. **`tech_cost` / `tech_time` (D89).** Import survival test first (`a kind-101 command reaches the config as a
+   tech_cost modifier`), then the effect application: effect 10 sets Feudal to 425 food and then subtracts 220, and a
+   kind-103 command shortens the research it names. 97 + 25 commands stop being dropped.
+4. **The ordered apply pass (D88, the engine work).** `Sim::step` walks objects in player-then-slot order and applies as
+   it goes. Expect the acceptance hash to change and a set of fight tests to re-baseline; both are the cost, not a defect.
+   Re-check anything in the AI that sums simultaneous damage.
+5. **The save-format zero test** (from `genie`'s `None`-vs-zeroed-memory bug, `2026-10-31`): one test pinning what a
+   saved world holds where the game writes `0` and we hold `Option::None`. Cheap, and it is the kind of divergence an
+   oracle save would expose anyway.
+
+**Not adopted, and why:** `genie`'s type sweep (every meaning becomes its own newtype, raw values only at the wire) is
+the tempting one and it is exactly the wrong direction for us - it bakes dat semantics into the engine, which D17 keeps
+on the importer's side. openaok's group volley spread (first blows spread over 0.6 s) stays recorded as a *look* lever
+for if fights read wrong once there is a renderer, not as a tick change.

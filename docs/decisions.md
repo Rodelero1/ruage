@@ -2253,3 +2253,65 @@ Consequences, and they are what future sessions should act on:
    go in.
 5. **Settled 2026-11-01, by the owner: both player slots can be set to AI.** The farm is a plain all-AI match, with no
    workaround and no passive human slot - which is what makes it a data source rather than a chore.
+
+## D88 - Fights are ordered: the tick applies object by object, as the original does (2026-11-01)
+
+The owner's instruction, verbatim: **"units cannot trade killing blows, follow original."** That settles U18 in favour of
+the original's model and against ours.
+
+What we do today: `Sim::step` decides every entity against the state the tick opened with, then applies. Two units can
+therefore trade killing blows in one tick and both die, and the outcome is independent of iteration order. The original
+(per `librematch/genie`'s reading of the DE port, `crates/engine/genie-core/src/world/step.rs` and `world/after_step.rs`)
+walks objects in player-then-slot order and reads live, so a later object sees an earlier one's kill, and a killed unit's
+actions are torn down in its own life step before its head action would run. In that model the later unit does not swing.
+
+**The consequence that must be written down, not discovered later:** order-dependence becomes a *contract*. Determinism
+stops resting on order-independence and starts resting on the iteration order being fixed - player, then slot - and on no
+step of it being reached through a hash map. D90 is therefore part of this decision, not a separate nicety.
+
+**What it costs, honestly:**
+
+1. **Every fight test that assumed simultaneous resolution re-baselines.** The acceptance hash changes; that is expected
+   and must be recorded as a new baseline rather than treated as a regression.
+2. **Damage inside one tick becomes slot-ordered**, so a mirror fight can resolve differently from its slot-swapped twin.
+   That is not a bug in the new model; it is the model, and a test should say so.
+3. **The AI's own code must not depend on the old symmetry** - anything that compares two sides by summing simultaneous
+   damage needs re-reading.
+
+**First step is a test, not the loop:** pin what we do *now* (`a unit killed by an earlier blow still swings`), watch it
+pass, then write its inverse - `the later unit does not swing` - and watch that one fail against the current loop before
+touching `Sim::step`. Two tests, one behaviour, and the failing run is the permission to change the engine.
+
+## D89 - The effect schema carries tech cost and tech time (2026-11-01)
+
+U16 and U2 closed on 2026-10-27: **kind 101 is tech cost** (`a` = tech id, `b` = resource 0-3, `c` = 0 set / 1 add,
+`d` = signed amount) and **kind 103 is tech time**. Our data holds **97 kind-101 and 25 kind-103 commands**, and today
+they are parsed, classified and then dropped: there is no `tech_cost` or `tech_time` modifier anywhere in `crates/` or
+`config/`, so the importer keeps the command and the engine cannot see the effect.
+
+Owner decision: adopt. The effect schema grows `tech_cost` and `tech_time` modifiers beside the existing ones, the
+importer maps 101 and 103 into them, and the sim applies them where a tech's price or research length is read. The
+party digit applies here as it does elsewhere (tens: 1 allies, 2 enemies, 3 neutrals, 4 Gaia).
+
+**Why this is not cosmetic:** a cost-changing effect is how the game's cheaper-tech bonuses are expressed at all. Effect
+10 ("Lombards Technology Tree") is the data's own worked example - Feudal/Castle/Imperial at 425/680/850 food as *set*,
+then an *add* of -220/-157/-250 - and it survives into our `commands` while having no representation in `modifiers`.
+
+**First tests:** a kind-101 command survives import as a `tech_cost` modifier; applying effect 10 sets Feudal cost to 425
+and then subtracts 220 from it; a kind-103 command shortens the research length it names.
+
+## D90 - The workspace denies hash iteration and a bare `#[allow]` (2026-11-01)
+
+Borrowed in shape from `librematch/genie`'s lint set, adopted on the owner's "adopt adoptable". Determinism rule 3 says
+no collection the sim walks is a hash map, and **nothing enforces it**: this workspace has no `[workspace.lints]` section
+at all, so the rule rests on review. `clippy::iter_over_hash_type` is available on this toolchain and free today because
+`crates/` holds no `HashMap`.
+
+Adopt: a `[workspace.lints.clippy]` section denying `iter_over_hash_type`, and the same section denying a new `#[allow]`
+that carries no reason (`allow_attributes_without_reason`). D88 is why this is not a style question - the moment fights
+are ordered, the iteration order *is* the rule.
+
+**How to verify a lint config, since a lint cannot be unit-tested from inside the thing it lints:** introduce the
+violation on purpose once (a `HashMap` walk in a scratch test), watch the build fail, remove it, and record the failing
+output in the commit or the day's review. `crates/sim/tests/no_float.rs` is the precedent for pinning a rule that would
+otherwise be a comment.
