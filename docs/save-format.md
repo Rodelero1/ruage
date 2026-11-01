@@ -161,7 +161,9 @@ chat = 4 pad + `u32 length` + text. All four files consume to **exact EOF**:
 
 `mgz` 1.8.51 itself **fails** on these HD 5.8 files (`could not parse: unpack requires a buffer of 2 bytes`) because it
 expects a different meta preamble - the grammar above is what its own body spec says, driven by hand and validated by
-the EOF check. A recording therefore needs no save reader to be useful, which is what dates a series and what supplies
+the EOF check. **It is in the tree now:** `tools/recordings.py` (`split`, `iter_ops`, `Op`) walks `142146`'s 111,494
+ops in **128.8 ms** and yields chat text and action bodies; `tools/test_recordings.py` pins the grammar with synthetic
+streams and the real file's op count, elapsed time (2 681 138 ms) and the AI's resignation as the last chats. A recording therefore needs no save reader to be useful, which is what dates a series and what supplies
 the "known interval" when the copies have lost their timestamps.
 
 ## What is still unknown, and where the code that answers it lives
