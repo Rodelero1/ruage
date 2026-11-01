@@ -291,3 +291,33 @@ The one that answers the most rows per hour, and the one to compare our headless
 What it answers: the AI's real build order and age timings (recording), the decay row (two saves five minutes apart), the
 gather rows (differenced saves), and the HUD/vibe check (screenshots). What it cannot answer: per-tick order and pathing
 tie-breaks - those stay `needs-oracle` until a recording's SYNC stream or instrumentation is used.
+
+## The farm delivered (2026-11-01) — and it settles the 5.8 question
+
+`Age2HD/SaveGame/` now holds the first real capture set:
+
+- **4 recordings**: `SP Replay v5.8 @2026.11.01 141408 / 141505 / 141539 / 142146.aoe2record`, 188 KB - 2.7 MB.
+- **14 saves**: `brit1` … `brit13` plus `britXhuns`, 263 KB growing to 454 KB across the series.
+
+Decoded by hand (raw DEFLATE, `zlib.decompressobj(-15)`, exactly the recipe step 2b established):
+
+| file family | container | header | seconds |
+|---|---|---|---|
+| recordings | `u32 section_len`, `u32 0`, then the deflated header; the op stream after it, uncompressed | `VER 9.4\0\0\0HA\0` | 187,964-2,697,673 bytes; the header section is ~252-256 KB in all four, so the 2.7 MB one carries a far longer op stream |
+| saves | raw DEFLATE from offset 0 | `VER 9.4\0\0\0HA\0` | 263,141 → 453,902 bytes, monotone growth across `brit1`…`brit13` |
+
+**The `VER 5.8` question is settled.** `docs/re-toolchain.md` recorded that the binary holds no `VER 5.8` literal "so that
+needs a real `.aoe2record` from your install", and `oracle.md` itself said mgz-fast supports HD 5.8 but "whether 5.7 differs
+is unknown". These four files are named **v5.8 by the game itself**, so this build writes 5.8 recordings — and every one of
+them still carries a `VER 9.4` payload, the same magic as the 5.7-family recording and the saves. The version string in the
+filename and the version string in the body are two different numbers, which is worth knowing before anyone "fixes" one to
+match the other.
+
+**What the series is for.** `brit1` … `brit13` is a *timed* series, not a scatter of unrelated saves: the sizes grow
+monotonically, which is what a world filling up looks like. Two consecutive saves are the differential oracle — resources
+gained over a known interval give the gather rate directly, unit and building counts give the AI's build order, and a
+building that is present in `brit7` and absent from `brit8` with nobody attacking it answers the decay row.
+
+**Not yet known, and not guessed:** which two civs each file holds, whether both slots were AI, and the interval between the
+numbers. `britXhuns` names its civs in the ownername; the numbered series does not, and the tick counter lives inside a body
+we have no reader for yet.

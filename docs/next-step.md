@@ -2431,3 +2431,25 @@ modifiers, **"adopt adoptable"** = the lints and D88 (landed as **D89**).
    test-first fix in `damage_between`.
 4. **The farm artifacts** (owner): first Random Map match, record + saves at 5/10/15/20 minutes + event screenshots. Those
    close rows 3, 4, 5 and the decay question, and nothing on my side can substitute for them.
+
+## The first capture set is in: parse it (2026-11-01, next slice)
+
+`Age2HD/SaveGame/` holds 4 HD **5.8** recordings and 14 saves (`brit1`…`brit13`, `britXhuns`), all `VER 9.4`, all decoding
+by the step-2b recipe (see `docs/oracle.md`). Nothing install-derived is committed (D8/D22) - the files stay in the install
+folder, and what lands here is the reader plus the findings.
+
+**The slice:** a save reader that answers three questions, in this order of value.
+
+1. **The tick counter and the clock.** Without it, two saves cannot be placed on a timeline and the series is just a pile
+   of files. This is the first field to find.
+2. **Per-player stockpile and population.** With (1), any two consecutive `britN` saves give the gather rate over a known
+   interval - register row 6 - and the age-up times give row 4.
+3. **The entity list**, or as much of it as the format allows: unit and building counts per player per save, which answers
+   the build-order question and, by *absence*, the decay row (row 5: a building that is there in one save and gone in the
+   next with no attack).
+
+Test-first in the repo's sense means: a fixture saved from the real game (kept out of git, hash committed), and a test that
+parses it and asserts the fields the three questions need - not a parser written against a guess.
+
+**What it unblocks:** register rows 3, 4, 5 and 6, and the acceptance match's second data point (our headless report against
+a real 20-minute British opening).
