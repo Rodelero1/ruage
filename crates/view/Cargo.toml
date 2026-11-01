@@ -14,3 +14,6 @@ ruage-sim = { path = "../sim" }
 # buffer, so the window's whole job is to put it on a surface and drive a fixed-step loop.
 winit = "0.30"
 softbuffer = "0.4"
+
+[lints]
+workspace = true

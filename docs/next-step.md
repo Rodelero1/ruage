@@ -2410,3 +2410,24 @@ behaviour, and the engine change last, because it re-baselines fights.
 the tempting one and it is exactly the wrong direction for us - it bakes dat semantics into the engine, which D17 keeps
 on the importer's side. openaok's group volley spread (first blows spread over 0.6 s) stays recorded as a *look* lever
 for if fights read wrong once there is a renderer, not as a tick change.
+
+## After D88/D89: the queue this thread is working (2026-11-01)
+
+The owner answered the three open questions from the prior-art round in the other thread and named this one the main
+instance: **U18 = "units cannot trade killing blows, follow original"** (landed as **D88**), **"3 adopt"** = tech cost/time
+modifiers, **"adopt adoptable"** = the lints and D88 (landed as **D89**).
+
+**In order, from here:**
+
+1. **Tech cost and time (kinds 101 and 103)** - the next slice, and the only one of the three still open. 97 kind-101 and 25
+   kind-103 commands are parsed, classified and dropped today; the effect table already carries them. Shape: `[tech]`
+   cost/time overrides resolved through the effect interpreter, applied at `check_research`/`start_research`, with the
+   Chinese/Byzantine-style civ bonuses as the external check (a published tech whose discount is known). Test-first.
+2. **The panel chain** (`docs/ui.md`): `Snapshot` carries `queue`/`paused`/trainable → letters in `font.rs` → the message
+   beside the queue → the panel regions. This is what makes D85's `NoRoom` visible, and the one-word question still open is
+   whether the population ceiling earns a second reason (`AtCeiling`).
+3. **Register row 2** (`docs/behaviour-diff.md`): `FUN_00744d60` is a candidate - three (class, amount) pairs, per-entry
+   drop below 1 - and the damage caller (`FUN_00741a30`, `FUN_006bb100`) is the next read. A difference here means a
+   test-first fix in `damage_between`.
+4. **The farm artifacts** (owner): first Random Map match, record + saves at 5/10/15/20 minutes + event screenshots. Those
+   close rows 3, 4, 5 and the decay question, and nothing on my side can substitute for them.

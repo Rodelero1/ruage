@@ -6981,7 +6981,20 @@ impl World {
             }
         }
         // Melee: a blow lands on the tick the attacker is in position, then every `reload_ticks`.
+        //
+        // **Blows land in order, so two units cannot trade killing blows** (D88, the owner's decision: "follow
+        // original"). Each blow is applied against the world as the previous ones left it, so a unit killed earlier
+        // in this same loop never swings - it is still in the list (the death sweep runs at the end of the tick) but
+        // its health is already at or below zero. A blow aimed at something that died earlier finds nothing to hit.
+        // Who this pass has already killed. Everything dead before this pass was swept at the end of the last tick,
+        // so this list is the whole of "already gone" - and it is normally empty, which is why the guard costs two
+        // comparisons per blow rather than two scans of the world (`find` is a linear search; a hundred blows on a
+        // 3,000-entity map would have paid 600,000 comparisons a tick for a fact this list already knows).
+        let mut killed: Vec<EntityId> = Vec::new();
         for (attacker, target) in strikes {
+            if killed.contains(&attacker) || killed.contains(&target) {
+                continue;
+            }
             let swung = self.swing(attacker);
             let landed = self.blow_against(attacker, target, swung);
             if landed <= 0 {
@@ -7052,6 +7065,9 @@ impl World {
             // splashes around that point rather than hitting one unit (D51).
             if let Some(victim) = self.find_mut(target) {
                 victim.hp -= landed;
+                if victim.hp <= 0 {
+                    killed.push(target);
+                }
             }
             blows.push((target, attacker));
             // A blow is an order to an animal (D70): it turns on whoever struck it.
@@ -7063,6 +7079,9 @@ impl World {
             for victim in self.blast_victims(aim, Fixed::from_raw(blast), target) {
                 if let Some(entity) = self.find_mut(victim) {
                     entity.hp -= landed;
+                    if entity.hp <= 0 {
+                        killed.push(victim);
+                    }
                 }
                 ejected.push(victim);
             }

@@ -2315,3 +2315,35 @@ are ordered, the iteration order *is* the rule.
 violation on purpose once (a `HashMap` walk in a scratch test), watch the build fail, remove it, and record the failing
 output in the commit or the day's review. `crates/sim/tests/no_float.rs` is the precedent for pinning a rule that would
 otherwise be a comment.
+
+## D88 - Blows land in order: two units cannot trade killing blows (2026-11-01)
+
+The owner's answer to U18, verbatim: **"units cannot trade killing blows, follow original."** That settles a question that
+had stood open for three weeks with three consistent positions available (ours simultaneous; genie's ordered-by-object;
+openaok's ordered-but-spread-over-0.6s for looks).
+
+**What was implemented.** Melee blows are applied in the order the decide pass collected them - entity-id order - and a unit
+whose health an earlier blow took below zero **does not swing**. The pass keeps a small `killed` list for that; a blow
+aimed at something already dead is skipped too, so nothing is credited to a corpse and no corpse retaliates.
+
+**What was deliberately not changed, and why it is written down:** an **arrow already in flight still lands** if its shooter
+dies while it is in the air, because a shot is an entity with its own lifetime. Ordering arrows would be a second decision
+the owner has not given, and inventing it here would be the guess this project refuses.
+
+**What is still unknown.** *Which* order the original uses - by object id, by side, or something else. Entity-id order is a
+deterministic order that satisfies the rule; register row 3 in `docs/behaviour-diff.md` stays `needs-oracle` until a
+recording or the binary says which.
+
+## D89 - The adoptables from the prior-art round: taken, deferred, or refused (2026-11-01)
+
+The owner: **"adopt adoptable"**, and **"3 adopt"** for tech cost/time. Recorded so a later session does not re-litigate:
+
+- **Taken: `clippy::iter_over_hash_type` denied workspace-wide.** Determinism rule 3 stopped being a review habit. Verified
+  by a throwaway probe that iterated a `HashMap` and watching clippy refuse it.
+- **Taken: D88** (above), the U18 decision.
+- **Taken, next slice: tech cost and time modifiers (kinds 101 and 103).** 97 kind-101 and 25 kind-103 commands are parsed,
+  classified, and then dropped; the data is already ours, so this is schema plus interpreter plus tests - not research.
+- **Deferred with a reason: the `None`-vs-zeroed-memory lesson from genie.** It needs a save format to test, and we have no
+  save writer yet; a test cannot be written against a format that does not exist. It joins the save-format slice.
+- **Deferred: openaok's per-tick pathing budget and landmark A\* estimate.** Real, cheap and MIT-clean as *facts*, but they
+  are the pathing slice's business, not this round's.

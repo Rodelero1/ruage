@@ -10,3 +10,6 @@ repository.workspace = true
 ruage-fixed = { path = "../fixed" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+
+[lints]
+workspace = true

@@ -8,6 +8,12 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Rodelero1/ruage"
 
+[workspace.lints.clippy]
+# Determinism rule 3: never iterate a hash container, because its order is not ours to choose. A review can miss one;
+# this lint cannot. It is free here because `crates/` holds no `HashMap`/`HashSet` - the day one appears, the lint fires
+# at the site instead of at the next desync.
+iter_over_hash_type = "deny"
+
 [profile.release]
 # Determinism does not depend on this, but a stable codegen setting makes
 # benchmark comparisons meaningful across machines.
