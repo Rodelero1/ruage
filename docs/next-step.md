@@ -2483,9 +2483,27 @@ carries the whole derivation, including the correction that I had dismissed this
    hands you `&player_info[i].{Food,Wood,Gold,Stone}` on the way - register row 6 - and ends at section 4's start.
 2. **Read `pturn`** (`world+0x100`, read 4 bytes at a time in `FUN_00730600` around line 448) and then the object loop,
    which is what turns the series into build orders and the decay row.
-3. **Put the recording walker in `tools/`**: the op grammar is documented and walks to exact EOF on all four files
-   (`docs/save-format.md`), so command streams become readable without any save parsing - actions carry timestamps, so
-   "what did the AI do, and when" is one file away.
+3. **Done since: the recording walker is in `tools/`** (`recordings.py`, v1.49) - 111,494 ops on the long file to exact
+   EOF, 128.8 ms - so command streams are readable without any save parsing. **Next there: the action bodies** (type
+   byte, unit ids, coordinates, research and queue ids), which is what turns the walker into "what did the AI build,
+   train and research, and at what second".
+
+## The scripted AI: decisions made, first piece landed (2026-11-01, D91/D92/D93)
+
+The owner agreed to all three proposals in `docs/ai-scripts.md`. In order:
+
+1. **D91 - the counter report: done** (`tools/counters.py`, v1.51). Damage, dps and damage per resource-second between
+   any roles the pack names, using the engine's formula, with the "class the target does not list contributes nothing"
+   trap pinned by a test. This is an *authoring* tool: with D93 the engine does not need the table at runtime yet.
+2. **D92 - the per-player memory of what was seen.** The next engine slice, and the one that needs care: counts of
+   enemy units by role with a last-seen tick, filled only from `World::vision`, updated in entity-id order, hashed with
+   state. **Ship the gate with it** - a test that walks the condition variants and fails any that reads ground truth.
+   Without the gate, "does not cheat" is a promise.
+3. **D93 - the conditions** (`enemy_share`, `enemy_at_least`, `army_at_least`, `health_share_below`) over that memory,
+   then a scenario test whose negative half is the anti-cheat check: the rules switch **after** the enemy composition is
+   seen and **not before**.
+4. **Scouting** follows from (2): a `scout` action and a chooser for unexplored ground, or the memory only fills when
+   the armies already meet.
 
 **Do not chase `old_time`.** It is `timeGetTime()` - a wall clock for pause accounting - and it is overwritten on load.
 That trap is written down in `docs/save-format.md` because it would have cost a session: the value looks like a clock and

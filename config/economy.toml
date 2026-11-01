@@ -176,6 +176,10 @@ farm = 50       # 45 hp, **60 wood only** (`costs = [[1, 60]]` in units.toml; th
 wall = 72       # WALL (palisade), 250 hp, 2 wood: the segment in [build] blocking_roles
 pikeman = 358       # 55 hp: an upgrade, researched (tech 197, Castle Age)
 halberdier = 359    # 60 hp: an upgrade, researched (tech 429, Imperial)
+# The spear line's reason to exist: 38 is the KNIGHT, 100 hp, 60 food + 75 gold, and its armour list carries the
+# cavalry class (8) at 0 - which is where a spearman's +15 lands. Named here because a countering rule has to name a
+# role, not an id (D91/D93), and `tools/counters.py` ranks candidates against it.
+knight = 38
 castle = 82         # CSTL, 4800 hp - available from the Castle Age (tech 137 makes it)
 trebuchet = 331     # PTREB - available from the Imperial Age (tech 256 makes it)
 siege_workshop = 49 # SIWS, class 3, 1800 hp, 200 wood: the building that makes the siege line

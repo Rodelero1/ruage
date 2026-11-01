@@ -8,6 +8,13 @@ inventing a second one, and so the three forks below get an owner's ruling befor
 
 ## What exists today
 
+**D91/D92/D93 are decided** (`docs/decisions.md`, 2026-11-01) and the first piece is in the tree: `tools/counters.py`
+derives damage, damage per second and damage per resource-second between any roles the pack names, from the pack's own
+attack/armour classes, with the engine's formula - including the part that is easy to get backwards, that a class the
+target does not list contributes **nothing** (`armour_missing_sentinel`). Against a knight the order it prints is
+halberdier 0.200 > pikeman 0.133 > spearman 0.089 > militia 0.013 damage per resource-second: derived, not remembered.
+That is the table a `[[rule]]` is written from (D91), and with D93 it is a tool rather than an engine dependency.
+
 `crates/sim/src/script.rs` (D75). A `[[rule]]` is `player`, `at_seconds`, `cooldown_seconds`, a `when` block and one
 `do` action. Conditions are **all-of** and every field is optional: `villagers_at_least/at_most`, `has_building`,
 `no_building`, `age`, `no_tech`, `has_unit`, `housing_at_most`, `stock`. Actions: `train{building, role}`,

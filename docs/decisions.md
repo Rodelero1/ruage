@@ -2364,3 +2364,52 @@ still disappears; only its blow is void.
 Consequences worth naming: a razed tower's volley already in the air hits nothing (same rule, no special case); a dead
 hunter's arrow leaves no carcass; and the rule is invisible in the acceptance match (its hash did not move), which means the
 case does not arise there rather than that the rule does nothing.
+
+## D91 - The counter relation is derived from the pack, never authored (2026-11-01)
+
+Owner's ruling on `docs/ai-scripts.md` fork 1: **agreed as proposed.** "Which of my units beats which of theirs" is
+arithmetic over the pack - `damage_between(attacks, armours, rules)` against each candidate's `attacks`/`armours` pairs -
+so it is computed, never written down.
+
+The two rejected alternatives and why, because both will be proposed again: a **hand-written table** is AoE2 knowledge
+in a file that is meant to describe *any* pack (it stops being true the moment our own units exist, D17/D18); a
+**generated file** is a second source of truth that drifts the first time the damage code changes.
+
+Consequence worth stating plainly: with **D93** (conditions, not a symbolic `counter_to`), the table is needed at
+**authoring time first** - when someone writes the `[[rule]]` that answers knights with pikemen - and only inside the
+engine if a later decision asks the *engine* to pick the unit. So the first increment is a **report derived from the
+pack**, and the engine surface stays at zero until a rule needs it. When the engine does need it, it goes in
+`crates/data` beside the other load-time derivations and is hashed like the rest.
+
+## D92 - The AI knows only what it has seen (2026-11-01)
+
+Owner's ruling on fork 2: **agreed as proposed.** Enemy knowledge is a per-player **memory** of observed units and their
+last-seen tick, never the world's ground truth. An unscouted army is unknown, so a counter rule cannot fire; a stale
+memory produces a wrong choice, which is what a human's information advantage is worth.
+
+Binding consequences:
+
+- The memory is filled **only** from what that player's units and buildings can watch (`World::vision`), updated in
+  entity-id order, and hashed with the rest of state - it changes what the world will allow, like `last_refusal`.
+- **The anti-cheat is a gate, not a promise.** A test walks the condition variants and fails any that reaches into true
+  state, in the same spirit as `no_float`'s scan. Without it, "does not cheat" is a claim nobody checks.
+- Its cost is named: scouting must exist before counters are useful, and a `scout` action plus a chooser for unexplored
+  ground is part of this line of work, not an optional extra.
+
+## D93 - The rule language grows by conditions, not by a symbolic "counter to" (2026-11-01)
+
+Owner's ruling on fork 3: **agreed as proposed.** A countering rule names the unit it trains and the observation that
+triggers it:
+
+```toml
+when = { enemy_share = { role = "knight", at_least = 0.40 } }
+do   = { train = { building = "barracks", role = "pikeman" } }
+```
+
+Explicit, visible in the refusal log, and it needs no new resolution inside the engine. A symbolic
+`do = { train = { counter_to = "their most common" } }` is **refused for now**: it hides the choice from the script,
+which is the one thing a scripted AI exists to make visible. The signal to revisit is rule files repeating a dozen
+near-identical blocks; D91's table is the thing that would back the change if that day comes.
+
+**What this buys immediately:** `enemy_share`, `enemy_at_least`, `army_at_least` and `health_share_below` are conditions
+over D92's memory, so scouting, raid response, attack timing and retreat are the same increment, not four.
