@@ -1,8 +1,10 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-01: three owner decisions are queued at the end of this file — D88 (fights are ordered, follow the
-> original), D89 (`tech_cost`/`tech_time` adopted), D90 (deny hash iteration and a bare `#[allow]`). Read that
-> section first; it states the order to write them in.**
+> **2026-11-01, latest: D88/D89/D90 are all written and landed. The work in hand is the save reader** — see "The save
+> container reads" at the end of this file and `docs/save-format.md`, which carries what is verified, the errata for the
+> bogus `HA` magic, and the address of the code that reads the world sections. The one thing that would collapse the
+> remaining work is **two saves from one match a known interval apart** (see that section). The order below this line is
+> history; the tail is the queue.
 
 Written 2026-10-26, after the resource enum and the unit roles became content (SPEC v0.54).
 **Kind 3 landed the same day** (v0.55): research plus "every unit `a` becomes unit `b`". This file
@@ -2453,3 +2455,35 @@ parses it and asserts the fields the three questions need - not a parser written
 
 **What it unblocks:** register rows 3, 4, 5 and 6, and the acceptance match's second data point (our headless report against
 a real 20-minute British opening).
+
+
+## The save container reads; the world does not yet (2026-11-01, landed v1.47)
+
+**Done:** `tools/savegame.py` + `tools/test_savegame.py` (18 tests; 29 in `tools/`). It inflates a save, reads the
+header and walks the named string records, and it refuses the inputs it cannot understand rather than half-reading them
+(a `.dat`, a truncated stream, a version the game itself would reject, a body past 64 MiB). `docs/save-format.md` is the
+register: verified facts with the address of the code that settled each, the errata for the `HA` magic, the corpus table
+(31 files: 23 at save version 12.5, 8 at 12.36, 0 refused, 0.69 s), and the map of the four sections still to walk.
+
+**What that changed in what we know.** The header is `VER 9.x\0` + **float32 save version**, not a magic followed by
+`HA`; the 12.5 ceiling is the game's own (`FUN_005e6730`); a string record is `u32 (0x0A60<<16|len)` + bytes; the eight
+saves that yielded no name records are exactly the eight at 12.36, which closes the "campaign vs random-map" guess in
+`oracle.md`.
+
+**The next three steps, in order, and the first is the cheapest thing anyone can do:**
+
+1. **Ask the owner for two saves from one match a known interval apart** (60 s of game time, nothing else moving).
+   The differential then has exactly one field that moved by `60 x tick_rate`, and the clock falls out without walking a
+   section. This is a five-minute job for him and saves a session of static reading. Failing that:
+2. **Walk section 2 (the scenario, `FUN_00545460` / `FUN_00567630`)** and then section 3 (the map, `FUN_00836830`), which
+   hands you `&player_info[i].{Food,Wood,Gold,Stone}` on the way - register row 6 - and ends at section 4's start.
+3. **Read `pturn`** (`world+0x100`, read 4 bytes at a time in `FUN_00730600` around line 448). With it the `brit` series
+   becomes a timeline and rows 4-6 open.
+
+**Do not chase `old_time`.** It is `timeGetTime()` - a wall clock for pause accounting - and it is overwritten on load.
+That trap is written down in `docs/save-format.md` because it would have cost a session: the value looks like a clock and
+is not one.
+
+**A negative result to keep:** no `u32`/`float32` at a fixed offset increases across `brit1`..`brit13` (all four byte
+phases), because the layout shifts between saves. Candidates at `0x224c52`, `0x270f52` and `0x22662e` were produced by
+that scan and none survives a look at the neighbourhood - they are coincidences, not fields.

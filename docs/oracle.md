@@ -340,3 +340,16 @@ the first 8 KB of the body that increases monotonically across all thirteen file
 does not line up between saves, or the clock is not a plain little-endian u32 there. Both say the same thing - a reader
 needs the format's own structure (a section walk), not an offset guessed from a scan. That is the next step, and it starts
 from the same `VER 9.4` header the recording shares.
+
+
+## Errata (2026-11-01): there is no `HA` magic, and the 8-of-13 puzzle is the save version
+
+Two claims in this file are corrected by `docs/save-format.md` and `tools/savegame.py`:
+
+1. **`VER 9.4\0\0\0HA\0` is a float seen as text.** Bytes 8-11 of a save are a **float32 save-game version**, and
+   `12.5f` is `0x41480000` - whose upper two bytes are the ASCII `HA`. The tag is not part of the format; the eight
+   older saves read `12.36` there (`0x4145c28f`, bytes 10-11 `EA`) and have no `HA` at all. A reader that required the
+   tag refused eight of the user's own saves.
+2. **The step-2b split "8 of 13 yield no name records" is the save version, not campaign-vs-random-map.** The eight
+   files that yield no `0x0A60`-framed records are exactly the eight at version 12.36; every 12.5 file yields 4-15.
+   Whether 12.36 stores names in another encoding or stores none is still unknown.
