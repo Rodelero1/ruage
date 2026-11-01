@@ -321,3 +321,22 @@ building that is present in `brit7` and absent from `brit8` with nobody attackin
 **Not yet known, and not guessed:** which two civs each file holds, whether both slots were AI, and the interval between the
 numbers. `britXhuns` names its civs in the ownername; the numbered series does not, and the tick counter lives inside a body
 we have no reader for yet.
+
+### Two facts from the owner about the capture set (2026-11-01)
+
+1. **Both slots were AI.** The farm needs no workaround and no human slot - confirmed for this batch, not just as a
+   possibility.
+2. **The interval between the `brit` saves was random**, not a fixed N minutes.
+
+The second one changes how the series may be used, and it is the kind of thing that silently corrupts an analysis:
+**consecutive files cannot be assumed to be equally spaced**, so a rate computed as "difference divided by the number I
+thought the interval was" is wrong, and so is ordering them by filename number alone if a save was made out of sequence. The
+tick counter inside each save is therefore not a convenience - it is the precondition for using the series at all, and it is
+the first field the reader must find.
+
+**First probe, negative and worth recording:** across `brit1`…`brit13` (inflated 3.96 MB → 4.57 MB), there is **no u32 in
+the first 8 KB of the body that increases monotonically across all thirteen files** and sits in a plausible tick range
+(500 … 5,000,000). Two readings: either the header contains variable-length parts (player names, map data) so a fixed offset
+does not line up between saves, or the clock is not a plain little-endian u32 there. Both say the same thing - a reader
+needs the format's own structure (a section walk), not an offset guessed from a scan. That is the next step, and it starts
+from the same `VER 9.4` header the recording shares.
