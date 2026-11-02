@@ -702,12 +702,30 @@ pub fn depth_of(entity: &EntityView) -> f32 {
 #[must_use]
 pub fn draw_order(snapshot: &Snapshot) -> Vec<&EntityView> {
     let mut order: Vec<&EntityView> = snapshot.entities.iter().collect();
+    // Depth first, then a **layer**, then the id. The layer exists because this renderer has no sprite heights: a berry
+    // bush is drawn as a short thing, but at greater depth it would paint over the villager working it - and that is
+    // exactly what the owner saw in `make run` ("they disappeared as if entering a building"). So the ground cover goes
+    // down first, then buildings, then the things that must never be lost behind scenery, then shots in the air.
     order.sort_by(|a, b| {
-        depth_of(a)
-            .total_cmp(&depth_of(b))
+        layer_of(a)
+            .cmp(&layer_of(b))
+            .then_with(|| depth_of(a).total_cmp(&depth_of(b)))
             .then_with(|| a.id.cmp(&b.id))
     });
     order
+}
+
+/// Which pass an entity belongs to. Lower is painted first.
+///
+/// Only two passes, and the split is deliberate: **ground cover goes down first**, then everything else in depth
+/// order. Buildings must still be able to cover a unit standing behind them - `a_unit_behind_a_building_is_covered_by_it`
+/// says so - but a berry bush is a short thing drawn without a height, so at greater depth it used to paint over the
+/// villager working it, which is the owner's "they disappeared as if entering a building".
+fn layer_of(entity: &EntityView) -> u8 {
+    match entity.kind {
+        EntityKind::Resource(_) => 0,
+        EntityKind::Building | EntityKind::Unit | EntityKind::Projectile => 1,
+    }
 }
 
 pub(crate) fn player_colour(player: u8) -> [u8; 4] {

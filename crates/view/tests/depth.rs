@@ -181,3 +181,40 @@ fn a_unit_behind_a_building_is_covered_by_it() {
         footprint.1
     );
 }
+
+/// The owner's report from `make run`: "the villagers upon approaching to the berry bush disappeared as if entering a
+/// building". The simulation is right - `crates/sim/tests/neighbours.rs` proves the gatherer stands *beside* the node -
+/// so it is the drawing: a bush one tile in front of a worker has a greater depth and used to paint over it. There are
+/// no sprite heights in this renderer, so a low bush cannot be allowed to occlude a unit at all.
+#[test]
+fn a_worker_behind_a_bush_is_not_hidden_by_it() {
+    let worker = entity(30, EntityKind::Unit, (10.0, 10.0), (1, 1));
+    let bush = entity(31, EntityKind::Resource(0), (11.0, 11.0), (1, 1));
+    let snapshot = Snapshot {
+        tick: 0,
+        player: 1,
+        width: 32,
+        height: 32,
+        terrain: vec![false; 32 * 32],
+        stock: Vec::new(),
+        population: 0,
+        population_cap: 0,
+        outcome: None,
+        visible: vec![u64::MAX; 16],
+        explored: vec![u64::MAX; 16],
+        entities: vec![worker.clone(), bush.clone()],
+    };
+    let order = ruage_view::draw_order(&snapshot);
+    let worker_at = order
+        .iter()
+        .position(|e| e.id == 30)
+        .expect("the worker is drawn");
+    let bush_at = order
+        .iter()
+        .position(|e| e.id == 31)
+        .expect("the bush is drawn");
+    assert!(
+        worker_at > bush_at,
+        "the bush is nearer the camera, but a bush is not tall enough to hide the villager working it"
+    );
+}
