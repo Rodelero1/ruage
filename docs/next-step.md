@@ -2517,3 +2517,18 @@ at one fixed offset produced **0 hits at byte phase 0 and 20 at phases 1-3**, an
 alignment - the layouts shift between saves, so the same offset holds a different structure in `brit1` and `brit13`.
 The three inspected candidates (`0x224c52`, `0x270f52`, `0x22662e`) all fail that neighbourhood check. A value scan
 cannot find this clock; the section walk or the differential pair can.
+
+## Queued, not this step: U19 and U20 from the 2026-11-02 prior-art run
+
+Two dat facts arrived that the sim does not use yet, both recorded in `docs/mechanics/README.md` and `docs/prior-art.md`.
+Neither is part of the save-reader work in hand; they are the next engine slices after it.
+
+- **U19 — the Spanish construction rate.** Effect 446 "Spanish Technology Tree" sets **player resource 195 to 1.3**
+  (`[1, 195, 0, -1, 1.3]`). Resource 195 is the builder work-rate multiplier, `195 x the builder's work_rate`, 0 meaning
+  default. Nothing applies it: a civ's `tech_tree_effect` is read only for its kind-2 bars, and `build` progress counts
+  builder-ticks without reading 195. Test first: a Spanish barracks finishes in 1.3x fewer working ticks than a British
+  one on the same ground.
+- **U20 — a farm's food base is 175, not 250.** Resource 36 is 175 and the farm techs *add* to it (Horse Collar +75,
+  Heavy Plow +125, Crop Rotation +175, Chinese team bonus +45). `economy.toml`'s `food_per_farm = 250` plus
+  `Sim::farm_food_total`'s tech bonus gives 325 after Horse Collar where the game gives 250. Test first: 175 unupgraded,
+  250 after Horse Collar, 220 for the Chinese.

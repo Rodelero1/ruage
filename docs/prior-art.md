@@ -847,3 +847,136 @@ lines of perimeter scan is the most liftable-looking code either project has pro
 not position, a body's own room, the spot a function of asker and taken list) are what we would take; the file is
 not, because its `standoff`/`clearance` numbers and its two-pass grain are the game's feel arrived at by their own
 tuning, and copying them would give us their tuning without their evidence.
+
+## 2026-11-02 — the guide that names the numbers, and U19 falls
+
+**The smallest of the three moved the most.** `Divy1211/AoE2DE_UGC_Guide` (`bda6dec6`, first look) is not an engine: it is
+a GPL-3.0 prose guide to the game's own tables, written for scenario designers and data modders, and it carries what the
+question register has been asking since 2026-10-23 — **names for the numbers**.
+
+- `docs/general/resources/resources.md` (4,483 lines) is the **player-resource table**: every id from 0 upward named,
+  with its per-civ defaults. This is the array `civs.toml` holds — 4 population headroom, 6 current age, 23/24/25 the
+  Castle/Imperial/Feudal age techs, 36 farm food amount (**default 175**, Chinese 220, "what horse collar etc.
+  modify"), 84 starting villagers, 88 fish trap food, **195 construction rate modifier — 0 default, 1.3 Spanish**.
+- `docs/general/attributes/attributes.md` (1,662 lines) is the **unit attribute table**, and its 195 is a *different*
+  195: "Initiated Tech Id". Two namespaces, one number.
+- `docs/general/damage_calculation.md` lists all **38 damage classes** by name and id (0 Wonder, 1 Infantry, 3 Base
+  Pierce, 4 Base Melee, 11 All Buildings except Port, 13 Stone Defense, 22 Walls & Gates, 36 Heroes and Kings, 37
+  Hussite Wagons) — U3's table. Its own foreword says it is outdated on the formula, and it claims a per-unit **Base
+  Armour of 1000**, which is a claim to test rather than to adopt.
+- Its RMS, scenario-binary and AI pages are empty stubs, so it says nothing about `world-rms.md`.
+
+Believed only after a check against our own file: resource 23/24/25 = **102/103/101** (Castle/Imperial/Feudal age techs),
+36 = **175**, 84 = **3**, 88 = **700** — every one exactly the value in `config/gamedata/civs.toml`. `Zaydme/openaok`'s
+`Core::Rules::Res` constants name the same indices independently (36 farm food, 84 starting villagers, 88 fish trap, 23/24/25
+the age techs), so the table is confirmed by three sources with no disagreement.
+
+**U19 is answered, and the last report was wrong about it.** The Spanish bonus *is* in the dat, as a **resource**, not an
+attribute: effect **446 "Spanish Technology Tree"** carries `[1, 195, 0, -1, 1.3]` — kind 1 (resource), resource 195,
+`b = 0` (set), value 1.3. The guide says what that means — "builder work rate multiplier", and "the actual work rate for
+builders is given by `construction_rate_mod * builder.default_work_rate`" — and lists 0 default, 1.3 Spanish. The
+2026-11-01 census said "no effect in 5.7.2 touches attribute 195" and concluded the bonus "cannot come from the dat". The
+census was true of kinds 0/4/5 and I did not look at kind 1, which is where the answer was; attribute 195 is Initiated
+Tech Id and resource 195 is the construction rate. A search named after a number finds the wrong namespace twice.
+
+**And the same command shape gives the farm its base, which we have 75 too high.** Resource 36 is 175 in every playable
+civ's row, and the farm techs are kind-1 *adds* to it — Horse Collar `[1, 36, 1, -1, 75]`, Heavy Plow +125, Crop Rotation
++175, Chinese team bonus +45 — so 175 + 75 = **250**, the published figure, which is where our `food_per_farm = 250` came
+from. `Sim::farm_food_total` then adds the techs *on top of* 250, so a Horse Collar farm here holds **325 where the game
+holds 250**, and a Chinese one 295 where the game holds 220. U20.
+
+**genie, 84 commits (`2f0ac827..0c133548`; 801 files, +47,054 / -23,509).** Four streams, and the one that carries a lesson
+for us is again a defect rather than a rename.
+
+- **`93293d63`: `Player::computer` was a copy of `Player::kind` (player+0x10) that the import never set.** genie-oracle
+  wrote `false` for every player, so every test of the game's `player+0x10 == 3` answered "human" for a computer player.
+  The field is gone, `PlayerType::is_computer` asks the type, and 160 of 14,110 recordings now stop at update 1 on
+  computer branches they do not model — the branch set had been invisible. Third week, same shape: a copied field with no
+  writer (week 1 a derived default, week 2 two copies of one column, this week a copy nothing filled).
+- **T4, the objects' "parts".** The world gained one table by object id (`World::index`, as the game's own `world+0x168`
+  does), and the per-object layers left the row for `World::parts` — actions, building, combat, the mover, the unit AI.
+  An object taken out of its player's list for its own update is not findable in the index while it is out — the game's
+  own behaviour, ported — which is one more piece of the sequential-order picture U18 is about. Every step claims "bit
+  for bit" against a recording.
+- **`3e13b4df`: a unit's top speed is read from the sprite it holds, not from its master.** A spawned deer ran at 1.4003
+  because the mover kept the master's *running* sprite's speed; the game reads slot 65 off the sprite the object actually
+  holds (0.737 for that deer). Our sim reads one speed per unit and never re-reads it, which is right for a walker and
+  wrong for anything that changes sprite.
+- **`bd106a43`: a building lets go its links to objects past state 6**, and the long pather now asks the gate on its own
+  tile whether it lets this player through (unlocked, both alliances, a transform-capable master) instead of walking round
+  it. Found by a diverging recording, then ported from the game's function.
+- `a7628788` makes the sprite table a dense column by sprite id; T15 adds an RFC 430 casing gate; T9b finishes the newtype
+  sweep into the player and the action states.
+
+**openaok, 83 commits (`6c9e64c5..7e50543e`; 239 files, +27,399 / -1,697).** Three clusters.
+
+- **Platforms: the iOS port merged, and the docs now name six targets** — Windows, macOS, Linux, Android, iPhone/iPad and
+  the Switch, from one `src/` tree, SDL2 behind a HAL, the original's 800x600/1024x768/1280x1024 frame drawn to an
+  off-screen texture and letterboxed into the window (nearest-neighbour at whole-number scales, filtered otherwise).
+- **The engine documented itself: 43 markdown pages under `docs/`, a VitePress site.** `docs/engine/pathfinding.md` (508
+  lines), `economy.md`, `combat.md`, `data.md`, `determinism.md`, `rendering/*`, `platforms.md`,
+  `development/performance.md`. This is the first public cost model for "a cheap A* that feels like AoE2", and it is the
+  study item of the week.
+- **Farms are worked on the field, spot by spot.** A farmer stands *on* the plot, works one spot for one unit of food's
+  time, then steps a tile or so to another spot and works again — gathering while it steps, stopping only for the trip to
+  the drop site. The spot is a function of the farmer, the farm and the count of spots so far, so it needs no random
+  stream. A farm's food is not its own storage but its owner's **resource 36** at the moment it is laid, which is how a
+  farm tech reaches only farms laid after it. Also new: a load is taken only to a *finished* drop site, a spent farm
+  leaves the dead farm unit that is rebuilt by right-clicking it, a fish trap leaves its own dead unit for Fishing Ships.
+
+**Divergence.** Unchanged on D17 (both still put the dat's particulars inside the engine — genie by porting the game's
+structs and offsets, openaok by a build-time `rules.json`; neither has moved toward our four layers) and on D18 (no
+original art from either; their player-colour work is a renderer fact, below). What is new:
+
+- **Platform is now a real difference and their answer is better than our absence of one.** Six targets including phones
+  and a console, from one source tree, with the interface laid out in the original's pixel space and scaled at the end.
+  That is exactly the shape D18's asset pack wants — sprite refs stay at original resolution and a different screen is a
+  scale factor, not a second layout. Cost to us: a HAL boundary and a fixed frame, which are meaningful decisions and
+  cannot be judged before a renderer exists. Record it, do not adopt it yet.
+- **U7: still one integer A*, and the published cost model is complete.** `kStraight 10`, `kDiagonal 14`,
+  `kBesideClosed 4`, `kPastStanding 40`; octile distance raised by 8 per-layer landmark distance fields (corners and
+  edge middles, measured at load); short routes budgeted `256 + 64 x` their length, others 20,000 expansions; ties
+  broken by one 64-bit key. New this week: **shared walks** (a route planned this tick for the same point, on the same
+  ground, from within 2 tiles, is copied rather than searched), **marching** (a group is left out of the standing list it
+  would plan around), and **a crowd over 32 tiles at the goal costs nothing to cross** — the route goes straight in and
+  units stop against whoever they meet, which is the opposite of our "go inside / garrison" (D85/D76). Nothing in the
+  recorded decision changes; the shared walk is the one piece we do not have and could use.
+- **Determinism.** Their gate is our `no_float.rs` (a script that greps simulation code for float literals) plus a golden
+  world hash; their tick states the rule "where an outcome depends on which entity goes first, collect them and sort by
+  id". genie's T4 gives the mechanism behind U18's "sequence, not a snapshot" — an object is out of the world's id table
+  while it updates — but no project yet says whether a unit killed earlier in a tick still swings.
+- **Asset pipeline.** openaok bakes each player's colour into shared growing texture pages so a screen full of sprites
+  draws in a few batches, and indexes graphics through a table built once. Both are "entity+state+owner → one sprite id in
+  a dense table" facts, which is the asset pack's core; neither is a dat format decision that touches us.
+
+**Study list.** The guide's `docs/general/resources/resources.md` entries for 34 ("Unused Resource 034 … known to sometimes
+have some values" — exactly where the Aztecs' lone `2.0` sits), 36, 62, 63, 78, 195 and 196, and its
+`docs/general/damage_calculation.md` class table for U3; openaok's `docs/engine/economy.md` ("Its food" and "On the
+field", about 60 lines), `docs/engine/pathfinding.md` ("Who stands in the way", "Units sent together", "The budget" —
+about 150 lines) and `docs/engine/platforms.md` for the frame model; genie's `3e13b4df`, `bd106a43` and `a7628788` commit
+bodies.
+
+**Never copy.** The UGC guide is **GPL-3.0**, and it is new to this list precisely because a docs repository feels
+harmless: the ids and the names are facts, its prose and the arrangement of its tables are not. Take the id, write our own
+sentence, cite the page. genie is AGPL-3.0; openaok is MIT but its dat reader is `genieutils`, LGPL-3.0. This week's "it is
+only a small function" candidate is openaok's `Farmland()`, about twenty lines — and what we want from it is the *rule*
+(the storage entry names which resource line a farm draws on; the owner's table gives the amount), not the function.
+
+**Open questions.**
+
+- **U19 closed** — with the correction above. What is left is ours, not the data's: `build` progress counts builder-ticks
+  and never reads resource 195, and a civ's `tech_tree_effect` is read only for its kind-2 bars, so the 1.3 is loaded and
+  unused. Two slices, test-first: the tech-tree effect's kind-1 sets applied at match start, and `build` progress
+  multiplied by resource 195 (0 meaning 1.0). Test: a Spanish barracks reaches 100% in 1.3x fewer working ticks than a
+  British one, on the same ground.
+- **U20 new** — the farm food base is 175 (dat, resource 36), not 250; the three techs add to it and the Chinese team bonus
+  adds 45. `farm_food_total` adds the techs on top of the published 250, so Horse Collar gives 325 where the game gives
+  250. The guide names the resource, openaok reads it the same way, and our own file agrees on the base; the fix is to
+  read the base from content per civ rather than from a constant.
+- **U8 answered** — the 211-entry array is the player-resource table, named entry by entry, and the 31 playable civs agree
+  on every value except index 34, which the community table itself calls "unused but known to sometimes have some values".
+  Civ identity is not here, again (U13). The one action left is to decide whether the content pack carries the names.
+- **U3 answered** by the class table (0–37); the "Base Armour of 1000" claim needs an oracle test before it enters
+  `combat.md`.
+- **U18 unchanged, third week**, now with the id-table detail. **U7 updated**: shared walks, and a crowd at the goal is
+  crossed rather than gone round.

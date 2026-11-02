@@ -64,8 +64,8 @@ the outlier**, and it is now resolved by decision rather than by measurement (D5
 id 50) **0.400**. Checked and ruled out: `work_value1` is 1.0 on every gather task, so nothing
 scales 0.530 down to a plausible number.
 
-**Taken: effective farm rate = 0.400**, the farm building's own `work_rate`. 250 food lasts
-625 s at 0.400, 472 s at 0.530, ~784 s at the published 0.319.
+**Taken: effective farm rate = 0.400**, the farm building's own `work_rate`. A 250-food farm (base 175 plus Horse
+Collar, see "Farm and decay") lasts 625 s at 0.400, 472 s at 0.530, ~784 s at the published 0.319.
 
 Two hypotheses tested and rejected, so they don't get re-litigated:
 
@@ -117,8 +117,19 @@ is not a cost.
 
 ## Farm and decay
 
-`unit.resource_decay_rate` and the farm's 480 HP are in the data; how farm food depletes
-(250 per farm, and whether decay interacts) is **not** stated — **unknown**, oracle test.
+`unit.resource_decay_rate` and the farm's 480 HP are in the data. **How much food a farm holds is now known** (U20,
+2026-11-02): the base is **resource 36 = 175** in every playable civ's row, and the three farm techs *add* to that line —
+Horse Collar `[1, 36, 1, -1, 75]`, Heavy Plow +125, Crop Rotation +175, the Chinese team bonus +45 — so 175 + 75 = 250,
+the published figure we had taken for the base. Two independent sources read it the same way: the UGC guide's resource
+table names 36 "farm food amount — default 175, Chinese 220, what horse collar etc. modify", and `Zaydme/openaok` takes
+a farm's food from its owner's resource 36 at the moment the farm is laid, which is why a farm tech reaches only farms
+laid after it. **Our `economy.toml` still has `food_per_farm = 250` as the base and `Sim::farm_food_total` adds the techs
+on top of it, so a Horse Collar farm holds 325** where the game holds 250 — that is U20 in `README.md`.
+
+Whether decay interacts with farm food is **unknown**. So is one behaviour: openaok says a farmer works *standing on* the
+plot, taking a unit of food per spot and stepping to another spot between units, gathering while it walks; ours stands
+beside the plot and draws continuously. Totals agree, positions and timing do not, and it is cheap to oracle-test — watch
+where the villager stands on a farm, and whether food arrives in whole units or smoothly.
 
 ## The gather loop as implemented (2026-10-25)
 
@@ -148,7 +159,9 @@ next tree of the same kind), and movement ignores obstacles until A* lands.
 - ~~**U11** farming rate~~ — **resolved by decision (D5)**: effective rate 0.400, the farm
   building's own `work_rate`, capping the villager's 0.530. Rationale and the cheap
   re-measurement test are in `docs/decisions.md`.
-- **U8** the 190-entry per-civ `resources` array: likely holds civ-wide economic constants.
+- ~~**U8** the 190-entry per-civ `resources` array~~ — **answered 2026-11-02**: it is the player-resource table, named
+  entry by entry in the UGC guide's `resources.md`, and the playable civs agree on every value but index 34 (U8 in
+  `README.md`).
 - Farm depletion and resource decay semantics (`resource_decay_rate` is in the dat, unused
   so far).
 - Whether the villager *swaps unit id* on task change (variants suggest yes) — the sim needs
