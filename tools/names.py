@@ -74,7 +74,28 @@ def slug(text: str) -> str:
     return text
 
 
-def name_table(records: list[Record], strings: dict[int, str]) -> tuple[dict[int, str], list[str]]:
+def upgrade_targets(effects_path: Path) -> set[int]:
+    """Units an upgrade turns *other* units into: the variants, not the base.
+
+    Which member of a name collision gets the bare word matters. `Town Center` is both 109 (what a match starts with,
+    and what every age replaces) and 71 (what it becomes) - and by id alone 71 would take the name and the one the
+    engine actually uses would read `town_center_2`. So the unit that is nobody's upgrade target keeps the plain word.
+    """
+    if not effects_path.exists():
+        return set()
+    # Read as text rather than through `tomllib`: this tool runs in the importer's environment, whose interpreter is
+    # older than 3.11. The generated file writes every command as `[kind, a, b, c, value]`, and kind 3 is "upgrade",
+    # so the two numbers after it are the pair.
+    text = effects_path.read_text()
+    targets = {int(to) for _, to in re.findall(r"\[3, (\d+), (\d+),", text) if int(to) > 0}
+    if len(targets) < 100:
+        raise SystemExit(f"{effects_path}: only {len(targets)} upgrade targets found - the file's shape has changed")
+    return targets
+
+
+def name_table(
+    records: list[Record], strings: dict[int, str], targets: set[int] | None = None
+) -> tuple[dict[int, str], list[str]]:
     """`id -> identifier`, plus every problem found while building it.
 
     Collisions are resolved by suffixing the later id (`arrow`, `arrow_2`), because the game really does carry 54 units
@@ -88,7 +109,10 @@ def name_table(records: list[Record], strings: dict[int, str]) -> tuple[dict[int
     corpse_of: dict[int, int] = {
         record.dead_unit_id: record.id for record in records if record.dead_unit_id > 0
     }
-    for record in sorted(records, key=lambda r: r.id):
+    # Base units before variants, then by id: the plain word belongs to the unit that is not an upgrade's result.
+    targets = targets or set()
+    order = sorted(records, key=lambda r: (r.id in targets, r.id))
+    for record in order:
         if record.id in corpse_of:
             continue
         text = strings.get(record.name_str_id)
@@ -111,7 +135,7 @@ def name_table(records: list[Record], strings: dict[int, str]) -> tuple[dict[int
         by_id[record.id] = name
 
     # Corpses, from the thing that leaves them - and overriding a code-derived name if one already exists.
-    for record in sorted(records, key=lambda r: r.id):
+    for record in order:
         if record.dead_unit_id <= 0:
             continue
         base = by_id.get(record.id)
@@ -130,7 +154,7 @@ def name_table(records: list[Record], strings: dict[int, str]) -> tuple[dict[int
         owner[name] = record.dead_unit_id
         by_id[record.dead_unit_id] = name
     # Anything left (a record that is neither living nor anybody's corpse): the code, or the id.
-    for record in sorted(records, key=lambda r: r.id):
+    for record in order:
         if record.id in by_id:
             continue
         name = slug(record.code) or f"unit_{record.id}"
@@ -199,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
 
     records = read_dat(args.dat)
     strings = load_strings(args.strings)
-    table, problems = name_table(records, strings)
+    table, problems = name_table(records, strings, upgrade_targets(CONFIG / "gamedata" / "effects.toml"))
 
     populated = [record for record in records if record.hp > 0]
     unnamed = [record.id for record in populated if record.id not in table]

@@ -55,6 +55,17 @@ class TableTests(unittest.TestCase):
     def test_a_collision_is_reported_rather_than_hidden(self):
         self.assertTrue(self.problems, "the second 'Knight' is worth a line in the report")
 
+    def test_the_base_unit_keeps_the_plain_word_and_its_variant_is_suffixed(self):
+        # `Town Center` is 71 (what an age turns the centre into) and 109 (the one a match starts with). By id alone 71
+        # would take the name and the unit the engine actually uses would read `town_center_2` - backwards.
+        pack = [
+            names.Record(id=71, code="RTWC3", name_str_id=6001, hp=2400, dead_unit_id=-1),
+            names.Record(id=109, code="RTWC", name_str_id=6001, hp=2400, dead_unit_id=-1),
+        ]
+        table, _ = names.name_table(pack, {6001: "Town Center"}, targets={71})
+        self.assertEqual(table[109], "town_center", "the base unit is not the upgrade's result")
+        self.assertEqual(table[71], "town_center_2")
+
     def test_two_animals_sharing_one_body_name_it_after_the_first(self):
         shared = [
             names.Record(id=5, code="BOARX", name_str_id=6001, hp=75, dead_unit_id=7),
