@@ -2413,3 +2413,32 @@ near-identical blocks; D91's table is the thing that would back the change if th
 
 **What this buys immediately:** `enemy_share`, `enemy_at_least`, `army_at_least` and `health_share_below` are conditions
 over D92's memory, so scouting, raid response, attack timing and retreat are the same increment, not four.
+
+## D94 - AI behaviour lives in its own folder, apart from the mechanics config (2026-11-01)
+
+The owner's instruction, verbatim: **"I want to keep separated AI from normal configs. Whatever sets things like height
+bonus and other internals it a configuration. Whatever sets how the AI player behaviour like which units to train how
+many villagers to sent here and there etc. that has to go to separate folder for AI."**
+
+Settled by that sentence:
+
+- **`config/` is the world**: sim pacing and scales, map, economy roles and gather rates, combat including the height
+  bonus, movement, resources, `gamedata/`, overrides. None of it decides *what a player does*.
+- **AI behaviour moves out**: the `[policy]` villager-share table (today in `economy.toml`) and every `[[rule]]` block
+  (today inside the scenario files) are AI, not configuration, and they belong in an AI folder.
+
+Two consequences that follow rather than being chosen: the loader has to read AI content from the new place (and the
+pack's identity, D19, has to cover it, or two players could disagree about the AI and desync), and every test that
+loads `[policy]` or a `[[rule]]` points at the new files.
+
+**Shape still open - the questions put to the owner in the same breath:**
+
+1. **Location**: `config/ai/` (one content pack, one hash, one handshake) or a top-level `ai/` beside `config/`
+   (clearly separate, but a second thing to version and hash). *Default if nothing is said: `config/ai/`.*
+2. **Granularity**: one file per **personality** (`aggressive.toml`, `booming.toml`), reusable across matches and named
+   per seat by the match, or one AI file per match. *Default: personalities.*
+3. **Do the rules leave the scenario files entirely?** Then a scenario is what it says - timed scripted steps - and it
+   names the personality its seats use. *Default: yes, rules leave; the acceptance's fourteen rules become a personality
+   and the scenario points at it.*
+4. **Is a scenario's timed step (`at_seconds = 300`, build a barracks) AI?** It is a scripted command, not a decision
+   the engine makes, so it stays with the match. *Default: steps stay, rules move.*
