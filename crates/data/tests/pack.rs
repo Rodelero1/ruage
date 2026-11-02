@@ -19,6 +19,33 @@ fn config_dir() -> Option<PathBuf> {
     Some(repo("config"))
 }
 
+
+/// A copy of the pack, personalities included: the identity covers `config/ai/` as a **directory**, so a scratch pack
+/// without it would differ for the wrong reason and every "one byte changed" test would name two files.
+fn copy_pack(dir: &std::path::Path, scratch: &std::path::Path) {
+    std::fs::create_dir_all(scratch).expect("scratch dir");
+    for name in PACK_FILES.iter().copied().chain(["overrides.toml"]) {
+        let from = pack_path(dir, name);
+        if !from.exists() {
+            continue;
+        }
+        let to = pack_path(scratch, name);
+        std::fs::create_dir_all(to.parent().expect("a parent")).expect("dir");
+        std::fs::copy(&from, &to).expect("copy");
+    }
+    let ai = dir.join("ai");
+    if ai.is_dir() {
+        std::fs::create_dir_all(scratch.join("ai")).expect("ai dir");
+        for entry in std::fs::read_dir(&ai).expect("read ai") {
+            let path = entry.expect("entry").path();
+            if path.extension().and_then(|e| e.to_str()) == Some("toml") {
+                std::fs::copy(&path, scratch.join("ai").join(path.file_name().expect("name")))
+                    .expect("copy personality");
+            }
+        }
+    }
+}
+
 #[test]
 fn the_project_pack_loads_and_has_an_identity() {
     let Some(dir) = config_dir() else { return };
@@ -28,10 +55,22 @@ fn the_project_pack_loads_and_has_an_identity() {
         "an empty hash would compare equal to everything"
     );
     assert_eq!(pack.identity().len(), 16, "hex of a u64");
-    // The eight tables, plus `overrides.toml` when the pack has one - it is content too, because two
-    // peers with different overrides are playing different games (D45).
-    let expected = PACK_FILES.len() + usize::from(pack.parts.contains_key("overrides.toml"));
+    // The nine tables, plus `overrides.toml` when the pack has one - it is content too, because two
+    // peers with different overrides are playing different games (D45) - plus every personality under `ai/`, which the
+    // loader walks rather than listing (D94): a scenario may name any of them.
+    let personalities = std::fs::read_dir(dir.join("ai"))
+        .expect("the project has an ai folder")
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("toml"))
+        .count();
+    assert!(personalities > 0, "the base personality is the pack's own AI");
+    let expected =
+        PACK_FILES.len() + usize::from(pack.parts.contains_key("overrides.toml")) + personalities;
     assert_eq!(pack.parts.len(), expected);
+    assert!(
+        pack.parts.contains_key("ai/base.toml"),
+        "the personality is in the identity, named as the loader names it"
+    );
     assert_eq!(pack.resources.count(), 4);
     // The tables a pack carries are the ones its files hold - compared against a direct load of the same file rather
     // than against a remembered count. A magic number here fails the day a civ is added, for a reason that has nothing
@@ -76,16 +115,7 @@ fn one_changed_byte_changes_the_identity_and_names_the_file() {
 
     // A copy of the pack with a comment added to one file: same values, different bytes.
     let scratch = repo("build/pack-test");
-    std::fs::create_dir_all(&scratch).expect("scratch dir");
-    for name in PACK_FILES.iter().copied().chain(["overrides.toml"]) {
-        let from = pack_path(&dir, name);
-        if !from.exists() {
-            continue;
-        }
-        let to = pack_path(&scratch, name);
-        std::fs::create_dir_all(to.parent().expect("a parent")).expect("dir");
-        std::fs::copy(&from, &to).expect("copy");
-    }
+    copy_pack(&dir, &scratch);
     let path = pack_path(&scratch, "combat.toml");
     let mut combat = std::fs::read_to_string(&path).expect("read");
     combat.push_str("\n# a comment, which changes nothing about the game\n");
@@ -136,8 +166,8 @@ fn every_pack_file_is_required() {
     }
     assert_eq!(
         PACK_FILES.len(),
-        10,
-        "seven behaviour files, two tables of research, the civ bonuses and the AI personality"
+        9,
+        "seven behaviour files, two tables of research and the civ bonuses - personalities are a directory, not a list"
     );
     let dir = Path::new(".");
     assert!(dir.exists());
@@ -152,16 +182,7 @@ fn a_pack_with_a_different_override_is_a_different_pack() {
 
     let scratch = repo("build/pack-override-test");
     let _ = std::fs::remove_dir_all(&scratch);
-    std::fs::create_dir_all(&scratch).expect("scratch dir");
-    for name in PACK_FILES.iter().copied().chain(["overrides.toml"]) {
-        let from = pack_path(&dir, name);
-        if !from.exists() {
-            continue;
-        }
-        let to = pack_path(&scratch, name);
-        std::fs::create_dir_all(to.parent().expect("a parent")).expect("dir");
-        std::fs::copy(&from, &to).expect("copy");
-    }
+    copy_pack(&dir, &scratch);
     // Same tables, one hand-written value different.
     std::fs::write(
         scratch.join("overrides.toml"),
@@ -203,16 +224,7 @@ fn a_civs_bonuses_are_part_of_the_pack_identity() {
     let pack = ContentPack::load(&dir).expect("the project pack");
 
     let scratch = repo("build/pack-civs");
-    std::fs::create_dir_all(&scratch).expect("scratch dir");
-    for name in PACK_FILES.iter().copied().chain(["overrides.toml"]) {
-        let from = pack_path(&dir, name);
-        if !from.exists() {
-            continue;
-        }
-        let to = pack_path(&scratch, name);
-        std::fs::create_dir_all(to.parent().expect("a parent")).expect("dir");
-        std::fs::copy(&from, &to).expect("copy");
-    }
+    copy_pack(&dir, &scratch);
     let path = pack_path(&scratch, "civs.toml");
     let mut civs = std::fs::read_to_string(&path).expect("read");
     civs.push_str("\n# a civ bonus edited in place\n");
@@ -227,5 +239,30 @@ fn a_civs_bonuses_are_part_of_the_pack_identity() {
         changed.differences(&pack),
         vec!["civs.toml".to_owned()],
         "and the difference names the file, so the handshake can refuse and say why"
+    );
+}
+
+/// Every personality a scenario can name is content, so every one of them must be in the identity. `PACK_FILES` is a
+/// static list and cannot say "whatever is in `config/ai/`", so the loader walks the directory; this test is what keeps
+/// that true when a second personality is added and someone forgets to list it.
+#[test]
+fn a_personality_outside_the_fixed_list_is_part_of_the_identity() {
+    let Some(dir) = config_dir() else { return };
+    let pack = ContentPack::load(&dir).expect("the project pack");
+
+    let scratch = repo("build/pack-ai");
+    let _ = std::fs::remove_dir_all(&scratch);
+    copy_pack(&dir, &scratch);
+
+    // A personality nobody listed anywhere: the scenario would load it, so the handshake has to see it.
+    std::fs::write(scratch.join("ai").join("rush.toml"), "schema = 1\n")
+        .expect("write an unlisted personality");
+    let changed = ContentPack::load(&scratch).expect("the edited pack still loads");
+
+    assert_ne!(changed.hash, pack.hash, "a personality the peers do not share is a different game");
+    assert_eq!(
+        changed.differences(&pack),
+        vec!["ai/rush.toml".to_owned()],
+        "and the difference names it, so a refusal can say which file"
     );
 }

@@ -1053,3 +1053,27 @@ fn a_scenario_held_as_text_cannot_name_a_personality() {
         "and says what to do: {why}"
     );
 }
+
+/// `ai` is a **name**, not a path: it is resolved inside `config/ai/`, and anything that could leave that directory is
+/// refused before the filesystem is touched. Verified against `Path::join` before the rule existed: `"../economy"` gave
+/// `config/ai/../economy.toml` and `"/etc/passwd"` gave `/etc/passwd.toml`, because an absolute path replaces the base.
+#[test]
+fn a_personality_name_that_could_escape_the_folder_is_refused() {
+    let dir = scratch("escape");
+    for name in ["../economy", "/etc/passwd", "", "Base", "a b", "base.toml", "a/b"] {
+        let file = dir.join(format!("m{}.toml", name.replace(['/', '.', ' '], "_")));
+        std::fs::write(
+            &file,
+            format!("schema = 2\nduration_seconds = 60.0\nai = \"{name}\"\n"),
+        )
+        .expect("write");
+        let why = match load_scenario_file(&file) {
+            Ok(scenario) => panic!("{name:?} was accepted as {:?}", scenario.ai),
+            Err(why) => why,
+        };
+        assert!(
+            why.contains("is not a personality name"),
+            "{name:?} must be refused as a name, not as a failed read: {why}"
+        );
+    }
+}

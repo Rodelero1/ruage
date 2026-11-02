@@ -14,7 +14,7 @@
 //! - its cost is real and accepted: editing a comment changes the hash, so a modded pack must be
 //!   re-published rather than tweaked in place. That is the correct behaviour for a shared pack.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::{
@@ -26,7 +26,7 @@ use crate::{
 /// Every file a match reads. The order here is the order the hash is computed in, so adding a file
 /// changes every pack's hash - which is correct, because a build that needs a file an older build
 /// did not is not the same content.
-pub const PACK_FILES: [&str; 10] = [
+pub const PACK_FILES: [&str; 9] = [
     "sim.toml",
     "economy.toml",
     "map.toml",
@@ -43,10 +43,12 @@ pub const PACK_FILES: [&str; 10] = [
     // cheapest possible cheat. (`movement.toml` is still outside deliberately: nothing reads it yet, and hashing a file
     // nobody consumes would look like protection without being any. It joins this list in the commit that reads it.)
     "civs.toml",
-    // **The AI's behaviour** (D94). It is not world data, but it decides what a player does, so two peers with different
-    // personalities are playing different games. Unlike `civs.toml` this file *is* read (by the scenario loader).
-    "ai/base.toml",
 ];
+
+/// The folder a scenario resolves a personality in (D94). It is a **directory**, not a file list: a scenario may name any
+/// personality it likes, so everything under `ai/` is content and everything under `ai/` is hashed. Listing one file and
+/// letting the loader open others was the `civs.toml` hole again - a peer playing a different AI shared our identity.
+pub const AI_DIR: &str = "ai";
 
 /// Where a pack file lives relative to the config directory. `units.toml` is under `gamedata/`
 /// because it is generated (D8) while the rest are hand-written; a pack is one thing to a handshake
@@ -120,6 +122,42 @@ impl ContentPack {
         let techs = load_techs_file(&pack_path(dir, "techs.toml"))?;
         let effects = load_effects_file(&pack_path(dir, "effects.toml"))?;
 
+        // Personalities: every `*.toml` under `ai/`, in sorted order, so the hash cannot depend on the filesystem's
+        // order. An unknown extension is ignored rather than refused - an editor's `.swp` is not a game file - but a
+        // `.toml` is always content and is always hashed.
+        let mut ai_names: Vec<String> = Vec::new();
+        let ai_dir = dir.join(AI_DIR);
+        if ai_dir.is_dir() {
+            for entry in std::fs::read_dir(&ai_dir).map_err(|err| ConfigError::Io {
+                path: ai_dir.display().to_string(),
+                detail: err.to_string(),
+            })? {
+                let path = entry.map_err(|err| ConfigError::Io {
+                    path: ai_dir.display().to_string(),
+                    detail: err.to_string(),
+                })?
+                .path();
+                if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
+                    continue;
+                }
+                let name = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .ok_or_else(|| ConfigError::Io {
+                        path: path.display().to_string(),
+                        detail: "a personality's name is not valid UTF-8".to_owned(),
+                    })?;
+                let key = format!("{AI_DIR}/{name}");
+                let data = std::fs::read(&path).map_err(|err| ConfigError::Io {
+                    path: path.display().to_string(),
+                    detail: err.to_string(),
+                })?;
+                parts.insert(key.clone(), fnv1a(&data));
+                ai_names.push(key);
+            }
+            ai_names.sort();
+        }
+
         // Hand-written overrides, applied after everything is loaded. The file is optional - a pack
         // written before the layer existed has none, and must keep its hash - but when it is there it
         // is part of the pack's identity: two peers with different overrides are playing different
@@ -150,6 +188,10 @@ impl ContentPack {
             hash = fnv1a_update(hash, b"overrides.toml");
             hash = fnv1a_update(hash, &part.to_le_bytes());
         }
+        for name in &ai_names {
+            hash = fnv1a_update(hash, name.as_bytes());
+            hash = fnv1a_update(hash, &parts[name].to_le_bytes());
+        }
 
         Ok(ContentPack {
             sim,
@@ -168,15 +210,14 @@ impl ContentPack {
 
     /// Files whose hash differs from another pack's. Empty means the two agree.
     pub fn differences(&self, other: &ContentPack) -> Vec<String> {
-        let mut out = Vec::new();
-        for name in PACK_FILES.iter().copied().chain(["overrides.toml"]) {
-            let mine = self.parts.get(name).copied();
-            let theirs = other.parts.get(name).copied();
-            if mine != theirs {
-                out.push(name.to_owned());
-            }
-        }
-        out
+        // Every part in either pack, not a fixed list: a personality is found by walking `ai/`, so a file one peer has
+        // and the other does not is exactly the sort of difference a refusal must name.
+        let names: BTreeSet<&String> = self.parts.keys().chain(other.parts.keys()).collect();
+        names
+            .into_iter()
+            .filter(|name| self.parts.get(*name) != other.parts.get(*name))
+            .cloned()
+            .collect()
     }
 }
 

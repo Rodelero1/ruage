@@ -20,6 +20,7 @@ use crate::{Command, EntityId, EntityKind, World};
 /// `[role]` table is the vocabulary, so a scenario for a pack of our own is writable at all (D17).
 pub const SCENARIO_SCHEMA: u32 = 2;
 
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scenario {
@@ -658,6 +659,26 @@ pub fn load_scenario_str(text: &str, path: &str) -> Result<Scenario, String> {
     Ok(scenario)
 }
 
+/// A personality's name, resolved inside `ai/`. It must therefore *be* a name: lowercase letters, digits, `-` and `_`.
+///
+/// This is not decoration. `Path::join` honours `..` and replaces the base for an absolute path, which was checked with
+/// `rustc` against the real implementation: `"../economy"` gave `config/ai/../economy.toml` and `"/etc/passwd"` gave
+/// `/etc/passwd.toml`. Neither is a personality, and a scenario that names one should hear that rather than get a
+/// confusing "cannot be read" from a file it was never meant to reach.
+fn personality_path(dir: &std::path::Path, name: &str) -> Result<std::path::PathBuf, String> {
+    let valid = !name.is_empty()
+        && name.len() <= 64
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_');
+    if !valid {
+        return Err(format!(
+            "{name:?} is not a personality name: use lowercase letters, digits, '-' and '_' (it is resolved inside ai/)"
+        ));
+    }
+    Ok(dir.join("ai").join(format!("{name}.toml")))
+}
+
 pub fn load_scenario_file(path: &std::path::Path) -> Result<Scenario, String> {
     let text = std::fs::read_to_string(path).map_err(|err| format!("{}: {err}", path.display()))?;
     let mut scenario: Scenario =
@@ -672,7 +693,7 @@ pub fn load_scenario_file(path: &std::path::Path) -> Result<Scenario, String> {
         ));
     }
     let dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
-    let file = dir.join("ai").join(format!("{name}.toml"));
+    let file = personality_path(dir, &name).map_err(|why| format!("{}: {why}", path.display()))?;
     let text = std::fs::read_to_string(&file).map_err(|err| {
         format!(
             "{}: names personality {name:?}, but {} cannot be read: {err}",
@@ -680,8 +701,8 @@ pub fn load_scenario_file(path: &std::path::Path) -> Result<Scenario, String> {
             file.display()
         )
     })?;
-    let personality: Personality =
-        toml::from_str(&text).map_err(|err| format!("{}: {err}", file.display()))?;
+    let personality: Personality = toml::from_str(&text)
+        .map_err(|err| format!("{}: personality {}: {err}", path.display(), file.display()))?;
     scenario.rule = personality.rule;
     Ok(scenario)
 }
