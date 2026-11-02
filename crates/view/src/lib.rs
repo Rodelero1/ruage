@@ -705,7 +705,11 @@ pub fn draw_order(snapshot: &Snapshot) -> Vec<&EntityView> {
     // Depth first, then a **layer**, then the id. The layer exists because this renderer has no sprite heights: a berry
     // bush is drawn as a short thing, but at greater depth it would paint over the villager working it - and that is
     // exactly what the owner saw in `make run` ("they disappeared as if entering a building"). So the ground cover goes
-    // down first, then buildings, then the things that must never be lost behind scenery, then shots in the air.
+    // down first, then everything else.
+    //
+    // Keys are derived *inside* the comparator on purpose: precomputing them was tried and measured **slower** (10,000
+    // entries: 686.8 us against 472.3 us), because the extra vector and copy cost more than a match on an enum. The
+    // number is in `docs/reviews/2026-11-02-gatherer-drawing.md`.
     order.sort_by(|a, b| {
         layer_of(a)
             .cmp(&layer_of(b))

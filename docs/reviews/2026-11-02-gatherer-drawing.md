@@ -59,3 +59,45 @@ comment at the end of the file: a second copy of the header appeared mid-file an
 (`expected outer doc comment`, `repo` defined twice). Rebuilt the file from the original plus the new test, and the
 lesson - never anchor an append on a doc comment, and read the file after appending - is the same one already recorded
 for derive/use blocks.
+
+## Addendum: the adversarial review he asked about, honestly (2026-11-02)
+
+The question was whether this slice got an adversarial review for **performance and stability**, not whether a review
+file existed. Answering it properly found that the first pass did not: it had one mutation and an *estimated* frame
+number. What follows is what was measured and attacked.
+
+### Performance, measured
+
+| what | number |
+|---|---|
+| a frame at 960x720 with 126 entities (debug build) | **6,508 us** and **8,154 us** on two runs - the spread is ~25%, so frame time is the wrong instrument for a per-comparison change |
+| sort of 10,000 entries, three keys derived inside the comparator | **472.3 us** |
+| the same sort with the keys precomputed into a vector first | **686.8 us - 0.69x, i.e. slower** |
+
+The second row is the finding: **precomputing the sort keys was tried and reverted.** The reasoning for it was sound in
+principle (a comparator runs `depth_of` O(n log n) times) but wrong in practice, because a vector of `(layer, depth, id,
+&view)` costs an extra allocation and copy that outweighs a `match` on a `Copy` enum. The comparator form shipped, with
+the number in a comment so the next session does not "optimise" it back.
+
+A first attempt at this measurement compared a two-key `(f32, u32)` tuple against a three-key `(u8, f32, u32)` one and
+reported "3.2x slower" - that measured **tuple size**, not the extra key, and it is recorded here because it was a
+plausible wrong answer that nearly became a decision.
+
+### Stability, attacked
+
+- **Mutation**: with `layer_of` neutralised (comparing a tuple with itself), `a_worker_behind_a_bush_is_not_hidden_by_it`
+  fails with its own message; restored, it passes. So the new ordering rule is pinned, not merely present.
+- **Regression guard**: the two pre-existing depth tests still hold - units are covered by buildings, and back-to-front
+  order within a pass is unchanged. An earlier four-layer version (units above buildings) broke
+  `a_unit_behind_a_building_is_covered_by_it`, which is why the shipped rule is two passes.
+
+### Not attacked, and named
+
+- **Same-depth ties**: a resource and a unit at exactly equal depth rely on the layer, and the layer decides - but no test
+  constructs that pair. The bush test uses `(10,10)` against `(11,11)`, i.e. strictly greater depth.
+- **Fog**: a *remembered* resource (drawn as memory) versus a visible unit is not tested; the layer applies to both, which
+  is presumably right and is unverified.
+- **Projectiles**: they are in the same layer as units, so an arrow at lower depth is drawn *behind* a unit. Probably
+  harmless at a few pixels; not decided deliberately.
+- **Frame cost with many entities**: the measurement is at 126 entities, which is what a scenario produces. A 1,000-unit
+  fight would put the sort at the scale where the comparator's O(n log n) matters, and nothing measures that today.
