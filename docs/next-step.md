@@ -2575,3 +2575,19 @@ scenario that has both rules and a personality, and refuses `ai` on a scenario h
 3. **`config/ai/civ/<name>.toml`** - the per-civ delta (D95): what this civ fields where the line's last tier differs.
 4. **Line resolution** - `train { line = "knight" }` takes the last member the civ can train.
 5. **Groups, then spatial, then raiding** (D96), as recorded above.
+
+### Readable names (2026-11-02, D97)
+
+`config/names.toml` holds 1,390 identifiers - 1,132 populated units plus corpses - derived from the install's string
+table through the dat's `name_str_id`, because the dat's codes are shifted (283 says `PALDN` and is the cavalier).
+`tools/names.py` rebuilds it; `tools/test_names.py` (13 tests) checks uniqueness, snake_case and the four shifted cases.
+
+**Next in this line:**
+
+1. **Resolve names in the engine** - `[role]` currently repeats `villager = 83`; with names it can say `villager` and let
+   `names.toml` be the vocabulary, so refusals read "no villager" rather than "no unit 83".
+2. **Names for the things the effect table references** - the ~30 armour/attack classes (3 pierce, 4 melee, 8 cavalry,
+   15 archers...), so an effect command can be written `[add, knight, cavalry, +15]` instead of `[4, 38, 8, 15]`. That is
+   the prerequisite for flipping the tables to name keys.
+3. **Then the flip** - tables keyed by name with `id` kept as a field, once every reference has a word. This is the step
+   that makes the configuration ours, and the owner's plan is to commit it at that point (no reimport).

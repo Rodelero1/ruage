@@ -2506,3 +2506,33 @@ tests. One slice after groups exist - it cannot land first, because "near" has n
 
 Still the owner's call, if he disagrees: whether the radius is one number for every group or a per-group field (a raider
 cares about 8 tiles, a siege group about 12).
+
+## D97 - Units get readable names, derived from the game's own strings (owner, 2026-11-02)
+
+The owner's instruction: *"They also contain legacy and rather cryptic names. I would like those names to be human
+readable like 'villager', 'elite_cataphract' etc."* - every populated unit, corpses included.
+
+**Where the names come from, and why not the codes.** The dat's five-letter codes are neither names nor stable: 283 says
+`PALDN` and is the cavalier, 569 says `HEROC` and is the paladin, 7 says `XBOWM` and is the skirmisher, 74 says `SPRMN`
+and is the militia. Every record instead carries `name_str_id`, and the install's string table turns it into "Elite
+Cataphract". So the table is **derived and reviewed, not typed**: `tools/names.py` joins the two and normalises the
+result to snake_case.
+
+**What is committed and what is not.** `config/names.toml` is ours - a list of identifiers - and is committed. The
+extracted tables beside it stay out of git under D8, unchanged for now (the owner chose "C now": pin and verify, ship
+later). The owner's plan is *no reimport*: once the configuration no longer needs the dat's numbering, the tables become
+hand-maintained content and can be committed, because the ids were the only thing that had to be extracted.
+
+**The rules the table follows.**
+
+- A name is an **identifier**: lowercase snake_case, unique, and therefore a rename is a migration.
+- A unit with `name_str_id = 5000` has no name in the game either (the editor's props: `TERRC`, `WNDR`,
+  `INDESTRUCT`), so it falls back to its code, slugged - ugly on purpose, and honest about its origin.
+- A corpse is named after what leaves it: 449 is `scout_cavalry_corpse`, and when two animals share one body the base
+  animal names it.
+- Duplicate display names are suffixed by ascending id (`barracks`, `barracks_2`): 413 of them, mostly age variants of
+  one building.
+
+**Direction (owner, same message):** ids should disappear from the configuration where feasible, and names become the
+reference. `names.toml` is keyed by id today because every table still is; flipping the tables to name keys is the next
+step, and it needs names for every reference the effect table makes - units *and* the ~30 armour classes.

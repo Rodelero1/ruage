@@ -6,7 +6,7 @@ this tree is either source data or supporting documentation.
 
 | | |
 |---|---|
-| Spec version | 1.55 |
+| Spec version | 1.56 |
 | Last updated | 2026-11-01 |
 | Decision status | **D1 = G1, D2 = file-based oracle, D17 = four layers with the resource enum deleted — see §6 and `docs/decisions.md`** |
 | Historical handoff | [`docs/age2hd.md`](docs/age2hd.md) — read it *through* the errata in §4 |
