@@ -76,6 +76,49 @@ readable and deterministic.
 feel like a program), then the memory conditions (D93), and only then consider `any_of`/`not`. A `.per` importer stays
 on the shelf with the price written above it, so nobody re-opens it casually.
 
+## What the original's scripts actually do, measured (2026-11-01)
+
+The install ships its AI as 39 `.per` files, **919 rules**, 262 KB of script. A census (counting facts and actions,
+never copying rule bodies) says what shape the *game's own* AI chose, which is the best available lead for ours:
+
+| what | count | reading |
+|---|---|---|
+| `goal` | 883 | the goal array is the only memory, and it is used constantly |
+| `can-research-with-escrow` / `can-research` | 373 / 123 | research is gated on affordability, not on a plan |
+| `unit-type-count-total` / `unit-type-count` | 285 / 219 | army size and per-type counts drive decisions |
+| `or` / `not` | 279 / 69 | boolean structure **is** used; our all-of `when` cannot express it |
+| `building-type-count-total` / `building-type-count` | 110 / 47 | "do I already have one" is a first-class question |
+| `can-build` / `can-train` | 51 / 74 | every build and train rule checks feasibility, not just desire |
+| `current-age`, `difficulty` | 77, 85 | age gates rules; difficulty is a *fact*, not a multiplier |
+| `set-strategic-number`, `up-modify-sn` | 331, 77 | tuning numbers are the main knob |
+| `set-goal`, `disable-self` | 133, 71 | memory and "run once" idioms |
+| `release-escrow` | 1,531 | every rule that reserves resources releases them; escrow is pervasive |
+| `chat-local-to-self` | 527 | the AI logs to itself - the ancestor of our refusal log |
+
+**Six leads, each a measured fact rather than a preference:**
+
+1. **Civ differences are civ-tagged rules inside shared files.** `(civ-selected ...)` appears **15 times** - e.g. the
+   economy's general rules carry a Briton-specific rule - rather than a script set per civilisation. The original picked
+   the "tag the exception where it lives" shape, not 31 overlays.
+2. **Personalities are separate small files** (`Dr3/personality p4 and 5.per`, `p6 and 8`, `p7`) and they mostly set
+   strategic numbers. So personality = tuning table; civilisation = tagged rules.
+3. **Difficulty is a fact**, gating rules (85 uses), not a handicap multiplier applied behind the AI's back - which is
+   the same reason our AI should not read the world's truth.
+4. **"Already have one" is the universal build guard**: `building-type-count-total < 1` (8) and `== 0` (14) before a
+   `build`. **A barracks a campaign or scenario provides needs no special case** - the guard asks the question that
+   covers it. This is the direct answer to the owner's point about provided buildings.
+5. **Escrow is an idiom we do not have**: 1,531 `release-escrow` calls, because the AI reserves resources for the rule
+   it is about to run and releases them when it does not. Our rules read the stock and hope nothing else spends it. Not
+   urgent, but it is why their rules can be written without ordering guards.
+6. **Boolean structure is real**: 279 `or`, 69 `not`. A `when` that is only all-of can express their *rules* only by
+   duplicating them, which is the maintenance cost the owner is worried about in a different place.
+
+**What that implies for civ-specific AI (not a decision):** the measured shape is *shared rules + civ tags + a tuning
+table per personality*, i.e. my families **B + C**, not 31 overlays and not pure derivation. The variation the owner
+described - fewer villagers on stone, more on wood, a different unit composition - is exactly a **tuning table** entry;
+the things a table cannot say (Saracens have no knight upgrade) are exactly a **tagged rule** entry. The open question
+is only how many of each we are willing to maintain.
+
 ## The gap, stated as two missing inputs
 
 Countering is not a new kind of AI behaviour. It is the same rule shape with two inputs it does not have:
