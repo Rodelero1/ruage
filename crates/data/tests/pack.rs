@@ -136,8 +136,8 @@ fn every_pack_file_is_required() {
     }
     assert_eq!(
         PACK_FILES.len(),
-        8,
-        "six behaviour files and two tables of research"
+        9,
+        "seven behaviour files, two tables of research and the civ bonuses"
     );
     let dir = Path::new(".");
     assert!(dir.exists());
@@ -191,5 +191,41 @@ fn a_pack_with_a_different_override_is_a_different_pack() {
             .raw(),
         0,
         "and the pack really carries the overridden value"
+    );
+}
+
+#[test]
+fn a_civs_bonuses_are_part_of_the_pack_identity() {
+    // The cheapest cheat there is: edit a civilisation's bonuses. Until 2026-11-01 `civs.toml` was loaded by the
+    // binaries *outside* the pack, so a player could raise their own civ's gathering rate and still pass the handshake.
+    // This test is what keeps it inside: remove "civs.toml" from PACK_FILES and it fails, naming no difference at all.
+    let Some(dir) = config_dir() else { return };
+    let pack = ContentPack::load(&dir).expect("the project pack");
+
+    let scratch = repo("build/pack-civs");
+    std::fs::create_dir_all(&scratch).expect("scratch dir");
+    for name in PACK_FILES.iter().copied().chain(["overrides.toml"]) {
+        let from = pack_path(&dir, name);
+        if !from.exists() {
+            continue;
+        }
+        let to = pack_path(&scratch, name);
+        std::fs::create_dir_all(to.parent().expect("a parent")).expect("dir");
+        std::fs::copy(&from, &to).expect("copy");
+    }
+    let path = pack_path(&scratch, "civs.toml");
+    let mut civs = std::fs::read_to_string(&path).expect("read");
+    civs.push_str("\n# a civ bonus edited in place\n");
+    std::fs::write(&path, civs).expect("write");
+
+    let changed = ContentPack::load(&scratch).expect("the edited pack still loads");
+    assert_ne!(
+        changed.hash, pack.hash,
+        "a civ bonus is part of what the match is"
+    );
+    assert_eq!(
+        changed.differences(&pack),
+        vec!["civs.toml".to_owned()],
+        "and the difference names the file, so the handshake can refuse and say why"
     );
 }

@@ -26,7 +26,7 @@ use crate::{
 /// Every file a match reads. The order here is the order the hash is computed in, so adding a file
 /// changes every pack's hash - which is correct, because a build that needs a file an older build
 /// did not is not the same content.
-pub const PACK_FILES: [&str; 8] = [
+pub const PACK_FILES: [&str; 9] = [
     "sim.toml",
     "economy.toml",
     "map.toml",
@@ -37,6 +37,12 @@ pub const PACK_FILES: [&str; 8] = [
     // peer running different techs is playing a different game, so the handshake must see them.
     "techs.toml",
     "effects.toml",
+    // **Civilisation bonuses.** This file is not parsed by `ContentPack` - the binaries load it into the world - but it
+    // decides what a player's units and economy can do, so two peers with different civs are playing different games.
+    // It was outside the hash until now: a player could edit a civ's bonuses and pass the handshake, which is the
+    // cheapest possible cheat. (`movement.toml` is still outside deliberately: nothing reads it yet, and hashing a file
+    // nobody consumes would look like protection without being any. It joins this list in the commit that reads it.)
+    "civs.toml",
 ];
 
 /// Where a pack file lives relative to the config directory. `units.toml` is under `gamedata/`
@@ -45,7 +51,9 @@ pub const PACK_FILES: [&str; 8] = [
 pub fn pack_path(dir: &Path, name: &str) -> PathBuf {
     match name {
         // Generated from the game data (D8), and therefore under `gamedata/`.
-        "units.toml" | "techs.toml" | "effects.toml" => dir.join("gamedata").join(name),
+        "units.toml" | "techs.toml" | "effects.toml" | "civs.toml" => {
+            dir.join("gamedata").join(name)
+        }
         other => dir.join(other),
     }
 }

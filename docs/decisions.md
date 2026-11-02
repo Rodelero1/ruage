@@ -2431,7 +2431,19 @@ Two consequences that follow rather than being chosen: the loader has to read AI
 pack's identity, D19, has to cover it, or two players could disagree about the AI and desync), and every test that
 loads `[policy]` or a `[[rule]]` points at the new files.
 
-**Shape still open - the questions put to the owner in the same breath:**
+**Shape settled by the owner (2026-11-01, second exchange):**
+
+- **Location: `config/ai/`** - one pack, one hash, one handshake.
+- **Layout: a base AI plus a per-civilisation delta** ("per civ delta sounds more sensible"). The base holds the rules
+  every civ shares; `config/ai/civ/<name>.toml` carries only what that civ does differently. This matches what the
+  original's own scripts do in spirit - civ differences are the exception, not a script set per civ
+  (`docs/ai-scripts.md` measured 15 `(civ-selected ...)` uses across 39 files) - while keeping "what does Britons do"
+  answerable in one file, which is the maintenance property the owner asked for.
+- **Still open: derived defaults.** Whether a civ's *tuning* is derived from the bonuses already in `civs.toml` (with a
+  hand-written entry overriding) or authored per civ. The distinction is about the *values*, not the files: a delta file
+  exists either way.
+
+**The rest of the shape, still open from the first exchange:**
 
 1. **Location**: `config/ai/` (one content pack, one hash, one handshake) or a top-level `ai/` beside `config/`
    (clearly separate, but a second thing to version and hash). *Default if nothing is said: `config/ai/`.*
