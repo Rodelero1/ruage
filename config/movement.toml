@@ -20,8 +20,10 @@ algorithm = "astar"
 
 heuristic = "octile"
 diagonal_allowed = true
-cost_straight = 1.0
-cost_diagonal = 1.41421356
+# **No cost weights here, on purpose** (owner, 2026-11-02). A straight step costs 10 and a diagonal 14, and that is a
+# property of the grid rather than of a content pack: the ratio is sqrt(2) and no pack has an opinion about it. The
+# knobs that used to sit here (`cost_straight`, `cost_diagonal`) were read by nothing while `path.rs` hardcoded 10/14 -
+# config that advertised control it did not have, and the first thing a diagonal-movement complaint reached for.
 max_iterations = 100000
 # Weights are placeholders with no provenance. Do not tune them to match observations
 # without recording the observation — an untraceable magic constant is exactly what this

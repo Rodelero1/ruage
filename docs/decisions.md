@@ -2536,3 +2536,16 @@ hand-maintained content and can be committed, because the ids were the only thin
 **Direction (owner, same message):** ids should disappear from the configuration where feasible, and names become the
 reference. `names.toml` is keyed by id today because every table still is; flipping the tables to name keys is the next
 step, and it needs names for every reference the effect table makes - units *and* the ~30 armour classes.
+
+## D98 - Two owners' rulings on movement (owner, 2026-11-02)
+
+Asked what needed deciding before the evasion work, the owner ruled both:
+
+1. **The dead pathing knobs are deleted, not wired.** `movement.toml` carried `cost_straight = 1.0` and
+   `cost_diagonal = 1.41421356` while `path.rs` hardcoded 10 and 14 - the same ratio, so nothing changed either way, and
+   the knobs advertised a control that did not exist. The ratio is a property of the grid (sqrt(2) on an 8-way grid), not
+   of a content pack: a pack has no opinion about the geometry of a step. The comment that replaced them says so, because
+   the knobs were the first thing a diagonal-movement complaint reached for.
+2. **Soft evasion is "wait and let pass".** A unit whose next tile is occupied yields for a tick or two rather than
+   sliding sideways: deterministic, no repathing, and a headless test can pin it exactly - two villagers crossing never
+   share a tile and both arrive. Sliding is a later refinement, only if the waiting looks wrong on screen.

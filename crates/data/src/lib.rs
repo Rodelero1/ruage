@@ -655,14 +655,15 @@ overrides = "overrides.toml"
     }
 
     #[test]
-    #[allow(clippy::approx_constant)] // deliberately the config's pathing weight, not SQRT_2
+    #[allow(clippy::approx_constant)] // deliberately sqrt(2)-ish, not SQRT_2
     fn sub_precision_values_are_refused_not_rounded() {
-        // 1.41421356 is a pathing weight; it must not enter the fixed-point domain.
+        // A weight with more precision than the fixed-point scale holds must not enter the domain by being rounded -
+        // the example is the classic sqrt(2) approximation, and the key only has to name where it came from.
         let err = MaybeFixed::from_f64(1.41421356)
-            .resolve(20_000, "movement.pathing.cost_diagonal")
+            .resolve(20_000, "pathing.weight")
             .unwrap_err()
             .to_string();
-        assert!(err.contains("cost_diagonal"), "got: {err}");
+        assert!(err.contains("pathing.weight"), "got: {err}");
     }
 
     #[test]
