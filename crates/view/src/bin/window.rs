@@ -17,7 +17,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use ruage_data::{Economy, Map, Units};
-use ruage_sim::World;
+use ruage_sim::{Runner, World, load_scenario_file};
 use ruage_view::ui;
 use ruage_view::{Camera, Highlights, Snapshot, render_with};
 use winit::application::ApplicationHandler;
@@ -33,6 +33,13 @@ struct Config {
     units: Units,
     combat: ruage_data::Combat,
     resources: ruage_data::Resources,
+    // A window that plays the pack but installs no behaviour shows villagers standing on a berry bush: the content
+    // policy only *reallocates* villagers, and without the rules nothing trains or builds. So the view loads what the
+    // headless runner loads - research, civs and the scenario - rather than a subset that looks alive.
+    techs: ruage_data::Techs,
+    effects: ruage_data::Effects,
+    civs: ruage_data::Civs,
+    scenario: ruage_sim::Scenario,
 }
 
 fn load(config: &Path) -> Result<Config, String> {
@@ -49,6 +56,15 @@ fn load(config: &Path) -> Result<Config, String> {
             .map_err(|err| format!("units.toml: {err}"))?,
         combat: ruage_data::load_combat_file(&config.join("combat.toml"))
             .map_err(|err| format!("combat.toml: {err}"))?,
+        techs: ruage_data::load_techs_file(&config.join("gamedata/techs.toml"))
+            .map_err(|err| format!("techs.toml: {err}"))?,
+        effects: ruage_data::load_effects_file(&config.join("gamedata/effects.toml"))
+            .map_err(|err| format!("effects.toml: {err}"))?,
+        civs: ruage_data::load_civs_file(&config.join("gamedata/civs.toml"))
+            .map_err(|err| format!("civs.toml: {err}"))?,
+        // The same match the headless runner plays, so what the window shows is what the tests assert.
+        scenario: load_scenario_file(&config.join("acceptance.toml"))
+            .map_err(|err| format!("acceptance.toml: {err}"))?,
         resources,
     })
 }
@@ -57,6 +73,8 @@ fn load(config: &Path) -> Result<Config, String> {
 struct App {
     config: Config,
     world: Option<World>,
+    /// The scenario's steps and the personality's rules. `None` until the world is seeded.
+    runner: Option<Runner>,
     window: Option<std::rc::Rc<Window>>,
     surface: Option<softbuffer::Surface<std::rc::Rc<Window>, std::rc::Rc<Window>>>,
     context: Option<softbuffer::Context<std::rc::Rc<Window>>>,
@@ -91,6 +109,7 @@ impl App {
         App {
             config,
             world: None,
+            runner: None,
             window: None,
             surface: None,
             context: None,
@@ -196,10 +215,24 @@ impl App {
                 .load_resources(&self.config.resources)
                 .map_err(|err| err.to_string())?;
             world.load_combat(&self.config.combat);
+            world
+                .load_research(&self.config.techs, &self.config.effects)
+                .map_err(|err| err.to_string())?;
+            world
+                .load_civs(&self.config.civs)
+                .map_err(|err| err.to_string())?;
             world.apply_content_policy();
+            let runner = Runner::new(&self.config.scenario, world.tick_rate_hz())
+                .map_err(|err| err.to_string())?;
             self.world = Some(world);
+            self.runner = Some(runner);
         }
         let world = self.world.as_mut().ok_or("the world was not seeded")?;
+        // Rules before the tick: the scenario's steps and the personality's rules are due against the state the last
+        // tick left, exactly as the headless runner applies them.
+        if let Some(runner) = self.runner.as_mut() {
+            runner.due(world);
+        }
         world.step().map_err(|err| err.to_string())?;
         self.ticks += 1;
         Ok(())
