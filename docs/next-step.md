@@ -2598,3 +2598,29 @@ table through the dat's `name_str_id`, because the dat's codes are shifted (283 
 (D82's 3x5 font) and every other sentence is a developer diagnostic. The order when someone wants it is message keys,
 then a font with letters, then display text per locale, then gettext as an adapter - and the rule that a translated
 string never reaches the simulation or the state hash.
+
+### Next slice, planned to the last call site: `[policy]` moves into `config/ai/` (2026-11-02)
+
+D94's other half. The villager share table is behaviour - "how many villagers go where" - and it is the last piece of
+AI still living in `economy.toml`. What it touches, enumerated rather than estimated:
+
+- **`crates/data/src/economy.rs`**: `Economy.policy: Policy`, `RawPolicy`/`RawShare`, the "rows sum to 100" validation
+  (line ~846), and `Policy`'s own deserialisation. The *type* can stay in `data` (both crates need it); the *parse* moves.
+- **`crates/sim/src/script.rs`**: `Personality` gains `policy: Policy` (default empty), so `config/ai/base.toml` carries
+  `[policy]` and `[[policy.share]]` beside its rules. `deny_unknown_fields` means the field must land in the same commit
+  the content does, or the file stops loading.
+- **`crates/sim/src/lib.rs`**: `apply_content_policy()` (~1472) becomes `apply_policy(&Policy)`; it reads
+  `economy.policy.share` today (~1483-1487) and would take the table as an argument instead.
+- **Five call sites**: `bin/headless.rs:146`, `bin/batch.rs:177`, `view/bin/window.rs:199`,
+  `sim/tests/scenario.rs:934`, `view/tests/frame_cost.rs:29`. The three runners already load a scenario, so they have a
+  personality to take the policy from; the two tests need one too, which is the honest cost of the move.
+- **`config/economy.toml`**: the `[policy]` block (19 share rows) leaves; **`config/ai/base.toml`** gains it.
+- **Pack identity**: `ai/base.toml` is already hashed as part of the `ai/` walk, so the table is covered without a new
+  entry - and `economy.toml`'s hash changes because the block left it.
+
+**Order:** personality field first (so the content can name it), then the content, then the call sites, then delete the
+old path. Test first: a personality carrying a share table reaches `World` and moves a villager, and an `economy.toml`
+that still has `[policy]` is refused rather than silently ignored.
+
+**Why it was not done in the same session as D95/D97:** it changes five call sites including two test fixtures, and the
+last refactor of this size (the window's loader) shipped a bug that the suite could not see. It deserves its own pass.
