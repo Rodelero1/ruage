@@ -132,11 +132,12 @@ impl ContentPack {
                 path: ai_dir.display().to_string(),
                 detail: err.to_string(),
             })? {
-                let path = entry.map_err(|err| ConfigError::Io {
-                    path: ai_dir.display().to_string(),
-                    detail: err.to_string(),
-                })?
-                .path();
+                let path = entry
+                    .map_err(|err| ConfigError::Io {
+                        path: ai_dir.display().to_string(),
+                        detail: err.to_string(),
+                    })?
+                    .path();
                 if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
                     continue;
                 }

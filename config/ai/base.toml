@@ -26,7 +26,10 @@ do = "train"
 building = "town_centre"
 role = "villager"
 
-# Loom once, at 12 villagers: the AI's own guard (`Economy/Dark Age.per`).
+# Loom once, at 12 villagers and not before 2:00: the AI's own guard (`Economy/Dark Age.per`) is the villager count;
+# the time gate is ours, and it exists because Loom's 50 food competes with villager production at twelve. Whether it
+# earns its place is a measurement (run the acceptance match with and without) rather than a reading - it is the one
+# threshold in this file that is neither the game's nor a rate that survives a correction.
 [[rule]]
 player = 1
 cooldown_seconds = 5.0

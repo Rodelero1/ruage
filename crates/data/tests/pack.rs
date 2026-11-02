@@ -19,7 +19,6 @@ fn config_dir() -> Option<PathBuf> {
     Some(repo("config"))
 }
 
-
 /// A copy of the pack, personalities included: the identity covers `config/ai/` as a **directory**, so a scratch pack
 /// without it would differ for the wrong reason and every "one byte changed" test would name two files.
 fn copy_pack(dir: &std::path::Path, scratch: &std::path::Path) {
@@ -39,8 +38,11 @@ fn copy_pack(dir: &std::path::Path, scratch: &std::path::Path) {
         for entry in std::fs::read_dir(&ai).expect("read ai") {
             let path = entry.expect("entry").path();
             if path.extension().and_then(|e| e.to_str()) == Some("toml") {
-                std::fs::copy(&path, scratch.join("ai").join(path.file_name().expect("name")))
-                    .expect("copy personality");
+                std::fs::copy(
+                    &path,
+                    scratch.join("ai").join(path.file_name().expect("name")),
+                )
+                .expect("copy personality");
             }
         }
     }
@@ -63,7 +65,10 @@ fn the_project_pack_loads_and_has_an_identity() {
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("toml"))
         .count();
-    assert!(personalities > 0, "the base personality is the pack's own AI");
+    assert!(
+        personalities > 0,
+        "the base personality is the pack's own AI"
+    );
     let expected =
         PACK_FILES.len() + usize::from(pack.parts.contains_key("overrides.toml")) + personalities;
     assert_eq!(pack.parts.len(), expected);
@@ -259,7 +264,10 @@ fn a_personality_outside_the_fixed_list_is_part_of_the_identity() {
         .expect("write an unlisted personality");
     let changed = ContentPack::load(&scratch).expect("the edited pack still loads");
 
-    assert_ne!(changed.hash, pack.hash, "a personality the peers do not share is a different game");
+    assert_ne!(
+        changed.hash, pack.hash,
+        "a personality the peers do not share is a different game"
+    );
     assert_eq!(
         changed.differences(&pack),
         vec!["ai/rush.toml".to_owned()],

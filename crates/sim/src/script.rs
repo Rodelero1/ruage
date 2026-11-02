@@ -20,6 +20,9 @@ use crate::{Command, EntityId, EntityKind, World};
 /// `[role]` table is the vocabulary, so a scenario for a pack of our own is writable at all (D17).
 pub const SCENARIO_SCHEMA: u32 = 2;
 
+/// A personality's own version. It moves at its own pace like the scenario's, and for the same reason: `config/ai/` is
+/// behaviour, and a rule's shape may change without a match's format changing.
+pub const PERSONALITY_SCHEMA: u32 = 1;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -703,6 +706,21 @@ pub fn load_scenario_file(path: &std::path::Path) -> Result<Scenario, String> {
     })?;
     let personality: Personality = toml::from_str(&text)
         .map_err(|err| format!("{}: personality {}: {err}", path.display(), file.display()))?;
+    if personality.schema != PERSONALITY_SCHEMA {
+        return Err(format!(
+            "{}: personality {} is schema {}, this build reads {PERSONALITY_SCHEMA}",
+            path.display(),
+            file.display(),
+            personality.schema
+        ));
+    }
+    if personality.rule.is_empty() {
+        return Err(format!(
+            "{}: personality {} has no [[rule]] blocks, so it would play the match doing nothing",
+            path.display(),
+            file.display()
+        ));
+    }
     scenario.rule = personality.rule;
     Ok(scenario)
 }

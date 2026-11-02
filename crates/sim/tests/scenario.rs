@@ -979,7 +979,10 @@ fn the_acceptance_scenario_parses_and_its_opening_runs() {
 fn a_scenario_takes_its_rules_from_its_personality() {
     let scenario = load_scenario_file(&repo("config/acceptance.toml")).expect("it parses");
     assert_eq!(scenario.ai.as_deref(), Some("base"));
-    assert_eq!(scenario.rule.len(), 14, "the base personality's rules");
+    // Not `== 14`: the count is content, and tuning the AI would break a sim test for no behavioural reason. What has
+    // to be true is that the rules came from the file (this scenario has none of its own) and that they are the ones
+    // the opening needs.
+    assert!(!scenario.rule.is_empty(), "the personality's rules arrived");
     let trains_villagers = scenario
         .rule
         .iter()
@@ -1060,7 +1063,15 @@ fn a_scenario_held_as_text_cannot_name_a_personality() {
 #[test]
 fn a_personality_name_that_could_escape_the_folder_is_refused() {
     let dir = scratch("escape");
-    for name in ["../economy", "/etc/passwd", "", "Base", "a b", "base.toml", "a/b"] {
+    for name in [
+        "../economy",
+        "/etc/passwd",
+        "",
+        "Base",
+        "a b",
+        "base.toml",
+        "a/b",
+    ] {
         let file = dir.join(format!("m{}.toml", name.replace(['/', '.', ' '], "_")));
         std::fs::write(
             &file,
@@ -1076,4 +1087,47 @@ fn a_personality_name_that_could_escape_the_folder_is_refused() {
             "{name:?} must be refused as a name, not as a failed read: {why}"
         );
     }
+}
+
+/// A personality carries its own schema, so a future file is refused rather than half-applied (the scenario has done
+/// this since `Runner::new`; the personality was parsed and never checked).
+#[test]
+fn a_personality_from_a_different_schema_is_refused() {
+    let dir = scratch("schema");
+    std::fs::write(
+        dir.join("ai").join("future.toml"),
+        "schema = 99\n\n[[rule]]\nplayer = 1\ndo = \"build\"\nrole = \"house\"\n",
+    )
+    .expect("write");
+    let file = dir.join("match.toml");
+    std::fs::write(
+        &file,
+        "schema = 2\nduration_seconds = 60.0\nai = \"future\"\n",
+    )
+    .expect("write");
+    let why = load_scenario_file(&file).expect_err("an unknown personality schema is not playable");
+    assert!(
+        why.contains("schema 99"),
+        "the refusal names what it read: {why}"
+    );
+    assert!(why.contains('1'), "and what this build reads: {why}");
+}
+
+/// A personality with no rules is refused: it is an AI that does nothing, which is the same silent failure the
+/// text-only scenario path refuses.
+#[test]
+fn an_empty_personality_is_refused() {
+    let dir = scratch("empty");
+    std::fs::write(dir.join("ai").join("blank.toml"), "schema = 1\n").expect("write");
+    let file = dir.join("match.toml");
+    std::fs::write(
+        &file,
+        "schema = 2\nduration_seconds = 60.0\nai = \"blank\"\n",
+    )
+    .expect("write");
+    let why = load_scenario_file(&file).expect_err("a personality with no rules is not an AI");
+    assert!(
+        why.contains("no [[rule]]"),
+        "the refusal says what is missing: {why}"
+    );
 }

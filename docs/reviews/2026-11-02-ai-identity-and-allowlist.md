@@ -68,3 +68,35 @@ lookups, no allocation beyond the result vector. It is called at handshake time,
   so this is a note rather than a hole.
 - **Non-UTF-8 filenames** are refused with an error naming the directory, not skipped; a pack that cannot name a file is
   a pack whose identity is ambiguous.
+
+## Addendum: the personality's own schema, an empty refusal, and two hygiene items (2026-11-02)
+
+Second commit of the same review, items 3, 4, 8 and 12. The landing gate above is `c370599`.
+
+- **`PERSONALITY_SCHEMA = 1` now exists and is checked.** Item 3 was right in substance and wrong in constant: the
+  personality is not a scenario, so it moves on its own version (`SCENARIO_SCHEMA` is 2), and the refusal names both
+  what it read and what this build reads. The scenario's `schema` check still lives in `Runner::new` (item 5, deferred
+  with the code that touches it).
+- **An empty personality is refused** (item 4). It would play the match doing nothing - the same silent failure that
+  `load_scenario_str` refuses for `ai`, and the contradiction the review pointed out.
+- **The one-tier count assertion is gone** (item 8). `assert_eq!(scenario.rule.len(), 14)` coupled a sim test to content
+  tuning; it is now "the rules arrived and are non-empty", with the behavioural proof left where it belongs - the
+  acceptance run, which plays the opening for a minute and refuses if it does not work.
+- **The Loom comment now describes the rule it is attached to** (item 12). The 120 s gate is ours, not the game's, and
+  the comment says so and why (50 food against villager production at twelve). Removing it stays an experiment with
+  acceptance numbers, not a code change made on a hunch.
+
+### Mutation testing
+
+| mutation | result |
+|---|---|
+| `personality.schema != PERSONALITY_SCHEMA` -> `if false` | **FAILED** - `a_personality_from_a_different_schema_is_refused` |
+| `personality.rule.is_empty()` -> `if false` | **FAILED** - `an_empty_personality_is_refused` |
+
+Both guards are pinned.
+
+### Honest note on ordering
+
+Items 3 and 4 were written **implementation and test in the same edit**, then proven by mutation rather than by a
+watched RED. That is the third time today the tests did not come first; the mutation run is what establishes they bite,
+and it is recorded here rather than presented as test-first.
