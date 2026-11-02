@@ -136,6 +136,33 @@ thing":
 So the resource-aware switch is close to free once goals land; raiding and "hit the archers, avoid the pikes" need two
 new kinds of primitive - **spatial awareness** and **movement orders** - which no version of the language has.
 
+## "A larger force" is a matchup, and the pack already knows the answer (2026-11-01)
+
+The owner's test, verbatim: **"6 scout-line would flee from 4 spear-line but not from 5 skirmisher-line."** Computed
+from the pack's own attacks and armours through `tools/counters.py` (no authored strength table):
+
+- spear -> scout: **18 damage per hit, 6.0 dps**, three hits to kill a 45 hp scout
+- scout -> spear: **3 damage per hit, 1.5 dps**, fifteen hits to kill
+- skirmisher -> scout: **1 damage per hit, 0.33 dps** - 45 hits, because the scout's pierce armour 2 eats a 3-pierce
+  attack
+- scout -> skirmisher: **3 damage per hit, 1.5 dps**, ten hits
+
+Time to wipe the other side, hit points divided by the side's summed dps:
+
+- **6 scouts against 4 spears**: scouts need 180 hp / 9 dps = **20.0 s**; spears need 270 hp / 24 dps = **11.3 s**. Spears
+  win - the scouts should flee.
+- **6 scouts against 5 skirmishers**: scouts need 150 hp / 9 dps = **16.7 s**; skirmishers need 270 hp / 1.7 dps =
+  **162 s**. Scouts win comfortably - no reason to flee.
+
+So the owner's example reproduces exactly, and the "per-unit strength table" it asks for **does not have to be authored**:
+it falls out of the attack/armour classes, which is D91 applied to a second question. The quantity a rule needs is a
+**ratio of time-to-wipe**, not a strength score.
+
+What the model deliberately leaves out, and a script must therefore not pretend to know: range and kiting (skirmishers
+outrange nothing here, but archers do), speed (whether flight is even possible - scouts are faster than spears),
+focus fire, terrain, and buildings shooting. Treat the ratio as a threshold to flee *by*, tune the threshold, and expect
+the first version to be wrong in exactly those cases.
+
 ## The three decisions this leaves
 
 **A. How a script names a unit.**
