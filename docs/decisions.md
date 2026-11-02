@@ -2454,3 +2454,27 @@ loads `[policy]` or a `[[rule]]` points at the new files.
    and the scenario points at it.*
 4. **Is a scenario's timed step (`at_seconds = 300`, build a barracks) AI?** It is a scripted command, not a decision
    the engine makes, so it stays with the match. *Default: steps stay, rules move.*
+
+## D95 - The AI names *lines*, not units (owner, 2026-11-01)
+
+The owner chose **A1 (explicit naming)** with one addition that does the work a capability resolver would have done:
+the AI refers to a **line** - "knight-line, knight and its upgrades, the best cavalry generalist", "spear-line,
+spearman and upgrades, the cavalry counter" - and a civ override says what that civ fields in its place.
+
+Why this is better than the capability vocabulary the owner rejected:
+
+- A line is **content**, not judgement: an ordered list of roles (`knight -> cavalier -> paladin`), so "the best one I
+  can field" is simply the highest tier the civ can actually train, resolved from the tech tree that already exists. The
+  ambiguity the owner objected to ("best cavalry" - Paladin vs Cataphract vs Camel) is answered by the *civ override*,
+  which is authored, not inferred by a scoring function.
+- The base AI stays readable: it asks for a line and a purpose; the civ file says which units answer it.
+- D93 survives: the choice of unit is visible, in one file, named.
+
+**Shape (to confirm):** `[line]` in the content pack maps a line name to role names in ascending order; the base AI
+names lines; `config/ai/civ/<name>.toml` overrides line membership where the civ differs (Byzantines: camels for
+anti-cavalry, cataphracts as the generalist). The engine still knows no AoE2: "knight" is a line name in the pack, and
+the resolver only picks the highest tier the world lets the player train.
+
+**Open:** which lines exist and what each answers (the owner named knight/spear/skirmisher; the skirmisher sentence needs
+one clarification), whether a line is the unit family alone or family-plus-intent, and whether a civ override may replace
+a line, reorder it, or only add a tier.
