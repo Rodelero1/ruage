@@ -24,6 +24,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 CONFIG = HERE.parent / "config"
 EFFECTS = CONFIG / "gamedata" / "effects.toml"
+UNITS = CONFIG / "gamedata" / "units.toml"
 ECONOMY = CONFIG / "economy.toml"
 LINES = CONFIG / "lines.toml"
 
@@ -99,11 +100,15 @@ def roots(edges: list[Edge]) -> list[int]:
     return sorted({edge.from_unit for edge in edges} - targets)
 
 
-def verify(lines: dict[str, list[str]], roles: dict[str, int], edges: list[Edge]) -> list[str]:
+def verify(
+    lines: dict[str, list[str]], roles: dict[str, int], edges: list[Edge], units: set[int]
+) -> list[str]:
     """Every problem with the authored table, as sentences that name the line and the unit.
 
-    Empty means the table agrees with the pack: each role exists, and each consecutive pair is an upgrade the game can
-    actually research.
+    Empty means the table agrees with the pack: each role exists, it names a unit the pack carries, and each
+    consecutive pair is an upgrade the game can actually research. The unit check is not decoration - a one-tier line
+    has no pair to check, so without it a role could name an id that does not exist and the tool would still say the
+    table agrees with the pack.
     """
     pairs = {(edge.from_unit, edge.to_unit): edge.effect for edge in edges}
     problems: list[str] = []
@@ -117,7 +122,14 @@ def verify(lines: dict[str, list[str]], roles: dict[str, int], edges: list[Edge]
                 problems.append(f"line {name!r} names role {role!r}, which economy.toml's [role] table does not have")
                 ids.append(-1)
                 continue
-            ids.append(roles[role])
+            unit = roles[role]
+            if unit not in units:
+                problems.append(
+                    f"line {name!r} names role {role!r}, whose unit {unit} the pack does not carry"
+                )
+                ids.append(-1)
+                continue
+            ids.append(unit)
         for before, after, previous, role in zip(ids, ids[1:], members, members[1:]):
             if before == -1 or after == -1:
                 continue
@@ -149,9 +161,13 @@ def main(argv: list[str] | None = None) -> int:
             print(" ".join(str(unit) for unit in chain))
         return 0
 
+    if not LINES.exists():
+        print(f"{LINES} is missing: it is content, not generated, so it has to be authored", file=sys.stderr)
+        return 2
+    units = {unit["id"] for unit in tomllib.loads(UNITS.read_text()).get("unit", [])}
     roles = tomllib.loads(ECONOMY.read_text()).get("role", {})
     lines = tomllib.loads(LINES.read_text()).get("line", {})
-    problems = verify(lines, roles, upgrade_edges(effects))
+    problems = verify(lines, roles, upgrade_edges(effects), units)
     for problem in problems:
         print(problem, file=sys.stderr)
     if problems:
