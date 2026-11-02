@@ -2475,6 +2475,12 @@ names lines; `config/ai/civ/<name>.toml` overrides line membership where the civ
 anti-cavalry, cataphracts as the generalist). The engine still knows no AoE2: "knight" is a line name in the pack, and
 the resolver only picks the highest tier the world lets the player train.
 
-**Open:** which lines exist and what each answers (the owner named knight/spear/skirmisher; the skirmisher sentence needs
-one clarification), whether a line is the unit family alone or family-plus-intent, and whether a civ override may replace
-a line, reorder it, or only add a tier.
+**Lines and what each answers, confirmed by the owner (2026-11-01):** `knight` is the generalist cavalry line; `spear`
+(spearman -> pikeman -> halberdier) counters **cavalry**; `skirmisher` counters **archers**. The owner's first phrasing
+read as if the skirmisher line countered cavalry - asked, and answered: "I meant skirmisher-line -> archer counter,
+spear-line -> cavalry counter." Recorded because the difference decides whether a line carries a `counters` field or
+whether purpose comes only from the AI file.
+
+**Still open:** whether a line is the unit family alone or family-plus-intent (the owner's Light Cavalry/Hussar point says
+raiding is an intent, and no line may answer it), and whether a civ override may replace a line, reorder it, or only add
+a tier.
