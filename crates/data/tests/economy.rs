@@ -30,7 +30,7 @@ forage = 120
 [build]
 repair_hp_per_second = -1.0
 [[train.entry]]
-building = "town_centre"
+building = "town_center"
 units = ["villager"]
 [decay]
 enabled = true
@@ -42,14 +42,14 @@ gold = "gold"
 stone = "stone"
 
 [role]
-town_centre = 109
+town_center = 109
 villager = 83
 
 [tech_role]
 man_at_arms = 222
 
 [start]
-town_centre = "town_centre"
+town_center = "town_center"
 villager = "villager"
 villagers_per_player = 3
 techs = ["man_at_arms"]
@@ -166,10 +166,10 @@ fn the_real_economy_names_the_starting_units() {
     let economy = load_economy_file(&repo("config/economy.toml")).expect("economy.toml loads");
     // A start names *roles*, and the role table is what turns them into dat ids (D17): nothing in
     // `crates/` needs to know that a town centre is 109.
-    assert_eq!(economy.start.town_centre, "town_centre");
+    assert_eq!(economy.start.town_center, "town_center");
     assert_eq!(economy.start.villager, "villager");
     assert_eq!(economy.start.villagers_per_player, 3);
-    assert_eq!(economy.role.get("town_centre"), Some(&109), "RTWC");
+    assert_eq!(economy.role.get("town_center"), Some(&109), "RTWC");
     assert_eq!(economy.role.get("villager"), Some(&83), "VMBAS");
 }
 
@@ -225,11 +225,11 @@ fn a_missing_start_block_is_refused() {
 fn start_roles_must_be_defined_and_distinct() {
     // A role of 0 is refused (see `a_role_cannot_be_unit_zero`); a *start* naming the same role
     // twice would seed one unit where a match needs two kinds of thing.
-    let same = GOOD.replace("villager = \"villager\"", "villager = \"town_centre\"");
+    let same = GOOD.replace("villager = \"villager\"", "villager = \"town_center\"");
     let err = load_economy_str(&same, "economy.toml")
         .expect_err("one role cannot be both the town centre and the villager")
         .to_string();
-    assert!(err.contains("town_centre"), "got: {err}");
+    assert!(err.contains("town_center"), "got: {err}");
 }
 
 #[test]
@@ -287,12 +287,12 @@ fn the_real_file_says_who_trains_what() {
 #[test]
 fn a_building_listed_twice_is_refused() {
     let bad =
-        GOOD.to_owned() + "\n[[train.entry]]\nbuilding = \"town_centre\"\nunits = [\"villager\"]\n";
+        GOOD.to_owned() + "\n[[train.entry]]\nbuilding = \"town_center\"\nunits = [\"villager\"]\n";
     let err = load_economy_str(&bad, "economy.toml")
         .expect_err("a duplicate building entry must be refused")
         .to_string();
     assert!(
-        err.contains("town_centre"),
+        err.contains("town_center"),
         "the refusal names the role: {err}"
     );
 }
@@ -311,8 +311,8 @@ fn a_building_that_trains_nothing_is_refused() {
 #[test]
 fn a_start_naming_an_undefined_role_is_refused() {
     let bad = GOOD.replace(
-        "town_centre = \"town_centre\"",
-        "town_centre = \"great_hall\"",
+        "town_center = \"town_center\"",
+        "town_center = \"great_hall\"",
     );
     let err = load_economy_str(&bad, "economy.toml")
         .expect_err("a start role with no unit must be refused")
@@ -337,7 +337,7 @@ fn a_role_cannot_be_unit_zero() {
 /// A role table is the vocabulary scenarios and the start use; empty, it names nothing.
 #[test]
 fn an_empty_role_table_is_refused() {
-    let bad = GOOD.replace("[role]\ntown_centre = 109\nvillager = 83\n", "[role]\n");
+    let bad = GOOD.replace("[role]\ntown_center = 109\nvillager = 83\n", "[role]\n");
     let err = load_economy_str(&bad, "economy.toml")
         .expect_err("no roles means no unit can be named")
         .to_string();
@@ -369,7 +369,7 @@ fn a_train_entry_names_units_by_role() {
     let economy = load_economy_str(GOOD, "economy.toml").expect("fixture loads");
     assert!(
         economy.train.allows(109, 83),
-        "town_centre -> villager, resolved through [role]"
+        "town_center -> villager, resolved through [role]"
     );
 
     let unknown = GOOD.replace("units = [\"villager\"]", "units = [\"militia\"]");
@@ -435,12 +435,12 @@ fn the_pack_names_the_civilisation_it_is_played_as() {
 /// The project names the Town Centre's footprint, and a farm is a floor (D76). Read from the real content, because the
 /// point of the mask is that content decides it.
 #[test]
-fn the_project_names_the_town_centres_footprint() {
+fn the_project_names_the_town_centers_footprint() {
     let economy =
         ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy.toml");
     let town = economy
         .footprint
-        .get("town_centre")
+        .get("town_center")
         .expect("a footprint for the town centre");
     assert_eq!((town.width, town.height), (4, 4), "the town centre is 4x4");
     assert_eq!(

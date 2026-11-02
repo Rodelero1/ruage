@@ -128,7 +128,7 @@ fn a_blocked_queue_costs_this_much_per_tick() {
     .into_iter()
     .collect();
     economy.population.cap_default = 1_000;
-    economy.population.town_centre_population = 500;
+    economy.population.town_center_population = 500;
     economy.decay.enabled = false;
     economy.train.by_building.insert(84, vec![83]);
     let mut world = World::new(settings, 11).expect("world");

@@ -70,7 +70,7 @@ fn seeded(fx: &Fixture, economy: &Economy) -> World {
     // for the wrong reason. The ceiling is `min(sum of finished buildings, cap_default)`, so both numbers move; the
     // ceiling has its own tests.
     economy.population.cap_default = 1_000;
-    economy.population.town_centre_population = 500;
+    economy.population.town_center_population = 500;
     // A spawned building with nobody working it decays (`[decay] enabled`), and a market left alone for five game
     // minutes was gone by the end of the run - which silently un-blocked its own yard and let the recruit walk out. The
     // rule under test is placement, not rot; decay keeps its own tests.
@@ -90,7 +90,7 @@ fn seeded(fx: &Fixture, economy: &Economy) -> World {
     world
 }
 
-fn town_centre(world: &World) -> EntityId {
+fn town_center(world: &World) -> EntityId {
     world
         .entities()
         .iter()
@@ -195,7 +195,7 @@ const TOWN_CENTRE: u32 = 109;
 fn a_unit_with_nowhere_to_stand_is_garrisoned_not_dropped() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx, &fx.economy);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     block_the_yard(&mut world, centre);
     let before = villagers(&world);
 

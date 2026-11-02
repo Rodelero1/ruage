@@ -85,7 +85,7 @@ Two defects the review of this slice found, and what is left of them:
     because `Construction` stores that number and nothing refreshed it. `finish_research` now updates
     `construction.max_hp` alongside the entity's health.
 
-**`[[train.entry]]` stopped quoting ids** in the same pass: `building = "town_centre"`,
+**`[[train.entry]]` stopped quoting ids** in the same pass: `building = "town_center"`,
 `units = ["villager"]`, resolved through `[role]` at load, with an unknown role refused by name and an
 integer refused outright — accepting both spellings is how the numbering creeps back in. A role the
 table lacks is an error the author sees at load, not a building that quietly makes the wrong unit.
@@ -382,7 +382,7 @@ resolver - since no tech in this dat can reach the order path with a count.
 population is one per live unit, the ceiling is `min(cap_default, finished houses x 5 + finished town
 centres x 5)`, and a train order past it is refused with `PopulationCapped` before it is priced.
 
-`town_centre_population = 5` is new content and published fact (a house and a town centre both support
+`town_center_population = 5` is new content and published fact (a house and a town centre both support
 five; a castle's twenty is not modelled). The Huns needed a rule rather than a formula - their tree bars
 the house, so a cap that counted houses would pin them at zero - and the exemption is read from the same
 bar the engine already checks, giving them `cap_default`.
@@ -1543,7 +1543,7 @@ release plays the ten-minute project script (`--release`, one process) in well u
 **Built and tested:** the scenario vocabulary a build order needs - `where = "<resource>"` on a build step (which was
 being **parsed and ignored**: `where` was written in `scenario.toml`, no step has `deny_unknown_fields`, and nothing
 read the key, so a lumber camp asked for beside the wood landed beside the town centre), `target = "enemy_building"` /
-`"enemy_town_centre"` on an attack step, and `node = "farm"` on a gather step (a farm is a **building**, and
+`"enemy_town_center"` on an attack step, and `node = "farm"` on a gather step (a farm is a **building**, and
 `nearest_resource` only finds `Resource` entities, so a script could not touch the food engine a long opening needs).
 Five tests, three mutations bite: the first `where` test passed with the selector disabled entirely because player 1's
 nearest tree is four tiles from its town centre, so it now uses **gold** - eight tiles out, outside the placement ring,
@@ -1918,7 +1918,7 @@ thing between this match and a result.
 
 **Where it stands.** The acceptance match reaches the Castle Age, builds a siege workshop site and orders a mangonel, and
 then stops: the mangonel rule is refused 133 times with *"no finished siege_workshop"*, and the attack rule reports *"no
-enemy matches enemy_town_centre"* 64 times. Food is no longer the wall (885 banked, population 42).
+enemy matches enemy_town_center"* 64 times. Food is no longer the wall (885 banked, population 42).
 
 **The AI's answer to the first half**, read from `Economy/Feudal Age.per`, `Economy/Castle Age.per` and
 `General Rules.per`: `up-assign-builders c: <role> c: <n>` dedicates builders - market 3, blacksmith 2, house 2, monastery
@@ -1926,7 +1926,7 @@ enemy matches enemy_town_centre"* 64 times. Food is no longer the wall (885 bank
 Castle). A dedicated builder is **reserved**: the villager manager does not touch it until the building is up.
 
 **What is built:** `Task::Build` is a reservation in the share pass, named in the code rather than implied by the
-classifier, so no future change can poach a builder; and `enemy_town_centre` falls back to any enemy building, then to the
+classifier, so no future change can poach a builder; and `enemy_town_center` falls back to any enemy building, then to the
 nearest enemy unit, when the town centre is already gone - which is what "no enemy matches" means once the mangonel has
 done its work but the enemy still has villagers alive.
 

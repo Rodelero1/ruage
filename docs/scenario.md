@@ -43,7 +43,7 @@ A scenario can research, and it names the tech the way it names everything else:
 at_seconds = 120.0
 player = 1
 kind = "research"
-building = "town_centre"   # a [role]
+building = "town_center"   # a [role]
 tech = "loom"              # a [tech_role]
 ```
 

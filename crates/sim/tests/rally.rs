@@ -57,7 +57,7 @@ fn seeded(fx: &Fixture) -> World {
     world
 }
 
-fn town_centre(world: &World) -> EntityId {
+fn town_center(world: &World) -> EntityId {
     world
         .entities()
         .iter()
@@ -101,11 +101,11 @@ kind = "wood"
 amount = 200
 hp = 20
 tiles = [[2, 1], [4, 1], [2, 0], [3, 0], [4, 0]]
-[[map.town_centre]]
+[[map.town_center]]
 player = 1
 x = 1
 y = 5
-[[map.town_centre]]
+[[map.town_center]]
 player = 2
 x = 6
 y = 6
@@ -132,7 +132,7 @@ const VILLAGER: u32 = 83;
 fn a_trained_unit_walks_to_the_rally_point() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let here = tile_of(&world, centre);
     let rally = (here.0 + 6, here.1 + 6);
     world
@@ -186,7 +186,7 @@ fn a_trained_unit_walks_to_the_rally_point() {
 fn a_unit_rallied_to_its_own_building_stays_inside() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let here = tile_of(&world, centre);
     world
         .submit_checked(Command::Rally {
@@ -220,7 +220,7 @@ fn a_unit_rallied_to_its_own_building_stays_inside() {
 fn without_a_rally_a_trained_unit_stays_where_it_appeared() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     world
         .submit_checked(Command::Train {
             building: centre,
@@ -254,7 +254,7 @@ fn without_a_rally_a_trained_unit_stays_where_it_appeared() {
 fn a_rally_point_can_be_cleared() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let here = tile_of(&world, centre);
     world
         .submit_checked(Command::Rally {
@@ -298,7 +298,7 @@ fn a_rally_point_can_be_cleared() {
 fn a_rally_point_outside_the_map_is_refused() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     match world.submit_checked(Command::Rally {
         building: centre,
         point: Some((30_000, 30_000)),
@@ -314,7 +314,7 @@ fn a_rally_point_outside_the_map_is_refused() {
 fn a_villager_rallied_onto_stone_gathers_stone_not_the_wood_around_it() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded_on(&fx, WALLED_STONE);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     world
         .submit_checked(Command::Rally {
             building: centre,
@@ -393,11 +393,11 @@ kind = "wood"
 amount = 400
 hp = 20
 tiles = [[3, 3], [4, 3], [5, 3], [3, 4], [5, 4], [3, 5], [4, 5], [5, 5]]
-[[map.town_centre]]
+[[map.town_center]]
 player = 1
 x = 1
 y = 1
-[[map.town_centre]]
+[[map.town_center]]
 player = 2
 x = 7
 y = 7
@@ -408,7 +408,7 @@ y = 7
 fn a_rally_into_a_forest_pocket_goes_as_close_as_it_can() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded_on(&fx, FOREST_POCKET);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let pocket = (4, 4);
     world
         .submit_checked(Command::Rally {

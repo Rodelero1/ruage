@@ -617,7 +617,7 @@ fn an_age_up_does_not_take_the_blacksmith_away() {
 /// Age replaces 109 with 71. Without the family link a player who aged up could never bank anything
 /// again - every load would be carried forever.
 #[test]
-fn villagers_still_bank_after_the_town_centre_is_upgraded() {
+fn villagers_still_bank_after_the_town_center_is_upgraded() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     feudal(&mut world);

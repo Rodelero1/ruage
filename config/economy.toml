@@ -82,7 +82,7 @@ repair   = 156   # VMREP 12.5   the repair task, likewise not a gather rate
 # Which roles block movement once built. A wall is a building whose tile nobody can walk through;
 # nothing else this pack builds does, which is why the rule is content's list and not a class id.
 # PROVENANCE: dat ids (the pack's four wall types are 72/117/119/155).
-blocking_roles = ["wall"]
+blocking_roles = ["palisade_wall"]
 
 repair_hp_per_second = -1.0
 # PROVENANCE: unknown, with a dat CANDIDATE: the repair variant VMREP (id 156) carries
@@ -109,7 +109,7 @@ rate_from = "dat"
 [start]
 # What a match begins with, named by role. The ids live in [role] below, so nothing outside the
 # content pack has to know that a town centre is 109 (D17).
-town_centre = "town_centre"
+town_center = "town_center"
 villager = "villager"
 villagers_per_player = 3
 # What the match opens with. Every tech in the table lists the Dark Age tech as a prerequisite, so a
@@ -131,7 +131,7 @@ stock = { food = 200, wood = 200, gold = 100, stone = 200 }
 queue_length = 5
 
 [[train.entry]]
-building = "town_centre"
+building = "town_center"
 units = ["villager"]
 # PROVENANCE: authored, not a dat field we read. The dat says what a unit costs and how long it
 # takes, and the tech tree disables units per civ, but nothing we parse says "this building
@@ -147,7 +147,7 @@ units = ["militia", "spearman"]
 
 [[train.entry]]
 building = "castle"
-units = ["trebuchet"]
+units = ["trebuchet_packed"]
 
 [[train.entry]]
 building = "siege_workshop"
@@ -161,7 +161,7 @@ units = ["mangonel"]
 # A role is the engine's word for a unit: everything that must not quote the dat's numbering uses
 # one - the start above, the scenario format, and the engine's own seeding. Add a role here and a
 # scenario can name it; the ids are the reference pack's and change with the dat (D17).
-town_centre = 109   # RTWC, the building a villager drops wood at
+town_center = 109   # RTWC, the building a villager drops wood at
 villager = 83       # VMBAS, 25 hp, 0.8 tiles/s
 house = 70          # HOUS, 25 wood, 25 s
 barracks = 12       # BRKS
@@ -173,7 +173,7 @@ spearman = 93
 # The building a villager works for food. The engine treats it like any other building except for
 # this one thing: `[farm]` says its work yields the `food` column.
 farm = 50       # 45 hp, **60 wood only** (`costs = [[1, 60]]` in units.toml; the old comment here said 35 food + 25 wood and was wrong)
-wall = 72       # WALL (palisade), 250 hp, 2 wood: the segment in [build] blocking_roles
+palisade_wall = 72       # WALL (palisade), 250 hp, 2 wood: the segment in [build] blocking_roles
 pikeman = 358       # 55 hp: an upgrade, researched (tech 197, Castle Age)
 halberdier = 359    # 60 hp: an upgrade, researched (tech 429, Imperial)
 # The spear line's reason to exist: 38 is the KNIGHT, 100 hp, 60 food + 75 gold, and its armour list carries the
@@ -197,21 +197,21 @@ long_swordsman = 77
 two_handed_swordsman = 473
 champion = 567
 castle = 82         # CSTL, 4800 hp - available from the Castle Age (tech 137 makes it)
-trebuchet = 331     # PTREB - available from the Imperial Age (tech 256 makes it)
+trebuchet_packed = 331     # PTREB - available from the Imperial Age (tech 256 makes it)
 siege_workshop = 49 # SIWS, class 3, 1800 hp, 200 wood: the building that makes the siege line
 blacksmith = 103    # BLAC, class 3, 1800 hp, 150 wood: the Feudal Age prerequisite of the siege workshop
 mill = 68           # MILL, class 3, 600 hp, 100 wood: a Dark Age building (and the farm prerequisite)
 mining_camp = 584   # MINE, class 3, 600 hp, 100 wood: a Dark Age building
 market = 84         # MRKT, class 3, 1800 hp, 175 wood: a Feudal Age building
 stable = 101        # STBL, class 3, 1500 hp, 175 wood: a Feudal Age building
-archery_range = 87  # ARRG, class 3, 1500 hp, 175 wood: a Feudal Age building
+archery_range_3 = 87  # ARRG, class 3, 1500 hp, 175 wood: a Feudal Age building
 lumber_camp = 562   # SMIL (the dat's "saw mill"), class 3, 600 hp, 100 wood: a Dark Age building
 sheep = 594         # SHEEPG, class 58: 7 hp, 100 food, leaves body 595 (D69)
-boar = 48           # BOARX, class 10 (Gaia only): 75 hp, 340 food, leaves body 356
+wild_boar = 48           # BOARX, class 10 (Gaia only): 75 hp, 340 food, leaves body 356
 deer = 65           # DEERX, class 9 (Gaia only): 140 food, leaves body 43
-sheep_carcass = 595 # SHEEP_D, class 11: the body a slaughtered sheep becomes
-boar_carcass = 356  # BOARX_D, class 11
-deer_carcass = 43   # DEERX_D, class 11
+sheep_corpse = 595 # SHEEP_D, class 11: the body a slaughtered sheep becomes
+wild_boar_corpse = 356  # BOARX_D, class 11
+deer_corpse = 43   # DEERX_D, class 11
 mangonel = 280      # MANGO, class 13: 50 hp, 7 range / 3 minimum, 160 wood + 135 gold, 6 s reload,
                     # 35 vs buildings and 40 vs units - the first thing in the pack that breaks a base
 
@@ -236,7 +236,7 @@ imperial_age = 103  # 1000 food + 800 gold, at the town centre: named for comple
 # `of` lists the roles that count; `single` lists roles that satisfy the requirement on their own.
 [age.requires]
 feudal_age = { count = 2, of = ["mill", "mining_camp", "barracks"] }
-castle_age = { count = 2, of = ["blacksmith", "market", "stable", "archery_range"] }
+castle_age = { count = 2, of = ["blacksmith", "market", "stable", "archery_range_3"] }
 imperial_age = { count = 2, of = ["castle", "siege_workshop"], single = ["castle"] }
 
 [population]
@@ -244,7 +244,7 @@ cap_default = 200
 house_population = 5
 # A town centre supports five units, like a house; a castle twenty (not modelled yet). Published:
 # the game manual and the AoE2 DB both say five, and the Chinese +5 is a civ bonus, not a rule here.
-town_centre_population = 5
+town_center_population = 5
 # PROVENANCE: published. Per-building values are in the dat only indirectly (civ resources
 # array, U8) so they are stated here instead.
 
@@ -255,12 +255,12 @@ town_centre_population = 5
 herdable_roles = ["sheep"]
 # Which animals carry meat at all - both kinds, herdable (58) and huntable (9, 10), because a boar or a deer
 # is as edible as a sheep. Herding and meat are two questions, so they are two lists.
-animal_roles = ["sheep", "boar", "deer"]
+animal_roles = ["sheep", "wild_boar", "deer"]
 # What an animal yields while it is alive and what its body holds after (D69, D70).
 resource = "food"
 # The bodies: what a slaughtered animal becomes in place, and what may therefore be gathered from a thing
 # with no health. A carcass is a different unit id, not an inference (D70).
-carcass_roles = ["sheep_carcass", "boar_carcass", "deer_carcass"]
+carcass_roles = ["sheep_corpse", "wild_boar_corpse", "deer_corpse"]
 # The leash (D71): a struck animal chases, loses interest, and walks back to where it was first struck.
 # Every new blow renews the interest, which is what a hunter's second arrow is *for*.
 #
@@ -305,7 +305,7 @@ surviving_classes = [3]
 [metrics]
 # What a balance run counts as a **military** unit (D17: the engine never learns that a militia is 74). A role that
 # the pack cannot name is skipped rather than refused - a metric is a measurement, not a rule of the game.
-military_roles = ["militia", "spearman", "pikeman", "halberdier", "mangonel", "trebuchet"]
+military_roles = ["militia", "spearman", "pikeman", "halberdier", "mangonel", "trebuchet_packed"]
 
 # Villager shares, in the shape the game's own AI uses (`docs/ai-of-the-game.md`): a percentage per resource, per
 # villager count, which the engine applies to idle villagers. The numbers below are read from HD's
@@ -415,7 +415,7 @@ gold = 10
 # What stands on a footprint is content's business, not the engine's (D76). Rows run top-to-bottom from the building's
 # anchor tile, which is the diamond's **north corner** (D84); '#' is impassable, '.' is ground a unit may cross. A role with
 # no entry blocks its own tile, which is what every building did before masks existed.
-[footprint.town_centre]
+[footprint.town_center]
 # The owner's Town Centre: the two-storey back core is solid, the left and right wings and the front courtyard are
 # under-hang and walkable - three quarters of the covered area.
 blocked = ["##..", "##..", "....", "...."]

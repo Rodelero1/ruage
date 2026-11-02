@@ -82,7 +82,7 @@ fn seeded_rich(fx: &Fixture, economy: &Economy) -> World {
     world
 }
 
-fn town_centre(world: &World) -> EntityId {
+fn town_center(world: &World) -> EntityId {
     world
         .entities()
         .iter()
@@ -132,7 +132,7 @@ fn bank(world: &mut World, slot: usize, want: u32) {
 fn training_a_unit_this_building_does_not_make_is_refused() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     // A spearman is a barracks unit (12), not a town-centre one.
     match world.submit_checked(Command::Train {
         building: centre,
@@ -235,7 +235,7 @@ fn a_second_order_joins_the_queue_and_is_paid_at_once() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     bank(&mut world, slot("food"), 150);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let order = |world: &mut World| {
         world
             .submit_checked(Command::Train {
@@ -289,9 +289,9 @@ fn the_queue_stops_at_the_length_content_allows() {
     // of five villagers needs five population and the town centre alone has that.
     let mut economy = fx.economy.clone();
     economy.population.cap_default = 50;
-    economy.population.town_centre_population = 50;
+    economy.population.town_center_population = 50;
     let mut world = seeded_rich(&fx, &economy);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let length = economy.train.queue_length;
     for placed in 0..length {
         world
@@ -330,7 +330,7 @@ fn a_villager_costs_fifty_food_and_appears_after_its_create_time() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     bank(&mut world, slot("food"), 50);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let before = world.stock(1, slot("food"));
     let villagers = world
         .entities()

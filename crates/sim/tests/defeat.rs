@@ -126,7 +126,7 @@ fn spawn_by_unit(world: &mut World, player: u8, unit: u32, tile: (i64, i64)) -> 
 }
 
 #[test]
-fn losing_the_town_centre_is_not_losing_the_match() {
+fn losing_the_town_center_is_not_losing_the_match() {
     // The rule the original plays and D46 did not: a razed base is a setback, not a defeat.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
@@ -195,7 +195,7 @@ fn walls_and_farms_do_not_keep_a_player_alive() {
     // The manual's exclusion list, by role. Content names them; the engine only knows "does not count".
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let wall = spawn_building(&mut world, 2, "wall", (28, 26));
+    let wall = spawn_building(&mut world, 2, "palisade_wall", (28, 26));
     let farm = spawn_building(&mut world, 2, "farm", (26, 24));
     reduce_to(&mut world, 2, &[wall, farm]);
 
@@ -252,7 +252,7 @@ fn a_barracks_keeps_a_player_alive() {
 }
 
 #[test]
-fn a_town_centre_keeps_a_player_alive() {
+fn a_town_center_keeps_a_player_alive() {
     // It makes villagers (production) and it takes wood in (gathering): both halves of the rule.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);

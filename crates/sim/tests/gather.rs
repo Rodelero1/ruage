@@ -88,11 +88,11 @@ kind = "wood"
 amount = 5
 hp = 20
 tiles = [[3, 1]]
-[[map.town_centre]]
+[[map.town_center]]
 player = 1
 x = 1
 y = 1
-[[map.town_centre]]
+[[map.town_center]]
 player = 2
 x = 5
 y = 5
@@ -394,7 +394,7 @@ fn a_partial_load_comes_home_when_the_node_runs_out() {
 }
 
 #[test]
-fn a_closer_lumber_camp_wins_over_the_town_centre() {
+fn a_closer_lumber_camp_wins_over_the_town_center() {
     // VMLUM's own drop list is [109 town centre, 562 lumber camp]. With a camp standing next to
     // the tree, a woodcutter must use it: that is the whole point of the campaign economy.
     let Some(fx) = fixture() else { return };
@@ -498,7 +498,7 @@ fn ordering_a_building_to_gather_is_an_error() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
-    let town_centre = world
+    let town_center = world
         .entities()
         .iter()
         .find(|e| e.kind == EntityKind::Building)
@@ -507,9 +507,9 @@ fn ordering_a_building_to_gather_is_an_error() {
 
     match world.submit_checked(Command::Gather {
         villager,
-        node: town_centre,
+        node: town_center,
     }) {
-        Err(SimError::NotAResource { id }) => assert_eq!(id, town_centre),
+        Err(SimError::NotAResource { id }) => assert_eq!(id, town_center),
         other => panic!("expected NotAResource, got {other:?}"),
     }
 }

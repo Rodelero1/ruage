@@ -59,7 +59,7 @@ pub struct Map {
     /// Row-major, `width * height` entries.
     pub terrain: Vec<Terrain>,
     pub resources: Vec<ResourceNode>,
-    pub town_centres: Vec<TownCentre>,
+    pub town_centers: Vec<TownCentre>,
 }
 
 impl Map {
@@ -95,7 +95,7 @@ struct RawMap {
     #[serde(default)]
     resource: Vec<RawResource>,
     #[serde(default)]
-    town_centre: Vec<RawTownCentre>,
+    town_center: Vec<RawTownCentre>,
 }
 
 #[derive(Deserialize)]
@@ -193,7 +193,7 @@ pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, Con
         height,
         terrain,
         resources: Vec::new(),
-        town_centres: Vec::new(),
+        town_centers: Vec::new(),
     };
 
     // --- resources ---
@@ -288,25 +288,25 @@ pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, Con
 
     // --- town centres ---
     let mut saw = [false; 3];
-    for tc in &raw.map.town_centre {
+    for tc in &raw.map.town_center {
         if !(1..=2).contains(&tc.player) {
             return Err(invalid(
                 path,
-                "map.town_centre",
+                "map.town_center",
                 format!("player {} is not 1 or 2", tc.player),
             ));
         }
         if saw[usize::from(tc.player)] {
             return Err(invalid(
                 path,
-                "map.town_centre",
+                "map.town_center",
                 format!("player {} has more than one town centre", tc.player),
             ));
         }
         if map.terrain_at(tc.x, tc.y).is_none() {
             return Err(invalid(
                 path,
-                "map.town_centre",
+                "map.town_center",
                 format!(
                     "player {} town centre at ({}, {}) is outside the map",
                     tc.player, tc.x, tc.y
@@ -316,7 +316,7 @@ pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, Con
         if !map.is_walkable(tc.x, tc.y) {
             return Err(invalid(
                 path,
-                "map.town_centre",
+                "map.town_center",
                 format!(
                     "player {} town centre at ({}, {}) is not on open ground",
                     tc.player, tc.x, tc.y
@@ -328,7 +328,7 @@ pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, Con
     if !saw[1] || !saw[2] {
         return Err(invalid(
             path,
-            "map.town_centre",
+            "map.town_center",
             "both players need a town centre: a slice with one side is not a game",
         ));
     }
@@ -338,7 +338,7 @@ pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, Con
     for node in &resources {
         if let Some(town) = raw
             .map
-            .town_centre
+            .town_center
             .iter()
             .find(|town| town.x == node.x && town.y == node.y)
         {
@@ -355,9 +355,9 @@ pub fn load_map_str(text: &str, path: &str, pack: &Resources) -> Result<Map, Con
 
     Ok(Map {
         resources,
-        town_centres: raw
+        town_centers: raw
             .map
-            .town_centre
+            .town_center
             .iter()
             .map(|tc| TownCentre {
                 player: tc.player,

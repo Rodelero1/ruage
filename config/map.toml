@@ -95,12 +95,12 @@ kind = "stone"
 amount = 300
 tiles = [[9, 11], [9, 12], [10, 11], [10, 12], [53, 51], [53, 52], [54, 51], [54, 52]]
 
-[[map.town_centre]]
+[[map.town_center]]
 player = 1
 x = 16
 y = 16
 
-[[map.town_centre]]
+[[map.town_center]]
 player = 2
 x = 47
 y = 47

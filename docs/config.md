@@ -130,11 +130,11 @@ never gathers.
 
 `economy.toml` also carries `[start]` — **role names**, not ids: which role is the town centre,
 which is the villager, and how many villagers each player begins with — plus `[role]`, the table that
-turns a role into a unit id (`town_centre = 109`, `house = 70`, `barracks = 12`, `spearman = 74`).
+turns a role into a unit id (`town_center = 109`, `house = 70`, `barracks = 12`, `spearman = 74`).
 The role table is the engine's whole vocabulary for units, so nothing outside content has to know
 that a town centre is 109 (D17): `World::seed_from` places one town centre per map town-centre tile
 and that many villagers on the nearest free walkable tiles, a scenario step names `role = "house"`,
-and the engine's own free-tile search finds the centre through `start.town_centre`. The loader
+and the engine's own free-tile search finds the centre through `start.town_center`. The loader
 refuses an empty role table, a role mapped to unit 0 (zero is a real unit id, so it cannot mean
 "unset"), and a `[start]` naming a role the table does not define.
 
@@ -154,7 +154,7 @@ training **pauses** at the ceiling until a unit dies or a house finishes. The pa
 countdown, so it resumes where it stopped.
 
 `[population]` feeds the housing rule: `cap_default` is the ceiling nothing raises, `house_population` is
-what one finished house supports, and `town_centre_population` what one finished town centre supports (both
+what one finished house supports, and `town_center_population` what one finished town centre supports (both
 five in the game; a castle's twenty is not modelled yet). Population is one per live unit, and a train order
 past the ceiling is refused with `PopulationCapped` before it is priced. A civilisation whose tech tree
 takes the house away is exempt from the house arithmetic and gets `cap_default` - which is how the Huns stay
@@ -202,7 +202,7 @@ the pack cannot name is refused at load. The tables must carry the tech: `--tech
 headless runner, or `World::load_research` in a test.
 
 `[[train.entry]]` says which building may create which unit, and it names **roles**, like everything
-else that talks about a unit: `building = "town_centre"`, `units = ["villager"]`. The ids are resolved
+else that talks about a unit: `building = "town_center"`, `units = ["villager"]`. The ids are resolved
 through `[role]` when the pack loads, so an author who mistypes a role is told at load which name was
 unknown; an integer is refused outright rather than accepted as a second spelling.
 

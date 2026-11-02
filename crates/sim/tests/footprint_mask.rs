@@ -34,7 +34,7 @@ fn fresh() -> Option<World> {
 }
 
 /// Player 1's Town Centre and where it stands.
-fn town_centre(world: &World) -> (EntityId, (i32, i32), u32) {
+fn town_center(world: &World) -> (EntityId, (i32, i32), u32) {
     let entity = world
         .entities()
         .iter()
@@ -54,9 +54,9 @@ fn town_centre(world: &World) -> (EntityId, (i32, i32), u32) {
 /// The back core is solid and the wings and courtyard are not: `blocked = ["##..", "##..", "....", "...."]` about the
 /// north-corner anchor (D84) means (0,0), (1,0), (0,1) and (1,1) are blocked and the bottom half is grass.
 #[test]
-fn a_town_centre_blocks_its_back_core_and_nothing_else() {
+fn a_town_center_blocks_its_back_core_and_nothing_else() {
     let Some(world) = fresh() else { return };
-    let (_, (ax, ay), _) = town_centre(&world);
+    let (_, (ax, ay), _) = town_center(&world);
 
     for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
         assert!(
@@ -76,7 +76,7 @@ fn a_town_centre_blocks_its_back_core_and_nothing_else() {
 #[test]
 fn demolition_frees_exactly_the_mask() {
     let Some(mut world) = fresh() else { return };
-    let (town, (ax, ay), _) = town_centre(&world);
+    let (town, (ax, ay), _) = town_center(&world);
     world
         .submit_checked(Command::Delete {
             player: 1,
@@ -102,7 +102,7 @@ fn demolition_frees_exactly_the_mask() {
 #[test]
 fn a_villager_can_stand_on_the_yard() {
     let Some(mut world) = fresh() else { return };
-    let (_, (ax, ay), _) = town_centre(&world);
+    let (_, (ax, ay), _) = town_center(&world);
     let scale = world.scale();
     let villager = world
         .entities()

@@ -43,7 +43,7 @@ cooldown_seconds = 5.0
 at_seconds = 120.0
 when = { villagers_at_least = 12, no_tech = "loom" }
 do = "research"
-building = "town_centre"
+building = "town_center"
 tech = "loom"
 ```
 

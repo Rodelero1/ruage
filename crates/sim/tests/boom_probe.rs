@@ -175,13 +175,13 @@ fn what_a_dark_age_opening_buys() {
     let market = world.role_unit("market").expect("market");
     let mining_camp = world.role_unit("mining_camp").expect("mining camp");
 
-    let town_centre = world
+    let town_center = world
         .entities()
         .iter()
         .find(|entity| entity.player == 1 && entity.kind == EntityKind::Building)
         .map(|entity| (entity.id, entity.position))
         .expect("the town centre");
-    let (tc, tc_at) = town_centre;
+    let (tc, tc_at) = town_center;
     let tc_tile = tile_of(&world, tc_at);
 
     let mut by_slot: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();

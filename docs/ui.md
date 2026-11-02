@@ -35,7 +35,7 @@ Everything below is data the engine already has; none of it needs a new simulati
    spent elsewhere mid-queue).
 4. **Affordability and headroom, for dimming a button.** From `stock` and `population`/`population_cap`, both already in
    the snapshot - the panel computes it, the engine does not need to.
-5. **A name to draw.** Content's role word (`town_centre`, `villager`) is the only vocabulary we have; the dat's name codes
+5. **A name to draw.** Content's role word (`town_center`, `villager`) is the only vocabulary we have; the dat's name codes
    are a byte array (`RTWC`), not a display string. Role words are lowercase with underscores - fine for now, and a
    content-side `[display]` table can replace it later without touching the engine.
 

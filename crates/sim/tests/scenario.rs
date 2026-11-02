@@ -204,7 +204,7 @@ fn the_ten_minute_scenario_builds_trains_and_fights() {
     // at an opponent *villager*, which stopped being reachable once villagers learned to spread through the wood
     // cluster (item 9) - the town centre is a target a walk can always reach, and a refusal is a worse teacher than a
     // scratch on the wall.
-    let centre_unit = world.start_town_centre_unit().expect("a town centre role");
+    let centre_unit = world.start_town_center_unit().expect("a town centre role");
     let target = world
         .entities()
         .iter()
@@ -332,20 +332,20 @@ role = "wonder"
     );
 }
 
-/// The engine must not know the *word* "town_centre": it is a role name from `economy.toml`, and a
+/// The engine must not know the *word* "town_center": it is a role name from `economy.toml`, and a
 /// pack of our own may call its keep anything it likes. This builds a world whose only gathering
 /// point is called `keep` and asks for a house beside it, so the engine's own free-tile search has
 /// to resolve the role rather than a literal (D17).
 #[test]
-fn a_world_whose_town_centre_role_is_renamed_still_finds_a_build_site() {
+fn a_world_whose_town_center_role_is_renamed_still_finds_a_build_site() {
     let Some(fx) = fixture() else { return };
     let mut economy = fx.economy.clone();
     let tc = economy
         .role
-        .remove("town_centre")
+        .remove("town_center")
         .expect("the project pack has one");
     economy.role.insert("keep".to_owned(), tc);
-    economy.start.town_centre = "keep".to_owned();
+    economy.start.town_center = "keep".to_owned();
 
     let mut world = World::new(&fx.settings, 5).expect("world");
     world
@@ -412,7 +412,7 @@ role = "house"
         .collect();
     assert!(
         refused.is_empty(),
-        "a build step must not need the literal \"town_centre\": {refused:?}"
+        "a build step must not need the literal \"town_center\": {refused:?}"
     );
 }
 
@@ -456,7 +456,7 @@ nth = 2
 at_seconds = 120.0
 player = 1
 kind = "research"
-building = "town_centre"
+building = "town_center"
 tech = "loom"
 "#;
     let (world, runner) = play(&fx, text, 12_345);
@@ -503,7 +503,7 @@ duration_seconds = 10
 at_seconds = 0.0
 player = 1
 kind = "research"
-building = "town_centre"
+building = "town_center"
 tech = "bronze_working"
 "#;
     let (_, runner) = play(&fx, text, 12_345);
@@ -639,7 +639,7 @@ duration_seconds = 140
 at_seconds = 5.0
 player = 1
 kind = "research"
-building = "town_centre"
+building = "town_center"
 tech = "doubling"
 
 [[step]]
@@ -687,7 +687,7 @@ role = "house"
 at_seconds = 70.0
 player = 1
 kind = "research"
-building = "town_centre"
+building = "town_center"
 tech = "doubling"
 "#
     );
@@ -823,7 +823,7 @@ where = "fish"
 /// A target selector that names a *building*: the acceptance match's last step is a siege engine aimed at a town
 /// centre, which `nearest_enemy` (a unit) could never express.
 #[test]
-fn an_attack_step_can_name_the_enemy_town_centre() {
+fn an_attack_step_can_name_the_enemy_town_center() {
     let Some(fx) = fixture() else {
         return;
     };
@@ -836,7 +836,7 @@ at_seconds = 2.0
 player = 1
 kind = "attack"
 attacker = "villager"
-target = "enemy_town_centre"
+target = "enemy_town_center"
 "#;
     let (world, runner) = play(&fx, text, 7);
     assert!(
@@ -847,7 +847,7 @@ target = "enemy_town_centre"
         "the step has to run: {:?}",
         runner.outcomes
     );
-    let centre_unit = world.start_town_centre_unit().expect("a town centre role");
+    let centre_unit = world.start_town_center_unit().expect("a town centre role");
     let enemy_centre = world
         .entities()
         .iter()

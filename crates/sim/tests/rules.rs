@@ -198,7 +198,7 @@ duration_seconds = 60.0
 [[rule]]
 player = 1
 cooldown_seconds = 1.0
-when = { no_building = "town_centre" }
+when = { no_building = "town_center" }
 do = "gather"
 resource = "food"
 "#,

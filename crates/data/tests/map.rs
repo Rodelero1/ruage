@@ -37,11 +37,11 @@ tiles = [[1, 1], [2, 1]]
 kind = "gold"
 amount = 400
 tiles = [[0, 0]]
-[[map.town_centre]]
+[[map.town_center]]
 player = 1
 x = 3
 y = 3
-[[map.town_centre]]
+[[map.town_center]]
 player = 2
 x = 0
 y = 3
@@ -70,7 +70,7 @@ fn the_real_map_toml_loads_as_a_mirrored_64x64() {
     assert_eq!((map.width, map.height), (64, 64));
     assert_eq!(map.terrain.len(), 64 * 64, "one entry per tile");
 
-    let players: Vec<u8> = map.town_centres.iter().map(|tc| tc.player).collect();
+    let players: Vec<u8> = map.town_centers.iter().map(|tc| tc.player).collect();
     assert_eq!(players, vec![1, 2], "both players get a town centre");
 
     let count = |slot: usize| map.resources.iter().filter(|n| n.slot == slot).count();
@@ -81,7 +81,7 @@ fn the_real_map_toml_loads_as_a_mirrored_64x64() {
     assert_eq!(count(of("food")), 12);
 
     // Every town centre stands on walkable ground, and every tree on a forest tile.
-    for tc in &map.town_centres {
+    for tc in &map.town_centers {
         assert_eq!(
             map.terrain_at(tc.x, tc.y),
             Some(Terrain::Grass),
@@ -192,16 +192,16 @@ fn a_resource_outside_the_map_is_refused() {
 }
 
 #[test]
-fn a_map_needs_a_town_centre_for_each_player() {
-    let bad = GOOD.replace("[[map.town_centre]]\nplayer = 2\nx = 0\ny = 3", "");
+fn a_map_needs_a_town_center_for_each_player() {
+    let bad = GOOD.replace("[[map.town_center]]\nplayer = 2\nx = 0\ny = 3", "");
     let err = load_map_str(&bad, "map.toml", &project())
         .expect_err("a one-sided map must be refused")
         .to_string();
-    assert!(err.contains("town_centre"), "got: {err}");
+    assert!(err.contains("town_center"), "got: {err}");
 }
 
 #[test]
-fn a_resource_cannot_sit_under_a_town_centre() {
+fn a_resource_cannot_sit_under_a_town_center() {
     // Both are on grass, so nothing else in the loader notices - and a tree inside the town
     // centre is a villager who can never reach it.
     let bad = GOOD.replace("tiles = [[0, 0]]", "tiles = [[3, 3]]");
@@ -251,11 +251,11 @@ terrain = [
   "DDG",
   "GGG",
 ]
-[[map.town_centre]]
+[[map.town_center]]
 player = 1
 x = 0
 y = 0
-[[map.town_centre]]
+[[map.town_center]]
 player = 2
 x = 2
 y = 2

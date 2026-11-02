@@ -90,11 +90,11 @@ kind = "wood"
 amount = 100
 hp = 20
 tiles = [[4, 0], [4, 1], [4, 2], [4, 3], [4, 4], [4, 5]]
-[[map.town_centre]]
+[[map.town_center]]
 player = 1
 x = 1
 y = 1
-[[map.town_centre]]
+[[map.town_center]]
 player = 2
 x = 7
 y = 7
@@ -127,11 +127,11 @@ kind = "wood"
 amount = 100
 hp = 20
 tiles = [[3, 1], [4, 1], [5, 1], [3, 2], [5, 2], [3, 3], [4, 3], [5, 3]]
-[[map.town_centre]]
+[[map.town_center]]
 player = 1
 x = 1
 y = 1
-[[map.town_centre]]
+[[map.town_center]]
 player = 2
 x = 7
 y = 7
@@ -158,11 +158,11 @@ terrain = [
 kind = "gold"
 amount = 400
 tiles = [[6, 1]]
-[[map.town_centre]]
+[[map.town_center]]
 player = 1
 x = 1
 y = 1
-[[map.town_centre]]
+[[map.town_center]]
 player = 2
 x = 7
 y = 7

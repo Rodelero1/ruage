@@ -2246,9 +2246,9 @@ impl World {
         self.explored = std::array::from_fn(|_| vec![0u64; words]);
         // The start names roles; the economy's role table is what turns them into units, so this
         // function never learns that a town centre is 109 (D17).
-        let tc_stats = self.role_unit_in(economy, &economy.start.town_centre)?;
+        let tc_stats = self.role_unit_in(economy, &economy.start.town_center)?;
         let villager_stats = self.role_unit_in(economy, &economy.start.villager)?;
-        let town_centre = units
+        let town_center = units
             .unit(tc_stats)
             .ok_or(SimError::MissingUnit { id: tc_stats })?;
         let villager = units
@@ -2263,10 +2263,10 @@ impl World {
                     detail: err.to_string(),
                 })
         };
-        let tc_speed = resolve(town_centre, tc_stats)?;
+        let tc_speed = resolve(town_center, tc_stats)?;
         let villager_speed = resolve(villager, villager_stats)?;
 
-        let mut centres = map.town_centres.clone();
+        let mut centres = map.town_centers.clone();
         centres.sort_by_key(|centre| centre.player);
 
         // Node tiles are taken before anyone is placed, so a villager never starts inside a
@@ -2285,7 +2285,7 @@ impl World {
                 position: self.tile(here),
                 speed: tc_speed,
                 velocity: (Fixed::ZERO, Fixed::ZERO),
-                hp: town_centre.hp,
+                hp: town_center.hp,
                 amount: Fixed::ZERO,
                 task: Task::Idle,
                 training: None,
@@ -5568,8 +5568,8 @@ impl World {
         let population = &economy.population;
         let base = if economy.role.get("house") == Some(&root) {
             population.house_population
-        } else if economy.role.get("town_centre") == Some(&root) {
-            population.town_centre_population
+        } else if economy.role.get("town_center") == Some(&root) {
+            population.town_center_population
         } else {
             0
         };

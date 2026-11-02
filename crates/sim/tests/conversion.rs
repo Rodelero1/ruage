@@ -219,7 +219,7 @@ fn a_boar_is_not_herdable_and_never_converts() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let boar = place(&mut world, 0, boar_unit, 0, 0, 75);
     let _seer = place(&mut world, 1, 83, -2, 0, 25);
 

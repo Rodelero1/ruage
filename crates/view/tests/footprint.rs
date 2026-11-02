@@ -79,7 +79,7 @@ fn the_pack_gives_buildings_three_different_sizes() {
     let Some(fx) = fixture() else { return };
     let world = seeded(&fx);
     let scale = world.scale();
-    let town = world.role_unit("town_centre").expect("town centre");
+    let town = world.role_unit("town_center").expect("town centre");
     let house = world.role_unit("house").expect("house");
     let barracks = world.role_unit("barracks").expect("barracks");
     let sizes = [
@@ -101,7 +101,7 @@ fn the_snapshot_carries_each_entities_footprint_from_the_pack() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let scale = world.scale();
-    let town = world.role_unit("town_centre").expect("town centre");
+    let town = world.role_unit("town_center").expect("town centre");
 
     // A house of the player's own, placed on open ground beside the town centre: a seeded map does not have
     // one, and a footprint nobody draws is a footprint nobody has checked.

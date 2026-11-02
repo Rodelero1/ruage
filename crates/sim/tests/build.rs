@@ -539,15 +539,15 @@ fn a_site_on_top_of_something_is_refused() {
         .id;
     bank_wood(&mut world, 25, node);
 
-    let town_centre = world
+    let town_center = world
         .entities()
         .iter()
         .find(|e| e.kind == EntityKind::Building && e.player == 1)
         .expect("TC");
     let scale = world.scale();
     let occupied = (
-        u16::try_from(town_centre.position.0.raw() / scale).unwrap(),
-        u16::try_from(town_centre.position.1.raw() / scale).unwrap(),
+        u16::try_from(town_center.position.0.raw() / scale).unwrap(),
+        u16::try_from(town_center.position.1.raw() / scale).unwrap(),
     );
 
     match world.submit_checked(Command::Build {
@@ -606,12 +606,12 @@ tiles = [
   [7, 12], [8, 12], [7, 13], [8, 13], [7, 14], [8, 14], [7, 15], [8, 15],
 ]
 
-[[map.town_centre]]
+[[map.town_center]]
 x = 3
 y = 6
 player = 1
 
-[[map.town_centre]]
+[[map.town_center]]
 x = 12
 y = 9
 player = 2
@@ -797,11 +797,11 @@ terrain = [
 kind = "timber"
 amount = 500
 tiles = [[1, 1], [2, 1]]
-[[map.town_centre]]
+[[map.town_center]]
 player = 1
 x = 5
 y = 5
-[[map.town_centre]]
+[[map.town_center]]
 player = 2
 x = 0
 y = 5

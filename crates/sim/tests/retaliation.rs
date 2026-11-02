@@ -93,7 +93,7 @@ fn a_struck_boar_turns_on_whoever_struck_it() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let scale = world.scale();
     let centre = world
         .entities()
@@ -187,7 +187,7 @@ fn an_animal_that_was_never_struck_stays_idle() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let scale = world.scale();
     let centre = world
         .entities()
@@ -446,7 +446,7 @@ fn an_arrow_carries_its_archer() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     // The archer is dat unit 4 (4 tiles of reach, 2 s reload), placed inside its own range and well
     // outside the town centre's.
     let archer = spawn_unit(&mut world, 1, 4, 12, 0, 30);
@@ -491,7 +491,7 @@ fn a_boar_that_loses_interest_returns_to_where_it_was_struck() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let boar = spawn_animal(&mut world, boar_unit, 14, 75, 340);
     let home = pos_of(&world, boar);
     let villager = villager_of(&world);
@@ -569,7 +569,7 @@ fn a_second_blow_turns_a_boar_that_had_given_up() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let boar = spawn_animal(&mut world, boar_unit, 14, 75, 340);
     // A second hunter, idle and out of reach until it is ordered in: the re-provoking blow is an arrow,
     // which is exactly the path the owner's "wait until two arrows are shot" describes.
@@ -642,7 +642,7 @@ fn a_refused_retaliation_is_recorded_rather_than_swallowed() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let boar = spawn_animal(&mut world, boar_unit, 14, 75, 340);
     let villager = villager_of(&world);
     world

@@ -107,8 +107,8 @@ fn place(world: &mut World, player: u8, id: u32, unit: u32, tile: (i64, i64)) ->
     id
 }
 
-fn own_town_centre(world: &World, player: u8) -> EntityId {
-    let role = world.role_unit("town_centre").expect("town centre role");
+fn own_town_center(world: &World, player: u8) -> EntityId {
+    let role = world.role_unit("town_center").expect("town centre role");
     world
         .entities()
         .iter()
@@ -147,7 +147,7 @@ fn a_player_can_raze_its_own_building() {
 fn a_player_cannot_raze_something_it_does_not_own() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let enemy = own_town_centre(&world, 2);
+    let enemy = own_town_center(&world, 2);
     let err = world
         .submit_checked(Command::Delete {
             player: 1,
@@ -186,7 +186,7 @@ fn a_resource_node_cannot_be_deleted() {
 fn a_deleted_building_releases_its_garrison() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = own_town_centre(&world, 1);
+    let centre = own_town_center(&world, 1);
     let villager = place(&mut world, 1, 9_001, fx.economy.role["villager"], (17, 17));
     world
         .submit_checked(Command::Garrison {
@@ -232,14 +232,14 @@ fn deleting_a_unit_frees_its_population() {
 }
 
 #[test]
-fn razing_the_town_centre_is_not_the_end_of_a_player() {
+fn razing_the_town_center_is_not_the_end_of_a_player() {
     // D59 replaced D46's seat rule: a razed base is a setback, because the villagers who survived it can
     // build another. The player is out only when nothing that counts is left.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     assert_eq!(world.outcome(), None, "a match at tick zero is undecided");
 
-    let mine = own_town_centre(&world, 1);
+    let mine = own_town_center(&world, 1);
     world
         .submit_checked(Command::Delete {
             player: 1,

@@ -87,7 +87,7 @@ fn seeded_with(fx: &Fixture, economy: &Economy, civs: bool) -> World {
     world
 }
 
-fn town_centre(world: &World) -> EntityId {
+fn town_center(world: &World) -> EntityId {
     world
         .entities()
         .iter()
@@ -115,7 +115,7 @@ fn villagers(world: &World) -> usize {
 
 fn a_free_tile(world: &World) -> (u16, u16) {
     let scale = world.scale();
-    let centre = world.entity(town_centre(world)).expect("tc");
+    let centre = world.entity(town_center(world)).expect("tc");
     let origin = (
         u16::try_from(centre.position.0.raw() / scale).unwrap(),
         u16::try_from(centre.position.1.raw() / scale).unwrap(),
@@ -170,7 +170,7 @@ fn a_finished_house(world: &mut World) {
 /// Order villagers one at a time until one stops arriving - the ceiling pausing it - and return how
 /// many arrived. The order that stalls is still queued when this returns.
 fn fill_to_the_ceiling(world: &mut World) -> usize {
-    let centre = town_centre(world);
+    let centre = town_center(world);
     let start = villagers(world);
     for arrived in 0..40 {
         world
@@ -200,7 +200,7 @@ const VILLAGER: u32 = 83;
 const SPEARMAN: u32 = 93;
 
 #[test]
-fn a_town_centre_supports_five_units() {
+fn a_town_center_supports_five_units() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     // Three villagers start and the town centre holds five, so two more arrive and no more.
@@ -215,7 +215,7 @@ fn a_full_player_holds_the_order_and_pauses_the_clock() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     fill_to_the_ceiling(&mut world);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     world
         .submit_checked(Command::Train {
             building: centre,
@@ -248,7 +248,7 @@ fn a_finished_house_lets_a_paused_unit_arrive() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     fill_to_the_ceiling(&mut world);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     world
         .submit_checked(Command::Train {
             building: centre,
@@ -274,7 +274,7 @@ fn a_dead_unit_lets_a_paused_unit_arrive() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     fill_to_the_ceiling(&mut world);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     world
         .submit_checked(Command::Train {
             building: centre,
@@ -337,7 +337,7 @@ fn a_civilisation_that_cannot_build_houses_gets_the_whole_cap() {
     let mut economy = fx.economy.clone();
     economy.start.civs = vec!["Huns".to_owned()];
     let mut world = seeded_with(&fx, &economy, true);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let before = villagers(&world);
     for _ in 0..20 {
         // The queue holds five, so this keeps it fed rather than trying to place twenty at once.
@@ -398,7 +398,7 @@ fn the_cap_stops_at_what_content_allows() {
 fn a_queue_can_exceed_the_ceiling_and_drains_later() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     for placed in 0..5 {
         world
             .submit_checked(Command::Train {

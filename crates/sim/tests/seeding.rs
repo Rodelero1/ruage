@@ -68,7 +68,7 @@ fn seeded(fx: &Fixture) -> World {
 }
 
 #[test]
-fn a_seeded_map_gives_each_player_a_town_centre_and_three_villagers() {
+fn a_seeded_map_gives_each_player_a_town_center_and_three_villagers() {
     let Some(fx) = fixture() else { return };
     let world = seeded(&fx);
 
@@ -113,7 +113,7 @@ fn ids_run_player_by_player_in_role_order() {
         "the entity list is in ascending id order"
     );
     // The start names roles; the economy's role table is the only place the ids live (D17).
-    let tc = fx.economy.role[&fx.economy.start.town_centre];
+    let tc = fx.economy.role[&fx.economy.start.town_center];
     let villager = fx.economy.role[&fx.economy.start.villager];
     assert_eq!(world.entities()[0].unit, Some(tc));
     assert_eq!(world.entities()[1].unit, Some(villager));
@@ -129,7 +129,7 @@ fn villagers_carry_the_stats_from_the_unit_table() {
         .expect("VMBAS");
     let tc = fx
         .units
-        .unit(fx.economy.role[&fx.economy.start.town_centre])
+        .unit(fx.economy.role[&fx.economy.start.town_center])
         .expect("RTWC");
 
     for entity in world.entities().iter().filter(|e| e.player != 0) {

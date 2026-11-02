@@ -71,7 +71,7 @@ fn spawn_tree(world: &mut World, at: (u16, u16), amount: u32) -> EntityId {
 fn spawn_wall(world: &mut World, at: (u16, u16)) -> EntityId {
     let scale = world.scale();
     let id = next_id(world);
-    let wall = world.role_unit("wall").expect("the wall role");
+    let wall = world.role_unit("palisade_wall").expect("the wall role");
     world
         .submit_checked(Command::Spawn {
             id,

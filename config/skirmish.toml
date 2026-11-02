@@ -21,7 +21,7 @@ duration_seconds = 900.0
 at_seconds = 0.0
 player = 1
 kind = "research"
-building = "town_centre"
+building = "town_center"
 tech = "loom"
 
 [[step]]
@@ -57,7 +57,7 @@ player = 1
 kind = "build"
 villager = 0
 role = "house"
-where = "near_town_centre"
+where = "near_town_center"
 
 # A tree holds 200 and a villager idles when its own tree runs out (a recorded limit), so the three
 # are re-tasked onto the next three trees once the first ones are bare. This is the script working
@@ -89,7 +89,7 @@ player = 1
 kind = "build"
 villager = 0
 role = "barracks"
-where = "near_town_centre"
+where = "near_town_center"
 
 # Food and gold for the spearman. The villagers switch off the tree once the barracks is paid for;
 # one villager on forage banks about 0.25 food per second, so 60 food takes ~240 s.

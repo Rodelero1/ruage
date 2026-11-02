@@ -176,7 +176,7 @@ pub enum StepKind {
     /// Put up a building: a villager, the building's role, and **where** it goes.
     ///
     /// `where` is a resource name (the building lands on the free tile nearest the nearest such node) or
-    /// `"near_town_centre"`, which is the default. The field was parsed and **ignored** before this: `where` was
+    /// `"near_town_center"`, which is the default. The field was parsed and **ignored** before this: `where` was
     /// written in `scenario.toml`, `deny_unknown_fields` is not set on a step, and nothing read the key - so a script
     /// that asked for a lumber camp by the wood got a building beside the town centre and no complaint.
     Build {
@@ -191,7 +191,7 @@ pub enum StepKind {
     /// entry, because a tech has no name in the dat at all (D17).
     Research { building: String, tech: String },
     /// Send this player's newest unit of a role at something. `target` is a selector: `"nearest_enemy"` (the first
-    /// enemy unit), `"enemy_building"` (their first building), or `"enemy_town_centre"` (the building of the start's
+    /// enemy unit), `"enemy_building"` (their first building), or `"enemy_town_center"` (the building of the start's
     /// town-centre family, which is what a mangonel is aimed at).
     Attack { attacker: String, target: String },
     /// Stand a villager down.
@@ -415,7 +415,7 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 .ok_or_else(|| format!("player {player} has no villager {villager}"))?;
             let unit = role_of(world, role)?;
             let at = match where_.as_deref() {
-                None | Some("near_town_centre") => free_tile_near(world, player),
+                None | Some("near_town_center") => free_tile_near(world, player),
                 Some(resource) => {
                     // A building placed for a resource is a building placed *at* that resource: a lumber camp beside
                     // the wood is the whole point of a lumber camp, and one beside the town centre is wood spent on a
@@ -425,7 +425,7 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                             "where = {resource:?} names no resource in the pack, so there is nothing to build beside"
                         )
                     })?;
-                    let centre = town_centre_of(world, player).ok_or_else(|| {
+                    let centre = town_center_of(world, player).ok_or_else(|| {
                         format!("player {player} has no town centre to measure a walk from")
                     })?;
                     let node = nearest_resource(world, centre, slot, 0).ok_or_else(|| {
@@ -568,8 +568,8 @@ fn nearest_resource(world: &World, from: EntityId, slot: usize, nth: usize) -> O
 
 /// The first free tile within two of this player's town centre, in a fixed scan order.
 /// The player's own town centre, by the start's role rather than by an id.
-fn town_centre_of(world: &World, player: u8) -> Option<EntityId> {
-    let centre_unit = world.start_town_centre_unit()?;
+fn town_center_of(world: &World, player: u8) -> Option<EntityId> {
+    let centre_unit = world.start_town_center_unit()?;
     world
         .entities()
         .iter()
@@ -612,7 +612,7 @@ fn free_tile_near_node(world: &World, node: EntityId) -> Option<(u16, u16)> {
 
 fn free_tile_near(world: &World, player: u8) -> Option<(u16, u16)> {
     // The start's own town-centre role, not the word: a pack of our own may call it "keep" (D17).
-    let centre_unit = world.start_town_centre_unit()?;
+    let centre_unit = world.start_town_center_unit()?;
     // **The family, not the id.** A town centre that has been upgraded to its Feudal variant (463) is not unit 109 any
     // more, and matching the id exactly made every placement beside it fail: *"no free tile for a market"*, 267 times,
     // with the town centre standing right there.
@@ -742,11 +742,11 @@ impl World {
         economy.role.get(&economy.start.villager).copied()
     }
 
-    /// The unit id of the town centre a match starts from: the `start.town_centre` role. Scripted
+    /// The unit id of the town centre a match starts from: the `start.town_center` role. Scripted
     /// steps place buildings beside it, and they must do that by role rather than by the word.
-    pub fn start_town_centre_unit(&self) -> Option<u32> {
+    pub fn start_town_center_unit(&self) -> Option<u32> {
         let economy = self.economy.as_ref()?;
-        economy.role.get(&economy.start.town_centre).copied()
+        economy.role.get(&economy.start.town_center).copied()
     }
 
     /// Is this tile inside the map, walkable, and empty?
@@ -945,12 +945,12 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Command, String> {
                 .ok_or_else(|| format!("player {player} has no idle villager to build with"))?;
             let unit = role_of(world, role)?;
             let at = match where_.as_deref() {
-                None | Some("near_town_centre") => free_tile_near(world, player),
+                None | Some("near_town_center") => free_tile_near(world, player),
                 Some(resource) => {
                     let slot = world.slot_of(resource).ok_or_else(|| {
                         format!("the content pack defines no resource called {resource:?}")
                     })?;
-                    let centre = town_centre_of(world, player).ok_or_else(|| {
+                    let centre = town_center_of(world, player).ok_or_else(|| {
                         format!("player {player} has no town centre to measure a walk from")
                     })?;
                     let node = nearest_resource(world, centre, slot, 0).ok_or_else(|| {
@@ -1080,12 +1080,12 @@ fn choose_target(
             })
             .map(|entity| entity.id)
             .next(),
-        "enemy_town_centre" => {
-            let centre = world.start_town_centre_unit().ok_or_else(|| {
+        "enemy_town_center" => {
+            let centre = world.start_town_center_unit().ok_or_else(|| {
                 "the pack names no town centre, so there is none to aim at".to_owned()
             })?;
             // The town centre first; then **any** enemy building, then the nearest enemy unit. A mangonel that has already
-            // razed the town centre leaves the rule with nothing to aim at - *"no enemy matches enemy_town_centre"*, 64
+            // razed the town centre leaves the rule with nothing to aim at - *"no enemy matches enemy_town_center"*, 64
             // times in the last run, while the enemy's villagers were still alive and the match was still on. The
             // selector now degrades instead of failing.
             let buildings = |family: Option<u32>| -> Option<EntityId> {

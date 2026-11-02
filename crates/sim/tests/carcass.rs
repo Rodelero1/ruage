@@ -125,9 +125,9 @@ fn the_last_blow_of_a_villager_leaves_the_meat() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let carcass = world
-        .role_unit("boar_carcass")
+        .role_unit("wild_boar_corpse")
         .expect("a boar carcass role");
     let villager = place(&mut world, 1, 83, 14, 2, 25, 0);
     let boar = place(&mut world, 0, boar_unit, 14, 0, 10, 340);
@@ -173,9 +173,9 @@ fn a_soldiers_last_blow_leaves_a_body_with_nothing() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let carcass = world
-        .role_unit("boar_carcass")
+        .role_unit("wild_boar_corpse")
         .expect("a boar carcass role");
     // Dat unit 74 is the militia (40 hp, 4 melee damage): the pack's cheapest soldier.
     let soldier = place(&mut world, 1, 74, 14, 2, 40, 0);
@@ -217,9 +217,9 @@ fn a_soldier_who_softens_the_boar_does_not_take_the_meat() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let carcass = world
-        .role_unit("boar_carcass")
+        .role_unit("wild_boar_corpse")
         .expect("a boar carcass role");
     let soldier = place(&mut world, 1, 74, 14, 3, 40, 0);
     let villager = place(&mut world, 1, 83, 14, -2, 25, 0);
@@ -291,7 +291,7 @@ fn an_attacker_stops_swinging_once_its_quarry_is_a_body() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let villager = place(&mut world, 1, 83, 14, 2, 25, 0);
     let boar = place(&mut world, 0, boar_unit, 14, 0, 10, 340);
 
@@ -340,7 +340,7 @@ fn a_carcass_rots_at_the_rate_the_pack_gives() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let villager = place(&mut world, 1, 83, 14, 2, 25, 0);
     let boar = place(&mut world, 0, boar_unit, 14, 0, 10, 340);
     let scale = world.scale();
@@ -460,7 +460,7 @@ fn a_soldiers_body_lies_for_a_carcass_span_and_then_goes() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let soldier = place(&mut world, 1, 74, 14, 2, 40, 0);
     let boar = place(&mut world, 0, boar_unit, 14, 0, 10, 340);
 

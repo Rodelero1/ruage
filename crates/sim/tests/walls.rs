@@ -131,7 +131,7 @@ fn ring(world: &mut World, role: &str, first_id: u32) -> Vec<EntityId> {
 fn a_wall_of_walls_closes_the_way() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    ring(&mut world, "wall", 9_900);
+    ring(&mut world, "palisade_wall", 9_900);
     let unit = walker(&mut world, 9_950, (26, 30));
 
     let err = world
@@ -144,7 +144,7 @@ fn a_wall_of_walls_closes_the_way() {
 fn knocking_one_segment_down_opens_the_way() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let segments = ring(&mut world, "wall", 9_910);
+    let segments = ring(&mut world, "palisade_wall", 9_910);
     let unit = walker(&mut world, 9_951, (26, 30));
 
     world

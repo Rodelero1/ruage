@@ -58,7 +58,7 @@ fn seeded(fx: &Fixture) -> World {
     world
 }
 
-fn town_centre(world: &World) -> EntityId {
+fn town_center(world: &World) -> EntityId {
     world
         .entities()
         .iter()
@@ -127,7 +127,7 @@ const SPEARMAN: u32 = 93;
 fn a_unit_goes_inside_a_building_and_stops_existing_on_the_map() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let scale = world.scale();
     let home = world.position(centre).expect("position");
     let tile = (home.0.raw() / scale + 1, home.1.raw() / scale);
@@ -160,7 +160,7 @@ fn a_unit_goes_inside_a_building_and_stops_existing_on_the_map() {
 fn a_full_building_refuses_another_unit() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let capacity = u32::from(fx.units.unit(109).expect("town centre").garrison);
     let scale = world.scale();
     let home = world.position(centre).expect("position");
@@ -191,7 +191,7 @@ fn a_full_building_refuses_another_unit() {
 fn ungarrisoning_puts_the_units_back_on_the_map() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let scale = world.scale();
     let home = world.position(centre).expect("position");
     let tile = (home.0.raw() / scale + 1, home.1.raw() / scale);
@@ -223,10 +223,10 @@ fn ungarrisoning_puts_the_units_back_on_the_map() {
 
 /// A town centre has an attack array and a range: it is an armed entity that does not move.
 #[test]
-fn a_town_centre_shoots_a_spearman_five_tiles_away() {
+fn a_town_center_shoots_a_spearman_five_tiles_away() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let scale = world.scale();
     let home = world.position(centre).expect("position");
     let tile = (home.0.raw() / scale, home.1.raw() / scale + 5);
@@ -260,7 +260,7 @@ fn a_building_without_attacks_is_unarmed() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let scale = world.scale();
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let home = world.position(centre).expect("position");
     let builder = place(
         &mut world,
@@ -317,7 +317,7 @@ const BARRACKS: u32 = 12;
 fn a_damaged_building_ejects_its_garrison() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let scale = world.scale();
     let home = world.position(centre).expect("position");
     let tile = (home.0.raw() / scale + 1, home.1.raw() / scale);
@@ -386,7 +386,7 @@ fn a_damaged_building_ejects_its_garrison() {
 fn a_garrisoned_unit_cannot_be_attacked() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let scale = world.scale();
     let home = world.position(centre).expect("position");
     let tile = (home.0.raw() / scale + 1, home.1.raw() / scale);
@@ -413,10 +413,10 @@ fn a_garrisoned_unit_cannot_be_attacked() {
 /// the **pierce** attack over the reload - and only units that deal pierce damage from range count, which
 /// is why a Throwing Axeman (melee damage at range 3) adds nothing.
 #[test]
-fn garrisoned_archers_add_arrows_to_a_town_centre() {
+fn garrisoned_archers_add_arrows_to_a_town_center() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let scale = world.scale();
     let home = world.position(centre).expect("position");
     let tile = (home.0.raw() / scale + 1, home.1.raw() / scale);
@@ -465,7 +465,7 @@ fn garrisoned_archers_add_arrows_to_a_town_centre() {
 fn a_throwing_axeman_adds_no_arrows() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let scale = world.scale();
     let home = world.position(centre).expect("position");
     let tile = (home.0.raw() / scale + 1, home.1.raw() / scale);
@@ -515,7 +515,7 @@ fn a_production_building_does_not_take_units_in_from_outside() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let scale = world.scale();
-    let centre = town_centre(&world);
+    let centre = town_center(&world);
     let home = world.position(centre).expect("position");
     // A builder has to be able to walk to its site, so this one has a speed.
     let builder = place_moving(

@@ -378,7 +378,7 @@ fn a_live_animal_yields_no_meat() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let (_, villager, centre) = seat(&world);
     let boar = a_sheep(&mut world, boar_unit, centre, 5);
     let scale = world.scale();
@@ -526,7 +526,7 @@ fn a_villager_hunting_a_boar_uses_the_bow() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let (_, villager, centre) = seat(&world);
     // Fourteen tiles out: at six the town centre still shoots, and the blow being measured would be the tower's.
     let boar = an_animal(&mut world, boar_unit, centre, 14, 75);
@@ -574,7 +574,7 @@ fn a_hunters_arrow_that_kills_leaves_the_meat() {
         return;
     };
     let mut world = seeded(&fx);
-    let boar_unit = world.role_unit("boar").expect("a boar role");
+    let boar_unit = world.role_unit("wild_boar").expect("a boar role");
     let (_, villager, centre) = seat(&world);
     // Fourteen tiles out, so the only blow that lands is the hunter's (a town centre shoots at six).
     let boar = an_animal(&mut world, boar_unit, centre, 14, 75);
@@ -597,7 +597,7 @@ fn a_hunters_arrow_that_kills_leaves_the_meat() {
         body.unit,
         Some(
             world
-                .role_unit("boar_carcass")
+                .role_unit("wild_boar_corpse")
                 .expect("a boar carcass role")
         ),
         "a kill leaves the body"

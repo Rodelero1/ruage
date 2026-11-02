@@ -588,12 +588,12 @@ been validated at load for months while the sim never read them. Housing is now 
 
 - population is the number of live units a player has, one each - the dat carries no per-unit cost, and
   neither does the game;
-- the ceiling is `min(cap_default, houses x house_population + town_centres x town_centre_population)`,
+- the ceiling is `min(cap_default, houses x house_population + town_centers x town_center_population)`,
   counted from **finished** buildings only: a house supports its five when it is finished, not when the
   site is marked out;
 - a train order past the ceiling is refused with `PopulationCapped`, before any price is quoted.
 
-`town_centre_population = 5` is new content, and it is published fact rather than invention: a house and a
+`town_center_population = 5` is new content, and it is published fact rather than invention: a house and a
 town centre both support five, a castle twenty (the manual and the AoE2 DB agree; the Chinese +5 is a civ
 bonus, not a rule). A castle is not modelled, so a pack that wants its twenty says so when castles land.
 
@@ -1075,7 +1075,7 @@ the world already hashes what it derives from them.
 
 The prototype list's first item is victory and defeat, and the smallest honest rule is the one the list states:
 destroy the enemy town centre, or lose yours. So **the seat rule** is the whole conquest rule - a side that has no
-living building of the family content names in `[start] town_centre` has lost - and it is enough to decide a
+living building of the family content names in `[start] town_center` has lost - and it is enough to decide a
 two-side match, a draw (both seats gone on one tick), and to leave a three-way match running while two seats still
 stand.
 
@@ -2085,7 +2085,7 @@ said. A farm is the extreme case: `radius 1.5` (3x3) and **entirely walkable**.
 So content describes, per role, which tiles of the footprint are solid:
 
 ```toml
-[footprint.town_centre]
+[footprint.town_center]
 # Rows top-to-bottom, columns left-to-right, anchored at the building's own tile.
 # '#' is impassable, '.' is ground a unit may cross. The diamond's core is the back half.
 blocked = ["##..", "##..", "....", "...."]

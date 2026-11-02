@@ -73,8 +73,11 @@ fn the_real_unit_table_loads_and_answers_known_values() {
     // And the flag says where each came from: the sheep is duplicated onto the playable civ (as `SHEEPG`),
     // the boar exists only on Gaia. That difference is exactly why the missing animals went unnoticed.
     assert!(!sheep.gaia, "a sheep is on the playable civ");
-    assert!(units.unit(48).expect("boar").gaia, "a boar is Gaia's alone");
-    let boar = units.unit(48).expect("boar");
+    assert!(
+        units.unit(48).expect("wild_boar").gaia,
+        "a boar is Gaia's alone"
+    );
+    let boar = units.unit(48).expect("wild_boar");
     assert_eq!(boar.food, 340);
     assert_eq!(boar.dead_unit, Some(356));
     let deer = units.unit(65).expect("deer");
@@ -246,7 +249,7 @@ fn the_units_table_and_the_map_agree_on_the_world() {
         .expect("resources.toml loads");
     let map = load_map_file(&map_path, &pack).expect("map.toml loads");
     let units = load_units_file(&units_path).expect("units.toml loads");
-    for tc in &map.town_centres {
+    for tc in &map.town_centers {
         assert_eq!(map.terrain_at(tc.x, tc.y), Some(Terrain::Grass));
     }
     let villager = units.unit(83).expect("VMBAS");

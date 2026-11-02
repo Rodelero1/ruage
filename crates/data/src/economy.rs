@@ -167,7 +167,7 @@ pub struct Conquest {
 pub struct Start {
     /// Role names, not unit ids: the roles below are the vocabulary content uses, and the engine
     /// never has to know that a town centre is unit 109 (D17).
-    pub town_centre: String,
+    pub town_center: String,
     pub villager: String,
     pub villagers_per_player: u32,
     /// Tech roles a match begins with, already researched. Without them a match could research
@@ -282,7 +282,7 @@ pub struct Population {
     /// What one finished town centre supports. Published: a house and a town centre both support five,
     /// a castle twenty - the castle is not modelled, so a pack that wants its cap says it here or not
     /// at all (D31).
-    pub town_centre_population: u32,
+    pub town_center_population: u32,
 }
 
 // --- wire format: one struct per table, strict -------------------------------------------
@@ -483,7 +483,7 @@ struct RawDecay {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawStart {
-    town_centre: String,
+    town_center: String,
     villager: String,
     villagers_per_player: u32,
     #[serde(default)]
@@ -504,7 +504,7 @@ struct RawPopulation {
     /// Defaulted to zero: a pack written before housing existed supported nothing from its town
     /// centres, which is exactly what "the field is absent" should mean.
     #[serde(default)]
-    town_centre_population: u32,
+    town_center_population: u32,
 }
 
 fn invalid(path: &str, key: &str, detail: impl Into<String>) -> ConfigError {
@@ -653,7 +653,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         }
     }
     for (field, name) in [
-        ("town_centre", &raw.start.town_centre),
+        ("town_center", &raw.start.town_center),
         ("villager", &raw.start.villager),
     ] {
         if !raw.role.contains_key(name) {
@@ -667,13 +667,13 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             ));
         }
     }
-    if raw.start.town_centre == raw.start.villager {
+    if raw.start.town_center == raw.start.villager {
         return Err(invalid(
             path,
             "start",
             format!(
                 "{} is both the town centre and the villager; a match starts with one of each",
-                raw.start.town_centre
+                raw.start.town_center
             ),
         ));
     }
@@ -792,10 +792,10 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         population: Population {
             cap_default: raw.population.cap_default,
             house_population: raw.population.house_population,
-            town_centre_population: raw.population.town_centre_population,
+            town_center_population: raw.population.town_center_population,
         },
         start: Start {
-            town_centre: raw.start.town_centre,
+            town_center: raw.start.town_center,
             villager: raw.start.villager,
             villagers_per_player: raw.start.villagers_per_player,
             techs: raw.start.techs,

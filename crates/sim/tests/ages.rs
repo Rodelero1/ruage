@@ -83,7 +83,7 @@ fn fresh_id(world: &World) -> u32 {
 }
 
 /// The player's town centre: a finished building that can research an age.
-fn town_centre(world: &World) -> EntityId {
+fn town_center(world: &World) -> EntityId {
     world
         .entities()
         .iter()
@@ -130,7 +130,7 @@ const IMPERIAL: u32 = 103;
 fn the_feudal_age_needs_two_dark_age_buildings() {
     let Some(fx) = fixture() else { return };
     let mut world = world(&fx);
-    let tc = town_centre(&world);
+    let tc = town_center(&world);
 
     // A town centre is not one of the two: the game counts the Dark Age *economy and military* buildings.
     let refused = research(&mut world, tc, FEUDAL);
@@ -161,7 +161,7 @@ fn the_feudal_age_needs_two_dark_age_buildings() {
 fn a_foundation_does_not_count_towards_an_age() {
     let Some(fx) = fixture() else { return };
     let mut world = world(&fx);
-    let tc = town_centre(&world);
+    let tc = town_center(&world);
     // A mill foundation: placed, paid for, not yet a building.
     let mill = world.role_unit("mill").expect("mill");
     let scale = world.scale();
@@ -203,7 +203,7 @@ fn a_castle_alone_reaches_the_imperial_age() {
     let mut world = world(&fx);
     world.grant_tech(1, FEUDAL).expect("Feudal");
     world.grant_tech(1, CASTLE_AGE).expect("Castle");
-    let tc = town_centre(&world);
+    let tc = town_center(&world);
 
     let nothing = research(&mut world, tc, IMPERIAL);
     assert!(
