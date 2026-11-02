@@ -136,8 +136,8 @@ fn every_pack_file_is_required() {
     }
     assert_eq!(
         PACK_FILES.len(),
-        9,
-        "seven behaviour files, two tables of research and the civ bonuses"
+        10,
+        "seven behaviour files, two tables of research, the civ bonuses and the AI personality"
     );
     let dir = Path::new(".");
     assert!(dir.exists());

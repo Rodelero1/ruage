@@ -34,6 +34,22 @@ pub struct Scenario {
     /// (`docs/ai-of-the-game.md`), and the reason a rule cannot go stale when the economy's speed changes.
     #[serde(default)]
     pub rule: Vec<Rule>,
+    /// The **personality** this match plays (D94): a name resolved beside the scenario, as `ai/<name>.toml`. Behaviour
+    /// lives there, not here - a scenario keeps what is scripted for this match, and one opening serves many matches.
+    /// A scenario may use `ai` or carry its own `[[rule]]` blocks, never both: two sources for one AI is a file nobody
+    /// can read.
+    #[serde(default)]
+    pub ai: Option<String>,
+}
+
+/// A personality: the rules that decide what a player *does* (D94). Its own file, its own schema, because it is
+/// behaviour and the rest of `config/` is the world.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Personality {
+    pub schema: u32,
+    #[serde(default)]
+    pub rule: Vec<Rule>,
 }
 
 /// One rule: a player, a condition, one action, and a cooldown so a satisfied condition does not spam orders.
@@ -631,12 +647,43 @@ fn free_tile_near(world: &World, player: u8) -> Option<(u16, u16)> {
 }
 
 pub fn load_scenario_str(text: &str, path: &str) -> Result<Scenario, String> {
-    toml::from_str(text).map_err(|err| format!("{path}: {err}"))
+    let scenario: Scenario = toml::from_str(text).map_err(|err| format!("{path}: {err}"))?;
+    // `ai` names a file beside the scenario, so a scenario held only as text cannot honour it. Refusing is the honest
+    // answer: silently playing with no rules is an AI that does nothing and a file that says it should do something.
+    if let Some(name) = &scenario.ai {
+        return Err(format!(
+            "{path}: names personality {name:?}, which is resolved beside the file - load it with load_scenario_file"
+        ));
+    }
+    Ok(scenario)
 }
 
 pub fn load_scenario_file(path: &std::path::Path) -> Result<Scenario, String> {
     let text = std::fs::read_to_string(path).map_err(|err| format!("{}: {err}", path.display()))?;
-    load_scenario_str(&text, &path.display().to_string())
+    let mut scenario: Scenario =
+        toml::from_str(&text).map_err(|err| format!("{}: {err}", path.display()))?;
+    let Some(name) = scenario.ai.clone() else {
+        return Ok(scenario);
+    };
+    if !scenario.rule.is_empty() {
+        return Err(format!(
+            "{}: carries [[rule]] blocks *and* names personality {name:?} - the behaviour belongs in one place",
+            path.display()
+        ));
+    }
+    let dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let file = dir.join("ai").join(format!("{name}.toml"));
+    let text = std::fs::read_to_string(&file).map_err(|err| {
+        format!(
+            "{}: names personality {name:?}, but {} cannot be read: {err}",
+            path.display(),
+            file.display()
+        )
+    })?;
+    let personality: Personality =
+        toml::from_str(&text).map_err(|err| format!("{}: {err}", file.display()))?;
+    scenario.rule = personality.rule;
+    Ok(scenario)
 }
 
 /// A step that could not run at all, for tests that want to know why.

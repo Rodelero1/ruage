@@ -1,153 +1,18 @@
-# The acceptance match, written the way the game's own AI writes one: **rules**, not timestamps.
+# The acceptance match: a thirty-minute game played by the **base personality**, on the project pack.
 #
-# The previous version was 35 `at_seconds` steps measured by hand. Every economy change moved the times, so the file
-# rotted the moment a rate was corrected - and it never once finished the match. `docs/ai-of-the-game.md` records what
-# replaced the idea: HD's own `Economy/Dark Age.per` is five *rules* whose guards are villager counts, stock amounts and
-# `can-*` predicates, re-evaluated forever, and its villager assignment is a *share table* the engine applies
-# (`config/economy.toml`'s `[policy]`, taken from `Low-pop Villager Distribution.per`).
+# The behaviour is not written here. `ai = "base"` names `config/ai/base.toml`, which holds the opening as rules (D94) -
+# train villagers, Loom at twelve, a house when the headroom is low, a mill and a camp, a barracks, Feudal, the Castle
+# buildings, a siege workshop and a mangonel at the enemy town centre. This file says only what belongs to *this match*:
+# how long it runs. Everything else about it is the personality's.
 #
-# What this file therefore says, in the AI's own numbers:
-#   * train villagers below the AI's Dark Age target (28 before Feudal - `Economy/Dark Age.per`);
-#   * Loom at 12 villagers, once;
-#   * a house whenever the headroom falls under three;
-#   * a mill by the berries at 9, a lumber camp by the wood at 14;
-#   * a barracks (the second Dark Age building the Feudal Age wants - D65);
-#   * Feudal at 22 villagers with mill and barracks up (the AI says 28; 22 is our own earlier number, and it is the one
-#     threshold here that is a choice rather than a reading);
-#   * market + blacksmith in Feudal, Castle once both stand;
-#   * a siege workshop, a mangonel, and the mangonel at the enemy town centre.
+# The previous shape put the rules here, and before that it was 35 hand-measured `at_seconds` steps: every economy
+# change moved the times and the file rotted. Rules whose guards are villager counts and stock amounts survive a rate
+# correction, which is why the behaviour is separate from the match.
 #
 # The match is won by razing the town centre, which is what `ruage-batch` reports an outcome for.
 
 schema = 2
 duration_seconds = 2400.0
 
-# --- the villager pump -------------------------------------------------------------------------------------------
-
-[[rule]]
-player = 1
-cooldown_seconds = 2.0
-when = { villagers_at_most = 27 }
-do = "train"
-building = "town_centre"
-role = "villager"
-
-# Loom once, at 12 villagers: the AI's own guard (`Economy/Dark Age.per`).
-[[rule]]
-player = 1
-cooldown_seconds = 5.0
-at_seconds = 120.0
-when = { villagers_at_least = 12, no_tech = "loom" }
-do = "research"
-building = "town_centre"
-tech = "loom"
-
-# --- housing -----------------------------------------------------------------------------------------------------
-
-[[rule]]
-player = 1
-cooldown_seconds = 4.0
-when = { housing_at_most = 3 }
-do = "build"
-role = "house"
-
-# --- the Dark Age economy ----------------------------------------------------------------------------------------
-
-[[rule]]
-player = 1
-cooldown_seconds = 5.0
-when = { villagers_at_least = 9, no_building = "mill" }
-do = "build"
-role = "mill"
-where = "food"
-
-# The lumber camp comes **before** the farms, at ten villagers: it is what makes wood income possible, and a farm costs
-# 25 wood. The first version asked for the camp at fourteen and for farms from the mill onwards, so the farms spent the
-# wood the camp needed and the run never had a camp, never mind a barracks - 1,400 seconds of a 200-wood opening.
-[[rule]]
-player = 1
-cooldown_seconds = 5.0
-when = { villagers_at_least = 10, no_building = "lumber_camp" }
-do = "build"
-role = "lumber_camp"
-where = "wood"
-
-# Two buildings of the current age open the Feudal Age (D65): a mill and a barracks.
-[[rule]]
-player = 1
-cooldown_seconds = 6.0
-when = { villagers_at_least = 18, no_building = "barracks" }
-do = "build"
-role = "barracks"
-
-[[rule]]
-player = 1
-cooldown_seconds = 8.0
-# `no_tech`: without it the rule asked 132 more times after the research landed ("tech 101 has already been researched").
-when = { villagers_at_least = 22, has_building = ["mill", "barracks"], no_tech = "feudal_age" }
-do = "research"
-building = "town_centre"
-tech = "feudal_age"
-
-# --- Feudal: the buildings the Castle Age needs ------------------------------------------------------------------
-
-[[rule]]
-player = 1
-cooldown_seconds = 6.0
-when = { age = "feudal_age", no_building = "market" }
-do = "build"
-role = "market"
-
-[[rule]]
-player = 1
-cooldown_seconds = 6.0
-when = { age = "feudal_age", no_building = "blacksmith" }
-do = "build"
-role = "blacksmith"
-
-# Farms as soon as the mill stands and the larder is thin - **not** at Feudal. A farm is a Dark Age building gated by the
-# mill, which is why the game's own AI farms through the Dark Age; gating this on `age = "feudal_age"` starved the run at
-# 18 villagers with 46 food, which is exactly the wall the first version hit.
-[[rule]]
-player = 1
-cooldown_seconds = 6.0
-# A farm only when there is wood **to spare**: 25 wood a farm, and the lumber camp and barracks come first. Without this
-# guard the farm rule ate every stick the villagers cut (85 firings in 800 s) and the camp's 100 wood was never banked -
-# the death spiral in one line.
-when = { has_building = ["mill", "lumber_camp"], stock = [{ name = "food", at_most = 120 }, { name = "wood", at_least = 120 }] }
-do = "build"
-role = "farm"
-where = "food"
-
-[[rule]]
-player = 1
-cooldown_seconds = 10.0
-when = { age = "feudal_age", has_building = ["market", "blacksmith"], villagers_at_least = 28, no_tech = "castle_age" }
-do = "research"
-building = "town_centre"
-tech = "castle_age"
-
-# --- Castle: the siege line, and the match -----------------------------------------------------------------------
-
-[[rule]]
-player = 1
-cooldown_seconds = 6.0
-when = { age = "castle_age", no_building = "siege_workshop" }
-do = "build"
-role = "siege_workshop"
-
-[[rule]]
-player = 1
-cooldown_seconds = 8.0
-when = { age = "castle_age", has_building = ["siege_workshop"] }
-do = "train"
-building = "siege_workshop"
-role = "mangonel"
-
-[[rule]]
-player = 1
-cooldown_seconds = 12.0
-when = { has_unit = "mangonel" }
-do = "attack"
-attacker = "mangonel"
-target = "enemy_town_centre"
+# The behaviour is not here: it lives in `config/ai/base.toml` (D94). A scenario keeps what is scripted for this match.
+ai = "base"

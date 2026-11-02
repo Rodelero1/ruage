@@ -26,7 +26,7 @@ use crate::{
 /// Every file a match reads. The order here is the order the hash is computed in, so adding a file
 /// changes every pack's hash - which is correct, because a build that needs a file an older build
 /// did not is not the same content.
-pub const PACK_FILES: [&str; 9] = [
+pub const PACK_FILES: [&str; 10] = [
     "sim.toml",
     "economy.toml",
     "map.toml",
@@ -43,6 +43,9 @@ pub const PACK_FILES: [&str; 9] = [
     // cheapest possible cheat. (`movement.toml` is still outside deliberately: nothing reads it yet, and hashing a file
     // nobody consumes would look like protection without being any. It joins this list in the commit that reads it.)
     "civs.toml",
+    // **The AI's behaviour** (D94). It is not world data, but it decides what a player does, so two peers with different
+    // personalities are playing different games. Unlike `civs.toml` this file *is* read (by the scenario loader).
+    "ai/base.toml",
 ];
 
 /// Where a pack file lives relative to the config directory. `units.toml` is under `gamedata/`

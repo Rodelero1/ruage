@@ -30,8 +30,8 @@ pub use metrics::Metrics;
 pub use path::{Walk, find_path};
 use ruage_fixed::Fixed;
 pub use script::{
-    Outcome, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind, describe, load_scenario_file,
-    load_scenario_str,
+    Outcome, Personality, Rule, RuleAction, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind,
+    describe, load_scenario_file, load_scenario_str,
 };
 
 /// The largest number of players a match can have: eight, so four-versus-four (D20). It is a

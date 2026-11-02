@@ -2557,3 +2557,21 @@ mask). What each part costs, measured rather than guessed:
      group is home and idle.
 - **Cheap and already unblocked:** the AI can switch units on resources today (`when.stock` exists) - only goals are
   missing, and without them the two rules flap on their cooldowns.
+
+### The AI folder, first slice (2026-11-01)
+
+`config/ai/base.toml` now holds the 14 rules that were inside `config/acceptance.toml`, and the scenario says `ai =
+"base"` instead. The loader resolves the name beside the scenario, refuses a missing personality by name, refuses a
+scenario that has both rules and a personality, and refuses `ai` on a scenario held only as text. `ai/base.toml` is in
+`PACK_FILES`, so a peer with a different AI is refused rather than playing a different game.
+
+**Next in this line of work, in order:**
+
+1. **`[policy]` into the personality.** It is the other half of D94 (villager distribution is behaviour) and the last
+   piece of AI still living in `economy.toml`. `Economy` loses the field; five call sites of `apply_content_policy`
+   change; the share table's validation (rows summing to 100) moves with it.
+2. **A second personality, and a sorted directory hash.** `PACK_FILES` is a fixed list today; a folder needs a
+   deterministic walk or two peers can hash the same set in a different order.
+3. **`config/ai/civ/<name>.toml`** - the per-civ delta (D95): what this civ fields where the line's last tier differs.
+4. **Line resolution** - `train { line = "knight" }` takes the last member the civ can train.
+5. **Groups, then spatial, then raiding** (D96), as recorded above.

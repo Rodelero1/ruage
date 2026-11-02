@@ -971,3 +971,85 @@ fn the_acceptance_scenario_parses_and_its_opening_runs() {
     );
     let _ = food;
 }
+
+/// The acceptance scenario carries no rules of its own: it names a **personality** (D94), and the rules come from
+/// `config/ai/base.toml` beside it. This is the assertion that the move happened at all - a file that still had its own
+/// `[[rule]]` blocks would pass every behavioural test while defeating the point.
+#[test]
+fn a_scenario_takes_its_rules_from_its_personality() {
+    let scenario = load_scenario_file(&repo("config/acceptance.toml")).expect("it parses");
+    assert_eq!(scenario.ai.as_deref(), Some("base"));
+    assert_eq!(scenario.rule.len(), 14, "the base personality's rules");
+    let trains_villagers = scenario
+        .rule
+        .iter()
+        .any(|rule| matches!(rule.action, ruage_sim::RuleAction::Train { ref role, .. } if role == "villager"));
+    assert!(
+        trains_villagers,
+        "the opening trains villagers, and that rule lives in the personality"
+    );
+    assert!(
+        scenario.step.is_empty(),
+        "the match has no scripted steps left: it is all rules"
+    );
+}
+
+fn scratch(name: &str) -> PathBuf {
+    let dir = repo("build/ai-test").join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("ai")).expect("scratch dir");
+    dir
+}
+
+/// A scenario naming a personality that is not there is refused **by name**, not played with no AI.
+#[test]
+fn a_personality_that_does_not_exist_is_refused_by_name() {
+    let dir = scratch("missing");
+    let file = dir.join("match.toml");
+    std::fs::write(
+        &file,
+        "schema = 2\nduration_seconds = 60.0\n\nai = \"nope\"\n",
+    )
+    .expect("write");
+    let why = load_scenario_file(&file).expect_err("a missing personality is not a match");
+    assert!(
+        why.contains("nope"),
+        "the refusal names the personality: {why}"
+    );
+    assert!(
+        why.contains("cannot be read"),
+        "and says what failed: {why}"
+    );
+}
+
+/// A scenario may bring its rules or name a personality, never both - two sources for one AI is a file nobody can read.
+#[test]
+fn a_scenario_with_rules_and_a_personality_is_refused() {
+    let dir = scratch("both");
+    let file = dir.join("match.toml");
+    std::fs::write(
+        &file,
+        "schema = 2\nduration_seconds = 60.0\nai = \"base\"\n\n[[rule]]\nplayer = 1\ndo = \"build\"\nrole = \"house\"\n",
+    )
+    .expect("write");
+    let why = load_scenario_file(&file).expect_err("both is a contradiction");
+    assert!(
+        why.contains("belong"),
+        "the refusal says where the behaviour goes: {why}"
+    );
+}
+
+/// Text alone cannot resolve `ai` - it names a file beside the scenario - so it is refused rather than silently ignored.
+#[test]
+fn a_scenario_held_as_text_cannot_name_a_personality() {
+    let why = load_scenario_str(
+        "schema = 2\nduration_seconds = 60.0\nai = \"base\"\n",
+        "inline",
+    )
+    .expect_err("no directory to resolve it");
+    assert!(why.contains("base"), "the refusal names it: {why}");
+    assert!(
+        why.contains("load_scenario_file"),
+        "and says what to do: {why}"
+    );
+}
