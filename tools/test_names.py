@@ -75,6 +75,26 @@ class TableTests(unittest.TestCase):
         self.assertEqual(table[7], "wild_boar_corpse", "the base animal names the body, not its variant")
 
 
+class OverrideTests(unittest.TestCase):
+    def test_an_override_swaps_a_name_between_units(self):
+        table = {37: "light_cavalry", 546: "light_cavalry_2"}
+        fixed, problems = names.apply_overrides(table, {546: "light_cavalry", 37: "light_cavalry_2"})
+        self.assertEqual(problems, [])
+        self.assertEqual(fixed[546], "light_cavalry", "the unit a scout upgrades into keeps the plain word")
+        self.assertEqual(fixed[37], "light_cavalry_2")
+
+    def test_an_override_that_collides_is_refused(self):
+        table = {1: "knight", 2: "cavalier"}
+        _, problems = names.apply_overrides(table, {2: "knight"})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("collides", problems[0])
+
+    def test_an_override_for_an_unknown_unit_is_refused(self):
+        _, problems = names.apply_overrides({1: "knight"}, {99: "ghost"})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("99", problems[0])
+
+
 class ProjectNamesTests(unittest.TestCase):
     """The repository's own table. Skipped when the pack has not been generated."""
 
@@ -109,6 +129,12 @@ class ProjectNamesTests(unittest.TestCase):
         self.assertEqual(self.table[569], "paladin")
         self.assertEqual(self.table[7], "skirmisher")
         self.assertEqual(self.table[359], "halberdier")
+
+    def test_the_owners_collision_decisions_are_in_the_table(self):
+        self.assertEqual(self.table[546], "light_cavalry", "what a scout upgrades into")
+        self.assertEqual(self.table[37], "light_cavalry_2")
+        self.assertEqual(self.table[87], "archery_range_3", "the three ranges are numbered, none is 'the' one")
+        self.assertEqual(self.table[10], "archery_range_1")
 
     def test_a_corpse_is_named_for_its_living_unit(self):
         self.assertEqual(self.table[449], "scout_cavalry_corpse")

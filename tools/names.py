@@ -34,11 +34,14 @@ DEFAULT_STRINGS = (
     ROOT / "Age2HD" / "resources" / "en" / "strings" / "key-value" / "key-value-strings-utf8.txt"
 )
 OUT = CONFIG / "names.toml"
+# Owner decisions that the derivation cannot make (which unit is "the" light cavalry), keyed by id.
+OVERRIDES = CONFIG / "names_overrides.toml"
 # The importer's parser, cloned outside this repository (D4/D12: the generator is not part of this history).
 DEFAULT_PARSER = Path("/opt/data/tools/src/GenieDatParser")
 
 # The pile of strings the game uses for "unit name": `5068 "Knight"`.
 STRING_LINE = re.compile(r'^(\d+)\s+"(.*)"\s*$')
+SNAKE_ID = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 @dataclass(frozen=True)
@@ -192,6 +195,34 @@ def read_dat(dat_path: Path) -> list[Record]:
     return [seen[key] for key in sorted(seen)]
 
 
+def apply_overrides(
+    table: dict[int, str], overrides: dict[int, str]
+) -> tuple[dict[int, str], list[str]]:
+    """Owner decisions, applied after the derivation: the cases where the game's words and our intent disagree.
+
+    Applied as a swap: the overridden ids give up their derived names first, then take the new ones, so 546 can become
+    `light_cavalry` while 37 becomes `light_cavalry_2` - the derivation cannot know which unit is "the" light cavalry.
+    """
+    problems: list[str] = []
+    for unit_id in overrides:
+        if unit_id not in table:
+            problems.append(f"override for unit {unit_id}, which has no derived name")
+    freed = dict(table)
+    for unit_id in overrides:
+        freed.pop(unit_id, None)
+    owner: dict[str, int] = {name: unit_id for unit_id, name in freed.items()}
+    for unit_id, name in sorted(overrides.items()):
+        if not SNAKE_ID.match(name):
+            problems.append(f"override {unit_id} -> {name!r} is not an identifier")
+            continue
+        if name in owner:
+            problems.append(f"override {unit_id} -> {name!r} collides with unit {owner[name]}")
+            continue
+        owner[name] = unit_id
+        freed[unit_id] = name
+    return freed, problems
+
+
 def render(table: dict[int, str]) -> str:
     head = [
         "# Readable names for the units, keyed by the pack's unit id (D97).",
@@ -224,6 +255,16 @@ def main(argv: list[str] | None = None) -> int:
     records = read_dat(args.dat)
     strings = load_strings(args.strings)
     table, problems = name_table(records, strings, upgrade_targets(CONFIG / "gamedata" / "effects.toml"))
+    if OVERRIDES.exists():
+        raw = {}
+        for line in OVERRIDES.read_text().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if not line or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            raw[int(key.strip())] = value.strip().strip('"')
+        table, override_problems = apply_overrides(table, raw)
+        problems.extend(override_problems)
 
     populated = [record for record in records if record.hp > 0]
     unnamed = [record.id for record in populated if record.id not in table]

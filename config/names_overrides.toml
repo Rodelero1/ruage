@@ -1,0 +1,17 @@
+# Names the owner decided, because the derivation cannot (D97).
+#
+# The game gives three units the same display word and two of them are somebody's upgrade result, so "which one is *the*
+# archery range" is a judgement about what the engine means, not a fact in the data. This file holds those judgements;
+# `tools/names.py` applies them after deriving everything else.
+#
+# Format: one `id = "name"` per line. Comments and blank lines are ignored.
+
+# Three records display "Archery Range". Numbered, so none of them is pretending to be the only one.
+10 = "archery_range_1"
+14 = "archery_range_2"
+87 = "archery_range_3"
+
+# Two unrelated units display "Light Cavalry". 546 is the one a scout upgrades into, so it keeps the plain word; 37 is
+# the other record that shares the name.
+546 = "light_cavalry"
+37 = "light_cavalry_2"
