@@ -2484,3 +2484,25 @@ whether purpose comes only from the AI file.
 **Still open:** whether a line is the unit family alone or family-plus-intent (the owner's Light Cavalry/Hussar point says
 raiding is an intent, and no line may answer it), and whether a civ override may replace a line, reorder it, or only add
 a tier.
+
+## D96 - Spatial awareness is in scope, as a visibility-respecting local query (2026-11-01)
+
+Not a separate choice after D95 and the group decisions: "retreat from an approaching force" needs to know *what is near
+this group*, and a fight ratio computed from global counts would be the cheating the owner rejected. So:
+
+- **The primitive is a query, not a memory.** `local_contacts(player, point, radius)` counts the enemy units that
+  player's `visible_mask` already exposes, by unit id. It is computed at decision time from what the player can see, so
+  D92 holds by construction: no sight, no contact.
+- **The anchor is a group's members**, not its centroid: an enemy counts if it is within the radius of *any* member.
+  A stretched-out raiding party that is flanked at one end must see the flank, and a centroid would average it away.
+- **Cached per group per game second**, the same rule as the memory pass - a per-rule-per-tick scan over every entity
+  would cost O(entities x rules) for a number that cannot change within a tick.
+- **The same query anchors on a building** ("is my town centre under attack"), which is why it takes a point rather than
+  a group.
+
+Cost, measured against what exists: `visible_mask` is already computed per player, so the new code is a filter with a
+squared-distance test; the work is the condition that combines the local count with the time-to-wipe ratio, and its
+tests. One slice after groups exist - it cannot land first, because "near" has no subject until there is a group.
+
+Still the owner's call, if he disagrees: whether the radius is one number for every group or a per-group field (a raider
+cares about 8 tiles, a siege group about 12).
