@@ -2532,3 +2532,28 @@ Neither is part of the save-reader work in hand; they are the next engine slices
   Heavy Plow +125, Crop Rotation +175, Chinese team bonus +45). `economy.toml`'s `food_per_farm = 250` plus
   `Sim::farm_food_total`'s tech bonus gives 325 after Horse Collar where the game gives 250. Test first: 175 unupgraded,
   250 after Horse Collar, 220 for the Chinese.
+
+
+## The AI queue, as it stands (2026-11-01)
+
+The owner's decisions are D94 (AI lives in `config/ai/`, apart from the mechanics config), D95 (the AI names **lines**,
+and a per-civ delta says what answers a line) and D96 (spatial awareness is in scope, as a query over the visible
+mask). What each part costs, measured rather than guessed:
+
+- **Done:** `config/lines.toml` (five lines from the pack's 227 upgrade edges), twelve roles for the line members, and
+  `tools/lines.py` + `tools/test_lines.py` (12 tests) checking the table against the effect table. **Not wired**: no
+  engine code reads a line, so it is deliberately not in `PACK_FILES` yet.
+- **Next, in this order:**
+  1. **`config/ai/`** - move `[policy]` out of `economy.toml` and every `[[rule]]` out of the three scenario files into a
+     personality file; the scenario keeps its timed steps and names a personality per seat; the loader resolves it, the
+     pack identity covers it.
+  2. **Line resolution** - `train { line = "knight" }` picks the last member the civ can actually train. Needs the tech
+     tree's per-tier availability, which exists (`check_train` refuses an unresearched upgrade target); what is missing
+     is expressing "the highest tier I have" as one request.
+  3. **Groups** - declared in the AI file, exclusive membership, persistent orders with a completion condition and a
+     state (`idle`/`moving`/`engaged`/`retreating`), hashed. The risk is the hash, not the movement.
+  4. **Spatial** - `local_contacts(player, point, radius)` over `visible_mask`, cached per group per second.
+  5. **Raiding** - the rule that ties 3 and 4 together: retreat when the time-to-wipe ratio is bad, resume when the
+     group is home and idle.
+- **Cheap and already unblocked:** the AI can switch units on resources today (`when.stock` exists) - only goals are
+  missing, and without them the two rules flap on their cooldowns.

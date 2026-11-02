@@ -180,6 +180,22 @@ halberdier = 359    # 60 hp: an upgrade, researched (tech 429, Imperial)
 # cavalry class (8) at 0 - which is where a spearman's +15 lands. Named here because a countering rule has to name a
 # role, not an id (D91/D93), and `tools/counters.py` ranks candidates against it.
 knight = 38
+# The rest of the knight, spear, skirmisher, scout and militia lines (D95). A line is an ordered family of roles, and
+# the AI names the family rather than a unit, so every tier needs a role even when no rule names it directly. Ids come
+# from the pack's upgrade table, checked by `tools/lines.py` - the names the dat carries are shifted (283 is the
+# cavalier and says PALDN, 569 is the paladin and says HEROC), so the ids are the trustworthy part.
+cavalier = 283
+paladin = 569
+skirmisher = 7
+elite_skirmisher = 6
+imperial_skirmisher = 1155
+scout_cavalry = 448
+light_cavalry = 546
+hussar = 441
+man_at_arms = 75
+long_swordsman = 77
+two_handed_swordsman = 473
+champion = 567
 castle = 82         # CSTL, 4800 hp - available from the Castle Age (tech 137 makes it)
 trebuchet = 331     # PTREB - available from the Imperial Age (tech 256 makes it)
 siege_workshop = 49 # SIWS, class 3, 1800 hp, 200 wood: the building that makes the siege line

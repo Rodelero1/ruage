@@ -1,0 +1,24 @@
+# Lines: the unit families an AI names instead of units (D95).
+#
+# The AI says "train from the knight line" and the resolver takes the **last member this civ can actually train**, so a
+# civ's tech tree - not a scoring function and not a per-civ script - decides what it fields. Saracens never reach the
+# end of the knight line, and nothing in the AI file has to say so.
+#
+# Members are roles from economy.toml's `[role]` table, weakest first. The order is checked against the pack: every
+# consecutive pair must be an upgrade in the effect table (`tools/lines.py`, and `tools/test_lines.py` runs it).
+#
+# Adding a line is content work, not engine work. Adding a *tier* to a line is an upgrade the pack has to contain.
+
+[line]
+# The generalist cavalry answer: knight -> cavalier -> paladin.
+knight = ["knight", "cavalier", "paladin"]
+# The cavalry counter: spearman (+15 against the cavalry class) -> pikeman (+22) -> halberdier (+32).
+spear = ["spearman", "pikeman", "halberdier"]
+# The archer counter: skirmisher -> elite skirmisher -> imperial skirmisher. The top tier is in the pack; whether a civ
+# can research it is exactly the question a line leaves to the tech tree.
+skirmisher = ["skirmisher", "elite_skirmisher", "imperial_skirmisher"]
+# The raider: fast, high pierce armour, cheap. Not a counter to anything by bonus - its value is speed and cost, which
+# is why "best cavalry" could never have been a score.
+scout = ["scout_cavalry", "light_cavalry", "hussar"]
+# The infantry line, for completeness: militia -> man-at-arms -> long swordsman -> two-handed -> champion.
+militia = ["militia", "man_at_arms", "long_swordsman", "two_handed_swordsman", "champion"]
