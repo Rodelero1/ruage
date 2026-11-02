@@ -119,6 +119,47 @@ described - fewer villagers on stone, more on wood, a different unit composition
 the things a table cannot say (Saracens have no knight upgrade) are exactly a **tagged rule** entry. The open question
 is only how many of each we are willing to maintain.
 
+## Behaviours asked for, and the primitives each one needs (2026-11-01)
+
+The owner named four behaviours. Measured against the grammar that exists - nine conditions (`villagers_at_least`,
+`villagers_at_most`, `no_building`, `has_building`, `age`, `no_tech`, `has_unit`, `housing_at_most`, `stock`) and five
+actions (`train`, `research`, `build`, `gather`, `attack`) - they split into "nearly free" and "needs a new kind of
+thing":
+
+| behaviour | needs | today |
+|---|---|---|
+| **Low gold: light cavalry instead of knights** | a stock comparison, an alternative rule, and a flag so it does not flap | `stock` exists; **goals are missing**, so nothing remembers that the switch was made and the two rules can alternate every cooldown |
+| **Raid towns and villagers, retreat from a larger force** | target selection by class (villager, building), *local* sighting near the raiders, and a retreat order | **all three missing**: `attack` names a role to attack, memory is a global per-player per-type count with no position, and there is no move/retreat action |
+| **Light cavalry onto archers, avoid infantry** | attack priority by class, plus disengage | **missing**: `attack{attacker,target}` cannot say "only archers", and nothing can order a withdrawal |
+| **Composition that answers what was seen** | enemy shares from memory | memory exists (D92), the *conditions* that read it do not |
+
+So the resource-aware switch is close to free once goals land; raiding and "hit the archers, avoid the pikes" need two
+new kinds of primitive - **spatial awareness** and **movement orders** - which no version of the language has.
+
+## The three decisions this leaves
+
+**A. How a script names a unit.**
+
+| option | what it says | cost |
+|---|---|---|
+| A1 explicit role | `train { role = "hussar" }`; every rule names a unit, per-civ deltas carry the differences | verbose; nothing to resolve; fully visible (D93) |
+| A2 capability filter | `train { class = "cavalry", best = true }` resolved against the tech tree | small resolver; fixes "Saracens have no paladin"; still no judgement |
+| A3 class + stated mix + metric | `train { class = "cavalry", against = { infantry = 0.6 }, metric = "damage_per_resource_second" }` | a metric argument; mis-ranks raiders, whose value is speed and pierce armour, not damage per cost |
+| A4 intent vocabulary | `train { intent = "raider" }` / `anti_archer` / `anti_cavalry` / `generalist` | a fourth authored table (intent -> class, metric, candidate set); names the owner's light-cavalry examples naturally |
+
+The owner's point that Light Cavalry/Hussar are "best cavalry in a sense" is the stress test: they are best by **intent**
+(raid, chase archers), not by class or by damage per cost. A1 and A2 cannot express them as "best"; A3 only with an
+intent term bolted on; A4 is the only one that says it directly - at the price of an authored intent table.
+
+**B. Is spatial awareness in scope?** Global counts only (no raiding, no retreat - matches the sim as it stands) or local
+sighting per group plus a retreat order (unlocks raiding and kiting; costs a new memory structure and a movement action).
+
+**C. One army or groups?** `attack{attacker,target}` implies a single force. Raiding needs a second group with its own
+orders, which is group bookkeeping in the world and in the script.
+
+**Ordering that follows from the dependencies:** C and B are what raiding needs; A is independent. So the cheap path is
+A1 (or A2) now, B and C when raiding is actually wanted.
+
 ## The gap, stated as two missing inputs
 
 Countering is not a new kind of AI behaviour. It is the same rule shape with two inputs it does not have:
