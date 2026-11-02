@@ -2591,3 +2591,10 @@ table through the dat's `name_str_id`, because the dat's codes are shifted (283 
    the prerequisite for flipping the tables to name keys.
 3. **Then the flip** - tables keyed by name with `id` kept as a field, once every reference has a word. This is the step
    that makes the configuration ours, and the owner's plan is to commit it at that point (no reimport).
+
+### Translation, documented for later (2026-11-02)
+
+`docs/i18n.md` records the owner's question and the answer: gettext is possible, but the only text drawn today is digits
+(D82's 3x5 font) and every other sentence is a developer diagnostic. The order when someone wants it is message keys,
+then a font with letters, then display text per locale, then gettext as an adapter - and the rule that a translated
+string never reaches the simulation or the state hash.

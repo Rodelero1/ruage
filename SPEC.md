@@ -608,6 +608,7 @@ should say so rather than claim otherwise.
 | `docs/sources.md` | current | Every outside source used, what for, trust level, and the version caveat (wiki = DE, dat = 5.7) |
 | `docs/oracle.md` | current | The oracle: 13 saves found, raw DEFLATE, `VER 9.4`; what snapshots can/can't answer; D1 recommendation |
 | `docs/ai-scripts.md` | current | The scripted AI's next shape: counters derived from the pack's attack/armour classes, a per-player **memory** of what was seen (never the world's truth), the conditions that fall out of it, and three forks awaiting a ruling |
+| `docs/i18n.md` | current | Translation: three kinds of text (identifiers, display, diagnostics), why the only drawn text is digits today (D82's 3x5 font), the message-key refactor gettext would need, and the rule that a translated string must never reach the state hash. Nothing implemented. |
 | `docs/save-format.md` | current | The save container as verified: raw DEFLATE, `VER 9.x` + float save version (12.5 / 12.36), the `0x0A60` string framing, what the world sections are and the address of the code that reads each; errata for the `HA` misreading. Tool: `tools/savegame.py` |
 | `docs/mechanics/*.md` | current | 6 subsystem files + `README.md` (tag legend, index, unknown registry U1–U12) |
 | `docs/formats/*.md` | planned | dat / slp / dld / rms / per — what our parser assumes |
