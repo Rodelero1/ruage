@@ -126,6 +126,20 @@ pub struct When {
     pub housing_at_most: Option<u32>,
     #[serde(default)]
     pub stock: Vec<StockWhen>,
+    /// How many villagers **work a resource**, which is what a drop-site rule has to see: a mining camp beside the gold
+    /// waits for a villager on the gold, not for the bank to be low (item 4). Counted from the gather and trip-home tasks'
+    /// nodes, so a worker carrying its load home still counts.
+    #[serde(default)]
+    pub working: Vec<WorkingWhen>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorkingWhen {
+    pub resource: String,
+    #[serde(default)]
+    pub at_least: Option<usize>,
+    #[serde(default)]
+    pub at_most: Option<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -436,7 +450,9 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 .ok_or_else(|| format!("player {player} has no villager {villager}"))?;
             let unit = role_of(world, role)?;
             let at = match where_.as_deref() {
-                None | Some("near_town_center") => free_tile_near(world, player, unit),
+                None | Some("near_town_center") => {
+                    free_tile_near(world, player, unit, Some(worker))
+                }
                 Some(resource) => {
                     // A building placed for a resource is a building placed *at* that resource: a lumber camp beside
                     // the wood is the whole point of a lumber camp, and one beside the town centre is wood spent on a
@@ -452,7 +468,7 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                     let node = nearest_resource(world, centre, slot, 0).ok_or_else(|| {
                         format!("player {player} has no {resource} node to build beside")
                     })?;
-                    free_tile_near_node(world, node, unit, player)
+                    free_tile_near_node(world, node, unit, player, Some(worker))
                 }
             };
             let at =
@@ -605,7 +621,17 @@ fn town_center_of(world: &World, player: u8) -> Option<EntityId> {
 }
 
 /// The free tile nearest a resource node, for a building that exists to shorten a walk to it.
-fn free_tile_near_node(world: &World, node: EntityId, unit: u32, player: u8) -> Option<(u16, u16)> {
+///
+/// **And one the builder can walk to.** A site that fits and leaves a lane can still be inside a wood pocket: the camp is
+/// ordered, paid for, and refused at apply with *"no walkable route ... the target is walled off"* - measured, the first
+/// gold mining camp this personality ever ordered. Reachability is the last test because it is the expensive one.
+fn free_tile_near_node(
+    world: &World,
+    node: EntityId,
+    unit: u32,
+    player: u8,
+    builder: Option<EntityId>,
+) -> Option<(u16, u16)> {
     let position = world.position(node)?;
     let scale = world.scale();
     let origin = (
@@ -627,6 +653,7 @@ fn free_tile_near_node(world: &World, node: EntityId, unit: u32, player: u8) -> 
                     if world.is_free_ground(x, y)
                         && world.site_fits(player, unit, (x, y))
                         && world.site_has_lane(player, unit, (x, y))
+                        && reachable(world, builder, (x, y))
                     {
                         return Some((x, y));
                     }
@@ -637,7 +664,22 @@ fn free_tile_near_node(world: &World, node: EntityId, unit: u32, player: u8) -> 
     None
 }
 
-fn free_tile_near(world: &World, player: u8, unit: u32) -> Option<(u16, u16)> {
+/// Can `builder` walk to that tile? A site elsewhere on the map is a site nobody can raise.
+fn reachable(world: &World, builder: Option<EntityId>, at: (u16, u16)) -> bool {
+    let Some(builder) = builder else {
+        return true;
+    };
+    world
+        .position(builder)
+        .is_some_and(|from| world.can_reach(from, world.tile(at)))
+}
+
+fn free_tile_near(
+    world: &World,
+    player: u8,
+    unit: u32,
+    builder: Option<EntityId>,
+) -> Option<(u16, u16)> {
     // The start's own town-centre role, not the word: a pack of our own may call it "keep" (D17).
     let centre_unit = world.start_town_center_unit()?;
     // **The family, not the id.** A town centre that has been upgraded to its Feudal variant (463) is not unit 109 any
@@ -674,6 +716,7 @@ fn free_tile_near(world: &World, player: u8, unit: u32) -> Option<(u16, u16)> {
                     if world.is_free_ground(x, y)
                         && world.site_fits(player, unit, (x, y))
                         && world.site_has_lane(player, unit, (x, y))
+                        && reachable(world, builder, (x, y))
                     {
                         return Some((x, y));
                     }
@@ -694,6 +737,7 @@ fn free_tile_near(world: &World, player: u8, unit: u32) -> Option<(u16, u16)> {
                     if world.is_free_ground(x, y)
                         && world.site_fits(player, unit, (x, y))
                         && world.site_has_lane(player, unit, (x, y))
+                        && reachable(world, builder, (x, y))
                     {
                         return Some((x, y));
                     }
@@ -926,6 +970,23 @@ fn when_holds(world: &World, rule: &Rule) -> bool {
             return false;
         }
     }
+    for working in &when.working {
+        let Some(slot) = world.slot_of(&working.resource) else {
+            return false;
+        };
+
+        let count = world.workers_on(player, slot);
+        if let Some(least) = working.at_least
+            && count < least
+        {
+            return false;
+        }
+        if let Some(most) = working.at_most
+            && count > most
+        {
+            return false;
+        }
+    }
     for stock in &when.stock {
         let Some(slot) = world.slot_of(&stock.name) else {
             return false;
@@ -1033,7 +1094,9 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Vec<Command>, String> {
                 .ok_or_else(|| format!("player {player} has no idle villager to build with"))?;
             let unit = role_of(world, role)?;
             let at = match where_.as_deref() {
-                None | Some("near_town_center") => free_tile_near(world, player, unit),
+                None | Some("near_town_center") => {
+                    free_tile_near(world, player, unit, Some(worker))
+                }
                 Some(resource) => {
                     let slot = world.slot_of(resource).ok_or_else(|| {
                         format!("the content pack defines no resource called {resource:?}")
@@ -1044,7 +1107,7 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Vec<Command>, String> {
                     let node = nearest_resource(world, centre, slot, 0).ok_or_else(|| {
                         format!("player {player} has no {resource} node to build beside")
                     })?;
-                    free_tile_near_node(world, node, unit, player)
+                    free_tile_near_node(world, node, unit, player, Some(worker))
                 }
             };
             let at = at.ok_or_else(|| format!("no free tile for a {role}"))?;

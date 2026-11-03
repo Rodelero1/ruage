@@ -2614,3 +2614,16 @@ Four rulings, each forced by a measurement rather than chosen:
 4. **A refusal the engine gives itself is state, whoever issues it** - a queued site that cannot start included - **and it
    names its actor.** `entity_of_last_command` returned `EntityId(0)` for every command, which made every refusal
    undiagnosable.
+
+## D100 - What an order may change, and what a rule may see (this slice)
+
+1. **An identical order is a no-op.** Re-sending the same attack at the same target (same resolved numbers) keeps the
+   reload and the route; the AI's twelve-second army order must not become the unit's combat clock, and a crowd of
+   soldiers must not shuffle between equally-near stand tiles because their orders are refreshed. A *different* fight
+   resets, and validation still runs first, so a re-order at a dead or friendly target is refused as it always was.
+2. **A condition may read the work, not only the bank.** `working` counts villagers on a resource; a drop site is built
+   because somebody is walking a long way with every load, not because a stockpile is low. Two miners was tried and never
+   fired (the personality sends one at a time), so the threshold is one - the owner's own wording.
+3. **A site nobody can walk to is not a site.** The placement search asks reachability after the cheap footprint and lane
+   tests. This is the prior art's point (`Zaydme/openaok` remembers the distance of a site it found no way to), reached
+   here from a measured refusal rather than from the reference.

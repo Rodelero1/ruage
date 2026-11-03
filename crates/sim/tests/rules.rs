@@ -357,3 +357,62 @@ target = "enemy_town_center"
         );
     }
 }
+
+/// **A rule can see the work, not just the bank** (item 4): "a mining camp beside the gold once a villager is working
+/// there" needs a condition on *how many villagers are on a resource*, which no condition had. `working` reads the
+/// gather task's node and the trip-home task's node, so a villager carrying a load home still counts as working it.
+#[test]
+fn a_rule_sees_how_many_villagers_work_a_resource() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let scenario: Scenario = toml::from_str(
+        r#"
+schema = 2
+duration_seconds = 60.0
+
+[[rule]]
+player = 1
+cooldown_seconds = 2.0
+when = { working = [{ resource = "gold", at_least = 1 }] }
+do = "build"
+role = "house"
+"#,
+    )
+    .expect("a rule the format can read");
+    let before = houses(&world);
+    let mut runner = Runner::new(&scenario, 20).expect("a runner");
+    for _ in 0..120 {
+        runner.due(&mut world);
+        world.step().expect("stepping");
+    }
+    assert_eq!(runner.fired_times, vec![0], "nobody works the gold yet");
+    assert_eq!(houses(&world), before, "and no house was ordered");
+
+    // Put the first villager on the nearest gold node, the way the share policy does.
+    let gold = world.slot_of("gold").expect("a gold column");
+    let villager = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
+        .map(|entity| entity.id)
+        .expect("a villager");
+    let node = world
+        .entities()
+        .iter()
+        .filter(|entity| entity.kind == EntityKind::Resource(gold))
+        .map(|entity| entity.id)
+        .next()
+        .expect("a gold node");
+    world
+        .submit_checked(ruage_sim::Command::Gather { villager, node })
+        .expect("a gather order on gold");
+    for _ in 0..120 {
+        runner.due(&mut world);
+        world.step().expect("stepping");
+    }
+    assert!(
+        runner.fired_times[0] >= 1,
+        "one villager on the gold is work the rule can see"
+    );
+}

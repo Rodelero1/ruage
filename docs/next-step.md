@@ -24,11 +24,21 @@
 >    the town centre is at 19 hp at 36,000 ticks, gone at 36,500, `players=1` at 37,000 and at 48,000 ticks. The step also
 >    closed the `farm_husk` leftover (a spawned farm's amount, the husk's ground, the lane rule), killed D58's dead blind
 >    overbuild, and repaired **28 tests that were already red at HEAD** - see `docs/reviews/2026-11-03-the-army-and-the-red-suite.md`.
-> 2. **B - "soldiers attack buildings consistently" (item 7).** Diagnosis first, with a probe: a re-issued `Attack`
->    resets the reload, and retaliation may be pulling units off the building. Stance / attack-move and the retreat
->    path, measured on the acceptance match.
-> 3. **C - "villagers build drop sites near the resource" (item 4).** A condition that sees **how many villagers are
->    working a resource** (the trigger that does not exist), then a mining-camp rule with `where = "gold"`/`"stone"`.
+> 2. **B - "soldiers attack buildings consistently" (item 7). LANDED (first half).** `start_attack` no longer resets a
+>    running reload and no longer re-plans the route when the order is the **same fight** - a soldier's attack runs on its
+>    own reload, not the AI's twelve-second beat. Retaliation was checked and cleared: it answers only animals, so it never
+>    pulled a soldier off a building. Measured, and it is a caution: with the same content the town centre stood at **385 hp**
+>    at 36,000 ticks where the bug had it at 19 - the reset had been giving the army free swings. Review:
+>    `docs/reviews/2026-11-03-a-reissued-attack.md`. **Second half open:** stances and attack-move are untested against a
+>    building; nothing in the match uses them yet.
+> 3. **C - "villagers build drop sites near the resource" (item 4). LANDED, with the camp itself unbuilt.** `When.working`
+>    counts the villagers on a resource (gather **and** trip home, column from `gather_source`); a gold rule sends a
+>    villager when the bank is empty and a mining-camp rule waits on one villager there. Placement now rejects a site the
+>    builder cannot walk to - the first camp ordered was inside a wood pocket. **The match is now won at 36,000 ticks**
+>    (`players=1`, hash `c12bdc86aab31513`, 29.4 s) because the gold column the army eats finally fills; but **0 camps
+>    stand** - the personality sends one miner, so the camp's own precondition is met only late. Review:
+>    `docs/reviews/2026-11-03-the-work-a-rule-can-see.md`. **Next thing this queue owes:** the share pass does not re-task
+>    a base with no idle villagers, which is why the gold column needed a rule of its own.
 > 4. **D - pictograms on buildings (item 6).** A mark per role from content, drawn on the footprint; pure function in
 >    `ruage_view`, with a test.
 > 5. **E - silhouettes.** A square for a villager, a triangle for a soldier, from content's roles; a test that one

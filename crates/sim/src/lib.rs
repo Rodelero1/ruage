@@ -3054,10 +3054,32 @@ impl World {
         let Some(victim) = self.find(target).map(|e| e.position) else {
             return Err(SimError::MissingEntity(target));
         };
+        // **An identical re-order changes nothing.** The base personality re-sends its army every twelve seconds; the
+        // next lines used to re-plan the route from wherever the soldier now stands, which is how a line converging on
+        // one building ends up shuffling between equally-near stand tiles - "they strike, then withdraw". When the task
+        // is already this fight, with these numbers, the route and the reload both stay as they are.
+        let kept = match source.task {
+            Task::Attack {
+                target: was,
+                damage: was_damage,
+                reload_ticks: was_reload,
+                cooldown_ticks: was_cooldown,
+                range: was_range,
+                min_range: was_min,
+            } if was == target
+                && was_damage == damage
+                && was_reload == reload_ticks
+                && was_range == range
+                && was_min == min_range =>
+            {
+                Some(was_cooldown)
+            }
+            _ => None,
+        };
         // A building does not walk: its reach is its range, and pathing from a blocked tile would
         // refuse every shot a town centre wants to take. The test is the kind, not the speed - a unit
         // with no speed still gets a route, which is what a stationary test fixture relies on.
-        if source.kind != EntityKind::Building {
+        if source.kind != EntityKind::Building && kept.is_none() {
             // **End the route where the blow can land** (E1b). A building's own tile is blocked and a node's tile holds
             // the thing being worked, so a route planned *to* the target ends wherever collision first refuses - and a
             // crowd of attackers queues behind the first arrival instead of spreading over the target's edge.
@@ -3095,11 +3117,12 @@ impl World {
             );
         }
         if let Some(entity) = self.find_mut(attacker) {
+            // The reload the fight has already run is kept (see `kept` above); a new fight starts the swing at once.
             entity.task = Task::Attack {
                 target,
                 damage,
                 reload_ticks,
-                cooldown_ticks: 0,
+                cooldown_ticks: kept.unwrap_or(0),
                 range,
                 min_range,
             };
@@ -6542,8 +6565,38 @@ impl World {
         }
     }
 
-    /// The actor of the command that just failed, for the refusal record. A command is not always about one entity, so a
-    /// placeholder is used when the world cannot name one.
+    /// Whether this worker can **work** that node: somewhere to stand that is free *and reachable*. A node's own tile is
+    /// blocked - a tree, a bush, a mine - so `can_reach(from, node.position)` is false for every one of them, and a
+    /// chooser that asks it rejects the whole map (the trap: `nearest_resource` did, and a test helper spun 400,000
+    /// ticks re-issuing an order that could never start).
+    #[must_use]
+    pub fn can_work(&self, from: EntityId, node: EntityId) -> bool {
+        let (Some(here), Some(there)) = (self.position(from), self.position(node)) else {
+            return false;
+        };
+        self.work_position(here, there).is_some()
+    }
+
+    /// How many of this player's villagers are **working** the resource in `slot`: a gather task whose node fills that
+    /// column, or a trip home carrying what that node gave. A farm is a building, so the column comes from
+    /// `gather_source`, not from the entity's kind - the same rule the trip home uses.
+    #[must_use]
+    pub fn workers_on(&self, player: u8, slot: usize) -> usize {
+        self.entities
+            .iter()
+            .filter(|entity| entity.player == player && entity.kind == EntityKind::Unit)
+            .filter(|entity| {
+                let node = match entity.task {
+                    Task::Gather { node, .. } | Task::Return { node, .. } => Some(node),
+                    _ => None,
+                };
+                node.and_then(|node| self.gather_source(node).ok())
+                    .and_then(|(resource, _)| self.slot_of(&resource))
+                    == Some(slot)
+            })
+            .count()
+    }
+
     /// The entity a command acts through: the villager, the building, the attacker, or the id a spawn names. A refusal
     /// that cannot name its actor is a refusal nobody can diagnose, and this used to return `EntityId(0)` for every
     /// command - so every recorded refusal read `entity 0`. The actor is read **before** `apply`, which takes the command

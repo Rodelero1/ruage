@@ -73,6 +73,34 @@ do = "build"
 role = "lumber_camp"
 where = "wood"
 
+# **A drop site at the mine** (the owner's item 4). The trigger had to exist first: `working` counts the villagers whose
+# gather (or trip home) is on a resource, because the question a mining camp answers is not "is the bank low" but "is
+# somebody walking forty tiles with every load". **One** villager on the gold is the threshold - the owner's own wording,
+# "once a villager is working one there" - because the personality sends a single gold miner at a time (the rule above)
+# and asked for two it never built a camp at all: measured, 0 camps in a whole match with the gold column producing.
+#
+# **The gold column the army eats.** Measured: with the militia line training, the run refuses *"not enough gold"* 152
+# times and the bank sits at 10 while the share table's 10% of thirty-two villagers never reaches the mine - the pass moves
+# idle villagers, and a booming base has none. So the personality asks for the work it is missing: no gold in the bank and
+# a soldier's price in the barracks means a villager goes to the gold, which is also what gives the camp rule below
+# something to see.
+[[rule]]
+player = 1
+cooldown_seconds = 8.0
+when = { age = "feudal_age", stock = [{ name = "gold", at_most = 20 }] }
+do = "gather"
+resource = "gold"
+
+# Stone is the same rule with `resource = "stone"`; content gives it no consumer yet (nothing this personality builds
+# costs stone), so the rule would exist to be untested. Named here rather than written.
+[[rule]]
+player = 1
+cooldown_seconds = 8.0
+when = { working = [{ resource = "gold", at_least = 1 }], no_building = "mining_camp" }
+do = "build"
+role = "mining_camp"
+where = "gold"
+
 # Two buildings of the current age open the Feudal Age (D65): a mill and a barracks.
 [[rule]]
 player = 1

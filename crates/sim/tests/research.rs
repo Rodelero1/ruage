@@ -215,18 +215,26 @@ fn bank(world: &mut World, slot: usize, want: u32) {
     );
 }
 
+/// The nearest node of a column the villager can **walk to**. Reachability is part of the choice: a tree behind a
+/// forest wall is refused by `Command::Gather`, `submit` swallows the refusal, and this helper spun 400,000 ticks
+/// re-issuing the same impossible order - which is why six tests here took 60 seconds each and then failed.
 fn nearest_node(world: &World, from: EntityId, slot: usize) -> Option<EntityId> {
     let here = world.position(from)?;
-    world
+    let mut nodes: Vec<(i64, u32, EntityId, (ruage_fixed::Fixed, ruage_fixed::Fixed))> = world
         .entities()
         .iter()
         .filter(|e| e.kind == EntityKind::Resource(slot) && e.amount.raw() > 0)
-        .min_by_key(|e| {
+        .map(|e| {
             let dx = e.position.0.raw() - here.0.raw();
             let dy = e.position.1.raw() - here.1.raw();
-            (dx * dx + dy * dy, e.id.0)
+            (dx * dx + dy * dy, e.id.0, e.id, e.position)
         })
-        .map(|e| e.id)
+        .collect();
+    nodes.sort_unstable_by_key(|(distance, id, _, _)| (*distance, *id));
+    nodes
+        .into_iter()
+        .find(|(_, _, _, position)| world.can_reach(here, *position))
+        .map(|(_, _, id, _)| id)
 }
 
 /// A finished building, spawned rather than built: these tests are about research, not masonry.
@@ -356,13 +364,16 @@ fn research_needs_the_building_the_tech_names_and_a_finished_one() {
         "expected CannotResearchHere, got {err:?}"
     );
 
-    // A barracks still under construction cannot, so build one for real.
+    // A barracks still under construction cannot, so build one for real - on ground its 3x3 footprint fits, which (14, 14)
+    // no longer is once the town centre owns its own four tiles.
     bank(&mut world, slot("wood"), 175);
+    let builder = first_villager(&world);
+    let at = free_tile(&world, builder, BARRACKS);
     world
         .submit_checked(Command::Build {
-            villager: first_villager(&world),
+            villager: builder,
             unit: BARRACKS,
-            at: (14, 14),
+            at,
         })
         .expect("a barracks costs 175 wood, which the villager just banked");
     world.step().expect("step");

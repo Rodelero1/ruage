@@ -1010,3 +1010,91 @@ fn an_upgrade_gives_a_half_eaten_farm_half_the_extra() {
         "a half-eaten farm gains half the upgrade"
     );
 }
+
+/// **Working a node is "somewhere to stand", not "a path somewhere near it".** `can_work` asks the question
+/// `Command::Gather` asks - `work_position`, a free *and reachable* neighbour - so a node with no standable neighbour is
+/// not workable even though a path exists to within a tile of it. A chooser that asks a weaker question sends a worker
+/// at a node it cannot work; that is how a test helper re-issued an impossible order for 400,000 ticks.
+#[test]
+fn can_work_asks_for_somewhere_to_stand() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let villager = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
+        .map(|entity| entity.id)
+        .expect("a villager");
+    let gold = world.slot_of("gold").expect("a gold column");
+    let node = world
+        .entities()
+        .iter()
+        .filter(|entity| entity.kind == EntityKind::Resource(gold))
+        .map(|entity| entity.id)
+        .next()
+        .expect("a gold node");
+    assert!(
+        world.can_work(villager, node),
+        "a gold node in the open is workable: there is a free neighbour"
+    );
+
+    // The same node, walled in by eight palisade segments: a path to the tile may exist, but nobody can stand beside it.
+    let wall = world.role_unit("palisade_wall").expect("a wall role");
+    let scale = world.scale();
+    let at = (30i64, 30i64);
+    let mut id = world
+        .entities()
+        .iter()
+        .map(|entity| entity.id.0)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    for (dx, dy) in [
+        (-1i64, -1i64),
+        (-1, 0),
+        (-1, 1),
+        (0, -1),
+        (0, 1),
+        (1, -1),
+        (1, 0),
+        (1, 1),
+    ] {
+        world
+            .submit_checked(ruage_sim::Command::Spawn {
+                id: ruage_sim::EntityId(id),
+                player: 1,
+                kind: EntityKind::Building,
+                unit: Some(wall),
+                position: (
+                    Fixed::from_raw((at.0 + dx) * scale),
+                    Fixed::from_raw((at.1 + dy) * scale),
+                ),
+                speed: Fixed::ZERO,
+                hp: 250,
+                amount: 0,
+            })
+            .expect("a wall segment");
+        world.step().expect("one tick");
+        id += 1;
+    }
+    let ringed = ruage_sim::EntityId(id);
+    world
+        .submit_checked(ruage_sim::Command::Spawn {
+            id: ringed,
+            player: 0,
+            kind: EntityKind::Resource(gold),
+            unit: None,
+            position: (Fixed::from_raw(at.0 * scale), Fixed::from_raw(at.1 * scale)),
+            speed: Fixed::ZERO,
+            hp: 0,
+            amount: 400,
+        })
+        .expect("a gold node");
+    world.step().expect("one tick");
+    assert!(
+        !world.can_work(villager, ringed),
+        "a node with no free neighbour is not workable, whatever a path to its tile says"
+    );
+}

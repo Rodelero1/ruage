@@ -625,3 +625,49 @@ fn an_arrow_is_not_a_unit() {
         other => panic!("expected NotATarget, got {other:?}"),
     }
 }
+
+/// **A re-issued attack keeps the reload it has already run.** The base personality re-orders its army every twelve
+/// seconds, and `start_attack` set `cooldown_ticks: 0` unconditionally - so every re-order threw away whatever part of the
+/// reload had run and the soldier swung early. That is one half of "they strike, then withdraw": an army re-ordered on a
+/// rhythm attacks on the rhythm rather than on its own reload.
+#[test]
+fn a_reissued_attack_keeps_the_reload_it_has_run() {
+    let Some(fx) = fixture() else { return };
+    let (mut world, spearman, villager) = duel(&fx);
+    let hp0 = world.entity(villager).expect("the victim").hp;
+    world
+        .submit_checked(Command::Attack {
+            attacker: spearman,
+            target: villager,
+        })
+        .expect("an attack");
+    for _ in 0..40 {
+        world.step().expect("step");
+    }
+    let after_first = world.entity(villager).expect("the victim").hp;
+    let damage = hp0 - after_first;
+    assert!(damage > 0, "the first blow landed: {hp0} -> {after_first}");
+
+    // Twenty ticks into the next reload (2 s = 40 ticks), the army is re-ordered at the same target.
+    for _ in 0..20 {
+        world.step().expect("step");
+    }
+    world
+        .submit_checked(Command::Attack {
+            attacker: spearman,
+            target: villager,
+        })
+        .expect("the same attack again");
+
+    // Twenty more: the reload runs 40 ticks from the *first* blow, so by now two blows have landed. A reset reload would
+    // swing at the re-order and show three.
+    for _ in 0..20 {
+        world.step().expect("step");
+    }
+    let after = world.entity(villager).expect("the victim").hp;
+    assert_eq!(
+        after,
+        hp0 - 2 * damage,
+        "two blows by tick 80, not three: a re-order must not reset the swing"
+    );
+}
