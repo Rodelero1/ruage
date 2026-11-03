@@ -107,6 +107,10 @@ struct App {
     /// Escape opens this: a modal that stops the clock (`step` returns early) and offers resume, restart and quit.
     menu_open: bool,
     menu_hover: Option<usize>,
+    /// **The command card**: what the selected building offers, each button with the command it would send. Rebuilt when
+    /// the selection changes or an order lands, never per frame - it is a query over every tech the building knows.
+    card: Vec<(ui::CardButton, ruage_sim::CardTarget)>,
+    card_hover: Option<usize>,
     /// Paused freezes the accumulator rather than the loop: the window keeps drawing, the match stops.
     paused: bool,
     /// The window's pace (1x, 1.5x, 2x, 3x, 5x). **Presentation only**: the simulation is fixed-rate (D16), so a speed
@@ -146,6 +150,8 @@ impl App {
             notice: None,
             menu_open: false,
             menu_hover: None,
+            card: Vec::new(),
+            card_hover: None,
             paused: false,
             pace: Pace::new(Speed::One),
             cursor: (0, 0),
@@ -188,6 +194,13 @@ impl App {
                     eprintln!("speed -> {}", speed.label());
                     return;
                 }
+                // The command card next: it is drawn above the panel, so a click on a button is not a click on the ground.
+                let (width, height) = self.frame_size();
+                if let Some(index) = ui::card_at(self.cursor_pixel, self.card.len(), width, height)
+                {
+                    self.use_card(index);
+                    return;
+                }
                 // The minimap next, for the same reason: it is a picture of the world drawn over the world.
                 if let Some(tile) = self.minimap_at(self.cursor_pixel) {
                     self.camera = self
@@ -204,6 +217,53 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Rebuild the command card from what is selected: one building, the player's own, gives buttons.
+    fn refresh_card(&mut self) {
+        self.card.clear();
+        self.card_hover = None;
+        if self.selection.ids.len() != 1 {
+            return;
+        }
+        let Some(world) = self.world.as_ref() else {
+            return;
+        };
+        let id = ruage_sim::EntityId(self.selection.ids[0]);
+        for item in world.card(1, id) {
+            self.card.push((
+                ui::CardButton {
+                    name: item.name,
+                    costs: item.costs,
+                    refusal: item.refusal,
+                },
+                item.target,
+            ));
+        }
+    }
+
+    /// Send the card's order: train a unit, or research a tech, on the selected building.
+    fn use_card(&mut self, index: usize) {
+        let Some((_, target)) = self.card.get(index).cloned() else {
+            return;
+        };
+        let Some(building) = self.selection.ids.first().copied() else {
+            return;
+        };
+        let building = ruage_sim::EntityId(building);
+        let command = match target {
+            ruage_sim::CardTarget::Unit(unit) => ruage_sim::Command::Train { building, unit },
+            ruage_sim::CardTarget::Tech(tech) => ruage_sim::Command::Research { building, tech },
+        };
+        let Some(world) = self.world.as_mut() else {
+            return;
+        };
+        match world.submit_checked(command) {
+            Ok(()) => self.notice = None,
+            Err(err) => self.notice = Some((err.to_string(), self.ticks)),
+        }
+        // The card says what the *next* button does: a queue may now be full, or the money gone.
+        self.refresh_card();
     }
 
     /// Which map tile a pixel on the minimap means, if it is on the minimap at all.
@@ -238,6 +298,7 @@ impl App {
         if travelled {
             self.selection.band(&snapshot, &camera, from, to);
             self.last_click = None;
+            self.refresh_card();
             return;
         }
         let twice = self.last_click.is_some_and(|(when, at)| {
@@ -252,6 +313,8 @@ impl App {
             self.selection.click(&snapshot, &camera, to);
             self.last_click = Some((Instant::now(), to));
         }
+        // The card belongs to the selection: a new selection is a new set of buttons.
+        self.refresh_card();
     }
 
     /// Send the selected units an order at a tile: gather from a resource, attack a living thing, otherwise walk. This is
@@ -335,6 +398,8 @@ impl App {
     /// Start the match again from tick zero: a new world from the same config and seed, an empty selection, and the menu
     /// closed. The seed is the config's, so "restart" is reproducible and two restarts of one match are the same match.
     fn restart(&mut self) {
+        self.card.clear();
+        self.card_hover = None;
         self.world = None;
         self.runner = None;
         self.ticks = 0;
@@ -427,6 +492,11 @@ impl App {
         // become furniture.
         hud.notice = notice;
         ui::hud(&mut frame, &hud, &snapshot, self.pace.speed());
+        let buttons: Vec<ui::CardButton> =
+            self.card.iter().map(|(button, _)| button.clone()).collect();
+        if !buttons.is_empty() {
+            ui::draw_card(&mut frame, &buttons, width, height, self.card_hover);
+        }
         if menu_open {
             ui::draw_menu(&mut frame, width, height, menu_hover);
         }
@@ -571,12 +641,11 @@ impl ApplicationHandler for App {
                 self.cursor = self.camera.pick(pixel);
                 self.cursor_point = self.camera.pick_point(pixel);
                 self.cursor_pixel = pixel;
+                let (width, height) = self.frame_size();
                 if self.menu_open {
-                    let (width, height) = self.window.as_ref().map_or((0, 0), |window| {
-                        let size = window.inner_size();
-                        (size.width, size.height)
-                    });
                     self.menu_hover = ui::menu_at(pixel, width, height);
+                } else {
+                    self.card_hover = ui::card_at(pixel, self.card.len(), width, height);
                 }
             }
             WindowEvent::MouseInput {

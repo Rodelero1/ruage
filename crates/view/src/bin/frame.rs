@@ -72,6 +72,41 @@ fn main() -> ExitCode {
     }
     world.load_resources(&resources).ok();
     world.load_combat(&combat);
+    // **The same tables the window loads.** A diagnostic that plays a different game from the window - no techs, so no
+    // research on the card, no rules, so a village that never builds - is a picture that can look right while the window
+    // is wrong.
+    let techs = match ruage_data::load_techs_file(&config.join("gamedata/techs.toml")) {
+        Ok(techs) => techs,
+        Err(err) => {
+            eprintln!("techs.toml: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let effects = match ruage_data::load_effects_file(&config.join("gamedata/effects.toml")) {
+        Ok(effects) => effects,
+        Err(err) => {
+            eprintln!("effects.toml: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let civs = match ruage_data::load_civs_file(&config.join("gamedata/civs.toml")) {
+        Ok(civs) => civs,
+        Err(err) => {
+            eprintln!("civs.toml: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(err) = world.load_research(&techs, &effects) {
+        eprintln!("research: {err}");
+        return ExitCode::FAILURE;
+    }
+    if let Err(err) = world.load_civs(&civs) {
+        eprintln!("civs: {err}");
+        return ExitCode::FAILURE;
+    }
+    if let Ok(personality) = ruage_sim::load_personality_file(&config.join("ai/base.toml")) {
+        world.apply_policy(&personality.policy);
+    }
 
     // Something to look at: the first villager of the player under test walks out, so the frame is not a
     // still life of a town centre.
@@ -112,11 +147,18 @@ fn main() -> ExitCode {
     });
     let focus = focus.unwrap_or((20.0, 20.0));
     let camera = Camera::new((640, 480)).centred_on(focus);
-    // The player's first unit, selected, so the diagnostic picture shows the ring and the health bar too.
+    // What the diagnostic selects: the player's first unit (ring, health bar), or - with `card` as the fifth argument - the
+    // first building, so the command card can be looked at without a display.
+    let want_buildings = args.get(4).is_some_and(|arg| arg == "card");
+    let kind = if want_buildings {
+        EntityKind::Building
+    } else {
+        EntityKind::Unit
+    };
     let selected: Vec<u32> = snapshot
         .entities
         .iter()
-        .filter(|entity| entity.player == player && entity.kind == EntityKind::Unit)
+        .filter(|entity| entity.player == player && entity.kind == kind)
         .map(|entity| entity.id)
         .take(1)
         .collect();
@@ -134,6 +176,22 @@ fn main() -> ExitCode {
     let hud = ui::Hud::of_selected(&snapshot, &resources, &selected);
     ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);
     // `... ppm 1 menu`: the same picture with the Escape menu over it, so the modal can be looked at without a display.
+    // The command card, when what is selected is one of the player's buildings: the diagnostic shows what the window shows.
+    if let Some(id) = selected.first().copied() {
+        let card = world.card(player, ruage_sim::EntityId(id));
+        if !card.is_empty() {
+            let buttons: Vec<ui::CardButton> = card
+                .into_iter()
+                .map(|item| ui::CardButton {
+                    name: item.name,
+                    costs: item.costs,
+                    refusal: item.refusal,
+                })
+                .collect();
+            let (width, height) = (frame.width, frame.height);
+            ui::draw_card(&mut frame, &buttons, width, height, None);
+        }
+    }
     if args.get(4).is_some_and(|arg| arg == "menu") {
         let (width, height) = (frame.width, frame.height);
         ui::draw_menu(&mut frame, width, height, Some(0));

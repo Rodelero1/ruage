@@ -14,7 +14,7 @@
 > | A3 | the HUD that exists gets drawn | **landed** - `docs/reviews/2026-11-03-the-hud-is-drawn.md` |
 > | P1 | feedback: refusals on screen, a menu on Escape | **landed** - `docs/reviews/2026-11-03-the-hud-learns-to-speak.md` |
 > | P2 | band select, double-click, minimap click | **landed** - `docs/reviews/2026-11-03-input-that-was-never-run.md` |
-> | P4 | the command card (moddable) | last, and the largest |
+> | P4 | the command card (moddable) | **landed** - `docs/reviews/2026-11-03-the-card-is-a-query.md` |
 >
 > **A5/A6 in one line, with the numbers:** `tools/require_data.py` refuses to call a run meaningful without the generated
 > data (7 tests; `make test` depends on it, `make check` runs 96 tool tests), and the **14** red tests - not the 8 I reported -

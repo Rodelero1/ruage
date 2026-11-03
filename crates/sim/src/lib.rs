@@ -63,6 +63,30 @@ pub struct EntityId(pub u32);
 /// One damage per second, in the integer millionths `pierce_dps` counts in (D67).
 const DPS_ONE: i64 = 1_000_000;
 
+/// What a command-card button would do: make a unit, or research a tech.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CardTarget {
+    Unit(u32),
+    Tech(u32),
+}
+
+/// **One button on the command card.** It is a query over the same tables an order is validated against, so a button can
+/// never be offered for an order the engine would refuse: the price comes from the unit or tech, the name from the pack's
+/// own vocabulary (`[role]`, `[tech_role]`), and `refusal` is `check_train`/`check_research`'s own answer. That is what
+/// "moddable" means for a UI (the owner's D1): a pack with a new building and a new unit gets a new button without the
+/// engine learning either word.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CardItem {
+    pub target: CardTarget,
+    /// The pack's word for it, or `"unit 83"` when the pack names no role - a button with no label is worse than a button
+    /// with an id.
+    pub name: String,
+    /// `(stock column, amount)`, in the pack's column order. Empty when the thing is free.
+    pub costs: Vec<(usize, u32)>,
+    /// `None` when the order would be accepted right now; otherwise why not, in the engine's words.
+    pub refusal: Option<String>,
+}
+
 /// A villager's waiting sites: unit id and tile, oldest first (D66).
 type BuildQueue = BTreeMap<EntityId, VecDeque<(u32, (u16, u16))>>;
 
@@ -9239,6 +9263,111 @@ impl World {
         // point the opening stockpile can be applied when the pack is loaded after seeding.
         self.apply_start_stock()?;
         Ok(())
+    }
+
+    /// **What the selected building offers, as the buttons a player would see.** Empty for a unit, for another player's
+    /// building, and for a foundation: none of those has a card.
+    ///
+    /// Every entry is checked with the same function the order goes through, so the card and the order cannot disagree -
+    /// a lesson paid for twice in this tree (a HUD that showed what nothing drew, a selection nobody called).
+    #[must_use]
+    pub fn card(&self, player: u8, entity: EntityId) -> Vec<CardItem> {
+        let Some(found) = self.find(entity) else {
+            return Vec::new();
+        };
+        if found.player != player
+            || found.kind != EntityKind::Building
+            || found.construction.is_some()
+        {
+            return Vec::new();
+        }
+        let Some(unit) = found.unit else {
+            return Vec::new();
+        };
+        let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
+        let mut items = Vec::new();
+        // What this building makes.
+        if let Some(economy) = self.economy.as_ref()
+            && let Some(made) = economy.train.by_building.get(&root)
+        {
+            for candidate in made {
+                let costs = self
+                    .units
+                    .as_ref()
+                    .and_then(|units| units.unit(*candidate))
+                    .map(|stats| self.cost_slots(&stats.costs))
+                    .unwrap_or_default();
+                items.push(CardItem {
+                    target: CardTarget::Unit(*candidate),
+                    name: self
+                        .role_name(*candidate)
+                        .unwrap_or_else(|| format!("unit {candidate}")),
+                    costs,
+                    refusal: self
+                        .check_train(entity, *candidate)
+                        .err()
+                        .map(|err| err.to_string()),
+                });
+            }
+        }
+        // What it researches: a tech names the unit that researches it (`location`), which is 0 for a tech with no home.
+        if let Some(techs) = self.techs.as_ref() {
+            let mut researched: Vec<CardItem> = techs
+                .techs
+                .iter()
+                .filter(|(_, tech)| u32::try_from(tech.location).ok() == Some(root))
+                .map(|(id, tech)| CardItem {
+                    target: CardTarget::Tech(*id),
+                    name: self
+                        .tech_role_name(*id)
+                        .map_or_else(|| format!("tech {id}"), str::to_owned),
+                    costs: self.cost_slots(&tech.costs),
+                    refusal: self
+                        .check_research(entity, *id)
+                        .err()
+                        .map(|err| err.to_string()),
+                })
+                .collect();
+            // A card is read like a menu: the affordable-and-available things first, then the rest, each in id order.
+            researched.sort_by_key(|item| {
+                (
+                    item.refusal.is_some(),
+                    match item.target {
+                        CardTarget::Tech(id) => id,
+                        CardTarget::Unit(id) => id,
+                    },
+                )
+            });
+            items.extend(researched);
+        }
+        items
+    }
+
+    /// The role name a unit id carries in the pack, if any: the inverse of `role_unit`, so a card can name a unit without
+    /// the window holding a second copy of the vocabulary.
+    #[must_use]
+    pub fn role_name(&self, unit: u32) -> Option<String> {
+        let economy = self.economy.as_ref()?;
+        economy
+            .role
+            .iter()
+            .find(|(_, id)| **id == unit)
+            .map(|(name, _)| name.clone())
+    }
+
+    /// A price as `(stock column, amount)`. A cost the pack cannot place in a column is dropped: a button that quotes a
+    /// number for a resource the bank does not hold would be quoting a column that does not exist.
+    fn cost_slots(&self, costs: &[ruage_data::Cost]) -> Vec<(usize, u32)> {
+        costs
+            .iter()
+            .filter_map(|cost| {
+                let slot = match &cost.resource {
+                    ruage_data::CostResource::ReferenceId(id) => self.resource_slot(u16::from(*id)),
+                    ruage_data::CostResource::Name(name) => self.slot_of(name),
+                }?;
+                Some((slot, u32::from(cost.amount)))
+            })
+            .collect()
     }
 
     /// The unit id behind a role name, from the loaded economy (`[role]` in economy.toml). This is

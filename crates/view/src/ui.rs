@@ -365,6 +365,108 @@ pub fn selection_row_origin(row: usize, frame_height: u32) -> (i32, i32) {
     (8, top + 12 + row as i32 * ROW_HEIGHT)
 }
 
+/// One button on the command card: a name, its price in stock columns, and why it would be refused (if it would).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CardButton {
+    pub name: String,
+    /// `(stock column, amount)` - the columns are the pack's order, the numbers are the pack's prices.
+    pub costs: Vec<(usize, u32)>,
+    pub refusal: Option<String>,
+}
+
+/// The card's buttons, four to a row, from the left above the bottom panel. A card that ran off the screen would have
+/// buttons that do not exist, so the layout is bounded by the frame it is given.
+#[must_use]
+pub fn card_rows(count: usize, frame_width: u32, frame_height: u32) -> Vec<(i32, i32, u32, u32)> {
+    const PER_ROW: usize = 4;
+    const WIDTH: u32 = 96;
+    const HEIGHT: u32 = 28;
+    const GAP: u32 = 6;
+    let bottom = frame_height.saturating_sub(hud_panel_height());
+    let rows = u32::try_from(count.div_ceil(PER_ROW)).unwrap_or(0);
+    // **Read left to right, top to bottom**, so the first button is the top-left one: the block is placed as a whole above
+    // the panel instead of each row being stacked upward from the bottom.
+    let block = rows * (HEIGHT + GAP);
+    let top = bottom.saturating_sub(8 + block);
+    let _ = frame_width;
+    (0..count)
+        .map(|index| {
+            let column = (index % PER_ROW) as u32;
+            let row = (index / PER_ROW) as u32;
+            (
+                (8 + column * (WIDTH + GAP)) as i32,
+                (top + row * (HEIGHT + GAP)) as i32,
+                WIDTH,
+                HEIGHT,
+            )
+        })
+        .collect()
+}
+
+/// Which button a pixel picks, if any.
+#[must_use]
+pub fn card_at(
+    pixel: (i32, i32),
+    count: usize,
+    frame_width: u32,
+    frame_height: u32,
+) -> Option<usize> {
+    card_rows(count, frame_width, frame_height)
+        .iter()
+        .position(|&(x, y, w, h)| {
+            pixel.0 >= x && pixel.0 < x + w as i32 && pixel.1 >= y && pixel.1 < y + h as i32
+        })
+}
+
+/// Draw the card: each button a dark box, its name in the pack's word, its price in digits, and a refusal in red.
+/// `chosen` is the button the pointer is on, which is drawn lit - the same shape as the menu's rows and the speed boxes.
+pub fn draw_card(
+    frame: &mut Frame,
+    buttons: &[CardButton],
+    frame_width: u32,
+    frame_height: u32,
+    chosen: Option<usize>,
+) {
+    for (index, (x, y, w, h)) in card_rows(buttons.len(), frame_width, frame_height)
+        .into_iter()
+        .enumerate()
+    {
+        let button = &buttons[index];
+        let background = if Some(index) == chosen {
+            palette::MENU_ROW
+        } else {
+            palette::PANEL
+        };
+        frame.fill_rect(x, y, w as i32, h as i32, background);
+        frame.fill_rect(x, y, w as i32, 1, palette::MARK);
+        // The name, trimmed to the button: a button is not a paragraph, and a name that overflows its box makes two buttons
+        // look like one.
+        let room = (w as i32 - 6) / (crate::font::WIDTH + crate::font::GAP);
+        let label: String = button
+            .name
+            .to_uppercase()
+            .chars()
+            .take(usize::try_from(room).unwrap_or(0))
+            .collect();
+        frame.draw_text(x + 3, y + 3, &label, 1, palette::HUD_TEXT);
+        // The price: one number per cost, in the pack's column order.
+        let mut at = x + 3;
+        for (_, amount) in &button.costs {
+            at = frame.draw_number(at, y + 11, *amount, 1, palette::HUD_TEXT) + 3;
+        }
+        // And why not, if it would not be taken. The words are the engine's; the colour is the view's job.
+        if let Some(refusal) = &button.refusal {
+            frame.fill_rect(x, y + h as i32 - 4, w as i32, 2, palette::REFUSED);
+            let short: String = refusal
+                .to_uppercase()
+                .chars()
+                .take(usize::try_from(room).unwrap_or(0))
+                .collect();
+            frame.draw_text(x + 3, y + 18, &short, 1, palette::REFUSED);
+        }
+    }
+}
+
 /// The menu's three rows - resume, restart, quit - as `(x, y, w, h)` rectangles, centred in the play area.
 ///
 /// A menu needs words, and the font only grew letters after the HUD needed names; this is the second customer for them.
