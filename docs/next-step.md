@@ -2648,6 +2648,25 @@ from. `make headless` and the window both always load `acceptance.toml`, so only
 are derivable from the unit table; 15 of the 31 class ids already have effect-modifier words attached, 0 have a name in
 the pack), then the table flip to name keys; evasion separately, with the binary map below.
 
+### The movement module is mapped, and the original repaths on collision (2026-11-03)
+
+The cheap step is done and it was cheaper than priced: the original's asserts carry its own source file, line and a log
+string, and the pseudocode corpus at `/opt/data/tools/rea/pseudo-aokhd` is one file per function, so `grep` for
+`motion.cpp` / `move_obj.cpp` **is** the map. Measured: **265 references across 18 functions** (91 in motion.cpp's
+three, 174 in move_obj.cpp's fifteen), of the 1,029 `.cpp` references in the whole corpus. `docs/movement-in-the-binary.md`
+carries the address-to-role table, the reproducible commands, and what the strings settle.
+
+**The finding that matters:** `doIntelligentMovementUpdate` (move_obj.cpp 3,290+) has an explicit collision decision -
+"non-past collisions and terrain collisions, **repathing**" (4,747), a collision with the *target* means arrival (4,733),
+a "past" collision is ignored (4,709), and a straight line with no non-target collisions skips the path entirely
+(4,079-4,245). So **the original does not wait; it repaths.** D98 ruled "wait and let pass" as the cheap deterministic
+answer and it is built and tested; this is recorded against it rather than acted on. **Default if the owner says
+nothing: keep D98**, and treat a collision-triggered repath as its own slice - the conditions alone are a dozen
+comparisons, and unread.
+
+Still unread, and named: the A* cost model (no heuristic/open-list string exists in the corpus, so it needs `008007f0`
+in pathsys.cpp read as pseudocode), the tie-break, and the ObSystem occupancy query `008a4360` calls.
+
 ### Reading pathfinding and evasion out of the binary (lead, 2026-11-02)
 
 The owner asked whether the original's pathfinding and evasion can be read from the game binaries. **Yes**, and there is

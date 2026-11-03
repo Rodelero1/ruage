@@ -145,3 +145,13 @@ disassembly is for. Each one must come back as an address plus a number that a f
    tick, which is the U6/U7 gap that snapshots cannot see.
 3. **Age-up timing:** what a kind-102 gating effect does at the tick boundary — the U10 "aftermath, not the
    transition" problem.
+
+## Where the movement module turned out to be (2026-11-03)
+
+`docs/movement-in-the-binary.md` is the map: 18 functions carry 265 references to `motion.cpp` (91, three functions)
+and `move_obj.cpp` (174, fifteen), of 1,029 `.cpp` references in the corpus. It was built by grepping the corpus for the
+source path - no pseudocode had to be interpreted - and it names each function's role from its own log strings. The
+collision decision in `doIntelligentMovementUpdate` (move_obj.cpp 4,600-4,760) is read and recorded there: the original
+**repaths** on a non-past or terrain collision, treats a collision with the target as arrival, and ignores "past"
+collisions. The cost model and the tie-break are still unread.
+
