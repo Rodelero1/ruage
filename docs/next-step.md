@@ -1,6 +1,17 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, latest: E1b, in two steps. First the adjacency-ring arrival** - an order against a *blocked* target tile
+> **2026-11-03, latest: the owner's observation - movement is continuous in the original, and ours is tile-centre to
+> tile-centre.** `Command::Move/AttackMove/Patrol { to: (u16, u16) }` takes a **tile**, `check_order` turns it into
+> `self.tile(to)` (the centre), and `next_waypoint` returns `self.tile((x, y))` for every leg - so every leg ends at a
+> centre and the destination is a centre. The original disagrees, and its own strings say so: waypoints and goal points
+> are floats ("Waypoint[%2d]=(%f, %f, %f)", "Adding goalPoint of (%f, %f, %f)", "Setting position to exact waypoint").
+> Tiles are terrain, resource placement and building placement; **movement is free of them**. The slice, in order:
+> (1) orders carry an exact point, not a tile (the route's last leg aims at it); (2) the route is string-pulled - steer
+> at the furthest waypoint the unit can see, so a clear run is one line and not a staircase of centres; (3) arrival and
+> stand rules become distance-based, which is what E1b's radius step wanted anyway. This supersedes the "E1b, in two
+> steps" ordering below; the fixtures parked by E1a/E1b stay parked until (3).
+>
+> Superseded: **E1b, in two steps. First the adjacency-ring arrival** - an order against a *blocked* target tile
 > (a building, a node) must end the route on a tile from which the order can actually be satisfied, or a melee army
 > stops 1-4 tiles off and never strikes (measured in E1a: twelve attackers at 1,066 of 2,400 hp, all alive,
 > `cooldown_ticks: 0`). That is what un-parks `garrison::a_damaged_building_ejects_its_garrison` and may well be the
