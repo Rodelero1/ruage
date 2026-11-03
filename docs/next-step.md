@@ -1,25 +1,27 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, the owner's nine observations, and where each one stands.** Written down before any of them is worked on,
-> so a fresh session resumes from the list rather than from the conversation. `main` is green at `bff75d6`; the buildings
-> work is on **`wip/buildings-block`** (see item 1).
+> **2026-11-03, the owner's nine observations: 1-3 are landed, 4-9 are the queue.**
 >
-> 1. **Buildings crowd the base and wall it in - they must leave gaps.** The rule (every building blocks its whole
->    footprint from its foundation, a farm is a floor, the town centre keeps its core and yard, no overlap but a spent
->    farm) is implemented on `wip/buildings-block` with seven tests, and the placement now follows the game's own manual:
->    a lane around every building, farms included ("leaving some space between them to avoid 'peasant traffic jam'"), and
->    the ground within 3 tiles of the town centre kept for farms ("do not build your first house too close to the Town
->    Center"). **Measured: still not won** - `players=2`, hash `ca90bc834457d7a6`, 38 buildings, bank 258/290/170 at
->    1,200 s against the baseline's 752/825/370. Better than the frozen base the bare rule produced (8 units, 200 wood),
->    not as good as the pre-rule win. The suite on the branch is red in ~25 build fixtures that raise a house overlapping
->    the town centre - those refusals are the rule working, and each fixture has to move.
-> 2. **Units walk through forest; a tree blocks its tile until it is cut and fully harvested, and no passage between two
->    trees that touch only at a corner.** Tree tiles already block (D84), and `step_is_walkable` on the branch adds the
->    both-corners rule for raw-space diagonals - so the corner case may already be fixed there and wants a test that
->    proves it (two trees diagonal, a villager that must go round).
-> 3. **Villagers should stand *around* a bush, mine or stone, not on top of it.** Today the mover treats an order's goal
->    tile as unblocked, so a gatherer walks onto the node's tile. The arrival rule already accepts the ring (`beside`), so
->    the fix is to stop exempting a **blocked** goal tile from the step check and let the ring arrival finish the order.
+> **Standing measurement:** acceptance match at 36,000 ticks, seed 7 - **`players=1`** (won), hash
+> `51992525a3b1c3fb`, bank **1,294 wood / 1,209 food / 175 gold at 1,600 s**, 136 entities, 34 buildings, 160 repaths,
+> 143 nudges, **48.4 s** (1.34 ms/tick, 2.7% of the 50 ms budget). The 2.4x wall clock against `c979ba7`'s 19.9 s is the
+> base's size and the pathing around 34 blocking buildings, not the movement pass - measured in the two reviews below.
+>
+> 1. **DONE - buildings block their footprints, and the base leaves lanes.** Rule: every building blocks its whole
+>    footprint from its foundation, a farm is a floor, the town centre keeps its solid core and walkable yard, no overlap
+>    except a spent farm. Placement follows the game's own manual - a lane around every building, farms included
+>    (*"leaving some space between them to avoid 'peasant traffic jam'"*), the ground within 3 tiles of the town centre
+>    left for farms (*"do not build your first house too close to the Town Center"*). Review:
+>    `docs/reviews/2026-11-03-buildings-block-their-ground.md`.
+> 2. **DONE - no passage between two trees touching at a corner.** The both-corners rule for raw-space diagonals is
+>    `World::step_is_walkable`, and `passage::two_trees_touching_at_a_corner_leave_no_gap` proves it (trees at (4,4) and
+>    (5,5), a villager at (4,5) sent to (5,4) goes round; the test fails if the rule is removed).
+> 3. **DONE - a worker stands beside its node.** Every resource node now closes its tile while it holds anything (the old
+>    rule keyed on hit points, which only a tree has, so a bush or a mine was a floor - and a felled tree with wood in it
+>    stopped blocking). **This is what brought the win back**: a worker standing on the node was standing in every other
+>    worker's arrival, and the food column starved at 609. Review: `docs/reviews/2026-11-03-ground-and-arrival.md`.
+>
+> **Next in the queue:**
 > 4. **Villagers should build drop sites near the resource they are mining.** Content/AI: a rule that raises a mining camp
 >    beside gold or stone once a villager is working one there (`where = "gold"` exists; the trigger does not).
 > 5. **Panning is vertical because the map is rotated 45 degrees.** `crates/view`: screen-aligned up/down and left/right,
@@ -33,9 +35,8 @@
 >    population and entities are the named gap, and the recordings walk to EOF with an op grammar - the action bodies
 >    (type byte, unit ids, coordinates) are next.
 >
-> **Proposed order:** 2 and 3 first (both are small, both are movement/arrival, and 3 changes what "at the node" means
-> for every gather test), then 4 and 8 together (both are content/AI rules and 8 is what makes 7 worth fixing), then 7,
-> then 5 and 6 (view), with 9 available whenever a long build is running. 1 stays open until the base can win again.
+> **Proposed order:** 4 and 8 together (both content/AI rules, and 8 is what makes 7 worth fixing), then 7, then 5 and 6
+> (view), with 9 available whenever a long build is running.
 >
 > Superseded: **C1b + C2 landed, and the acceptance match is WON.**> Superseded: **C1b + C2 landed, and the acceptance match is WON.** A body blocks a disc of `radius[0]` summed
 > for the pair on **every** step, and gather / build / deposit / attack arrival are distances in the same units
