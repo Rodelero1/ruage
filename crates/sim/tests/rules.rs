@@ -215,3 +215,71 @@ resource = "food"
         "a rule whose building already stands must not fire"
     );
 }
+
+/// **"Gather an army, then attack"** (the owner, 2026-11-03): a rule can wait on a soldier **count**, not just on the
+/// existence of one unit - `has_unit` fires for a single mangonel, which is the behaviour the owner saw.
+#[test]
+fn an_army_rule_waits_for_an_army() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let scenario: Scenario = toml::from_str(
+        r#"
+schema = 2
+duration_seconds = 60.0
+
+[[rule]]
+player = 1
+cooldown_seconds = 2.0
+when = { army_at_least = 3 }
+do = "build"
+role = "house"
+"#,
+    )
+    .expect("a rule the format can read");
+    let before = houses(&world);
+    let mut runner = Runner::new(&scenario, 20).expect("a runner");
+    for _ in 0..120 {
+        runner.due(&mut world);
+        world.step().expect("stepping");
+    }
+    assert_eq!(runner.fired_times, vec![0], "no soldiers, so no attack");
+    assert_eq!(houses(&world), before, "and nothing else happened either");
+
+    // Three soldiers: the same rule now finds an army.
+    let scale = world.scale();
+    for n in 0..3 {
+        let id = ruage_sim::EntityId(
+            world
+                .entities()
+                .iter()
+                .map(|entity| entity.id.0)
+                .max()
+                .unwrap_or(0)
+                + 1,
+        );
+        world
+            .submit_checked(ruage_sim::Command::Spawn {
+                id,
+                player: 1,
+                kind: EntityKind::Unit,
+                unit: Some(74),
+                position: (
+                    ruage_fixed::Fixed::from_raw(20 * scale + n * scale),
+                    ruage_fixed::Fixed::from_raw(24 * scale),
+                ),
+                speed: ruage_fixed::Fixed::ZERO,
+                hp: 40,
+                amount: 0,
+            })
+            .expect("a soldier can be placed");
+    }
+    for _ in 0..120 {
+        runner.due(&mut world);
+        world.step().expect("stepping");
+    }
+    assert!(
+        runner.fired_times[0] >= 1,
+        "three soldiers are an army, so the rule fires"
+    );
+}

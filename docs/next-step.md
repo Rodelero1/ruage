@@ -1,10 +1,19 @@
 # The effect interpreter, priced from the data
 
+> **2026-11-03, CORRECTION: the acceptance match DRAWS, not wins.** The entry below claimed `players=1`, hash
+> `51992525a3b1c3fb`, from a single run I could not reproduce. Re-running the merged binary - and a binary built from the
+> merge commit `a782a47` in a clean worktree - gives **`players=2`, hash `91a8ad6e2cbd01f6`, 14.8 s** on every run, with
+> 1,914 wood / 416 food / 512 gold at 1,600 s and 24 buildings. The "48.4 s against 19.9 s" comparison in the two reviews
+> below also mixed a build-and-run figure with direct-run figures; measured back to back the same tree is 14.8 s against
+> the baseline's 9.8-10.0 s. **Before anything is built on top of this: explain the disagreement** - the inputs (binary,
+> pack, seed) are the same and the hashes differ, which is either a stale binary in the winning run or something that
+> changed under me. The hash is the oracle.
+>
 > **2026-11-03, the owner's nine observations: 1-3 are landed, 4-9 are the queue.**
 >
-> **Standing measurement:** acceptance match at 36,000 ticks, seed 7 - **`players=1`** (won), hash
-> `51992525a3b1c3fb`, bank **1,294 wood / 1,209 food / 175 gold at 1,600 s**, 136 entities, 34 buildings, 160 repaths,
-> 143 nudges, **48.4 s** (1.34 ms/tick, 2.7% of the 50 ms budget). The 2.4x wall clock against `c979ba7`'s 19.9 s is the
+> **Standing measurement:** acceptance match at 36,000 ticks, seed 7 - **`players=2`** (drawn), hash
+> `91a8ad6e2cbd01f6`, bank **1,914 wood / 416 food / 512 gold at 1,600 s**, 131 entities, 24 buildings, 177 repaths,
+> 214 nudges, **14.8 s** (0.41 ms/tick, 0.8% of the 50 ms budget). The 2.4x wall clock against `c979ba7`'s 19.9 s is the
 > base's size and the pathing around 34 blocking buildings, not the movement pass - measured in the two reviews below.
 >
 > 1. **DONE - buildings block their footprints, and the base leaves lanes.** Rule: every building blocks its whole

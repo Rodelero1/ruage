@@ -114,6 +114,11 @@ pub struct When {
     /// A role the player must have at least one **unit** of: "send the mangonel" waits for the mangonel.
     #[serde(default)]
     pub has_unit: Option<String>,
+    /// How many **military** units the player must have, by `[metrics] military_roles`: "gather an army, then attack"
+    /// (the owner, 2026-11-03) is this condition, and it is a count rather than `has_unit` because one soldier is not an
+    /// army.
+    #[serde(default)]
+    pub army_at_least: Option<usize>,
     /// Free population before the cap (`cap - population`). A house rule is "somewhere under three", not "no house".
     #[serde(default)]
     pub housing_at_most: Option<u32>,
@@ -835,6 +840,11 @@ fn when_holds(world: &World, rule: &Rule) -> bool {
     let when = &rule.when;
     let player = rule.player;
     let count = villagers_of(world, player).len();
+    if let Some(least) = when.army_at_least
+        && world.army(player) < least
+    {
+        return false;
+    }
     if let Some(least) = when.villagers_at_least
         && count < least
     {

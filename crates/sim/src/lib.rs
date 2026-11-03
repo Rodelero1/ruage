@@ -5438,6 +5438,39 @@ impl World {
         (Fixed::ZERO, Fixed::ZERO)
     }
 
+    /// How many **military** units `player` has, by content's `[metrics] military_roles`.
+    ///
+    /// The same list the balance harness counts, so a rule that waits for an army and a metric that reports one cannot
+    /// disagree about what an army is. Family-matched, because a pikeman is the spearman's upgrade and both answer the
+    /// question "how many soldiers".
+    #[must_use]
+    pub fn army(&self, player: u8) -> usize {
+        let Some(economy) = self.economy.as_ref() else {
+            return 0;
+        };
+        let roots: Vec<u32> = economy
+            .metrics
+            .military_roles
+            .iter()
+            .filter_map(|role| economy.role.get(role).copied())
+            .flat_map(|unit| self.units.as_ref().map(|units| units.root(unit)))
+            .collect();
+        if roots.is_empty() {
+            return 0;
+        }
+        self.entities
+            .iter()
+            .filter(|entity| {
+                entity.player == player && entity.kind == EntityKind::Unit && entity.hp > 0
+            })
+            .filter(|entity| {
+                entity.unit.is_some_and(|unit| {
+                    roots.contains(&self.units.as_ref().map_or(unit, |units| units.root(unit)))
+                })
+            })
+            .count()
+    }
+
     /// The entity an order is trying to reach, when the order has one. `Move` has none - its goal is a place, and that
     /// is why `collide` also asks `goal_of` (rule 2), which covers the order that names ground rather than a body.
     fn order_target(entity: &Entity) -> Option<EntityId> {
