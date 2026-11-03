@@ -13,7 +13,32 @@
 > in any commit - so there is nothing to bisect to: the hash is an oracle only for a tree that can be rebuilt. The
 > corrected numbers in `d00ee7a` stand and are the baseline above.
 >
-> **The queue, in the order I am taking it** (owner, this thread: implement all of it, stop only for a decision):
+> **Where session 3 ended, in one line each - six of the seven, with the numbers:**
+>
+> | # | item | state | evidence |
+> |---|---|---|---|
+> | 8 | gather an army, then attack | **landed**, and the match is won at 36,000 ticks | `069d6c7`, `docs/reviews/2026-11-03-the-army-and-the-red-suite.md` |
+> | 7 | soldiers attack consistently | **first half landed** (reload and route kept on a re-order); stances/attack-move untested | `8d2d1fe`, `docs/reviews/2026-11-03-a-reissued-attack.md` |
+> | 4 | drop sites at the mine | **capability + content landed; 0 camps stand** (one miner, so the trigger is met late) | `8d2d1fe`, `docs/reviews/2026-11-03-the-work-a-rule-can-see.md` |
+> | 6 | pictograms | **landed** (`[mark]`, five glyphs, a load error for a bad key) | `04a53a9`, `docs/reviews/2026-11-03-what-a-glance-shows.md` |
+> | 5 | silhouettes | **landed** (square / triangle by row width) | `04a53a9`, same review |
+> | 5b | speed selector | **landed** (`Speed`/`Pace`, five HUD boxes, keys 1-5; D101) | `04a53a9`, same review |
+> | 9 | save games and recordings | **NOT STARTED** - see below | - |
+>
+> **The suite at HEAD was red, and that is the other finding of the day.** A clean worktree at `55fcc2f` with the generated
+> `config/gamedata/` copied in reports **525 passed / 40 failed / 18 ignored**; 32 of the 40 are repaired (all the
+> fixed-tile staging the footprint slice invalidated), and the eight left are `research.rs` (7) and `walls.rs` (1), all
+> pre-existing. **The reason nobody saw it is D8's skip**: every suite returns early without `config/gamedata/`, so a clean
+> worktree is "green" because the tests do not run. Until that is fixed, `cargo test` on a fresh clone proves nothing.
+>
+> **Item 9 is the head of the queue, and it is a format walk, not a feature.** 10 real `SaveGame/*.aoe2spgame` files are in
+> the install and **zero** recordings, so the save half is verifiable and the recording half is not. The named gap is
+> `docs/save-format.md`'s sections 2-4: `player_info[i].{Food,Wood,Gold,Stone}` in the scenario section
+> (`FUN_00545460` / `FUN_00567630`) and the object loop in the world section (`FUN_00730600`), with the pseudocode corpus
+> at `/opt/data/tools/rea/pseudo-aokhd`. Read the two functions, find the offsets, then a `stockpiles()` reader with a
+> real-file assertion - the same shape as `find_game_clock`.
+>
+> **The queue as it stands** (owner, this thread: implement all of it, stop only for a decision):
 >
 > 1. **A - "gather an army first, then attack" (item 8). LANDED.** `When.army_at_least` / `army_at_most` and
 >    `World::army`, plus `RuleAction::Attack` ordering the **whole** family rather than the newest unit. **Correction to
