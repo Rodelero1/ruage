@@ -1,6 +1,13 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, latest: prove B and C by measurement before writing either (owner's instruction).** Both are priced with
+> **2026-11-03, latest: B is landed (`f0fe9af`) at a measured 4.94% of walking distance; C was built, measured and
+> reverted, because on its own it kills the economy** (89 wood at 1,600 s against B's 729) - collision stops a body 0.4
+> tiles short while the arrival predicates are still tile-based. **The next step is C1 + C2 in one slice:** the footprint
+> collision as built (with the make-room step and live positions) *and* distance-based arrival for gather, build, deposit
+> and attack, with the 1,600 s bank as the acceptance test. The build is described in
+> `docs/reviews/2026-11-03-b-string-pull.md`, "C was built, measured, and reverted".
+>
+> Superseded: **prove B and C by measurement before writing either (owner's instruction).** Both are priced with
 > probes first: **B** - does a pather route carry slack a string-pull would remove? Measured as polyline length against a
 > greedily pulled route over 200 pairs of the project map. **C** - do bodies overlap without sharing a tile? Measured on
 > the acceptance match as pairs closer than `radius[0] + radius[0]` split by whether they share a tile, which is exactly

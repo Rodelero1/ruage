@@ -52,3 +52,41 @@ probe is kept so anyone can re-run it.
 ---
 
 *Staged with the change for `tools/review_check.py`. See `.githooks/pre-commit` and the routine in `AGENTS.md`.*
+
+## Addendum: C was built, measured, and reverted - it needs distance arrival in the same step
+
+Built on top of B and taken out again, because the measurement said so rather than because it was hard.
+
+**What was built.** `collide` now tests the body's **footprint** at the moved position - the sum of the two `radius[0]`
+values, falling back to one tile when the content carries no radius, which is the original's rule (`Pos=(...) Radius=`) -
+and the tile map now holds a **list** per tile (the map-of-one silently dropped the second body on a tile) of live
+entity **indices**, so `blocker_at` reads positions as they are rather than as they were.
+
+**Two defects the tests found, both real:**
+
+- **Stale positions cost 500 raw units of interpenetration.** The tile map was built once per tick with copied positions;
+  the first body to move inside that tick left a stale entry behind, and a pair walked 500 raw inside each other before
+  the distance was checked properly. Positions are now read through the index.
+- **Radius collision deadlocks a head-on pair.** Both villagers stopped dead on tile (4, 1) and stayed there: each refused
+  the other's step, a one-tile row gives no sideways component to slide on, and the repath search cannot help because
+  both already stand inside the tile it would avoid. Fixed with a **make-room** step - half the way plus a nudge to one
+  side, terrain-checked - which opens the gap the next tick follows. Mutation: remove it and the crossing test reports
+  `both have to arrive: a at (4, 1), b at (4, 1)`.
+
+**And then the match collapsed**, which is why it did not land:
+
+| | B (landed) | B + C |
+|---|---|---|
+| wall, 36,000 ticks | 9.97 s | **6.16 s** |
+| entities | 159 | 147 |
+| bank at 1,600 s | 729 wood / 792 food / 370 gold | **89 / 20 / 50** |
+| rule firings | spread across the table | `900, 6, 7, 1, 9, 0, 0, 0, 0, 23, 0, ...` |
+
+Faster and much worse: collision now stops a body **0.4 tiles short** of its target, while the arrival predicates that
+let a villager gather, build or deposit are still **tile**-based. Nothing arrives, so nothing fires. C is the right rule
+and it cannot land alone - it needs **distance-based arrival** beside it, and that is the next step, with this table as its
+acceptance test: the bank at 1,600 s has to come back to at least B's.
+
+**Mutation evidence kept from the run:** put the footprint back to the tile and the walker goes through a standing body at
+**closest 500 raw where 8,000 is the footprint** - a sixteen-fold violation, caught.
+
