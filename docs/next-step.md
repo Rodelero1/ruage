@@ -18,6 +18,13 @@
 > 4. **Crowd slotting is tile-based** (`slot_for`): a clicked point must survive as the exact goal for the first unit and
 >    be replaced by a tile centre only when the crowd takes a slot.
 >
+> **A is landed (`238ae56`) and B is dropped, measured rather than argued.** A probe asking whether an open-ground route is
+> a staircase of centres measured **1.218 tiles** of deviation - and the reason was not a staircase at all: the goal
+> crossed forest, so the route bent round it, which is the pather doing its job. On a corridor that *is* open there is
+> nothing to straighten: eight-way A\* steps diagonally, so the polyline through centres is the line. B would only cut
+> corners on routes that bend, which is a cosmetic change with a real risk (a chord through a diagonal gap). Left out of
+> the queue; the owner can put it back if a bent route looks wrong on screen.
+>
 > Then B (string-pull the route so a clear run is one line), the garrison fixture restage, the radius predicate with
 > distance-based arrival, and the acceptance victory.
 >

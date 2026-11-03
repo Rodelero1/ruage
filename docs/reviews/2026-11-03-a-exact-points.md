@@ -49,3 +49,26 @@ the suite (no display); the arithmetic it uses is `pick_point`, which is tested.
 ---
 
 *Staged with the change for `tools/review_check.py`. See `.githooks/pre-commit` and the routine in `AGENTS.md`.*
+
+## Addendum: B's premise measured, and B dropped (2026-11-03)
+
+The plan's next step was B - string-pull a route so a clear run is one line. A probe measured the trajectory of an
+order to a point five tiles east and two north, on the "open row" the fixtures use, against the straight line it was
+sent along: **worst deviation 1.218 tiles**. That number looked like the staircase B was meant to fix, and it is not:
+the goal crossed forest, so the route bent round it - the pather behaving correctly. In a corridor that is open there is
+nothing to straighten, because eight-way A\* steps diagonally (10/14 costs, octile heuristic), so the polyline through
+centres *is* the straight line.
+
+## Performance
+
+No production change; a test and a probe. The acceptance match is unchanged from the slice above (hash
+`a596e97fc9a47ec9`, `players=2`, 12.63 s at 36,000 ticks), which is the control that dropping B costs nothing.
+
+## Stability
+
+The probe was written as an assertion (`worst < 0.10`) and **failed**, which is the useful outcome: it says B's premise
+is false on open ground and that the deviation it would remove only exists where the route bends. It is deleted rather
+than kept as a test that documents a false claim, and the finding is recorded in `docs/next-step.md` so the queue does not
+carry a step whose justification has been measured away. What remains of B - cutting corners on bent routes - is a
+cosmetic change with a real risk (a chord across a diagonal gap), so it waits for a screen, not for a plan.
+
