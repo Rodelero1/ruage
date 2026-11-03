@@ -1,6 +1,27 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, latest: the owner's observation - movement is continuous in the original, and ours is tile-centre to
+> **2026-11-03, latest: A (exact order points) is scoped to the last line and NOT started - the context ran out, not
+> the plan.** Owner: "implement as agreed and then follow with remaining previous steps". What the scoping pass settled,
+> so the next session does not rediscover it:
+>
+> 1. **The view half is nearly free.** `Camera::pick` already computes the continuous tile coordinate (`x`, `y` from
+>    `sx`/`sy`) and only *then* rounds; a `pick_point(pixel) -> (f32, f32)` is that function without the round, with a
+>    test beside the existing round-trip one in `crates/view/tests/camera.rs`.
+> 2. **The engine half is `Route.end: Option<(Fixed, Fixed)>`** - set from the ordered point, returned by `next_waypoint`
+>    when one step remains - plus a way to *say* a point: an additive `Command::WalkTo { unit, to: (Fixed, Fixed) }`
+>    rather than retyping `Command::Move.to`, which 34 test call sites construct with tiles. One internal path (positions),
+>    two ways to say where: a tile means its centre, and that keeps scenario files and the AI's rules readable.
+> 3. **The trap, found before writing it:** the waypoint-spent test compares the new position *for equality* with the
+>    tile centre. A free point is never hit exactly by a fixed step, so the last waypoint would never be spent and the
+>    order would never end - the mover needs to clamp the final step to the remaining distance and snap (the original's own
+>    "Teleporting to exact waypoint" is the same idea).
+> 4. **Crowd slotting is tile-based** (`slot_for`): a clicked point must survive as the exact goal for the first unit and
+>    be replaced by a tile centre only when the crowd takes a slot.
+>
+> Then B (string-pull the route so a clear run is one line), the garrison fixture restage, the radius predicate with
+> distance-based arrival, and the acceptance victory.
+>
+> Superseded: **the owner's observation - movement is continuous in the original, and ours is tile-centre to
 > tile-centre.** `Command::Move/AttackMove/Patrol { to: (u16, u16) }` takes a **tile**, `check_order` turns it into
 > `self.tile(to)` (the centre), and `next_waypoint` returns `self.tile((x, y))` for every leg - so every leg ends at a
 > centre and the destination is a centre. The original disagrees, and its own strings say so: waypoints and goal points
