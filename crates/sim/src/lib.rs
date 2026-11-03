@@ -2531,14 +2531,12 @@ impl World {
                 }
             }
         }
-        // A **tree** blocks the tile it stands on, from the tick it stands there (the owner's rule, 2026-10-31: it blocks
-        // until it is cut and fully harvested, and the ground under it - dirt - is walkable afterwards). Key it on the hit
-        // points the node carries, which is what a tree has and a bush, a mine or a pile does not: those are worked where
-        // they stand and never blocked anybody. `step_spent_nodes` frees the tile when the wood is gone.
-        if matches!(entity.kind, EntityKind::Resource(_))
-            && entity.hp > 0
-            && entity.amount.raw() > 0
-        {
+        // **Every node blocks the tile it stands on while it holds anything** - a tree, a berry bush, a gold or stone
+        // mine (the owner's rule, 2026-11-03: "each forest tile is blocking passage until tree cut and all wood
+        // extracted"). The first version keyed it on hit points, which only a tree has, so a bush or a mine was a floor a
+        // villager stood on to work it; it also stopped blocking a felled tree that still had wood in it, which is the
+        // half of the rule the owner named. `step_spent_nodes` frees the tile when the node is emptied and removed.
+        if matches!(entity.kind, EntityKind::Resource(_)) && entity.amount.raw() > 0 {
             let tile = self.tile_of(entity.position);
             if let Some(walk) = self.walk.as_mut() {
                 walk.block(tile.0, tile.1);
