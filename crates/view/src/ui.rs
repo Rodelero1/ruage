@@ -73,6 +73,9 @@ impl Selection {
     /// squad out of a crowd.
     pub fn double_click(&mut self, snapshot: &Snapshot, camera: &Camera, pixel: (i32, i32)) {
         self.click(snapshot, camera, pixel);
+        // **On the screen, not on the map.** The first version took every entity of that kind that the snapshot held, and a
+        // snapshot holds the whole world: a double-click picked up villagers thirty tiles away that the player cannot see.
+        let (wide, tall) = camera.viewport;
         let Some(first) = self.ids.first().copied() else {
             return;
         };
@@ -86,6 +89,10 @@ impl Selection {
                 entity.player == snapshot.player
                     && entity.kind == EntityKind::Unit
                     && entity.unit == Some(wanted)
+            })
+            .filter(|entity| {
+                let (x, y) = camera.project(entity.position);
+                x >= 0 && y >= 0 && (x as u32) < wide && (y as u32) < tall
             })
             .map(|entity| entity.id)
             .collect();
@@ -425,6 +432,31 @@ pub fn draw_menu(frame: &mut Frame, frame_width: u32, frame_height: u32, chosen:
         let text_y = *y + (*h as i32 - crate::font::HEIGHT * 2) / 2;
         frame.draw_text(text_x, text_y, label, 2, palette::HUD_TEXT);
     }
+}
+
+/// **Which tile a pixel on the minimap means.** The box is drawn at two pixels a tile (`minimap_rect`), so the inverse is
+/// a division - but a division done in the window would be a second copy of the layout, and the day the box moves, one of
+/// the two copies would be wrong.
+#[must_use]
+pub fn minimap_tile(
+    pixel: (i32, i32),
+    rect: (i32, i32, u32, u32),
+    map_width: u16,
+    map_height: u16,
+) -> Option<(u16, u16)> {
+    let (x, y, w, h) = rect;
+    if w == 0 || h == 0 || u32::from(map_width) == 0 || u32::from(map_height) == 0 {
+        return None;
+    }
+    if pixel.0 < x || pixel.1 < y || pixel.0 >= x + w as i32 || pixel.1 >= y + h as i32 {
+        return None;
+    }
+    let across = u32::try_from(pixel.0 - x).ok()? * u32::from(map_width) / w;
+    let down = u32::try_from(pixel.1 - y).ok()? * u32::from(map_height) / h;
+    Some((
+        u16::try_from(across.min(u32::from(map_width) - 1)).ok()?,
+        u16::try_from(down.min(u32::from(map_height) - 1)).ok()?,
+    ))
 }
 
 /// The minimap's place in the frame: bottom-right, **above** the panel, two pixels a tile.

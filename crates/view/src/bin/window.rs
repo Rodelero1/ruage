@@ -93,8 +93,14 @@ struct App {
     failed: bool,
     /// The seed, so a window session can be reproduced headless.
     seed: u64,
-    /// What the player has selected. Orders go to these and nothing else, exactly as a test would name them.
-    selected: Vec<ruage_sim::EntityId>,
+    /// What the player has selected. Orders go to these and nothing else, exactly as a test would name them. It is the
+    /// view's own `Selection` - the type that knows how a click, a box and a double-click pick - rather than a second,
+    /// hand-rolled copy of the rules.
+    selection: ui::Selection,
+    /// Where the left button went down: a press and a release in the same place is a click, further apart is a box.
+    press_at: Option<(i32, i32)>,
+    /// When and where the last left click landed, so a second one in the same place in time is a double-click.
+    last_click: Option<(Instant, (i32, i32))>,
     /// The last refusal and the tick it happened on: shown in the HUD for a few seconds, because an order that was not
     /// accepted has to look different from one that was.
     notice: Option<(String, u64)>,
@@ -134,7 +140,9 @@ impl App {
             ticks: 0,
             failed: false,
             seed,
-            selected: Vec::new(),
+            selection: ui::Selection::new(),
+            press_at: None,
+            last_click: None,
             notice: None,
             menu_open: false,
             menu_hover: None,
@@ -180,13 +188,69 @@ impl App {
                     eprintln!("speed -> {}", speed.label());
                     return;
                 }
-                self.selected = self.pick_entity(self.cursor).into_iter().collect();
+                // The minimap next, for the same reason: it is a picture of the world drawn over the world.
+                if let Some(tile) = self.minimap_at(self.cursor_pixel) {
+                    self.camera = self
+                        .camera
+                        .centred_on((f32::from(tile.0), f32::from(tile.1)));
+                    return;
+                }
+                // Otherwise this is either a click or the start of a box; which one is decided on release.
+                self.press_at = Some(self.cursor_pixel);
             }
             winit::event::MouseButton::Right => {
                 let (tile, point) = (self.cursor, self.cursor_point);
                 self.order_at(tile, point);
             }
             _ => {}
+        }
+    }
+
+    /// Which map tile a pixel on the minimap means, if it is on the minimap at all.
+    fn minimap_at(&self, pixel: (i32, i32)) -> Option<(u16, u16)> {
+        let (width, height) = self.frame_size();
+        let (map_width, map_height) = (self.config.map.width, self.config.map.height);
+        let rect = ui::minimap_rect(width, height, map_width, map_height);
+        ui::minimap_tile(pixel, rect, map_width, map_height)
+    }
+
+    /// The frame's size in pixels, or zero before the window exists.
+    fn frame_size(&self) -> (u32, u32) {
+        self.window.as_ref().map_or((0, 0), |window| {
+            let size = window.inner_size();
+            (size.width, size.height)
+        })
+    }
+
+    /// The left button came up: a box if the pointer travelled, a click if it did not, a double-click if it landed in the
+    /// same place twice in half a second.
+    fn release(&mut self) {
+        let Some(from) = self.press_at.take() else {
+            return;
+        };
+        let to = self.cursor_pixel;
+        let travelled = (to.0 - from.0).abs() > 4 || (to.1 - from.1).abs() > 4;
+        let Some(world) = self.world.as_ref() else {
+            return;
+        };
+        let snapshot = Snapshot::of(world, &self.config.map, 1);
+        let camera = self.camera;
+        if travelled {
+            self.selection.band(&snapshot, &camera, from, to);
+            self.last_click = None;
+            return;
+        }
+        let twice = self.last_click.is_some_and(|(when, at)| {
+            when.elapsed() < std::time::Duration::from_millis(400)
+                && (at.0 - to.0).abs() <= 4
+                && (at.1 - to.1).abs() <= 4
+        });
+        if twice {
+            self.selection.double_click(&snapshot, &camera, to);
+            self.last_click = None;
+        } else {
+            self.selection.click(&snapshot, &camera, to);
+            self.last_click = Some((Instant::now(), to));
         }
     }
 
@@ -204,7 +268,12 @@ impl App {
         let Some(world) = self.world.as_mut() else {
             return;
         };
-        let selected = self.selected.clone();
+        let selected: Vec<ruage_sim::EntityId> = self
+            .selection
+            .ids
+            .iter()
+            .map(|id| ruage_sim::EntityId(*id))
+            .collect();
         for id in selected {
             let Some(entity) = world.entity(id) else {
                 continue;
@@ -270,7 +339,9 @@ impl App {
         self.runner = None;
         self.ticks = 0;
         self.accumulated = Duration::ZERO;
-        self.selected.clear();
+        self.selection.clear();
+        self.press_at = None;
+        self.last_click = None;
         self.notice = None;
         self.order = None;
         self.menu_open = false;
@@ -340,7 +411,7 @@ impl App {
         let snapshot = Snapshot::of(world, &self.config.map, 1);
         // Selection rings, health bars and the last order's marker are `ruage_view`'s work, not the binary's: a marker
         // nobody can test is a marker that is wrong for a month without anyone noticing.
-        let selected: Vec<u32> = self.selected.iter().map(|id| id.0).collect();
+        let selected: Vec<u32> = self.selection.ids.clone();
         let mut frame = render_with(
             &snapshot,
             &self.camera,
@@ -393,7 +464,7 @@ impl App {
             self.pace.speed().label(),
             if self.paused { " (paused)" } else { "" },
             world.entities().len(),
-            self.selected.len(),
+            self.selection.ids.len(),
             if self.failed { " - STOPPED" } else { "" }
         ));
     }
@@ -513,6 +584,11 @@ impl ApplicationHandler for App {
                 button,
                 ..
             } => self.click(button),
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: winit::event::MouseButton::Left,
+                ..
+            } => self.release(),
             WindowEvent::RedrawRequested => self.draw(),
             _ => {}
         }
