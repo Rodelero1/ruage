@@ -23,6 +23,16 @@
 > **Do this before** names for the attack/armour classes, groups, spatial awareness and raiding. `[policy]` / D94a is
 > done and pushed (v1.57). The order below this line is history; the tail is the queue.
 
+> **Queued 2026-11-03 by the prior-art watch — two small fixes, both test-first.** (1) **The attribute ids 1 and 12 are the
+> wrong way round.** `librematch/genie`'s unit-attribute table names 1 Line of Sight and 12 Maximum Range; our importer calls
+> 1 `range`, so Town Watch's +4 to classes 3/52 lands on tower *attack* range (8 → 12) and Greek Fire's +1 (attribute 12
+> only, fire galleys 529/532/1103) lands nowhere. Two tests: a galley with Greek Fire outranges one without, and a tower after
+> Town Watch keeps range 8. Then the importer's name table, 1 `line_of_sight` and 12 `range`. (2) **A drop site with no
+> route.** `Zaydme/openaok` remembers the distance of the site it found no way to and looks only further out, and prefers a
+> site whose footprint borders the ground the worker stands on; ours picks the nearest by straight distance with no path test
+> and re-picks the same unreachable site every tick — a candidate cause of the queued villagers the E1a regression left.
+> Evidence and the never-copy line: `docs/prior-art.md`, 2026-11-03.
+
 Written 2026-10-26, after the resource enum and the unit roles became content (SPEC v0.54).
 **Kind 3 landed the same day** (v0.55): research plus "every unit `a` becomes unit `b`". This file
 keeps the census that decided the order of work and records what is left - the question it answers

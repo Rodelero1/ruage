@@ -980,3 +980,122 @@ only a small function" candidate is openaok's `Farmland()`, about twenty lines �
   `combat.md`.
 - **U18 unchanged, third week**, now with the id-table detail. **U7 updated**: shared walks, and a crowd at the goal is
   crossed rather than gone round.
+
+## 2026-11-03 — genie turns the exe's constants into data, and its attribute list names a defect of ours
+
+**Forty-seven commits between the two, and the useful thing came out of a generated name table rather than a design essay.**
+
+`librematch/genie` (`0c133548→add94a62`, 37 commits, 964 files, +62,385/−36,351). One job, in many steps (FD-046): the game
+data leaves the engine. A new `genie-model` crate holds every table as one `Model` value, each in an `Arc` so a clone shares
+it and a write copies only the table it changes; `genie-import` fills it from the `.dat` and the save; `genie-nickel`
+evaluates the **build layer** — `builds/158041.ncl`, 345 lines, the build's own hardcoded facts as data: role sets over
+class, master, tech and player-attribute ids (517 role names), 27 named id slots (farm 50, town centre 109, gate class 39)
+and 254 tuning constants in 37 groups. The layer is *generated* from build 158041's symbol table, and the shape is generated
+the other way as well: `contracts/genie.ncl` (1,029 lines) holds Nickel contracts written from the Rust types' JSON Schema
+and checked in CI, so the data cannot drift from the types.
+
+What makes it more than a refactor is `89c9f168`, three fixtures that prove the engine asks the layer rather than carrying
+constants. Under a layer that gives class 99 the gate's role and class 39 none, the hull pather lets the class-99 object
+through its own player's gate and stops at the class-39 one. Under a layer that calls master 99 a farm, a gather on it goes
+in master 50's four timed stops. And a **modded stock `.dat`** — the villagers' decay changed, written back and compressed —
+loads through `load_bytes`, and a recording's villagers imported with those tables carry the new decay. `514cf90c` adds a
+no-filesystem loader for a browser host (`wasm`); `761d29c7` a cache keyed by the files' hashes, the build, the layer's text
+and the schema hash — postcard 42.8 MB, decode 0.109 s, against a 0.60 s import, their measurement on their box.
+
+The rest is the same sweep seen from the data side: 28 code sets became enums (`0a61bb54`), the player's kind a four-value
+enum of the four the game's factory makes (`88cefdbf`), every `type` in a name became `kind` (`4f9c27fc`), and the `.dat`'s
+effects became **one patch table** (`04325bb4`): a tech holds an effect id, not a copy of the commands. Holding the table
+closed two gaps that only lacked it — a research gives its *override* effect (+0x62) unless that is −1, and a researched
+technology whose override changes gives the new effect at once with no object.
+
+`Zaydme/openaok` (`7e50543e→06a06b03`, 10 commits, 39 files, +916/−99) spent the week on the computer player and the lobby.
+`06ba898` answers a blow with the soldiers its orders leave free: a unit on its way somewhere, or attacking what its player
+sent it at, is not diverted — the player's orders outrank the AI's reaction — one at a wall or with nothing left is; a
+soldier cut off from the attacker's region is not sent; and a blow in the town or on a building sends **all** of the
+answerable ones where one elsewhere sends `sn-percent-enemy-sighted-response` percent of them. `7b96f5e` fixes what "in the
+town" means for that judgement: its size plus four tiles. `ea7fadb` bounds the drop-site search — a villager whose nearest
+drop site has no route records that distance, then considers only sites further out, and with none left stands holding its
+load instead of re-searching every tick. `bbb6a14` moves the lobby's fifteen map names into one table compared by letters
+alone (`random_map.def`'s "BlackForest" is the lobby's "Black Forest"); `97d6e5d` adds the original's Time Limit
+(300–1,500 years) and Score (4,000–14,000) victories to the lobby and the wire format; `181dcc7` widens the settings list;
+`5baf93e` is a rendering fix — fire and garrison flags were drawn for every entity with an owner, now only for buildings and
+garrison holders.
+
+**Divergence.**
+
+- **D17 — genie now does what D17 asks, one seam further in than we do.** Our rule is that no AoE2 id or meaning lives in
+  `crates/`; theirs is that not even the *executable's* constants do: which class is a gate, which master is a farm and the
+  1.25 elevation constant are the build's data, and three fixtures prove a moved role moves behaviour. The cost is real and
+  I would not pay it — a Nickel dependency, a contracts generator, a symbol-table generator and a file per build. What we
+  should take is the *proof*, which is free: one simulation test that changes a content value and nothing else and asserts a
+  match outcome moves. Our override tests stop at the data layer (`crates/data/tests/overrides.rs`); `crates/sim/tests/min_range.rs`
+  is the only sim test that uses an override at all.
+- **D18 — unchanged on both sides, again.** No art, no asset pipeline; both still point at the install.
+- **Determinism and the tick — unchanged.** openaok's tick is still ordered and still staggers a group's first blows;
+  genie's `world/step.rs` changed 38 lines in this range and every one is a type (`player: PlayerKind`), so the loop order
+  U18 is about is untouched.
+- **Platform — genie's import now builds for wasm32 with no filesystem.** Not our target (D18 is desktop) and free to
+  ignore, but it says their model/import split runs where no files exist, which ours could not say today: our content is
+  TOML on disk.
+- **Language and licence — unchanged.** Rust AGPL-3.0; C++17/SDL2 MIT with an LGPL-3.0 dat reader.
+
+**The find: the layer's attribute maps name the unit attributes, and our table has 1 and 12 the wrong way round.**
+
+Nothing in either repository aimed at this. `slots.attribute` is the *player*-attribute space, 75 names, and it agrees with
+what we recorded from the guide (36 farm food amount, 88 fish trap food, 195 construction rate, 196 spread attribute, 230
+trickles, 269 world effect, 288 pasture food). But `crates/engine/genie-model/src/objects/masters/attribute.rs` carries the
+*unit* attribute list — 146 constants, each with the game's own name and the exe offset: 0 hit points, **1 Line of Sight
+(+0x5d0)**, 8 armour, 9 attack, **12 Maximum Range (+0x828)**, 13 work rate, 14 carry, **23 Search Radius (+0x794)**.
+
+Our importer names attribute 1 `range` (`crates/data/src/techs.rs`: "0 is hit points ... 1 is range (Fletching adds 1), 8 is
+armour and 9 is attack") and carries 12 as `other:12`. Fletching adds 1 to all three of 1, 12 and 23 — line of sight,
+maximum range, search radius — which is why the guess survived: the archer line's +1 range arrives on the wrong id and is
+still +1. Two consequences, both checkable in our own data:
+
+- **Live defect.** Town Watch and Town Patrol (effects 8 and 280) add +4 to attribute 1 for unit classes 3 and 52 — every
+  building and every tower. We match `range` for those classes, so researching Town Watch grants towers **+4 tiles of attack
+  range** (watch tower 79, class 52, base range 8 becomes 12; the game moves its line of sight from 10 to 14 and leaves its
+  range alone).
+- **Live gap.** Greek Fire (effect 518) adds +1 to attribute 12 only, for units 529, 532 and 1103 — the fire galleys, range
+  2.49. We carry it as `other:12` and match nothing on it, so the tech's entire payload is inert; in the game they outrange
+  by a tile.
+
+Sixteen effects add on raw 1 alone (Town Watch, Town Patrol, Tracking, the ages, team bonuses) and two on raw 12 alone
+(Greek Fire, and the placeholder 218). The fix is the importer's name table — 1 is `line_of_sight`, 12 is `range` — and a
+line of sight the engine then does not use, which is honest for a day; then test-first: a fire galley with Greek Fire
+outranges one without, and a watch tower after Town Watch does not.
+
+**Study list.** `builds/158041.ncl` — `slots.attribute` and the `tuning` groups (37 groups, 254 named constants:
+`movement.ally_pause 0.1`, `other_pause 0.5`, `stuck_pause 0.1`, `pushed 0.25`; `build.extra_builder 0.33`, `wonder_rate 1.2`;
+`damage.higher 1.25`, `lower 0.75`, `relic_boost 1.1`; `garrison.town_bell_reach 625`; `market.food_start 1.15`,
+`stone_start 1.3`, `swing 2`); `crates/engine/genie-model/src/objects/masters/attribute.rs` — the unit attribute names, 146
+of them, each with its exe offset; `89c9f168` (the three fixtures) and `761d29c7` (cache key and bytes); openaok's
+`src/ai/Military.cpp`, `Answerable` and `Answer` (~50 lines) for D94/D95's response rule, and
+`src/ecs/systems/WorkerSystem.cpp` around line 1005 with `docs/engine/economy.md`'s "A worker with a load" for the drop-site
+search.
+
+**Never copy.** genie is AGPL-3.0, and this week it published a file that looks like configuration and is in fact a
+generated slice of their RE harness. The ids and names are facts about the game — its own string table names the attributes
+— but the `.ncl` file, its role vocabulary, its generator and the Nickel contracts are theirs. The attribute list is the most
+tempting thing either project has produced, 146 lines of `pub const X: Self = Self(n)`, and it is exactly the "it was only a
+small function" case: take the number-to-name correspondence and the exe offset as a citation, write our own table from our
+own dat and our own reading, do not move their file into our repo. openaok is MIT with an LGPL-3.0 dat reader; `Answerable`
+is nine lines and `dropoff_beyond` seven, and what transfers is the *rule* — an ordered unit is not diverted, a failed drop
+site is remembered by distance — not either function.
+
+**Open questions.**
+
+- **U21 new — which unit attributes do kind-4/5 commands name?** Answered for the ones that bite by genie's list (1 line of
+  sight, 12 maximum range, 23 search radius, 10 reload, 17 building icon override, 22 blast width), and our pack has 1 and
+  12 the other way round. The two defects above are the evidence; the fix is queued test-first in `docs/next-step.md`.
+- **U19 confirmed, one namespace wider.** The exe's *player*-attribute 195 is `construction_rate` too, and 36 is
+  `farm_food_amount`: the resource space and the player-attribute space agree on 36, 88 and 195, and only the *unit*
+  attribute space has a 195 that means something else ("Initiated Tech Id"). The Spanish bonus is not a coincidence of
+  numbering — the same id means the same thing in the two spaces an effect can write to. No change to the fix owed.
+- **U20 stands** — no new evidence: base 175, then +75/+125/+175, Chinese +45.
+- **U7 gets a hypothesis, not a value.** genie's movement group names the exe's pauses for meeting a body (`ally_pause 0.1`,
+  `other_pause 0.5`, `stuck_pause 0.1`, `pushed 0.25`) — the other half of the E1a question: D98a covers the repath, these
+  cover what a unit does first. Whether they are seconds or game time is genie's reading, not the data's, so they are a probe
+  to design, not a constant to paste. The algorithm is unchanged: one A\* with a cost model.
+- **U18 unchanged, fourth week.** `world/step.rs` changed only types.
+- **U8** — nothing new; whether the pack carries the names is still ours to decide.
