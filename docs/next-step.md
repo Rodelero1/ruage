@@ -1,6 +1,25 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, latest: B is landed (`f0fe9af`) at a measured 4.94% of walking distance; C was built, measured and
+> **2026-11-03, latest: C was tried a second way and the two variants now bound the problem exactly. Start the next
+> session at "C1b + C2" below - the tree is clean at `1a31830` with B landed and C out.**
+>
+> - **C1b (footprint on *every* step) works mechanically.** Tests green, distance assertions in place, mutations caught
+>   (tile-only: *closest 500 raw where the footprints need 8,000*; no make-room: *both have to arrive: a at (4,1), b at
+>   (4,1)*). It needs a **make-room** step for head-on pairs, because a one-tile row gives no sideways component to slide
+>   on. Uncapped, that nudge turned the acceptance match into a mosh pit: **89 wood / 20 food / 50 gold at 1,600 s**
+>   against B's **729 / 792 / 370**, rule firings `900,6,7,1,9,0,0,0,0,23,0,...`. Next attempt caps it with a per-route
+>   `gave_way: bool` (set once, then refuse and re-plan), which is the difference between "a way past one obstruction"
+>   and "a way of life".
+> - **C1a (footprint only inside the tile-entry gate) is a dead end, measured.** Keeping the gate so a unit can always
+>   leave its own tile sounds safe and is *leaky*: a step that stays inside a tile is untested, so a body at 0.98 in one
+>   tile and another at 1.02 in the next end **0.04 tiles** apart. Measured violations in the two evasion tests: *500 raw*
+>   and *7,000 raw* against an 8,000 footprint. Do not re-try it.
+> - **So C is all-or-nothing:** every step tested, slide on one axis, capped make-room, and **C2 distance arrival** in the
+>   same slice - without C2 a body stops 0.4 tiles short of a tile-centre goal and every gather/build/deposit stalls,
+>   which is exactly the 89-wood run. The acceptance test for the slice is B's bank at 1,600 s (**729 wood / 792 food /
+>   370 gold**) coming back, plus `players=2` still, with the tick cost measured.
+>
+> Superseded: **B is landed (`f0fe9af`) at a measured 4.94% of walking distance; C was built, measured and
 > reverted, because on its own it kills the economy** (89 wood at 1,600 s against B's 729) - collision stops a body 0.4
 > tiles short while the arrival predicates are still tile-based. **The next step is C1 + C2 in one slice:** the footprint
 > collision as built (with the make-room step and live positions) *and* distance-based arrival for gather, build, deposit
