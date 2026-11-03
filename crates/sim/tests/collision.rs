@@ -143,11 +143,27 @@ fn a_crowd_sent_to_one_place_does_not_stack() {
         world.step().expect("step");
     }
 
-    let tiles = [a, b, c].map(|id| tile_of(&world, id));
-    assert!(
-        tiles[0] != tiles[1] && tiles[1] != tiles[2] && tiles[0] != tiles[2],
-        "three units share a tile in open ground: {tiles:?}"
-    );
+    // **The assertion used to be "no two share a tile"** - that was the tile rule speaking. A body's standoff is its
+    // footprint now (C), so the crowd is judged by distance: two bodies may stand in one tile and may not stand inside
+    // each other.
+    for (n, first) in [a, b, c].iter().enumerate() {
+        for second in [a, b, c].iter().skip(n + 1) {
+            let reach = world.reach_between(*first, *second).raw();
+            let (one, two) = (
+                world.position(*first).expect("a position"),
+                world.position(*second).expect("a position"),
+            );
+            let (dx, dy) = (one.0.raw() - two.0.raw(), one.1.raw() - two.1.raw());
+            let apart = (dx * dx + dy * dy).isqrt();
+            assert!(
+                apart >= reach,
+                "two units of one order stand {apart} raw units apart, inside the {reach} their footprints need: \
+                 {:?} and {:?}",
+                tile_of(&world, *first),
+                tile_of(&world, *second)
+            );
+        }
+    }
 }
 
 #[test]

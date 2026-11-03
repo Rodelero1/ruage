@@ -1,7 +1,37 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, latest: C was tried a second way and the two variants now bound the problem exactly. Start the next
-> session at "C1b + C2" below - the tree is clean at `1a31830` with B landed and C out.**
+> **2026-11-03, latest: C1b + C2 landed, and the acceptance match is WON.** A body blocks a disc of `radius[0]` summed
+> for the pair on **every** step, and gather / build / deposit / attack arrival are distances in the same units
+> (`World::reach_between`). Review: `docs/reviews/2026-11-03-c-footprints-and-distance-arrival.md`.
+>
+> **The standing measurement has moved, and the next session measures against these:**
+> - **`players=1`** - the enemy town centre is gone at **1,667 s**, where the landed baseline (`1a31830`) was `players=2`
+>   and had never won;
+> - hash **`912386556784c88f`**, 36,000 ticks in **18.7-19.1 s** (0.53 ms/tick, 1.1% of the 50 ms budget; baseline
+>   9.8-10.0 s), 153 entities, **repaths 100 / nudges 166**;
+> - the bank at 1,200 s is **752 wood / 825 food / 370 gold** - the baseline's 1,600 s figure, eight game-minutes early -
+>   and by 1,600 s it is spent on **49 buildings** (baseline 22) and the won match.
+>
+> **The garrison eject fixture is unparked** - same fixture, same twelve melee attackers, `garrison::
+> a_damaged_building_ejects_its_garrison` now passes: a melee attacker strikes from where its footprint touches the
+> target's, so the bodies behind the first rank also land blows. That item is off the queue.
+>
+> **Next, in the order I would take them:**
+> 1. **N1 - names for the ~30 attack/armour classes.** The last numbers the tables quote; it unblocks flipping those
+>    tables to name keys. No movement dependency, so it can slot in anywhere.
+> 2. **G1 - groups, then spatial awareness, then raiding.** The AI queue, and it is finally unblocked: raiding is
+>    movement behaviour, and units now block each other and pass.
+> 3. **The two leftovers named rather than fixed:** `farm_husk` (a command-spawned farm is not `is_expired_farm` - the
+>    known defect it parks) and the 0.25 ms/tick the collision pass costs, of which ~4.4 s of the 36,000-tick run is the
+>    match doing more work rather than the query (both measured in the review).
+>
+> **Three deadlocks this slice had to answer, worth knowing before touching movement again:** two bodies side by side in
+> one tile wait for each other forever; a body **at rest** never moves aside, so waiting on it is waiting for ever; and a
+> repath around a body standing on the mover's **own tile** produces a route that walks backwards. The rules that answer
+> them are in `collide` (steps 2-8) and the fixture evidence is in the review.
+>
+> Superseded: **C was tried a second way and the two variants bound the problem exactly. Start the next session at
+> "C1b + C2" below - the tree is clean at `1a31830` with B landed and C out.**
 >
 > - **C1b (footprint on *every* step) works mechanically.** Tests green, distance assertions in place, mutations caught
 >   (tile-only: *closest 500 raw where the footprints need 8,000*; no make-room: *both have to arrive: a at (4,1), b at

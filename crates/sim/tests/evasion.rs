@@ -123,10 +123,23 @@ fn two_villagers_crossing_never_share_a_tile_and_both_arrive() {
         to: (x, y),
     });
 
+    // **The assertion used to be "never share a tile"** - that was the old rule speaking. The rule is a distance now, so
+    // the test is one (C): two bodies never come inside the standoff their footprints need, which is the stronger claim
+    // and the one a crowd is judged by.
+    let reach = world.reach_between(a, b).raw();
     for tick in 0..2_000 {
         world.step().expect("step");
-        let (ta, tb) = (tile_of(&world, a), tile_of(&world, b));
-        assert_ne!(ta, tb, "they shared tile {ta:?} on tick {tick}");
+        let (pa, pb) = (
+            world.position(a).expect("a position"),
+            world.position(b).expect("a position"),
+        );
+        let (dx, dy) = (pa.0.raw() - pb.0.raw(), pa.1.raw() - pb.1.raw());
+        let apart = dx * dx + dy * dy;
+        assert!(
+            apart >= reach * reach,
+            "they came {} raw units apart on tick {tick}, inside the {reach} their footprints need",
+            apart.unsigned_abs().isqrt()
+        );
     }
     let moved = tile_of(&world, a) != (i64::from(x), i64::from(y))
         && tile_of(&world, b) != (i64::from(x + 6), i64::from(y));

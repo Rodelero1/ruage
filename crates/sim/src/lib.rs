@@ -1137,6 +1137,24 @@ struct Route {
     end: Option<(Fixed, Fixed)>,
     /// Units this route was planned around. Not hashed on its own: it is part of the route, and the route is hashed.
     avoiding: BTreeSet<EntityId>,
+    /// This route has already **made room** once (C1b). A nudge is a way past one obstruction, not a way of life: the
+    /// second obstruction on the same route is answered by refusing the step and re-planning, or a crowded base becomes
+    /// villagers stepping aside for each other and never arriving.
+    gave_way: bool,
+}
+
+/// What one tick of the movement pass carries between steps: the bodies that can be in the way, who has a step to take,
+/// and the reactions it collects for **after** the loop (a repath plans a route and must not be run while the entity list
+/// is being walked; a nudge writes a flag the pass reads).
+struct Passing<'a> {
+    bodies: &'a [(i64, i64, EntityId, usize, i64)],
+    /// Who has something to do this tick. A body at rest cannot move aside for anybody, which is the difference between
+    /// waiting a tick and waiting for ever.
+    moving: &'a BTreeSet<EntityId>,
+    repaths: Vec<Repath>,
+    made_room: Vec<EntityId>,
+    /// `(mover, blocker)` for every refused step this tick, in entity order: a pair that refused at each other is a jam.
+    refused: Vec<(EntityId, EntityId)>,
 }
 
 pub struct World {
@@ -1173,6 +1191,9 @@ pub struct World {
     /// How many times a blocked unit has re-planned its route. **Instrumentation, not state**: nothing reads it and it
     /// is not hashed; a test counts it to prove a known obstacle is not re-planned every tick (D98a).
     repath_count: u64,
+    /// How many times a step made room instead of being refused (C1b). A counter, like `repath_count`, because it is a
+    /// reaction the engine gives itself and has no caller to report to.
+    made_room_count: u64,
     /// The tech and effect tables, when they have been loaded. A research order is resolved against
     /// them the way damage is resolved against `combat.toml`: once, at order time.
     techs: Option<ruage_data::Techs>,
@@ -1514,6 +1535,7 @@ impl World {
             garrison_eject_at: Fixed::ZERO,
             paths: BTreeMap::new(),
             repath_count: 0,
+            made_room_count: 0,
             resources: None,
             sim_rng: Pcg32::new(seed, SIM_STREAM),
             map_rng: Pcg32::new(seed, MAP_STREAM),
@@ -1882,6 +1904,12 @@ impl World {
     /// never reads it and it is not hashed; a test counts it to prove a known obstacle is not re-planned every tick.
     pub fn repaths(&self) -> u64 {
         self.repath_count
+    }
+
+    /// How many steps have made room for a body in the way (C1b). Exposed so a test can say a nudge happened **once**.
+    #[must_use]
+    pub fn made_room(&self) -> u64 {
+        self.made_room_count
     }
 
     pub fn position(&self, id: EntityId) -> Option<(Fixed, Fixed)> {
@@ -2888,10 +2916,11 @@ impl World {
             let here = self.tile_of(position);
             let there = self.tile_of(victim);
             let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
+            let contact = self.reach_raw(source.unit, self.find(target).and_then(|e| e.unit));
             let in_reach = if range.raw() > 0 {
                 squared <= range.raw() * range.raw()
             } else {
-                adjacent
+                adjacent || squared <= contact * contact
             };
             let stand = if in_reach {
                 None
@@ -4961,104 +4990,136 @@ impl World {
         }
     }
 
-    /// Soft avoidance: if this step would end on a tile another unit is standing on, try the two quarter
-    /// turns; if those are taken too, stand still for this tick.
+    /// The bodies that can be in the way this tick, **sorted by tile then id**:
+    /// `(tile x, tile y, id, index into the entity list, its own radius)`.
     ///
-    /// Quarter turns rather than 45-degree ones because a rotation by ninety degrees preserves the step's
-    /// length exactly in fixed point, where a diagonal nudge would need a square root. The occupancy grid is
-    /// read as it was at the start of the tick, so two units ordered into one tile on the same tick still
-    /// both arrive - the game allows that, and blocking it would make an order to a crowded place deadlock
-    /// (D52).
-    fn avoid(
-        &self,
-        tiles: &BTreeMap<(i64, i64), EntityId>,
-        id: EntityId,
-        dx: Fixed,
-        dy: Fixed,
-    ) -> (Fixed, Fixed) {
-        if dx == Fixed::ZERO && dy == Fixed::ZERO {
-            return (dx, dy);
-        }
-        let Some(entity) = self.find(id) else {
-            return (dx, dy);
-        };
-        // What is avoided is the *last step onto a place somebody already stands*, not every tile on the
-        // way: a unit must be able to walk past a friend, and a villager must be able to reach the tile
-        // beside a tree that somebody is already working. The first version blocked any occupied tile and
-        // stranded nine gather tests and every walk past a standing unit at once (D52a).
-        let Some((goal, exclusive)) = self.goal_of(entity) else {
-            return (dx, dy);
-        };
-        if !exclusive {
-            return (dx, dy);
-        }
-        let (tx, ty) = (
-            (entity.position.0.raw() + dx.raw()).div_euclid(self.scale),
-            (entity.position.1.raw() + dy.raw()).div_euclid(self.scale),
-        );
-        if (tx, ty) != (i64::from(goal.0), i64::from(goal.1)) {
-            return (dx, dy);
-        }
-        // **Not itself.** A unit ordered to a point inside its own tile has that tile as its goal, and a map that
-        // answered "taken" by the mover's own body would freeze it at the first step (the exact-point slice, A).
-        let taken = tiles.get(&(tx, ty)).is_some_and(|occupant| *occupant != id);
-        if taken {
-            // Stand where it is: the ground it was sent to is somebody else's for now, and a unit that
-            // shuffled sideways for ever never arrives (which is what the second version did).
-            (Fixed::ZERO, Fixed::ZERO)
-        } else {
-            (dx, dy)
-        }
-    }
-
-    /// Which tile each live body stands on. Rebuilt only on ticks where something moves, beside the occupancy grid: the
-    /// grid says *whether* a tile is held, this says *by whom* - and the decision needs the id, because a collision with
-    /// the order's target is arrival while one with a body the route already avoids is past (D98a).
-    fn unit_tiles(&self) -> BTreeMap<(i64, i64), EntityId> {
-        let mut tiles = BTreeMap::new();
-        for entity in &self.entities {
+    /// A flat sorted slice rather than a map of tile to list: the map allocated a `Vec` per occupied tile on every
+    /// moving tick, which is 150 allocations a tick at the acceptance match's size, and the sorted slice answers the
+    /// same nine-tile query with `partition_point` and one allocation. The index is an index into the entity list, not
+    /// a copied position: a body that steps during the tick has to be seen where it now is, and a map of copies left a
+    /// pair standing 500 raw units inside each other (measured in C's first build).
+    fn body_tiles(&self) -> Vec<(i64, i64, EntityId, usize, i64)> {
+        let mut bodies: Vec<(i64, i64, EntityId, usize, i64)> =
+            Vec::with_capacity(self.entities.len());
+        for (index, entity) in self.entities.iter().enumerate() {
             if entity.kind != EntityKind::Unit
                 || matches!(entity.task, Task::Garrisoned { .. })
                 || entity.hp <= 0
             {
                 continue;
             }
-            tiles.insert(self.tile_of_raw(entity.position), entity.id);
+            let (x, y) = self.tile_of_raw(entity.position);
+            // The footprint is resolved **once per body per tick**, not once per pair it is asked about: at 150 bodies
+            // and five queries a step that was the difference between 20.7 s and 18.4 s on the acceptance run.
+            bodies.push((x, y, entity.id, index, self.body_radius(entity.unit)));
         }
-        tiles
+        bodies.sort_unstable_by_key(|(x, y, id, _, _)| (*x, *y, id.0));
+        bodies
     }
 
-    /// The entity an order is trying to reach, when the order has one. `Move` has none - its goal is a place, and that
-    /// is why `avoid`'s exclusive-goal rule still exists beside this.
-    fn order_target(entity: &Entity) -> Option<EntityId> {
-        match entity.task {
-            Task::Attack { target, .. } => Some(target),
-            Task::Gather { node, .. } => Some(node),
-            Task::Return { drop, .. } => Some(drop),
-            Task::Build { site } => Some(site),
-            _ => None,
+    /// The bodies standing on one tile, from the sorted slice.
+    fn bodies_at<'a>(
+        &self,
+        bodies: &'a [(i64, i64, EntityId, usize, i64)],
+        tile: (i64, i64),
+    ) -> &'a [(i64, i64, EntityId, usize, i64)] {
+        let start = bodies.partition_point(|(x, y, _, _, _)| (*x, *y) < tile);
+        let end = bodies.partition_point(|(x, y, _, _, _)| (*x, *y) <= tile);
+        &bodies[start..end]
+    }
+
+    /// Where a body stands **now**: through its index while the entity list still holds it there, and by id when a spawn
+    /// moved it during the tick.
+    fn body_at(&self, index: usize, id: EntityId) -> Option<(Fixed, Fixed)> {
+        match self.entities.get(index) {
+            Some(entity) if entity.id == id => Some(entity.position),
+            _ => self.position(id),
         }
     }
 
-    /// One step against the bodies in the way (D98a). The original queries collisions **at the new position**; this is
-    /// the same decision at tile granularity (E1a - the radius form is E1b):
+    /// The nearest body whose footprint the candidate position would stand inside, with its position - every step is
+    /// decided against it (C).
     ///
-    /// - a body on the tile the step lands in, when it is the **order's target**, ends the move: the step is refused and
-    ///   the arrival rules elsewhere finish the order;
-    /// - a body the route is already planned around is **past**: refuse the step, do **not** re-plan, or a blocked unit
-    ///   would re-plan every tick;
-    /// - anything else is **non-past**: refuse the step and collect a repath.
+    /// The **nine tiles around the landing point** are the whole search: no standoff in this content is wider than one
+    /// tile (two 0.2 radii, and the one-tile fallback for content that gives none), so a body in a further tile cannot
+    /// reach the candidate. Nearest wins, ties broken by id, so two runs pick the same body.
+    fn blocker_at(
+        &self,
+        bodies: &[(i64, i64, EntityId, usize, i64)],
+        id: EntityId,
+        radius: i64,
+        candidate: (Fixed, Fixed),
+    ) -> Option<(EntityId, (Fixed, Fixed))> {
+        let (tx, ty) = self.tile_of_raw(candidate);
+        let mut best: Option<(EntityId, (Fixed, Fixed))> = None;
+        // Nearest first, ties by id, so a crowd round one point always names the same body and two runs agree.
+        let mut best_key: Option<(i64, u32)> = None;
+        for dy in -1..=1i64 {
+            for dx in -1..=1i64 {
+                for (_, _, other, index, other_radius) in self.bodies_at(bodies, (tx + dx, ty + dy))
+                {
+                    if *other == id {
+                        continue;
+                    }
+                    let Some(position) = self.body_at(*index, *other) else {
+                        continue;
+                    };
+                    // The pair's standoff, from the two radii already resolved for this tick.
+                    let reach = match radius + other_radius {
+                        0 => self.scale,
+                        sum => sum,
+                    };
+                    let (gap_x, gap_y) = (
+                        position.0.raw() - candidate.0.raw(),
+                        position.1.raw() - candidate.1.raw(),
+                    );
+                    let squared = gap_x * gap_x + gap_y * gap_y;
+                    if squared >= reach * reach {
+                        continue;
+                    }
+                    let key = (squared, other.0);
+                    if best_key.is_none_or(|old| key < old) {
+                        best = Some((*other, position));
+                        best_key = Some(key);
+                    }
+                }
+            }
+        }
+        best
+    }
+
+    /// One step against the bodies in the way (D98a, C).
     ///
-    /// Only a step that **enters** a tile is tested. Two units sharing a tile (which D52 allowed) must be able to leave
-    /// it, and a body already overlapped is not made worse by moving.
+    /// The original queries collisions **at the new position with the unit's radius**, and this is that query: a body
+    /// blocks a disc of `radius[0]`, summed for the pair, or one whole tile when the content gives neither a radius.
+    /// **Every** step is tested, including one that stays inside the tile it started in - a rule that is precise at a
+    /// tile boundary and blind inside the tile let two bodies 0.04 tiles apart walk together, which is why the hybrid
+    /// (C1a) was measured and dropped.
+    ///
+    /// The answer, in this order:
+    /// 1. **clear** - take the step;
+    /// 2. the blocker is the **order's target**, or stands on the ground an **exclusive** order asked for - refuse and
+    ///    say nothing: the arrival rules finish the order from here, and a repath cannot put a unit anywhere better
+    ///    than the tile it is already on (D52, D98a);
+    /// 3. the mover is **already inside** the blocker's footprint - take the step, or a pair a spawn put inside each
+    ///    other can never separate;
+    /// 4. the blocker stands on the **mover's own tile** and is itself moving - wait: the plan cannot route around a
+    ///    tile it starts in, and the body ahead will move on;
+    /// 5. one axis alone is clear - **slide** along it;
+    /// 6. **make room**, once per route: half the way plus a quarter tile to one side, terrain-checked (C1b);
+    /// 7. otherwise refuse and classify: a body the route already avoids is *past* and costs no repath (or a blocked
+    ///    unit would re-plan every tick), anything else is non-past and earns one;
+    /// 8. the blocker is **at rest** - take the step and let the repath route round it: a body that is not going
+    ///    anywhere will not move aside, and waiting on it is waiting for ever;
+    /// 9. otherwise **wait**, unless the blocker refused a step at this unit on the same tick - a mutual block gives way
+    ///    in entity order, so a jam is never permanent.
     fn collide(
         &self,
-        tiles: &BTreeMap<(i64, i64), EntityId>,
+        pass: &mut Passing<'_>,
         index: usize,
         id: EntityId,
         dx: Fixed,
         dy: Fixed,
-        repaths: &mut Vec<Repath>,
     ) -> (Fixed, Fixed) {
         if dx == Fixed::ZERO && dy == Fixed::ZERO {
             return (dx, dy);
@@ -5070,43 +5131,165 @@ impl World {
         // version stopped every shot dead over the first unit it flew across - ten arrows froze mid-air over the town
         // centre. A building does not walk either, so this stays a rule about bodies.
         if entity.kind != EntityKind::Unit {
-            return self.avoid(tiles, id, dx, dy);
+            return (dx, dy);
         }
-        let here = self.tile_of_raw(entity.position);
-        let next = (
-            (entity.position.0.raw() + dx.raw()).div_euclid(self.scale),
-            (entity.position.1.raw() + dy.raw()).div_euclid(self.scale),
+        let here = entity.position;
+        let radius = self.body_radius(entity.unit);
+        let candidate = (
+            Fixed::from_raw(here.0.raw() + dx.raw()),
+            Fixed::from_raw(here.1.raw() + dy.raw()),
         );
-        if next != here
-            && let Some(&other) = tiles.get(&next)
-            && other != id
+        let Some((other, other_at)) = self.blocker_at(pass.bodies, id, radius, candidate) else {
+            return (dx, dy);
+        };
+        let stop = (Fixed::ZERO, Fixed::ZERO);
+        // 2. The order's own business: the body it was sent at, or the ground it was sent to.
+        if Self::order_target(entity) == Some(other) {
+            return stop;
+        }
+        let goal = self.goal_of(entity);
+        if let Some((goal_tile, true)) = goal
+            && self.tile_of(other_at) == goal_tile
         {
-            let Some((goal, _)) = self.goal_of(entity) else {
-                return (Fixed::ZERO, Fixed::ZERO);
-            };
-            // Already as close to the order's goal as a plan can put it: the arrival rules finish the order from a
-            // neighbouring tile, and re-planning at a crowd around a target only buys searches (D98a).
-            let here = self.tile_of_raw(entity.position);
-            let near_goal =
-                (here.0 - i64::from(goal.0)).abs() <= 1 && (here.1 - i64::from(goal.1)).abs() <= 1;
+            return stop;
+        }
+        // 3. A body the mover is **already inside** is not an obstruction (D52: "a body already overlapped is not made
+        //    worse by moving"). Refusing cannot separate a pair a spawn or a push put inside each other, and it froze a
+        //    drifter standing on a friend: the leader steps first, so the follower always sees a body it cannot reach.
+        //    Getting inside somebody from outside is what rule 1 prevents; once inside, movement is the way out.
+        let other_radius = self.body_radius(self.find(other).and_then(|entity| entity.unit));
+        let reach = match radius + other_radius {
+            0 => self.scale,
+            sum => sum,
+        };
+        let (gap_x, gap_y) = (
+            other_at.0.raw() - here.0.raw(),
+            other_at.1.raw() - here.1.raw(),
+        );
+        if gap_x * gap_x + gap_y * gap_y < reach * reach {
+            return (dx, dy);
+        }
+        // 4. A body standing on the **mover's own tile** is not something a plan can route around: the search would have
+        //     to leave the tile it starts in, and what it found was a nine-waypoint route that walked backwards. The unit
+        //     waits instead - which is what a follower does while the body ahead of it moves on. **Only while it moves**:
+        //     a body at rest will not get out of the way, and waiting on it is waiting for ever.
+        if self.tile_of_raw(other_at) == self.tile_of_raw(here) && pass.moving.contains(&other) {
+            return self.wait_or_give_way(id, other, dx, dy, &mut pass.refused);
+        }
+        // 5. One axis alone, in a fixed order so two runs slide the same way.
+        for (sx, sy) in [(dx.raw(), 0i64), (0, dy.raw())] {
+            if sx == 0 && sy == 0 {
+                continue;
+            }
+            let slide = (
+                Fixed::from_raw(here.0.raw() + sx),
+                Fixed::from_raw(here.1.raw() + sy),
+            );
+            if self.blocker_at(pass.bodies, id, radius, slide).is_none() {
+                return (Fixed::from_raw(sx), Fixed::from_raw(sy));
+            }
+        }
+        // 6. Make room: **once per route**. A nudge is a way past one obstruction, not a way of life - uncapped, every
+        //    crowded unit steps aside for every other and a base turns into a mosh pit that never arrives (measured:
+        //    89 wood / 20 food / 50 gold at 1,600 s against 729 / 792 / 370).
+        let gave_way = self.paths.get(&id).is_some_and(|route| route.gave_way);
+        if !gave_way {
+            let quarter = self.scale / 4;
+            let length = dx.raw().abs().max(dy.raw().abs()).max(1);
+            for turn in [1i64, -1i64] {
+                let (rx, ry) = if turn > 0 {
+                    (-dy.raw(), dx.raw())
+                } else {
+                    (dy.raw(), -dx.raw())
+                };
+                let (nx, ny) = (
+                    dx.raw() / 2 + rx * quarter / length,
+                    dy.raw() / 2 + ry * quarter / length,
+                );
+                let aside = (
+                    Fixed::from_raw(here.0.raw() + nx),
+                    Fixed::from_raw(here.1.raw() + ny),
+                );
+                // Terrain: a nudge may stay on the ground the body already holds (a body can stand on a node's tile),
+                // but it may not step onto blocked ground to get out of somebody's way.
+                let (x, y) = self.tile_of_raw(aside);
+                if (x, y) != self.tile_of_raw(here) {
+                    let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
+                        continue;
+                    };
+                    if !self.is_free_ground(x, y) {
+                        continue;
+                    }
+                }
+                if self.blocker_at(pass.bodies, id, radius, aside).is_none() {
+                    pass.made_room.push(id);
+                    return (Fixed::from_raw(nx), Fixed::from_raw(ny));
+                }
+            }
+        }
+        // 7. Refuse, and say why. A body the route already planned around is *past*; anything else is worth a repath,
+        //    unless the unit is already on its goal's ring, where a repath only buys searches (D98a).
+        if let Some((goal_tile, _)) = goal {
+            let tile = self.tile_of_raw(here);
+            let near_goal = (tile.0 - i64::from(goal_tile.0)).abs() <= 1
+                && (tile.1 - i64::from(goal_tile.1)).abs() <= 1;
             let known = self
                 .paths
                 .get(&id)
                 .is_some_and(|route| route.avoiding.contains(&other));
-            if !near_goal
-                && !known
-                && Self::order_target(entity) != Some(other)
-                && repaths.len() < MAX_REPATHS_PER_TICK
-            {
-                repaths.push(Repath {
+            if !near_goal && !known && pass.repaths.len() < MAX_REPATHS_PER_TICK {
+                pass.repaths.push(Repath {
                     unit: id,
                     body: other,
-                    goal,
+                    goal: goal_tile,
                 });
             }
-            return (Fixed::ZERO, Fixed::ZERO);
         }
-        self.avoid(tiles, id, dx, dy)
+        // 8. A body **at rest** cannot move aside, so waiting on it is waiting for ever (measured: a gatherer frozen from
+        //    tick 40,000 to 400,000 beside an idle friend). The step is taken and the repath above routes round it from
+        //    the next tick - the overlap is at most one footprint, and it resolves; a frozen unit never does.
+        if !pass.moving.contains(&other) {
+            return (dx, dy);
+        }
+        // 9. Otherwise wait - unless the blocker refused a step at this unit on the same tick, in which case one of the
+        //    two has to give way or the pair is jammed.
+        self.wait_or_give_way(id, other, dx, dy, &mut pass.refused)
+    }
+
+    /// Stand still for a body in the way - unless that body refused a step at **this** one on the same tick, in which
+    /// case this one gives way and takes its step.
+    ///
+    /// Entity order decides which of a pair gives way (the entity list is sorted by id), and a jam neither unit can
+    /// resolve is never permanent: measured on the one-wood-tree fixture, two villagers side by side in one tile waited
+    /// for each other from tick 15 to tick 2,000.
+    fn wait_or_give_way(
+        &self,
+        id: EntityId,
+        other: EntityId,
+        dx: Fixed,
+        dy: Fixed,
+        refused: &mut Vec<(EntityId, EntityId)>,
+    ) -> (Fixed, Fixed) {
+        if refused
+            .iter()
+            .any(|(unit, body)| *unit == other && *body == id)
+        {
+            return (dx, dy);
+        }
+        refused.push((id, other));
+        (Fixed::ZERO, Fixed::ZERO)
+    }
+
+    /// The entity an order is trying to reach, when the order has one. `Move` has none - its goal is a place, and that
+    /// is why `collide` also asks `goal_of` (rule 2), which covers the order that names ground rather than a body.
+    fn order_target(entity: &Entity) -> Option<EntityId> {
+        match entity.task {
+            Task::Attack { target, .. } => Some(target),
+            Task::Gather { node, .. } => Some(node),
+            Task::Return { drop, .. } => Some(drop),
+            Task::Build { site } => Some(site),
+            _ => None,
+        }
     }
 
     /// The `n`-th tile of a crowd's destination, counting the clicked tile as the first: the tile itself,
@@ -5695,16 +5878,40 @@ impl World {
     /// How much room two bodies take up between them, in engine units: the sum of their radii. Used to
     /// measure a dead zone from body to body rather than from centre to centre (D44).
     fn body_radii(&self, a: Option<u32>, b: Option<u32>) -> i64 {
+        self.body_radius(a) + self.body_radius(b)
+    }
+
+    /// One body's own footprint, in engine units: `radius[0]` of its variant, or zero when the content carries none
+    /// (D98a's `Pos=(...) Radius=`). Hoisted out of the pair calculation because the movement pass asks it for every body
+    /// it can see on every step, and resolving it per pair cost 2.3 s of a 36,000-tick acceptance run (measured).
+    fn body_radius(&self, id: Option<u32>) -> i64 {
         let Some(units) = self.units.as_ref() else {
             return 0;
         };
-        let radius = |id: Option<u32>| -> i64 {
-            id.and_then(|id| units.unit(units.root(id)))
-                .and_then(|unit| unit.radius.first().copied())
-                .and_then(|value| value.resolve(self.scale, "radius").ok())
-                .map_or(0, |value| value.raw())
-        };
-        radius(a) + radius(b)
+        id.and_then(|id| units.unit(units.root(id)))
+            .and_then(|unit| unit.radius.first().copied())
+            .and_then(|value| value.resolve(self.scale, "radius").ok())
+            .map_or(0, |value| value.raw())
+    }
+
+    /// The standoff two bodies keep from each other: the sum of their footprints' radii, or **one whole tile** when the
+    /// content gives them no radius at all.
+    ///
+    /// One number for two rules (C): `collide` refuses a step that ends inside it, and the arrival predicates accept work
+    /// at it, so "too close to stand" and "close enough to work" cannot drift apart. A target whose own tile is blocked
+    /// ground - a tree, a mine, a town centre - is worked from the ring around it, which the predicates express in the
+    /// same units.
+    #[must_use]
+    pub fn reach_between(&self, a: EntityId, b: EntityId) -> Fixed {
+        let unit = |id: EntityId| self.find(id).and_then(|entity| entity.unit);
+        Fixed::from_raw(self.reach_raw(unit(a), unit(b)))
+    }
+
+    fn reach_raw(&self, a: Option<u32>, b: Option<u32>) -> i64 {
+        match self.body_radii(a, b) {
+            0 => self.scale,
+            sum => sum,
+        }
     }
 
     /// The point a shot is really aimed at, after the archer's accuracy has had its say.
@@ -6802,12 +7009,13 @@ impl World {
                     let dx = victim.0.raw() - entity.position.0.raw();
                     let dy = victim.1.raw() - entity.position.1.raw();
                     let squared = dx * dx + dy * dy;
+                    // A melee attacker strikes from the next tile, diagonals included, or from where its footprint
+                    // touches the target's (C2) - a body stopped short by a friend's footprint is still in contact.
+                    let contact = self.reach_raw(entity.unit, victim_unit);
                     let in_reach = if range.raw() > 0 {
                         squared <= range.raw() * range.raw()
                     } else {
-                        // A melee attacker keeps the rule it always had: the next tile, diagonals
-                        // included. Comparing distance to one tile would exclude the diagonal.
-                        adjacent
+                        adjacent || squared <= contact * contact
                     };
                     // A siege engine - and a skirmisher - has a dead zone: inside it the shot is not
                     // possible however close the target is, so the shooter backs away instead of
@@ -6874,15 +7082,23 @@ impl World {
                     }
                 }
                 Task::Build { site } => {
-                    let Some(target) = self.find(site).map(|s| s.position) else {
+                    let Some((target, site_unit)) = self.find(site).map(|s| (s.position, s.unit))
+                    else {
                         finished.push(entity.id);
                         continue;
                     };
-                    // Adjacent counts: the site's own tile is where the building will be, so a
-                    // builder works from the tile beside it.
+                    // Adjacent counts: the site's own tile is where the building will be, so a builder works from the
+                    // tile beside it - or close enough for the two footprints to touch (C2), which is where a footprint
+                    // collision leaves a builder with a friend already on the good tile.
                     let here = self.tile_of(entity.position);
                     let there = self.tile_of(target);
                     let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
+                    let (gap_x, gap_y) = (
+                        target.0.raw() - entity.position.0.raw(),
+                        target.1.raw() - entity.position.1.raw(),
+                    );
+                    let reach = self.reach_raw(entity.unit, site_unit);
+                    let adjacent = adjacent || gap_x * gap_x + gap_y * gap_y <= reach * reach;
                     if adjacent {
                         builders.push((entity.id, site));
                         (Fixed::ZERO, Fixed::ZERO)
@@ -6899,7 +7115,8 @@ impl World {
                     }
                 }
                 Task::Return { drop, .. } => {
-                    let Some(target) = self.find(drop).map(|n| n.position) else {
+                    let Some((target, drop_unit)) = self.find(drop).map(|n| (n.position, n.unit))
+                    else {
                         finished.push(entity.id);
                         continue;
                     };
@@ -6915,7 +7132,15 @@ impl World {
                     // and each with one waypoint left that they never took.
                     let here = self.tile_of(entity.position);
                     let there = self.tile_of(target);
-                    let touching = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
+                    // Touching by tile, or by footprint (C2): a queue of villagers handing in at one town centre is
+                    // stacked 0.4 tiles deep, and the ones at the back are inside the ring but not on a tile centre.
+                    let (gap_x, gap_y) = (
+                        target.0.raw() - entity.position.0.raw(),
+                        target.1.raw() - entity.position.1.raw(),
+                    );
+                    let reach = self.reach_raw(entity.unit, drop_unit);
+                    let touching = (here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1)
+                        || gap_x * gap_x + gap_y * gap_y <= reach * reach;
                     if touching {
                         deposits.push(entity.id);
                         (Fixed::ZERO, Fixed::ZERO)
@@ -6951,7 +7176,18 @@ impl World {
                     // woodcutters did this for a thousand game-seconds beside two spent trees (2026-10-29), which is
                     // why the wood column produced nothing while the food column produced 1,994.
                     let beside = target_is_building || !self.tile_walkable(there.0, there.1);
-                    let at_node = entity.position == target
+                    // **Distance, not the exact point** (C2). A body stopped by its friend's footprint stands inside the
+                    // node's own tile but never on its centre, so `position == target` was a deadlock: the second worker
+                    // on a carcass took nothing for the rest of the match (measured: 89 wood / 20 food at 1,600 s). Being
+                    // on the node's ground, or close enough for the two footprints to touch, is being at it.
+                    let (gap_x, gap_y) = (
+                        target.0.raw() - entity.position.0.raw(),
+                        target.1.raw() - entity.position.1.raw(),
+                    );
+                    let squared = gap_x * gap_x + gap_y * gap_y;
+                    let reach = self.reach_raw(entity.unit, node_unit);
+                    let at_node = here == there
+                        || squared <= reach * reach
                         || (beside
                             && here.0.abs_diff(there.0) <= 1
                             && here.1.abs_diff(there.1) <= 1);
@@ -7325,7 +7561,22 @@ impl World {
             // to kill the animal. It doesn't change to corpse itself."*). The kill is an ordinary attack, so the
             // blow carries its attacker and the last-blow rule decides the meat; death promotes the animal to its
             // body in place, and the gather order is resumed on that body below. Arriving is not killing.
-            if self.tile_of(animal_pos) == self.tile_of(drop_pos) {
+            //
+            // **Touching, by tile or by footprint** (C2). A sheep stopped by its shepherd's footprint never reaches the
+            // drop site's own tile, so "the same tile" struck nothing and the flock queued for ever beside the mill.
+            let here = self.tile_of(animal_pos);
+            let there = self.tile_of(drop_pos);
+            let (gap_x, gap_y) = (
+                drop_pos.0.raw() - animal_pos.0.raw(),
+                drop_pos.1.raw() - animal_pos.1.raw(),
+            );
+            let reach = self.reach_raw(
+                self.find(animal).and_then(|entity| entity.unit),
+                self.find(drop).and_then(|entity| entity.unit),
+            );
+            let touching = (here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1)
+                || gap_x * gap_x + gap_y * gap_y <= reach * reach;
+            if touching {
                 self.slaughter.insert(villager, animal);
                 let already = matches!(
                     self.find(villager).map(|entity| entity.task),
@@ -7746,12 +7997,23 @@ impl World {
         let mut movers: Vec<EntityId> = Vec::new();
         // The occupancy grid is only worth building on a tick where something moves; an idle world pays
         // one `any` over the delta list, which is empty of movement in the common case (D52).
-        // Bodies in the way of this tick's steps. Decided in the pass, applied after it, because a repath plans a
-        // route and the entity list must stay still while it is walked (the same shape as shots).
-        let mut repaths: Vec<Repath> = Vec::new();
-        let tiles = self.unit_tiles();
+        // Who has a step to take this tick: a body with nothing to do cannot move aside for anybody, which is the
+        // difference between waiting a tick and waiting for ever (rules 4 and 8 in `collide`).
+        let moving: BTreeSet<EntityId> = deltas
+            .iter()
+            .filter(|(_, _, dx, dy)| *dx != Fixed::ZERO || *dy != Fixed::ZERO)
+            .map(|(_, id, _, _)| *id)
+            .collect();
+        let bodies = self.body_tiles();
+        let mut pass = Passing {
+            bodies: &bodies,
+            moving: &moving,
+            repaths: Vec::new(),
+            made_room: Vec::new(),
+            refused: Vec::new(),
+        };
         for (index, id, dx, dy) in deltas {
-            let (dx, dy) = self.collide(&tiles, index, id, dx, dy, &mut repaths);
+            let (dx, dy) = self.collide(&mut pass, index, id, dx, dy);
             if dx != Fixed::ZERO || dy != Fixed::ZERO {
                 movers.push(id);
             }
@@ -7795,15 +8057,26 @@ impl World {
             self.stamp_entity(id);
         }
 
+        // Bodies in the way of this tick's steps are decided in the pass and applied after it, because a repath plans a
+        // route and the entity list must stay still while it is walked (the same shape as shots).
+        //
+        // A route that made room has spent its one nudge; the next body in the way is answered by a repath.
+        for id in pass.made_room {
+            if let Some(route) = self.paths.get_mut(&id) {
+                route.gave_way = true;
+            }
+            self.made_room_count += 1;
+        }
+
         // Re-plan around the bodies that were in the way, now that the movement pass has finished with the entity
         // list. A repath keeps what the route already avoids - those bodies are still past - and adds the new one; a
         // search that fails leaves the old route in place, so the unit waits rather than walking into the body.
-        if !repaths.is_empty() {
+        if !pass.repaths.is_empty() {
             for Repath {
                 unit: id,
                 body: other,
                 goal,
-            } in repaths
+            } in pass.repaths
             {
                 let Some(from) = self.position(id) else {
                     continue;
@@ -7820,7 +8093,13 @@ impl World {
                     .filter_map(|other| {
                         self.position(*other).map(|position| self.tile_of(position))
                     })
+                    // The ground the unit already stands on is not an obstacle to plan around: an avoid set that holds
+                    // it makes the search leave the tile it starts in, which produced a nine-waypoint route backwards.
+                    .filter(|tile| *tile != start)
                     .collect();
+                // A nudge already spent is spent for the order, not for the plan: a repath must not hand the unit a
+                // second one.
+                let gave_way = self.paths.get(&id).is_some_and(|route| route.gave_way);
                 let planned = match self.walk.as_ref() {
                     Some(walk) => find_path_avoiding(walk, start, goal, &obstacles),
                     None => None,
@@ -7835,6 +8114,7 @@ impl World {
                                 steps,
                                 avoiding,
                                 end,
+                                gave_way,
                             },
                         );
                         self.repath_count += 1;

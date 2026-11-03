@@ -115,15 +115,25 @@ fn a_crowd_ordered_to_one_tile_all_arrive_and_spread() {
         world.step().expect("step");
     }
 
+    // **"No two share a tile" was the old rule**; the rule is a footprint now (C), so the crowd is judged by distance.
+    for (n, first) in squad.iter().enumerate() {
+        for second in squad.iter().skip(n + 1) {
+            let reach = world.reach_between(*first, *second).raw();
+            let (one, two) = (
+                world.position(*first).expect("a position"),
+                world.position(*second).expect("a position"),
+            );
+            let (dx, dy) = (one.0.raw() - two.0.raw(), one.1.raw() - two.1.raw());
+            let apart = (dx * dx + dy * dy).isqrt();
+            assert!(
+                apart >= reach,
+                "two units of one order stand {apart} raw units apart, inside the {reach} their footprints need"
+            );
+        }
+    }
     let mut tiles: Vec<(i64, i64)> = squad.iter().map(|id| tile_of(&world, *id)).collect();
     tiles.sort();
-    let before = tiles.len();
     tiles.dedup();
-    assert_eq!(
-        tiles.len(),
-        before,
-        "two units of one order share a tile: {tiles:?}"
-    );
 
     for tile in &tiles {
         let distance = (tile.0 - 22).abs().max((tile.1 - 22).abs());

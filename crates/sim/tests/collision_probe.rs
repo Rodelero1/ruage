@@ -136,3 +136,139 @@ fn what_a_radius_rule_binds_that_a_tile_rule_does_not() {
         );
     }
 }
+
+/// **How deep do bodies still overlap with the footprints in force?** The rule refuses a step that would end inside
+/// another body's disc, so the only overlaps left should be the ones it deliberately allows: a pair a spawn put inside
+/// each other, and the single step a jam gives way on. Anything else is the rule failing to bind. Ignored: run with
+/// `--release -- --ignored --nocapture`.
+#[test]
+#[ignore = "measurement, not a rule"]
+fn how_deeply_bodies_still_overlap() {
+    let units_path = repo("config/gamedata/units.toml");
+    if !units_path.exists() {
+        eprintln!("skipping: no units.toml (generated, D8)");
+        return;
+    }
+    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).expect("pack");
+    let settings = ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim");
+    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map");
+    let economy = ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy");
+    let units = ruage_data::load_units_file(&units_path).expect("units");
+    let combat = ruage_data::load_combat_file(&repo("config/combat.toml")).expect("combat");
+    let techs = ruage_data::load_techs_file(&repo("config/gamedata/techs.toml")).expect("techs");
+    let effects =
+        ruage_data::load_effects_file(&repo("config/gamedata/effects.toml")).expect("effects");
+    let civs = ruage_data::load_civs_file(&repo("config/gamedata/civs.toml")).expect("civs");
+    let scenario = load_scenario_file(&repo("config/acceptance.toml")).expect("scenario");
+
+    let mut world = World::new(&settings, 7).expect("world");
+    world.seed_from(&map, &economy, &units).expect("seed");
+    world.load_resources(&resources).expect("pack");
+    world.apply_policy(&scenario.policy);
+    world.load_combat(&combat);
+    world.load_research(&techs, &effects).expect("research");
+    world.load_civs(&civs).expect("civs");
+    let mut runner = Runner::new(&scenario, world.tick_rate_hz()).expect("runner");
+
+    let scale = world.scale();
+    let radius_of = |unit: Option<u32>| {
+        unit.and_then(|id| units.unit(id))
+            .map(|unit| {
+                unit.radius[0]
+                    .resolve(scale, "radius[0]")
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default()
+    };
+
+    let mut overlapping: u64 = 0;
+    let mut deepest = 0i64;
+    let mut same_tile: u64 = 0;
+    let mut cross_tile: u64 = 0;
+    let mut gross: u64 = 0; // deeper than half a footprint: a rule that is not binding at all
+    let mut pair_ticks: u64 = 0;
+    // **A *new* overlap is the rule failing**; one a spawn created is the fixture, not the movement pass. Tracked per
+    // pair across ticks, so a stack the map seeded is counted once and not once a tick.
+    let mut was_apart: std::collections::BTreeMap<(u32, u32), bool> =
+        std::collections::BTreeMap::new();
+    let mut new_overlaps: u64 = 0;
+    let mut deepest_new = 0i64;
+
+    for _ in 0..36_000u32 {
+        runner.due(&mut world);
+        world.step().expect("step");
+        let bodies: Vec<(i64, i64, i64, u32)> = world
+            .entities()
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::Unit
+                    && !matches!(entity.task, Task::Garrisoned { .. })
+                    && entity.hp > 0
+            })
+            .map(|entity| {
+                (
+                    entity.position.0.raw(),
+                    entity.position.1.raw(),
+                    radius_of(entity.variant.or(entity.unit)).raw(),
+                )
+            })
+            .zip(
+                world
+                    .entities()
+                    .iter()
+                    .filter(|entity| {
+                        entity.kind == EntityKind::Unit
+                            && !matches!(entity.task, Task::Garrisoned { .. })
+                            && entity.hp > 0
+                    })
+                    .map(|entity| entity.id.0),
+            )
+            .map(|((x, y, r), id)| (x, y, r, id))
+            .collect();
+        for i in 0..bodies.len() {
+            for j in (i + 1)..bodies.len() {
+                let (ax, ay, ar, a_id) = bodies[i];
+                let (bx, by, br, b_id) = bodies[j];
+                let reach = if ar + br > 0 { ar + br } else { scale };
+                let (dx, dy) = (ax - bx, ay - by);
+                let apart = (dx * dx + dy * dy).isqrt();
+                pair_ticks += 1;
+                let key = (a_id.min(b_id), a_id.max(b_id));
+                let newly = apart < reach && was_apart.get(&key).copied().unwrap_or(true);
+                was_apart.insert(key, apart >= reach);
+                if newly {
+                    new_overlaps += 1;
+                    deepest_new = deepest_new.max(reach - apart);
+                }
+                if apart < reach {
+                    overlapping += 1;
+                    deepest = deepest.max(reach - apart);
+                    if reach - apart > reach / 2 {
+                        gross += 1;
+                    }
+                    if (ax.div_euclid(scale), ay.div_euclid(scale))
+                        == (bx.div_euclid(scale), by.div_euclid(scale))
+                    {
+                        same_tile += 1;
+                    } else {
+                        cross_tile += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    println!(
+        "36,000 ticks: {overlapping} overlapping pair-ticks of {pair_ticks} inspected ({:.4}%), \n\
+         deepest {deepest} raw units ({:.3} tiles), {gross} pair-ticks deeper than half a footprint\n\
+         of those, {same_tile} in one tile and {cross_tile} across a tile line\n\
+         **new** overlaps (a step the rule let through, not a stack the map seeded): {new_overlaps}, \n\
+         deepest new {deepest_new} raw units ({:.3} tiles)\n\
+         repaths {} made_room {}",
+        overlapping as f64 * 100.0 / pair_ticks.max(1) as f64,
+        deepest as f64 / scale as f64,
+        deepest_new as f64 / scale as f64,
+        world.repaths(),
+        world.made_room()
+    );
+}

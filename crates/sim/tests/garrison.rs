@@ -357,16 +357,15 @@ fn ring_of_free_tiles(world: &World, centre: (i64, i64), want: usize) -> Vec<(i6
     spots
 }
 
-/// **Parked, and the reason has changed once already.** With units no longer sharing a tile, twelve melee attackers
-/// cannot all reach a 4x4 town centre. E1b's `stand_near` now ends each attacker's route on a tile it can strike from
-/// (measured: 5 legal tiles around this town centre in its built-up base, for 12 attackers), which is the right rule and
-/// is proved by `evasion::an_arms_route_ends_where_it_can_strike` - but five tiles cannot hold twelve bodies, so the
-/// damage total is unchanged at 1,066 of 2,400 hp where this fixture wants 480.
+/// **This was parked for two slices, and C unparked it.** With units no longer sharing a tile, twelve melee attackers
+/// could not all reach a 4x4 town centre: the five standable tiles around it held five bodies and the damage total sat
+/// at 1,066 of 2,400 hp where this fixture wants 480. The diagnosis at the time was "the fixture needs an open-perimeter
+/// target or ranged attackers".
 ///
-/// The fixture, not the rule, is the blocker: it needs a target with an open perimeter or attackers that strike at
-/// range. Pinned here rather than deleted because the *ejection* rule it tests is untouched and still worth a test.
+/// The real answer was the arrival rule, not the fixture (C2): a melee attacker now strikes from where its footprint
+/// touches the target's, so the bodies that queue behind the first rank also land blows. This test runs, unmodified -
+/// same fixture, same twelve villagers, the damage it always wanted.
 #[test]
-#[ignore = "staging: only 5 standable tiles around this town centre for 12 melee attackers; needs an open-perimeter target or ranged attackers"]
 fn a_damaged_building_ejects_its_garrison() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
