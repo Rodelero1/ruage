@@ -190,3 +190,35 @@ fn a_click_between_tiles_has_a_point_and_not_just_a_tile() {
         "the point has to keep the sub-tile position, or it is just the tile again"
     );
 }
+
+/// **The arrows pan the screen, not the grid** (the owner, 2026-11-03: "panning should be up-down and left-right, since the
+/// map is 45 degrees rotated"). A step in tile space moves diagonally on screen; a screen step is half a tile on each axis.
+#[test]
+fn the_arrows_pan_the_screen_not_the_grid() {
+    let mut camera = Camera::new((640, 480)).centred_on((16.0, 16.0));
+    let before = camera.project((16.0, 16.0));
+
+    camera.scroll_screen((1.0, 0.0));
+    let after = camera.project((16.0, 16.0));
+    assert!(
+        after.0 < before.0,
+        "panning right should move the world left on screen: {before:?} -> {after:?}"
+    );
+    assert_eq!(
+        after.1, before.1,
+        "panning right should not move the picture up or down: {before:?} -> {after:?}"
+    );
+
+    camera.scroll_screen((-1.0, 0.0));
+    assert_eq!(camera.project((16.0, 16.0)), before, "and back is back");
+
+    let down = {
+        camera.scroll_screen((0.0, 1.0));
+        camera.project((16.0, 16.0))
+    };
+    assert!(
+        down.1 < before.1,
+        "panning down moves the world up: {down:?}"
+    );
+    assert_eq!(down.0, before.0, "and not sideways: {down:?}");
+}

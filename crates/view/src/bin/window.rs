@@ -367,12 +367,13 @@ impl ApplicationHandler for App {
                         self.paused = !self.paused;
                         self.accumulated = Duration::ZERO;
                     }
-                    // Arrows pan the view by a tile a press, in the direction the *screen* moves: left takes the
-                    // camera towards -x, which is up-left in the diamond. A held key autorepeats, which is the pan.
-                    Key::Named(NamedKey::ArrowLeft) => self.camera.scroll((-1.0, 0.0)),
-                    Key::Named(NamedKey::ArrowRight) => self.camera.scroll((1.0, 0.0)),
-                    Key::Named(NamedKey::ArrowUp) => self.camera.scroll((0.0, -1.0)),
-                    Key::Named(NamedKey::ArrowDown) => self.camera.scroll((0.0, 1.0)),
+                    // Arrows pan in the direction the **screen** moves, not the grid's: the map is a diamond, so a tile
+                    // step would move the picture diagonally (the owner's report, 2026-11-03). A held key autorepeats,
+                    // which is the pan.
+                    Key::Named(NamedKey::ArrowLeft) => self.camera.scroll_screen((-1.0, 0.0)),
+                    Key::Named(NamedKey::ArrowRight) => self.camera.scroll_screen((1.0, 0.0)),
+                    Key::Named(NamedKey::ArrowUp) => self.camera.scroll_screen((0.0, -1.0)),
+                    Key::Named(NamedKey::ArrowDown) => self.camera.scroll_screen((0.0, 1.0)),
                     // 1..4 are the speed keys; the loop runs one, two, four or eight ticks per tick interval.
                     Key::Character(ref key) => match key.as_str() {
                         "1" => self.speed = 1,

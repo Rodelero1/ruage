@@ -299,6 +299,17 @@ impl Camera {
         self.origin.1 += tiles.1;
     }
 
+    /// Pan by a **screen** direction - right, left, up and down as the player sees them.
+    ///
+    /// The map is drawn as diamonds, so a step in tile space moves the picture *diagonally*: the arrow keys used to pan
+    /// the view "in verticals" (the owner, 2026-11-03). `project` puts a tile at `(dx - dy, dx + dy)`, so a screen step of
+    /// one is `(+0.5, -0.5)` in tile space for right and `(+0.5, +0.5)` for down - exact halves, so a pan out and back
+    /// lands on the same pixel.
+    pub fn scroll_screen(&mut self, screen: (f32, f32)) {
+        let (right, down) = screen;
+        self.scroll(((right + down) / 2.0, (down - right) / 2.0));
+    }
+
     /// The window changed size. **Only the viewport changes**: the camera's position is its own, so a resize must not
     /// re-centre it - rebuilding a `Camera` on every draw was the defect that made panning and zooming impossible while
     /// looking perfectly innocent.

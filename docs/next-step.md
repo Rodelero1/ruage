@@ -1,5 +1,20 @@
 # The effect interpreter, priced from the data
 
+> **2026-11-03, added to the queue by the owner this turn, and one of them done:**
+> - **DONE - panning is screen-aligned** (item 5). `Camera::scroll_screen` converts a screen direction into tile space
+>   (the map is a diamond, so a tile step moved the picture diagonally); the arrow keys use it. Review:
+>   `docs/reviews/2026-11-03-panning-the-screen.md`.
+> - **NEW - a speed selector** (1x, 1.5x, 2x, 3x, 5x) in the window: the sim is fixed-rate, so this is the *window's*
+>   tick pacing (`window.rs`'s loop) plus a dropdown in `ui.rs`. Decide whether a speed change is allowed mid-match and
+>   whether it is recorded; nothing in the sim needs to know.
+> - **NEW - silhouettes: villagers a square, military units a triangle** (or another shape), so a glance tells them
+>   apart. `crates/view` draws entities as blocks today; a shape per class, from content's roles, with a test that a
+>   villager and a soldier at one pixel differ.
+> - **Reference worth reading: `https://zaydme.github.io/openaok/engine/`** (OpenAoK, a from-scratch C++20 AoE2 engine,
+>   MIT). Same architecture family as ours - 32.32 fixed point, a fixed tick, no floats inside the tick, one-way
+>   presentation, commands stamped with a player - and its pages on pathfinding, physics and the AI `Brain` are the
+>   closest thing to a second opinion on items 4, 7 and 8. Ideas, not code: our licensing rule (D8) is unchanged.
+>
 > **2026-11-03, CORRECTION - the acceptance match DRAWS, it does not win.** The entry below claims `players=1`, hash
 > `51992525a3b1c3fb`, from a single run that I could not reproduce. Re-running the merged binary, and a binary built from
 > the merge commit `a782a47` in a clean worktree, gives **`players=2`, hash `91a8ad6e2cbd01f6`, 14.8 s** on every run
