@@ -1,5 +1,20 @@
 # The effect interpreter, priced from the data
 
+> **2026-11-03, CORRECTION - the acceptance match DRAWS, it does not win.** The entry below claims `players=1`, hash
+> `51992525a3b1c3fb`, from a single run that I could not reproduce. Re-running the merged binary, and a binary built from
+> the merge commit `a782a47` in a clean worktree, gives **`players=2`, hash `91a8ad6e2cbd01f6`, 14.8 s** on every run
+> (1,914 wood / 416 food / 512 gold at 1,600 s, 24 buildings, 177 repaths, 214 nudges). The "48.4 s against 19.9 s"
+> comparison in the two reviews below also mixed a build-and-run figure with direct-run figures; back to back the same
+> tree is 14.8 s against the baseline's 9.8-10.0 s - and the baseline no longer wins either.
+>
+> **Before anything is built on top of this, explain the disagreement.** Same binary, same pack, same seed, different hash:
+> either the winning run used a stale binary, or something changed under it. The hash is the oracle and the bisect starts
+> at the three commits between `97958a8` and the merge.
+>
+> One thing learned and not landed: `When.army_at_least` (a rule condition on the military count) was written, watched
+> fail without the condition, and **reverted** - `World::army(player)` returned fewer than three for three spawned
+> militia, and the cause was not found before the session ran out. That is the first thing item 8 needs.
+>
 > **2026-11-03, the owner's nine observations: 1-3 are landed, 4-9 are the queue.**
 >
 > **Standing measurement:** acceptance match at 36,000 ticks, seed 7 - **`players=1`** (won), hash
