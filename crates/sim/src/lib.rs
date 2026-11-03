@@ -27,7 +27,7 @@ mod metrics;
 mod path;
 mod script;
 pub use metrics::Metrics;
-pub use path::{Walk, find_path, find_path_avoiding};
+pub use path::{Walk, find_path, find_path_avoiding, line_clear};
 use ruage_fixed::Fixed;
 pub use script::{
     Outcome, Personality, Rule, RuleAction, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind,
@@ -2578,6 +2578,12 @@ impl World {
     ) -> Result<Vec<(u16, u16)>, SimError> {
         let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
         let (start, goal) = (self.tile_of(from), self.tile_of(to));
+        // The original tries the straight line first (S1, D98a): if nothing stands between here and the goal, the route
+        // **is** the goal - one waypoint, no search. A blocked line costs one Bresenham walk and then the search it
+        // would have paid anyway.
+        if start != goal && line_clear(walk, start, goal) {
+            return Ok(vec![goal]);
+        }
         find_path(walk, start, goal).ok_or(SimError::NoPath {
             from: start,
             to: goal,

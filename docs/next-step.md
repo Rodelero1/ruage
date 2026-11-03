@@ -1,6 +1,14 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, latest: E1a has landed, and it cost the acceptance victory - that is the next thing to face.** Units no
+> **2026-11-03, latest: S1 is the work in hand - the original's straight-line shortcut.** `doIntelligentMovementUpdate`
+> tries a straight line to the goal before any path (move_obj.cpp 4,079-4,245): "no non-target collisions there, so we
+> can do the straight line path", else "we can't do the straight line path" and the route is planned. Touch points:
+> `path::line_clear` (a supercover line over tiles, excluding the **goal's own tile**, since a node or a body may stand
+> there), `World::plan_path` tries it before A\*, and the tests are one waypoint on open ground, a fallback when a wall
+> crosses the line, and the goal tile not counting. Baseline to beat, from E1a: acceptance **players=2**, hash
+> `7c0b9132ed2074f8`, 36,000 ticks in 10.8 s. Then E1b (radius predicate + adjacency-ring arrival).
+>
+> Superseded: **E1a has landed, and it cost the acceptance victory - that is the next thing to face.** Units no
 > longer share a tile; a blocked unit repaths around the body (D98a), with a tick budget of 4 searches and a body the
 > route already avoids treated as past. Four tests in `crates/sim/tests/evasion.rs`; review in
 > `docs/reviews/2026-11-03-e1a-evasion.md`. **The match at 30:00 now ends with both players alive**

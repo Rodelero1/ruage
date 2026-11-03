@@ -93,6 +93,55 @@ fn octile(from: (u16, u16), to: (u16, u16)) -> u32 {
     (straight * u64::from(CARDINAL) + diagonal * u64::from(DIAGONAL)) as u32
 }
 
+/// Is the **straight line** between two tiles walkable, ignoring the goal's own tile?
+///
+/// This is the original's first attempt at every movement (`doIntelligentMovementUpdate`, move_obj.cpp 4,079-4,245:
+/// "no non-target collisions there, so we can do the straight line path"), and it is cheap where a search is not: one
+/// Bresenham walk instead of an A* over the map. The goal tile is exempt for the same reason `find_path` allows a blocked
+/// goal - a node's own tile holds the thing being worked, and a body you were ordered onto is a target, not an obstacle.
+///
+/// A diagonal step also requires both of its corners free, which is the rule the search uses: a line that would clip the
+/// corner of a wall is not a line a unit may walk.
+#[must_use]
+pub fn line_clear(walk: &Walk, from: (u16, u16), to: (u16, u16)) -> bool {
+    let free = |x: i64, y: i64| -> bool {
+        let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
+            return false;
+        };
+        walk.contains(x, y) && !walk.blocked(x, y)
+    };
+    let (x0, y0) = (i64::from(from.0), i64::from(from.1));
+    let (x1, y1) = (i64::from(to.0), i64::from(to.1));
+    let (dx, dy) = ((x1 - x0).abs(), (y1 - y0).abs());
+    let (sx, sy) = ((x1 - x0).signum(), (y1 - y0).signum());
+    let (mut x, mut y) = (x0, y0);
+    let mut err = dx - dy;
+    loop {
+        if (x, y) == (x1, y1) {
+            return true;
+        }
+        if !free(x, y) {
+            return false;
+        }
+        let e2 = 2 * err;
+        let mut stepped_x = false;
+        let mut stepped_y = false;
+        if e2 > -dy {
+            err -= dy;
+            x += sx;
+            stepped_x = true;
+        }
+        if e2 < dx {
+            err += dx;
+            y += sy;
+            stepped_y = true;
+        }
+        if stepped_x && stepped_y && (!free(x - sx, y) || !free(x, y - sy)) {
+            return false;
+        }
+    }
+}
+
 /// The tiles to walk through, excluding the start and including the goal. `None` when the goal is
 /// unreachable. A blocked goal is allowed: resource nodes stand on forest, and a villager has to
 /// be able to reach the tree it is working.
