@@ -333,24 +333,51 @@ fn deleting_a_foundation_refunds_it_in_full() {
         .expect("a villager");
     let before = stockpile(&world, 1);
     let house = world.role_unit("house").expect("house");
-    // Four tiles away, so the builder is still walking and the site is a bare foundation.
-    let tile = world
+    // Four or more tiles away, so the builder is still walking and the site is a bare foundation - and legal ground for a
+    // whole house footprint, which "four tiles east" alone was not once buildings owned their ground.
+    let (x, y) = world
         .entity(villein)
         .map(|entity| {
             let scale = world.scale();
             (
-                entity.position.0.raw() / scale + 4,
+                entity.position.0.raw() / scale,
                 entity.position.1.raw() / scale,
             )
         })
         .expect("the villager");
-    world
-        .submit_checked(Command::Build {
-            villager: villein,
-            unit: house,
-            at: (tile.0 as u16, tile.1 as u16),
-        })
-        .expect("a foundation");
+    let mut placed = false;
+    'ring: for radius in 4..=8i64 {
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx.abs() != radius && dy.abs() != radius {
+                    continue;
+                }
+                let (tx, ty) = (x + dx, y + dy);
+                if tx < 0 || ty < 0 || tx > i64::from(u16::MAX) || ty > i64::from(u16::MAX) {
+                    continue;
+                }
+                let at = (tx as u16, ty as u16);
+                if !world.site_fits(1, house, at) {
+                    continue;
+                }
+                if world
+                    .submit_checked(Command::Build {
+                        villager: villein,
+                        unit: house,
+                        at,
+                    })
+                    .is_ok()
+                {
+                    placed = true;
+                    break 'ring;
+                }
+            }
+        }
+    }
+    assert!(
+        placed,
+        "a legal, reachable site four to eight tiles from the villager"
+    );
     world.step().expect("step");
 
     let site = world

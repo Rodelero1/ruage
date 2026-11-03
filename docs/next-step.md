@@ -15,11 +15,15 @@
 >
 > **The queue, in the order I am taking it** (owner, this thread: implement all of it, stop only for a decision):
 >
-> 1. **A - "gather an army first, then attack" (item 8).** `When.army_at_least`, re-landed with its root cause fixed:
->    the reverted version counted through `[metrics] military_roles`, but `World::army` returned 0 in any world whose
->    unit table was not loaded (`flat_map` over `self.units.as_ref()` yields nothing), and the test fixture is exactly
->    such a world - three spawned militia counted as none. Then content: a barracks trains a soldier line from Feudal,
->    and an attack rule waits for a count.
+> 1. **A - "gather an army first, then attack" (item 8). LANDED.** `When.army_at_least` / `army_at_most` and
+>    `World::army`, plus `RuleAction::Attack` ordering the **whole** family rather than the newest unit. **Correction to
+>    the entry this replaces:** the reverted version was blamed on `World::army` counting wrong; the cause was the *test*
+>    naming one id three times (`max + 1` per iteration without a step), so two spawns were `DuplicateEntity` refusals and
+>    one soldier existed. `army()` was never wrong. Content: the feudal barracks trains the militia line to twelve
+>    (`army_at_most = 11`) and at **three** soldiers the army attacks the town centre (`army_at_least = 3`). Measured:
+>    the town centre is at 19 hp at 36,000 ticks, gone at 36,500, `players=1` at 37,000 and at 48,000 ticks. The step also
+>    closed the `farm_husk` leftover (a spawned farm's amount, the husk's ground, the lane rule), killed D58's dead blind
+>    overbuild, and repaired **28 tests that were already red at HEAD** - see `docs/reviews/2026-11-03-the-army-and-the-red-suite.md`.
 > 2. **B - "soldiers attack buildings consistently" (item 7).** Diagnosis first, with a probe: a re-issued `Attack`
 >    resets the reload, and retaliation may be pulling units off the building. Stance / attack-move and the retreat
 >    path, measured on the acceptance match.

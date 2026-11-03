@@ -2615,6 +2615,11 @@ impl World {
     fn site_refusal(&self, player: u8, unit: u32, at: (u16, u16)) -> Option<SimError> {
         let walk = self.walk.as_ref()?;
         let mut held: BTreeMap<(u16, u16), EntityId> = BTreeMap::new();
+        // Ground held by a building this player **cannot see**. The walk layer has it blocked - `insert` blocks a
+        // building's tiles the moment it stands - so asking `walk.blocked` alone refused a blind placement with
+        // `SiteBlocked`, and the rule this function documents (D58: a hidden building does not hold its ground, the
+        // overbuild is cancelled on sight) could never fire. Nine foundation tests said so and were red.
+        let mut hidden: BTreeSet<(u16, u16)> = BTreeSet::new();
         for entity in &self.entities {
             if entity.kind != EntityKind::Building || self.is_expired_farm(entity.id) {
                 continue;
@@ -2622,11 +2627,12 @@ impl World {
             let seen = entity.player == player
                 || entity.player == 0
                 || self.vision(player, self.tile_of(entity.position)) == TileVision::Visible;
-            if !seen {
-                continue;
-            }
-            for tile in self.footprint_area(entity) {
-                held.entry(tile).or_insert(entity.id);
+            if seen {
+                for tile in self.footprint_area(entity) {
+                    held.entry(tile).or_insert(entity.id);
+                }
+            } else {
+                hidden.extend(self.footprint_area(entity));
             }
         }
         for tile in self.build_site_tiles(unit, at) {
@@ -2637,8 +2643,9 @@ impl World {
                 return Some(SimError::SiteOccupied { tile });
             }
             // Terrain and resources are what is left: a resource node is not a player's to lose, so it blocks whoever is
-            // looking.
-            if walk.blocked(tile.0, tile.1) {
+            // looking. A **building** the player cannot see is not terrain - its tiles are blocked in the walk layer, and
+            // they are the one kind of blocked ground a blind site may cover.
+            if walk.blocked(tile.0, tile.1) && !hidden.contains(&tile) {
                 return Some(SimError::SiteBlocked { tile });
             }
         }
@@ -2680,7 +2687,13 @@ impl World {
             .filter(|tile| !site.contains(tile))
             .collect();
         !self.entities.iter().any(|entity| {
-            if entity.kind != EntityKind::Building || self.is_expired_farm(entity.id) {
+            // A farm is a **floor** (`[footprint.farm]` is all walkable), so it cannot be part of a wall. The exemption
+            // is what lets a spent plot inside a field be rebuilt; it is asked of every farm, live or spent, because the
+            // question is "does this footprint block anyone" and for a farm the answer is no.
+            if entity.kind != EntityKind::Building
+                || self.is_expired_farm(entity.id)
+                || self.is_farm_role(entity)
+            {
                 return false;
             }
             let seen = entity.player == player
@@ -5042,6 +5055,44 @@ impl World {
         .unwrap_or(u32::MAX)
     }
 
+    /// How many **military** units `player` has, by content's `[metrics] military_roles`.
+    ///
+    /// The same list the balance harness counts (`Metrics`), so a rule that waits for an army and a metric that reports
+    /// one cannot disagree about what an army is. **Family-matched**, because a man-at-arms is the militia's upgrade and
+    /// both answer the question "how many soldiers" - the roots are computed once per call, not once per entity.
+    ///
+    /// A dead soldier is not an army: `hp > 0` filters the corpses that the death sweep has not collected yet.
+    #[must_use]
+    pub fn army(&self, player: u8) -> usize {
+        let Some(economy) = self.economy.as_ref() else {
+            return 0;
+        };
+        // The root of each military role. A world with no unit table cannot family-match, so it compares ids: the role
+        // *is* its own root, which is the only statement available. Returning nothing here instead was a bug that made
+        // an army of three read as zero in every fixture that seeds without a table.
+        let roots: Vec<u32> = economy
+            .metrics
+            .military_roles
+            .iter()
+            .filter_map(|role| economy.role.get(role).copied())
+            .map(|unit| self.units.as_ref().map_or(unit, |units| units.root(unit)))
+            .collect();
+        if roots.is_empty() {
+            return 0;
+        }
+        self.entities
+            .iter()
+            .filter(|entity| {
+                entity.player == player && entity.kind == EntityKind::Unit && entity.hp > 0
+            })
+            .filter(|entity| {
+                entity.unit.is_some_and(|unit| {
+                    roots.contains(&self.units.as_ref().map_or(unit, |units| units.root(unit)))
+                })
+            })
+            .count()
+    }
+
     /// The ceiling on this player's population: what content allows, from finished buildings only - a
     /// house supports its five when it is finished, not when it is ordered.
     ///
@@ -6493,8 +6544,28 @@ impl World {
 
     /// The actor of the command that just failed, for the refusal record. A command is not always about one entity, so a
     /// placeholder is used when the world cannot name one.
-    fn entity_of_last_command(&self) -> EntityId {
-        EntityId(0)
+    /// The entity a command acts through: the villager, the building, the attacker, or the id a spawn names. A refusal
+    /// that cannot name its actor is a refusal nobody can diagnose, and this used to return `EntityId(0)` for every
+    /// command - so every recorded refusal read `entity 0`. The actor is read **before** `apply`, which takes the command
+    /// by value.
+    fn command_entity(command: &Command) -> EntityId {
+        match command {
+            Command::Gather { villager, .. } | Command::Build { villager, .. } => *villager,
+            Command::Stop { unit }
+            | Command::WalkTo { unit, .. }
+            | Command::Move { unit, .. }
+            | Command::AttackMove { unit, .. }
+            | Command::Patrol { unit, .. }
+            | Command::Stance { unit, .. }
+            | Command::Garrison { unit, .. } => *unit,
+            Command::Delete { entity, .. } => *entity,
+            Command::Attack { attacker, .. } => *attacker,
+            Command::Train { building, .. }
+            | Command::Research { building, .. }
+            | Command::Rally { building, .. }
+            | Command::Ungarrison { building } => *building,
+            Command::Spawn { id, .. } => *id,
+        }
     }
 
     /// A farm whose food is gone. It **stays on the map** - walkable, worth nothing - until a new farm replaces it, and the
@@ -6933,11 +7004,17 @@ impl World {
                     // the world starts at rest, and this one now does too (D64, D70).
                     velocity: (Fixed::ZERO, Fixed::ZERO),
                     hp,
-                    // An animal placed with no amount is worth what the pack says it is worth: a sheep
-                    // carries its 100 food, not zero (D70).
+                    // An animal placed with no amount is worth what the pack says it is worth: a sheep carries its 100
+                    // food, not zero (D70). **Only an animal.** `meat_of` reads any unit's `food` field, and a farm's
+                    // `food` is its 250-food capacity - so a spawned farm told "nothing left" came back full, and
+                    // `is_expired_farm` never saw a husk that a command had made (the parked defect, closed here).
                     amount: Fixed::from_raw(
                         i64::from(if amount == 0 {
-                            self.meat_of(unit)
+                            if unit.is_some_and(|unit| self.animals.contains(&unit)) {
+                                self.meat_of(unit)
+                            } else {
+                                0
+                            }
                         } else {
                             amount
                         }) * self.scale,
@@ -7082,8 +7159,9 @@ impl World {
             // somebody else took this tick, the tree that fell, the price that went up. The match must not end because two
             // orders in the same tick wanted the same square - which is exactly how the acceptance run died at tick 16,008
             // (`something already stands at (18, 17)`, a market and a blacksmith both choosing it).
+            let actor = Self::command_entity(&command);
             if let Err(why) = self.apply(command) {
-                self.refusal = Some((self.entity_of_last_command(), why, self.tick));
+                self.refusal = Some((actor, why, self.tick));
             }
         }
 
@@ -7909,8 +7987,14 @@ impl World {
                 {
                     self.build_queue.remove(&builder);
                 }
-                if let Some((unit, at)) = next {
-                    let _ = self.start_build(builder, unit, at);
+                if let Some((unit, at)) = next
+                    && let Err(why) = self.start_build(builder, unit, at)
+                {
+                    // A queued site is an order the engine gives itself, so its failure goes into state like any other
+                    // (D88's rule). Two orders given in one tick are checked against a world where neither exists yet,
+                    // so overlapping sites are accepted and the second can never start; `let _ =` here left the player's
+                    // queued building gone with no record at all.
+                    self.refusal = Some((builder, why, self.tick));
                 }
             }
         }

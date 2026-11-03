@@ -77,24 +77,28 @@ fn first_villager(world: &World) -> EntityId {
 }
 
 /// A free grass tile near the villager, so the site is legal and close.
-fn free_tile_near(world: &World, from: EntityId) -> (u16, u16) {
+///
+/// **The engine's own predicate, not "no entity at this point".** A building owns a footprint, so a candidate that is
+/// empty at its anchor is not a legal site - the first version scanned entity positions only and handed back the town
+/// centre's own anchor the moment the footprint work landed, which is why three build tests went red unnoticed (they skip
+/// themselves when the generated data is absent, and a clean worktree has none).
+fn free_tile_near(world: &World, from: EntityId, unit: u32) -> (u16, u16) {
     let position = world.position(from).expect("position");
     let scale = world.scale();
     let x = u16::try_from(position.0.raw() / scale).expect("in range");
     let y = u16::try_from(position.1.raw() / scale).expect("in range");
-    for radius in 1..6u16 {
+    for radius in 1..8u16 {
         for dy in 0..=radius {
             for dx in 0..=radius {
-                let candidate = (x + dx, y + dy);
-                let occupied = world.entities().iter().any(|e| {
-                    e.position
-                        == (
-                            ruage_fixed::Fixed::from_raw(i64::from(candidate.0) * scale),
-                            ruage_fixed::Fixed::from_raw(i64::from(candidate.1) * scale),
-                        )
-                });
-                if !occupied {
-                    return candidate;
+                for candidate in [
+                    (x + dx, y + dy),
+                    (x.wrapping_sub(dx), y + dy),
+                    (x + dx, y.wrapping_sub(dy)),
+                    (x.wrapping_sub(dx), y.wrapping_sub(dy)),
+                ] {
+                    if world.site_fits(1, unit, candidate) {
+                        return candidate;
+                    }
                 }
             }
         }
@@ -131,7 +135,7 @@ fn a_build_without_the_resources_is_refused() {
         .expect("seeding");
     world.load_resources(&fx.resources).expect("the pack fits");
     let villager = first_villager(&world);
-    let site = free_tile_near(&world, villager);
+    let site = free_tile_near(&world, villager, 70);
     let house = 70;
 
     assert_eq!(world.stock(1, slot("wood")), 0, "the player starts broke");
@@ -178,7 +182,7 @@ fn a_pack_that_does_not_carry_a_cost_id_refuses_the_order() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
-    let site = free_tile_near(&world, villager);
+    let site = free_tile_near(&world, villager, 70);
     let node = world
         .entities()
         .iter()
@@ -409,7 +413,7 @@ fn a_house_is_paid_for_and_finishes_in_its_create_time() {
 
     bank_wood(&mut world, 25, node);
     let before = world.stock(1, slot("wood"));
-    let site = free_tile_near(&world, villager);
+    let site = free_tile_near(&world, villager, 70);
     let house_unit = 70;
     let build_time = fx.units.unit(house_unit).expect("HOUS").train_time;
     assert_eq!(build_time, 25, "a house takes 25 seconds");
@@ -649,11 +653,12 @@ fn an_unreachable_site_is_refused_before_the_wood_is_spent() {
         .filter(|e| e.kind == EntityKind::Building)
         .count();
 
-    // (11, 9) is legal ground on the far side of the wall, and the villager cannot get there.
+    // (9, 9) is legal ground - the whole 2x2 footprint is grass - on the far side of the wall, and the villager cannot
+    // get there. It used to be (11, 9), which the house's footprint now shares with the enemy town centre's.
     match world.submit_checked(Command::Build {
         villager,
         unit: 70,
-        at: (11, 9),
+        at: (9, 9),
     }) {
         Err(SimError::NoPath { .. }) => {}
         other => panic!("expected NoPath, got {other:?}"),
@@ -870,8 +875,9 @@ fn a_content_pack_with_our_own_resources_loads_and_spends() {
     );
 
     // Build it, and let it finish.
-    // Two tiles diagonal from the town centre: grass, empty, and reachable from the wood.
-    let site = (4, 4);
+    // Two tiles diagonal from the town centre: grass, and its whole 2x2 footprint clear of the town centre's (a
+    // 2x2 site at (4, 4) now covers (5, 5), which is where the town centre stands).
+    let site = (3, 4);
     assert!(
         map.is_walkable(site.0, site.1),
         "the site must be open ground, terrain was {:?}",

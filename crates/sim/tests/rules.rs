@@ -6,7 +6,8 @@
 
 use std::path::PathBuf;
 
-use ruage_sim::{EntityKind, Runner, Scenario, World};
+use ruage_fixed::Fixed;
+use ruage_sim::{EntityId, EntityKind, Runner, Scenario, Task, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -214,4 +215,145 @@ resource = "food"
         vec![0],
         "a rule whose building already stands must not fire"
     );
+}
+
+/// Place one unit for player 1 at a tile. **Distinct ids**: three spawns that all name `max + 1` are one entity and two
+/// refusals - which is exactly how the first version of the army test "proved" `World::army` broken.
+fn spawn_unit(world: &mut World, unit: u32, tile: (i64, i64)) -> EntityId {
+    let scale = world.scale();
+    let id = EntityId(
+        world
+            .entities()
+            .iter()
+            .map(|entity| entity.id.0)
+            .max()
+            .unwrap_or(0)
+            + 1,
+    );
+    world
+        .submit_checked(ruage_sim::Command::Spawn {
+            id,
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(tile.0 * scale),
+                Fixed::from_raw(tile.1 * scale),
+            ),
+            speed: Fixed::ZERO,
+            hp: 40,
+            amount: 0,
+        })
+        .expect("a unit can be placed");
+    world.step().expect("stepping");
+    id
+}
+
+/// **An army is a count of soldiers, not of units.** A villager is not a soldier; a man-at-arms is, and he counts as
+/// his line's root, because content names the line and the dat swaps the record on upgrade.
+#[test]
+fn an_army_counts_soldiers_by_family_and_not_villagers() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let villager = world.role_unit("villager").expect("a villager role");
+    let militia = world.role_unit("militia").expect("a militia role");
+    let man_at_arms = world.role_unit("man_at_arms").expect("a man-at-arms role");
+    let before = world.army(1);
+    assert_eq!(before, 0, "the opening seeds villagers, not soldiers");
+    spawn_unit(&mut world, villager, (18, 18));
+    assert_eq!(world.army(1), before, "a fourth villager is not an army");
+    spawn_unit(&mut world, militia, (19, 18));
+    spawn_unit(&mut world, militia, (20, 18));
+    spawn_unit(&mut world, man_at_arms, (21, 18));
+    assert_eq!(
+        world.army(1),
+        3,
+        "two militia and a man-at-arms are three soldiers of one line"
+    );
+}
+
+/// **"Gather an army first, then attack"** (the owner, 2026-11-03): a rule waits on the soldier count, where
+/// `has_unit` fires for a single unit.
+#[test]
+fn an_army_rule_waits_for_an_army() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let scenario: Scenario = toml::from_str(
+        r#"
+schema = 2
+duration_seconds = 60.0
+
+[[rule]]
+player = 1
+cooldown_seconds = 2.0
+when = { army_at_least = 3 }
+do = "build"
+role = "house"
+"#,
+    )
+    .expect("a rule the format can read");
+    let before = houses(&world);
+    let mut runner = Runner::new(&scenario, 20).expect("a runner");
+    for _ in 0..120 {
+        runner.due(&mut world);
+        world.step().expect("stepping");
+    }
+    assert_eq!(runner.fired_times, vec![0], "no soldiers, so no army");
+    assert_eq!(houses(&world), before, "and nothing else happened either");
+
+    let militia = world.role_unit("militia").expect("a militia role");
+    for n in 0..3 {
+        spawn_unit(&mut world, militia, (20 + n, 22));
+    }
+    for _ in 0..120 {
+        runner.due(&mut world);
+        world.step().expect("stepping");
+    }
+    assert!(
+        runner.fired_times[0] >= 1,
+        "three soldiers are an army, so the rule fires"
+    );
+}
+
+/// **An attack is a body of soldiers, not the newest one.** The first shape ordered the latest unit of a role, so a
+/// mangonel fought alone and eleven soldiers stood at the barracks. Here every soldier of the family gets the order.
+#[test]
+fn an_attack_rule_sends_the_whole_army() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let militia = world.role_unit("militia").expect("a militia role");
+    let army: Vec<EntityId> = (0..3)
+        .map(|n| spawn_unit(&mut world, militia, (18 + n, 20)))
+        .collect();
+    let scenario: Scenario = toml::from_str(
+        r#"
+schema = 2
+duration_seconds = 60.0
+
+[[rule]]
+player = 1
+cooldown_seconds = 5.0
+when = { army_at_least = 3 }
+do = "attack"
+attacker = "militia"
+target = "enemy_town_center"
+"#,
+    )
+    .expect("a rule the format can read");
+    let mut runner = Runner::new(&scenario, 20).expect("a runner");
+    for _ in 0..40 {
+        runner.due(&mut world);
+        world.step().expect("stepping");
+    }
+    assert!(runner.fired_times[0] >= 1, "the rule fired");
+    for id in &army {
+        let task = world.entity(*id).map(|entity| entity.task);
+        assert!(
+            matches!(task, Some(Task::Attack { .. })),
+            "{id:?} was left behind: {task:?}"
+        );
+    }
 }

@@ -135,24 +135,25 @@ fn seeded_with(fx: &Fixture, economy: &ruage_data::Economy) -> World {
 }
 
 /// The first tile beside a villager that is free of entities: enough for a build order in a test.
-fn free_tile(world: &World, from: EntityId) -> (u16, u16) {
+/// A tile near this villager where `unit`'s **whole footprint** fits. Asking "is any entity's anchor here" handed back
+/// the town centre's own tile once buildings owned their ground, which is why the castle test was red at HEAD.
+fn free_tile(world: &World, from: EntityId, unit: u32) -> (u16, u16) {
     let position = world.position(from).expect("position");
     let scale = world.scale();
     let x = u16::try_from(position.0.raw() / scale).expect("in range");
     let y = u16::try_from(position.1.raw() / scale).expect("in range");
-    for radius in 1..8u16 {
+    for radius in 1..12u16 {
         for dy in 0..=radius {
             for dx in 0..=radius {
-                let candidate = (x + dx, y + dy);
-                let occupied = world.entities().iter().any(|entity| {
-                    entity.position
-                        == (
-                            ruage_fixed::Fixed::from_raw(i64::from(candidate.0) * scale),
-                            ruage_fixed::Fixed::from_raw(i64::from(candidate.1) * scale),
-                        )
-                });
-                if !occupied {
-                    return candidate;
+                for candidate in [
+                    (x + dx, y + dy),
+                    (x.wrapping_sub(dx), y + dy),
+                    (x + dx, y.wrapping_sub(dy)),
+                    (x.wrapping_sub(dx), y.wrapping_sub(dy)),
+                ] {
+                    if world.site_fits(1, unit, candidate) {
+                        return candidate;
+                    }
                 }
             }
         }
@@ -745,7 +746,7 @@ fn a_castle_cannot_be_built_before_the_age_that_enables_it() {
     // Enough for a castle (650 stone), so the refusal under test is availability and not the price.
     bank(&mut world, slot("food"), 400);
     bank(&mut world, slot("stone"), 700);
-    let site = free_tile(&world, villager);
+    let site = free_tile(&world, villager, CASTLE);
 
     let err = world
         .submit_checked(Command::Build {
@@ -784,7 +785,7 @@ fn a_unit_that_no_tech_gates_is_unaffected() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
-    let site = free_tile(&world, villager);
+    let site = free_tile(&world, villager, 70);
     bank(&mut world, slot("wood"), 100);
     world
         .submit_checked(Command::Build {
@@ -940,7 +941,7 @@ fn the_huns_cannot_build_a_house() {
     world.load_civs(&fx.civs).expect("the civ table");
     let villager = first_villager(&world);
     bank(&mut world, slot("wood"), 100);
-    let site = free_tile(&world, villager);
+    let site = free_tile(&world, villager, 70);
 
     let err = world
         .submit_checked(Command::Build {
@@ -1011,7 +1012,7 @@ fn two_players_can_be_different_civilisations() {
 
     // Building: the reverse pair on the house.
     let briton_villager = first_villager(&world);
-    let site = free_tile(&world, briton_villager);
+    let site = free_tile(&world, briton_villager, 70);
     world
         .submit_checked(Command::Build {
             villager: briton_villager,
@@ -1027,7 +1028,7 @@ fn two_players_can_be_different_civilisations() {
         .map(|entity| entity.id)
         .expect("a Hunnic villager");
     bank(&mut world, slot("wood"), 100);
-    let hun_site = free_tile(&world, hun_villager);
+    let hun_site = free_tile(&world, hun_villager, 70);
     let err = world
         .submit_checked(Command::Build {
             villager: hun_villager,

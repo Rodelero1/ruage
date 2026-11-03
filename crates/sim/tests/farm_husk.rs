@@ -58,13 +58,69 @@ fn farm(world: &mut World, at: (u16, u16), food: u32) -> EntityId {
     id
 }
 
-/// A farm with no food left is an expiring husk: it is still there, and a new farm may be built on its tile.
-///
-/// **Parked, and failing**: `is_expired_farm` returns false for a farm created by `Command::Spawn`, so either the role
-/// lookup through `[farm] unit` or the amount a spawned building carries is not what the predicate expects. The same
-/// family as the spawned node that is never removed - command-created entities are not quite map-created ones.
+/// The **placement search** asks `is_free_ground`, not `site_fits`: a spent farm has to read as free ground or the search
+/// never offers its tile, and the farm rule refuses with *"no free tile for a farm"* while nine husks lie in its own base
+/// (measured: 105 refusals in one acceptance run). A working farm still holds its ground.
 #[test]
-#[ignore = "known defect: is_expired_farm is false for a command-spawned farm (2026-10-30)"]
+fn a_spent_farm_is_free_ground() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    assert!(
+        world.is_free_ground(40, 40),
+        "nothing stands there to begin with"
+    );
+    farm(&mut world, (40, 40), 250);
+    assert!(
+        !world.is_free_ground(40, 40),
+        "a farm with food left holds its ground"
+    );
+    farm(&mut world, (44, 44), 0);
+    assert!(
+        world.is_free_ground(44, 44),
+        "a spent farm is a husk, and a husk is ground the next farm can use"
+    );
+}
+
+/// **A farm is a floor, so a farm beside a farm walls nobody in.** The lane rule exists so a base does not become walls -
+/// and a plot whose footprint is entirely walkable is not a wall. Without this exemption a spent farm *inside* a field
+/// cannot be rebuilt: the search finds the husk's tile, `is_free_ground` says yes, and `site_has_lane` says no, which is
+/// what the 105 *"no free tile for a farm"* refusals in an acceptance run were. A house next to a house is still refused.
+#[test]
+fn a_farm_beside_a_farm_leaves_a_lane() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let farm_unit = world.role_unit("farm").expect("a farm role");
+    let house_unit = world.role_unit("house").expect("a house role");
+    farm(&mut world, (40, 40), 250);
+    assert!(
+        world.site_has_lane(1, farm_unit, (43, 40)),
+        "a farm may stand beside a farm: the plot blocks nothing"
+    );
+    let house = next_id(&world);
+    let scale = world.scale();
+    world
+        .submit_checked(Command::Spawn {
+            id: house,
+            player: 1,
+            kind: EntityKind::Building,
+            unit: Some(house_unit),
+            position: (Fixed::from_raw(30 * scale), Fixed::from_raw(30 * scale)),
+            speed: Fixed::ZERO,
+            hp: 550,
+            amount: 0,
+        })
+        .expect("a house");
+    world.step().expect("one tick");
+    assert!(
+        !world.site_has_lane(1, house_unit, (32, 30)),
+        "two houses edge to edge are a wall, and the lane rule still says so"
+    );
+}
+
+/// A farm with no food left is an expiring husk: it is still there, and a new farm may be built on its tile.
+#[test]
 fn a_spent_farm_is_replaced_on_its_own_tile() {
     let Some(mut world) = fresh() else {
         return;

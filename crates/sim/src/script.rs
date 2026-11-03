@@ -114,6 +114,13 @@ pub struct When {
     /// A role the player must have at least one **unit** of: "send the mangonel" waits for the mangonel.
     #[serde(default)]
     pub has_unit: Option<String>,
+    /// How many **military** units the player must have, by `[metrics] military_roles`: "gather an army, then attack"
+    /// (the owner, 2026-11-03). A count, not `has_unit`, because one soldier is not an army; and `army_at_most` so a
+    /// training rule can stop at a size instead of spending the whole larder.
+    #[serde(default)]
+    pub army_at_least: Option<usize>,
+    #[serde(default)]
+    pub army_at_most: Option<usize>,
     /// Free population before the cap (`cap - population`). A house rule is "somewhere under three", not "no house".
     #[serde(default)]
     pub housing_at_most: Option<u32>,
@@ -336,9 +343,11 @@ impl Runner {
                 *count += 1;
             }
             match resolved {
-                Ok(command) => {
-                    if let Err(err) = world.submit_checked(command) {
-                        refusals.push((now as f64 / second, err.to_string()));
+                Ok(commands) => {
+                    for command in commands {
+                        if let Err(err) = world.submit_checked(command) {
+                            refusals.push((now as f64 / second, err.to_string()));
+                        }
                     }
                 }
                 Err(reason) => refusals.push((now as f64 / second, reason)),
@@ -823,10 +832,16 @@ impl World {
         // **A unit does not make ground occupied.** Terrain and what stands on it permanently do; a villager is a person
         // who is somewhere for a moment, and treating people as obstacles left a player unable to place a market beside
         // their own town centre - 177 refusals in a row - once villagers started standing there to deposit.
-        !self
-            .entities()
-            .iter()
-            .any(|entity| entity.position == position && entity.kind != EntityKind::Unit)
+        //
+        // **And a spent farm is not ground that stands on itself** (D77): its husk is a floor, and the next farm is built
+        // on it. This predicate used to say otherwise while `site_refusal` said the opposite, so the placement search
+        // never offered a husk's tile and the farm rule refused with *"no free tile for a farm"* 105 times in one
+        // acceptance run, with nine husks in its own base.
+        !self.entities().iter().any(|entity| {
+            entity.position == position
+                && entity.kind != EntityKind::Unit
+                && !self.is_expired_farm(entity.id)
+        })
     }
 }
 
@@ -835,6 +850,18 @@ fn when_holds(world: &World, rule: &Rule) -> bool {
     let when = &rule.when;
     let player = rule.player;
     let count = villagers_of(world, player).len();
+    if let Some(least) = when.army_at_least {
+        let army = world.army(player);
+        if army < least {
+            return false;
+        }
+    }
+    if let Some(most) = when.army_at_most {
+        let army = world.army(player);
+        if army > most {
+            return false;
+        }
+    }
     if let Some(least) = when.villagers_at_least
         && count < least
     {
@@ -981,15 +1008,17 @@ fn idle_villager(world: &World, player: u8) -> Option<EntityId> {
         })
 }
 
-/// Turn a rule's action into a command. The rules share the steps' resolvers, so a role means the same thing in both.
-fn resolve_rule(world: &World, rule: &Rule) -> Result<Command, String> {
+/// Turn a rule's action into the commands it orders. The rules share the steps' resolvers, so a role means the same
+/// thing in both. **A list, not one command:** an attack is a body of soldiers, and ordering only the newest one left an
+/// army standing at its barracks while a single mangonel fought (`an_attack_rule_sends_the_whole_army`).
+fn resolve_rule(world: &World, rule: &Rule) -> Result<Vec<Command>, String> {
     let player = rule.player;
     match &rule.action {
         RuleAction::Train { building, role } => {
             let at = finished_building(world, player, building)
                 .ok_or_else(|| format!("player {player} has no finished {building}"))?;
             let unit = role_of(world, role)?;
-            Ok(Command::Train { building: at, unit })
+            Ok(vec![Command::Train { building: at, unit }])
         }
         RuleAction::Research { building, tech } => {
             let at = finished_building(world, player, building)
@@ -997,7 +1026,7 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Command, String> {
             let tech = world
                 .tech_role(tech)
                 .ok_or_else(|| format!("the content pack has no tech role {tech:?}"))?;
-            Ok(Command::Research { building: at, tech })
+            Ok(vec![Command::Research { building: at, tech }])
         }
         RuleAction::Build { role, where_ } => {
             let worker = idle_villager(world, player)
@@ -1019,11 +1048,11 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Command, String> {
                 }
             };
             let at = at.ok_or_else(|| format!("no free tile for a {role}"))?;
-            Ok(Command::Build {
+            Ok(vec![Command::Build {
                 villager: worker,
                 unit,
                 at,
-            })
+            }])
         }
         RuleAction::Gather { resource, node } => {
             let worker = idle_villager(world, player)
@@ -1064,29 +1093,49 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Command, String> {
                     })?
                 }
             };
-            Ok(Command::Gather {
+            Ok(vec![Command::Gather {
                 villager: worker,
                 node: target,
-            })
+            }])
         }
         RuleAction::Attack { attacker, target } => {
             let attacker_unit = role_of(world, attacker)?;
-            let unit = world
+            // Family-matched: an upgrade is the same soldier. And **every** one of them, not the newest - the first
+            // shape ordered `max()` by id, which sent a single unit while the rest of the army stood where it spawned.
+            let army: Vec<EntityId> = world
                 .entities()
                 .iter()
                 .filter(|entity| {
                     entity.player == player
                         && entity.kind == EntityKind::Unit
-                        && entity.unit == Some(attacker_unit)
+                        && entity
+                            .unit
+                            .is_some_and(|unit| world.is_family(unit, attacker_unit))
                 })
                 .map(|entity| entity.id)
-                .max()
-                .ok_or_else(|| format!("player {player} has no unit {attacker}"))?;
-            let aim = choose_target(world, unit, player, target)?;
-            Ok(Command::Attack {
-                attacker: unit,
-                target: aim,
-            })
+                .collect();
+            if army.is_empty() {
+                return Err(format!("player {player} has no unit {attacker}"));
+            }
+            let mut commands = Vec::with_capacity(army.len());
+            let mut first_refusal: Option<String> = None;
+            for unit in army {
+                // A target is chosen per soldier because reachability is part of the choice, exactly as it is for a
+                // resource node: one soldier inside a wood cluster must not fail the whole order.
+                match choose_target(world, unit, player, target) {
+                    Ok(aim) => commands.push(Command::Attack {
+                        attacker: unit,
+                        target: aim,
+                    }),
+                    Err(reason) => {
+                        first_refusal.get_or_insert(reason);
+                    }
+                }
+            }
+            if commands.is_empty() {
+                return Err(first_refusal.unwrap_or_else(|| format!("no enemy matches {target:?}")));
+            }
+            Ok(commands)
         }
     }
 }

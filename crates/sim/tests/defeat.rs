@@ -289,23 +289,38 @@ fn build_site_on(world: &mut World, player: u8, role: &str) -> EntityId {
             )
         })
         .expect("the villager");
+    // A building owns its whole footprint - a barracks is 3x3 - so the four tiles beside the villager are not enough: the
+    // site has to be somewhere its footprint fits, which is what `site_fits` answers. This walked only the orthogonal
+    // neighbours and was left red by the footprint slice (it skips itself when the generated data is absent).
     let mut placed = false;
-    for (dx, dy) in [(1i64, 0i64), (0, 1), (-1, 0), (0, -1)] {
-        let (tx, ty) = (x + dx, y + dy);
-        if tx < 0 || ty < 0 || tx > i64::from(u16::MAX) || ty > i64::from(u16::MAX) {
-            continue;
-        }
-        let order = world.submit_checked(Command::Build {
-            villager,
-            unit,
-            at: (tx as u16, ty as u16),
-        });
-        if order.is_ok() {
-            placed = true;
-            break;
+    'ring: for radius in 1..=6i64 {
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx.abs() != radius && dy.abs() != radius {
+                    continue;
+                }
+                let (tx, ty) = (x + dx, y + dy);
+                if tx < 0 || ty < 0 || tx > i64::from(u16::MAX) || ty > i64::from(u16::MAX) {
+                    continue;
+                }
+                let at = (tx as u16, ty as u16);
+                if !world.site_fits(player, unit, at) {
+                    continue;
+                }
+                if world
+                    .submit_checked(Command::Build { villager, unit, at })
+                    .is_ok()
+                {
+                    placed = true;
+                    break 'ring;
+                }
+            }
         }
     }
-    assert!(placed, "no tile beside the villager would take a {role}");
+    assert!(
+        placed,
+        "no free ground within six tiles would take a {role}"
+    );
     world.step().expect("step");
     world
         .entities()

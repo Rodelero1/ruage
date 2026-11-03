@@ -2594,3 +2594,23 @@ the binary's membership test reads as and is operationally the same statement.
 
 The straight-line shortcut (no non-target collision on the line to the goal) is part of the same original block and is
 recorded as the second slice, not the first: it changes nothing until collision exists at all.
+
+## D99 - An army, and the ground a farm leaves behind (this slice)
+
+Four rulings, each forced by a measurement rather than chosen:
+
+1. **An army is a count, and an attack is a body.** A rule may wait on `army_at_least` / `army_at_most`, and an attack
+   rule orders **every** unit of the family with a target chosen per soldier. The old shape ordered the newest unit only,
+   which is why the owner saw one mangonel fighting and called it "attack per unit". The number the base personality uses
+   (three to send, twelve to stop) is ours, not the game's - the AI's own `.per` files are not in this install - and is
+   recorded as a threshold that a measurement can move.
+2. **A spent farm is a floor, in all three places that ask.** Its `amount` is what it holds (never its capacity, which is
+   why a spawned husk used to come back full), it is free ground for the next farm, and it is not a wall for the lane rule
+   - a farm's `[footprint.farm]` is entirely walkable, so it cannot wall anybody in. The risk this accepts is a packed
+   field; the first worker trapped by one makes this rule the suspect.
+3. **A building a player cannot see does not block their ground, and the walk layer does not get a vote.** D58 said so and
+   the code did not: the footprint was skipped and then the same tiles were refused because `insert` had blocked them.
+   Terrain and resource nodes still block a blind site; an unseen building's tiles do not.
+4. **A refusal the engine gives itself is state, whoever issues it** - a queued site that cannot start included - **and it
+   names its actor.** `entity_of_last_command` returned `EntityId(0)` for every command, which made every refusal
+   undiagnosable.

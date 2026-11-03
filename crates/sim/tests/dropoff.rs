@@ -169,8 +169,10 @@ fn a_touching_tile_is_enough_to_bank() {
 
     // A mill at (30,30), a bush diagonally beside it at (29,29), a villager at (28,28): the load has to be banked without
     // anybody ever standing on the mill's own tile.
-    // (21,16) is forest: a drop site whose own tile can never be stood on.
-    let mill = spawn_building(&mut world, mill_role, (21, 16));
+    // A forest tile at the **edge** of the block: (20, 14) cannot be stood on, and its western neighbours are grass, so
+    // the load can be handed in from beside it. (21, 16) - the first choice - is two tiles deep in the forest, where no
+    // villager can stand at all, so nothing could ever be banked there.
+    let mill = spawn_building(&mut world, mill_role, (20, 14));
     let bush = next_id(&world);
     world
         .submit_checked(Command::Spawn {

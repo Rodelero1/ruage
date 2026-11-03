@@ -13,6 +13,10 @@
 #   * a barracks (the second Dark Age building the Feudal Age wants - D65);
 #   * Feudal at 22 villagers with mill and barracks up (the AI says 28; 22 is our own earlier number, and it is the one
 #     threshold here that is a choice rather than a reading);
+#   * a feudal barracks trains the militia line to **twelve soldiers** (`army_at_most`), because one soldier is not an
+#     army and a barracks alone does not win a match;
+#   * at **eight** soldiers the army attacks the enemy town centre as a body (`army_at_least`) - the owner's item 8,
+#     "gather an army first, then attack";
 #   * market + blacksmith in Feudal, Castle once both stand;
 #   * a siege workshop, a mangonel, and the mangonel at the enemy town centre.
 
@@ -85,6 +89,32 @@ when = { villagers_at_least = 22, has_building = ["mill", "barracks"], no_tech =
 do = "research"
 building = "town_center"
 tech = "feudal_age"
+
+# --- the army: gather it first, then send it ---------------------------------------------------------------
+#
+# The owner's item 8, in two rules. **One soldier is not an army**: the old shape waited on `has_unit` (a single
+# mangonel) and re-issued the same order every twelve seconds, so eleven soldiers could stand at the barracks while one
+# unit fought. `army_at_most` caps the line so it stops at a size instead of spending the larder, and `army_at_least`
+# waits until the body exists before it is sent.
+#
+# Militia at Feudal, not in the Dark Age: the 60 food a soldier costs is the food the 500-food age-up needs, and a
+# Dark Age army arrives before there is anything to defend. The upgrade line is the same family, so a man-at-arms
+# counts toward the twelve and answers to the same order.
+[[rule]]
+player = 1
+cooldown_seconds = 6.0
+when = { age = "feudal_age", has_building = ["barracks"], army_at_most = 11 }
+do = "train"
+building = "barracks"
+role = "militia"
+
+[[rule]]
+player = 1
+cooldown_seconds = 12.0
+when = { army_at_least = 3 }
+do = "attack"
+attacker = "militia"
+target = "enemy_town_center"
 
 # --- Feudal: the buildings the Castle Age needs ------------------------------------------------------------------
 

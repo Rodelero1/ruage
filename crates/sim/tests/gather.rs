@@ -567,7 +567,26 @@ fn finish_building(world: &mut World, site: EntityId) {
 /// Build a farm for player 1 next to the town centre and return its id once it is up.
 fn a_finished_farm(world: &mut World) -> EntityId {
     let villager = first_villager(world);
-    let site = (4, 4);
+    // A farm is 3x3, so (4, 4) is inside the town centre's footprint now; ask the engine where it fits.
+    let mut site = None;
+    'ring: for radius in 2..12u16 {
+        for dy in 0..=radius {
+            for dx in 0..=radius {
+                for candidate in [
+                    (16u16.saturating_add(dx), 16u16.saturating_add(dy)),
+                    (16u16.saturating_sub(dx), 16u16.saturating_add(dy)),
+                    (16u16.saturating_add(dx), 16u16.saturating_sub(dy)),
+                    (16u16.saturating_sub(dx), 16u16.saturating_sub(dy)),
+                ] {
+                    if world.site_fits(1, FARM, candidate) {
+                        site = Some(candidate);
+                        break 'ring;
+                    }
+                }
+            }
+        }
+    }
+    let site = site.expect("free ground for a farm near the town centre");
     world
         .submit_checked(Command::Build {
             villager,
@@ -725,8 +744,32 @@ fn seeded_researchable(fx: &Fixture, food_per_farm: u32) -> World {
     world
 }
 
-/// A mill, which is where the pack puts the farm upgrades (tech location 68).
+/// A mill, which is where the pack puts the farm upgrades (tech location 68). `at` is asked for, and the nearest legal
+/// ground is used instead when that tile is taken: a mill is 2x2 now, and a fixed (6, 6) is inside the town centre's
+/// own footprint.
 fn a_mill(world: &mut World, at: (u16, u16)) -> EntityId {
+    let mut at = at;
+    if !world.site_fits(1, MILL, at) {
+        let mut found = None;
+        'ring: for radius in 1..12u16 {
+            for dy in 0..=radius {
+                for dx in 0..=radius {
+                    for candidate in [
+                        (at.0.saturating_add(dx), at.1.saturating_add(dy)),
+                        (at.0.saturating_sub(dx), at.1.saturating_add(dy)),
+                        (at.0.saturating_add(dx), at.1.saturating_sub(dy)),
+                        (at.0.saturating_sub(dx), at.1.saturating_sub(dy)),
+                    ] {
+                        if world.site_fits(1, MILL, candidate) {
+                            found = Some(candidate);
+                            break 'ring;
+                        }
+                    }
+                }
+            }
+        }
+        at = found.expect("free ground for a mill near the one asked for");
+    }
     let villager = first_villager(world);
     world
         .submit_checked(Command::Build {

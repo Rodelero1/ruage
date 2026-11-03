@@ -57,10 +57,22 @@ fn seeded(fx: &Fixture) -> World {
 
 /// Two sites with one builder: the `Build` order is the authority on which tiles are free, so the grid
 /// is walked until it accepts two. Both must be accepted - a refused second one would leave no queue.
+///
+/// **And they must not overlap**, because both orders are checked against a world in which neither has landed yet: a
+/// house owns its whole footprint, so a second anchor one tile from the first is accepted and can never start. That is a
+/// real shape - the queue check runs before the first site exists - and the engine reports the failure rather than
+/// swallowing it (`a_queued_site_that_cannot_start_is_reported`).
 fn place_twice(world: &mut World, builder: ruage_sim::EntityId, unit: u32) {
+    let mut first: Option<(u16, u16)> = None;
     let mut placed = 0;
     for y in 4..120u16 {
         for x in 4..120u16 {
+            if let Some((fx, fy)) = first
+                && x < fx.saturating_add(3)
+                && y < fy.saturating_add(3)
+            {
+                continue;
+            }
             if world
                 .submit_checked(Command::Build {
                     villager: builder,
@@ -70,6 +82,9 @@ fn place_twice(world: &mut World, builder: ruage_sim::EntityId, unit: u32) {
                 .is_ok()
             {
                 placed += 1;
+                if placed == 1 {
+                    first = Some((x, y));
+                }
                 if placed == 2 {
                     return;
                 }
@@ -205,5 +220,132 @@ fn a_queued_site_is_paid_for_when_it_starts() {
     assert!(
         when_second_starts < after_ordering,
         "the second site is paid for on the tick it starts"
+    );
+}
+
+/// **A second site that overlaps the first is refused when it lands, and the refusal names the builder.** Two orders
+/// given in one tick are both validated against a world in which neither site exists yet, so the second passes
+/// `submit_checked` and fails at apply time; that is why `place_twice` keeps the two anchors apart. The refusal used to
+/// read `entity 0` for every command, because the actor was a stub - a refusal that cannot name its actor cannot be
+/// diagnosed.
+#[test]
+fn a_second_site_that_overlaps_the_first_names_its_builder() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let house = world.role_unit("house").expect("house");
+    let builder = a_villager(&world);
+    for at in [(4u16, 4u16), (5, 5)] {
+        world
+            .submit_checked(Command::Build {
+                villager: builder,
+                unit: house,
+                at,
+            })
+            .unwrap_or_else(|err| panic!("{at:?} refused before it was even queued: {err:?}"));
+    }
+    world
+        .step()
+        .expect("one tick: the first site lands, the second is refused");
+    match world.last_refusal() {
+        Some((id, why, tick)) => {
+            println!("refused for {id:?} at tick {tick}: {why}");
+            assert_eq!(
+                id, builder,
+                "the refusal names the villager whose order could not start"
+            );
+            assert!(
+                matches!(why, ruage_sim::SimError::SiteOccupied { .. }),
+                "and it says the ground is taken: {why}"
+            );
+        }
+        None => panic!("the second site's refusal must be in state, not swallowed"),
+    }
+}
+
+/// **A queued site whose ground is taken before it starts leaves a refusal.** The queue pops the next site on the tick the
+/// last one finishes, and `start_build` can fail there - somebody else built on the ground, a tree grew back, the villager
+/// was pushed out of reach. The first version wrote `let _ = self.start_build(...)` and the queued order vanished with no
+/// record; it now goes into `last_refusal` like any self-issued order.
+#[test]
+fn a_queued_site_whose_ground_is_taken_is_reported() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let house = world.role_unit("house").expect("house");
+    let builder = a_villager(&world);
+    // Two legal sites, far enough apart that neither footprint touches the other.
+    let mut first: Option<(u16, u16)> = None;
+    let mut second: Option<(u16, u16)> = None;
+    'search: for y in 4..120u16 {
+        for x in 4..120u16 {
+            if !world.site_fits(1, house, (x, y)) {
+                continue;
+            }
+            match first {
+                None => first = Some((x, y)),
+                Some((fx, fy)) => {
+                    if x >= fx.saturating_add(3) || y >= fy.saturating_add(3) {
+                        second = Some((x, y));
+                        break 'search;
+                    }
+                }
+            }
+        }
+    }
+    let (a, b) = (first.expect("a site"), second.expect("a second site"));
+    for at in [a, b] {
+        world
+            .submit_checked(Command::Build {
+                villager: builder,
+                unit: house,
+                at,
+            })
+            .expect("both sites are legal when they are ordered");
+    }
+    world.step().expect("the first site lands");
+    // Take the second site's ground before the first is finished, with one of our own buildings so it is certainly seen.
+    world.step().expect("the first build starts");
+    let blocker = ruage_sim::EntityId(
+        world
+            .entities()
+            .iter()
+            .map(|entity| entity.id.0)
+            .max()
+            .unwrap_or(0)
+            + 1,
+    );
+    let scale = world.scale();
+    world
+        .submit_checked(Command::Spawn {
+            id: blocker,
+            player: 1,
+            kind: EntityKind::Building,
+            unit: Some(house),
+            position: (
+                ruage_fixed::Fixed::from_raw(i64::from(b.0) * scale),
+                ruage_fixed::Fixed::from_raw(i64::from(b.1) * scale),
+            ),
+            speed: ruage_fixed::Fixed::ZERO,
+            hp: 550,
+            amount: 0,
+        })
+        .expect("the blocker is placed");
+    let mut reported = false;
+    for _ in 0..2_000 {
+        world.step().expect("stepping");
+        if let Some((id, why, _)) = world.last_refusal()
+            && id == builder
+        {
+            println!("the queued site was refused: {why}");
+            reported = true;
+            break;
+        }
+    }
+    assert!(
+        reported,
+        "a queued site that cannot start must leave a refusal naming its builder"
     );
 }

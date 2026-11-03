@@ -113,21 +113,29 @@ fn villagers(world: &World) -> usize {
         .count()
 }
 
-fn a_free_tile(world: &World) -> (u16, u16) {
+/// A tile near the town centre where `unit`'s **whole footprint** fits: a house is 2x2 and a barracks 3x3, so asking
+/// `is_free_ground` of the anchor alone offered tiles the site check then refused, and the unchecked `submit` below turned
+/// that into "the house site exists" failing with no reason. Four population tests were red for exactly this.
+fn a_free_tile(world: &World, unit: u32) -> (u16, u16) {
     let scale = world.scale();
     let centre = world.entity(town_center(world)).expect("tc");
     let origin = (
         u16::try_from(centre.position.0.raw() / scale).unwrap(),
         u16::try_from(centre.position.1.raw() / scale).unwrap(),
     );
-    for radius in 2..8u16 {
-        for (x, y) in [
-            (origin.0 + radius, origin.1),
-            (origin.0, origin.1 + radius),
-            (origin.0 + radius, origin.1 + radius),
-        ] {
-            if world.is_free_ground(x, y) {
-                return (x, y);
+    for radius in 2..12u16 {
+        for dy in 0..=radius {
+            for dx in 0..=radius {
+                for candidate in [
+                    (origin.0 + dx, origin.1 + dy),
+                    (origin.0.wrapping_sub(dx), origin.1 + dy),
+                    (origin.0 + dx, origin.1.wrapping_sub(dy)),
+                    (origin.0.wrapping_sub(dx), origin.1.wrapping_sub(dy)),
+                ] {
+                    if world.site_fits(1, unit, candidate) {
+                        return candidate;
+                    }
+                }
             }
         }
     }
@@ -136,7 +144,7 @@ fn a_free_tile(world: &World) -> (u16, u16) {
 
 fn a_house_site(world: &mut World) -> EntityId {
     let villager = first_villager(world);
-    let at = a_free_tile(world);
+    let at = a_free_tile(world, HOUSE);
     world.submit(Command::Build {
         villager,
         unit: HOUSE,
@@ -459,7 +467,7 @@ fn arrivals(fx: &Fixture, civ: &str, barracks: bool) -> usize {
     let mut world = seeded_with(fx, &economy, true);
     if barracks {
         let villager = first_villager(&world);
-        let at = a_free_tile(&world);
+        let at = a_free_tile(&world, BARRACKS);
         world.submit(Command::Build {
             villager,
             unit: BARRACKS,

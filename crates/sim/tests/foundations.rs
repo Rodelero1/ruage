@@ -188,25 +188,28 @@ fn my_own_foundation_is_in_the_way() {
     let second = villager(&mut world, 1, (20, 16));
     let house = house(&world);
 
+    // Outside the town centre's own 4x4 footprint: (19, 16) is its last column, and a site there is refused before a
+    // foundation exists at all - the first version of this test used it and went red when buildings took their ground.
+    // (18, 20) is the nearest grass south of the footprint; (20, 16) is forest.
     world
         .submit_checked(Command::Build {
             villager: first,
             unit: house,
-            at: (19, 16),
+            at: (18, 20),
         })
         .expect("the first foundation");
     assert!(
-        wait_for_site(&mut world, 1, (19, 16), 200).is_some(),
+        wait_for_site(&mut world, 1, (18, 20), 200).is_some(),
         "the first foundation never appeared"
     );
 
     let refused = world.submit_checked(Command::Build {
         villager: second,
         unit: house,
-        at: (19, 16),
+        at: (18, 20),
     });
     assert!(
-        matches!(refused, Err(SimError::SiteOccupied { tile }) if tile == (19, 16)),
+        matches!(refused, Err(SimError::SiteOccupied { tile }) if tile == (18, 20)),
         "a player stacked two foundations on one tile: {refused:?}"
     );
 }
@@ -375,24 +378,24 @@ fn a_foundation_i_can_see_blocks_me() {
         .submit_checked(Command::Build {
             villager: theirs,
             unit: house,
-            at: (19, 16),
+            at: (20, 19),
         })
         .expect("their foundation");
-    wait_for_site(&mut world, 2, (19, 16), 200).expect("their foundation");
+    wait_for_site(&mut world, 2, (20, 19), 200).expect("their foundation");
 
-    let mine = villager(&mut world, 1, (20, 16));
+    let mine = villager(&mut world, 1, (22, 19));
     assert_eq!(
-        world.vision(1, (19, 16)),
+        world.vision(1, (20, 19)),
         TileVision::Visible,
         "the test's own premise is wrong: player 1 cannot see the tile"
     );
     let refused = world.submit_checked(Command::Build {
         villager: mine,
         unit: house,
-        at: (19, 16),
+        at: (20, 19),
     });
     assert!(
-        matches!(refused, Err(SimError::SiteOccupied { tile }) if tile == (19, 16)),
+        matches!(refused, Err(SimError::SiteOccupied { tile }) if tile == (20, 19)),
         "a foundation player 1 can see did not block the order: {refused:?}"
     );
 }
