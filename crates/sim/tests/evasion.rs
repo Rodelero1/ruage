@@ -283,3 +283,56 @@ fn a_collision_with_the_target_is_arrival_not_an_obstacle() {
         "and the attack lands: the walk closed to its own range"
     );
 }
+
+/// An order against a **blocked target tile** ends the route where the order can be satisfied (E1b). A building's own
+/// tile is blocked, so a route planned *to* it stops wherever collision first refuses - measured in E1a as twelve
+/// attackers standing 1-4 tiles off with `cooldown_ticks: 0`, never striking. The proof is the damage: the walk closed.
+#[test]
+fn an_arms_route_ends_where_it_can_strike() {
+    let Some(mut world) = fresh() else { return };
+    let scale = world.scale();
+    // The seeded enemy town centre: the map gives one per player, and a building's tile is blocked ground.
+    let Some((centre, home)) = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 2 && entity.kind == EntityKind::Building)
+        .map(|entity| (entity.id, entity.position))
+    else {
+        return;
+    };
+    let (tx, ty) = (home.0.raw() / scale, home.1.raw() / scale);
+    // Four tiles out, on open ground beside the base.
+    let mut spot = None;
+    for radius in 3..=6i64 {
+        for (dx, dy) in [(0, radius), (radius, 0), (-radius, 0), (0, -radius)] {
+            let (Ok(x), Ok(y)) = (u16::try_from(tx + dx), u16::try_from(ty + dy)) else {
+                continue;
+            };
+            if world.is_free_ground(x, y) {
+                spot = Some((x, y));
+                break;
+            }
+        }
+        if spot.is_some() {
+            break;
+        }
+    }
+    let Some((x, y)) = spot else { return };
+    let attacker = next_id(&world);
+    spawn_villager(&mut world, attacker, x, y);
+    world.step().expect("the spawn lands");
+    let before = world.entity(centre).expect("the building").hp;
+
+    world.submit(Command::Attack {
+        attacker,
+        target: centre,
+    });
+    for _ in 0..1_500 {
+        world.step().expect("step");
+    }
+    let now = world.entity(centre).expect("the building").hp;
+    assert!(
+        now < before,
+        "the attacker never struck: the route ended short of its reach"
+    );
+}

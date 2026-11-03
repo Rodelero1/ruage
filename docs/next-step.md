@@ -1,6 +1,14 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, latest: S1 is the work in hand - the original's straight-line shortcut.** `doIntelligentMovementUpdate`
+> **2026-11-03, latest: E1b, in two steps. First the adjacency-ring arrival** - an order against a *blocked* target tile
+> (a building, a node) must end the route on a tile from which the order can actually be satisfied, or a melee army
+> stops 1-4 tiles off and never strikes (measured in E1a: twelve attackers at 1,066 of 2,400 hp, all alive,
+> `cooldown_ticks: 0`). That is what un-parks `garrison::a_damaged_building_ejects_its_garrison` and may well be the
+> throughput lever the acceptance match needs, since a villager ordered at a node has the same shape. **Then the radius
+> predicate** (E1b proper): collision by overlapping `radius[0]` circles on the candidate position, with a tile->bodies
+> index for the 3x3 query. Baseline: acceptance `players=2`, hash `c4e63f8ff29c8b0a`, 12.66 s at 36,000 ticks.
+>
+> Superseded: **S1 is the work in hand - the original's straight-line shortcut.** `doIntelligentMovementUpdate`
 > tries a straight line to the goal before any path (move_obj.cpp 4,079-4,245): "no non-target collisions there, so we
 > can do the straight line path", else "we can't do the straight line path" and the route is planned. Touch points:
 > `path::line_clear` (a supercover line over tiles, excluding the **goal's own tile**, since a node or a body may stand

@@ -2796,7 +2796,33 @@ impl World {
         // refuse every shot a town centre wants to take. The test is the kind, not the speed - a unit
         // with no speed still gets a route, which is what a stationary test fixture relies on.
         if source.kind != EntityKind::Building {
-            let route = self.plan_path(position, victim)?;
+            // **End the route where the blow can land** (E1b). A building's own tile is blocked and a node's tile holds
+            // the thing being worked, so a route planned *to* the target ends wherever collision first refuses - and a
+            // crowd of attackers queues behind the first arrival instead of spreading over the target's edge.
+            let (ddx, ddy) = (
+                victim.0.raw() - position.0.raw(),
+                victim.1.raw() - position.1.raw(),
+            );
+            let squared = ddx * ddx + ddy * ddy;
+            let here = self.tile_of(position);
+            let there = self.tile_of(victim);
+            let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
+            let in_reach = if range.raw() > 0 {
+                squared <= range.raw() * range.raw()
+            } else {
+                adjacent
+            };
+            let stand = if in_reach {
+                None
+            } else {
+                self.stand_near(attacker, position, victim, min_range, range)
+            };
+            let route = match stand {
+                Some(stand) => self.plan_path(position, stand)?,
+                None if in_reach => Vec::new(),
+                // Nothing better than the target itself: the old behaviour, and the collision rule will still stop it.
+                None => self.plan_path(position, victim)?,
+            };
             self.paths.insert(
                 attacker,
                 Route {
@@ -5761,6 +5787,86 @@ impl World {
     /// reachable from `from`, in a fixed scan order, so the choice is a function of the map rather
     /// than of iteration order. `None` when there is none, and the caller keeps its old behaviour of
     /// walking at the building itself.
+    /// A tile from which a blow on `target` can land, chosen **for this unit**: free ground, reachable from `from`,
+    /// within `range` (adjacency when the range is melee) and outside `min_range`, in ring order around the target and
+    /// skipping any tile another unit is already walking to - so a dozen attackers at one building spread over its edge
+    /// instead of queueing behind whoever gets there first (E1b).
+    ///
+    /// This is the answer to "the route ends on a blocked tile": a building's own tile is not standable, and a route
+    /// planned *to* it ends wherever collision first refuses, which measured as twelve attackers standing 1-4 tiles off
+    /// with `cooldown_ticks: 0`, never striking.
+    fn stand_near(
+        &self,
+        unit: EntityId,
+        from: (Fixed, Fixed),
+        target: (Fixed, Fixed),
+        min_range: Fixed,
+        range: Fixed,
+    ) -> Option<(Fixed, Fixed)> {
+        let scale = self.scale;
+        let (tx, ty) = self.tile_of_raw(target);
+        // Melee reaches the next tile; anything with reach may stand inside it, so the ring is the reach in tiles plus
+        // one to cover the tile the target itself occupies.
+        let tiles = if range.raw() > 0 {
+            (range.raw() / scale).max(1) + 1
+        } else {
+            1
+        };
+        let mut candidates: Vec<(i64, (u16, u16))> = Vec::new();
+        for radius in 1..=tiles {
+            for dy in -radius..=radius {
+                for dx in -radius..=radius {
+                    if dx.abs() != radius && dy.abs() != radius {
+                        continue;
+                    }
+                    let (Ok(x), Ok(y)) = (u16::try_from(tx + dx), u16::try_from(ty + dy)) else {
+                        continue;
+                    };
+                    if !self.is_free_ground(x, y) {
+                        continue;
+                    }
+                    // A tile another unit is already heading for is that unit's: a crowd takes the edge, not one tile.
+                    if self.entities.iter().any(|other| {
+                        other.id != unit
+                            && matches!(self.goal_of(other), Some((tile, _)) if tile == (x, y))
+                    }) {
+                        continue;
+                    }
+                    let position = self.tile((x, y));
+                    let (ddx, ddy) = (
+                        position.0.raw() - target.0.raw(),
+                        position.1.raw() - target.1.raw(),
+                    );
+                    let squared = ddx * ddx + ddy * ddy;
+                    let legal = if range.raw() > 0 {
+                        squared <= range.raw() * range.raw()
+                            && (min_range.raw() <= 0
+                                || squared >= min_range.raw() * min_range.raw())
+                    } else {
+                        true
+                    };
+                    if !legal {
+                        continue;
+                    }
+                    // **Nearest to this unit, then tile order.** Ring order alone hands every attacker the same tile
+                    // when their orders land on one tick - none has a goal yet, so nothing looks claimed - and the crowd
+                    // queues behind the first arrival exactly as before. Distance from where the unit stands spreads
+                    // them over the edge it approached from, and the tile order keeps two runs identical.
+                    let (fdx, fdy) = (
+                        position.0.raw() - from.0.raw(),
+                        position.1.raw() - from.1.raw(),
+                    );
+                    candidates.push((fdx * fdx + fdy * fdy, (x, y)));
+                }
+            }
+        }
+        candidates.sort_by_key(|(distance, tile)| (*distance, *tile));
+        candidates.into_iter().find_map(|(_, tile)| {
+            let position = self.tile(tile);
+            self.plan_path(from, position).ok().map(|_| position)
+        })
+    }
+
     fn work_position(
         &self,
         from: (Fixed, Fixed),

@@ -357,17 +357,16 @@ fn ring_of_free_tiles(world: &World, centre: (i64, i64), want: usize) -> Vec<(i6
     spots
 }
 
-/// **Parked by D98a, not broken by it.** With units no longer sharing a tile, twelve melee attackers cannot all reach a
-/// 4x4 town centre: measured on this fixture, 12 attackers standing on distinct free tiles around the building, all
-/// alive at 500 hp, end 1 to 4 tiles from its centre with `cooldown_ticks: 0` - out of melee range, because their route
-/// ends on the building's own (blocked) tile and collision stops them short of the adjacency ring. Damage therefore
-/// reaches 1,066 of 2,400 hp where the rule wants 480.
+/// **Parked, and the reason has changed once already.** With units no longer sharing a tile, twelve melee attackers
+/// cannot all reach a 4x4 town centre. E1b's `stand_near` now ends each attacker's route on a tile it can strike from
+/// (measured: 5 legal tiles around this town centre in its built-up base, for 12 attackers), which is the right rule and
+/// is proved by `evasion::an_arms_route_ends_where_it_can_strike` - but five tiles cannot hold twelve bodies, so the
+/// damage total is unchanged at 1,066 of 2,400 hp where this fixture wants 480.
 ///
-/// What is missing is not the ejection rule (untouched) but a **route that ends on a tile from which the order can be
-/// satisfied** - the army's approach needs the "stop at the ring where the attack is legal" rule, which is E1b's
-/// distance-based arrival, not E1a's tile collision. Un-ignore it when that lands.
+/// The fixture, not the rule, is the blocker: it needs a target with an open perimeter or attackers that strike at
+/// range. Pinned here rather than deleted because the *ejection* rule it tests is untouched and still worth a test.
 #[test]
-#[ignore = "parked by D98a: melee attackers cannot close on a building's blocked goal tile; needs the adjacency-ring arrival (E1b)"]
+#[ignore = "staging: only 5 standable tiles around this town centre for 12 melee attackers; needs an open-perimeter target or ranged attackers"]
 fn a_damaged_building_ejects_its_garrison() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
