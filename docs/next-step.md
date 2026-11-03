@@ -12,7 +12,7 @@
 > |---|---|---|
 > | A5/A6 | the gate stops lying; the 14 red tests | **landed** - `docs/reviews/2026-11-03-the-suite-that-was-green.md` |
 > | A3 | the HUD that exists gets drawn | **landed** - `docs/reviews/2026-11-03-the-hud-is-drawn.md` |
-> | P1 | feedback: refusals on screen, a menu on Escape | after A3 |
+> | P1 | feedback: refusals on screen, a menu on Escape | **landed** - `docs/reviews/2026-11-03-the-hud-learns-to-speak.md` |
 > | P2 | band select, double-click, minimap click | after P1 |
 > | P4 | the command card (moddable) | last, and the largest |
 >

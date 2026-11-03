@@ -167,6 +167,10 @@ pub struct Hud {
     pub population_cap: u32,
     pub selected: Vec<SelectedRow>,
     pub outcome: Option<ruage_sim::MatchOutcome>,
+    /// **Why the last order was refused**, in the engine's own words, or `None` when the last order was taken. The
+    /// window sets it from `submit_checked`'s error; a HUD that stays silent about a refusal makes an ignored order look
+    /// like a bug in the game rather than a bug in the order.
+    pub notice: Option<String>,
 }
 
 impl Hud {
@@ -203,6 +207,7 @@ impl Hud {
             population_cap: snapshot.population_cap,
             selected,
             outcome: snapshot.outcome,
+            notice: None,
         }
     }
 }
@@ -263,7 +268,20 @@ pub fn minimap(snapshot: &Snapshot, pixels_per_tile: u32) -> Frame {
 
 /// The height of the HUD bar: the game is drawn below it, never under it.
 pub fn hud_bar_height() -> u32 {
-    26
+    30
+}
+
+/// Where a stock column's **name** starts: under its swatch, one pixel a dot, because a colour is not a name to somebody
+/// who has not played this pack. The bar is tall enough for the numbers (three pixels a dot) above it.
+#[must_use]
+pub fn stock_name_origin(column: usize) -> (i32, i32) {
+    (hud_swatch_x(column) as i32, hud_bar_height() as i32 - 7)
+}
+
+/// Where a refusal is written: the top line of the bottom panel, where the eye goes after an order.
+#[must_use]
+pub fn notice_origin(frame_height: u32) -> (i32, i32) {
+    (8, frame_height as i32 - hud_panel_height() as i32 + 3)
 }
 
 /// Where a stock column's swatch starts. **The pack's order is the display order**, so a pack with three resources
@@ -330,14 +348,83 @@ pub fn speed_selector(frame: &mut Frame, speed: crate::Speed) {
 /// The bottom panel's height: a selection list on the left, and room above the minimap on the right.
 #[must_use]
 pub fn hud_panel_height() -> u32 {
-    68
+    76
 }
 
 /// The left edge of a selection row's health bar, and its top. Row 0 is nearest the panel's top edge.
 #[must_use]
 pub fn selection_row_origin(row: usize, frame_height: u32) -> (i32, i32) {
     let top = frame_height as i32 - hud_panel_height() as i32;
-    (8, top + 6 + row as i32 * ROW_HEIGHT)
+    (8, top + 12 + row as i32 * ROW_HEIGHT)
+}
+
+/// The menu's three rows - resume, restart, quit - as `(x, y, w, h)` rectangles, centred in the play area.
+///
+/// A menu needs words, and the font only grew letters after the HUD needed names; this is the second customer for them.
+#[must_use]
+pub fn menu_rows(frame_width: u32, frame_height: u32) -> [(i32, i32, u32, u32); 3] {
+    const LABELS: [&str; 3] = ["RESUME", "RESTART", "QUIT"];
+    let widest = LABELS
+        .iter()
+        .map(|label| crate::font::text_width(label, 2))
+        .max()
+        .unwrap_or(0);
+    let width = (widest as u32).saturating_add(32);
+    let height = 24;
+    let gap = 8;
+    let total = 3 * height + 2 * gap;
+    let top = (frame_height.saturating_sub(total)) / 2;
+    let left = (frame_width.saturating_sub(width)) / 2;
+    std::array::from_fn(|index| {
+        (
+            left as i32,
+            (top + index as u32 * (height + gap)) as i32,
+            width,
+            height,
+        )
+    })
+}
+
+/// Which menu row a pixel picks, if any. The same shape as `speed_at`: the menu takes input only where it draws.
+#[must_use]
+pub fn menu_at(pixel: (i32, i32), frame_width: u32, frame_height: u32) -> Option<usize> {
+    menu_rows(frame_width, frame_height)
+        .iter()
+        .position(|&(x, y, w, h)| {
+            pixel.0 >= x && pixel.0 < x + w as i32 && pixel.1 >= y && pixel.1 < y + h as i32
+        })
+}
+
+/// Draw the menu over whatever is on the screen: a dim wash over the playfield, then the three rows, the chosen one lit.
+pub fn draw_menu(frame: &mut Frame, frame_width: u32, frame_height: u32, chosen: Option<usize>) {
+    // The wash: a dark screen, translucent enough that the match can be glimpsed behind it. `put` rather than `fill_rect`
+    // because a wash has to *mix* with what is there; the frame is ours to darken in place.
+    for y in 0..frame.height {
+        for x in 0..frame.width {
+            let pixel = frame.pixel(x, y);
+            let dim = [
+                (u16::from(pixel[0]) * 3 / 10) as u8,
+                (u16::from(pixel[1]) * 3 / 10) as u8,
+                (u16::from(pixel[2]) * 3 / 10) as u8,
+                pixel[3].max(palette::MENU_WASH[3]),
+            ];
+            frame.put(x as i32, y as i32, dim);
+        }
+    }
+    let labels = ["RESUME", "RESTART", "QUIT"];
+    for (index, (x, y, w, h)) in menu_rows(frame_width, frame_height).iter().enumerate() {
+        let colour = if Some(index) == chosen {
+            palette::MENU_ROW
+        } else {
+            palette::PANEL
+        };
+        frame.fill_rect(*x, *y, *w as i32, *h as i32, colour);
+        let label = labels[index];
+        let text_width = crate::font::text_width(label, 2);
+        let text_x = *x + (*w as i32 - text_width) / 2;
+        let text_y = *y + (*h as i32 - crate::font::HEIGHT * 2) / 2;
+        frame.draw_text(text_x, text_y, label, 2, palette::HUD_TEXT);
+    }
 }
 
 /// The minimap's place in the frame: bottom-right, **above** the panel, two pixels a tile.
@@ -383,11 +470,15 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
         let scale = 3;
         let text_y = (bar as i32 - crate::font::HEIGHT * scale) / 2;
         let swatch = 12;
-        for (column, (_, amount)) in hud.stock.iter().enumerate() {
+        for (column, (name, amount)) in hud.stock.iter().enumerate() {
             let x = hud_swatch_x(column) as i32;
             let colour = palette::STOCK[column.min(palette::STOCK.len() - 1)];
             frame.fill_rect(x, (bar as i32 - swatch) / 2, swatch, swatch, colour);
             frame.draw_number(x + swatch + 6, text_y, *amount, scale, palette::HUD_TEXT);
+            // The pack's own word for this column, at one pixel a dot: the swatch says which colour, and a colour is not
+            // a name to somebody who has not played this pack.
+            let (nx, ny) = stock_name_origin(column);
+            frame.draw_text(nx, ny, name, 1, palette::HUD_TEXT);
         }
         let x = hud_swatch_x(hud.stock.len()) as i32;
         frame.draw_ratio(
@@ -413,6 +504,10 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
         // A one-pixel edge along the panel's top: on darkness the panel's own colour is nearly the void's, and a HUD that
         // is drawn but unreadable is the same to a player as one that is not drawn.
         frame.fill_rect(0, top, frame.width as i32, 1, palette::MARK);
+        if let Some(notice) = &hud.notice {
+            let (nx, ny) = notice_origin(frame.height);
+            frame.draw_text(nx, ny, notice, 1, palette::REFUSED);
+        }
         // **A row per selected thing, five at most.** The panel is a list, not a summary: a player who boxed six villagers
         // sees six bars and can see which one is hurt.
         for (index, row) in hud.selected.iter().take(5).enumerate() {

@@ -133,6 +133,11 @@ fn main() -> ExitCode {
     // window is a diagnostic that can pass while the window is wrong.
     let hud = ui::Hud::of_selected(&snapshot, &resources, &selected);
     ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);
+    // `... ppm 1 menu`: the same picture with the Escape menu over it, so the modal can be looked at without a display.
+    if args.get(4).is_some_and(|arg| arg == "menu") {
+        let (width, height) = (frame.width, frame.height);
+        ui::draw_menu(&mut frame, width, height, Some(0));
+    }
     if let Err(err) = std::fs::write(&out, frame.to_ppm()) {
         eprintln!("write {}: {err}", out.display());
         return ExitCode::FAILURE;

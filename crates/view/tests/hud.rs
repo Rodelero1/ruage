@@ -180,7 +180,22 @@ fn panel(
         population_cap: snapshot.population_cap,
         selected,
         outcome,
+        notice: None,
     }
+}
+
+/// How many pixels of an exact colour are in a box: for text, "something is painted" is no claim at all - the bar's own
+/// background is painted - so the tests count the glyphs' colour.
+fn count_colour(frame: &Frame, x: u32, y: u32, w: u32, h: u32, colour: [u8; 4]) -> u32 {
+    let mut count = 0;
+    for py in y..y + h {
+        for px in x..x + w {
+            if px < frame.width && py < frame.height && frame.pixel(px, py) == colour {
+                count += 1;
+            }
+        }
+    }
+    count
 }
 
 fn row(hp_fraction: f32) -> ui::SelectedRow {
@@ -295,5 +310,134 @@ fn a_decided_match_paints_a_banner() {
         playing.pixel(x, y),
         palette::WON,
         "an undecided match shows no banner"
+    );
+}
+
+/// **A number says whose number it is.** The pack names its resources, the swatches say which colour, and a colour is not a
+/// name to somebody who has not played this pack. The name goes under the swatch at one pixel a dot.
+#[test]
+fn each_stock_column_shows_its_name() {
+    let snapshot = snapshot();
+    let mut frame = Frame::new(960, 720);
+    let hud = ui::Hud {
+        stock: vec![("FOOD".to_owned(), 7), ("WOOD".to_owned(), 42)],
+        population: 5,
+        population_cap: 15,
+        selected: Vec::new(),
+        outcome: None,
+        notice: None,
+    };
+    ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);
+    let (x, y) = ui::stock_name_origin(0);
+    assert!(
+        count_colour(&frame, x as u32, y as u32, 40, 6, palette::HUD_TEXT) > 0,
+        "no name under the first stock column"
+    );
+
+    let mut unnamed = Frame::new(960, 720);
+    let bare = ui::Hud {
+        stock: vec![(String::new(), 7)],
+        population: 5,
+        population_cap: 15,
+        selected: Vec::new(),
+        outcome: None,
+        notice: None,
+    };
+    ui::hud(&mut unnamed, &bare, &snapshot, ruage_view::Speed::One);
+    assert_eq!(
+        count_colour(&unnamed, x as u32, y as u32, 40, 6, palette::HUD_TEXT),
+        0,
+        "an empty name paints nothing"
+    );
+}
+
+/// **A refused order says so.** The engine keeps the refusal (`World::refusal`) and the window threw it away, so an order
+/// that was not accepted looked exactly like one that was. The panel now carries the words.
+#[test]
+fn a_refusal_is_written_in_the_panel() {
+    let snapshot = snapshot();
+    let mut showing = Frame::new(960, 720);
+    let hud = ui::Hud {
+        notice: Some("NO PATH".to_owned()),
+        ..panel(&snapshot, Vec::new(), None)
+    };
+    ui::hud(&mut showing, &hud, &snapshot, ruage_view::Speed::One);
+    let (x, y) = ui::notice_origin(720);
+    assert!(
+        count_colour(&showing, x as u32, y as u32, 80, 6, palette::REFUSED) > 0,
+        "the notice is not on the panel"
+    );
+
+    let mut quiet = Frame::new(960, 720);
+    let hud = panel(&snapshot, Vec::new(), None);
+    ui::hud(&mut quiet, &hud, &snapshot, ruage_view::Speed::One);
+    assert_eq!(
+        count_colour(&quiet, x as u32, y as u32, 80, 6, palette::REFUSED),
+        0,
+        "and nothing is written when nothing was refused"
+    );
+}
+
+/// **Escape opens a menu, and the menu is a place to click.** Three rows - resume, restart, quit - each with words
+/// (the font has letters now), each inside the frame, and each clickable: a menu you cannot click is a screenshot.
+#[test]
+fn the_menu_has_three_clickable_rows() {
+    let (width, height) = (960, 720);
+    let rows = ui::menu_rows(width, height);
+    assert_eq!(rows.len(), 3, "resume, restart, quit");
+    for (x, y, w, h) in rows {
+        assert!(x >= 0 && y >= 0, "a row starts inside the frame");
+        assert!(
+            x as u32 + w <= width && y as u32 + h <= height,
+            "a row ends inside the frame"
+        );
+        // The middle of each row picks that row, and only that row.
+        let middle = (x + w as i32 / 2, y + h as i32 / 2);
+        let picked = ui::menu_at(middle, width, height);
+        assert_eq!(
+            rows.iter().position(|row| *row == (x, y, w, h)),
+            picked,
+            "the middle of a row does not pick it"
+        );
+    }
+    assert_eq!(
+        ui::menu_at((2, 2), width, height),
+        None,
+        "the corner is not a menu row"
+    );
+}
+
+/// **The menu is a modal.** It washes the world behind it, draws the rows, and (tested at the window level) stops the clock:
+/// a menu that lets the match run under it is a menu a player cannot read.
+#[test]
+fn the_menu_washes_the_world_and_writes_its_rows() {
+    let (width, height) = (960, 720);
+    let mut frame = Frame::new(width, height);
+    frame.fill_rect(0, 0, width as i32, height as i32, palette::GRASS);
+    ui::draw_menu(&mut frame, width, height, Some(0));
+    let rows = ui::menu_rows(width, height);
+    let (x, y, w, h) = rows[0];
+    assert!(
+        count_colour(&frame, x as u32, y as u32, w, h, palette::MENU_ROW) > 0,
+        "the chosen row is not painted"
+    );
+    let mut letters = 0;
+    for row in rows {
+        letters += count_colour(
+            &frame,
+            row.0 as u32,
+            row.1 as u32,
+            row.2,
+            row.3,
+            palette::HUD_TEXT,
+        );
+    }
+    assert!(letters > 0, "the rows carry no words");
+    // The wash covers the playfield: the green under the menu is darker than the green that went in.
+    let washed = frame.pixel(width / 2, height - 40);
+    assert!(
+        washed[1] < palette::GRASS[1],
+        "the menu did not dim the world: {washed:?} against {:?}",
+        palette::GRASS
     );
 }

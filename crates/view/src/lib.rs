@@ -555,6 +555,25 @@ impl Frame {
     /// Draw one glyph of the bitmap font: `rows` are its scanlines, `scale` multiplies each font pixel.
     ///
     /// Returns the width used, so a caller can place the next thing without keeping the font's metrics in its head.
+    /// A line of text, at `scale`, with `GAP` between glyphs. Returns the width it used, which is what
+    /// `font::text_width` predicts - a caller that lays out two labels side by side can trust the two to agree.
+    pub fn draw_text(&mut self, x: i32, y: i32, text: &str, scale: i32, colour: [u8; 4]) -> i32 {
+        let scale = scale.max(1);
+        let mut at = x;
+        let mut drew = false;
+        for character in text.chars() {
+            let Some(rows) = font::glyph(character) else {
+                // **A character this font has no shape for is not drawn and takes no room.** The alternative - a box or a
+                // question mark - would put a lie on the screen in place of somebody's language.
+                continue;
+            };
+            self.draw_glyph(at, y, rows, scale, colour);
+            at += (font::WIDTH + font::GAP) * scale;
+            drew = true;
+        }
+        if drew { at - x - font::GAP * scale } else { 0 }
+    }
+
     pub fn draw_glyph(
         &mut self,
         x: i32,
@@ -665,6 +684,11 @@ pub mod palette {
     pub const HP_TRACK: [u8; 4] = [58, 58, 64, 255];
     /// The outcome banner: green for a won match, red for anything else. Colour is the whole vocabulary the font has
     /// (D82: digits, no words), so the banner says it this way and the tests name these two colours.
+    /// A refused order's words: red enough to read as "no", light enough to read at all.
+    pub const REFUSED: [u8; 4] = [230, 110, 100, 255];
+    /// The menu: a wash over the world, and the row the pointer is on.
+    pub const MENU_WASH: [u8; 4] = [0, 0, 0, 200];
+    pub const MENU_ROW: [u8; 4] = [64, 70, 96, 255];
     pub const WON: [u8; 4] = [40, 140, 60, 255];
     pub const LOST: [u8; 4] = [150, 40, 40, 255];
     /// Selection: a white ring under what is selected, a health bar over it, and where the last order went.

@@ -95,6 +95,12 @@ struct App {
     seed: u64,
     /// What the player has selected. Orders go to these and nothing else, exactly as a test would name them.
     selected: Vec<ruage_sim::EntityId>,
+    /// The last refusal and the tick it happened on: shown in the HUD for a few seconds, because an order that was not
+    /// accepted has to look different from one that was.
+    notice: Option<(String, u64)>,
+    /// Escape opens this: a modal that stops the clock (`step` returns early) and offers resume, restart and quit.
+    menu_open: bool,
+    menu_hover: Option<usize>,
     /// Paused freezes the accumulator rather than the loop: the window keeps drawing, the match stops.
     paused: bool,
     /// The window's pace (1x, 1.5x, 2x, 3x, 5x). **Presentation only**: the simulation is fixed-rate (D16), so a speed
@@ -129,6 +135,9 @@ impl App {
             failed: false,
             seed,
             selected: Vec::new(),
+            notice: None,
+            menu_open: false,
+            menu_hover: None,
             paused: false,
             pace: Pace::new(Speed::One),
             cursor: (0, 0),
@@ -147,6 +156,23 @@ impl App {
     fn click(&mut self, button: winit::event::MouseButton) {
         match button {
             winit::event::MouseButton::Left => {
+                // The menu takes the click while it is open: it is modal, and the world under it is not a target.
+                if self.menu_open {
+                    let (width, height) = self.window.as_ref().map_or((0, 0), |window| {
+                        let size = window.inner_size();
+                        (size.width, size.height)
+                    });
+                    match ui::menu_at(self.cursor_pixel, width, height) {
+                        Some(0) => {
+                            self.menu_open = false;
+                            self.menu_hover = None;
+                        }
+                        Some(1) => self.restart(),
+                        Some(2) => std::process::exit(0),
+                        _ => {}
+                    }
+                    return;
+                }
                 // The HUD's speed selector first: it is drawn over the world, so a click on it is a click on the HUD and
                 // must not also select whatever stands under it.
                 if let Some(speed) = ui::speed_at(self.cursor_pixel, self.camera.viewport.0) {
@@ -213,12 +239,43 @@ impl App {
                     }
                 }
             };
-            // A refused order is shown, not swallowed: this is how a player learns why nothing happened.
-            if let (Err(err), Some(window)) = (world.submit_checked(command), self.window.as_ref())
-            {
-                window.set_title(&format!("ruage - refused: {err}"));
+            // A refused order is shown twice over: in the window's title (for a log) and **in the HUD** (for the player,
+            // who is not reading titles). This is how a player learns why nothing happened.
+            match world.submit_checked(command) {
+                Ok(()) => self.notice = None,
+                Err(err) => {
+                    if let Some(window) = self.window.as_ref() {
+                        window.set_title(&format!("ruage - refused: {err}"));
+                    }
+                    self.notice = Some((err.to_string(), self.ticks));
+                    self.order = None;
+                }
             }
         }
+    }
+
+    /// How long a refusal stays on the panel: three seconds at the world's own tick rate.
+    fn notice_ticks(&self) -> u64 {
+        u64::from(
+            self.world
+                .as_ref()
+                .map_or(30, ruage_sim::World::tick_rate_hz),
+        ) * 3
+    }
+
+    /// Start the match again from tick zero: a new world from the same config and seed, an empty selection, and the menu
+    /// closed. The seed is the config's, so "restart" is reproducible and two restarts of one match are the same match.
+    fn restart(&mut self) {
+        self.world = None;
+        self.runner = None;
+        self.ticks = 0;
+        self.accumulated = Duration::ZERO;
+        self.selected.clear();
+        self.notice = None;
+        self.order = None;
+        self.menu_open = false;
+        self.menu_hover = None;
+        eprintln!("restart: seed {}", self.seed);
     }
 
     /// One simulation tick. The world is seeded on the first call, so a failure to seed is a failure to start rather than
@@ -259,6 +316,14 @@ impl App {
 
     /// Put the current world on the surface. Cheap enough to run every frame: it is one blit of a 960x720 buffer.
     fn draw(&mut self) {
+        // Read the HUD's own state **before** the world and the surface are borrowed mutably below.
+        let notice_ticks = self.notice_ticks();
+        let notice = self
+            .notice
+            .as_ref()
+            .filter(|(_, at)| self.ticks.saturating_sub(*at) < notice_ticks)
+            .map(|(text, _)| text.clone());
+        let (menu_open, menu_hover) = (self.menu_open, self.menu_hover);
         let (Some(world), Some(surface), Some(window)) = (
             self.world.as_ref(),
             self.surface.as_mut(),
@@ -286,8 +351,14 @@ impl App {
         );
         // The HUD reads the same snapshot the picture was drawn from - stock, population - so what it reports cannot
         // drift from what is on the screen (D74).
-        let hud = ui::Hud::of_selected(&snapshot, &self.config.resources, &selected);
+        let mut hud = ui::Hud::of_selected(&snapshot, &self.config.resources, &selected);
+        // A refusal stays on the panel for three seconds of match time: long enough to read, short enough that it does not
+        // become furniture.
+        hud.notice = notice;
         ui::hud(&mut frame, &hud, &snapshot, self.pace.speed());
+        if menu_open {
+            ui::draw_menu(&mut frame, width, height, menu_hover);
+        }
         // `softbuffer` wants non-zero dimensions; a minimised window has none, and drawing nothing is correct there.
         let (Some(w), Some(h)) = (
             std::num::NonZeroU32::new(width),
@@ -374,7 +445,12 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 match event.logical_key {
-                    Key::Named(NamedKey::Escape) => event_loop.exit(),
+                    // Escape is the menu, not the end of the match: quitting the process because somebody pressed Escape
+                    // is how a player loses a game they were winning.
+                    Key::Named(NamedKey::Escape) => {
+                        self.menu_open = !self.menu_open;
+                        self.menu_hover = None;
+                    }
                     // Space freezes the match, not the window: the camera and the picture stay live.
                     Key::Named(NamedKey::Space) => {
                         self.paused = !self.paused;
@@ -390,6 +466,15 @@ impl ApplicationHandler for App {
                     // 1..5 are the speed keys, the same five the HUD selector shows. A change is allowed mid-match and
                     // logged here: it is how fast this window watches, not something the match contains.
                     Key::Character(ref key) => {
+                        // With the menu open the keys are the menu's: R restarts, Q quits, Escape (above) resumes.
+                        if self.menu_open {
+                            match key.as_str() {
+                                "r" | "R" => self.restart(),
+                                "q" | "Q" => event_loop.exit(),
+                                _ => {}
+                            }
+                            return;
+                        }
                         if let Some(index) = key
                             .as_str()
                             .parse::<usize>()
@@ -415,6 +500,13 @@ impl ApplicationHandler for App {
                 self.cursor = self.camera.pick(pixel);
                 self.cursor_point = self.camera.pick_point(pixel);
                 self.cursor_pixel = pixel;
+                if self.menu_open {
+                    let (width, height) = self.window.as_ref().map_or((0, 0), |window| {
+                        let size = window.inner_size();
+                        (size.width, size.height)
+                    });
+                    self.menu_hover = ui::menu_at(pixel, width, height);
+                }
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
@@ -436,7 +528,8 @@ impl ApplicationHandler for App {
             self.accumulated = ceiling;
         }
         let mut ran = false;
-        while self.accumulated >= self.tick && !self.failed && !self.paused {
+        // **The menu stops the clock** as well as the space bar: a menu the match runs under is a menu nobody can read.
+        while self.accumulated >= self.tick && !self.failed && !self.paused && !self.menu_open {
             self.accumulated -= self.tick;
             // Speed is *ticks per interval*, not a shorter interval: the simulation's notion of a tick never changes, which
             // is why a fast window session and a headless run still agree on every tick boundary.
