@@ -12,8 +12,10 @@ the **trigger** did not.*
    same rule the trip home uses.
 2. **`World::workers_on(player, slot)`** is the count behind it.
 3. **`World::can_work(from, node)`**: whether a worker can stand somewhere free *and reachable* to work a node - the
-   question `Command::Gather` asks. It exists because a weaker question (`can_reach` to the node's own tile) is what made
-   a test helper send a worker at a node it could not work 400,000 times.
+   question `Command::Gather` asks. It is public and tested, and **not** wired into `nearest_resource` (see the stability
+   note). **A correction to my own first telling of this:** the research helper that spun 400,000 ticks had *no*
+   reachability filter at all, not a wrong one; `can_reach` to a node's tile was my first repair and it cut that suite from
+   408 s to 21 s without fixing its seven failures, because it is a weaker question than "is there somewhere to stand".
 4. **Content.** A gold rule: when the bank has ≤ 20 gold, send a villager to the gold (measured: 152 *"not enough gold"*
    refusals once the militia line trains, and the share table's 10% of thirty-two villagers never reaches the mine
    because the share pass moves *idle* villagers and a booming base has none). A mining-camp rule: one villager on the
