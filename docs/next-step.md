@@ -1,5 +1,48 @@
 # The effect interpreter, priced from the data
 
+> # Session 3, 2026-11-03 - the queue, and the baseline it is measured against
+>
+> **The acceptance baseline, measured three times at HEAD `55fcc2f` (not remembered):** 36,000 ticks, seed 7 -
+> **`players=2` (a draw)**, hash **`91a8ad6e2cbd01f6`**, **15.2-15.4 s** (0.42 ms/tick), 131 entities, 177 repaths,
+> 214 made_room; at 1,600 s **1,914 wood / 416 food / 512 gold**, 35 units, 24 buildings. The run is byte-identical
+> across repeats. `make headless` adds the build and reports 44 s; quote the direct run.
+>
+> **The "won" claim is withdrawn, and the disagreement is explained as far as the tree allows.** The winning hash
+> `51992525a3b1c3fb` is not reproducible at HEAD, at the merge `a782a47` (built in a clean worktree by the previous
+> session) or in three fresh runs here. What is left is an **uncommitted intermediate build** - a binary that was never
+> in any commit - so there is nothing to bisect to: the hash is an oracle only for a tree that can be rebuilt. The
+> corrected numbers in `d00ee7a` stand and are the baseline above.
+>
+> **The queue, in the order I am taking it** (owner, this thread: implement all of it, stop only for a decision):
+>
+> 1. **A - "gather an army first, then attack" (item 8).** `When.army_at_least`, re-landed with its root cause fixed:
+>    the reverted version counted through `[metrics] military_roles`, but `World::army` returned 0 in any world whose
+>    unit table was not loaded (`flat_map` over `self.units.as_ref()` yields nothing), and the test fixture is exactly
+>    such a world - three spawned militia counted as none. Then content: a barracks trains a soldier line from Feudal,
+>    and an attack rule waits for a count.
+> 2. **B - "soldiers attack buildings consistently" (item 7).** Diagnosis first, with a probe: a re-issued `Attack`
+>    resets the reload, and retaliation may be pulling units off the building. Stance / attack-move and the retreat
+>    path, measured on the acceptance match.
+> 3. **C - "villagers build drop sites near the resource" (item 4).** A condition that sees **how many villagers are
+>    working a resource** (the trigger that does not exist), then a mining-camp rule with `where = "gold"`/`"stone"`.
+> 4. **D - pictograms on buildings (item 6).** A mark per role from content, drawn on the footprint; pure function in
+>    `ruage_view`, with a test.
+> 5. **E - silhouettes.** A square for a villager, a triangle for a soldier, from content's roles; a test that one
+>    pixel tells them apart.
+> 6. **F - a speed selector (1x, 1.5x, 2x, 3x, 5x).** Window tick pacing plus a dropdown. **Decision taken here:** a
+>    speed change is allowed mid-match and is **not** match state - the sim is fixed-rate by D16 and nothing in it may
+>    depend on how fast a human watches; the window owns the multiplier, records it in its own log line, and a
+>    recording stays a tick stream.
+> 7. **G - save games and recordings (item 9).** Stockpiles, population and entities from a save; the action bodies
+>    (type byte, unit ids, coordinates) in a recording.
+>
+> **Standing rules for each step, unchanged:** compact (this block), test-first with the failing run shown, an
+> adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
+> commit and push. Nothing below this block is current - it is history, and where it disagrees with the baseline above,
+> the baseline wins.
+
+## Earlier queue entries (history)
+
 > **2026-11-03, added to the queue by the owner this turn, and one of them done:**
 > - **DONE - panning is screen-aligned** (item 5). `Camera::scroll_screen` converts a screen direction into tile space
 >   (the map is a diamond, so a tile step moved the picture diagonally); the arrow keys use it. Review:
