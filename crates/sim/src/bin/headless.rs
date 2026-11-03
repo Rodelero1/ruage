@@ -135,6 +135,13 @@ fn run(args: &[String]) -> Result<(), String> {
     }
     let seed: u64 = number(&parsed, "--seed")?;
 
+    // The scenario is read **before** the world is seeded: it carries the AI's villager shares (D94), and those apply to
+    // the world the match is played in.
+    let scenario = match parsed.get("--script") {
+        Some(path) => Some(load_scenario_file(Path::new(path)).map_err(|err| err.to_string())?),
+        None => None,
+    };
+
     let mut world = World::new(&settings, seed).map_err(|err| format!("{err}"))?;
     world
         .seed_from(&map, &economy, &units)
@@ -142,8 +149,11 @@ fn run(args: &[String]) -> Result<(), String> {
     world
         .load_resources(&resources)
         .expect("the pack fits the stockpile");
-    // The share table is content, and a match is where it applies: `[policy]` in economy.toml, in the game's own AI shape.
-    world.apply_content_policy();
+    // The share table is behaviour and travels with the personality (D94). A run with no scenario has no AI, and so
+    // installs no shares - rather than reading a table from a file nothing consumes.
+    if let Some(scenario) = &scenario {
+        world.apply_policy(&scenario.policy);
+    }
     if let Some(path) = parsed.get("--combat") {
         let combat = load_combat_file(Path::new(path)).map_err(|err| format!("{err}"))?;
         world.load_combat(&combat);
@@ -164,14 +174,13 @@ fn run(args: &[String]) -> Result<(), String> {
         world.load_civs(&civs).map_err(|err| format!("{err}"))?;
     }
 
-    let mut runner = match parsed.get("--script") {
-        Some(path) => {
-            let scenario = load_scenario_file(Path::new(path)).map_err(|err| err.to_string())?;
+    let mut runner = match &scenario {
+        Some(scenario) => {
             let ticks_from_script = u64::try_from(
                 (scenario.duration_seconds * f64::from(world.tick_rate_hz())).round() as i64,
             )
             .map_err(|_| "the scenario is longer than a u64 of ticks".to_owned())?;
-            let runner = Runner::new(&scenario, world.tick_rate_hz())?;
+            let runner = Runner::new(scenario, world.tick_rate_hz())?;
             Some((runner, ticks_from_script))
         }
         None => None,

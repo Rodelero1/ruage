@@ -8,9 +8,9 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use ruage_data::{Economy, Map, Sim as Settings, Units};
+use ruage_data::{ContentPack, Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, World};
+use ruage_sim::{Command, EntityId, EntityKind, World, load_personality_file};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -249,4 +249,65 @@ fn idle_world_with_a_memory_costs_this_much() {
             "{entities:>5} entities  {per_tick_us:>9.2} us/tick  {per_entity_ns:>7.1} ns/entity/tick  (memory on)"
         );
     }
+}
+
+/// What a match pays **once**, at load, now that the villager shares travel with the personality (D94): the pack's
+/// identity walk (which hashes `economy.toml` and every file under `ai/`), the personality parse, and installing the
+/// 19-row table into a world. None of it is per tick - the point of the probe is that the number stays at load time so
+/// nobody "optimises" a table that costs microseconds per match.
+#[test]
+#[ignore = "prints timings; run explicitly with --ignored --nocapture"]
+fn what_a_match_loads_and_installs_costs() {
+    let Some(fx) = fixture() else { return };
+    let reps = 200u32;
+
+    let start = Instant::now();
+    for _ in 0..reps {
+        let pack = ContentPack::load(&repo("config")).expect("the pack loads");
+        std::hint::black_box(pack.identity());
+    }
+    println!(
+        "pack load + identity ({} files hashed): {:.2} us each",
+        ContentPack::load(&repo("config"))
+            .expect("the pack loads")
+            .parts
+            .len(),
+        start.elapsed().as_secs_f64() / f64::from(reps) * 1e6
+    );
+
+    let path = repo("config/ai/base.toml");
+    let start = Instant::now();
+    for _ in 0..reps {
+        let personality = load_personality_file(&path).expect("the base personality");
+        std::hint::black_box(personality.policy.share.len());
+    }
+    println!(
+        "personality parse ({} rules, {} share rows): {:.2} us each",
+        load_personality_file(&path)
+            .expect("the base personality")
+            .rule
+            .len(),
+        load_personality_file(&path)
+            .expect("the base personality")
+            .policy
+            .share
+            .len(),
+        start.elapsed().as_secs_f64() / f64::from(reps) * 1e6
+    );
+
+    let policy = load_personality_file(&path)
+        .expect("the base personality")
+        .policy;
+    let mut world = world_with(&fx, 0);
+    let reps = 1_000u32;
+    let start = Instant::now();
+    for _ in 0..reps {
+        world.apply_policy(&policy);
+        std::hint::black_box(world.entities().len());
+    }
+    println!(
+        "apply_policy ({} rows): {:.2} us each",
+        policy.share.len(),
+        start.elapsed().as_secs_f64() / f64::from(reps) * 1e6
+    );
 }

@@ -221,7 +221,7 @@ impl App {
             world
                 .load_civs(&self.config.civs)
                 .map_err(|err| err.to_string())?;
-            world.apply_content_policy();
+            world.apply_policy(&self.config.scenario.policy);
             let runner = Runner::new(&self.config.scenario, world.tick_rate_hz())
                 .map_err(|err| err.to_string())?;
             self.world = Some(world);

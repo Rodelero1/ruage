@@ -1,10 +1,11 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-01, latest: D88/D89/D90 are all written and landed. The work in hand is the save reader** — see "The save
-> container reads" at the end of this file and `docs/save-format.md`, which carries what is verified, the errata for the
-> bogus `HA` magic, and the address of the code that reads the world sections. The one thing that would collapse the
-> remaining work is **two saves from one match a known interval apart** (see that section). The order below this line is
-> history; the tail is the queue.
+> **2026-11-03, latest: `[policy]` has moved and the AI folder now holds all of the behaviour** (D94a, v1.57). The
+> villager-share table lives in `config/ai/base.toml`, `Personality` carries it, `Scenario` hands it to
+> `apply_policy()` once per match, and an `economy.toml` that still has `[policy]` is refused by name. **Next, in order:**
+> names in the engine - the ~30 attack/armour **classes** are the last thing the tables quote as numbers - then evasion
+> (D98's wait-and-let-pass) with the binary read beside it ("Reading pathfinding and evasion out of the binary" at the
+> tail), then groups -> spatial awareness -> raiding. The order below this line is history; the tail is the queue.
 
 Written 2026-10-26, after the resource enum and the unit roles became content (SPEC v0.54).
 **Kind 3 landed the same day** (v0.55): research plus "every unit `a` becomes unit `b`". This file
@@ -2624,6 +2625,28 @@ that still has `[policy]` is refused rather than silently ignored.
 
 **Why it was not done in the same session as D95/D97:** it changes five call sites including two test fixtures, and the
 last refactor of this size (the window's loader) shipped a bug that the suite could not see. It deserves its own pass.
+
+### Done: `[policy]` lives in the personality (2026-11-03, v1.57)
+
+D94a, applied. `Economy` lost `policy`; `Personality` gained it; `Scenario` carries the resolved table so a runner has
+one thing to install; `apply_policy(&scenario.policy)` is called once per match at its five call sites (headless, batch,
+window, `sim/tests/scenario.rs`, `view/tests/frame_cost.rs`). `Policy` deserialises itself in `crates/data`, so the
+"rows sum to 100" refusal fires where the table is written and names that file. Three new rules: a personality may be
+shares without rules; a scenario may carry its own shares only when it writes its own rules; a stale `[policy]` in an
+economy is refused **by name** with the destination. `load_personality_file` is public so a caller without a scenario
+(the frame-cost probe) parses the same way the scenario loader does.
+
+**Evidence it changed nothing:** the acceptance match at 36,000 ticks is byte-identical to `57bf7c1` — same 521 report
+lines, same rule firings, same `hash=98c1c2a051d044f6`. Load time only: pack load + identity 92.70 ms, personality parse
+234.8 µs, `apply_policy` 1.47 µs, no hunk inside `step`. Six mutations, six caught; the review is
+`docs/reviews/2026-11-03-policy-in-the-personality.md`.
+
+**Named behaviour change:** a headless run with no `--script` installs no shares any more — there is no AI to take them
+from. `make headless` and the window both always load `acceptance.toml`, so only a bare `--ticks` probe is touched.
+
+**Next session starts here:** names for the ~30 attack/armour classes in `config/names.toml`'s sibling (their members
+are derivable from the unit table; 15 of the 31 class ids already have effect-modifier words attached, 0 have a name in
+the pack), then the table flip to name keys; evasion separately, with the binary map below.
 
 ### Reading pathfinding and evasion out of the binary (lead, 2026-11-02)
 

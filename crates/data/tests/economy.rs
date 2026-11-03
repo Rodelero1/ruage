@@ -484,3 +484,19 @@ fn a_mask_that_is_not_a_rectangle_is_refused() {
         vec![true, false, false, false]
     );
 }
+
+/// `[policy]` is behaviour and left `economy.toml` (D94). A pack that still carries it is refused **by name** and told
+/// where it went, rather than silently ignored: a share table no longer read looks exactly like a policy that does
+/// nothing, which is the dead-knob failure this project has already paid for once.
+#[test]
+fn an_economy_that_still_carries_the_policy_block_is_refused_by_name() {
+    let stale = format!("{GOOD}\n[policy]\n\n[[policy.share]]\nat_villagers = 0\nfood = 100\n");
+    let err = load_economy_str(&stale, "economy.toml")
+        .expect_err("the share table moved to the personality")
+        .to_string();
+    assert!(
+        err.contains("[policy]"),
+        "the refusal names the block: {err}"
+    );
+    assert!(err.contains("ai/"), "and says where it went: {err}");
+}

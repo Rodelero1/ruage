@@ -26,7 +26,9 @@ fn a_frame_costs_less_than_a_tick() {
     world.seed_from(&map, &economy, &units).expect("seed");
     world.load_resources(&resources).expect("pack");
     world.load_combat(&combat);
-    world.apply_content_policy();
+    let personality = ruage_sim::load_personality_file(&repo("config/ai/base.toml"))
+        .expect("the base personality loads");
+    world.apply_policy(&personality.policy);
     for _ in 0..2_000 {
         world.step().expect("step");
     }

@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, World};
+use ruage_sim::{Command, EntityId, EntityKind, World, load_scenario_file};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -314,4 +314,50 @@ fn seeded_fixture() -> Option<World> {
     world.load_resources(&resources).ok()?;
     world.load_combat(&combat);
     Some(world)
+}
+
+/// The table's whole journey: a personality's `[policy]` reaches the engine and moves a villager. The loader half is
+/// `scenario::a_personality_carries_the_villager_shares`; this is the half that proves the move did not leave the table
+/// in a file nothing reads - which is exactly what a config knob nothing consumes looks like (the dead `cost_diagonal`
+/// lesson).
+#[test]
+fn a_personalitys_shares_reach_the_world() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let dir = repo("build/ai-test/policy-world");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("ai")).expect("scratch dir");
+    std::fs::write(
+        dir.join("ai/wood.toml"),
+        "schema = 1\n\n[policy]\n\n[[policy.share]]\nat_villagers = 0\nwood = 100\n",
+    )
+    .expect("write the personality");
+    let file = dir.join("match.toml");
+    std::fs::write(
+        &file,
+        "schema = 2\nduration_seconds = 60.0\nai = \"wood\"\n",
+    )
+    .expect("write");
+    let scenario = load_scenario_file(&file).expect("the personality loads");
+
+    let mut world = seeded(&fx);
+    // Installed by the *match*, not by the loader (D94): the shares come from the AI, which is the thing under test.
+    world.apply_policy(&scenario.policy);
+    let mut on_wood = 0;
+    for _ in 0..1_200 {
+        world.step().expect("stepping");
+        on_wood = on_wood.max(
+            working_on(&world)
+                .iter()
+                .filter(|name| name.as_str() == "wood")
+                .count(),
+        );
+    }
+    assert_eq!(
+        on_wood,
+        villagers(&world).len(),
+        "every villager should be on wood: {:?}",
+        working_on(&world)
+    );
 }

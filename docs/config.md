@@ -17,6 +17,7 @@ config/sim.toml          hand-written behaviour constants
 config/combat.toml
 config/economy.toml
 config/movement.toml
+config/ai/base.toml      behaviour: rules and villager shares (D94)
 ```
 
 Precedence is bottom-up: a value in `overrides.toml` beats the same value in `gamedata/`, and
@@ -31,7 +32,8 @@ behaviour constants are separate keys that never collide with data keys.
 | `sim.toml` | tick rate, fixed-point scale, RNG, determinism flags | Engine decisions, not game facts. |
 | `combat.toml` | min damage, elevation, sentinels, attack-timing fraction | Constants the dat does not contain. |
 | `economy.toml` | farm rate, build/repair rates, pop values, decay | Constants the dat does not settle. |
-| `movement.toml` | tile scale, pathing weights, collision, formation | Unknowns (U5, U7) that must be visible, not buried. |
+| `movement.toml` | tile scale, collision, formation | Unknowns (U5, U7) that must be visible, not buried. The pathing weights that used to be listed here are **gone** (D98): the 10/14 step ratio is eight-way-grid geometry and `path.rs` owns it, so a knob here that nothing read was advertising control that did not exist. |
+| `ai/` | **behaviour**, not the world (D94): `base.toml`'s rules and the 19-row villager-share `[policy]` | A scenario names a personality (`ai = "base"`) and the loader resolves `ai/<name>.toml` beside it. Everything under `ai/` is hashed into the pack identity (D19), because two peers playing different AIs are playing different games. `[policy]` lives here and not in `economy.toml`: an economy that still carries one is refused by name. |
 | `map.toml` | the authored 64×64 slice map (D15): terrain rows, resource nodes, town centres | Our own content, not extracted data, mirrored point-for-point so neither side is favoured. |
 
 ## Rules

@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 
 use ruage_data::{
-    CommandApply, Cost, CostResource, Economy, Effects, Map, MaybeFixed, Resources,
+    CommandApply, Cost, CostResource, Economy, Effects, Map, MaybeFixed, Policy, Resources,
     Sim as Settings, Unit, Units,
 };
 
@@ -31,7 +31,7 @@ pub use path::{Walk, find_path};
 use ruage_fixed::Fixed;
 pub use script::{
     Outcome, Personality, Rule, RuleAction, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind,
-    describe, load_scenario_file, load_scenario_str,
+    describe, load_personality_file, load_scenario_file, load_scenario_str,
 };
 
 /// The largest number of players a match can have: eight, so four-versus-four (D20). It is a
@@ -1465,26 +1465,23 @@ impl World {
         &self.entities
     }
 
-    /// Install content's `[policy]` share table. **Not called by `load_resources`**, deliberately: the shares change what
-    /// an idle villager does, and a test that loads the real pack to watch a villager's own behaviour must not silently
-    /// get a second hand on it (six `gather.rs` tests said so, loudly, the first time this ran from the loader). The
-    /// runners call this; a world that is not playing a match does not have to.
-    pub fn apply_content_policy(&mut self) {
-        self.install_shares();
+    /// Install the **match's** villager-share table - called with the scenario's, which carries the personality's
+    /// (D94). **Not called by `load_resources`**, deliberately: the shares change what an idle villager does, and a test
+    /// that loads the real pack to watch a villager's own behaviour must not silently get a second hand on it (six
+    /// `gather.rs` tests said so, loudly, the first time this ran from the loader). The runners call this; a world that
+    /// is not playing a match does not have to, and a match whose AI writes no `[policy]` has none.
+    pub fn apply_policy(&mut self, policy: &Policy) {
+        self.install_policy(policy);
     }
 
-    /// Resolve content's `[policy]` rows into stockpile columns and install them. A name the pack cannot resolve is
+    /// Resolve the share rows into stockpile columns and install them. A name the pack cannot resolve is
     /// skipped rather than refused - the pack is authoritative about which resources exist, and a share for a resource
     /// that is not in the game is a share for nothing.
-    fn install_shares(&mut self) {
-        let Some(economy) = self.economy.as_ref() else {
-            return;
-        };
-        if economy.policy.share.is_empty() {
+    fn install_policy(&mut self, policy: &Policy) {
+        if self.economy.is_none() || policy.share.is_empty() {
             return;
         }
-        let rows: Vec<(usize, Vec<(usize, i32)>)> = economy
-            .policy
+        let rows: Vec<(usize, Vec<(usize, i32)>)> = policy
             .share
             .iter()
             .map(|row| {
@@ -4949,7 +4946,7 @@ impl World {
     /// ask "seen within thirty seconds" and get an honest answer; the alternative - clearing when nothing is in sight -
     /// would make the memory a view with extra steps.
     /// Switch the memory on for a player. Called by whatever installs behaviour - a scenario's rules - so a world
-    /// nobody has given an AI does not pay for one (the same shape as `apply_content_policy`, D75).
+    /// nobody has given an AI does not pay for one (the same shape as `apply_policy`, D75/D94).
     pub fn observe_for(&mut self, player: u8) {
         if player >= 1 && usize::from(player) <= MAX_PLAYERS {
             self.observers[usize::from(player) - 1] = true;

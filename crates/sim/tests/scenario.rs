@@ -929,9 +929,9 @@ fn the_acceptance_scenario_parses_and_its_opening_runs() {
     let scenario =
         load_scenario_file(&repo("config/acceptance.toml")).expect("config/acceptance.toml parses");
     let mut world = world(&fx, 7);
-    // The share table is what the *match* runs with (the headless and batch runners install it), and without it the
-    // acceptance script's rules would build an economy on idle villagers.
-    world.apply_content_policy();
+    // The share table is what the *match* runs with (the headless and batch runners install it from the scenario, D94),
+    // and without it the acceptance script's rules would build an economy on idle villagers.
+    world.apply_policy(&scenario.policy);
     let mut runner = Runner::new(&scenario, world.tick_rate_hz()).expect("runnable");
     let rate = u64::from(world.tick_rate_hz());
     for _ in 0..(60 * rate) {
@@ -1130,4 +1130,112 @@ fn an_empty_personality_is_refused() {
         why.contains("no [[rule]]"),
         "the refusal says what is missing: {why}"
     );
+}
+
+/// The villager-share table is **behaviour**, so it travels with the personality (D94). `[policy]` in `economy.toml` was
+/// the last piece of AI still living in the world's config; this is the loader half, and
+/// `policy::a_personalitys_shares_reach_the_world` is the half that proves the table still reaches the engine.
+#[test]
+fn a_personality_carries_the_villager_shares() {
+    let dir = scratch("shares");
+    std::fs::write(
+        dir.join("ai/shares.toml"),
+        "schema = 1\n\n[policy]\n\n[[policy.share]]\nat_villagers = 0\nfood = 100\n\n\
+         [[policy.share]]\nat_villagers = 9\nfood = 50\nwood = 50\n\n\
+         [[rule]]\nplayer = 1\ndo = \"train\"\nbuilding = \"town_center\"\nrole = \"villager\"\n",
+    )
+    .expect("write the personality");
+    let file = dir.join("match.toml");
+    std::fs::write(
+        &file,
+        "schema = 2\nduration_seconds = 60.0\nai = \"shares\"\n",
+    )
+    .expect("write");
+    let scenario = load_scenario_file(&file).expect("the shares arrive with the personality");
+    assert_eq!(scenario.policy.share.len(), 2, "both rows arrived");
+    assert_eq!(scenario.policy.share[1].at_villagers, 9);
+    assert_eq!(scenario.policy.share[1].per.get("food"), Some(&50));
+    assert_eq!(scenario.policy.share[1].per.get("wood"), Some(&50));
+    assert!(!scenario.rule.is_empty(), "the rules still come with it");
+}
+
+/// A personality whose only content is a share table is still an AI: shares are what a player *does*, and refusing one
+/// for having no `[[rule]]` blocks would make the policy-only personality unwritable.
+#[test]
+fn a_personality_that_only_sets_shares_is_still_an_ai() {
+    let dir = scratch("shares-only");
+    std::fs::write(
+        dir.join("ai/quiet.toml"),
+        "schema = 1\n\n[policy]\n\n[[policy.share]]\nat_villagers = 0\nwood = 100\n",
+    )
+    .expect("write the personality");
+    let file = dir.join("match.toml");
+    std::fs::write(
+        &file,
+        "schema = 2\nduration_seconds = 60.0\nai = \"quiet\"\n",
+    )
+    .expect("write");
+    let scenario = load_scenario_file(&file).expect("a policy-only personality is an AI");
+    assert!(scenario.rule.is_empty(), "it has no rules, and needs none");
+    assert_eq!(scenario.policy.share.len(), 1);
+}
+
+/// A share row that does not sum to 100 is a typo, not a policy: the engine would silently under-serve every resource.
+/// The refusal names the personality file, because that is now where the row lives.
+#[test]
+fn a_share_row_that_does_not_sum_to_100_is_refused_with_its_file() {
+    let dir = scratch("bad-shares");
+    std::fs::write(
+        dir.join("ai/bad.toml"),
+        "schema = 1\n\n[policy]\n\n[[policy.share]]\nat_villagers = 9\nfood = 50\nwood = 40\n\n\
+         [[rule]]\nplayer = 1\ndo = \"train\"\nbuilding = \"town_center\"\nrole = \"villager\"\n",
+    )
+    .expect("write the personality");
+    let file = dir.join("match.toml");
+    std::fs::write(&file, "schema = 2\nduration_seconds = 60.0\nai = \"bad\"\n").expect("write");
+    let why = load_scenario_file(&file).expect_err("90% is not a policy");
+    assert!(
+        why.contains("sums to 90"),
+        "the refusal counts the row: {why}"
+    );
+    assert!(
+        why.contains("bad.toml"),
+        "and names the file it is in: {why}"
+    );
+}
+
+/// Shares are behaviour, so a scenario that names a personality cannot also carry a share table of its own: two sources
+/// for one AI is a file nobody can read - the same rule the `[[rule]]` blocks already follow.
+#[test]
+fn a_scenario_with_shares_and_a_personality_is_refused() {
+    let dir = scratch("both-shares");
+    std::fs::write(
+        dir.join("ai/base.toml"),
+        "schema = 1\n\n[[rule]]\nplayer = 1\ndo = \"build\"\nrole = \"house\"\n",
+    )
+    .expect("write the personality");
+    let file = dir.join("match.toml");
+    std::fs::write(
+        &file,
+        "schema = 2\nduration_seconds = 60.0\nai = \"base\"\n\n[policy]\n\n[[policy.share]]\nat_villagers = 0\nfood = 100\n",
+    )
+    .expect("write");
+    let why = load_scenario_file(&file).expect_err("both is a contradiction");
+    assert!(
+        why.contains("belong"),
+        "the refusal says where the behaviour goes: {why}"
+    );
+}
+
+/// A scenario without a personality may carry its own shares - the arm the loader's comment promises, and the one
+/// nothing exercised until the review. `ai` is optional; behaviour still has to come from *somewhere*, and this is the
+/// other somewhere.
+#[test]
+fn a_scenario_that_carries_no_personality_may_carry_its_own_shares() {
+    let text = "schema = 2\nduration_seconds = 60.0\n\n[policy]\n\n[[policy.share]]\nat_villagers = 0\n\
+                wood = 100\n\n[[rule]]\nplayer = 1\ndo = \"build\"\nrole = \"house\"\n";
+    let scenario = load_scenario_str(text, "inline").expect("its own behaviour is allowed");
+    assert_eq!(scenario.policy.share.len(), 1);
+    assert_eq!(scenario.policy.share[0].per.get("wood"), Some(&100));
+    assert_eq!(scenario.rule.len(), 1, "its own rules, and its own shares");
 }

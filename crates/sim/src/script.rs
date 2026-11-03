@@ -11,6 +11,8 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use ruage_data::Policy;
+
 use crate::{Command, EntityId, EntityKind, World};
 
 /// The scenario format's own version. It is not a config file: it describes a match, so it moves
@@ -44,6 +46,12 @@ pub struct Scenario {
     /// can read.
     #[serde(default)]
     pub ai: Option<String>,
+    /// The villager-share table this match plays with (D94). Empty means "no policy": the engine then never moves a
+    /// villager on its own. It arrives from the personality, or from a scenario that writes its own rules - and the
+    /// loader refuses a scenario that names a personality *and* carries a table, for the same reason it refuses two
+    /// rule sources.
+    #[serde(default)]
+    pub policy: Policy,
 }
 
 /// A personality: the rules that decide what a player *does* (D94). Its own file, its own schema, because it is
@@ -54,6 +62,10 @@ pub struct Personality {
     pub schema: u32,
     #[serde(default)]
     pub rule: Vec<Rule>,
+    /// Where the villagers go, per villager count (`[policy]`, D75's shape). Shares are behaviour - "how many on wood"
+    /// is exactly what a personality decides - so the table lives here and not in `economy.toml` (D94).
+    #[serde(default)]
+    pub policy: Policy,
 }
 
 /// One rule: a player, a condition, one action, and a cooldown so a satisfied condition does not spam orders.
@@ -682,6 +694,32 @@ fn personality_path(dir: &std::path::Path, name: &str) -> Result<std::path::Path
     Ok(dir.join("ai").join(format!("{name}.toml")))
 }
 
+/// Read a personality from its own file.
+///
+/// Public because a caller that installs an AI without a scenario - the frame-cost probe, or a tool that wants the base
+/// AI's shares - must use the *same* parse as the scenario loader. One path, so a second caller cannot drift from it.
+/// A personality with neither rules nor shares is refused: it would play the match doing nothing.
+pub fn load_personality_file(path: &std::path::Path) -> Result<Personality, String> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|err| format!("{} cannot be read: {err}", path.display()))?;
+    let personality: Personality =
+        toml::from_str(&text).map_err(|err| format!("personality {}: {err}", path.display()))?;
+    if personality.schema != PERSONALITY_SCHEMA {
+        return Err(format!(
+            "personality {} is schema {}, this build reads {PERSONALITY_SCHEMA}",
+            path.display(),
+            personality.schema
+        ));
+    }
+    if personality.rule.is_empty() && personality.policy.share.is_empty() {
+        return Err(format!(
+            "personality {} has no [[rule]] blocks and no [policy], so it would play the match doing nothing",
+            path.display()
+        ));
+    }
+    Ok(personality)
+}
+
 pub fn load_scenario_file(path: &std::path::Path) -> Result<Scenario, String> {
     let text = std::fs::read_to_string(path).map_err(|err| format!("{}: {err}", path.display()))?;
     let mut scenario: Scenario =
@@ -689,39 +727,27 @@ pub fn load_scenario_file(path: &std::path::Path) -> Result<Scenario, String> {
     let Some(name) = scenario.ai.clone() else {
         return Ok(scenario);
     };
-    if !scenario.rule.is_empty() {
+    // One source for one AI: a scenario that names a personality supplies neither rules nor shares of its own. The
+    // refusal says *which* behaviour it found, so the author does not have to guess what to delete.
+    let own_behaviour = if !scenario.rule.is_empty() {
+        Some("[[rule]] blocks")
+    } else if !scenario.policy.share.is_empty() {
+        Some("a [policy] table")
+    } else {
+        None
+    };
+    if let Some(what) = own_behaviour {
         return Err(format!(
-            "{}: carries [[rule]] blocks *and* names personality {name:?} - the behaviour belongs in one place",
+            "{}: carries {what} *and* names personality {name:?} - the behaviour belongs in one place",
             path.display()
         ));
     }
     let dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
     let file = personality_path(dir, &name).map_err(|why| format!("{}: {why}", path.display()))?;
-    let text = std::fs::read_to_string(&file).map_err(|err| {
-        format!(
-            "{}: names personality {name:?}, but {} cannot be read: {err}",
-            path.display(),
-            file.display()
-        )
-    })?;
-    let personality: Personality = toml::from_str(&text)
-        .map_err(|err| format!("{}: personality {}: {err}", path.display(), file.display()))?;
-    if personality.schema != PERSONALITY_SCHEMA {
-        return Err(format!(
-            "{}: personality {} is schema {}, this build reads {PERSONALITY_SCHEMA}",
-            path.display(),
-            file.display(),
-            personality.schema
-        ));
-    }
-    if personality.rule.is_empty() {
-        return Err(format!(
-            "{}: personality {} has no [[rule]] blocks, so it would play the match doing nothing",
-            path.display(),
-            file.display()
-        ));
-    }
+    let personality = load_personality_file(&file)
+        .map_err(|why| format!("{}: names personality {name:?}, but {why}", path.display()))?;
     scenario.rule = personality.rule;
+    scenario.policy = personality.policy;
     Ok(scenario)
 }
 

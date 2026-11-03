@@ -2455,6 +2455,27 @@ loads `[policy]` or a `[[rule]]` points at the new files.
 4. **Is a scenario's timed step (`at_seconds = 300`, build a barracks) AI?** It is a scripted command, not a decision
    the engine makes, so it stays with the match. *Default: steps stay, rules move.*
 
+### D94a - the shares moved, and the type stayed (2026-11-03, applied)
+
+The other half of D94 is built: `[policy]` is no longer in `economy.toml`. It lives in the personality
+(`config/ai/base.toml`), `Personality` carries `policy`, and `Scenario` carries the **resolved** table so the runners
+have one thing to install (`apply_policy(&scenario.policy)`, once per match, at seed). Three consequences are rules now,
+not preferences:
+
+- **The type stays in `crates/data`; the parse goes with the table.** `Policy` is content vocabulary and both crates
+  need it, but the sum-to-100 refusal is enforced by its `Deserialize`, so it fires wherever the table is written - the
+  personality - and the message names that file rather than a block in a file it is no longer in.
+- **A leftover `[policy]` in an economy is refused by name.** `deny_unknown_fields` would refuse it anyway as an
+  anonymous unknown key; the refusal says the shares are behaviour, names `config/ai/<name>.toml`, and says to remove it.
+  A block nothing reads is the dead-knob failure (`cost_diagonal`) from the other side.
+- **A personality may be shares without rules.** "Where the villagers go" is a whole AI if that is all a match needs, so
+  the emptiness refusal now requires *both* empty. And a scenario that names a personality may carry neither rules nor
+  shares of its own - one source for one AI, the same rule `[[rule]]` already followed.
+
+The behaviour change worth stating: a run with **no scenario** has no personality and therefore installs no shares. It
+used to read the table out of the economy regardless. That is D94 read literally, and the only invocation it touches is
+a bare `--ticks` probe.
+
 ## D95 - The AI names *lines*, not units (owner, 2026-11-01)
 
 The owner chose **A1 (explicit naming)** with one addition that does the work a capability resolver would have done:

@@ -91,10 +91,6 @@ pub struct Economy {
     /// which roles count. The Castle Age's exception - a single Castle also opens the Imperial Age - is
     /// the `single` list.
     pub age: Ages,
-    /// Villager shares by villager count (`[policy]`): the game's own AI shape, which states a percentage per
-    /// resource and lets the engine move idle villagers to meet it (`docs/ai-of-the-game.md`). Empty means "no policy" -
-    /// the engine then never moves anybody on its own.
-    pub policy: Policy,
     /// What counts towards a side still being in the match (D59). The original's exclusion list is a
     /// fact about the game, not about the engine, so it is content: role names that do *not* keep a
     /// player alive.
@@ -311,8 +307,6 @@ struct RawEconomy {
     #[serde(default)]
     metrics: RawMetrics,
     #[serde(default)]
-    policy: RawPolicy,
-    #[serde(default)]
     age: RawAges,
     /// `[footprint.<role>] blocked = ["##..", ...]`. Optional: a building without one blocks its own tile.
     #[serde(default)]
@@ -363,9 +357,39 @@ struct RawHunt {
 /// `[policy]`: villager shares, in the game's own AI shape. Each row is the share from its `at_villagers` upwards;
 /// the highest row the player has reached applies. Resource names key the shares, so the pack's own vocabulary is
 /// what content writes.
+///
+/// Parsed here rather than in a raw struct beside the economy, because the table is **behaviour** and since D94 it
+/// lives in a personality (`config/ai/<name>.toml`) while the type stays with the rest of the content vocabulary.
 #[derive(Debug, Clone, Default)]
 pub struct Policy {
     pub share: Vec<ShareRow>,
+}
+
+impl<'de> Deserialize<'de> for Policy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = RawPolicy::deserialize(deserializer)?;
+        let mut rows: Vec<ShareRow> = Vec::with_capacity(raw.share.len());
+        for row in raw.share {
+            // A share row whose percentages do not sum to 100 is a typo, not a policy: the engine would silently
+            // under-serve every resource. Refused at load (D6's rule - a config that cannot mean what it says fails).
+            let total: u32 = row.per.values().sum();
+            if total != 100 {
+                return Err(serde::de::Error::custom(format!(
+                    "[policy] row at {} villagers sums to {total}%, not 100%",
+                    row.at_villagers
+                )));
+            }
+            rows.push(ShareRow {
+                at_villagers: row.at_villagers,
+                per: row.per,
+            });
+        }
+        rows.sort_by_key(|row| row.at_villagers);
+        Ok(Policy { share: rows })
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -515,10 +539,29 @@ fn invalid(path: &str, key: &str, detail: impl Into<String>) -> ConfigError {
 }
 
 pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> {
-    let raw: RawEconomy = toml::from_str(text).map_err(|err| ConfigError::Parse {
-        path: path.to_owned(),
-        detail: err.to_string(),
-    })?;
+    let raw: RawEconomy = match toml::from_str(text) {
+        Ok(raw) => raw,
+        Err(err) => {
+            // **`[policy]` is behaviour and it moved (D94).** `deny_unknown_fields` refuses it anyway, but "unknown
+            // field `policy`" hides the only fact the author needs: where it went. A share table nothing reads looks
+            // exactly like a policy that does nothing - the dead-knob failure this project has paid for once - so the
+            // refusal names the block and the destination.
+            if let Ok(document) = text.parse::<toml::Value>()
+                && document.get("policy").is_some()
+            {
+                return Err(invalid(
+                    path,
+                    "[policy]",
+                    "villager shares are behaviour and live in the personality (config/ai/<name>.toml, D94); \
+                     remove [policy] from the economy and put it beside the rules that use it",
+                ));
+            }
+            return Err(ConfigError::Parse {
+                path: path.to_owned(),
+                detail: err.to_string(),
+            });
+        }
+    };
 
     if raw.schema != SUPPORTED_SCHEMA {
         return Err(invalid(
@@ -842,33 +885,6 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         },
         metrics: MetricsSection {
             military_roles: raw.metrics.military_roles,
-        },
-        policy: {
-            // A share row whose percentages do not sum to 100 is a typo, not a policy: the engine would silently
-            // under-serve every resource. Refused at load (D6's rule - a config that cannot mean what it says fails).
-            for row in &raw.policy.share {
-                let total: u32 = row.per.values().sum();
-                if total != 100 {
-                    return Err(ConfigError::Invalid {
-                        key: "[policy]".to_owned(),
-                        detail: format!(
-                            "[policy] row at {0} villagers sums to {1}%, not 100%",
-                            row.at_villagers, total
-                        ),
-                    });
-                }
-            }
-            let mut rows: Vec<ShareRow> = raw
-                .policy
-                .share
-                .into_iter()
-                .map(|row| ShareRow {
-                    at_villagers: row.at_villagers,
-                    per: row.per,
-                })
-                .collect();
-            rows.sort_by_key(|row| row.at_villagers);
-            Policy { share: rows }
         },
         conquest: Conquest {
             surviving_classes: raw.conquest.surviving_classes,
