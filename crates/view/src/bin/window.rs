@@ -101,6 +101,9 @@ struct App {
     speed: u32,
     /// The tile under the pointer, in tile space.
     cursor: (i32, i32),
+    /// The same click in **continuous** tile coordinates: what a move order carries (A), so a unit walks to the place the
+    /// player pointed at rather than to the centre of the diamond under the pointer.
+    cursor_point: (f32, f32),
 }
 
 impl App {
@@ -125,6 +128,7 @@ impl App {
             paused: false,
             speed: 1,
             cursor: (0, 0),
+            cursor_point: (0.0, 0.0),
         }
     }
 
@@ -141,8 +145,8 @@ impl App {
                 self.selected = self.pick_entity(self.cursor).into_iter().collect();
             }
             winit::event::MouseButton::Right => {
-                let tile = self.cursor;
-                self.order_at(tile);
+                let (tile, point) = (self.cursor, self.cursor_point);
+                self.order_at(tile, point);
             }
             _ => {}
         }
@@ -150,8 +154,8 @@ impl App {
 
     /// Send the selected units an order at a tile: gather from a resource, attack a living thing, otherwise walk. This is
     /// the same `Command` a test submits through `World::submit_checked`, so nothing here can reach a state a test cannot.
-    fn order_at(&mut self, tile: (i32, i32)) {
-        self.order = Some((tile.0 as f32, tile.1 as f32));
+    fn order_at(&mut self, tile: (i32, i32), point: (f32, f32)) {
+        self.order = Some(point);
         // Pick first, borrow mutably second: picking reads the world, ordering writes it.
         let target = self.pick_entity(tile);
         let target_kind = self
@@ -183,14 +187,17 @@ impl App {
                     }
                 }
                 _ => {
+                    // **The point, not the tile** (A): the engine's movement is free of the grid, so a walk order carries
+                    // where the player pointed. A tile would put the unit on a centre it never clicked.
+                    let scale = world.scale();
                     #[allow(clippy::cast_possible_truncation)]
-                    let (x, y) = (
-                        tile.0.clamp(0, i32::from(u16::MAX)) as u16,
-                        tile.1.clamp(0, i32::from(u16::MAX)) as u16,
-                    );
-                    ruage_sim::Command::Move {
+                    let raw = |value: f32| (f64::from(value) * scale as f64).round() as i64;
+                    ruage_sim::Command::WalkTo {
                         unit: id,
-                        to: (x, y),
+                        to: (
+                            ruage_fixed::Fixed::from_raw(raw(point.0)),
+                            ruage_fixed::Fixed::from_raw(raw(point.1)),
+                        ),
                     }
                 }
             };
@@ -384,7 +391,9 @@ impl ApplicationHandler for App {
                 _ => {}
             },
             WindowEvent::CursorMoved { position, .. } => {
-                self.cursor = self.camera.pick((position.x as i32, position.y as i32));
+                let pixel = (position.x as i32, position.y as i32);
+                self.cursor = self.camera.pick(pixel);
+                self.cursor_point = self.camera.pick_point(pixel);
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,

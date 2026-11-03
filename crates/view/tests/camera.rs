@@ -157,3 +157,36 @@ fn zoom_steps_through_the_three_levels_and_stops_at_the_ends() {
         assert_eq!(camera.pick(at), (16, 16), "at {level}x");
     }
 }
+
+/// `pick_point` is `pick` **before** the rounding: the continuous tile coordinate a click landed on. A player points at
+/// a place, not at the centre of the diamond under the pointer (A, the owner's report that "movement is not aligned with
+/// the tiles"), so the order has to be able to carry that place.
+#[test]
+fn a_click_between_tiles_has_a_point_and_not_just_a_tile() {
+    let camera = camera();
+    let centre = camera.project((16.0, 16.0));
+    let at_centre = camera.pick_point((centre.0, centre.1));
+    assert!(
+        (at_centre.0 - 16.0).abs() < 0.01 && (at_centre.1 - 16.0).abs() < 0.01,
+        "a click on a centre is that centre: {at_centre:?}"
+    );
+
+    let mut off_centre = 0;
+    for offset in [(0, 12), (0, -12), (24, 0), (-24, 0), (18, 6)] {
+        let pixel = (centre.0 + offset.0, centre.1 + offset.1);
+        let point = camera.pick_point(pixel);
+        let tile = camera.pick(pixel);
+        assert_eq!(
+            (point.0.round() as i32, point.1.round() as i32),
+            tile,
+            "pick_point must round to exactly what pick returns, for {offset:?}"
+        );
+        if (point.0 - point.0.round()).abs() > 0.0 || (point.1 - point.1.round()).abs() > 0.0 {
+            off_centre += 1;
+        }
+    }
+    assert!(
+        off_centre >= 3,
+        "the point has to keep the sub-tile position, or it is just the tile again"
+    );
+}

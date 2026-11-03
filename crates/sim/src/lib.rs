@@ -449,21 +449,48 @@ pub enum Task {
 pub enum Command {
     /// Take from a resource node. The rate, the capacity and the variant come from the tables,
     /// not from the command: a replay must not be able to name its own numbers.
-    Gather { villager: EntityId, node: EntityId },
+    Gather {
+        villager: EntityId,
+        node: EntityId,
+    },
     /// Stand a unit down: drop its path and return it to idle.
-    Stop { unit: EntityId },
+    Stop {
+        unit: EntityId,
+    },
     /// Raze something of your own. The player is named because ownership is the only thing there is
     /// to check: every other command inherits its owner from the actor, and a deletion has no actor.
-    Delete { player: u8, entity: EntityId },
+    Delete {
+        player: u8,
+        entity: EntityId,
+    },
     /// Walk to a tile and stop. The ordinary order, and the one the rally point uses.
-    Move { unit: EntityId, to: (u16, u16) },
+    /// Walk to a **point**, not to a tile's centre (A). The original's movement is free of the grid - its waypoints and
+    /// goal points are floats - while tiles are for terrain, resource and building placement. A `Move` names a tile and
+    /// means its centre; this names a place.
+    WalkTo {
+        unit: EntityId,
+        to: (Fixed, Fixed),
+    },
+    Move {
+        unit: EntityId,
+        to: (u16, u16),
+    },
     /// Walk to a tile, fighting whatever enemy it meets on the way.
-    AttackMove { unit: EntityId, to: (u16, u16) },
+    AttackMove {
+        unit: EntityId,
+        to: (u16, u16),
+    },
     /// Walk to a tile, then back to where the order was given, forever - fighting on the way.
-    Patrol { unit: EntityId, to: (u16, u16) },
+    Patrol {
+        unit: EntityId,
+        to: (u16, u16),
+    },
     /// How much of a fight this unit picks on its own. The ground it stands on becomes its post, which
     /// is what a defensive stance returns to.
-    Stance { unit: EntityId, stance: Stance },
+    Stance {
+        unit: EntityId,
+        stance: Stance,
+    },
     /// Attack another player's unit or building.
     Attack {
         attacker: EntityId,
@@ -471,7 +498,10 @@ pub enum Command {
     },
     /// Produce a unit at a building. Cost and duration come from the unit table; whether this
     /// building may make this unit comes from `economy.toml` (the dat does not carry that edge).
-    Train { building: EntityId, unit: u32 },
+    Train {
+        building: EntityId,
+        unit: u32,
+    },
     /// Put up a building at a tile. Cost and duration come from the unit table.
     Build {
         villager: EntityId,
@@ -480,7 +510,10 @@ pub enum Command {
     },
     /// Research a tech at a building. Price, duration, where it may happen and what it applies all
     /// come from the tech and effect tables - a replay carries the id, never the numbers.
-    Research { building: EntityId, tech: u32 },
+    Research {
+        building: EntityId,
+        tech: u32,
+    },
     /// Where a building's finished units go. `Some(tile)` walks them there; `Some` of the building's own
     /// tile keeps them inside it, which is the only way a production building holds anybody (D38);
     /// `None` clears the rally and leaves them beside the building.
@@ -490,9 +523,14 @@ pub enum Command {
     },
     /// Put a unit inside a building. The capacity is the building's own `garrison` field, so the only
     /// numbers involved are the data's.
-    Garrison { unit: EntityId, building: EntityId },
+    Garrison {
+        unit: EntityId,
+        building: EntityId,
+    },
     /// Let everyone out of a building.
-    Ungarrison { building: EntityId },
+    Ungarrison {
+        building: EntityId,
+    },
     Spawn {
         id: EntityId,
         player: u8,
@@ -1093,6 +1131,10 @@ struct Repath {
 struct Route {
     /// Remaining waypoints, in tiles.
     steps: Vec<(u16, u16)>,
+    /// Where the order actually pointed, when it named a place rather than a tile (A). The **last** leg aims here instead
+    /// of at the tile's centre, so a click between tiles lands where it was clicked. `None` for a tile order, whose goal
+    /// is that tile's centre.
+    end: Option<(Fixed, Fixed)>,
     /// Units this route was planned around. Not hashed on its own: it is part of the route, and the route is hashed.
     avoiding: BTreeSet<EntityId>,
 }
@@ -1969,6 +2011,9 @@ impl World {
             Command::Move { unit, to } => {
                 self.check_order(*unit, *to)?;
             }
+            Command::WalkTo { unit, to } => {
+                self.check_order_at(*unit, *to)?;
+            }
             Command::Stance { unit, .. } => {
                 let entity = self.find(*unit).ok_or(SimError::MissingEntity(*unit))?;
                 if entity.kind != EntityKind::Unit {
@@ -2592,7 +2637,16 @@ impl World {
 
     /// The next waypoint of a unit's route, as a world position.
     fn next_waypoint(&self, id: EntityId) -> Option<(Fixed, Fixed)> {
-        let (x, y) = *self.paths.get(&id)?.steps.first()?;
+        let route = self.paths.get(&id)?;
+        let (x, y) = *route.steps.first()?;
+        // The **exact** point of the order on the last leg (A): a player clicks a place, not the centre of the diamond
+        // under the pointer. `step_towards` clamps each axis to the remaining gap, so a free point is reached exactly and
+        // the waypoint-spent test below still compares positions for equality.
+        if route.steps.len() == 1
+            && let Some(end) = route.end
+        {
+            return Some(end);
+        }
         Some(self.tile((x, y)))
     }
 
@@ -2827,7 +2881,7 @@ impl World {
                 attacker,
                 Route {
                     steps: route,
-                    avoiding: BTreeSet::new(),
+                    ..Route::default()
                 },
             );
         }
@@ -2846,6 +2900,28 @@ impl World {
 
     /// The checks a walk order has to survive: the unit is a unit, the tile is on the map, and there
     /// is a route to it. Returns the goal as a world position.
+    /// The checks a **point** order has to survive (A): the unit is a unit, the point is on the map, and there is a route
+    /// to it. Returns the point itself, not the centre of the tile it falls in - that is the whole point of the variant.
+    fn check_order_at(
+        &self,
+        unit: EntityId,
+        to: (Fixed, Fixed),
+    ) -> Result<(Fixed, Fixed), SimError> {
+        let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
+        if entity.kind != EntityKind::Unit {
+            return Err(SimError::NotAUnit { id: unit });
+        }
+        let (x, y) = self.tile_of_raw(to);
+        let (Ok(tx), Ok(ty)) = (u16::try_from(x), u16::try_from(y)) else {
+            return Err(SimError::OffMap { tile: (0, 0) });
+        };
+        if !self.on_map(tx, ty) {
+            return Err(SimError::OffMap { tile: (tx, ty) });
+        }
+        self.plan_path(entity.position, to)?;
+        Ok(to)
+    }
+
     fn check_order(&self, unit: EntityId, to: (u16, u16)) -> Result<(Fixed, Fixed), SimError> {
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
         if entity.kind != EntityKind::Unit {
@@ -2867,10 +2943,13 @@ impl World {
     fn start_walk(
         &mut self,
         unit: EntityId,
-        to: (u16, u16),
+        to: (Fixed, Fixed),
         fighting: bool,
         patrol: bool,
     ) -> Result<(), SimError> {
+        // Crowd slots are **tiles** (a place to stand), so the point becomes a tile for the slot search and survives as
+        // the goal when this unit takes the clicked tile itself (A).
+        let wanted = self.tile_of(to);
         // A crowd ordered to one tile is a crowd ordered to a *place*: each unit takes a tile of its own
         // near the one that was clicked, in the order the orders arrive. Without this they all aim at one
         // tile, and with the last-step rule (D52) all but one stop a step short of it (D53).
@@ -2878,10 +2957,11 @@ impl World {
             .entities
             .iter()
             .filter(|entity| entity.id != unit)
-            .filter(|entity| matches!(self.goal_of(entity), Some((tile, true)) if tile == to))
+            .filter(|entity| matches!(self.goal_of(entity), Some((tile, true)) if tile == wanted))
             .count();
-        let to = self.slot_for(to, already_heading);
-        let goal = self.check_order(unit, to)?;
+        let slot = self.slot_for(wanted, already_heading);
+        let goal = if slot == wanted { to } else { self.tile(slot) };
+        let goal = self.check_order_at(unit, goal)?;
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
         let route = self.plan_path(entity.position, goal)?;
         let here = self.tile_of(entity.position);
@@ -2889,7 +2969,8 @@ impl World {
             unit,
             Route {
                 steps: route,
-                avoiding: BTreeSet::new(),
+                end: Some(goal),
+                ..Route::default()
             },
         );
         // Any earlier order is superseded: a new order is not a second one running alongside.
@@ -4051,7 +4132,7 @@ impl World {
                         id,
                         Route {
                             steps: route,
-                            avoiding: BTreeSet::new(),
+                            ..Route::default()
                         },
                     );
                     if let Some(entity) = self.find_mut(id) {
@@ -4171,7 +4252,7 @@ impl World {
             villager,
             Route {
                 steps: route,
-                avoiding: BTreeSet::new(),
+                ..Route::default()
             },
         );
         if let Some(worker) = self.find_mut(villager) {
@@ -4891,7 +4972,9 @@ impl World {
         if (tx, ty) != (i64::from(goal.0), i64::from(goal.1)) {
             return (dx, dy);
         }
-        let taken = tiles.contains_key(&(tx, ty));
+        // **Not itself.** A unit ordered to a point inside its own tile has that tile as its goal, and a map that
+        // answered "taken" by the mover's own body would freeze it at the first step (the exact-point slice, A).
+        let taken = tiles.get(&(tx, ty)).is_some_and(|occupant| *occupant != id);
         if taken {
             // Stand where it is: the ground it was sent to is somebody else's for now, and a unit that
             // shuffled sideways for ever never arrives (which is what the second version did).
@@ -5912,7 +5995,7 @@ impl World {
                 unit,
                 Route {
                     steps: route,
-                    avoiding: BTreeSet::new(),
+                    ..Route::default()
                 },
             );
             target = Some(to);
@@ -5941,7 +6024,8 @@ impl World {
                                 unit,
                                 Route {
                                     steps: route,
-                                    avoiding: BTreeSet::new(),
+                                    end: Some(candidate),
+                                    ..Route::default()
                                 },
                             );
                             target = Some(candidate);
@@ -6390,7 +6474,7 @@ impl World {
             villager,
             Route {
                 steps: route,
-                avoiding: BTreeSet::new(),
+                ..Route::default()
             },
         );
 
@@ -6542,9 +6626,19 @@ impl World {
                 }
                 Ok(())
             }
-            Command::Move { unit, to } => self.start_walk(unit, to, false, false),
-            Command::AttackMove { unit, to } => self.start_walk(unit, to, true, false),
-            Command::Patrol { unit, to } => self.start_walk(unit, to, true, true),
+            Command::Move { unit, to } => {
+                let goal = self.tile(to);
+                self.start_walk(unit, goal, false, false)
+            }
+            Command::WalkTo { unit, to } => self.start_walk(unit, to, false, false),
+            Command::AttackMove { unit, to } => {
+                let goal = self.tile(to);
+                self.start_walk(unit, goal, true, false)
+            }
+            Command::Patrol { unit, to } => {
+                let goal = self.tile(to);
+                self.start_walk(unit, goal, true, true)
+            }
             Command::Delete { entity, .. } => {
                 // A deletion is a death and takes the death path: health to zero, and the end of the
                 // tick does the rest - the route goes, the population frees. Removing the entity
@@ -7043,7 +7137,7 @@ impl World {
                         id,
                         Route {
                             steps: route,
-                            avoiding: BTreeSet::new(),
+                            ..Route::default()
                         },
                     );
                     if let Some(entity) = self.find_mut(id) {
@@ -7077,7 +7171,7 @@ impl World {
                         id,
                         Route {
                             steps: route,
-                            avoiding: BTreeSet::new(),
+                            ..Route::default()
                         },
                     );
                     if let Some(entity) = self.find_mut(id) {
@@ -7172,7 +7266,7 @@ impl World {
                         id,
                         Route {
                             steps: route,
-                            avoiding: BTreeSet::new(),
+                            ..Route::default()
                         },
                     );
                 }
@@ -7306,7 +7400,7 @@ impl World {
                         id,
                         Route {
                             steps: route,
-                            avoiding: BTreeSet::new(),
+                            ..Route::default()
                         },
                     );
                 }
@@ -7605,7 +7699,7 @@ impl World {
                         id,
                         Route {
                             steps: route,
-                            avoiding: BTreeSet::new(),
+                            ..Route::default()
                         },
                     );
                     if let Some(entity) = self.find_mut(id) {
@@ -7706,7 +7800,16 @@ impl World {
                 };
                 match planned {
                     Some(steps) => {
-                        self.paths.insert(id, Route { steps, avoiding });
+                        // The exact end survives a repath: the order still points where it pointed.
+                        let end = self.paths.get(&id).and_then(|route| route.end);
+                        self.paths.insert(
+                            id,
+                            Route {
+                                steps,
+                                avoiding,
+                                end,
+                            },
+                        );
                         self.repath_count += 1;
                     }
                     None => {
@@ -7733,22 +7836,11 @@ impl World {
 
         // A waypoint reached is a waypoint spent. Done after the move, so a unit that lands on it
         // this tick starts toward the next one on the next tick.
-        let scale = self.scale;
+        // One definition of "reached", not two: the mover aims at `next_waypoint`, so the spend test asks it - an exact
+        // point (A) and a tile centre are then the same question.
         let spent: Vec<EntityId> = reached
             .iter()
-            .filter(|(id, position)| {
-                self.paths
-                    .get(id)
-                    .and_then(|route| route.steps.first())
-                    .map(|&(x, y)| {
-                        *position
-                            == (
-                                Fixed::from_raw(i64::from(x) * scale),
-                                Fixed::from_raw(i64::from(y) * scale),
-                            )
-                    })
-                    .unwrap_or(false)
-            })
+            .filter(|(id, position)| self.next_waypoint(*id).is_some_and(|way| *position == way))
             .map(|(id, _)| *id)
             .collect();
         for id in spent {

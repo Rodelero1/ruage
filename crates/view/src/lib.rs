@@ -266,15 +266,26 @@ impl Camera {
         )
     }
 
-    /// The tile under a pixel: the exact inverse of `project`, so a click lands on the diamond the player sees.
-    pub fn pick(&self, pixel: (i32, i32)) -> (i32, i32) {
+    /// The **continuous** tile coordinate under a pixel: `pick` before the rounding.
+    ///
+    /// A player points at a place, not at the centre of the diamond under the pointer, and the original's movement is free
+    /// of tiles (the owner's report; its own asserts print waypoints and goal points as floats). Terrain, resources and
+    /// buildings are what the grid is for. An order therefore carries this point (A).
+    pub fn pick_point(&self, pixel: (i32, i32)) -> (f32, f32) {
         let (rx, ry) = self.radii();
         let (w, h) = self.viewport;
         let sx = (pixel.0 as f32 - w as f32 / 2.0) / rx;
         let sy = (pixel.1 as f32 - h as f32 / 2.0 - ry) / ry;
         // x - y = sx and x + y = sy.
-        let x = (sx + sy) / 2.0 + self.origin.0;
-        let y = (sy - sx) / 2.0 + self.origin.1;
+        (
+            (sx + sy) / 2.0 + self.origin.0,
+            (sy - sx) / 2.0 + self.origin.1,
+        )
+    }
+
+    /// The tile under a pixel: the exact inverse of `project`, so a click lands on the diamond the player sees.
+    pub fn pick(&self, pixel: (i32, i32)) -> (i32, i32) {
+        let (x, y) = self.pick_point(pixel);
         // **Round, not floor.** `project` puts a tile at the *centre* of its diamond, so a diamond covers the
         // continuous range `tile - 0.5 .. tile + 0.5`; flooring is right only for a projection that puts a tile at
         // its top-left corner, and it sent every click in a diamond's upper-left half one tile off. Every centre
