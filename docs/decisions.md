@@ -2570,3 +2570,27 @@ Asked what needed deciding before the evasion work, the owner ruled both:
 2. **Soft evasion is "wait and let pass".** A unit whose next tile is occupied yields for a tick or two rather than
    sliding sideways: deterministic, no repathing, and a headless test can pin it exactly - two villagers crossing never
    share a tile and both arrive. Sliding is a later refinement, only if the waiting looks wrong on screen.
+
+### D98a - superseded by the original's own mechanism (owner, 2026-11-03)
+
+The owner asked whether pathfinding and evasion could be read out of the game binaries, was shown the map and the
+collision block, and ruled: **"B adopt from the original game."** So point 2 above is superseded in its *mechanism*; its
+**intent** - two units never pass through each other, and a crossing is deterministic and testable - stands and is what
+the tests assert.
+
+What the original does, read from `doIntelligentMovementUpdate` (move_obj.cpp 3,290+, collision block 4,600-4,760):
+
+- collision is queried **at the new position** with the unit's radius, not per tile;
+- a collision **with the order's target** means the move is done;
+- a collision with an object the path *already* avoids, or one its own class filter discards, is **past** - not counted;
+- otherwise the collisions are **non-past**, and the rule is "**repathing**", planning around the units it just met;
+- terrain collisions are counted separately and force the same repath;
+- when there is nothing actionable it says so ("Don't know what to do about my collision(s)") and moves on.
+
+Three consequences the engine inherits: a repath needs a path search that accepts extra obstacles
+(`find_path_avoiding`); the set of units a route is planned around is **state** (hashed, cleared with the route); and
+"past" is, until the one unread predicate is decoded, defined as **already in this route's avoid set** - which is what
+the binary's membership test reads as and is operationally the same statement.
+
+The straight-line shortcut (no non-target collision on the line to the goal) is part of the same original block and is
+recorded as the second slice, not the first: it changes nothing until collision exists at all.

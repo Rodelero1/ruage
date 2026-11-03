@@ -1,11 +1,12 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, latest: `[policy]` has moved and the AI folder now holds all of the behaviour** (D94a, v1.57). The
-> villager-share table lives in `config/ai/base.toml`, `Personality` carries it, `Scenario` hands it to
-> `apply_policy()` once per match, and an `economy.toml` that still has `[policy]` is refused by name. **Next, in order:**
-> names in the engine - the ~30 attack/armour **classes** are the last thing the tables quote as numbers - then evasion
-> (D98's wait-and-let-pass) with the binary read beside it ("Reading pathfinding and evasion out of the binary" at the
-> tail), then groups -> spatial awareness -> raiding. The order below this line is history; the tail is the queue.
+> **2026-11-03, latest: evasion adopts the original's shape (D98a) and it is the work in hand.** The owner ruled **B**:
+> a blocked unit does not pass through and does not merely wait - it **repaths**, exactly as `doIntelligentMovementUpdate`
+> does (move_obj.cpp 4,600-4,760: collision at the new position, a collision with the target means arrival, a *new*
+> obstacle means repath, an obstacle the path already knows about is ignored, terrain collision means repath). The design,
+> the call sites, the tests and the one predicate still unread are in "Evasion, the original's shape" at the tail.
+> **Do this before** names for the attack/armour classes, groups, spatial awareness and raiding. `[policy]` / D94a is
+> done and pushed (v1.57). The order below this line is history; the tail is the queue.
 
 Written 2026-10-26, after the resource enum and the unit roles became content (SPEC v0.54).
 **Kind 3 landed the same day** (v0.55): research plus "every unit `a` becomes unit `b`". This file
@@ -2647,6 +2648,68 @@ from. `make headless` and the window both always load `acceptance.toml`, so only
 **Next session starts here:** names for the ~30 attack/armour classes in `config/names.toml`'s sibling (their members
 are derivable from the unit table; 15 of the 31 class ids already have effect-modifier words attached, 0 have a name in
 the pack), then the table flip to name keys; evasion separately, with the binary map below.
+
+## Evasion, the original's shape - the compact for the slice (D98a, ruled 2026-11-03)
+
+The owner's ruling, verbatim: **"B adopt from the original game."** So the mechanism is the original's, not D98's
+"wait and let pass". What the binary says, read from `FUN_008a4360` (`doIntelligentMovementUpdate`, move_obj.cpp
+3,290+; the collision block is 4,600-4,760, pseudocode at `FUN_008a4360_008a4360.c` lines 1,964-2,197):
+
+1. **The query is at the new position, not at a tile** - "ObSystem collisions at our new position", and each collided
+   unit is logged with `Pos` and `Radius (x, y)`. So collision is **radius-based on continuous positions**, which our
+   engine also has (`radius` is already in the pack).
+2. **Classification, per collision:** terrain (`record+8 == 0`) is counted separately; a unit is resolved, and then
+   - **target collision** (the collided object id equals the path's target id, `path+0x24`): counted, and the decision
+     reads "That collision is with our target, so we're done";
+   - **non-past collision**: counted, its id pushed onto a list (max 0x100 ids, `DAT_00de1dc8`);
+   - **past collision**: *not* counted - the branch that is taken when the collided object is already in the path's own
+     avoid list (`FUN_007fe010` is a membership test over a list the path object holds at `+0x20`/`+0x24`), and when a
+     class comparison says it is already handled.
+3. **The decision:** `if (collisions != 1 || target_count != 1)` - i.e. unless the *only* collision is the target - then
+   `if non_past_count < 1` → **"Don't know what to do about my collision(s)"** (nothing to do), else
+   **"We have N non-past collisions and M terrain collisions, repathing"**.
+4. **The repath takes the non-target collided ids with it** (the `DAT_00de1dc8` list is walked next), i.e. it plans
+   *around the units it just met*, not merely again.
+5. A **straight-line shortcut** exists above all this: if the line to the goal has no non-target collisions, the unit
+   walks the line and never consults the path (move_obj.cpp 4,079-4,245).
+
+**The one predicate still unread:** the final "is it past" comparison inside the class-filtered branch
+(`iVar5+0x10 < (virtual +0x2ac)()`, with class ids 3 / 0x1b / 0x27 / 0x34) - it involves two object-system fields we have
+not identified. Until it is read, this engine's "past" means **already in this path's avoid set**, which is what the
+membership test reads as and is operationally the same statement: a known obstacle means keep the plan, a new one means
+replan. Write that reading down in the decision so the next session does not re-derive it as a guess.
+
+### The slice that follows (order, and why each order)
+
+1. **`find_path_avoiding(walk, from, to, extra: &BTreeSet<(u16,u16)>)`** in `crates/sim/src/path.rs` - today's
+   `find_path` becomes a wrapper with an empty set. No behaviour change on its own; the repath needs it.
+2. **A side table, not a wider `Entity`**: `World.avoiding: BTreeMap<EntityId, BTreeSet<EntityId>>`, the same shape as
+   `queued` / `rallies` / `shares`. It holds the units this route is already planned around. **Hashed when non-empty**,
+   joined to `bookkeeping_entries`/`bookkeeping_touches`, and cleared by `stand_down`, a new order, and death - a route
+   that ends must forget what it was avoiding or the next order starts pre-blind.
+3. **The collision test in the movement apply-loop** (`crates/sim/src/lib.rs` ~7,343, where `avoid` is called): the
+   `occupied` grid is already built there for exactly this. Compute the tile the step lands in; find a *unit* occupant
+   (the grid does not say which - add an `occupants: Vec<EntityId>`-style index or collect `(tile, id)` while building
+   the grid). Then, matching the original:
+   - occupant is the order's **target** → zero the step and let the existing arrival logic finish the order;
+   - occupant not in `avoiding[id]` → **collect a repath** (id, goal, blocked tiles) for after the loop; zero the step
+     this tick;
+   - occupant already in `avoiding[id]` → zero the step, **no repath** (the plan already routes around it).
+4. **Apply the repaths after the movement loop**, the same pattern as `shots`: `plan_path` with the collided tiles as
+   extra obstacles, insert the collided ids into `avoiding[id]`, and on failure keep the old route and wait (a refusal is
+   already recorded through `last_refusal`, so a deadlock is diagnosable).
+5. **Tests (D98's own, now satisfied by B, plus the original's branches):** two villagers walking through each other
+   never share a tile and both arrive; a unit whose route is blocked by a standing friend **goes round it and arrives**;
+   a unit with no way round **waits, does not enter the tile, and records a refusal**; and a second collision with a unit
+   already being avoided causes **no second repath** (count them through a probe or a counter on `World`).
+6. **Then the radius form** (slice 2): collision by overlapping circles rather than shared tile, which is what the
+   original actually does and what makes a crowd behave. The tile form is the first slice because our pathing is
+   tile-based and the test is exact; the radius form changes where units come to rest, so it gets its own review.
+
+**Measured before writing any of it:** a blunt guard ("never step onto a tile another unit stands on", two lines in
+`avoid`, nothing else) run over the suite fails **exactly two tests**, both in `build.rs` - *"the villager banked 0
+timber, which does not pay for a house"* - because a refusal without a repath strands a villager whose route crosses
+another. That is the measurement that says the repath is the load-bearing half, not the guard.
 
 ### The movement module is mapped, and the original repaths on collision (2026-11-03)
 
