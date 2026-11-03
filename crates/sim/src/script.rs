@@ -649,7 +649,31 @@ fn free_tile_near(world: &World, player: u8, unit: u32) -> Option<(u16, u16)> {
     // **Wide enough to still find ground.** Six tiles around a town centre is a base: seven houses, a mill, a lumber camp
     // and a dozen farms fill it, and then every later building is refused with *"no free tile"* - 267 times each for the
     // market and the blacksmith in the last full run, with 3,848 wood in the bank. The ring grows to twelve.
-    for radius in 2..=12u16 {
+    // **Leave the ground near the town centre for farms**, which is the manual's advice for houses - *"you should not
+    // build your first house too close to the Town Center; make sure there will be enough room for farms later"* - and
+    // the reason a base that packs itself against the centre has nowhere left to put a plot. Radius 2-3 is tried only if
+    // nothing further out fits.
+    for radius in 4..=12u16 {
+        for dy in 0..=radius {
+            for dx in 0..=radius {
+                for (x, y) in [
+                    (origin.0 + dx, origin.1 + dy),
+                    (origin.0 + dx, origin.1.wrapping_sub(dy)),
+                    (origin.0.wrapping_sub(dx), origin.1 + dy),
+                    (origin.0.wrapping_sub(dx), origin.1.wrapping_sub(dy)),
+                ] {
+                    if world.is_free_ground(x, y)
+                        && world.site_fits(player, unit, (x, y))
+                        && world.site_has_lane(player, unit, (x, y))
+                    {
+                        return Some((x, y));
+                    }
+                }
+            }
+        }
+    }
+    // Nothing at arm's length: come back in close, because a building is better than none.
+    for radius in 2..=3u16 {
         for dy in 0..=radius {
             for dx in 0..=radius {
                 for (x, y) in [

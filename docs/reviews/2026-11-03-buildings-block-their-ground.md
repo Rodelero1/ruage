@@ -19,11 +19,12 @@ construction. Building may not overlap in any case (only expired farm can be)."*
 | | baseline | with buildings blocking |
 |---|---|---|
 | outcome | **`players=1`** (won at 1,667 s) | `players=2` - not won |
-| hash | `912386556784c88f` | `c311cfb2158c03c6` |
-| bank at 1,600 s | 192 wood / 654 food / 110 gold (after spending on the win) | 39 / 258 / 370 |
-| entities / buildings | 153 / 49 | 164 / 50 |
-| repaths / nudges | 100 / 166 | 101 / 200 |
-| wall clock | 19.9 s | 47.4 s |
+| hash | `912386556784c88f` | `ca90bc834457d7a6` |
+| bank at 1,200 s | 752 wood / 825 food / 370 gold | 258 / 290 / 170 |
+| bank at 1,600 s | 192 / 654 / 110 (after spending on the win) | 1,157 / 609 / 280 |
+| entities / buildings | 153 / 49 | 144 / 38 |
+| repaths / nudges | 100 / 166 | 63 / 114 |
+| wall clock | 19.9 s | 47.3 s |
 
 The 2.4x wall clock is the same effect as the bank: the base is bigger and busier per tick (50 buildings, more pathing
 around them), not a slower movement pass.
@@ -40,6 +41,12 @@ around them), not a slower movement pass.
 4. **A floor needs no lane** (a farm blocks nothing) **and a wider farm search** (`free_tile_near_node` scanned 4 tiles,
    too few for a 3x3 plot): 50 buildings, 164 entities, food 258, wood 39 - the economy spends everything on the base and
    still does not win.
+5. **The lane back for farms, and the town centre's ground kept clear.** The manual is the authority the owner asked for:
+   *"you should build four or five farms around a granary, leaving some space between them to avoid 'peasant traffic
+   jam'"*, and *"you should not build your first house too close to the Town Center; make sure there will be enough room
+   for farms later"* (AoE manual, farms and houses). So the lane applies to every building, and the placement search starts
+   at radius 4 and only falls back to 2-3 when nothing further out fits. **This is the best state so far**: a living base
+   (38 buildings, 144 entities, bank 258/290/170 at 1,200 s) that still does not win.
 
 **Where it stands:** the rule is implemented and tested, and the acceptance match - the project's standing measurement -
 **regresses from a won match to a drawn one with a drained bank**. The cause is not the rule: it is that the AI's base

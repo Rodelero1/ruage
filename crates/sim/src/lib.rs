@@ -2656,11 +2656,11 @@ impl World {
     /// streets without anybody modelling a street.
     #[must_use]
     pub fn site_has_lane(&self, player: u8, unit: u32, at: (u16, u16)) -> bool {
-        // **A floor needs no lane.** A farm blocks nothing, so a farm packed against a house costs nobody a walk - and
-        // asking for a lane around every plot cost the match its food ("no free tile for a farm", 85 times).
-        if !self.site_blocks(unit) {
-            return true;
-        }
+        // The lane is asked of **every** building, farms included: the game's own manual says so - *"you should build four
+        // or five farms around a granary, leaving some space between them to avoid 'peasant traffic jam'"* (AoE manual,
+        // farms) - and the version that exempted a farm because it blocks nothing produced a floor of plots packed edge to
+        // edge that villagers could not queue around. What made the exemption look necessary was the farm search's
+        // four-tile radius, not the lane.
         let site: BTreeSet<(u16, u16)> = self.build_site_tiles(unit, at).into_iter().collect();
         let halo: BTreeSet<(u16, u16)> = site
             .iter()
@@ -2688,7 +2688,10 @@ impl World {
             let seen = entity.player == player
                 || entity.player == 0
                 || self.vision(player, self.tile_of(entity.position)) == TileVision::Visible;
-            seen && self.footprint_area(entity).iter().any(|tile| halo.contains(tile))
+            seen && self
+                .footprint_area(entity)
+                .iter()
+                .any(|tile| halo.contains(tile))
         })
     }
 
@@ -2700,20 +2703,11 @@ impl World {
         self.site_refusal(player, unit, at).is_none()
     }
 
-    /// Whether a building of `unit` blocks movement at all: no mask means its whole footprint does, and a mask means
-    /// whatever its `#` cells say (a farm's are all `.`, which is the one role that is a floor).
-    fn site_blocks(&self, unit: u32) -> bool {
-        let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
-        match self.footprints.get(&root) {
-            Some(mask) => self.blocking.contains(&root) || mask.blocked.iter().any(|blocked| *blocked),
-            None => true,
-        }
-    }
-
     /// The tiles a site of `unit` at `at` would cover: the footprint its `radius` gives it, which is what placement
     /// checks - not the mask, because a farm's floor is still the farm's ground.
     fn build_site_tiles(&self, unit: u32, at: (u16, u16)) -> Vec<(u16, u16)> {
-        let Some((width, height)) = self.units.as_ref().and_then(|units| units.footprint(unit)) else {
+        let Some((width, height)) = self.units.as_ref().and_then(|units| units.footprint(unit))
+        else {
             return vec![at];
         };
         let mut tiles = Vec::with_capacity(width as usize * height as usize);
@@ -2733,7 +2727,8 @@ impl World {
         let Some(unit) = entity.unit else {
             return vec![anchor];
         };
-        let Some((width, height)) = self.units.as_ref().and_then(|units| units.footprint(unit)) else {
+        let Some((width, height)) = self.units.as_ref().and_then(|units| units.footprint(unit))
+        else {
             return vec![anchor];
         };
         let mut tiles = Vec::with_capacity(width as usize * height as usize);
@@ -5212,10 +5207,7 @@ impl World {
         step: (Fixed, Fixed),
         goal: Option<(u16, u16)>,
     ) -> bool {
-        let (x, y) = (
-            here.0.raw() + step.0.raw(),
-            here.1.raw() + step.1.raw(),
-        );
+        let (x, y) = (here.0.raw() + step.0.raw(), here.1.raw() + step.1.raw());
         // A world with no map knows no blocked ground: a bare `World::new` (a unit test of the mover, a fixture that only
         // wants collision) must still be able to walk.
         if self.walk.is_none() {

@@ -82,9 +82,8 @@ fn free_ground(world: &World, tile: (i64, i64)) -> bool {
 fn open_patch(world: &World, width: i64, height: i64) -> Option<(i64, i64)> {
     for y in 26..56i64 {
         for x in 4..50i64 {
-            let clear = (0..width).all(|dy| {
-                (0..height).all(|dx| free_ground(world, (x + dx, y + dy)))
-            });
+            let clear =
+                (0..width).all(|dy| (0..height).all(|dx| free_ground(world, (x + dx, y + dy))));
             let approach = (1..=3).all(|back| free_ground(world, (x - back, y)));
             if clear && approach {
                 return Some((x, y));
@@ -266,7 +265,9 @@ fn a_foundation_blocks_while_it_is_still_being_built() {
     }
     let site = site.expect("the foundation exists");
     assert!(
-        world.entity(site).is_some_and(|entity| entity.construction.is_some()),
+        world
+            .entity(site)
+            .is_some_and(|entity| entity.construction.is_some()),
         "it is still being built, which is the point of the test"
     );
     let walkable: Vec<(i64, i64)> = footprint_tiles(&world, "house", at)
@@ -440,7 +441,9 @@ fn a_live_farm_is_not_buildable_over_but_an_expired_one_is() {
     }
     assert!(drained, "the plot never ran out of food");
     assert!(
-        world.entity(farm).is_some_and(|entity| entity.construction.is_none()),
+        world
+            .entity(farm)
+            .is_some_and(|entity| entity.construction.is_none()),
         "the plot is finished and spent, which is what makes it replaceable"
     );
     let replaced = world.submit_checked(Command::Build {
