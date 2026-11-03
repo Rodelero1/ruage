@@ -286,7 +286,8 @@ impl App {
         );
         // The HUD reads the same snapshot the picture was drawn from - stock, population - so what it reports cannot
         // drift from what is on the screen (D74).
-        ui::hud(&mut frame, &snapshot, self.pace.speed());
+        let hud = ui::Hud::of_selected(&snapshot, &self.config.resources, &selected);
+        ui::hud(&mut frame, &hud, &snapshot, self.pace.speed());
         // `softbuffer` wants non-zero dimensions; a minimised window has none, and drawing nothing is correct there.
         let (Some(w), Some(h)) = (
             std::num::NonZeroU32::new(width),

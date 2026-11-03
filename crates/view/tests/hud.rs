@@ -88,7 +88,12 @@ fn the_hud_shows_one_swatch_per_column_and_the_population() {
     let camera = Camera::new((320, 240)).centred_on((16.0, 16.0));
     let plain = render(&snapshot, &camera);
     let mut with_hud = render(&snapshot, &camera);
-    ui::hud(&mut with_hud, &snapshot, ruage_view::Speed::One);
+    ui::hud(
+        &mut with_hud,
+        &panel(&snapshot, Vec::new(), None),
+        &snapshot,
+        ruage_view::Speed::One,
+    );
 
     // A swatch per stock column, in order, each with digits beside it.
     for (column, colour) in palette::STOCK.iter().take(snapshot.stock.len()).enumerate() {
@@ -110,9 +115,18 @@ fn the_hud_shows_one_swatch_per_column_and_the_population() {
         lit(&with_hud, ui::hud_swatch_x(snapshot.stock.len()), 2, 60, 20) > 0,
         "no population reported"
     );
+    // The bottom panel and the minimap **are** painted over the game - that is what a HUD is - so this walks the band
+    // between them: below the top bar, above the panel, and left of the minimap.
     let below = ui::hud_bar_height() + 4;
-    for y in below..240 {
+    let above_panel = 240 - ui::hud_panel_height() - 4;
+    let (map_left, map_top, ..) = ui::minimap_rect(320, 240, snapshot.width, snapshot.height);
+    for y in below..above_panel {
         for x in 0..320 {
+            // The minimap is drawn in this band too, by design: it is the one part of the HUD that is the world.
+            // One pixel of slack for the box the minimap is drawn in.
+            if x as i32 >= map_left - 1 && y as i32 >= map_top - 1 {
+                continue;
+            }
             if plain.pixel(x, y) != [0, 0, 0, 0] {
                 assert_eq!(
                     with_hud.pixel(x, y),
@@ -131,7 +145,12 @@ fn a_pack_with_no_stock_draws_no_swatches() {
     snapshot.stock.clear();
     let camera = Camera::new((320, 240)).centred_on((16.0, 16.0));
     let mut frame = render(&snapshot, &camera);
-    ui::hud(&mut frame, &snapshot, ruage_view::Speed::One);
+    ui::hud(
+        &mut frame,
+        &panel(&snapshot, Vec::new(), None),
+        &snapshot,
+        ruage_view::Speed::One,
+    );
     for (column, colour) in palette::STOCK.iter().enumerate() {
         let x = ui::hud_swatch_x(column);
         assert_ne!(
@@ -140,4 +159,141 @@ fn a_pack_with_no_stock_draws_no_swatches() {
             "a swatch for column {column} was drawn from nothing"
         );
     }
+}
+
+/// The `Hud` the rest of these tests drive: the snapshot's own stock and population, and whatever is selected. The names
+/// are placeholders on purpose - the panel's numbers come from the snapshot and its layout from the pack's column order,
+/// so a test that hard-coded "food" would be testing the test.
+fn panel(
+    snapshot: &Snapshot,
+    selected: Vec<ui::SelectedRow>,
+    outcome: Option<ruage_sim::MatchOutcome>,
+) -> ui::Hud {
+    ui::Hud {
+        stock: snapshot
+            .stock
+            .iter()
+            .enumerate()
+            .map(|(column, amount)| (format!("column {column}"), *amount))
+            .collect(),
+        population: snapshot.population,
+        population_cap: snapshot.population_cap,
+        selected,
+        outcome,
+    }
+}
+
+fn row(hp_fraction: f32) -> ui::SelectedRow {
+    ui::SelectedRow {
+        id: 83,
+        kind: ruage_sim::EntityKind::Unit,
+        hp_fraction,
+        carry: 0,
+        construction: None,
+        garrison: 0,
+        pending: 0,
+        pose: ruage_view::Pose::Idle,
+    }
+}
+
+/// **What is selected is on the screen.** The panel that reads `Hud::of` was written and tested before the window drew it;
+/// the window drew the stock bar and nothing else, so a player could select six villagers and see no sign of it. This is
+/// the test that says the panel is painted, in the colour the health bar's own rule gives it.
+#[test]
+fn the_selection_panel_paints_a_health_bar() {
+    let mut frame = Frame::new(960, 720);
+    ui::hud(
+        &mut frame,
+        &panel(&snapshot(), vec![row(0.4)], None),
+        &snapshot(),
+        ruage_view::Speed::One,
+    );
+    let (x, y) = ui::selection_row_origin(0, frame.height);
+    assert_eq!(
+        frame.pixel(x as u32 + 2, y as u32 + 1),
+        palette::HP_RED,
+        "a selected thing at 40% health has a red bar in the panel"
+    );
+
+    let mut bare = Frame::new(960, 720);
+    ui::hud(
+        &mut bare,
+        &panel(&snapshot(), Vec::new(), None),
+        &snapshot(),
+        ruage_view::Speed::One,
+    );
+    assert_eq!(
+        bare.pixel(x as u32 + 2, y as u32 + 1),
+        palette::PANEL,
+        "and with nothing selected the row is the panel's own background"
+    );
+}
+
+/// **The minimap is drawn where `minimap_rect` says, pixel for pixel.** The function existed and was never called by the
+/// window; this pins the copy, so a panel that is drawn somewhere else is a failure rather than a surprise.
+#[test]
+fn the_minimap_is_copied_into_the_corner() {
+    let snapshot = snapshot();
+    let mut frame = Frame::new(960, 720);
+    ui::hud(
+        &mut frame,
+        &panel(&snapshot, Vec::new(), None),
+        &snapshot,
+        ruage_view::Speed::One,
+    );
+    let (x, y, w, h) = ui::minimap_rect(960, 720, snapshot.width, snapshot.height);
+    let map = ui::minimap(&snapshot, w / u32::from(snapshot.width).max(1));
+    for (px, py) in [(0, 0), (w / 2, h / 2), (w - 1, h - 1)] {
+        assert_eq!(
+            frame.pixel(x as u32 + px, y as u32 + py),
+            map.pixel(px, py),
+            "the minimap pixel at ({px}, {py}) was not copied into the panel"
+        );
+    }
+}
+
+/// **A decided match says so in colour**, because the font has digits and no words (D82). A banner in the middle of the
+/// screen, green for a win and red for a loss, is the whole vocabulary.
+#[test]
+fn a_decided_match_paints_a_banner() {
+    let mut won = Frame::new(960, 720);
+    ui::hud(
+        &mut won,
+        &panel(
+            &snapshot(),
+            Vec::new(),
+            Some(ruage_sim::MatchOutcome::Victory { winner: 1 }),
+        ),
+        &snapshot(),
+        ruage_view::Speed::One,
+    );
+    let (x, y) = ui::banner_point(960, 720);
+    assert_eq!(won.pixel(x, y), palette::WON, "a win paints the banner");
+
+    let mut lost = Frame::new(960, 720);
+    ui::hud(
+        &mut lost,
+        &panel(&snapshot(), Vec::new(), Some(ruage_sim::MatchOutcome::Draw)),
+        &snapshot(),
+        ruage_view::Speed::One,
+    );
+    assert_ne!(lost.pixel(x, y), palette::WON, "a draw is not a win");
+    assert_eq!(
+        lost.pixel(x, y),
+        palette::LOST,
+        "and it is not the ground either"
+    );
+
+    let mut playing = Frame::new(960, 720);
+    ui::hud(
+        &mut playing,
+        &panel(&snapshot(), Vec::new(), None),
+        &snapshot(),
+        ruage_view::Speed::One,
+    );
+    assert_ne!(
+        playing.pixel(x, y),
+        palette::WON,
+        "an undecided match shows no banner"
+    );
 }

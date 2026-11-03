@@ -171,14 +171,19 @@ pub struct Hud {
 
 impl Hud {
     pub fn of(snapshot: &Snapshot, resources: &Resources, selection: &Selection) -> Hud {
+        Hud::of_selected(snapshot, resources, &selection.ids)
+    }
+
+    /// The same HUD for a caller that holds a plain list of ids rather than a `Selection` - the window keeps its own
+    /// vector today, and a second way to ask "what is selected" would eventually disagree with the first.
+    pub fn of_selected(snapshot: &Snapshot, resources: &Resources, ids: &[u32]) -> Hud {
         let stock = (0..snapshot.stock.len())
             .map(|slot| {
                 let name = resources.name(slot).unwrap_or("?").to_owned();
                 (name, snapshot.stock[slot])
             })
             .collect();
-        let selected = selection
-            .ids
+        let selected = ids
             .iter()
             .filter_map(|id| snapshot.entities.iter().find(|entity| entity.id == *id))
             .map(|entity| SelectedRow {
@@ -322,29 +327,144 @@ pub fn speed_selector(frame: &mut Frame, speed: crate::Speed) {
 ///
 /// It reads a `Snapshot` and nothing else (D55): the simulation carries no text, and every number here is one the
 /// engine already keeps. D74 allowed this; D82 chose the bitmap font it is drawn with.
-pub fn hud(frame: &mut Frame, snapshot: &Snapshot, speed: crate::Speed) {
+/// The bottom panel's height: a selection list on the left, and room above the minimap on the right.
+#[must_use]
+pub fn hud_panel_height() -> u32 {
+    68
+}
+
+/// The left edge of a selection row's health bar, and its top. Row 0 is nearest the panel's top edge.
+#[must_use]
+pub fn selection_row_origin(row: usize, frame_height: u32) -> (i32, i32) {
+    let top = frame_height as i32 - hud_panel_height() as i32;
+    (8, top + 6 + row as i32 * ROW_HEIGHT)
+}
+
+/// The minimap's place in the frame: bottom-right, **above** the panel, two pixels a tile.
+#[must_use]
+pub fn minimap_rect(
+    frame_width: u32,
+    frame_height: u32,
+    map_width: u16,
+    map_height: u16,
+) -> (i32, i32, u32, u32) {
+    let scale = 2;
+    let width = u32::from(map_width) * scale;
+    let height = u32::from(map_height) * scale;
+    (
+        frame_width as i32 - width as i32 - 8,
+        frame_height as i32 - hud_panel_height() as i32 - height as i32 - 8,
+        width,
+        height,
+    )
+}
+
+/// The middle of the outcome banner: a strip across the play area, in colour because the font has no words (D82).
+#[must_use]
+pub fn banner_point(frame_width: u32, frame_height: u32) -> (u32, u32) {
+    (
+        frame_width / 2,
+        (frame_height.saturating_sub(hud_panel_height())) / 2,
+    )
+}
+
+/// How tall one selection row is, in pixels.
+const ROW_HEIGHT: i32 = 12;
+/// How wide a selection row's health bar is, in pixels.
+const ROW_BAR: i32 = 60;
+
+/// **Everything a player watches, in one place.** The top bar is the stock, the population and the speed; the bottom panel
+/// is what is selected; the corner is the minimap; a decided match paints a banner across the middle. `Hud::of` builds the
+/// numbers and this draws them - the window's job is to call it, not to decide what a HUD is.
+pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Speed) {
     let bar = hud_bar_height().min(frame.height);
-    if bar == 0 {
-        return;
+    if bar > 0 {
+        frame.fill_rect(0, 0, frame.width as i32, bar as i32, palette::HUD_BAR);
+        let scale = 3;
+        let text_y = (bar as i32 - crate::font::HEIGHT * scale) / 2;
+        let swatch = 12;
+        for (column, (_, amount)) in hud.stock.iter().enumerate() {
+            let x = hud_swatch_x(column) as i32;
+            let colour = palette::STOCK[column.min(palette::STOCK.len() - 1)];
+            frame.fill_rect(x, (bar as i32 - swatch) / 2, swatch, swatch, colour);
+            frame.draw_number(x + swatch + 6, text_y, *amount, scale, palette::HUD_TEXT);
+        }
+        let x = hud_swatch_x(hud.stock.len()) as i32;
+        frame.draw_ratio(
+            x,
+            text_y,
+            hud.population,
+            hud.population_cap,
+            scale,
+            palette::HUD_TEXT,
+        );
+        speed_selector(frame, speed);
     }
-    frame.fill_rect(0, 0, frame.width as i32, bar as i32, palette::HUD_BAR);
-    let scale = 3;
-    let text_y = (bar as i32 - crate::font::HEIGHT * scale) / 2;
-    let swatch = 12;
-    for (column, amount) in snapshot.stock.iter().enumerate() {
-        let x = hud_swatch_x(column) as i32;
-        let colour = palette::STOCK[column.min(palette::STOCK.len() - 1)];
-        frame.fill_rect(x, (bar as i32 - swatch) / 2, swatch, swatch, colour);
-        frame.draw_number(x + swatch + 6, text_y, *amount, scale, palette::HUD_TEXT);
+
+    let top = frame.height as i32 - hud_panel_height() as i32;
+    if top >= bar as i32 && top < frame.height as i32 {
+        frame.fill_rect(
+            0,
+            top,
+            frame.width as i32,
+            hud_panel_height() as i32,
+            palette::PANEL,
+        );
+        // A one-pixel edge along the panel's top: on darkness the panel's own colour is nearly the void's, and a HUD that
+        // is drawn but unreadable is the same to a player as one that is not drawn.
+        frame.fill_rect(0, top, frame.width as i32, 1, palette::MARK);
+        // **A row per selected thing, five at most.** The panel is a list, not a summary: a player who boxed six villagers
+        // sees six bars and can see which one is hurt.
+        for (index, row) in hud.selected.iter().take(5).enumerate() {
+            let (x, y) = selection_row_origin(index, frame.height);
+            frame.fill_rect(x, y, ROW_BAR, 4, palette::HP_TRACK);
+            let lit = (ROW_BAR as f32 * row.hp_fraction.clamp(0.0, 1.0)) as i32;
+            let colour = if row.hp_fraction > 0.5 {
+                palette::HP_GREEN
+            } else {
+                palette::HP_RED
+            };
+            frame.fill_rect(x, y, lit, 4, colour);
+            // A load in hand, then a production queue: two numbers, no words.
+            let mut next = x + ROW_BAR + 6;
+            if row.carry > 0 {
+                next = frame.draw_number(next, y - 1, row.carry, 1, palette::HUD_TEXT) + 4;
+            }
+            if row.pending > 0 {
+                frame.draw_number(next, y - 1, row.pending as u32, 1, palette::SELECTION);
+            }
+            // A building going up shows how far it has got, in the order marker's colour.
+            if let Some(progress) = row.construction {
+                let lit = (ROW_BAR as f32 * progress.clamp(0.0, 1.0)) as i32;
+                frame.fill_rect(x, y + 5, lit, 2, palette::ORDER);
+            }
+        }
     }
-    let x = hud_swatch_x(snapshot.stock.len()) as i32;
-    frame.draw_ratio(
-        x,
-        text_y,
-        snapshot.population,
-        snapshot.population_cap,
-        scale,
-        palette::HUD_TEXT,
-    );
-    speed_selector(frame, speed);
+
+    let (mx, my, mw, mh) = minimap_rect(frame.width, frame.height, snapshot.width, snapshot.height);
+    if mw > 0 && mh > 0 && mx >= 0 && my >= 0 {
+        // The box, then the map: unexplored ground is nearly black, so without an edge the minimap is a hole.
+        frame.fill_rect(mx - 1, my - 1, mw as i32 + 2, 1, palette::MARK);
+        frame.fill_rect(mx - 1, my + mh as i32, mw as i32 + 2, 1, palette::MARK);
+        frame.fill_rect(mx - 1, my, 1, mh as i32, palette::MARK);
+        frame.fill_rect(mx + mw as i32, my, 1, mh as i32, palette::MARK);
+        let map = minimap(snapshot, mw / u32::from(snapshot.width).max(1));
+        for py in 0..map.height {
+            for px in 0..map.width {
+                frame.put(mx + px as i32, my + py as i32, map.pixel(px, py));
+            }
+        }
+    }
+
+    if let Some(outcome) = hud.outcome {
+        let colour = match outcome {
+            ruage_sim::MatchOutcome::Victory { winner } if winner == snapshot.player => {
+                palette::WON
+            }
+            _ => palette::LOST,
+        };
+        let (bx, by) = banner_point(frame.width, frame.height);
+        let _ = bx;
+        frame.fill_rect(0, by as i32 - 4, frame.width as i32, 8, colour);
+    }
 }

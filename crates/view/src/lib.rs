@@ -659,6 +659,14 @@ pub mod palette {
     /// A building's **mark**: dark enough to read against the grey block, and its own colour so a test can name it.
     pub const MARK: [u8; 4] = [40, 40, 48, 255];
     pub const HUD_TEXT: [u8; 4] = [235, 235, 225, 255];
+    /// The bottom panel: the same darkness as the top bar, a little more translucent so the ground still shows through.
+    pub const PANEL: [u8; 4] = [18, 18, 24, 235];
+    /// A health bar's empty part, so a hurt thing reads as a bar that is *short*, not as a bar that vanished.
+    pub const HP_TRACK: [u8; 4] = [58, 58, 64, 255];
+    /// The outcome banner: green for a won match, red for anything else. Colour is the whole vocabulary the font has
+    /// (D82: digits, no words), so the banner says it this way and the tests name these two colours.
+    pub const WON: [u8; 4] = [40, 140, 60, 255];
+    pub const LOST: [u8; 4] = [150, 40, 40, 255];
     /// Selection: a white ring under what is selected, a health bar over it, and where the last order went.
     pub const SELECTION: [u8; 4] = [255, 255, 255, 255];
     pub const HP_GREEN: [u8; 4] = [80, 200, 80, 255];

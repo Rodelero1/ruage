@@ -129,7 +129,10 @@ fn main() -> ExitCode {
         },
     );
     // The HUD goes in the diagnostic picture too: a step that draws numbers has to be looked at, not only asserted on.
-    ui::hud(&mut frame, &snapshot, ruage_view::Speed::One);
+    // It is the whole HUD now - the panel, the minimap and any banner - because a diagnostic that draws less than the
+    // window is a diagnostic that can pass while the window is wrong.
+    let hud = ui::Hud::of_selected(&snapshot, &resources, &selected);
+    ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);
     if let Err(err) = std::fs::write(&out, frame.to_ppm()) {
         eprintln!("write {}: {err}", out.display());
         return ExitCode::FAILURE;
