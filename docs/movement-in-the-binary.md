@@ -23,16 +23,24 @@ what the branch does. No pseudocode has to be interpreted to build the map:
 cd /opt/data/tools/rea/pseudo-aokhd
 grep -rl --include=*.c 'move_obj\.cpp' .   # 15 functions
 grep -rl --include=*.c 'motion\.cpp'   .   #  3 functions
-grep -ro --include=*.c 'move_obj\.cpp' . | wc -l   # 174 references
-grep -ro --include=*.c 'motion\.cpp'   . | wc -l   #  91
+grep -ro --include=*.c 'move_obj\.cpp' . | wc -l   # 174 string matches
+grep -ro --include=*.c 'motion\.cpp'   . | wc -l   #  91 string matches
 ```
 
-`/opt/data/tools/rea/source-path-index.txt` already has the same mapping in text form for 94 source files; the counts
-here are measured from the corpus today, and they disagree with the earlier "159 / 81 sites" note because that pass
-counted only one of the two call shapes (the assert and the three debug-log variants all name the file).
+`/opt/data/tools/rea/source-path-index.txt` already has the same mapping in text form for 94 source files.
 
-**Measured: 265 references across 18 functions** - 91 in `motion.cpp`'s three, 174 in `move_obj.cpp`'s fifteen. The
-whole corpus carries **1,029** `.cpp` path references, so movement is the densest module in the binary by a wide margin.
+**Count distinct `(file, line)` sites, not string matches.** Several branches log twice at one source line (the assert
+and its debug-log sibling), so the same module counts differently depending on the extractor - the rule this project has
+already broken once:
+
+| motion.cpp | move_obj.cpp | total | what it counts |
+|---|---|---|---|
+| **81** | **159** | **240** | distinct `(file, line)` sites - **quote this** |
+| 91 | 174 | 265 | raw string matches |
+
+Either way it is **18 functions** (three in `motion.cpp`, fifteen in `move_obj.cpp`), out of the **1,029** `.cpp` string
+matches the whole corpus carries - movement is the densest module in the binary by a wide margin, and the earlier
+"159 / 81" note was right on the site count.
 
 ## The map
 

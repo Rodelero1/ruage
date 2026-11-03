@@ -2652,8 +2652,8 @@ the pack), then the table flip to name keys; evasion separately, with the binary
 
 The cheap step is done and it was cheaper than priced: the original's asserts carry its own source file, line and a log
 string, and the pseudocode corpus at `/opt/data/tools/rea/pseudo-aokhd` is one file per function, so `grep` for
-`motion.cpp` / `move_obj.cpp` **is** the map. Measured: **265 references across 18 functions** (91 in motion.cpp's
-three, 174 in move_obj.cpp's fifteen), of the 1,029 `.cpp` references in the whole corpus. `docs/movement-in-the-binary.md`
+`motion.cpp` / `move_obj.cpp` **is** the map. Measured: **240 distinct `(file, line)` assertion sites across 18 functions** (81 in motion.cpp's
+three, 159 in move_obj.cpp's fifteen; 265 raw string matches), of the 1,029 `.cpp` string matches in the whole corpus. `docs/movement-in-the-binary.md`
 carries the address-to-role table, the reproducible commands, and what the strings settle.
 
 **The finding that matters:** `doIntelligentMovementUpdate` (move_obj.cpp 3,290+) has an explicit collision decision -
