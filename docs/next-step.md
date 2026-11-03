@@ -1,6 +1,21 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, latest: C1b + C2 landed, and the acceptance match is WON.** A body blocks a disc of `radius[0]` summed
+> **2026-11-03, parked for a decision: `wip/buildings-block` implements the owner's passage rule and the match cannot
+> live with it yet.** The rule: every building blocks its whole footprint from its foundation, a farm is a floor, the town
+> centre keeps its solid core and walkable yard, and no building may overlap another except a used-up farm. It is
+> implemented, with seven tests watched failing first, and **unmerged on a branch** because the standing measurement
+> regresses: `players=1` -> `players=2`, hash `912386556784c88f` -> `c311cfb2158c03c6`, bank at 1,600 s 192/654/110 ->
+> 39/258/370, 19.9 s -> 47.4 s (50 buildings). Four measured iterations are in
+> `docs/reviews/2026-11-03-buildings-block-their-ground.md`; the short version is that the AI's base layout, farm spacing
+> and food economy were designed when a building was a picture: the footprint-aware search, then a lane around blocking
+> buildings, then no lane for a floor, then a wider farm search each moved the number and none of them won the match.
+> The suite is also red in ~25 build fixtures that raise a house overlapping the town centre's footprint - correct
+> refusals; each fixture has to move to ground it does not share.
+>
+> **The fork:** merge the rule now and take "an AI base that can be walked out of" as the next slice (the match is drawn
+> in the meantime), or hold the rule until the layout work lands with it. Nothing else in the queue is blocked by either.
+>
+> Superseded: **C1b + C2 landed, and the acceptance match is WON.** A body blocks a disc of `radius[0]` summed
 > for the pair on **every** step, and gather / build / deposit / attack arrival are distances in the same units
 > (`World::reach_between`). Review: `docs/reviews/2026-11-03-c-footprints-and-distance-arrival.md`.
 >
