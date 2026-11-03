@@ -87,7 +87,7 @@ fn first_villager(world: &World) -> EntityId {
 
 /// A free tile two steps from the player's first building: fixed choice, so the test does not depend
 /// on the map's resource layout.
-fn a_free_tile(world: &World) -> (u16, u16) {
+fn a_free_tile(world: &World, unit: u32) -> (u16, u16) {
     let scale = world.scale();
     let centre = world
         .entities()
@@ -104,7 +104,9 @@ fn a_free_tile(world: &World) -> (u16, u16) {
             (origin.0, origin.1 + radius),
             (origin.0 + radius, origin.1 + radius),
         ] {
-            if world.is_free_ground(x, y) {
+            // **The whole site, not the anchor.** `is_free_ground` said yes to the town centre's own walkable yard,
+            // and the build order then refused with `SiteOccupied` - six `tech_tree` tests were red on it.
+            if world.site_fits(1, unit, (x, y)) {
                 return (x, y);
             }
         }
@@ -122,7 +124,7 @@ fn the_dark_age_has_no_archery_range() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
-    let at = a_free_tile(&world);
+    let at = a_free_tile(&world, ARCHERY_RANGE);
     let err = world
         .submit_checked(Command::Build {
             villager,
@@ -143,7 +145,7 @@ fn the_feudal_age_allows_an_archery_range() {
     let mut world = seeded(&fx);
     feudal(&mut world, 1);
     let villager = first_villager(&world);
-    let at = a_free_tile(&world);
+    let at = a_free_tile(&world, ARCHERY_RANGE);
     world
         .submit_checked(Command::Build {
             villager,
@@ -158,7 +160,7 @@ fn a_dark_age_barracks_is_allowed_because_the_pack_says_so() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
-    let at = a_free_tile(&world);
+    let at = a_free_tile(&world, BARRACKS);
     world
         .submit_checked(Command::Build {
             villager,
@@ -225,10 +227,10 @@ fn the_feudal_age_is_reachable_without_granting_its_prerequisites_by_hand() {
     // chain, so the buildings are placed rather than paid for - what matters here is that the tech itself
     // needs nobody's help.
     for role in ["mill", "barracks"] {
-        let at = a_free_tile(&world);
+        let unit = world.role_unit(role).unwrap_or_else(|| panic!("{role}"));
+        let at = a_free_tile(&world, unit);
         let scale = world.scale();
         let id = EntityId(world.entities().iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
-        let unit = world.role_unit(role).unwrap_or_else(|| panic!("{role}"));
         world
             .submit_checked(Command::Spawn {
                 id,
@@ -257,7 +259,7 @@ fn the_feudal_age_is_reachable_without_granting_its_prerequisites_by_hand() {
     }
     // The proof that it landed: a Feudal building is now allowed.
     let villager = first_villager(&world);
-    let at = a_free_tile(&world);
+    let at = a_free_tile(&world, ARCHERY_RANGE);
     world
         .submit_checked(Command::Build {
             villager,
@@ -281,7 +283,7 @@ fn allow_barracks_spearmen(economy: &mut Economy) {
 /// Build `unit` at a free tile and run the clock until it is finished.
 fn a_finished_building(world: &mut World, unit: u32) -> EntityId {
     let villager = first_villager(world);
-    let at = a_free_tile(world);
+    let at = a_free_tile(world, unit);
     world
         .submit_checked(Command::Build { villager, unit, at })
         .expect("the build order");
@@ -445,7 +447,7 @@ fn an_availability_tech_counts_its_prerequisites() {
         world.grant_tech(1, tech).expect("a marker");
     }
     let villager = first_villager(&world);
-    let at = a_free_tile(&world);
+    let at = a_free_tile(&world, HOUSE);
     world
         .submit_checked(Command::Build {
             villager,
@@ -461,7 +463,7 @@ fn an_availability_tech_with_one_marker_is_not_granted() {
     let mut world = two_of_three_world(&fx);
     world.grant_tech(1, 901).expect("one marker");
     let villager = first_villager(&world);
-    let at = a_free_tile(&world);
+    let at = a_free_tile(&world, HOUSE);
     match world.submit_checked(Command::Build {
         villager,
         unit: HOUSE,

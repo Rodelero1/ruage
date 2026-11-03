@@ -1,5 +1,29 @@
 # The effect interpreter, priced from the data
 
+> # Session 4, 2026-11-03 - the playable core, on the owner's order
+>
+> **The owner's order (this thread):** postpone saving and recording; fix what is broken, then shape the engine to be
+> playable - a proper GUI and HUD, no sound, no real graphics, no real AI, the one pregenerated map. Take the work in this
+> order: **A5/6, then A3, P1, P2, P4**, one step at a time, each with a compact before it, an adversarial review after it,
+> and a push. D1 (the command card) must be **moddable**: units, buildings, techs, descriptions, AI and civs all changeable
+> by a pack. D2: keys 1-5 stay as they are.
+>
+> | # | step | state |
+> |---|---|---|
+> | A5/A6 | the gate stops lying; the 14 red tests | **landed** - `docs/reviews/2026-11-03-the-suite-that-was-green.md` |
+> | A3 | the HUD that exists gets drawn | next |
+> | P1 | feedback: refusals on screen, a menu on Escape | after A3 |
+> | P2 | band select, double-click, minimap click | after P1 |
+> | P4 | the command card (moddable) | last, and the largest |
+>
+> **A5/A6 in one line, with the numbers:** `tools/require_data.py` refuses to call a run meaningful without the generated
+> data (7 tests; `make test` depends on it, `make check` runs 96 tool tests), and the **14** red tests - not the 8 I reported -
+> are green: 584 passed / 0 failed / 17 ignored. The engine fixes: a spawned building evicts units off its footprint
+> *before* the ground turns solid, `push_units_off` matches by tile, and a carrier's route home is the anchor's first with
+> the footprint's walkable edge only as a fallback (D102). **Measured:** aiming every trip at the yard cost the match -
+> 176 entities and a win became 127 and a draw. The acceptance still wins: `players=1`, hash `ab314fb1969fde95`,
+> 160 entities, 29 s.
+>
 > # Session 3, 2026-11-03 - the queue, and the baseline it is measured against
 >
 > **The acceptance baseline, measured three times at HEAD `55fcc2f` (not remembered):** 36,000 ticks, seed 7 -

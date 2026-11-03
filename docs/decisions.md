@@ -2635,3 +2635,25 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 **mid-match**, is not hashed, is not in a recording, and is logged by the window (`speed -> 1.5x`) rather than recorded in
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
+
+## D102 - A place is approached by its ground, and a unit is evicted before it turns solid
+
+Three rules, learned together because they were one bug wearing three coats, all measured in the acceptance match:
+
+1. **A building's place is its footprint, not its anchor tile.** The anchor is a blocked tile in the middle of the
+   diamond, so "how far from the anchor" is a question with no physical meaning: a villager handing in from a town
+   centre's yard is two tiles from it and stands *on* the building. `World::touches_footprint` answers the real question
+   (on or beside the ground, one tile of slack), and the deposit rule now accepts it.
+2. **The route to a drop site is the anchor's, with the footprint as the fallback.** `approach_tile` finds the nearest
+   walkable tile of the footprint (the yard), else the nearest tile touching it, and is used **only when the route to the
+   anchor does not exist**. Making it the route for every trip was tried and measured: 176 entities and a won match became
+   127 and a draw. A fix for a boxed-in town centre is not a new route for every trip.
+3. **A building that appears evicts the units on its ground, before the ground turns solid.** A unit inside a blocked
+   footprint can never plan a route again (A* refuses to start on a blocked tile), and the old eviction matched exact
+   positions - while a unit stopped by collision stands inside a tile, rarely on its origin. The escape tile is chosen on
+   the grid as it stood before the insert, by a ring search (a square scan cost 60 s of suite time).
+
+**Cost of the change, reported:** the acceptance match still ends in a win (160 entities at 36,000 ticks, hash
+`ab314fb1969fde95`, 29 s) but no longer matches HEAD's flow (176 entities, `c12bdc86aab31513`): moving units off ground
+they should not have been standing on changes what happens next. The alternative - keeping villagers inside buildings -
+is not a behaviour worth preserving.

@@ -57,10 +57,19 @@ batch:
 	$(CARGO) build --release -p ruage-sim --bin batch
 	./target/release/batch $(PACK) --script $(CONFIG)/acceptance.toml --seeds $(SEEDS)
 
-test:
+# **A test run without the generated data proves nothing**: every data-driven suite skips itself, so `cargo test` reports
+# success while running almost nothing. This gate says so out loud (tools/require_data.py, and D8 for the polite skip).
+require-data:
+	python3 tools/require_data.py
+
+test: require-data
 	$(CARGO) test --workspace
 
-check: fmt clippy test
+# The tools' own tests, including the gate above. Cheap, and they are what keeps a tool honest.
+tools-test:
+	python3 -m unittest discover -s tools -p 'test_*.py'
+
+check: fmt clippy test tools-test
 	@echo "check: clean"
 
 fmt:

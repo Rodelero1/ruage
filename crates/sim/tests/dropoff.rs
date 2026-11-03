@@ -244,3 +244,72 @@ fn spawn_building(world: &mut World, unit: u32, at: (i64, i64)) -> EntityId {
     world.step().expect("one tick");
     id
 }
+
+/// **A drop site sealed on one side still takes a load.** `docs/next-step.md` carried this as "a drop site with no free
+/// neighbour"; it is worse than that, because the *route* was aimed at the building's own blocked anchor tile. With a
+/// barracks at (14, 14) - which is what six `research.rs` tests stage - the town centre's four north-west approach tiles
+/// are gone, A* finds no goal at all, and the villager stands holding a load for the rest of the match. Every acceptance
+/// run ends with the same sentence: `no walkable route ... to (16, 16)`.
+///
+/// The answer is not a bigger radius on the deposit test: it is that **a building is worked from its edge, not its
+/// anchor**, so the goal has to be a walkable tile that touches the footprint.
+#[test]
+fn a_load_comes_home_past_a_building_beside_the_town_centre() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let food = world.slot_of("food").expect("a food column");
+    let scale = world.scale();
+    let before = world.stock(1, food);
+
+    // The barracks that seals the north-west approach, exactly as the research tests stage it.
+    let barracks = world.role_unit("barracks").expect("a barracks role");
+    let hut = next_id(&world);
+    world
+        .submit_checked(Command::Spawn {
+            id: hut,
+            player: 1,
+            kind: EntityKind::Building,
+            unit: Some(barracks),
+            position: (Fixed::from_raw(14 * scale), Fixed::from_raw(14 * scale)),
+            speed: Fixed::ZERO,
+            hp: 1200,
+            amount: 0,
+        })
+        .expect("a barracks beside the town centre");
+    world.step().expect("one tick");
+
+    let villager = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
+        .map(|entity| entity.id)
+        .expect("a villager");
+    let node = world
+        .entities()
+        .iter()
+        .filter(|entity| matches!(entity.kind, EntityKind::Resource(slot) if slot == food))
+        .map(|entity| entity.id)
+        .next()
+        .expect("a berry");
+    world
+        .submit_checked(Command::Gather { villager, node })
+        .expect("a gather order");
+
+    let mut ticked = 0;
+    while ticked < 2400 && world.stock(1, food) <= before {
+        world.step().expect("a tick");
+        ticked += 1;
+    }
+    let task = world
+        .entities()
+        .iter()
+        .find(|entity| entity.id == villager)
+        .map(|entity| format!("{:?}", entity.task))
+        .unwrap_or_else(|| "gone".to_owned());
+    assert!(
+        world.stock(1, food) > before,
+        "no load came home in {ticked} ticks: the bank holds {} food and the villager is in {task}",
+        world.stock(1, food)
+    );
+}

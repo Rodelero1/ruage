@@ -964,12 +964,14 @@ fn the_huns_cannot_build_a_house() {
         .to_string();
     assert!(err.contains("Huns"), "the refusal names the civ: {err}");
 
-    // And the bar is that one unit, not the Huns' whole build menu.
+    // And the bar is that one unit, not the Huns' whole build menu - a barracks needs its own 3x3 site, which the
+    // house's tile is not.
+    let barracks_site = free_tile(&world, villager, BARRACKS);
     world
         .submit_checked(Command::Build {
             villager,
             unit: BARRACKS,
-            at: site,
+            at: barracks_site,
         })
         .expect("the Huns still build barracks");
 }

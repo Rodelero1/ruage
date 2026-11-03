@@ -327,7 +327,9 @@ military_roles = ["militia", "spearman", "pikeman", "halberdier", "mangonel", "t
 
 # What stands on a footprint is content's business, not the engine's (D76). Rows run top-to-bottom from the building's
 # anchor tile, which is the diamond's **north corner** (D84); '#' is impassable, '.' is ground a unit may cross. A role with
-# no entry blocks its own tile, which is what every building did before masks existed.
+# no entry blocks its **whole footprint** (the engine falls through to the footprint area, `solid_tiles`), which is what
+# every building did before masks existed - a house is solid, a town centre is three quarters ground. (The comment here
+# said "its own tile" until a test measured it; the code was right and this line was wrong.)
 [footprint.town_center]
 # The owner's Town Centre: the two-storey back core is solid, the left and right wings and the front courtyard are
 # under-hang and walkable - three quarters of the covered area.

@@ -82,6 +82,12 @@ impl Walk {
     pub fn contains(&self, x: u16, y: u16) -> bool {
         x < self.width && y < self.height
     }
+
+    /// The grid's size, for a search that has to stop at the edge of the world rather than at a guessed radius.
+    #[must_use]
+    pub fn size(&self) -> (u16, u16) {
+        (self.width, self.height)
+    }
 }
 
 fn octile(from: (u16, u16), to: (u16, u16)) -> u32 {

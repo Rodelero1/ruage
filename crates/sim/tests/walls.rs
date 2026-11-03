@@ -161,15 +161,31 @@ fn knocking_one_segment_down_opens_the_way() {
 }
 
 #[test]
-fn a_house_does_not_block_the_way() {
-    // The control: what blocks is content's list, not "a building is in the way". A ring of houses is
-    // walk-through in this engine, and that is a decision (D54) rather than an oversight.
+fn a_house_blocks_its_own_tile_and_the_way_goes_round() {
+    // **The control, restated after footprints.** D54's version of this test said a ring of houses is walk-through,
+    // because walls were the only role that blocked. D76 made that false: every role blocks the tiles its mask names, and
+    // a role with no mask - a house - blocks its own tile. The claim that survives is the narrower one a player feels:
+    // a house is **one tile you walk round**, not a wall that closes a gap. Measured here rather than assumed, because
+    // the old assertion is exactly the kind that goes stale quietly.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    ring(&mut world, "house", 9_920);
-    let unit = walker(&mut world, 9_952, (26, 30));
+    place_building(&mut world, 1, 9_940, "house", (30, 30), 550);
 
+    assert!(
+        !world.tile_walkable(30, 30),
+        "a house blocks the tile it stands on"
+    );
+    // **The whole diamond, not just the anchor** - and this assertion started life the other way round, because
+    // `config/economy.toml` said "a role with no entry blocks its own tile". The code says otherwise
+    // (`solid_tiles` falls through to `footprint_area`), the code is right, and the comment has been corrected to match.
+    assert!(
+        !world.tile_walkable(31, 30)
+            && !world.tile_walkable(30, 31)
+            && !world.tile_walkable(31, 31),
+        "a house with no mask blocks its whole two-by-two ground"
+    );
+    let unit = walker(&mut world, 9_954, (26, 30));
     world
-        .submit_checked(Command::Move { unit, to: (30, 30) })
-        .expect("a house is not a wall");
+        .submit_checked(Command::Move { unit, to: (34, 30) })
+        .expect("the way goes round a house");
 }

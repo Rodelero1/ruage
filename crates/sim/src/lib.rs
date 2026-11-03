@@ -66,6 +66,10 @@ const DPS_ONE: i64 = 1_000_000;
 /// A villager's waiting sites: unit id and tile, oldest first (D66).
 type BuildQueue = BTreeMap<EntityId, VecDeque<(u32, (u16, u16))>>;
 
+/// A tile found by a nearest-first search: its sort key - squared distance, then the tile, so the answer is
+/// deterministic - and the tile itself.
+type NearKey = ((u32, u16, u16), (u16, u16));
+
 /// A building is a place; a unit is a thing that moves. Splitting them now keeps "villagers
 /// gather into the town centre" from being a special case of "entities with zero speed".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6696,13 +6700,135 @@ impl World {
     /// Move any unit standing on a tile that has just been built on to the nearest free tile beside it, and forget its
     /// route: the game pushes units out of the way of a new building, and a player who drops a house on a villager means
     /// the house, not the villager.
+    /// **Where a unit dispossessed by a building goes**: the nearest walkable tile that is not part of the building,
+    /// measured on the grid as it stands *before* the building is inserted. Nearest is by squared tile distance, with the
+    /// tile itself as the tie-break so the answer is deterministic.
+    fn escape_from(&self, tiles: &[(u16, u16)], from: (u16, u16)) -> Option<(Fixed, Fixed)> {
+        let (wide, tall) = self.walk.as_ref().map_or((0, 0), Walk::size);
+        let mut best: Option<NearKey> = None;
+        // **The ring, not the square.** A square scan up to the map's size is a quarter of a million tile tests per
+        // dispossessed unit, and it cost 60 s on the suite when I first wrote it this way; a ring costs O(radius) and the
+        // loop stops as soon as no further ring can hold anything nearer than what it has.
+        for radius in 1..=wide.max(tall).max(1) {
+            if let Some((key, _)) = best
+                && key.0 <= u32::from(radius) * u32::from(radius)
+            {
+                break;
+            }
+            for at @ (x, y) in Self::ring(from, radius) {
+                if tiles.contains(&at) || !self.tile_walkable(x, y) {
+                    continue;
+                }
+                let across = u32::from(x.abs_diff(from.0));
+                let down = u32::from(y.abs_diff(from.1));
+                let key = (across * across + down * down, x, y);
+                if best.as_ref().is_none_or(|(seen, _)| key < *seen) {
+                    best = Some((key, at));
+                }
+            }
+        }
+        best.map(|(_, at)| self.tile(at))
+    }
+
+    /// The nearest of `candidates` to `from`, by squared tile distance with the tile as the tie-break.
+    fn nearest_of(
+        &self,
+        from: (u16, u16),
+        candidates: impl Iterator<Item = (u16, u16)>,
+    ) -> Option<(u16, u16)> {
+        let mut best: Option<NearKey> = None;
+        for at @ (x, y) in candidates {
+            let across = u32::from(x.abs_diff(from.0));
+            let down = u32::from(y.abs_diff(from.1));
+            let key = (across * across + down * down, x, y);
+            if best.as_ref().is_none_or(|(seen, _)| key < *seen) {
+                best = Some((key, at));
+            }
+        }
+        best.map(|(_, at)| at)
+    }
+
+    /// **Whether a unit is on or beside a building's ground.** The anchor is a blocked tile in the middle of the diamond,
+    /// so "how far from the anchor" answers a question nobody asked: a villager handing in from a town centre's yard is
+    /// two tiles from the anchor and stands *on* the building. Without this, widening the approach (see `approach_tile`)
+    /// walked carriers into the yard and then refused to bank them there - the economy lost a third of its size and the
+    /// acceptance match stopped being won (measured: 176 entities won at HEAD, 127 entities drawn with the approach
+    /// alone).
+    #[must_use]
+    pub fn touches_footprint(&self, position: (Fixed, Fixed), building: EntityId) -> bool {
+        let Some(entity) = self.find(building) else {
+            return false;
+        };
+        let Some((across, down)) = entity.unit.and_then(|unit| self.footprint_of(unit)) else {
+            return false;
+        };
+        let anchor = self.tile_of(entity.position);
+        let here = self.tile_of(position);
+        // One tile of slack on every side: a crowd handing in at one building stands a little deep, and that is what the
+        // "touching is enough" rule (C2) is about.
+        let (wide, tall) = (across as u16, down as u16);
+        here.0.saturating_add(1) >= anchor.0
+            && here.1.saturating_add(1) >= anchor.1
+            && here.0 <= anchor.0.saturating_add(wide)
+            && here.1 <= anchor.1.saturating_add(tall)
+    }
+
+    /// **The ground a worker stands on to work a place.** A building's own tile is blocked, so a route aimed at it does
+    /// not exist: the walkable tiles of the footprint come first (a town centre's yard), then the ring touching the
+    /// footprint. Without this, a carrier standing on the far side of its own barracks was told there was no route home
+    /// and stood holding its load for the rest of the match - every acceptance run's last refusal, and six red tests.
+    fn approach_tile(&self, from: (u16, u16), building: EntityId) -> Option<(u16, u16)> {
+        let entity = self.find(building)?;
+        let tiles = self.build_site_tiles(entity.unit.unwrap_or(0), self.tile_of(entity.position));
+        let yard = self.nearest_of(
+            from,
+            tiles
+                .iter()
+                .copied()
+                .filter(|&(x, y)| self.tile_walkable(x, y)),
+        );
+        yard.or_else(|| {
+            let ring: Vec<(u16, u16)> = tiles.iter().flat_map(|at| Self::ring(*at, 1)).collect();
+            self.nearest_of(
+                from,
+                ring.into_iter()
+                    .filter(|at| !tiles.contains(at) && self.tile_walkable(at.0, at.1)),
+            )
+        })
+    }
+
+    /// Every tile exactly `radius` tiles from `at`, in a stable order, without leaving the map.
+    fn ring(at: (u16, u16), radius: u16) -> Vec<(u16, u16)> {
+        let (x0, y0) = (at.0.saturating_sub(radius), at.1.saturating_sub(radius));
+        let (x1, y1) = (at.0.saturating_add(radius), at.1.saturating_add(radius));
+        let mut out = Vec::with_capacity(radius as usize * 8);
+        for x in x0..=x1 {
+            out.push((x, y0));
+            if y1 != y0 {
+                out.push((x, y1));
+            }
+        }
+        for y in (y0 + 1)..y1 {
+            out.push((x0, y));
+            if x1 != x0 {
+                out.push((x1, y));
+            }
+        }
+        out
+    }
+
     fn push_units_off(&mut self, at: (u16, u16)) {
         let position = self.tile(at);
+        // **By tile, not by exact position.** A unit stopped by collision stands *inside* a tile and rarely on its
+        // origin, and the old equality test left exactly those units in a ground the building now owns - a villager
+        // inside a blocked footprint can never plan a route again.
         let movers: Vec<EntityId> = self
             .entities
             .iter()
             .filter(|entity| {
-                entity.kind == EntityKind::Unit && entity.position == position && entity.player != 0
+                entity.kind == EntityKind::Unit
+                    && entity.player != 0
+                    && self.tile_of(entity.position) == at
             })
             .map(|entity| entity.id)
             .collect();
@@ -7082,7 +7208,27 @@ impl World {
                 {
                     self.herdable_ids.insert(id);
                 }
-                self.insert(Entity {
+                // **Who owns this ground?** Units standing inside the new footprint have to be given somewhere else *before*
+                // the tiles turn solid, or their escape search cannot see a way out (a unit in the middle of a 3x3 has
+                // eight blocked neighbours and stays put for the rest of the match).
+                let movers: Vec<(EntityId, (Fixed, Fixed))> = if kind == EntityKind::Building {
+                    let tiles = self.build_site_tiles(unit.unwrap_or(0), self.tile_of(position));
+                    self.entities
+                        .iter()
+                        .filter(|entity| {
+                            entity.kind == EntityKind::Unit
+                                && entity.player != 0
+                                && tiles.contains(&self.tile_of(entity.position))
+                        })
+                        .filter_map(|entity| {
+                            let here = self.tile_of(entity.position);
+                            self.escape_from(&tiles, here).map(|at| (entity.id, at))
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                let inserted = self.insert(Entity {
                     id,
                     player,
                     kind,
@@ -7116,7 +7262,20 @@ impl World {
                     researching: None,
                     carry: Fixed::ZERO,
                     variant: None,
-                })
+                });
+                // **A building that appears pushes units off its ground**, exactly as one that is finished does: a villager
+                // left inside a blocked footprint can never plan a route again (A* refuses to start on a blocked tile), so
+                // it stands there for the rest of the match. `Command::Spawn` used not to, and six research tests were red
+                // on it - a barracks spawned at (14, 14) swallowed the three starting villagers.
+                if inserted.is_ok() {
+                    for (id, at) in movers {
+                        if let Some(entity) = self.find_mut(id) {
+                            entity.position = at;
+                        }
+                        self.paths.remove(&id);
+                    }
+                }
+                inserted
             }
             Command::Gather { villager, node } => self.start_gather(villager, node),
             Command::Build { villager, unit, at } => self.start_build(villager, unit, at),
@@ -7467,7 +7626,10 @@ impl World {
                     );
                     let reach = self.reach_raw(entity.unit, drop_unit);
                     let touching = (here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1)
-                        || gap_x * gap_x + gap_y * gap_y <= reach * reach;
+                        || gap_x * gap_x + gap_y * gap_y <= reach * reach
+                        // **Or standing on the building's ground.** A carrier walked into the yard by `approach_tile`
+                        // was two tiles from the anchor and never banked, which cost a third of the economy.
+                        || self.touches_footprint(entity.position, drop);
                     if touching {
                         deposits.push(entity.id);
                         (Fixed::ZERO, Fixed::ZERO)
@@ -7847,8 +8009,16 @@ impl World {
                     self.find(id).map(|entity| entity.position),
                     self.find(drop).map(|entity| entity.position),
                 );
+                // **Home is the edge of the building, not its anchor** - see `approach_tile`.
+                // **The anchor's route first, the footprint's only when that route does not exist.** Aiming every carrier
+                // at the building's edge changed the flow of a whole match (176 entities and a won match became 127 and a
+                // draw), so the approach is a fallback for the case that used to fail outright - a drop site whose near
+                // side is built over - and not a new route for every trip.
                 let route = match ends {
-                    (Some(from), Some(to)) => self.plan_path(from, to).ok(),
+                    (Some(from), Some(to)) => self.plan_path(from, to).ok().or_else(|| {
+                        self.approach_tile(self.tile_of(from), drop)
+                            .and_then(|stand| self.plan_path(from, self.tile(stand)).ok())
+                    }),
                     _ => None,
                 };
                 if let Some(route) = route {

@@ -138,3 +138,91 @@ fn an_empty_node_does_not_block_its_tile() {
         "a node with nothing in it blocked its tile"
     );
 }
+
+/// **A building that appears pushes a unit off its ground.** `Command::Spawn` inserted a building over whatever stood
+/// there, and a villager left inside a blocked footprint can never plan a route again - A* refuses to start on a blocked
+/// tile - so it stands there for the rest of the match. Six `research.rs` tests were red on exactly this shape: a barracks
+/// spawned at (14, 14) swallowed the three starting villagers, and every later path search failed from a blocked start.
+/// It is the same family as the farm husk: a command-made entity was not quite a map-made one.
+#[test]
+fn a_spawned_building_pushes_a_unit_off_its_ground() {
+    let Some(mut world) = fresh() else { return };
+    let villager = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
+        .map(|entity| entity.id)
+        .expect("a villager");
+    let here = world.position(villager).expect("a position");
+    let scale = world.scale();
+    let anchor = (
+        u16::try_from(here.0.raw() / scale).expect("in range"),
+        u16::try_from(here.1.raw() / scale).expect("in range"),
+    );
+    let barracks = world.role_unit("barracks").expect("a barracks role");
+    let (across, down) = world.footprint_of(barracks).expect("a footprint");
+
+    let id = next_id(&world);
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player: 1,
+            kind: EntityKind::Building,
+            unit: Some(barracks),
+            position: here,
+            speed: Fixed::ZERO,
+            hp: 1200,
+            amount: 0,
+        })
+        .expect("a barracks on top of the villager");
+    world.step().expect("one tick");
+
+    let now = world
+        .position(villager)
+        .expect("the villager is still alive");
+    let tile = (
+        u16::try_from(now.0.raw() / scale).expect("in range"),
+        u16::try_from(now.1.raw() / scale).expect("in range"),
+    );
+    let inside = tile.0 >= anchor.0
+        && tile.0 < anchor.0 + across as u16
+        && tile.1 >= anchor.1
+        && tile.1 < anchor.1 + down as u16;
+    assert!(
+        !inside,
+        "the villager was left inside the spawned building's footprint at {tile:?}"
+    );
+    assert!(
+        world.tile_walkable(tile.0, tile.1),
+        "and it stands on walkable ground, or no route can ever start"
+    );
+}
+
+/// **"Beside the building" is about the building's ground, not its anchor tile.** The anchor is a blocked tile in the
+/// middle of the diamond: a villager handing in from a town centre's yard is two tiles from it and stands *on* the
+/// building. Measuring from the anchor meant the yard counted as "far away", which is the second half of the reason
+/// villagers stood holding loads.
+#[test]
+fn a_villager_in_the_yard_is_on_the_town_centre() {
+    let Some(world) = fresh() else { return };
+    let centre = world
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Building && entity.player == 1)
+        .map(|entity| entity.id)
+        .expect("a town centre");
+    let scale = world.scale();
+    let at = |x: i64, y: i64| (Fixed::from_raw(x * scale), Fixed::from_raw(y * scale));
+    assert!(
+        world.touches_footprint(at(16, 16), centre),
+        "the anchor itself"
+    );
+    assert!(
+        world.touches_footprint(at(18, 18), centre),
+        "the far corner of the yard: two tiles from the anchor, and on the building"
+    );
+    assert!(
+        !world.touches_footprint(at(24, 24), centre),
+        "eight tiles away is not the town centre"
+    );
+}
