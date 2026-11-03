@@ -1,6 +1,21 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, latest: evasion adopts the original's shape (D98a) and it is the work in hand.** The owner ruled **B**:
+> **2026-11-03, latest: E1a has landed, and it cost the acceptance victory - that is the next thing to face.** Units no
+> longer share a tile; a blocked unit repaths around the body (D98a), with a tick budget of 4 searches and a body the
+> route already avoids treated as past. Four tests in `crates/sim/tests/evasion.rs`; review in
+> `docs/reviews/2026-11-03-e1a-evasion.md`. **The match at 30:00 now ends with both players alive**
+> (`players=2`, hash `7c0b9132ed2074f8`) where it won for player 1 before (`98c1c2a051d044f6`) - villagers queue at
+> bushes and drop sites. **Next, in order:** (1) measure and fix the economy's loss of throughput (is the 4-search budget
+> starving a busy base? is a villager blocked by another villager that is about to move?), (2) S1, the straight-line
+> shortcut, which is the original's answer for open ground, (3) E1b, the radius predicate and the adjacency-ring
+> arrival - which also un-parks the two fixtures named below.
+>
+> **Parked by E1a, with diagnosis:** `garrison::a_damaged_building_ejects_its_garrison` (12 melee attackers, all alive,
+> stand 1-4 tiles off a blocked goal tile: 1,066 of 2,400 hp instead of 480 - needs the adjacency-ring arrival) and
+> `retarget::a_forager_whose_bush_is_finished_goes_to_a_farm` (picks node 103, another food source, no refusal
+> recorded - cause unread). Both are `#[ignore]`d with that reason in the attribute.
+>
+> Superseded note, kept for the sections below: **evasion adopts the original's shape (D98a) and it is the work in hand.** The owner ruled **B**:
 > a blocked unit does not pass through and does not merely wait - it **repaths**, exactly as `doIntelligentMovementUpdate`
 > does (move_obj.cpp 4,600-4,760: collision at the new position, a collision with the target means arrival, a *new*
 > obstacle means repath, an obstacle the path already knows about is ignored, terrain collision means repath). The design,

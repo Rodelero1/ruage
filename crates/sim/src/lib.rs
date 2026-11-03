@@ -38,6 +38,12 @@ pub use script::{
 /// constant rather than a runtime number because stockpiles are fixed-size arrays, and it is eight
 /// rather than two because the cost of widening is paid once and the cost of a later re-refactor is
 /// paid in every state hash.
+/// The most routes one tick may re-plan because bodies are in the way (D98a). A **performance budget**, not a game
+/// value - the same kind of constant as `MAX_PLAYERS`' neighbour `max_entities`: a crowd in which every unit is blocked
+/// would otherwise buy one path search per unit per tick, and measurably turned a 40,000-tick fixture into minutes.
+/// A unit the budget leaves out simply waits this tick, which is what a blocked unit does anyway, and tries again next.
+const MAX_REPATHS_PER_TICK: usize = 4;
+
 pub const MAX_PLAYERS: usize = 8;
 
 /// The largest number of stockpiled resources a match can have. Like `MAX_PLAYERS` this is a
@@ -1070,6 +1076,27 @@ struct Rot {
     expires: u64,
 }
 
+/// A unit's remaining route, and the bodies it is planned around (D98a).
+///
+/// The avoid set lives **with** the route rather than in a table keyed by unit, so a new order cannot inherit the old
+/// plan's blind spots: replacing the route replaces the set. A collision with a unit in this set is *past* - the plan
+/// already accounts for it - which is exactly what stops a blocked unit from repathing every tick.
+/// A repath collected in the movement pass and applied after it (D98a): the unit, the body that was in the way, and the
+/// tile that body occupies. The blocked tile is the body's own, so it is not stored twice.
+struct Repath {
+    unit: EntityId,
+    body: EntityId,
+    goal: (u16, u16),
+}
+
+#[derive(Debug, Clone, Default)]
+struct Route {
+    /// Remaining waypoints, in tiles.
+    steps: Vec<(u16, u16)>,
+    /// Units this route was planned around. Not hashed on its own: it is part of the route, and the route is hashed.
+    avoiding: BTreeSet<EntityId>,
+}
+
 pub struct World {
     tick: u64,
     tick_rate_hz: u32,
@@ -1099,8 +1126,11 @@ pub struct World {
     accuracy_scatter: i64,
     /// Fraction of its health (in engine units) at or below which a building ejects its garrison.
     garrison_eject_at: Fixed,
-    /// Remaining waypoints per unit, in tiles. Part of state: it decides where the unit goes next.
-    paths: BTreeMap<EntityId, Vec<(u16, u16)>>,
+    /// A route and the bodies it was planned around (D98a).
+    paths: BTreeMap<EntityId, Route>,
+    /// How many times a blocked unit has re-planned its route. **Instrumentation, not state**: nothing reads it and it
+    /// is not hashed; a test counts it to prove a known obstacle is not re-planned every tick (D98a).
+    repath_count: u64,
     /// The tech and effect tables, when they have been loaded. A research order is resolved against
     /// them the way damage is resolved against `combat.toml`: once, at order time.
     techs: Option<ruage_data::Techs>,
@@ -1441,6 +1471,7 @@ impl World {
             accuracy_scatter: 0,
             garrison_eject_at: Fixed::ZERO,
             paths: BTreeMap::new(),
+            repath_count: 0,
             resources: None,
             sim_rng: Pcg32::new(seed, SIM_STREAM),
             map_rng: Pcg32::new(seed, MAP_STREAM),
@@ -1803,6 +1834,12 @@ impl World {
         self.refusal
             .as_ref()
             .map(|(id, why, tick)| (*id, why, *tick))
+    }
+
+    /// How many routes the engine has re-planned because a body was in the way. **Instrumentation, not state**: the tick
+    /// never reads it and it is not hashed; a test counts it to prove a known obstacle is not re-planned every tick.
+    pub fn repaths(&self) -> u64 {
+        self.repath_count
     }
 
     pub fn position(&self, id: EntityId) -> Option<(Fixed, Fixed)> {
@@ -2549,7 +2586,7 @@ impl World {
 
     /// The next waypoint of a unit's route, as a world position.
     fn next_waypoint(&self, id: EntityId) -> Option<(Fixed, Fixed)> {
-        let (x, y) = *self.paths.get(&id)?.first()?;
+        let (x, y) = *self.paths.get(&id)?.steps.first()?;
         Some(self.tile((x, y)))
     }
 
@@ -2754,7 +2791,13 @@ impl World {
         // with no speed still gets a route, which is what a stationary test fixture relies on.
         if source.kind != EntityKind::Building {
             let route = self.plan_path(position, victim)?;
-            self.paths.insert(attacker, route);
+            self.paths.insert(
+                attacker,
+                Route {
+                    steps: route,
+                    avoiding: BTreeSet::new(),
+                },
+            );
         }
         if let Some(entity) = self.find_mut(attacker) {
             entity.task = Task::Attack {
@@ -2810,7 +2853,13 @@ impl World {
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
         let route = self.plan_path(entity.position, goal)?;
         let here = self.tile_of(entity.position);
-        self.paths.insert(unit, route);
+        self.paths.insert(
+            unit,
+            Route {
+                steps: route,
+                avoiding: BTreeSet::new(),
+            },
+        );
         // Any earlier order is superseded: a new order is not a second one running alongside.
         self.resuming.remove(&unit);
         if patrol {
@@ -3966,7 +4015,13 @@ impl World {
             self.stand_down(id);
             match self.plan_path(position, entry.home) {
                 Ok(route) => {
-                    self.paths.insert(id, route);
+                    self.paths.insert(
+                        id,
+                        Route {
+                            steps: route,
+                            avoiding: BTreeSet::new(),
+                        },
+                    );
                     if let Some(entity) = self.find_mut(id) {
                         entity.task = Task::Move { to: entry.home };
                     }
@@ -4080,7 +4135,13 @@ impl World {
             Some(stand) => self.plan_path(from, stand)?,
             None => self.plan_path(from, position)?,
         };
-        self.paths.insert(villager, route);
+        self.paths.insert(
+            villager,
+            Route {
+                steps: route,
+                avoiding: BTreeSet::new(),
+            },
+        );
         if let Some(worker) = self.find_mut(villager) {
             worker.task = Task::Build { site: id };
         }
@@ -4760,31 +4821,6 @@ impl World {
         }
     }
 
-    /// Which tiles hold a unit right now, one bit per tile. Rebuilt on the ticks where something moves and
-    /// only then, because a world where nothing moves (which is most of an idle probe, and most of a quiet
-    /// match) has nothing to avoid (D52).
-    fn occupancy(&self) -> Vec<u64> {
-        let (width, height) = self.map_size;
-        let mut grid = vec![0u64; (usize::from(width) * usize::from(height)).div_ceil(64)];
-        if width == 0 {
-            return grid;
-        }
-        for entity in &self.entities {
-            if entity.kind != EntityKind::Unit || matches!(entity.task, Task::Garrisoned { .. }) {
-                continue;
-            }
-            let (x, y) = self.tile_of_raw(entity.position);
-            if x < 0 || y < 0 || x >= i64::from(width) || y >= i64::from(height) {
-                continue;
-            }
-            let bit = usize::try_from(y * i64::from(width) + x).unwrap_or(0);
-            if let Some(word) = grid.get_mut(bit / 64) {
-                *word |= 1u64 << (bit % 64);
-            }
-        }
-        grid
-    }
-
     /// Soft avoidance: if this step would end on a tile another unit is standing on, try the two quarter
     /// turns; if those are taken too, stand still for this tick.
     ///
@@ -4793,7 +4829,13 @@ impl World {
     /// read as it was at the start of the tick, so two units ordered into one tile on the same tick still
     /// both arrive - the game allows that, and blocking it would make an order to a crowded place deadlock
     /// (D52).
-    fn avoid(&self, occupied: &[u64], id: EntityId, dx: Fixed, dy: Fixed) -> (Fixed, Fixed) {
+    fn avoid(
+        &self,
+        tiles: &BTreeMap<(i64, i64), EntityId>,
+        id: EntityId,
+        dx: Fixed,
+        dy: Fixed,
+    ) -> (Fixed, Fixed) {
         if dx == Fixed::ZERO && dy == Fixed::ZERO {
             return (dx, dy);
         }
@@ -4817,14 +4859,7 @@ impl World {
         if (tx, ty) != (i64::from(goal.0), i64::from(goal.1)) {
             return (dx, dy);
         }
-        let (width, height) = self.map_size;
-        if tx < 0 || ty < 0 || tx >= i64::from(width) || ty >= i64::from(height) {
-            return (dx, dy);
-        }
-        let bit = usize::try_from(ty * i64::from(width) + tx).unwrap_or(0);
-        let taken = occupied
-            .get(bit / 64)
-            .is_some_and(|word| word & (1u64 << (bit % 64)) != 0);
+        let taken = tiles.contains_key(&(tx, ty));
         if taken {
             // Stand where it is: the ground it was sent to is somebody else's for now, and a unit that
             // shuffled sideways for ever never arrives (which is what the second version did).
@@ -4832,6 +4867,104 @@ impl World {
         } else {
             (dx, dy)
         }
+    }
+
+    /// Which tile each live body stands on. Rebuilt only on ticks where something moves, beside the occupancy grid: the
+    /// grid says *whether* a tile is held, this says *by whom* - and the decision needs the id, because a collision with
+    /// the order's target is arrival while one with a body the route already avoids is past (D98a).
+    fn unit_tiles(&self) -> BTreeMap<(i64, i64), EntityId> {
+        let mut tiles = BTreeMap::new();
+        for entity in &self.entities {
+            if entity.kind != EntityKind::Unit
+                || matches!(entity.task, Task::Garrisoned { .. })
+                || entity.hp <= 0
+            {
+                continue;
+            }
+            tiles.insert(self.tile_of_raw(entity.position), entity.id);
+        }
+        tiles
+    }
+
+    /// The entity an order is trying to reach, when the order has one. `Move` has none - its goal is a place, and that
+    /// is why `avoid`'s exclusive-goal rule still exists beside this.
+    fn order_target(entity: &Entity) -> Option<EntityId> {
+        match entity.task {
+            Task::Attack { target, .. } => Some(target),
+            Task::Gather { node, .. } => Some(node),
+            Task::Return { drop, .. } => Some(drop),
+            Task::Build { site } => Some(site),
+            _ => None,
+        }
+    }
+
+    /// One step against the bodies in the way (D98a). The original queries collisions **at the new position**; this is
+    /// the same decision at tile granularity (E1a - the radius form is E1b):
+    ///
+    /// - a body on the tile the step lands in, when it is the **order's target**, ends the move: the step is refused and
+    ///   the arrival rules elsewhere finish the order;
+    /// - a body the route is already planned around is **past**: refuse the step, do **not** re-plan, or a blocked unit
+    ///   would re-plan every tick;
+    /// - anything else is **non-past**: refuse the step and collect a repath.
+    ///
+    /// Only a step that **enters** a tile is tested. Two units sharing a tile (which D52 allowed) must be able to leave
+    /// it, and a body already overlapped is not made worse by moving.
+    fn collide(
+        &self,
+        tiles: &BTreeMap<(i64, i64), EntityId>,
+        index: usize,
+        id: EntityId,
+        dx: Fixed,
+        dy: Fixed,
+        repaths: &mut Vec<Repath>,
+    ) -> (Fixed, Fixed) {
+        if dx == Fixed::ZERO && dy == Fixed::ZERO {
+            return (dx, dy);
+        }
+        let Some(entity) = self.entities.get(index) else {
+            return (dx, dy);
+        };
+        // **Only a unit collides with a body.** An arrow is an entity that moves through the same pass, and the first
+        // version stopped every shot dead over the first unit it flew across - ten arrows froze mid-air over the town
+        // centre. A building does not walk either, so this stays a rule about bodies.
+        if entity.kind != EntityKind::Unit {
+            return self.avoid(tiles, id, dx, dy);
+        }
+        let here = self.tile_of_raw(entity.position);
+        let next = (
+            (entity.position.0.raw() + dx.raw()).div_euclid(self.scale),
+            (entity.position.1.raw() + dy.raw()).div_euclid(self.scale),
+        );
+        if next != here
+            && let Some(&other) = tiles.get(&next)
+            && other != id
+        {
+            let Some((goal, _)) = self.goal_of(entity) else {
+                return (Fixed::ZERO, Fixed::ZERO);
+            };
+            // Already as close to the order's goal as a plan can put it: the arrival rules finish the order from a
+            // neighbouring tile, and re-planning at a crowd around a target only buys searches (D98a).
+            let here = self.tile_of_raw(entity.position);
+            let near_goal =
+                (here.0 - i64::from(goal.0)).abs() <= 1 && (here.1 - i64::from(goal.1)).abs() <= 1;
+            let known = self
+                .paths
+                .get(&id)
+                .is_some_and(|route| route.avoiding.contains(&other));
+            if !near_goal
+                && !known
+                && Self::order_target(entity) != Some(other)
+                && repaths.len() < MAX_REPATHS_PER_TICK
+            {
+                repaths.push(Repath {
+                    unit: id,
+                    body: other,
+                    goal,
+                });
+            }
+            return (Fixed::ZERO, Fixed::ZERO);
+        }
+        self.avoid(tiles, id, dx, dy)
     }
 
     /// The `n`-th tile of a crowd's destination, counting the clicked tile as the first: the tile itself,
@@ -5663,7 +5796,13 @@ impl World {
         };
         let mut target = None;
         if let Ok(route) = self.plan_path(from, to) {
-            self.paths.insert(unit, route);
+            self.paths.insert(
+                unit,
+                Route {
+                    steps: route,
+                    avoiding: BTreeSet::new(),
+                },
+            );
             target = Some(to);
         } else {
             let scale = self.scale;
@@ -5686,7 +5825,13 @@ impl World {
                         }
                         let candidate = self.tile((cx, cy));
                         if let Ok(route) = self.plan_path(from, candidate) {
-                            self.paths.insert(unit, route);
+                            self.paths.insert(
+                                unit,
+                                Route {
+                                    steps: route,
+                                    avoiding: BTreeSet::new(),
+                                },
+                            );
                             target = Some(candidate);
                             break 'rings;
                         }
@@ -5825,7 +5970,7 @@ impl World {
     /// How many waypoints are left on this entity's route: 0 means it is standing on its goal (or has none).
     #[must_use]
     pub fn path_length(&self, id: EntityId) -> usize {
-        self.paths.get(&id).map_or(0, Vec::len)
+        self.paths.get(&id).map_or(0, |route| route.steps.len())
     }
 
     /// Whether a unit may stand on this tile: terrain, walls and buildings, as the walk grid holds them. Exposed because
@@ -6129,7 +6274,13 @@ impl World {
         } else {
             self.plan_path(from, to)?
         };
-        self.paths.insert(villager, route);
+        self.paths.insert(
+            villager,
+            Route {
+                steps: route,
+                avoiding: BTreeSet::new(),
+            },
+        );
 
         let worker = self
             .find_mut(villager)
@@ -6776,7 +6927,13 @@ impl World {
                 .and_then(|from| self.plan_path(from, other).ok());
             match route {
                 Some(route) => {
-                    self.paths.insert(id, route);
+                    self.paths.insert(
+                        id,
+                        Route {
+                            steps: route,
+                            avoiding: BTreeSet::new(),
+                        },
+                    );
                     if let Some(entity) = self.find_mut(id) {
                         entity.task = Task::Hunt { to: other };
                     }
@@ -6804,7 +6961,13 @@ impl World {
                 .and_then(|from| self.plan_path(from, post).ok());
             match route {
                 Some(route) => {
-                    self.paths.insert(id, route);
+                    self.paths.insert(
+                        id,
+                        Route {
+                            steps: route,
+                            avoiding: BTreeSet::new(),
+                        },
+                    );
                     if let Some(entity) = self.find_mut(id) {
                         entity.task = Task::Move { to: post };
                     }
@@ -6893,7 +7056,13 @@ impl World {
                     _ => None,
                 };
                 if let Some(route) = route {
-                    self.paths.insert(id, route);
+                    self.paths.insert(
+                        id,
+                        Route {
+                            steps: route,
+                            avoiding: BTreeSet::new(),
+                        },
+                    );
                 }
             } else {
                 self.paths.remove(&id);
@@ -7021,7 +7190,13 @@ impl World {
                     _ => None,
                 };
                 if let Some(route) = route {
-                    self.paths.insert(id, route);
+                    self.paths.insert(
+                        id,
+                        Route {
+                            steps: route,
+                            avoiding: BTreeSet::new(),
+                        },
+                    );
                 }
             }
             // The shares moved this worker while it was carrying: the bank has it now, so it takes up the new column.
@@ -7314,7 +7489,13 @@ impl World {
                 .and_then(|from| self.plan_path(from, to).ok());
             match route {
                 Some(route) => {
-                    self.paths.insert(id, route);
+                    self.paths.insert(
+                        id,
+                        Route {
+                            steps: route,
+                            avoiding: BTreeSet::new(),
+                        },
+                    );
                     if let Some(entity) = self.find_mut(id) {
                         entity.task = task;
                     }
@@ -7332,16 +7513,12 @@ impl World {
         let mut movers: Vec<EntityId> = Vec::new();
         // The occupancy grid is only worth building on a tick where something moves; an idle world pays
         // one `any` over the delta list, which is empty of movement in the common case (D52).
-        let something_moves = deltas
-            .iter()
-            .any(|(_, _, dx, dy)| *dx != Fixed::ZERO || *dy != Fixed::ZERO);
-        let occupied = if something_moves {
-            self.occupancy()
-        } else {
-            Vec::new()
-        };
+        // Bodies in the way of this tick's steps. Decided in the pass, applied after it, because a repath plans a
+        // route and the entity list must stay still while it is walked (the same shape as shots).
+        let mut repaths: Vec<Repath> = Vec::new();
+        let tiles = self.unit_tiles();
         for (index, id, dx, dy) in deltas {
-            let (dx, dy) = self.avoid(&occupied, id, dx, dy);
+            let (dx, dy) = self.collide(&tiles, index, id, dx, dy, &mut repaths);
             if dx != Fixed::ZERO || dy != Fixed::ZERO {
                 movers.push(id);
             }
@@ -7385,6 +7562,63 @@ impl World {
             self.stamp_entity(id);
         }
 
+        // Re-plan around the bodies that were in the way, now that the movement pass has finished with the entity
+        // list. A repath keeps what the route already avoids - those bodies are still past - and adds the new one; a
+        // search that fails leaves the old route in place, so the unit waits rather than walking into the body.
+        if !repaths.is_empty() {
+            for Repath {
+                unit: id,
+                body: other,
+                goal,
+            } in repaths
+            {
+                let Some(from) = self.position(id) else {
+                    continue;
+                };
+                let start = self.tile_of(from);
+                let mut avoiding = self
+                    .paths
+                    .get(&id)
+                    .map(|route| route.avoiding.clone())
+                    .unwrap_or_default();
+                avoiding.insert(other);
+                let obstacles: BTreeSet<(u16, u16)> = avoiding
+                    .iter()
+                    .filter_map(|other| {
+                        self.position(*other).map(|position| self.tile_of(position))
+                    })
+                    .collect();
+                let planned = match self.walk.as_ref() {
+                    Some(walk) => find_path_avoiding(walk, start, goal, &obstacles),
+                    None => None,
+                };
+                match planned {
+                    Some(steps) => {
+                        self.paths.insert(id, Route { steps, avoiding });
+                        self.repath_count += 1;
+                    }
+                    None => {
+                        // The body joins the route's avoid set even though the search failed - the original's list is
+                        // filled *before* the repath, and this is why it matters: without it the same hopeless search
+                        // is re-run every tick, at four whole-map explorations a tick in a crowded fight.
+                        if let Some(route) = self.paths.get_mut(&id) {
+                            route.avoiding.insert(other);
+                        }
+                        // A reaction the engine gives itself has no caller: its refusal goes into state, where the
+                        // dump can show it, rather than being dropped (D71's lesson).
+                        self.refusal = Some((
+                            id,
+                            SimError::NoPath {
+                                from: start,
+                                to: goal,
+                            },
+                            self.tick,
+                        ));
+                    }
+                }
+            }
+        }
+
         // A waypoint reached is a waypoint spent. Done after the move, so a unit that lands on it
         // this tick starts toward the next one on the next tick.
         let scale = self.scale;
@@ -7393,7 +7627,7 @@ impl World {
             .filter(|(id, position)| {
                 self.paths
                     .get(id)
-                    .and_then(|path| path.first())
+                    .and_then(|route| route.steps.first())
                     .map(|&(x, y)| {
                         *position
                             == (
@@ -7407,7 +7641,7 @@ impl World {
             .collect();
         for id in spent {
             if let Some(path) = self.paths.get_mut(&id) {
-                path.remove(0);
+                path.steps.remove(0);
             }
         }
 
@@ -8082,7 +8316,7 @@ impl World {
     /// can assert that bookkeeping is released when an entity dies.
     #[must_use]
     pub fn path_len(&self, id: EntityId) -> Option<usize> {
-        self.paths.get(&id).map(Vec::len)
+        self.paths.get(&id).map(|route| route.steps.len())
     }
 
     /// Canonical hash over the state. Encoding is explicit little-endian: no `usize`, no
@@ -8246,12 +8480,21 @@ impl World {
                 fnv_bytes(&mut hash, &tech.to_le_bytes());
             }
         }
-        for (id, path) in &self.paths {
+        for (id, route) in &self.paths {
             fnv_bytes(&mut hash, &id.0.to_le_bytes());
-            fnv_bytes(&mut hash, &(path.len() as u32).to_le_bytes());
-            for (x, y) in path {
+            fnv_bytes(&mut hash, &(route.steps.len() as u32).to_le_bytes());
+            for (x, y) in &route.steps {
                 fnv_bytes(&mut hash, &x.to_le_bytes());
                 fnv_bytes(&mut hash, &y.to_le_bytes());
+            }
+            // The bodies a route is planned around decide where the unit goes next, so they are state. Written only
+            // when non-empty, so a world that never collides hashes exactly as one written before D98a.
+            if !route.avoiding.is_empty() {
+                fnv_bytes(&mut hash, b"route");
+                fnv_bytes(&mut hash, &(route.avoiding.len() as u32).to_le_bytes());
+                for other in &route.avoiding {
+                    fnv_bytes(&mut hash, &other.0.to_le_bytes());
+                }
             }
         }
         for entity in &self.entities {
