@@ -2627,3 +2627,11 @@ Four rulings, each forced by a measurement rather than chosen:
 3. **A site nobody can walk to is not a site.** The placement search asks reachability after the cheap footprint and lane
    tests. This is the prior art's point (`Zaydme/openaok` remembers the distance of a site it found no way to), reached
    here from a measured refusal rather than from the reference.
+
+## D101 - A speed change is the window's, not the match's (owner's speed selector)
+
+The speed selector (1x, 1.5x, 2x, 3x, 5x) is **pacing**, and pacing is the window's: the simulation runs at its own fixed
+rate (D16), a recording is a tick stream, and how fast a person watches is not part of the match. So a change is allowed
+**mid-match**, is not hashed, is not in a recording, and is logged by the window (`speed -> 1.5x`) rather than recorded in
+state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
+rounding rule applied per frame.

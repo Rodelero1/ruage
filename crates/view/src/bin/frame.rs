@@ -129,7 +129,7 @@ fn main() -> ExitCode {
         },
     );
     // The HUD goes in the diagnostic picture too: a step that draws numbers has to be looked at, not only asserted on.
-    ui::hud(&mut frame, &snapshot);
+    ui::hud(&mut frame, &snapshot, ruage_view::Speed::One);
     if let Err(err) = std::fs::write(&out, frame.to_ppm()) {
         eprintln!("write {}: {err}", out.display());
         return ExitCode::FAILURE;

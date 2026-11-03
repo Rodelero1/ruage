@@ -72,6 +72,8 @@ fn entity(id: u32, kind: EntityKind, at: (f32, f32), footprint: (u32, u32)) -> E
         pending: 0,
         remembered: false,
         footprint,
+        shape: ruage_view::Silhouette::Square,
+        mark: ruage_view::Mark::None,
     }
 }
 
@@ -171,14 +173,21 @@ fn a_unit_behind_a_building_is_covered_by_it() {
     let camera = Camera::new((640, 480)).centred_on(building.position);
     let frame = render(&snapshot, &camera);
 
-    // The villager is inside the diamond the building covers, so the building's paint is what a player sees there.
+    // The villager is inside the diamond the building covers, so **the building's paint** is what a player sees there -
+    // its block or its mark, never the unit. (The strict "exactly the building colour" version broke when buildings got
+    // marks: a mark is part of the building's paint, and a pixel on a mark is still not a villager.)
     let (px, py) = camera.project((behind.0 as f32, behind.1 as f32));
-    assert_eq!(
-        frame.pixel(px as u32, py as u32),
-        palette::BUILDING,
+    let seen = frame.pixel(px as u32, py as u32);
+    assert_ne!(
+        seen,
+        palette::PLAYER_ONE,
         "a villager standing behind a {0}x{1} building was painted on top of it",
         footprint.0,
         footprint.1
+    );
+    assert!(
+        seen == palette::BUILDING || seen == palette::MARK,
+        "and what is seen there is the building's own paint: {seen:?}"
     );
 }
 

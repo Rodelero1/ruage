@@ -88,7 +88,7 @@ fn the_hud_shows_one_swatch_per_column_and_the_population() {
     let camera = Camera::new((320, 240)).centred_on((16.0, 16.0));
     let plain = render(&snapshot, &camera);
     let mut with_hud = render(&snapshot, &camera);
-    ui::hud(&mut with_hud, &snapshot);
+    ui::hud(&mut with_hud, &snapshot, ruage_view::Speed::One);
 
     // A swatch per stock column, in order, each with digits beside it.
     for (column, colour) in palette::STOCK.iter().take(snapshot.stock.len()).enumerate() {
@@ -131,7 +131,7 @@ fn a_pack_with_no_stock_draws_no_swatches() {
     snapshot.stock.clear();
     let camera = Camera::new((320, 240)).centred_on((16.0, 16.0));
     let mut frame = render(&snapshot, &camera);
-    ui::hud(&mut frame, &snapshot);
+    ui::hud(&mut frame, &snapshot, ruage_view::Speed::One);
     for (column, colour) in palette::STOCK.iter().enumerate() {
         let x = ui::hud_swatch_x(column);
         assert_ne!(

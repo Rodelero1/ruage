@@ -157,6 +157,24 @@ units = ["mangonel"]
 # (siege), 50 hp, range 7 / minimum 3, 160 wood + 135 gold, 6 s reload, 35 attack against buildings.
 # A barracks makes spearmen (40 hp, 0.9 tiles/s, 60 food + 20 gold, 21 s).
 
+[mark]
+# **A pictogram per role**, drawn on the building's footprint so a glance says which is which (the owner's item 6). The
+# shapes are the view's vocabulary - ring, roof, sword, grain, cross - and content only says which role carries which:
+# a pack of our own can name its own marks, and one this build does not know is drawn plain rather than refused.
+town_center = "ring"
+house = "roof"
+barracks = "sword"
+mill = "grain"
+farm = "grain"
+mining_camp = "cross"
+lumber_camp = "cross"
+market = "ring"
+blacksmith = "cross"
+siege_workshop = "cross"
+stable = "roof"
+archery_range_3 = "sword"
+castle = "ring"
+
 [role]
 # A role is the engine's word for a unit: everything that must not quote the dat's numbering uses
 # one - the start above, the scenario format, and the engine's own seeding. Add a role here and a

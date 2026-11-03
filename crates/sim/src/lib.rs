@@ -5085,21 +5085,59 @@ impl World {
     /// both answer the question "how many soldiers" - the roots are computed once per call, not once per entity.
     ///
     /// A dead soldier is not an army: `hp > 0` filters the corpses that the death sweep has not collected yet.
-    #[must_use]
-    pub fn army(&self, player: u8) -> usize {
+    /// The family roots content calls military, computed once per call. A world with no unit table cannot family-match,
+    /// so it compares ids: the role *is* its own root, which is the only statement available. Returning nothing here
+    /// instead was a bug that made an army of three read as zero in every fixture that seeds without a table.
+    fn military_roots(&self) -> Vec<u32> {
         let Some(economy) = self.economy.as_ref() else {
-            return 0;
+            return Vec::new();
         };
-        // The root of each military role. A world with no unit table cannot family-match, so it compares ids: the role
-        // *is* its own root, which is the only statement available. Returning nothing here instead was a bug that made
-        // an army of three read as zero in every fixture that seeds without a table.
-        let roots: Vec<u32> = economy
+        economy
             .metrics
             .military_roles
             .iter()
             .filter_map(|role| economy.role.get(role).copied())
             .map(|unit| self.units.as_ref().map_or(unit, |units| units.root(unit)))
-            .collect();
+            .collect()
+    }
+
+    /// Is this unit a **soldier**, by content's `[metrics] military_roles`? The view asks it to choose a silhouette, and
+    /// `army` asks it to count - so a picture and a metric cannot disagree about what a soldier is.
+    #[must_use]
+    pub fn is_military(&self, unit: u32) -> bool {
+        let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
+        self.military_roots().contains(&root)
+    }
+
+    /// Is this unit a **worker** - the start villager's family, so an upgrade still counts?
+    #[must_use]
+    pub fn is_worker(&self, unit: u32) -> bool {
+        self.start_villager_unit()
+            .is_some_and(|villager| self.is_family(unit, villager))
+    }
+
+    /// The **mark** content gives this unit's role (item 6), for the view to draw on a building's footprint. The name is
+    /// the view's vocabulary ("ring", "sword", ...); content only says which role carries which mark.
+    #[must_use]
+    pub fn mark_name(&self, unit: u32) -> Option<&str> {
+        let economy = self.economy.as_ref()?;
+        let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
+        let role = economy
+            .role
+            .iter()
+            .find(|(_, id)| **id == unit)
+            .or_else(|| {
+                economy.role.iter().find(|(_, id)| {
+                    self.units.as_ref().map_or(**id, |units| units.root(**id)) == root
+                })
+            })
+            .map(|(name, _)| name)?;
+        economy.mark.get(role).map(String::as_str)
+    }
+
+    #[must_use]
+    pub fn army(&self, player: u8) -> usize {
+        let roots = self.military_roots();
         if roots.is_empty() {
             return 0;
         }

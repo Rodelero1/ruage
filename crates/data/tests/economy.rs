@@ -500,3 +500,15 @@ fn an_economy_that_still_carries_the_policy_block_is_refused_by_name() {
     );
     assert!(err.contains("ai/"), "and says where it went: {err}");
 }
+
+/// **A mark must name a role that exists.** A typo in `[mark]` would otherwise be a building drawn plain with no
+/// complaint, which is the shape of mistake this loader refuses everywhere else (the `[train.entry]` rule, one table
+/// over).
+#[test]
+fn a_mark_naming_no_role_is_rejected() {
+    let bad = format!("{GOOD}\n[mark]\nno_such_building = \"ring\"\n");
+    let err = load_economy_str(&bad, "economy.toml")
+        .expect_err("a mark for a role the pack lacks must be refused")
+        .to_string();
+    assert!(err.contains("no_such_building"), "got: {err}");
+}

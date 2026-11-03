@@ -23,6 +23,8 @@ fn unit(id: u32, at: (f32, f32), hp_fraction: f32) -> EntityView {
         pending: 0,
         remembered: false,
         footprint: (1, 1),
+        shape: ruage_view::Silhouette::Square,
+        mark: ruage_view::Mark::None,
     }
 }
 

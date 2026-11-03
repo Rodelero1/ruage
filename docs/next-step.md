@@ -39,14 +39,16 @@
 >    stand** - the personality sends one miner, so the camp's own precondition is met only late. Review:
 >    `docs/reviews/2026-11-03-the-work-a-rule-can-see.md`. **Next thing this queue owes:** the share pass does not re-task
 >    a base with no idle villagers, which is why the gold column needed a rule of its own.
-> 4. **D - pictograms on buildings (item 6).** A mark per role from content, drawn on the footprint; pure function in
->    `ruage_view`, with a test.
-> 5. **E - silhouettes.** A square for a villager, a triangle for a soldier, from content's roles; a test that one
->    pixel tells them apart.
-> 6. **F - a speed selector (1x, 1.5x, 2x, 3x, 5x).** Window tick pacing plus a dropdown. **Decision taken here:** a
->    speed change is allowed mid-match and is **not** match state - the sim is fixed-rate by D16 and nothing in it may
->    depend on how fast a human watches; the window owns the multiplier, records it in its own log line, and a
->    recording stays a tick stream.
+> 4. **D - pictograms on buildings (item 6). LANDED with E and F in one view slice.** `[mark] <role> = "<shape>"` in
+>    `economy.toml` (13 roles), `World::mark_name`, five glyphs drawn on the footprint; a mark naming a role the pack lacks
+>    is a load error. Review: `docs/reviews/2026-11-03-what-a-glance-shows.md`.
+> 5. **E - silhouettes. LANDED.** A square for the start villager's family, a triangle for `[metrics] military_roles`, a
+>    dot otherwise; the test compares the **row widths** a villager and a militia paint at one pixel (constant against
+>    growing), so the two cannot be confused for a colour difference.
+> 6. **F - a speed selector (1x, 1.5x, 2x, 3x, 5x). LANDED.** `Speed` + `Pace` (thousandths accumulator, so 1.5x runs
+>    1, 2, 1, 2 ticks and never drifts), five clickable boxes at the right of the HUD, keys 1-5 in the window, the pace in
+>    the title and a log line on every change. **Decision (D101):** allowed mid-match, not match state - the sim is
+>    fixed-rate (D16), a replay is a tick stream, and how fast a person watches is not in it.
 > 7. **G - save games and recordings (item 9).** Stockpiles, population and entities from a save; the action bodies
 >    (type byte, unit ids, coordinates) in a recording.
 >

@@ -267,11 +267,62 @@ pub fn hud_swatch_x(column: usize) -> u32 {
     8 + column as u32 * 60
 }
 
+/// The speed selector's five boxes, at the right end of the HUD bar: `(x, y, w, h)` each, in `Speed::ALL` order.
+///
+/// A **segmented control**, not a dropdown: the HUD's font has digits and no words (D82), so a label like "1.5x" cannot be
+/// written - five boxes with the live one filled say the same thing and are clickable.
+#[must_use]
+pub fn speed_boxes(frame_width: u32) -> [(u32, u32, u32, u32); 5] {
+    let width = 22;
+    let gap = 4;
+    let total = 5 * width + 4 * gap;
+    let left = frame_width.saturating_sub(total + 8);
+    let y = 3;
+    let height = hud_bar_height().saturating_sub(6);
+    std::array::from_fn(|index| {
+        let x = left + index as u32 * (width + gap);
+        (x, y, width, height)
+    })
+}
+
+/// Which speed a click at a pixel picks, if any: the selector is the only part of the HUD that takes input.
+#[must_use]
+pub fn speed_at(pixel: (i32, i32), frame_width: u32) -> Option<crate::Speed> {
+    if pixel.0 < 0 || pixel.1 < 0 {
+        return None;
+    }
+    let (x, y) = (pixel.0 as u32, pixel.1 as u32);
+    speed_boxes(frame_width)
+        .iter()
+        .position(|(bx, by, w, h)| x >= *bx && x < bx + w && y >= *by && y < by + h)
+        .map(|index| crate::Speed::ALL[index])
+}
+
+/// Draw the selector: one box per speed, the current one filled with the selection colour.
+pub fn speed_selector(frame: &mut Frame, speed: crate::Speed) {
+    for (index, (x, y, w, h)) in speed_boxes(frame.width).into_iter().enumerate() {
+        let chosen = crate::Speed::ALL[index] == speed;
+        frame.fill_rect(x as i32, y as i32, w as i32, h as i32, palette::HUD_TEXT);
+        let inset = if chosen { 2 } else { 4 };
+        frame.fill_rect(
+            (x + inset) as i32,
+            (y + inset) as i32,
+            (w - inset * 2) as i32,
+            (h - inset * 2) as i32,
+            if chosen {
+                palette::SELECTION
+            } else {
+                palette::HUD_BAR
+            },
+        );
+    }
+}
+
 /// Draw the HUD over a frame: one swatch and one number per stockpile column, then population as `have/cap`.
 ///
 /// It reads a `Snapshot` and nothing else (D55): the simulation carries no text, and every number here is one the
 /// engine already keeps. D74 allowed this; D82 chose the bitmap font it is drawn with.
-pub fn hud(frame: &mut Frame, snapshot: &Snapshot) {
+pub fn hud(frame: &mut Frame, snapshot: &Snapshot, speed: crate::Speed) {
     let bar = hud_bar_height().min(frame.height);
     if bar == 0 {
         return;
@@ -295,4 +346,5 @@ pub fn hud(frame: &mut Frame, snapshot: &Snapshot) {
         scale,
         palette::HUD_TEXT,
     );
+    speed_selector(frame, speed);
 }

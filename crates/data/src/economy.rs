@@ -99,6 +99,10 @@ pub struct Economy {
     pub hunt: Hunt,
     /// What the batch runner counts as military (items 7-8).
     pub metrics: MetricsSection,
+    /// Role name → the **mark** the view draws on its footprint (item 6). The vocabulary of marks belongs to the view
+    /// ("ring", "roof", "sword", ...), so content names one and the view decides what it looks like - the same split the
+    /// palette has (D55). A role with no entry is drawn as a plain block.
+    pub mark: BTreeMap<String, String>,
 }
 
 /// Herding: the animals that walk to a drop site when a villager works them. Content, because the engine
@@ -315,6 +319,9 @@ struct RawEconomy {
     role: BTreeMap<String, u32>,
     #[serde(default)]
     tech_role: BTreeMap<String, u32>,
+    /// `[mark] <role> = "<shape>"`. Optional: a role without one is drawn as a plain block.
+    #[serde(default)]
+    mark: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -845,6 +852,21 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             stock: raw.start.stock,
             civs: raw.start.civs,
             teams: raw.start.teams,
+        },
+        mark: {
+            // **A mark must name a role.** A typo in `[mark]` would otherwise be a building drawn plain with no complaint,
+            // which is the shape of mistake this loader refuses everywhere else.
+            for role in raw.mark.keys() {
+                if !raw.role.contains_key(role) {
+                    return Err(ConfigError::Invalid {
+                        key: format!("mark.{role}"),
+                        detail: format!(
+                            "{role:?} is not a role in this pack's [role] table, so no building can carry its mark"
+                        ),
+                    });
+                }
+            }
+            raw.mark
         },
         role: raw.role,
         footprint: raw

@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use ruage_data::{Economy, Map, Units};
 use ruage_sim::{Runner, World, load_scenario_file};
 use ruage_view::ui;
-use ruage_view::{Camera, Highlights, Snapshot, render_with};
+use ruage_view::{Camera, Highlights, Pace, Snapshot, Speed, render_with};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -97,13 +97,17 @@ struct App {
     selected: Vec<ruage_sim::EntityId>,
     /// Paused freezes the accumulator rather than the loop: the window keeps drawing, the match stops.
     paused: bool,
-    /// Simulation ticks per tick interval: 1, 2, 4 or 8 (the speed keys).
-    speed: u32,
+    /// The window's pace (1x, 1.5x, 2x, 3x, 5x). **Presentation only**: the simulation is fixed-rate (D16), so a speed
+    /// change is how many ticks this window runs per interval and nothing in the match knows. A change is allowed
+    /// mid-match and is logged here, not recorded in the simulation - a replay is a tick stream.
+    pace: Pace,
     /// The tile under the pointer, in tile space.
     cursor: (i32, i32),
     /// The same click in **continuous** tile coordinates: what a move order carries (A), so a unit walks to the place the
     /// player pointed at rather than to the centre of the diamond under the pointer.
     cursor_point: (f32, f32),
+    /// The pointer in **pixels**, which is what the HUD's speed selector is picked in: the HUD is not on the ground.
+    cursor_pixel: (i32, i32),
 }
 
 impl App {
@@ -126,9 +130,10 @@ impl App {
             seed,
             selected: Vec::new(),
             paused: false,
-            speed: 1,
+            pace: Pace::new(Speed::One),
             cursor: (0, 0),
             cursor_point: (0.0, 0.0),
+            cursor_pixel: (0, 0),
         }
     }
 
@@ -142,6 +147,13 @@ impl App {
     fn click(&mut self, button: winit::event::MouseButton) {
         match button {
             winit::event::MouseButton::Left => {
+                // The HUD's speed selector first: it is drawn over the world, so a click on it is a click on the HUD and
+                // must not also select whatever stands under it.
+                if let Some(speed) = ui::speed_at(self.cursor_pixel, self.camera.viewport.0) {
+                    self.pace.set(speed);
+                    eprintln!("speed -> {}", speed.label());
+                    return;
+                }
                 self.selected = self.pick_entity(self.cursor).into_iter().collect();
             }
             winit::event::MouseButton::Right => {
@@ -274,7 +286,7 @@ impl App {
         );
         // The HUD reads the same snapshot the picture was drawn from - stock, population - so what it reports cannot
         // drift from what is on the screen (D74).
-        ui::hud(&mut frame, &snapshot);
+        ui::hud(&mut frame, &snapshot, self.pace.speed());
         // `softbuffer` wants non-zero dimensions; a minimised window has none, and drawing nothing is correct there.
         let (Some(w), Some(h)) = (
             std::num::NonZeroU32::new(width),
@@ -303,10 +315,10 @@ impl App {
         }
         let _ = buffer.present();
         window.set_title(&format!(
-            "ruage - tick {} ({:.1} s) - {}x speed{} - {} entities - {} selected{}",
+            "ruage - tick {} ({:.1} s) - {} speed{} - {} entities - {} selected{}",
             self.ticks,
             self.ticks as f64 / f64::from(self.config.settings.tick_rate_hz.max(1)),
-            self.speed,
+            self.pace.speed().label(),
             if self.paused { " (paused)" } else { "" },
             world.entities().len(),
             self.selected.len(),
@@ -374,14 +386,20 @@ impl ApplicationHandler for App {
                     Key::Named(NamedKey::ArrowRight) => self.camera.scroll_screen((1.0, 0.0)),
                     Key::Named(NamedKey::ArrowUp) => self.camera.scroll_screen((0.0, -1.0)),
                     Key::Named(NamedKey::ArrowDown) => self.camera.scroll_screen((0.0, 1.0)),
-                    // 1..4 are the speed keys; the loop runs one, two, four or eight ticks per tick interval.
-                    Key::Character(ref key) => match key.as_str() {
-                        "1" => self.speed = 1,
-                        "2" => self.speed = 2,
-                        "3" => self.speed = 4,
-                        "4" => self.speed = 8,
-                        _ => {}
-                    },
+                    // 1..5 are the speed keys, the same five the HUD selector shows. A change is allowed mid-match and
+                    // logged here: it is how fast this window watches, not something the match contains.
+                    Key::Character(ref key) => {
+                        if let Some(index) = key
+                            .as_str()
+                            .parse::<usize>()
+                            .ok()
+                            .filter(|index| (1..=5).contains(index))
+                        {
+                            let speed = Speed::ALL[index - 1];
+                            self.pace.set(speed);
+                            eprintln!("speed -> {}", speed.label());
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -395,6 +413,7 @@ impl ApplicationHandler for App {
                 let pixel = (position.x as i32, position.y as i32);
                 self.cursor = self.camera.pick(pixel);
                 self.cursor_point = self.camera.pick_point(pixel);
+                self.cursor_pixel = pixel;
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
@@ -420,8 +439,11 @@ impl ApplicationHandler for App {
             self.accumulated -= self.tick;
             // Speed is *ticks per interval*, not a shorter interval: the simulation's notion of a tick never changes, which
             // is why a fast window session and a headless run still agree on every tick boundary.
+            // `Pace` carries the fraction, so 1.5x runs 1, 2, 1, 2 ticks: the simulation's tick never changes, only how
+            // many of them an interval runs.
+            let ticks_this_interval_target = self.pace.ticks();
             let mut ticks_this_interval = 0;
-            while ticks_this_interval < self.speed && !self.failed {
+            while ticks_this_interval < ticks_this_interval_target && !self.failed {
                 ticks_this_interval += 1;
                 if let Err(err) = self.step() {
                     eprintln!("step: {err}");

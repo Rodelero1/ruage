@@ -41,6 +41,48 @@ impl Pose {
     }
 }
 
+/// What a unit is drawn as. **Shapes, not units:** the snapshot asks the simulation which units content calls soldiers
+/// (`[metrics] military_roles`) and which are workers (the start villager's family), and only the answer crosses this
+/// boundary (D55). A glance then tells a villager from a soldier without any new art.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Silhouette {
+    /// A worker: the start villager's family.
+    Square,
+    /// A soldier, by content's own list.
+    Triangle,
+    /// Anything else - an animal, a projectile, a unit content says nothing about.
+    Dot,
+}
+
+/// The **mark** content gives a building's role (item 6): a glyph on the footprint, so a glance says which building is
+/// which. The vocabulary belongs to the view - content only says *which* mark a role carries (`[mark] barracks = "sword"`),
+/// the same split the palette has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mark {
+    None,
+    Ring,
+    Roof,
+    Sword,
+    Grain,
+    Cross,
+}
+
+impl Mark {
+    /// The mark a content name means. An unknown name is `None` rather than an error: a pack of our own may invent marks
+    /// this build cannot draw, and a building drawn plain is better than a load that refuses.
+    #[must_use]
+    pub fn named(name: &str) -> Mark {
+        match name {
+            "ring" => Mark::Ring,
+            "roof" => Mark::Roof,
+            "sword" => Mark::Sword,
+            "grain" => Mark::Grain,
+            "cross" => Mark::Cross,
+            _ => Mark::None,
+        }
+    }
+}
+
 /// One entity, as the screen sees it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntityView {
@@ -73,6 +115,10 @@ pub struct EntityView {
     /// a villager one. The renderer draws this silhouette, so the screen shows the space the simulation
     /// reserves rather than a square of its own invention.
     pub footprint: (u32, u32),
+    /// What to draw a unit as (item 6's silhouette): a worker a square, a soldier a triangle.
+    pub shape: Silhouette,
+    /// The mark to draw on a building's footprint (item 6's pictogram), from content's `[mark]` table.
+    pub mark: Mark,
 }
 
 /// Everything a renderer needs, and nothing it could use to change the match.
@@ -160,6 +206,15 @@ impl Snapshot {
                     .unit
                     .and_then(|unit| world.footprint_of(unit))
                     .unwrap_or((1, 1)),
+                shape: match entity.unit {
+                    Some(unit) if world.is_military(unit) => Silhouette::Triangle,
+                    Some(unit) if world.is_worker(unit) => Silhouette::Square,
+                    _ => Silhouette::Dot,
+                },
+                mark: entity
+                    .unit
+                    .and_then(|unit| world.mark_name(unit))
+                    .map_or(Mark::None, Mark::named),
                 remembered,
             });
         }
@@ -398,6 +453,19 @@ impl Frame {
         self.pixels[at..at + 4].copy_from_slice(&colour);
     }
 
+    /// Draw an **upward triangle**: the soldier's silhouette (item 6). `half_w` is the base half-width and `half_h` the
+    /// height above the apex, so a triangle is as tall as it is wide - the same box a square would fill, different shape.
+    pub fn fill_triangle(&mut self, centre: (i32, i32), half_w: i32, half_h: i32, colour: [u8; 4]) {
+        let half_w = half_w.max(1);
+        let half_h = half_h.max(1);
+        for row in 0..=half_h {
+            // The apex is at -half_h, the base at +half_h: width grows linearly from a point to the full base.
+            let width = (half_w * row * 2) / half_h;
+            let y = centre.1 - half_h + row;
+            self.fill_rect(centre.0 - width, y, width * 2 + 1, 1, colour);
+        }
+    }
+
     pub fn fill_rect(&mut self, x: i32, y: i32, w: i32, h: i32, colour: [u8; 4]) {
         for dy in 0..h {
             for dx in 0..w {
@@ -588,6 +656,8 @@ pub mod palette {
     pub const BUILDING: [u8; 4] = [200, 200, 200, 255];
     /// The HUD: a dark bar, light text, and one swatch per stockpile column in the pack's own order.
     pub const HUD_BAR: [u8; 4] = [16, 16, 20, 255];
+    /// A building's **mark**: dark enough to read against the grey block, and its own colour so a test can name it.
+    pub const MARK: [u8; 4] = [40, 40, 48, 255];
     pub const HUD_TEXT: [u8; 4] = [235, 235, 225, 255];
     /// Selection: a white ring under what is selected, a health bar over it, and where the last order went.
     pub const SELECTION: [u8; 4] = [255, 255, 255, 255];
@@ -754,6 +824,46 @@ fn layer_of(entity: &EntityView) -> u8 {
     }
 }
 
+/// Draw a building's **mark**: a small dark glyph on the footprint, sized off the tile so it reads at every zoom. Each
+/// mark is a distinct pattern rather than a letter, because the font has no letters worth trusting at eight pixels.
+fn draw_mark(frame: &mut Frame, centre: (i32, i32), size: i32, mark: Mark, colour: [u8; 4]) {
+    let size = size.max(3);
+    let (h, v) = (size, size);
+    match mark {
+        Mark::None => {}
+        // A ring: an open square outline, so what is underneath still shows.
+        Mark::Ring => {
+            frame.fill_rect(centre.0 - h, centre.1 - v, h * 2, 2, colour);
+            frame.fill_rect(centre.0 - h, centre.1 + v - 2, h * 2, 2, colour);
+            frame.fill_rect(centre.0 - h, centre.1 - v, 2, v * 2, colour);
+            frame.fill_rect(centre.0 + h - 2, centre.1 - v, 2, v * 2, colour);
+        }
+        // A roof: two strokes meeting at the top.
+        Mark::Roof => {
+            for step in 0..=v {
+                frame.fill_rect(centre.0 - step, centre.1 + v - step * 2, 2, 2, colour);
+                frame.fill_rect(centre.0 + step, centre.1 + v - step * 2, 2, 2, colour);
+            }
+        }
+        // A sword: a vertical blade over a crossguard.
+        Mark::Sword => {
+            frame.fill_rect(centre.0 - 1, centre.1 - v, 2, v * 2, colour);
+            frame.fill_rect(centre.0 - h, centre.1 + v / 2, h * 2, 2, colour);
+        }
+        // Grain: three vertical stalks.
+        Mark::Grain => {
+            for offset in [-h, 0, h] {
+                frame.fill_rect(centre.0 + offset - 1, centre.1 - v, 2, v * 2, colour);
+            }
+        }
+        // A cross: two bars, the storehouse's mark.
+        Mark::Cross => {
+            frame.fill_rect(centre.0 - 1, centre.1 - v, 2, v * 2, colour);
+            frame.fill_rect(centre.0 - h, centre.1 - 1, h * 2, 2, colour);
+        }
+    }
+}
+
 pub(crate) fn player_colour(player: u8) -> [u8; 4] {
     match player {
         1 => palette::PLAYER_ONE,
@@ -852,17 +962,40 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
                     palette::BUILDING
                 };
                 frame.fill_diamond(centre, (rx * across as f32, ry * down as f32), colour);
+                // **A mark per role** (item 6): a glyph in the building's own outline colour, on the footprint, so a
+                // glance says which building is which. Content names the mark; this crate only knows the shapes.
+                draw_mark(
+                    &mut frame,
+                    centre,
+                    (rx * 0.5).max(4.0) as i32,
+                    entity.mark,
+                    palette::MARK,
+                );
             }
             EntityKind::Unit => {
                 let centre = camera.project(entity.position);
-                let dot = (rx * 0.4).max(2.0) as i32;
-                frame.fill_rect(
-                    centre.0 - dot / 2,
-                    centre.1 - dot / 2,
-                    dot.max(2),
-                    dot.max(2),
-                    player_colour(entity.player),
-                );
+                let colour = player_colour(entity.player);
+                let half = (rx * 0.35).max(2.0) as i32;
+                match entity.shape {
+                    // **A worker is a square, a soldier a triangle** (item 6): one glance tells the two apart, which is
+                    // what the owner asked for - the shapes come from content's roles, never from this crate's guess.
+                    Silhouette::Square => {
+                        frame.fill_rect(
+                            centre.0 - half,
+                            centre.1 - half,
+                            half * 2,
+                            half * 2,
+                            colour,
+                        );
+                    }
+                    Silhouette::Triangle => {
+                        frame.fill_triangle(centre, half, half, colour);
+                    }
+                    Silhouette::Dot => {
+                        let dot = half.max(1);
+                        frame.fill_rect(centre.0 - dot, centre.1 - dot, dot * 2, dot * 2, colour);
+                    }
+                }
             }
         }
     }
@@ -929,6 +1062,88 @@ pub fn draw_highlights(
             frame.put(centre.0 + offset, centre.1, palette::ORDER);
             frame.put(centre.0, centre.1 + offset, palette::ORDER);
         }
+    }
+}
+
+/// The window's speed multiplier (the owner's speed-selector item). **Pacing, not state:** the simulation is fixed-rate
+/// (D16), so a speed change is the window running more or fewer ticks per interval and nothing in the match knows it.
+/// A change mid-match is allowed - it is how fast a person is watching - and it is not recorded in the simulation,
+/// because a replay is a tick stream and a viewer's pace is not part of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Speed {
+    One,
+    OneAndAHalf,
+    Two,
+    Three,
+    Five,
+}
+
+impl Speed {
+    pub const ALL: [Speed; 5] = [
+        Speed::One,
+        Speed::OneAndAHalf,
+        Speed::Two,
+        Speed::Three,
+        Speed::Five,
+    ];
+
+    /// Ticks per interval in **thousandths**: 1.5x is exact and never drifts, where a float would round every frame.
+    #[must_use]
+    pub fn milli(self) -> u32 {
+        match self {
+            Speed::One => 1000,
+            Speed::OneAndAHalf => 1500,
+            Speed::Two => 2000,
+            Speed::Three => 3000,
+            Speed::Five => 5000,
+        }
+    }
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Speed::One => "1x",
+            Speed::OneAndAHalf => "1.5x",
+            Speed::Two => "2x",
+            Speed::Three => "3x",
+            Speed::Five => "5x",
+        }
+    }
+}
+
+/// Turns a speed into **whole ticks per interval** without losing the fraction: the remainder is carried, so 1.5x over
+/// two intervals runs three ticks and never one-and-a-half rounded down to one for ever.
+#[derive(Debug, Clone)]
+pub struct Pace {
+    speed: Speed,
+    carry_milli: u32,
+}
+
+impl Pace {
+    #[must_use]
+    pub fn new(speed: Speed) -> Pace {
+        Pace {
+            speed,
+            carry_milli: 0,
+        }
+    }
+
+    #[must_use]
+    pub fn speed(&self) -> Speed {
+        self.speed
+    }
+
+    /// Change the speed **mid-match**: the carry is kept, so a change never gives or takes a partial tick.
+    pub fn set(&mut self, speed: Speed) {
+        self.speed = speed;
+    }
+
+    /// How many ticks this interval runs.
+    pub fn ticks(&mut self) -> u32 {
+        self.carry_milli += self.speed.milli();
+        let whole = self.carry_milli / 1000;
+        self.carry_milli %= 1000;
+        whole
     }
 }
 
