@@ -1,7 +1,14 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, latest: A (exact order points) is scoped to the last line and NOT started - the context ran out, not
-> the plan.** Owner: "implement as agreed and then follow with remaining previous steps". What the scoping pass settled,
+> **2026-11-03, latest: prove B and C by measurement before writing either (owner's instruction).** Both are priced with
+> probes first: **B** - does a pather route carry slack a string-pull would remove? Measured as polyline length against a
+> greedily pulled route over 200 pairs of the project map. **C** - do bodies overlap without sharing a tile? Measured on
+> the acceptance match as pairs closer than `radius[0] + radius[0]` split by whether they share a tile, which is exactly
+> what the tile predicate cannot see. Whatever the numbers justify gets written; a step whose worth measures at zero is
+> dropped with the number rather than built on a hunch. Then the garrison fixture restage and the acceptance victory.
+>
+> Superseded: **A (exact order points) is scoped to the last line and NOT started - the context ran out, not
+> the plan.** [A has since landed, `238ae56`.] Owner: "implement as agreed and then follow with remaining previous steps". What the scoping pass settled,
 > so the next session does not rediscover it:
 >
 > 1. **The view half is nearly free.** `Camera::pick` already computes the continuous tile coordinate (`x`, `y` from
