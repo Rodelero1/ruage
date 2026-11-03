@@ -1,21 +1,43 @@
 # The effect interpreter, priced from the data
 
-> **2026-11-03, parked for a decision: `wip/buildings-block` implements the owner's passage rule and the match cannot
-> live with it yet.** The rule: every building blocks its whole footprint from its foundation, a farm is a floor, the town
-> centre keeps its solid core and walkable yard, and no building may overlap another except a used-up farm. It is
-> implemented, with seven tests watched failing first, and **unmerged on a branch** because the standing measurement
-> regresses: `players=1` -> `players=2`, hash `912386556784c88f` -> `c311cfb2158c03c6`, bank at 1,600 s 192/654/110 ->
-> 39/258/370, 19.9 s -> 47.4 s (50 buildings). Four measured iterations are in
-> `docs/reviews/2026-11-03-buildings-block-their-ground.md`; the short version is that the AI's base layout, farm spacing
-> and food economy were designed when a building was a picture: the footprint-aware search, then a lane around blocking
-> buildings, then no lane for a floor, then a wider farm search each moved the number and none of them won the match.
-> The suite is also red in ~25 build fixtures that raise a house overlapping the town centre's footprint - correct
-> refusals; each fixture has to move to ground it does not share.
+> **2026-11-03, the owner's nine observations, and where each one stands.** Written down before any of them is worked on,
+> so a fresh session resumes from the list rather than from the conversation. `main` is green at `bff75d6`; the buildings
+> work is on **`wip/buildings-block`** (see item 1).
 >
-> **The fork:** merge the rule now and take "an AI base that can be walked out of" as the next slice (the match is drawn
-> in the meantime), or hold the rule until the layout work lands with it. Nothing else in the queue is blocked by either.
+> 1. **Buildings crowd the base and wall it in - they must leave gaps.** The rule (every building blocks its whole
+>    footprint from its foundation, a farm is a floor, the town centre keeps its core and yard, no overlap but a spent
+>    farm) is implemented on `wip/buildings-block` with seven tests, and the placement now follows the game's own manual:
+>    a lane around every building, farms included ("leaving some space between them to avoid 'peasant traffic jam'"), and
+>    the ground within 3 tiles of the town centre kept for farms ("do not build your first house too close to the Town
+>    Center"). **Measured: still not won** - `players=2`, hash `ca90bc834457d7a6`, 38 buildings, bank 258/290/170 at
+>    1,200 s against the baseline's 752/825/370. Better than the frozen base the bare rule produced (8 units, 200 wood),
+>    not as good as the pre-rule win. The suite on the branch is red in ~25 build fixtures that raise a house overlapping
+>    the town centre - those refusals are the rule working, and each fixture has to move.
+> 2. **Units walk through forest; a tree blocks its tile until it is cut and fully harvested, and no passage between two
+>    trees that touch only at a corner.** Tree tiles already block (D84), and `step_is_walkable` on the branch adds the
+>    both-corners rule for raw-space diagonals - so the corner case may already be fixed there and wants a test that
+>    proves it (two trees diagonal, a villager that must go round).
+> 3. **Villagers should stand *around* a bush, mine or stone, not on top of it.** Today the mover treats an order's goal
+>    tile as unblocked, so a gatherer walks onto the node's tile. The arrival rule already accepts the ring (`beside`), so
+>    the fix is to stop exempting a **blocked** goal tile from the step check and let the ring arrival finish the order.
+> 4. **Villagers should build drop sites near the resource they are mining.** Content/AI: a rule that raises a mining camp
+>    beside gold or stone once a villager is working one there (`where = "gold"` exists; the trigger does not).
+> 5. **Panning is vertical because the map is rotated 45 degrees.** `crates/view`: screen-aligned up/down and left/right,
+>    which is the camera basis rather than the tile basis.
+> 6. **Pictograms on buildings**, so a glance says which is which. `crates/view`: a mark per role, from content, drawn on
+>    the footprint.
+> 7. **Soldiers walk up and down instead of consistently attacking enemy buildings** (they strike, then withdraw). AI:
+>    stance/attack-move rules and the retreat path.
+> 8. **Gather an army first, then attack.** AI: a rule that attacks at a unit count rather than per unit.
+> 9. **Save games and recordings should give a lot of this information.** `tools/savegame.py` reads the clock; stockpiles,
+>    population and entities are the named gap, and the recordings walk to EOF with an op grammar - the action bodies
+>    (type byte, unit ids, coordinates) are next.
 >
-> Superseded: **C1b + C2 landed, and the acceptance match is WON.** A body blocks a disc of `radius[0]` summed
+> **Proposed order:** 2 and 3 first (both are small, both are movement/arrival, and 3 changes what "at the node" means
+> for every gather test), then 4 and 8 together (both are content/AI rules and 8 is what makes 7 worth fixing), then 7,
+> then 5 and 6 (view), with 9 available whenever a long build is running. 1 stays open until the base can win again.
+>
+> Superseded: **C1b + C2 landed, and the acceptance match is WON.**> Superseded: **C1b + C2 landed, and the acceptance match is WON.** A body blocks a disc of `radius[0]` summed
 > for the pair on **every** step, and gather / build / deposit / attack arrival are distances in the same units
 > (`World::reach_between`). Review: `docs/reviews/2026-11-03-c-footprints-and-distance-arrival.md`.
 >
