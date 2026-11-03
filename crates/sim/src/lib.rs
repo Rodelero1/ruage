@@ -2606,17 +2606,163 @@ impl World {
     }
 
     /// The tile a world position sits on.
-    /// The tiles a building occupies **solidly**: its `[footprint.<role>]` `#` cells if content names a mask, otherwise
-    /// its own tile if it is a blocking role, otherwise nothing (D76). One function answers both "what to block" and "what
-    /// to free", so placement and demolition can never disagree.
+    /// What stops a site of `unit` at `at` being raised for `player`, if anything.
+    ///
+    /// **A building owns its whole footprint**, so an overlap is refused by the footprint and not by the anchor tile (the
+    /// owner's rule, 2026-11-03: "building may not overlap in any case (only expired farm can be)"). A house on a town
+    /// centre's yard is the case that used to pass every check, because the yard is walkable ground. A building the
+    /// player cannot see does not hold its ground (D58): the placement is allowed and the cancellation-on-sight rule
+    /// resolves it later. **Units do not block a site** - the game drops a building on your own villagers and pushes them
+    /// out - and a spent farm is the one thing a new building may cover.
+    fn site_refusal(&self, player: u8, unit: u32, at: (u16, u16)) -> Option<SimError> {
+        let walk = self.walk.as_ref()?;
+        let mut held: BTreeMap<(u16, u16), EntityId> = BTreeMap::new();
+        for entity in &self.entities {
+            if entity.kind != EntityKind::Building || self.is_expired_farm(entity.id) {
+                continue;
+            }
+            let seen = entity.player == player
+                || entity.player == 0
+                || self.vision(player, self.tile_of(entity.position)) == TileVision::Visible;
+            if !seen {
+                continue;
+            }
+            for tile in self.footprint_area(entity) {
+                held.entry(tile).or_insert(entity.id);
+            }
+        }
+        for tile in self.build_site_tiles(unit, at) {
+            if !walk.contains(tile.0, tile.1) {
+                return Some(SimError::SiteBlocked { tile });
+            }
+            if held.contains_key(&tile) {
+                return Some(SimError::SiteOccupied { tile });
+            }
+            // Terrain and resources are what is left: a resource node is not a player's to lose, so it blocks whoever is
+            // looking.
+            if walk.blocked(tile.0, tile.1) {
+                return Some(SimError::SiteBlocked { tile });
+            }
+        }
+        None
+    }
+
+    /// Whether a site of `unit` at `at` leaves a **lane**: no building this player can see stands on the ring of tiles
+    /// around its footprint. Two buildings placed edge to edge make a wall, and a base of walls is a base nobody can walk
+    /// out of - measured the first time buildings blocked: the housing rule packed every house against the town centre
+    /// and the villagers could not reach a single node ("no walkable route ... the target is walled off").
+    ///
+    /// A player is free to butt buildings together; this is what the **placement search** asks, so an AI's base keeps
+    /// streets without anybody modelling a street.
+    #[must_use]
+    pub fn site_has_lane(&self, player: u8, unit: u32, at: (u16, u16)) -> bool {
+        // **A floor needs no lane.** A farm blocks nothing, so a farm packed against a house costs nobody a walk - and
+        // asking for a lane around every plot cost the match its food ("no free tile for a farm", 85 times).
+        if !self.site_blocks(unit) {
+            return true;
+        }
+        let site: BTreeSet<(u16, u16)> = self.build_site_tiles(unit, at).into_iter().collect();
+        let halo: BTreeSet<(u16, u16)> = site
+            .iter()
+            .flat_map(|(x, y)| {
+                let (x, y) = (*x as i32, *y as i32);
+                let mut ring = Vec::with_capacity(8);
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        if dx == 0 && dy == 0 {
+                            continue;
+                        }
+                        if let (Ok(x), Ok(y)) = (u16::try_from(x + dx), u16::try_from(y + dy)) {
+                            ring.push((x, y));
+                        }
+                    }
+                }
+                ring
+            })
+            .filter(|tile| !site.contains(tile))
+            .collect();
+        !self.entities.iter().any(|entity| {
+            if entity.kind != EntityKind::Building || self.is_expired_farm(entity.id) {
+                return false;
+            }
+            let seen = entity.player == player
+                || entity.player == 0
+                || self.vision(player, self.tile_of(entity.position)) == TileVision::Visible;
+            seen && self.footprint_area(entity).iter().any(|tile| halo.contains(tile))
+        })
+    }
+
+    /// Whether a building of `unit` would fit at `at` **as a whole footprint** - what a placement search has to ask, or it
+    /// chooses a tile whose neighbour the building already owns and the order is refused (measured: the acceptance
+    /// match's housing rule asked for the town centre's own ground 450 times).
+    #[must_use]
+    pub fn site_fits(&self, player: u8, unit: u32, at: (u16, u16)) -> bool {
+        self.site_refusal(player, unit, at).is_none()
+    }
+
+    /// Whether a building of `unit` blocks movement at all: no mask means its whole footprint does, and a mask means
+    /// whatever its `#` cells say (a farm's are all `.`, which is the one role that is a floor).
+    fn site_blocks(&self, unit: u32) -> bool {
+        let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
+        match self.footprints.get(&root) {
+            Some(mask) => self.blocking.contains(&root) || mask.blocked.iter().any(|blocked| *blocked),
+            None => true,
+        }
+    }
+
+    /// The tiles a site of `unit` at `at` would cover: the footprint its `radius` gives it, which is what placement
+    /// checks - not the mask, because a farm's floor is still the farm's ground.
+    fn build_site_tiles(&self, unit: u32, at: (u16, u16)) -> Vec<(u16, u16)> {
+        let Some((width, height)) = self.units.as_ref().and_then(|units| units.footprint(unit)) else {
+            return vec![at];
+        };
+        let mut tiles = Vec::with_capacity(width as usize * height as usize);
+        for dy in 0..u16::try_from(height).unwrap_or(1) {
+            for dx in 0..u16::try_from(width).unwrap_or(1) {
+                tiles.push((at.0.saturating_add(dx), at.1.saturating_add(dy)));
+            }
+        }
+        tiles
+    }
+
+    /// Every tile a building's **footprint** covers: the ground it is drawn on, from the same `radius` the renderer
+    /// uses (D83). One rectangle, mask or not - `solid_tiles` says which of these cells block *movement*, this says which
+    /// cells a building **owns**, and a building may not share any of them with another one.
+    fn footprint_area(&self, entity: &Entity) -> Vec<(u16, u16)> {
+        let anchor = self.tile_of(entity.position);
+        let Some(unit) = entity.unit else {
+            return vec![anchor];
+        };
+        let Some((width, height)) = self.units.as_ref().and_then(|units| units.footprint(unit)) else {
+            return vec![anchor];
+        };
+        let mut tiles = Vec::with_capacity(width as usize * height as usize);
+        for dy in 0..u16::try_from(height).unwrap_or(1) {
+            for dx in 0..u16::try_from(width).unwrap_or(1) {
+                tiles.push((anchor.0.saturating_add(dx), anchor.1.saturating_add(dy)));
+            }
+        }
+        tiles
+    }
+
+    /// The tiles a building occupies **solidly**, which is what blocks movement: its `[footprint.<role>]` `#` cells when
+    /// content names a mask, otherwise its whole footprint (D76, and the owner's rule of 2026-11-03: "all other buildings
+    /// block passage since start of construction"). A role in `[build] blocking_roles` blocks its whole footprint even
+    /// where a mask says otherwise - the knob content has to override a floor.
+    ///
+    /// Two roles name a mask, and both are the exceptions the owner gave: a **farm** is all `.` (a floor, walked over while
+    /// it is built and after) and a **town centre** is solid at its back core and open in its yard. Everything else builds
+    /// its mask from its own footprint, which is why a house is no longer a picture a villager walks through.
     fn solid_tiles(&self, entity: &Entity) -> Vec<(u16, u16)> {
         let Some(unit) = entity.unit else {
             return Vec::new();
         };
         let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
-        let anchor = self.tile_of(entity.position);
-        match self.footprints.get(&root) {
-            Some(mask) => mask
+        if !self.blocking.contains(&root)
+            && let Some(mask) = self.footprints.get(&root)
+        {
+            let anchor = self.tile_of(entity.position);
+            return mask
                 .blocked
                 .iter()
                 .enumerate()
@@ -2629,12 +2775,13 @@ impl World {
                         anchor.1.saturating_add(row),
                     )
                 })
-                .collect(),
-            None if self.blocking.contains(&root) => vec![anchor],
-            None => Vec::new(),
+                .collect();
         }
+        self.footprint_area(entity)
     }
 
+    /// The tile a position falls in. Truncating division, because every position the engine stores is positive - a
+    /// position outside the map is clamped to tile 0 rather than panicking, which is what a test fixture needs.
     fn tile_of(&self, position: (Fixed, Fixed)) -> (u16, u16) {
         (
             u16::try_from(position.0.raw() / self.scale).unwrap_or(0),
@@ -3795,47 +3942,10 @@ impl World {
                 });
             }
         }
-        let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
-        if !walk.contains(at.0, at.1) {
-            return Err(SimError::SiteBlocked { tile: at });
-        }
-        if walk.blocked(at.0, at.1) {
-            // A **building's footprint mask** puts its solid core into the walk layer (D76), where a blocked tile would
-            // otherwise be reported as "not open ground" - a message about terrain, for a building the player can see.
-            // Say what is actually there: one tile refuses as the building it holds, everything else as ground.
-            let held = self.entities.iter().any(|entity| {
-                entity.kind == EntityKind::Building
-                    && !self.is_expired_farm(entity.id)
-                    && self.solid_tiles(entity).contains(&at)
-            });
-            return Err(if held {
-                SimError::SiteOccupied { tile: at }
-            } else {
-                SimError::SiteBlocked { tile: at }
-            });
+        if let Some(why) = self.site_refusal(worker.player, unit_id, at) {
+            return Err(why);
         }
         let position = self.tile(at);
-        // One tile holds one building per player, and a building you cannot see does not block you
-        // (D58): the player chooses blind, so the answer has to be the world *as that player sees it*.
-        // Your own foundation always blocks - stacking your own is never what the click meant - and a
-        // resource node blocks whoever is looking, because it is not a player's to lose.
-        // Only a *foundation* can be overbuilt blind. A finished building blocks whoever is looking: the
-        // rule is about a site someone has merely marked out, and letting a house cancel a town centre
-        // through fog is not the game either version plays.
-        let blind = self.vision(worker.player, at) != TileVision::Visible;
-        // **Units do not block a site.** The game lets you drop a building on your own villagers and pushes them out;
-        // refusing instead made a site beside a drop site impossible to place, because a villager now stands there
-        // (deposits are made from a touching tile, 2026-10-29). Resources and buildings still block.
-        let blocked = self.entities.iter().any(|entity| {
-            entity.kind != EntityKind::Unit
-                // A spent farm is not in the way: the whole point of building on it is to replace it.
-                && !self.is_expired_farm(entity.id)
-                && entity.position == position
-                && (entity.player == worker.player || entity.player == 0 || !blind)
-        });
-        if blocked {
-            return Err(SimError::SiteOccupied { tile: at });
-        }
         // Reachability is part of "can this order run": paying for a site nobody can walk to would
         // leave a construction that never progresses and wood the player cannot get back.
         self.plan_path(worker.position, position)?;
@@ -5088,6 +5198,50 @@ impl World {
         best
     }
 
+    /// Whether a unit may **walk** this step: the tile it lands in is walkable ground, and a diagonal does not cut a
+    /// corner the search would refuse - the same both-corners rule `line_clear` applies.
+    ///
+    /// The route is tile-legal, but the mover moves in **raw space**: a diagonal step toward the next waypoint can enter a
+    /// blocked tile's corner that the Bresenham line never touches, which is how villagers walked *through* a house once
+    /// houses started blocking their ground (measured: standing on the house for 19 ticks, 2026-11-03). The **goal's own
+    /// tile is exempt**, the same rule the search and the straight line use - a node's tile holds the thing being worked,
+    /// so a gatherer must still be able to step onto its tree.
+    fn step_is_walkable(
+        &self,
+        here: (Fixed, Fixed),
+        step: (Fixed, Fixed),
+        goal: Option<(u16, u16)>,
+    ) -> bool {
+        let (x, y) = (
+            here.0.raw() + step.0.raw(),
+            here.1.raw() + step.1.raw(),
+        );
+        // A world with no map knows no blocked ground: a bare `World::new` (a unit test of the mover, a fixture that only
+        // wants collision) must still be able to walk.
+        if self.walk.is_none() {
+            return true;
+        }
+        let free = |tile: (i64, i64)| -> bool {
+            let (Ok(x), Ok(y)) = (u16::try_from(tile.0), u16::try_from(tile.1)) else {
+                return false;
+            };
+            goal == Some((x, y)) || self.tile_walkable(x, y)
+        };
+        let landing = (x.div_euclid(self.scale), y.div_euclid(self.scale));
+        if !free(landing) {
+            return false;
+        }
+        if step.0.raw() != 0 && step.1.raw() != 0 {
+            let from = self.tile_of_raw(here);
+            if !free((from.0 + step.0.raw().signum(), from.1))
+                || !free((from.0, from.1 + step.1.raw().signum()))
+            {
+                return false;
+            }
+        }
+        true
+    }
+
     /// One step against the bodies in the way (D98a, C).
     ///
     /// The original queries collisions **at the new position with the unit's radius**, and this is that query: a body
@@ -5135,6 +5289,20 @@ impl World {
         }
         let here = entity.position;
         let radius = self.body_radius(entity.unit);
+        let goal_tile = self.goal_of(entity).map(|(tile, _)| tile);
+        // **Ground first.** A step that lands on blocked ground, or cuts the corner of one, is not a step - the mover
+        // slides along the axis that is clear, which is how it gets round a building instead of through it.
+        if !self.step_is_walkable(here, (dx, dy), goal_tile) {
+            for (sx, sy) in [(dx, Fixed::ZERO), (Fixed::ZERO, dy)] {
+                if sx == Fixed::ZERO && sy == Fixed::ZERO {
+                    continue;
+                }
+                if self.step_is_walkable(here, (sx, sy), goal_tile) {
+                    return (sx, sy);
+                }
+            }
+            return (Fixed::ZERO, Fixed::ZERO);
+        }
         let candidate = (
             Fixed::from_raw(here.0.raw() + dx.raw()),
             Fixed::from_raw(here.1.raw() + dy.raw()),
@@ -8271,10 +8439,12 @@ impl World {
         let mut buried: Vec<EntityId> = Vec::new();
         // A wall's tile, remembered before the sweep: after `retain` the entity is gone and there is no
         // position left to free.
+        // Only a building that is **already dead** needs its ground freed, and asking every building every tick for its
+        // whole footprint would be sixteen allocations a building a tick for nothing.
         let wall_tiles: Vec<(EntityId, (u16, u16))> = self
             .entities
             .iter()
-            .filter(|entity| entity.kind == EntityKind::Building)
+            .filter(|entity| entity.kind == EntityKind::Building && entity.hp <= 0)
             .flat_map(|entity| {
                 let id = entity.id;
                 self.solid_tiles(entity)

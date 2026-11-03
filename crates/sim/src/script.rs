@@ -427,7 +427,7 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 .ok_or_else(|| format!("player {player} has no villager {villager}"))?;
             let unit = role_of(world, role)?;
             let at = match where_.as_deref() {
-                None | Some("near_town_center") => free_tile_near(world, player),
+                None | Some("near_town_center") => free_tile_near(world, player, unit),
                 Some(resource) => {
                     // A building placed for a resource is a building placed *at* that resource: a lumber camp beside
                     // the wood is the whole point of a lumber camp, and one beside the town centre is wood spent on a
@@ -443,7 +443,7 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                     let node = nearest_resource(world, centre, slot, 0).ok_or_else(|| {
                         format!("player {player} has no {resource} node to build beside")
                     })?;
-                    free_tile_near_node(world, node)
+                    free_tile_near_node(world, node, unit, player)
                 }
             };
             let at =
@@ -596,14 +596,17 @@ fn town_center_of(world: &World, player: u8) -> Option<EntityId> {
 }
 
 /// The free tile nearest a resource node, for a building that exists to shorten a walk to it.
-fn free_tile_near_node(world: &World, node: EntityId) -> Option<(u16, u16)> {
+fn free_tile_near_node(world: &World, node: EntityId, unit: u32, player: u8) -> Option<(u16, u16)> {
     let position = world.position(node)?;
     let scale = world.scale();
     let origin = (
         u16::try_from(position.0.raw() / scale).ok()?,
         u16::try_from(position.1.raw() / scale).ok()?,
     );
-    for radius in 1..=4u16 {
+    // **Wide enough for a footprint, not for a tile.** The search used to span four tiles, which is plenty for a point and
+    // too little for a farm: a 3x3 plot needs its whole footprint free, and around a bush among trees a four-tile ring
+    // found a corner at best - 46 refusals of "no free tile for a farm" in one acceptance run.
+    for radius in 1..=8u16 {
         for dy in 0..=radius {
             for dx in 0..=radius {
                 for (x, y) in [
@@ -612,7 +615,10 @@ fn free_tile_near_node(world: &World, node: EntityId) -> Option<(u16, u16)> {
                     (origin.0.wrapping_sub(dx), origin.1 + dy),
                     (origin.0.wrapping_sub(dx), origin.1.wrapping_sub(dy)),
                 ] {
-                    if world.is_free_ground(x, y) {
+                    if world.is_free_ground(x, y)
+                        && world.site_fits(player, unit, (x, y))
+                        && world.site_has_lane(player, unit, (x, y))
+                    {
                         return Some((x, y));
                     }
                 }
@@ -622,7 +628,7 @@ fn free_tile_near_node(world: &World, node: EntityId) -> Option<(u16, u16)> {
     None
 }
 
-fn free_tile_near(world: &World, player: u8) -> Option<(u16, u16)> {
+fn free_tile_near(world: &World, player: u8, unit: u32) -> Option<(u16, u16)> {
     // The start's own town-centre role, not the word: a pack of our own may call it "keep" (D17).
     let centre_unit = world.start_town_center_unit()?;
     // **The family, not the id.** A town centre that has been upgraded to its Feudal variant (463) is not unit 109 any
@@ -652,7 +658,10 @@ fn free_tile_near(world: &World, player: u8) -> Option<(u16, u16)> {
                     (origin.0.wrapping_sub(dx), origin.1 + dy),
                     (origin.0.wrapping_sub(dx), origin.1.wrapping_sub(dy)),
                 ] {
-                    if world.is_free_ground(x, y) {
+                    if world.is_free_ground(x, y)
+                        && world.site_fits(player, unit, (x, y))
+                        && world.site_has_lane(player, unit, (x, y))
+                    {
                         return Some((x, y));
                     }
                 }
@@ -971,7 +980,7 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Command, String> {
                 .ok_or_else(|| format!("player {player} has no idle villager to build with"))?;
             let unit = role_of(world, role)?;
             let at = match where_.as_deref() {
-                None | Some("near_town_center") => free_tile_near(world, player),
+                None | Some("near_town_center") => free_tile_near(world, player, unit),
                 Some(resource) => {
                     let slot = world.slot_of(resource).ok_or_else(|| {
                         format!("the content pack defines no resource called {resource:?}")
@@ -982,7 +991,7 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Command, String> {
                     let node = nearest_resource(world, centre, slot, 0).ok_or_else(|| {
                         format!("player {player} has no {resource} node to build beside")
                     })?;
-                    free_tile_near_node(world, node)
+                    free_tile_near_node(world, node, unit, player)
                 }
             };
             let at = at.ok_or_else(|| format!("no free tile for a {role}"))?;
