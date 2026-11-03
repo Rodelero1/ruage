@@ -339,3 +339,100 @@ fn a_villager_walks_straight_over_dirt() {
     }
     assert!(arrived, "the villager never crossed the dirt band");
 }
+
+/// A search that must go **around something the tile grid does not know about** - a unit, in the slice that follows.
+/// The obstacle here is taken from the first path's own midpoint, so the test does not hand-pick coordinates on a map it
+/// does not own: whatever the pather chose, routing around one of its own tiles must still reach the goal and must not
+/// use that tile.
+#[test]
+fn a_search_can_be_told_to_avoid_a_tile() {
+    use std::collections::BTreeSet;
+
+    // The fixture is only the skip gate: this test is about the pather, not about a world.
+    if fixture().is_none() {
+        return;
+    }
+    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).expect("pack");
+    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map");
+    let walk = ruage_sim::Walk::from_map(&map);
+
+    // Two open tiles eight apart on the same row: the map's forest is not on every row, and the search proves the pair
+    // is reachable before the obstacle matters.
+    let mut pair = None;
+    for y in 0..map.height {
+        for x in 0..map.width.saturating_sub(8) {
+            let (a, b) = ((x, y), (x + 8, y));
+            if walk.blocked(a.0, a.1) || walk.blocked(b.0, b.1) {
+                continue;
+            }
+            if ruage_sim::find_path(&walk, a, b).is_some() {
+                pair = Some((a, b));
+                break;
+            }
+        }
+        if pair.is_some() {
+            break;
+        }
+    }
+    let (from, to) = pair.expect("the project map has two open tiles to path between");
+
+    let straight = ruage_sim::find_path(&walk, from, to).expect("reachable");
+    assert!(
+        !straight.is_empty(),
+        "eight tiles apart is a walk, not a no-op"
+    );
+    let blocked = straight[straight.len() / 2];
+
+    let around = ruage_sim::find_path_avoiding(&walk, from, to, &BTreeSet::from([blocked]))
+        .expect("a detour exists around one open tile");
+    assert!(
+        !around.contains(&blocked),
+        "the forbidden tile is not on the route: {around:?}"
+    );
+    assert_eq!(
+        around.last().copied(),
+        Some(to),
+        "and the goal is still reached"
+    );
+}
+
+/// What the extra obstacle set costs a search. Ignored by default: a measurement, not a rule. Run with
+/// `--release -- --ignored --nocapture`.
+#[test]
+#[ignore = "measurement, not a rule"]
+fn what_avoiding_tiles_costs_a_search() {
+    use std::collections::BTreeSet;
+    use std::time::Instant;
+
+    if fixture().is_none() {
+        return;
+    }
+    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).expect("pack");
+    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map");
+    let walk = ruage_sim::Walk::from_map(&map);
+    let (from, to) = ((16u16, 16u16), (47u16, 47u16));
+    let base = ruage_sim::find_path(&walk, from, to).expect("the project map connects the bases");
+    let detour = BTreeSet::from([base[base.len() / 2]]);
+    let reps = 20u32;
+
+    let start = Instant::now();
+    for _ in 0..reps {
+        std::hint::black_box(ruage_sim::find_path(&walk, from, to));
+    }
+    let plain_us = start.elapsed().as_secs_f64() / f64::from(reps) * 1e6;
+
+    assert!(
+        ruage_sim::find_path_avoiding(&walk, from, to, &detour).is_some(),
+        "the measurement is only about a search that succeeds"
+    );
+    let start = Instant::now();
+    for _ in 0..reps {
+        std::hint::black_box(ruage_sim::find_path_avoiding(&walk, from, to, &detour));
+    }
+    let avoid_us = start.elapsed().as_secs_f64() / f64::from(reps) * 1e6;
+
+    println!(
+        "corner-to-corner search over 64x64: {plain_us:.0} us plain, {avoid_us:.0} us with {} tile(s) avoided",
+        detour.len()
+    );
+}

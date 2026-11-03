@@ -9,7 +9,7 @@
 //! same nodes in the same order. No hash-map iteration order reaches the result.
 
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BinaryHeap};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 
 use ruage_data::Map;
 
@@ -97,6 +97,22 @@ fn octile(from: (u16, u16), to: (u16, u16)) -> u32 {
 /// unreachable. A blocked goal is allowed: resource nodes stand on forest, and a villager has to
 /// be able to reach the tree it is working.
 pub fn find_path(walk: &Walk, from: (u16, u16), to: (u16, u16)) -> Option<Vec<(u16, u16)>> {
+    find_path_avoiding(walk, from, to, &BTreeSet::new())
+}
+
+/// The same search with tiles the grid does not know about treated as impassable - **a unit is not terrain**, so the
+/// caller says which tiles to route around rather than the `Walk` layer learning about bodies.
+///
+/// This is what the original does when a collision is *non-past*: it repaths, planning around the objects it just met
+/// (D98a, move_obj.cpp 4,600-4,760). The set is per-search and temporary, so two units crossing do not poison each
+/// other's plans. The goal is allowed to be in the set, for the same reason a blocked goal is allowed: a node's own tile
+/// is usually occupied by the thing being worked.
+pub fn find_path_avoiding(
+    walk: &Walk,
+    from: (u16, u16),
+    to: (u16, u16),
+    avoid: &BTreeSet<(u16, u16)>,
+) -> Option<Vec<(u16, u16)>> {
     if !walk.contains(to.0, to.1) || !walk.contains(from.0, from.1) {
         return None;
     }
@@ -148,11 +164,17 @@ pub fn find_path(walk: &Walk, from: (u16, u16), to: (u16, u16)) -> Option<Vec<(u
                 if !walk.contains(nx, ny) {
                     continue;
                 }
-                // Walls may not be cut across: a diagonal step needs both of its corners open.
-                if diagonal && (walk.blocked(nx, y) || walk.blocked(x, ny)) {
+                // Walls may not be cut across: a diagonal step needs both of its corners open. A unit is not a wall, but
+                // it is in the way, so the same rule keeps a route from clipping its corner.
+                if diagonal
+                    && (walk.blocked(nx, y)
+                        || walk.blocked(x, ny)
+                        || avoid.contains(&(nx, y))
+                        || avoid.contains(&(x, ny)))
+                {
                     continue;
                 }
-                if !is_goal && walk.blocked(nx, ny) {
+                if !is_goal && (walk.blocked(nx, ny) || avoid.contains(&(nx, ny))) {
                     continue;
                 }
                 let step = if diagonal { DIAGONAL } else { CARDINAL };

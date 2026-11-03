@@ -27,7 +27,7 @@ mod metrics;
 mod path;
 mod script;
 pub use metrics::Metrics;
-pub use path::{Walk, find_path};
+pub use path::{Walk, find_path, find_path_avoiding};
 use ruage_fixed::Fixed;
 pub use script::{
     Outcome, Personality, Rule, RuleAction, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind,
