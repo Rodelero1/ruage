@@ -2624,3 +2624,25 @@ that still has `[policy]` is refused rather than silently ignored.
 
 **Why it was not done in the same session as D95/D97:** it changes five call sites including two test fixtures, and the
 last refactor of this size (the window's loader) shipped a bug that the suite could not see. It deserves its own pass.
+
+### Reading pathfinding and evasion out of the binary (lead, 2026-11-02)
+
+The owner asked whether the original's pathfinding and evasion can be read from the game binaries. **Yes**, and there is
+already a map for it rather than a cold start: `docs/re-toolchain.md` records that the original asserts through
+`FUN_005404f0(path, line)`, so every assertion names its source file - **939 path references across 84 source files** -
+and the movement module is the densest one: **`move_obj.cpp` (159 sites)** and **`motion.cpp` (81)**. `Path` is
+`Age2HD/AoK HD.exe`, the REA workspace is at `/opt/data/tools/rea` (`aokhd.snapshot`, `export-pilot/`,
+`find_in_corpus.sh`).
+
+**The first step is cheap and worth doing before any evasion code is written:** list the assertion sites whose string is
+`move_obj.cpp` or `motion.cpp`, resolve each to its containing function, and that names the movement module's boundary -
+which functions are the pather, which are the unit-motion update, and where collision is resolved. Only then is
+decompiling worth it, because the interesting questions are narrow:
+
+1. **the A\* cost model** - confirm 10/14 (ours) against the original's integers, and its tie-breaking;
+2. **the evasion rule** - whether a blocked unit waits, slides, or repaths, and what decides it (this is exactly the
+   "soft evade" question, and getting the original's answer is cheaper than guessing);
+3. **determinism** - how the original orders equal-cost nodes and equal-distance units, since our replay depends on it.
+
+Cost: a session for the map, one or two for the reading. It is *not* on the critical path for `[policy]`, names, or
+groups, so it belongs alongside the evasion slice rather than before it.
