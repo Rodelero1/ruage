@@ -26,6 +26,7 @@ use ruage_data::{
 mod metrics;
 mod path;
 mod script;
+mod short;
 pub use metrics::Metrics;
 pub use path::{Walk, find_path, find_path_avoiding, line_clear, line_clear_avoiding};
 use ruage_fixed::Fixed;
@@ -33,6 +34,7 @@ pub use script::{
     Outcome, Personality, Rule, RuleAction, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind,
     describe, load_personality_file, load_scenario_file, load_scenario_str,
 };
+pub use short::short_range;
 
 /// The largest number of players a match can have: eight, so four-versus-four (D20). It is a
 /// constant rather than a runtime number because stockpiles are fixed-size arrays, and it is eight
@@ -1197,12 +1199,9 @@ struct Repath {
 
 #[derive(Debug, Clone, Default)]
 struct Route {
-    /// Remaining waypoints, in tiles.
-    steps: Vec<(u16, u16)>,
-    /// Where the order actually pointed, when it named a place rather than a tile (A). The **last** leg aims here instead
-    /// of at the tile's centre, so a click between tiles lands where it was clicked. `None` for a tile order, whose goal
-    /// is that tile's centre.
-    end: Option<(Fixed, Fixed)>,
+    /// Remaining waypoints, **as points**: the geometry's corners (D113), or the centres of the tiles a search returned when
+    /// the geometry declined. The last point is the goal itself, so an order between tiles lands where it pointed (A).
+    points: Vec<(Fixed, Fixed)>,
     /// Units this route was planned around. Not hashed on its own: it is part of the route, and the route is hashed.
     avoiding: BTreeSet<EntityId>,
     /// This route has already **made room** once (C1b). A nudge is a way past one obstruction, not a way of life: the
@@ -2078,7 +2077,7 @@ impl World {
                 // A walled-off node is refused here rather than discovered ten seconds later by a
                 // villager walking into a wall and giving up.
                 if let Some(position) = self.find(*villager).map(|e| e.position) {
-                    self.plan_path(position, target.position)?;
+                    self.plan_path_for(*villager, position, target.position)?;
                 }
             }
             Command::Build { villager, unit, at } => {
@@ -2606,7 +2605,7 @@ impl World {
     /// node to send a villager to, so the script chooses a node it can reach instead of ordering a
     /// trip the engine will refuse.
     pub fn can_reach(&self, from: (Fixed, Fixed), to: (Fixed, Fixed)) -> bool {
-        self.plan_path(from, to).is_ok()
+        self.plan_path(from, to, 0).is_ok()
     }
 
     /// A tile's origin as a world position. Tiles are the unit of the map; the scale is the unit
@@ -2923,26 +2922,78 @@ impl World {
         )
     }
 
-    /// A route between two positions, or `NoPath` when the target is walled off. Computed from the
-    /// terrain copy taken at seed time; the map is static for a match.
+    /// A route between two positions, as **points to walk through**, or `NoPath` when the target is walled off.
+    ///
+    /// Two solvers, in this order, and the second is why a walk bends where the ground does (D113):
+    /// 1. **The short-range pathfinder** (`short.rs`): the goal is within its window and reachable, so it answers the whole
+    ///    question geometrically - obstacles expanded by the body's radius, corners of the merged rectangles, shortest path
+    ///    through them. This is the route a player watches.
+    /// 2. **A\* over the tile grid**, pulled to the corners an obstacle forces, when the geometry declines (a window too big
+    ///    for its budget, or a goal outside it). Those are straight lines between **tile corners** - better than a staircase,
+    ///    worse than the geometry, and cheap.
+    ///
+    /// `radius` is the body's own footprint: a route for a scout is not a route for a house. A caller that only asks whether
+    /// a place is reachable passes `0`, because the question is about walls, not clearance.
     fn plan_path(
         &self,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
-    ) -> Result<Vec<(u16, u16)>, SimError> {
+        radius: i64,
+    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
         let (start, goal) = (self.tile_of(from), self.tile_of(to));
-        // The original tries the straight line first (S1, D98a): if nothing stands between here and the goal, the route
-        // **is** the goal - one waypoint, no search. A blocked line costs one Bresenham walk and then the search it
-        // would have paid anyway.
-        if start != goal && line_clear(walk, start, goal) {
-            return Ok(vec![goal]);
+        if let Some(points) = short_range(walk, self.scale, from, to, radius, &BTreeSet::new()) {
+            return Ok(points);
         }
-        let steps = find_path(walk, start, goal).ok_or(SimError::NoPath {
-            from: start,
-            to: goal,
-        })?;
-        Ok(Self::pull_route(walk, start, steps))
+        // The geometry declined: the tile search answers instead, and its corners become the route.
+        // A blocked goal is allowed here for the same reason it always was - a node's own tile holds the thing being
+        // worked, and "come as close as you can" is what an order on a wall means.
+        let steps = if start == goal || line_clear(walk, start, goal) {
+            vec![goal]
+        } else {
+            find_path(walk, start, goal).ok_or(SimError::NoPath {
+                from: start,
+                to: goal,
+            })?
+        };
+        Ok(self.corners(walk, start, steps, to))
+    }
+
+    /// The route a **body** would walk: the same plan, with its own footprint as the clearance.
+    fn plan_path_for(
+        &self,
+        id: EntityId,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
+        let radius = self.body_radius(self.find(id).and_then(|entity| entity.unit));
+        self.plan_path(from, to, radius)
+    }
+
+    /// A pulled tile chain as points: each corner is the **centre of its tile**, and the last point is the goal itself, so a
+    /// click between tiles lands where it was clicked.
+    fn corners(
+        &self,
+        walk: &Walk,
+        start: (u16, u16),
+        steps: Vec<(u16, u16)>,
+        goal: (Fixed, Fixed),
+    ) -> Vec<(Fixed, Fixed)> {
+        let pulled = Self::pull_route(walk, start, steps);
+        let half = self.scale / 2;
+        let mut points: Vec<(Fixed, Fixed)> = pulled
+            .iter()
+            .map(|(x, y)| {
+                (
+                    Fixed::from_raw(i64::from(*x) * self.scale + half),
+                    Fixed::from_raw(i64::from(*y) * self.scale + half),
+                )
+            })
+            .collect();
+        if let Some(last) = points.last_mut() {
+            *last = goal;
+        }
+        points
     }
 
     /// **B**: spend the waypoints a clear line lets the unit skip.
@@ -2988,17 +3039,9 @@ impl World {
 
     /// The next waypoint of a unit's route, as a world position.
     fn next_waypoint(&self, id: EntityId) -> Option<(Fixed, Fixed)> {
-        let route = self.paths.get(&id)?;
-        let (x, y) = *route.steps.first()?;
-        // The **exact** point of the order on the last leg (A): a player clicks a place, not the centre of the diamond
-        // under the pointer. `step_towards` clamps each axis to the remaining gap, so a free point is reached exactly and
-        // the waypoint-spent test below still compares positions for equality.
-        if route.steps.len() == 1
-            && let Some(end) = route.end
-        {
-            return Some(end);
-        }
-        Some(self.tile((x, y)))
+        // **A point, not a tile.** The route already carries the corner the walk should bend at and the exact place the
+        // order pointed (D113); `step_towards` lands on it exactly, so the waypoint-spent test is still an equality.
+        self.paths.get(&id)?.points.first().copied()
     }
 
     /// How much a worker takes this tick: the rate, the room left under its cap, and what the
@@ -3246,15 +3289,15 @@ impl World {
                 self.stand_near(attacker, position, victim, min_range, range)
             };
             let route = match stand {
-                Some(stand) => self.plan_path(position, stand)?,
+                Some(stand) => self.plan_path_for(attacker, position, stand)?,
                 None if in_reach => Vec::new(),
                 // Nothing better than the target itself: the old behaviour, and the collision rule will still stop it.
-                None => self.plan_path(position, victim)?,
+                None => self.plan_path_for(attacker, position, victim)?,
             };
             self.paths.insert(
                 attacker,
                 Route {
-                    steps: route,
+                    points: route,
                     ..Route::default()
                 },
             );
@@ -3293,7 +3336,7 @@ impl World {
         if !self.on_map(tx, ty) {
             return Err(SimError::OffMap { tile: (tx, ty) });
         }
-        self.plan_path(entity.position, to)?;
+        self.plan_path_for(unit, entity.position, to)?;
         Ok(to)
     }
 
@@ -3306,7 +3349,7 @@ impl World {
             return Err(SimError::OffMap { tile: to });
         }
         let goal = self.tile(to);
-        self.plan_path(entity.position, goal)?;
+        self.plan_path_for(unit, entity.position, goal)?;
         Ok(goal)
     }
 
@@ -3338,13 +3381,12 @@ impl World {
         let goal = if slot == wanted { to } else { self.tile(slot) };
         let goal = self.check_order_at(unit, goal)?;
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
-        let route = self.plan_path(entity.position, goal)?;
+        let route = self.plan_path_for(unit, entity.position, goal)?;
         let here = self.tile_of(entity.position);
         self.paths.insert(
             unit,
             Route {
-                steps: route,
-                end: Some(goal),
+                points: route,
                 ..Route::default()
             },
         );
@@ -4144,7 +4186,7 @@ impl World {
         let position = self.tile(at);
         // Reachability is part of "can this order run": paying for a site nobody can walk to would
         // leave a construction that never progresses and wood the player cannot get back.
-        self.plan_path(worker.position, position)?;
+        self.plan_path(worker.position, position, 0)?;
 
         Ok(BuildPlan {
             total_ticks: total,
@@ -4488,12 +4530,12 @@ impl World {
                 entry.chasing = false;
             }
             self.stand_down(id);
-            match self.plan_path(position, entry.home) {
+            match self.plan_path(position, entry.home, 0) {
                 Ok(route) => {
                     self.paths.insert(
                         id,
                         Route {
-                            steps: route,
+                            points: route,
                             ..Route::default()
                         },
                     );
@@ -4607,13 +4649,13 @@ impl World {
         // Beside the site, not on it: a builder standing inside the footprint has no free tile to
         // plan a route home from, and once finished the building would be under the villager.
         let route = match self.work_position(from, position) {
-            Some(stand) => self.plan_path(from, stand)?,
-            None => self.plan_path(from, position)?,
+            Some(stand) => self.plan_path_for(villager, from, stand)?,
+            None => self.plan_path_for(villager, from, position)?,
         };
         self.paths.insert(
             villager,
             Route {
-                steps: route,
+                points: route,
                 ..Route::default()
             },
         );
@@ -6660,7 +6702,7 @@ impl World {
         candidates.sort_by_key(|(distance, tile)| (*distance, *tile));
         candidates.into_iter().find_map(|(_, tile)| {
             let position = self.tile(tile);
-            self.plan_path(from, position).ok().map(|_| position)
+            self.plan_path(from, position, 0).ok().map(|_| position)
         })
     }
 
@@ -6692,7 +6734,7 @@ impl World {
             }
             let position = self.tile(tile);
             // Free is not the same as reachable: a free tile inside a wall is no place to stand.
-            self.plan_path(from, position).ok().map(|_| position)
+            self.plan_path(from, position, 0).ok().map(|_| position)
         })
     }
 
@@ -6704,11 +6746,11 @@ impl World {
             return;
         };
         let mut target = None;
-        if let Ok(route) = self.plan_path(from, to) {
+        if let Ok(route) = self.plan_path(from, to, 0) {
             self.paths.insert(
                 unit,
                 Route {
-                    steps: route,
+                    points: route,
                     ..Route::default()
                 },
             );
@@ -6733,12 +6775,11 @@ impl World {
                             continue;
                         }
                         let candidate = self.tile((cx, cy));
-                        if let Ok(route) = self.plan_path(from, candidate) {
+                        if let Ok(route) = self.plan_path(from, candidate, 0) {
                             self.paths.insert(
                                 unit,
                                 Route {
-                                    steps: route,
-                                    end: Some(candidate),
+                                    points: route,
                                     ..Route::default()
                                 },
                             );
@@ -7049,6 +7090,14 @@ impl World {
         }
     }
 
+    /// **A body's own footprint, in engine units**, as the movement rules read it (`radius[0]` of its variant, or zero
+    /// when the content carries none). Public because a test - and later a renderer - asks how much room a unit keeps, and
+    /// a second copy of that number is how two answers to one question start.
+    #[must_use]
+    pub fn body_radius_of(&self, id: EntityId) -> i64 {
+        self.body_radius(self.find(id).and_then(|entity| entity.unit))
+    }
+
     /// **Which resource column this entity holds, if it holds one.** The panel asks so it can print a number *and say whose
     /// number it is*: a node knows its column from its kind, while a **farm is a building** whose column only content knows
     /// (`economy.farm.resource`). `None` for a villager, a house, an arrow.
@@ -7083,7 +7132,7 @@ impl World {
     /// How many waypoints are left on this entity's route: 0 means it is standing on its goal (or has none).
     #[must_use]
     pub fn path_length(&self, id: EntityId) -> usize {
-        self.paths.get(&id).map_or(0, |route| route.steps.len())
+        self.paths.get(&id).map_or(0, |route| route.points.len())
     }
 
     /// Whether a unit may stand on this tile: terrain, walls and buildings, as the walk grid holds them. Exposed because
@@ -7390,16 +7439,16 @@ impl World {
         // blocked tile and never find a route.
         let route = if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
             match self.work_position(from, to) {
-                Some(stand) => self.plan_path(from, stand)?,
-                None => self.plan_path(from, to)?,
+                Some(stand) => self.plan_path(from, stand, 0)?,
+                None => self.plan_path(from, to, 0)?,
             }
         } else {
-            self.plan_path(from, to)?
+            self.plan_path(from, to, 0)?
         };
         self.paths.insert(
             villager,
             Route {
-                steps: route,
+                points: route,
                 ..Route::default()
             },
         );
@@ -8128,13 +8177,13 @@ impl World {
             let route = self
                 .find(id)
                 .map(|entity| entity.position)
-                .and_then(|from| self.plan_path(from, other).ok());
+                .and_then(|from| self.plan_path(from, other, 0).ok());
             match route {
                 Some(route) => {
                     self.paths.insert(
                         id,
                         Route {
-                            steps: route,
+                            points: route,
                             ..Route::default()
                         },
                     );
@@ -8162,13 +8211,13 @@ impl World {
             let route = self
                 .find(id)
                 .map(|entity| entity.position)
-                .and_then(|from| self.plan_path(from, post).ok());
+                .and_then(|from| self.plan_path(from, post, 0).ok());
             match route {
                 Some(route) => {
                     self.paths.insert(
                         id,
                         Route {
-                            steps: route,
+                            points: route,
                             ..Route::default()
                         },
                     );
@@ -8261,9 +8310,9 @@ impl World {
                 // draw), so the approach is a fallback for the case that used to fail outright - a drop site whose near
                 // side is built over - and not a new route for every trip.
                 let route = match ends {
-                    (Some(from), Some(to)) => self.plan_path(from, to).ok().or_else(|| {
+                    (Some(from), Some(to)) => self.plan_path(from, to, 0).ok().or_else(|| {
                         self.approach_tile(self.tile_of(from), drop)
-                            .and_then(|stand| self.plan_path(from, self.tile(stand)).ok())
+                            .and_then(|stand| self.plan_path(from, self.tile(stand), 0).ok())
                     }),
                     _ => None,
                 };
@@ -8271,7 +8320,7 @@ impl World {
                     self.paths.insert(
                         id,
                         Route {
-                            steps: route,
+                            points: route,
                             ..Route::default()
                         },
                     );
@@ -8413,14 +8462,14 @@ impl World {
                     self.find(node).map(|entity| entity.position),
                 );
                 let route = match ends {
-                    (Some(here), Some(there)) => self.plan_path(here, there).ok(),
+                    (Some(here), Some(there)) => self.plan_path(here, there, 0).ok(),
                     _ => None,
                 };
                 if let Some(route) = route {
                     self.paths.insert(
                         id,
                         Route {
-                            steps: route,
+                            points: route,
                             ..Route::default()
                         },
                     );
@@ -8731,13 +8780,13 @@ impl World {
             let route = self
                 .find(id)
                 .map(|entity| entity.position)
-                .and_then(|from| self.plan_path(from, to).ok());
+                .and_then(|from| self.plan_path(from, to, 0).ok());
             match route {
                 Some(route) => {
                     self.paths.insert(
                         id,
                         Route {
-                            steps: route,
+                            points: route,
                             ..Route::default()
                         },
                     );
@@ -8861,23 +8910,29 @@ impl World {
                 // A nudge already spent is spent for the order, not for the plan: a repath must not hand the unit a
                 // second one.
                 let gave_way = self.paths.get(&id).is_some_and(|route| route.gave_way);
-                // The pull obeys the same avoid set as the search: a jump that walked back through the body the search
-                // went round would be a worse route than the one it replaced.
+                // **The old route's last point is the goal**, so the repath aims where the order pointed rather than at the
+                // centre of a tile; the geometry then answers the whole question, avoiding the bodies by `avoid` (D98a).
+                let aim = self
+                    .paths
+                    .get(&id)
+                    .and_then(|route| route.points.last().copied())
+                    .unwrap_or_else(|| self.tile(goal));
+                let radius = self.body_radius(self.find(id).and_then(|entity| entity.unit));
                 let planned = match self.walk.as_ref() {
-                    Some(walk) => find_path_avoiding(walk, start, goal, &obstacles)
-                        .map(|steps| Self::pull_route_avoiding(walk, start, steps, &obstacles)),
+                    Some(walk) => short_range(walk, self.scale, from, aim, radius, &obstacles)
+                        .or_else(|| {
+                            find_path_avoiding(walk, start, goal, &obstacles)
+                                .map(|steps| self.corners(walk, start, steps, aim))
+                        }),
                     None => None,
                 };
                 match planned {
-                    Some(steps) => {
-                        // The exact end survives a repath: the order still points where it pointed.
-                        let end = self.paths.get(&id).and_then(|route| route.end);
+                    Some(points) => {
                         self.paths.insert(
                             id,
                             Route {
-                                steps,
+                                points,
                                 avoiding,
-                                end,
                                 gave_way,
                             },
                         );
@@ -8916,7 +8971,7 @@ impl World {
             .collect();
         for id in spent {
             if let Some(path) = self.paths.get_mut(&id) {
-                path.steps.remove(0);
+                path.points.remove(0);
             }
         }
 
@@ -9922,7 +9977,7 @@ impl World {
     /// can assert that bookkeeping is released when an entity dies.
     #[must_use]
     pub fn path_len(&self, id: EntityId) -> Option<usize> {
-        self.paths.get(&id).map(|route| route.steps.len())
+        self.paths.get(&id).map(|route| route.points.len())
     }
 
     /// Canonical hash over the state. Encoding is explicit little-endian: no `usize`, no
@@ -10088,10 +10143,10 @@ impl World {
         }
         for (id, route) in &self.paths {
             fnv_bytes(&mut hash, &id.0.to_le_bytes());
-            fnv_bytes(&mut hash, &(route.steps.len() as u32).to_le_bytes());
-            for (x, y) in &route.steps {
-                fnv_bytes(&mut hash, &x.to_le_bytes());
-                fnv_bytes(&mut hash, &y.to_le_bytes());
+            fnv_bytes(&mut hash, &(route.points.len() as u32).to_le_bytes());
+            for (x, y) in &route.points {
+                fnv_bytes(&mut hash, &x.raw().to_le_bytes());
+                fnv_bytes(&mut hash, &y.raw().to_le_bytes());
             }
             // The bodies a route is planned around decide where the unit goes next, so they are state. Written only
             // when non-empty, so a world that never collides hashes exactly as one written before D98a.

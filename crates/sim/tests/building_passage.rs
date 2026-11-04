@@ -459,3 +459,65 @@ fn a_live_farm_is_not_buildable_over_but_an_expired_one_is() {
         "a house may be raised on a spent farm: {replaced:?}"
     );
 }
+
+/// **A walk past a house keeps the body's clearance** (M2, D113). The route used to bend at *tile origins* - the point where
+/// four cells meet - so a villager rounding a house passed exactly through the corner of its footprint: distance zero, body
+/// inside the wall. The owner saw that as "villagers went through the house". With the geometric route the closest approach
+/// is the body's own radius, and this measures it every tick.
+#[test]
+fn a_walk_past_a_house_keeps_its_bodys_clearance() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let Some(at) = open_patch(&world, 5, 5) else {
+        return;
+    };
+    building(&mut world, 1, "house", at, 0);
+    let house = footprint_tiles(&world, "house", at);
+    let start = (at.0 - 4, at.1 + 1);
+    let goal = (at.0 + 6, at.1 + 1);
+    let walker = villager(&mut world, start);
+    // The dat's radius for a villager, in raw units: the clearance the route has to keep.
+    let body = world.body_radius_of(walker);
+    assert!(
+        body > 0,
+        "the pack gives a villager no radius, so this test proves nothing"
+    );
+
+    world
+        .submit_checked(Command::Move {
+            unit: walker,
+            to: (
+                u16::try_from(goal.0).expect("in range"),
+                u16::try_from(goal.1).expect("in range"),
+            ),
+        })
+        .expect("a move past the house");
+
+    let scale = world.scale();
+    let mut closest = i64::MAX;
+    for _ in 0..1_600 {
+        world.step().expect("step");
+        let position = world.position(walker).expect("alive");
+        for (x, y) in &house {
+            // Distance from the body's centre to that tile's square, in raw units; zero when inside it.
+            let (x0, y0) = (x * scale, y * scale);
+            let (dx, dy) = (
+                (x0 - position.0.raw())
+                    .max(0)
+                    .max(position.0.raw() - (x0 + scale)),
+                (y0 - position.1.raw())
+                    .max(0)
+                    .max(position.1.raw() - (y0 + scale)),
+            );
+            let squared = dx * dx + dy * dy;
+            closest = closest.min(squared);
+        }
+    }
+    // A fortieth of a tile of slack for the mover's own rounding; the route's clearance is the body's radius.
+    let floor = (body - scale / 40).max(0);
+    assert!(
+        closest >= floor * floor,
+        "the walker came within {} raw units of the house (a fortieth of a tile of slack over the body's {body})",
+        (closest as f64).sqrt() as i64
+    );
+}

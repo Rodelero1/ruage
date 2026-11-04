@@ -2636,6 +2636,46 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D113 - A route bends where the ground does, at the body's own clearance
+
+M1 (`step_towards` walks the segment) made a walk straight **between waypoints**, and a waypoint was a tile's origin - the
+point where four cells meet. So a villager rounding a house passed exactly through the corner of its footprint: distance
+zero, body inside the wall, which the owner saw as "villagers went through the house". Measured, by mutating the clearance
+away: **1 raw unit** from the wall with the body's 4,000.
+
+`crates/sim/src/short.rs` is the answer, and it is the algorithm the original's maintainers documented
+(`docs/pathfinding-from-the-talk.md`): the body is shrunk to a point and every obstruction expands by its radius; a ray at
+the goal, and where it hits, a walk over the corners of the merged rectangles. The walk is a **visibility graph** rather than
+the talk's edge-following - the same geodesic, and an invariant that is much easier to test (an edge exists only where a
+straight line enters no expanded rectangle's interior).
+
+The rules that make it fit this engine:
+
+1. **All integers, exact.** Segment-versus-rectangle is Liang-Barsky in rationals with `i128` cross-multiplication - no
+   sampled segment (which can step over a thin rect) and no float (the project's rule, and the talk's own lesson that
+   precision is what breaks pathing).
+2. **The window is fenced.** "Whoops, I edge-walked the whole map": an obstacle that runs out of the search window is not an
+   obstacle that ends there, so four thin boxes at the window's tile boundaries make leaving it impossible. Without them a
+   sealed wall was walked around through its cut end - the test that caught it is `a_wall_across_the_world_is_no_path`.
+3. **A minimum radius of one raw unit.** With no radius at all, two blocked tiles touching at a corner leave a zero-width
+   pinch a line may pass exactly through, and the tile rule forbids it ("no passage between two trees that touch at a
+   corner"). One unit closes every pinch and is invisible in play.
+4. **Two exemptions, the same two the engine already had**: the start's own tile (a worker stands on its node) and the
+   goal's (an order on a wall means "come as close as you can").
+5. **The start is not a waypoint.** A route that began with the unit's own position cost a tick of standing still, and it
+   made a lead-shot prediction read zero motion for a runner.
+6. **Bounded, and it declines rather than guessing.** A window over 40 tiles a side, more than 96 rectangles or 400 nodes,
+   and the solver returns `None`; the route then falls back to the pulled tile chain with its corners at **tile centres**.
+   A long strategic walk keeps the cheap answer; the corners a player watches are the ones in a base.
+7. **Bodies are obstacles only where the caller says so** - the repath's avoid set, because a route planned around a body
+   that the geometry then straightened through it is worse than no smoothing at all.
+
+**Measured:** 40.2 us a solve in a base-sized window (eight buildings and a wood, seven corners on average, `short_probe`);
+the acceptance match wins at 36,000 ticks in 10.5-10.7 s with **148** entities against M1's 8.7-8.9 s with 126 - different
+matches, so that difference is not a like-for-like cost, and an ablation that forces the tile fallback played yet another
+match (12.4-13.0 s, 156 entities) rather than measuring the geometry. What the isolated number says is that a plan is
+microseconds, which is the question a per-plan solver has to answer.
+
 ## D112 - An enemy may be inspected, and an enemy's maximum health is the owner's
 
 The owner, one line after D111: *"Enemy hit points on click"* - the half D111 explicitly left out.

@@ -85,6 +85,38 @@
 > **Next on the board:** the movement pass's M2 (route corners at the obstacles' edges rather than tile centres), and the
 > farm/nodes items the owner listed earlier (band selection of nodes, a node's maximum hit points).
 
+> # Session 9, 2026-11-04 - M2: the route's corners are the obstacles' (the owner: "Proceed with M2")
+>
+> **What is left after M1:** the step walks the segment, so a walk is straight *between waypoints* - but a waypoint is a
+> **tile's origin**, so a unit still turns at the corner of a cell and can brush a wall by up to half a tile. The owner has
+> seen that as "villagers went through the house" (a corner graze).
+>
+> **The slice:** `crates/sim/src/short.rs` - blocked tiles merged into rectangles, each expanded by the body's radius, a
+> visibility graph over their corners, shortest path through it. Every edge must also be clear at tile level (sampled), so the
+> line the geometry chooses obeys the same rule `step_is_walkable` enforces; the start's and the goal's own tiles are not
+> obstacles, exactly as the search and the goal rule already say. `Route.steps: Vec<(u16, u16)>` becomes
+> `Route.points: Vec<(Fixed, Fixed)>` - the mover already aims at points (M1), so this is a data change at eight call sites,
+> not a new movement rule.
+>
+> **The bounds, and what it will not do:** the solve is per route (never per tick), over the bbox of the route expanded by
+> three tiles, and it **falls back to the pulled tile chain** when the window or the rectangle count exceeds its budget - a
+> long strategic walk keeps tile corners rather than paying for a map-sized graph. Bodies are not obstacles: the avoid set is
+> passed in for repaths, because a route planned around a body that the geometry then straightened through it is worse than
+> no smoothing at all.
+>
+> **LANDED** - `docs/reviews/2026-11-04-a-route-bends-where-the-ground-does.md`, D113. The route is a polyline of **points**
+> (`Route.points`), the geometry is `crates/sim/src/short.rs`, and the measured clearance is the body's own radius: the
+> mutation that removes it puts a villager **1 raw unit** from the house's wall with a body of 4,000.
+>
+> **Cost, measured honestly:** 40.2 us a solve (`short_probe`), once per route and never per tick. The acceptance match is a
+> win at 36,000 ticks in 10.54-10.65 s with 148 entities (M1: 8.73-8.91 s, 126) - two different matches, so that pair is not
+> a like-for-like cost; an ablation with the geometry forced off played a *larger and slower* match (12.4-13.0 s, 156), which
+> is the evidence that the tile-centre fallback, not the visibility graph, is where the time goes.
+>
+> **What is left of the movement pass:** M3 - `step_is_walkable` still tests the landing *tile* rather than the segment, so a
+> body may still overlap a wall by up to half a tile even though its route keeps a radius (the collision half of the pass);
+> and the bump-versus-push question in `docs/pathfinding-from-the-talk.md`, which is still the owner's to answer.
+
 ## Earlier queue entries (history)
 
 > # Session 5, 2026-11-03 - the interface, after openaok
