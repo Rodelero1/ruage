@@ -141,11 +141,12 @@ fn a_click_on_the_middle_of_a_building_selects_it() {
 fn a_minimap_pixel_is_a_tile() {
     let (x, y, w, h) = ui::minimap_rect(960, 720, 64, 64);
     let rect = (x, y, w, h);
-    // The top point of the diamond is the map's first tile, and the middle of the box is the middle of the map.
-    let top = (x + (w as i32 - 1) / 2, y);
+    // **The top point of the diamond is the map's first tile**, wherever the flat 2:1 diamond puts it in its box.
+    let top = ui::minimap_point((0, 0), rect, 64, 64);
     assert_eq!(ui::minimap_tile(top, rect, 64, 64), Some((0, 0)));
-    let middle = (x + (w as i32 - 1) / 2, y + (h as i32 - 1) / 2);
-    let tile = ui::minimap_tile(middle, rect, 64, 64).expect("the middle of the box is on the map");
+    let middle = ui::minimap_point((32, 32), rect, 64, 64);
+    let tile =
+        ui::minimap_tile(middle, rect, 64, 64).expect("the middle of the map is on the minimap");
     assert!(
         tile.0.abs_diff(32) <= 1 && tile.1.abs_diff(32) <= 1,
         "the middle of the box is {tile:?}, not the middle of the map"

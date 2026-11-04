@@ -878,19 +878,22 @@ fn projected(tile: (f32, f32), rect: (i32, i32, u32, u32), width: u16, height: u
     let (x, y, w, h) = rect;
     let across = f32::from(width.max(1)).max(1.0) - 1.0;
     let down = f32::from(height.max(1)).max(1.0) - 1.0;
-    // One scale for both axes would make a non-square map a diamond of the wrong shape; these keep each axis' extremes on the
-    // box's own extremes, so the map is always as large as it can be inside the minimap.
-    // The diamond's points land on the box's own outermost pixels: `w - 1` pixels are addressable, so the span is `w - 1`.
-    let half_w = (w.saturating_sub(1)) as f32 / 2.0;
+    // **2:1, like the world's own tiles.** A tile on the map is twice as wide as it is tall, and the owner asked for the
+    // minimap to be "angled in the same way as map is" (2026-11-04): square diamonds read as a different game seen from the
+    // same angle. The diamond spans the box's width and half of it vertically, centred in whatever box it is given.
+    let span_w = (w.saturating_sub(1)) as f32;
+    let span_h = span_w / 2.0;
+    let half_w = span_w / 2.0;
     let sx = if across > 0.0 { half_w / across } else { 0.0 };
     let sy = if down > 0.0 {
-        (h.saturating_sub(1)) as f32 / (2.0 * down)
+        span_h / (2.0 * down)
     } else {
         0.0
     };
-    let cx = x as f32 + (w.saturating_sub(1)) as f32 / 2.0;
-    // `v` is `tx + ty`, which runs from 0 to `2 * down`: the top point of the diamond is the box's top edge, not its middle.
-    let cy = y as f32;
+    let cx = x as f32 + span_w / 2.0;
+    // `v` is `tx + ty`, which runs from 0 to `2 * down`: the top point of the diamond is the top of its own span, and the
+    // span is centred in the box vertically.
+    let cy = y as f32 + (h as f32 - span_h) / 2.0;
     (
         (cx + (tile.0 - tile.1) * sx).round() as i32,
         (cy + (tile.0 + tile.1) * sy).round() as i32,
@@ -923,16 +926,18 @@ pub fn minimap_tile(
     }
     let across = f32::from(width) - 1.0;
     let down = f32::from(height) - 1.0;
-    let half_w = (w.saturating_sub(1)) as f32 / 2.0;
+    // The same 2:1 geometry `projected` draws with, so a click lands on the tile the picture shows.
+    let span_w = (w.saturating_sub(1)) as f32;
+    let span_h = span_w / 2.0;
+    let half_w = span_w / 2.0;
     let sx = if across > 0.0 { half_w / across } else { 0.0 };
     let sy = if down > 0.0 {
-        (h.saturating_sub(1)) as f32 / (2.0 * down)
+        span_h / (2.0 * down)
     } else {
         0.0
     };
-    let cx = x as f32 + (w.saturating_sub(1)) as f32 / 2.0;
-    // `v` is `tx + ty`, which runs from 0 to `2 * down`: the top point of the diamond is the box's top edge, not its middle.
-    let cy = y as f32;
+    let cx = x as f32 + span_w / 2.0;
+    let cy = y as f32 + (h as f32 - span_h) / 2.0;
     let dx = pixel.0 as f32 - cx;
     let dy = pixel.1 as f32 - cy;
     let (u, v) = (
@@ -944,7 +949,9 @@ pub fn minimap_tile(
     // is a click on nothing.
     if across > 0.0 && down > 0.0 {
         let reach = u.abs() / across + (v - down).abs() / down;
-        if reach > 1.0 + 0.5 / across {
+        // A pixel is rounder than a tile here: the diamond is half as tall as it is wide, so one pixel is two tiles' worth
+        // of `v` at the edge. The slack keeps a projected corner inside its own diamond.
+        if reach > 1.0 + 1.5 / down.max(1.0) {
             return None;
         }
     }
