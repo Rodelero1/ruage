@@ -349,3 +349,41 @@ fn an_arms_route_ends_where_it_can_strike() {
         "the attacker never struck: the route ended short of its reach"
     );
 }
+
+/// **M1: a repathed route is pulled, like a planned one.** The search answers with a node per tile, and a route stored that
+/// way is walked tile centre to tile centre - the staircase the owner keeps seeing, because most long walks in a busy base
+/// are repaths rather than first plans. The route the unit is handed after a repath must be the pulled one: three points
+/// around a single body on a row, not seven nodes through every tile of the detour.
+#[test]
+fn a_repath_route_is_pulled_like_a_planned_one() {
+    let Some(mut world) = fresh() else { return };
+    let Some((x, y)) = open_row(&world, 8) else {
+        return;
+    };
+    let walker = next_id(&world);
+    let sitter = EntityId(walker.0 + 1);
+    spawn_villager(&mut world, walker, x, y);
+    spawn_villager(&mut world, sitter, x + 3, y);
+    world.step().expect("the spawns land");
+
+    let before = world.repaths();
+    world.submit(Command::Move {
+        unit: walker,
+        to: (x + 6, y),
+    });
+    let mut stored = None;
+    for _ in 0..2_000 {
+        world.step().expect("step");
+        if world.repaths() > before {
+            stored = Some(world.path_length(walker));
+            break;
+        }
+    }
+    let Some(stored) = stored else {
+        panic!("the body on the line never forced a repath, so there is nothing to measure");
+    };
+    assert!(
+        stored <= 3,
+        "the repathed route holds {stored} waypoints: a route per tile is the staircase, a pulled one is three"
+    );
+}

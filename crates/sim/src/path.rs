@@ -110,11 +110,25 @@ fn octile(from: (u16, u16), to: (u16, u16)) -> u32 {
 /// corner of a wall is not a line a unit may walk.
 #[must_use]
 pub fn line_clear(walk: &Walk, from: (u16, u16), to: (u16, u16)) -> bool {
+    line_clear_avoiding(walk, from, to, &BTreeSet::new())
+}
+
+/// The same line with tiles the grid does not know about counted as impassable - **a body is not terrain**, so a caller
+/// that plans around units (a repath, D98a) says which tiles to avoid rather than the `Walk` layer learning about bodies.
+/// A pulled route has to obey the same avoid set the search did, or the pull would walk the line straight back through
+/// the body the search went round.
+#[must_use]
+pub fn line_clear_avoiding(
+    walk: &Walk,
+    from: (u16, u16),
+    to: (u16, u16),
+    avoid: &BTreeSet<(u16, u16)>,
+) -> bool {
     let free = |x: i64, y: i64| -> bool {
         let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
             return false;
         };
-        walk.contains(x, y) && !walk.blocked(x, y)
+        walk.contains(x, y) && !walk.blocked(x, y) && !avoid.contains(&(x, y))
     };
     let (x0, y0) = (i64::from(from.0), i64::from(from.1));
     let (x1, y1) = (i64::from(to.0), i64::from(to.1));

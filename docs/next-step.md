@@ -1,4 +1,34 @@
-# The effect interpreter, priced from the data
+# The step walks the line, and the route bends where the ground does
+
+> # Session 6, 2026-11-04 - straight-line walking, the pass the owner has asked for three times
+>
+> **Where session 5 ended:** `docs/pathfinding-from-the-talk.md` (pushed as `3cfd783`) - the short-range algorithm from
+> the Forgotten Empires talk, mapped onto this tree, with the one decision it forces left to the owner there. The owner's
+> complaint is on record three times, the third with a screenshot: *"Walking still follows squares and goes through their
+> centers - units go either vertically, horizontally or diagonally, if unit has to go from point A to point B and point B
+> is 60 degrees in some direction, the path is not a straight line but instead 45 degree walk followed by horizontal
+> walk."* That sentence names the bug exactly: `step_towards` clamps **each axis independently**, so every heading that is
+> not a multiple of 45 degrees becomes a 45-degree leg plus a cardinal leg.
+>
+> **The step, in two slices, one commit each:**
+>
+> | # | slice | state |
+> |---|---|---|
+> | M1 | **the step walks the segment**: `step_towards` moves `delta` along the line and lands exactly on the point when the remainder is one step; a repath's route is pulled the way a planned route already is | **landed** - `docs/reviews/2026-11-04-the-step-walks-the-line.md` |
+> | M2 | **the route's corners are the obstacles'**: `short.rs`, blocked tiles merged into rectangles and expanded by the body's radius, a visibility graph over their corners (the talk's edge walk, as a graph), so a walk bends where the ground does and keeps its body's clearance | **next** - the design is `docs/pathfinding-from-the-talk.md`; M1 is the half that could be landed without it, and it is what the owner's screenshots are about |
+> | M3 | **arrival and collision read the same line**: `step_is_walkable` asks the segment rather than the landing tile alone, and the shape question in `docs/pathfinding-from-the-talk.md` (bump-and-repath against `push_units_off`) is answered by the owner | after M2 |
+>
+> **D110 records the deferral**: slide is kept for M1/M2 (a step refused by a body still slides, `collide` untouched), and
+> the original's "units bump into others, stop and repath around. No pushing allowed" (slide 9 of the talk) is **not**
+> adopted until the owner says so - it is a gameplay rule, not a correctness one, and it would change the acceptance hash
+> for a reason nobody asked for. Recommended, if asked: keep sliding friendly bodies (our units keep lanes), and revisit
+> when formations exist.
+>
+> **Standing rules for each step, unchanged:** compact (this block), test-first with the failing run shown, an
+> adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
+> commit and push.
+
+## Earlier queue entries (history)
 
 > # Session 5, 2026-11-03 - the interface, after openaok
 >

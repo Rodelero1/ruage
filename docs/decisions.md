@@ -2636,6 +2636,41 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D110 - The step walks the segment, and bodies still slide
+
+D109 said continuous steering is a pass over path, arrival and collision. This is the first slice of that pass, and the
+boundary of what it changes:
+
+1. **The step is along the line, not per axis.** `step_towards` clamped each axis to its own remaining gap, which turns
+   every heading that is not a multiple of 45 degrees into a 45-degree leg plus a cardinal leg - the owner's "45 degree
+   walk followed by horizontal walk", reported three times, the third with a screenshot. It now moves `delta` along the
+   segment and lands *exactly* on the point when the remainder is within one step, so `position == waypoint` stays the
+   spend test and every `position == target` arrival rule needs no new case. All integer (`integer_sqrt`, an `i128`
+   product, `f64` nowhere): floats in the tick are the desync the project forbids.
+2. **Two details are load-bearing, and both were found by a test.** A component that rounds to zero freezes the unit with
+   a purely axis-aligned step, which has no slide to fall back on against a wall, so every axis with a gap keeps at least
+   one raw unit of movement per tick; and a *zero* step must move nothing at all, or a unit the pack gives no speed creeps
+   a raw unit a tick for the rest of the match.
+3. **A repath's route is pulled, like a planned one.** It was not: the search's answer is a node per tile, so a unit that
+   repathed after a collision walked tile to tile - and in a base full of villagers most long walks are repaths. The pull
+   obeys the same avoid set as the search, because a jump back through the body the search went round would be worse than
+   the route it replaced.
+4. **Bodies still slide; nothing is adopted.** Slide 9 of the talk states the original's rule - "units bump into others,
+   stop and repath around. No pushing allowed" - and this engine does the opposite (`push_units_off`, plus `collide`'s
+   slide and one nudge per route). That is a *gameplay* rule, not a correctness one, it would move the acceptance hash for
+   a reason the owner never gave, and it is his call. Until he makes it, sliding stays and this row records that the
+   question is open rather than silently decided.
+
+**Because a step now covers the true length of a segment, a diagonal walk is no longer sqrt(2) faster than a straight
+one.** That is a correctness fix - the dat's speed is tiles per second - and it retimes every build order written under
+the old speed, including `config/scenario.toml` (one step moved 380 s -> 390 s; see the review).
+
+Still to come, and next: the route's **corners** are tile centres, not the corners of the obstacles expanded by the body's
+radius (`docs/pathfinding-from-the-talk.md`), so a walker still turns at the middle of a tile and can graze a wall by half
+a tile. Everything else about collision - the goal exemption, the both-corners rule, the one nudge per route - is
+unchanged. A change of this size is measured against `HEAD` interleaved, and the acceptance hash moves: what a unit walks
+to is what it does next.
+
 ## D109 - Continuous steering is a pass, not a step function
 
 `step_towards` still walks eight-way. Normalising it (so a unit walks the line it was given) was implemented and measured, and

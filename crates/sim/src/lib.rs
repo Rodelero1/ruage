@@ -27,7 +27,7 @@ mod metrics;
 mod path;
 mod script;
 pub use metrics::Metrics;
-pub use path::{Walk, find_path, find_path_avoiding, line_clear};
+pub use path::{Walk, find_path, find_path_avoiding, line_clear, line_clear_avoiding};
 use ruage_fixed::Fixed;
 pub use script::{
     Outcome, Personality, Rule, RuleAction, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind,
@@ -1078,27 +1078,59 @@ fn fnv_bytes(hash: &mut u64, bytes: &[u8]) {
     }
 }
 
-/// One tick of movement from `from` toward `to`, in raw fixed units on each axis.
+/// One tick of movement from `from` toward `to`, in raw fixed units on each axis: **a step along the line**.
 ///
-/// Each axis is clamped independently, so the unit lands exactly on the target instead of
-/// overshooting and oscillating. This is a straight line with no obstacle test: pathing replaces
-/// it, and until then a villager can walk through a tree.
+/// The old shape clamped each axis to its own remaining gap, which walks every heading that is not a multiple of 45
+/// degrees as a 45-degree leg followed by a cardinal one - the owner's report, three times over, the third with a
+/// screenshot ("the path is not a straight line but instead 45 degree walk followed by horizontal walk"). The step is now
+/// the same fraction of both gaps, so the unit's positions lie on the segment it was given, and the walk is as long as
+/// the line rather than as long as the line's Manhattan projection (a diagonal used to be sqrt(2) faster).
+///
+/// Two details are load-bearing:
+/// 1. **When the remainder is within one step the unit lands exactly on the point.** Every arrival rule in this engine -
+///    `position == waypoint` to spend a waypoint, `position == target` for a node - is an equality, and a proportional
+///    step that stopped a rounding unit short would stall all of them.
+/// 2. It is all integer arithmetic (`integer_sqrt`, an `i128` product), because a float in the tick is the desync the
+///    project forbids and the talk's own warning about pathing precision.
 fn step_towards(from: (Fixed, Fixed), to: (Fixed, Fixed), delta: i64) -> (i64, i64) {
-    // **Straight lines are the goal, and this is the honest state of it.** The owner asked twice (2026-11-04) for a unit to
-    // walk the line between two points; the first attempt moved `delta` along the line (normalised, Euclidean) and it broke
-    // arrival for a villager walking past a house, which is a worse bug than a staircase. The eight-way step stays until the
-    // whole movement pass moves together - path, arrival and collision - because they share one notion of where "next" is.
-    let axis = |from: Fixed, to: Fixed| -> i64 {
-        let gap = to.raw() - from.raw();
-        if gap.abs() <= delta {
-            gap
-        } else if gap > 0 {
-            delta
-        } else {
-            -delta
+    let gap_x = to.0.raw() - from.0.raw();
+    let gap_y = to.1.raw() - from.1.raw();
+    // **Nothing moves on a zero step**, including the one-raw-unit floor below: a unit the pack gives no speed would
+    // otherwise creep a raw unit a tick for the rest of the match (found by `a_unit_with_no_speed_stays_where_it_is`).
+    if (gap_x == 0 && gap_y == 0) || delta <= 0 {
+        return (0, 0);
+    }
+    let squared = gap_x * gap_x + gap_y * gap_y;
+    let length = integer_sqrt(squared);
+    if length <= delta.max(0) {
+        return (gap_x, gap_y);
+    }
+    // **Rounded, not truncated, and never past the point.** Truncation is what froze a villager against a house: its line
+    // carried a 20-raw-unit remainder on one axis, every step rounded that axis to zero, and a purely axis-aligned step
+    // whose landing tile was blocked then had no slide to fall back on (`a_villager_walks_round_a_house_rather_than_through_it`,
+    // 2026-11-04). Rounding keeps both axes moving, which is also what gives the slide in `collide` something to work with.
+    // The clamp to the gap means no axis can overshoot, so a point is still landed on exactly.
+    let component = |gap: i64| -> i64 {
+        if gap == 0 {
+            return 0;
         }
+        let magnitude = i128::from(gap).abs() * i128::from(delta);
+        let rounded = (magnitude + i128::from(length / 2)) / i128::from(length);
+        // **No axis is ever abandoned.** A component that rounds to zero leaves the unit with a purely axis-aligned step,
+        // and an axis-aligned step into a wall has no slide to fall back on - that is what froze a villager a tenth of a
+        // raw unit short of the row its goal was in. One raw unit per tick closes any remainder, and the cap keeps it
+        // from passing the point it aims at.
+        let capped = rounded.max(1).min(i128::from(gap.unsigned_abs()));
+        i64::try_from(capped)
+            .unwrap_or_else(|_| i64::try_from(gap.unsigned_abs()).unwrap_or(i64::MAX))
+            * gap.signum()
     };
-    (axis(from.0, to.0), axis(from.1, to.1))
+    let (step_x, step_y) = (component(gap_x), component(gap_y));
+    // A step that rounded to nothing on both axes would freeze the unit short of its point.
+    if step_x == 0 && step_y == 0 {
+        return (gap_x.signum(), gap_y.signum());
+    }
+    (step_x, step_y)
 }
 
 /// The nearest free walkable tile around `from`, searched in ring order so the choice is
@@ -2570,8 +2602,6 @@ impl World {
         Ok(())
     }
 
-    /// A tile's origin as a world position. Tiles are the unit of the map; the scale is the unit
-    /// of state, and this is the only place the two meet.
     /// Can a walker get from one place to another? Asked by the scenario runner when it picks which
     /// node to send a villager to, so the script chooses a node it can reach instead of ordering a
     /// trip the engine will refuse.
@@ -2579,6 +2609,8 @@ impl World {
         self.plan_path(from, to).is_ok()
     }
 
+    /// A tile's origin as a world position. Tiles are the unit of the map; the scale is the unit
+    /// of state, and this is the only place the two meet.
     fn tile(&self, (x, y): (u16, u16)) -> (Fixed, Fixed) {
         (
             Fixed::from_raw(i64::from(x) * self.scale),
@@ -2920,6 +2952,18 @@ impl World {
     /// of the line the unit actually walks. From each node this jumps to the furthest node `line_clear` reaches, so the
     /// corners that remain are the ones an obstacle forces. Cheap: it runs when a route is planned, never per tick.
     fn pull_route(walk: &Walk, start: (u16, u16), steps: Vec<(u16, u16)>) -> Vec<(u16, u16)> {
+        Self::pull_route_avoiding(walk, start, steps, &BTreeSet::new())
+    }
+
+    /// The same pull, obeying the tiles a repath's search went round (D98a). Without this the **repathed** route is the
+    /// search's own answer - a node per tile - and the unit walks it tile centre to tile centre: the staircase, in the one
+    /// place the owner actually watches a base full of villagers, because most long walks there are repaths.
+    fn pull_route_avoiding(
+        walk: &Walk,
+        start: (u16, u16),
+        steps: Vec<(u16, u16)>,
+        avoid: &BTreeSet<(u16, u16)>,
+    ) -> Vec<(u16, u16)> {
         if steps.len() < 2 {
             return steps;
         }
@@ -2927,10 +2971,13 @@ impl World {
         nodes.push(start);
         nodes.extend(steps);
         let mut pulled: Vec<(u16, u16)> = Vec::with_capacity(nodes.len());
+        let last = nodes.len() - 1;
         let mut at = 0usize;
         while at + 1 < nodes.len() {
-            let mut jump = nodes.len() - 1;
-            while jump > at + 1 && !line_clear(walk, nodes[at], nodes[jump]) {
+            let mut jump = last;
+            // Every intermediate node the search returns is free ground (only the goal may be blocked), so the pull needs
+            // no rule of its own about the end: `line_clear_avoiding` applies the same endpoint exemption the search does.
+            while jump > at + 1 && !line_clear_avoiding(walk, nodes[at], nodes[jump], avoid) {
                 jump -= 1;
             }
             pulled.push(nodes[jump]);
@@ -8783,8 +8830,11 @@ impl World {
                 // A nudge already spent is spent for the order, not for the plan: a repath must not hand the unit a
                 // second one.
                 let gave_way = self.paths.get(&id).is_some_and(|route| route.gave_way);
+                // The pull obeys the same avoid set as the search: a jump that walked back through the body the search
+                // went round would be a worse route than the one it replaced.
                 let planned = match self.walk.as_ref() {
-                    Some(walk) => find_path_avoiding(walk, start, goal, &obstacles),
+                    Some(walk) => find_path_avoiding(walk, start, goal, &obstacles)
+                        .map(|steps| Self::pull_route_avoiding(walk, start, steps, &obstacles)),
                     None => None,
                 };
                 match planned {

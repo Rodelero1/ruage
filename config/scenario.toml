@@ -102,9 +102,12 @@ villager = 1
 resource = "food"
 
 # The third villager joins the forager after the barracks is paid for: one villager banks about
-# 0.25 food per second and the spearman needs 60.
+# 0.25 food per second and the spearman needs 60. **390 s, not 380**: this schedule was measured while a
+# diagonal step was sqrt(2) faster than a straight one (each axis took a whole step), and with the walk
+# held to its own speed the builder needs four more seconds to finish the barracks - re-tasking it at
+# 380 left a half-built barracks at 921 of 1,000 ticks for the rest of the match.
 [[step]]
-at_seconds = 380.0
+at_seconds = 390.0
 player = 1
 kind = "gather"
 villager = 0
