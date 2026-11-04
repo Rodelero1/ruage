@@ -187,6 +187,7 @@ fn panel(
         help: None,
         bar_hover: None,
         notice: None,
+        view: None,
     }
 }
 
@@ -254,10 +255,11 @@ fn the_selection_panel_paints_a_health_bar() {
     );
 }
 
-/// **The minimap is drawn where `minimap_rect` says, pixel for pixel.** The function existed and was never called by the
-/// window; this pins the copy, so a panel that is drawn somewhere else is a failure rather than a surprise.
+/// **The minimap is drawn where `minimap_rect` says, and it is a diamond.** The owner asked for the interface to be turned
+/// like the map (2026-11-04), so the middle of the box is map and its four corners are not: the panel shows through where the
+/// diamond does not reach.
 #[test]
-fn the_minimap_is_copied_into_the_corner() {
+fn the_minimap_is_a_diamond_in_the_corner() {
     let snapshot = snapshot();
     let mut frame = Frame::new(960, 720);
     ui::hud(
@@ -267,12 +269,28 @@ fn the_minimap_is_copied_into_the_corner() {
         ruage_view::Speed::One,
     );
     let (x, y, w, h) = ui::minimap_rect(960, 720, snapshot.width, snapshot.height);
-    let map = ui::minimap(&snapshot, w / u32::from(snapshot.width).max(1));
-    for (px, py) in [(0, 0), (w / 2, h / 2), (w - 1, h - 1)] {
+    // The middle of the box is a tile of the map: its colour is not the panel's.
+    let middle = frame.pixel(x as u32 + w / 2, y as u32 + h / 2);
+    assert_ne!(
+        middle,
+        palette::PANEL,
+        "the middle of the minimap is bare panel, so no map was drawn"
+    );
+    // The top-left pixel of the box is outside the diamond, so it is not a tile's colour either - and the map's own top tile
+    // is exactly at the top of the box.
+    let (top_x, top_y) = ui::minimap_point((0, 0), (x, y, w, h), snapshot.width, snapshot.height);
+    let top = frame.pixel(top_x as u32, top_y as u32);
+    assert_ne!(top, palette::PANEL, "the map's first tile was not drawn");
+    for (px, py) in [
+        (x as u32 + 1, y as u32 + 1),
+        (x as u32 + w - 2, y as u32 + 1),
+        (x as u32 + 1, y as u32 + h - 2),
+        (x as u32 + w - 2, y as u32 + h - 2),
+    ] {
         assert_eq!(
-            frame.pixel(x as u32 + px, y as u32 + py),
-            map.pixel(px, py),
-            "the minimap pixel at ({px}, {py}) was not copied into the panel"
+            frame.pixel(px, py),
+            palette::PANEL,
+            "the box's corner at ({px}, {py}) is painted, but it is outside the diamond"
         );
     }
 }
@@ -339,6 +357,7 @@ fn each_stock_column_shows_its_name() {
         help: None,
         bar_hover: None,
         notice: None,
+        view: None,
     };
     ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);
     let (x, y) = ui::stock_name_origin(0);
@@ -358,6 +377,7 @@ fn each_stock_column_shows_its_name() {
         help: None,
         bar_hover: None,
         notice: None,
+        view: None,
     };
     ui::hud(&mut unnamed, &bare, &snapshot, ruage_view::Speed::One);
     assert_eq!(

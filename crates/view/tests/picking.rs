@@ -135,19 +135,29 @@ fn a_click_on_the_middle_of_a_building_selects_it() {
     assert_eq!(selection.ids, vec![7]);
 }
 
-/// **A minimap pixel is a tile.** The minimap is drawn at two pixels a tile in a box in the corner; clicking it has to mean
-/// the tile under the pointer, and clicking outside the box has to mean nothing at all.
+/// **A minimap pixel is a tile.** The minimap is a diamond in the corner of the panel; clicking it has to mean the tile under
+/// the pointer, and clicking the empty corners of its box - or outside it - has to mean nothing at all.
 #[test]
 fn a_minimap_pixel_is_a_tile() {
-    let (x, y, w, _h) = ui::minimap_rect(960, 720, 64, 64);
-    assert_eq!(ui::minimap_tile((x, y), (x, y, w, w), 64, 64), Some((0, 0)));
+    let (x, y, w, h) = ui::minimap_rect(960, 720, 64, 64);
+    let rect = (x, y, w, h);
+    // The top point of the diamond is the map's first tile, and the middle of the box is the middle of the map.
+    let top = (x + (w as i32 - 1) / 2, y);
+    assert_eq!(ui::minimap_tile(top, rect, 64, 64), Some((0, 0)));
+    let middle = (x + (w as i32 - 1) / 2, y + (h as i32 - 1) / 2);
+    let tile = ui::minimap_tile(middle, rect, 64, 64).expect("the middle of the box is on the map");
+    assert!(
+        tile.0.abs_diff(32) <= 1 && tile.1.abs_diff(32) <= 1,
+        "the middle of the box is {tile:?}, not the middle of the map"
+    );
+    // A corner of the box is outside the diamond: the panel shows there, and a click on it is not a click on the map.
     assert_eq!(
-        ui::minimap_tile((x + 64, y + 32), (x, y, w, w), 64, 64),
-        Some((32, 16)),
-        "two pixels a tile: pixel 64 is tile 32"
+        ui::minimap_tile((x + 1, y + 1), rect, 64, 64),
+        None,
+        "the corner of the box read as a tile"
     );
     assert_eq!(
-        ui::minimap_tile((x - 4, y - 4), (x, y, w, w), 64, 64),
+        ui::minimap_tile((x - 4, y - 4), rect, 64, 64),
         None,
         "outside the box is not a tile"
     );

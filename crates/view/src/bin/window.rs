@@ -99,6 +99,9 @@ struct App {
     selection: ui::Selection,
     /// Where the left button went down: a press and a release in the same place is a click, further apart is a box.
     press_at: Option<(i32, i32)>,
+    /// **A press that began on the minimap is holding the view**: the camera follows the pointer until release, which is what
+    /// makes the minimap's box grabbable by its inside as well as its edge (the owner's note, 2026-11-04).
+    minimap_drag: bool,
     /// When and where the last left click landed, so a second one in the same place in time is a double-click.
     last_click: Option<(Instant, (i32, i32))>,
     /// The last refusal and the tick it happened on: shown in the HUD for a few seconds, because an order that was not
@@ -148,6 +151,7 @@ impl App {
             seed,
             selection: ui::Selection::new(),
             press_at: None,
+            minimap_drag: false,
             last_click: None,
             notice: None,
             menu_open: false,
@@ -223,8 +227,11 @@ impl App {
                     self.use_card(index);
                     return;
                 }
-                // The minimap next, for the same reason: it is a picture of the world drawn over the world.
+                // **The minimap next**, for the same reason: it is a picture of the world drawn over the world. A press on it
+                // moves the view there and *starts a drag*, so the box can be pushed around by its inside as well as its
+                // edge (the owner's note, 2026-11-04) - the pointer keeps deciding where the camera is until release.
                 if let Some(tile) = self.minimap_at(self.cursor_pixel) {
+                    self.minimap_drag = true;
                     self.camera = self
                         .camera
                         .centred_on((f32::from(tile.0), f32::from(tile.1)));
@@ -293,6 +300,25 @@ impl App {
         self.refresh_card();
     }
 
+    /// The tile under a pixel on the minimap, **clamped to the map**: the pointer can leave the box mid-drag, and the camera
+    /// should follow it to the edge rather than stop.
+    fn minimap_at_clamped(&self, pixel: (i32, i32)) -> Option<(u16, u16)> {
+        let (width, height) = self.frame_size();
+        let (map_width, map_height) = (self.config.map.width, self.config.map.height);
+        let (x, y, w, h) = ui::minimap_rect(width, height, map_width, map_height);
+        if w == 0 || h == 0 {
+            return None;
+        }
+        let clamp =
+            |value: i32, low: i32, span: u32| value.clamp(low, low + span.saturating_sub(1) as i32);
+        ui::minimap_tile(
+            (clamp(pixel.0, x, w), clamp(pixel.1, y, h)),
+            (x, y, w, h),
+            map_width,
+            map_height,
+        )
+    }
+
     /// Which map tile a pixel on the minimap means, if it is on the minimap at all.
     fn minimap_at(&self, pixel: (i32, i32)) -> Option<(u16, u16)> {
         let (width, height) = self.frame_size();
@@ -312,6 +338,8 @@ impl App {
     /// The left button came up: a box if the pointer travelled, a click if it did not, a double-click if it landed in the
     /// same place twice in half a second.
     fn release(&mut self) {
+        // Releasing anywhere ends a minimap drag, even off the box: the pointer is no longer holding the view.
+        self.minimap_drag = false;
         let Some(from) = self.press_at.take() else {
             return;
         };
@@ -553,6 +581,8 @@ impl App {
         hud.notice = notice;
         hud.help = help;
         hud.bar_hover = bar_hover;
+        // The minimap's box is the camera's own view, so the picture of where the player is looking comes from the camera.
+        hud.view = Some(self.camera.visible_corners());
         ui::hud(&mut frame, &hud, &snapshot, self.pace.speed());
         let buttons: Vec<ui::CardButton> =
             self.card.iter().map(|(button, _)| button.clone()).collect();
@@ -714,6 +744,15 @@ impl ApplicationHandler for App {
             },
             WindowEvent::CursorMoved { position, .. } => {
                 let pixel = (position.x as i32, position.y as i32);
+                // **A drag on the minimap keeps the camera under the pointer**, clamped to the map's edge so a fast mouse
+                // that leaves the box does not stop the drag half way.
+                if self.minimap_drag
+                    && let Some(tile) = self.minimap_at_clamped(pixel)
+                {
+                    self.camera = self
+                        .camera
+                        .centred_on((f32::from(tile.0), f32::from(tile.1)));
+                }
                 self.cursor = self.camera.pick(pixel);
                 self.cursor_point = self.camera.pick_point(pixel);
                 self.cursor_pixel = pixel;

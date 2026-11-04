@@ -190,6 +190,7 @@ fn main() -> ExitCode {
                 .unwrap_or_else(|| format!("unit {unit}"));
         }
     }
+    hud.view = Some(camera.visible_corners());
     ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);
     // `... ppm 1 menu`: the same picture with the Escape menu over it, so the modal can be looked at without a display.
     // The command card, when what is selected is one of the player's buildings: the diagnostic shows what the window shows.

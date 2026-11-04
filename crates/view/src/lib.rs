@@ -352,6 +352,20 @@ impl Camera {
         (x.round() as i32, y.round() as i32)
     }
 
+    /// **The four corners of what the camera sees, in tiles** - the parallelogram the minimap draws (the owner's "rectangle
+    /// ... based on where on the map I am", 2026-11-04). Corners rather than a bounding box because the world is isometric:
+    /// the screen's rectangle is a *slanted* rectangle in tile space, and an axis-aligned box would be a lie about it.
+    #[must_use]
+    pub fn visible_corners(&self) -> [(f32, f32); 4] {
+        let (w, h) = self.viewport;
+        [
+            self.pick_point((0, 0)),
+            self.pick_point((w as i32, 0)),
+            self.pick_point((w as i32, h as i32)),
+            self.pick_point((0, h as i32)),
+        ]
+    }
+
     pub fn scroll(&mut self, tiles: (f32, f32)) {
         self.origin.0 += tiles.0;
         self.origin.1 += tiles.1;

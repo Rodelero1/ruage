@@ -189,6 +189,10 @@ pub struct Hud {
     /// window sets it from `submit_checked`'s error; a HUD that stays silent about a refusal makes an ignored order look
     /// like a bug in the game rather than a bug in the order.
     pub notice: Option<String>,
+    /// **What the camera can see**, as the four corner tiles of its view: the box drawn on the minimap. The window sets it
+    /// from its own camera (`Camera::visible_corners`), because a picture of a match does not know where anybody is looking
+    /// (the owner's note, 2026-11-04).
+    pub view: Option<[(f32, f32); 4]>,
 }
 
 impl Hud {
@@ -231,61 +235,13 @@ impl Hud {
             help: None,
             bar_hover: None,
             notice: None,
+            view: None,
         }
     }
 }
 
 /// The minimap: the whole map at one or two pixels a tile, coloured by fog and terrain, with the player's
 /// own units on top. It is the vision layer's second customer, and the reason `visible_mask` exists.
-pub fn minimap(snapshot: &Snapshot, pixels_per_tile: u32) -> Frame {
-    let scale = pixels_per_tile.max(1);
-    let mut frame = Frame::new(
-        u32::from(snapshot.width) * scale,
-        u32::from(snapshot.height) * scale,
-    );
-    for y in 0..snapshot.height {
-        for x in 0..snapshot.width {
-            let forest = snapshot
-                .terrain
-                .get(usize::from(y) * usize::from(snapshot.width) + usize::from(x))
-                .copied()
-                .unwrap_or(false);
-            let colour = match snapshot.tile_vision(x, y) {
-                ruage_sim::TileVision::Unseen => [8, 8, 12, 255],
-                ruage_sim::TileVision::Explored => [40, 48, 40, 255],
-                ruage_sim::TileVision::Visible if forest => [24, 48, 24, 255],
-                ruage_sim::TileVision::Visible => [88, 120, 56, 255],
-            };
-            frame.fill_rect(
-                i32::from(x) * scale as i32,
-                i32::from(y) * scale as i32,
-                scale as i32,
-                scale as i32,
-                colour,
-            );
-        }
-    }
-    for entity in &snapshot.entities {
-        let (x, y) = (
-            entity.position.0.floor().max(0.0) as u32,
-            entity.position.1.floor().max(0.0) as u32,
-        );
-        let colour = match entity.kind {
-            EntityKind::Resource(_) => [180, 150, 90, 255],
-            EntityKind::Unit => player_colour(entity.player),
-            EntityKind::Building => [220, 220, 220, 255],
-            EntityKind::Projectile => continue,
-        };
-        frame.fill_rect(
-            x as i32 * scale as i32,
-            y as i32 * scale as i32,
-            scale.max(1) as i32,
-            scale.max(1) as i32,
-            colour,
-        );
-    }
-    frame
-}
 
 // --- the HUD ---------------------------------------------------------------------------------
 
@@ -771,33 +727,221 @@ pub fn draw_menu(frame: &mut Frame, frame_width: u32, frame_height: u32, chosen:
     }
 }
 
-/// **Which tile a pixel on the minimap means.** The box is drawn at two pixels a tile (`minimap_rect`), so the inverse is
-/// a division - but a division done in the window would be a second copy of the layout, and the day the box moves, one of
-/// the two copies would be wrong.
+/// **The minimap, drawn as the map is: a diamond.** Each tile is the small diamond the world's own projection gives it, the
+/// fog colours it, and the camera's view is a slanted parallelogram outlined in white with an empty inside - the owner's
+/// "rectangle (empty fill, white margin)", whose size is the proportion of the map the camera covers (2026-11-04).
+fn draw_minimap(
+    frame: &mut Frame,
+    snapshot: &Snapshot,
+    rect: (i32, i32, u32, u32),
+    view: Option<[(f32, f32); 4]>,
+) {
+    let (mx, my, mw, mh) = rect;
+    if mw == 0 || mh == 0 {
+        return;
+    }
+    frame.fill_rect(mx, my, mw as i32, mh as i32, palette::PANEL);
+    // A tile's diamond: one step across is `sx` pixels, and a diamond of that half-width is what fills the strip between
+    // neighbouring tiles.
+    let step = {
+        let (x0, _) = minimap_point((0, 0), rect, snapshot.width, snapshot.height);
+        let (x1, _) = minimap_point((1, 0), rect, snapshot.width, snapshot.height);
+        (
+            (x1 - x0).abs().max(1) as f32,
+            (x1 - x0).abs().max(1) as f32 / 2.0,
+        )
+    };
+    for y in 0..snapshot.height {
+        for x in 0..snapshot.width {
+            let forest = snapshot
+                .terrain
+                .get(usize::from(y) * usize::from(snapshot.width) + usize::from(x))
+                .copied()
+                .unwrap_or(false);
+            let colour = match snapshot.tile_vision(x, y) {
+                ruage_sim::TileVision::Unseen => [10, 10, 14, 255],
+                ruage_sim::TileVision::Explored => [34, 40, 34, 255],
+                ruage_sim::TileVision::Visible if forest => [26, 54, 26, 255],
+                ruage_sim::TileVision::Visible => [96, 128, 60, 255],
+            };
+            let point = minimap_point((x, y), rect, snapshot.width, snapshot.height);
+            frame.fill_diamond(point, step, colour);
+        }
+    }
+    // The edge of the box: unexplored ground is nearly black, so without it the minimap is a hole in the panel.
+    frame.fill_rect(mx - 1, my - 1, mw as i32 + 2, 1, palette::MARK);
+    frame.fill_rect(mx - 1, my + mh as i32, mw as i32 + 2, 1, palette::MARK);
+    frame.fill_rect(mx - 1, my, 1, mh as i32, palette::MARK);
+    frame.fill_rect(mx + mw as i32, my, 1, mh as i32, palette::MARK);
+    // **Where the camera is looking.** A rectangle of the world on a diamond minimap is a parallelogram, so it is drawn as
+    // four lines rather than a box; and its inside is left empty, because the ground underneath is what a player is reading.
+    if let Some(corners) = view {
+        let corners = corners.map(|corner| {
+            // Clamped to the map: a camera looking off the edge of the world is still somewhere on the minimap, at its edge.
+            projected(
+                (
+                    corner
+                        .0
+                        .clamp(0.0, f32::from(snapshot.width.saturating_sub(1))),
+                    corner
+                        .1
+                        .clamp(0.0, f32::from(snapshot.height.saturating_sub(1))),
+                ),
+                rect,
+                snapshot.width,
+                snapshot.height,
+            )
+        });
+        for index in 0..4 {
+            let (from, to) = (corners[index], corners[(index + 1) % 4]);
+            line(frame, from, to, [255, 255, 255, 255]);
+            // The "white margin": a second, greyer line one pixel out, so the box reads as a frame over the ground rather
+            // than as a line that happens to be white.
+            line(
+                frame,
+                (from.0, from.1 + 1),
+                (to.0, to.1 + 1),
+                [150, 150, 150, 255],
+            );
+        }
+    }
+}
+
+/// A one-pixel line, Bresenham: the view box's edges are slanted, so the frame's axis-aligned fills cannot draw them.
+fn line(frame: &mut Frame, from: (i32, i32), to: (i32, i32), colour: [u8; 4]) {
+    let (mut x, mut y) = from;
+    let (dx, dy) = ((to.0 - from.0).abs(), -(to.1 - from.1).abs());
+    let (sx, sy) = (
+        if from.0 < to.0 { 1 } else { -1 },
+        if from.1 < to.1 { 1 } else { -1 },
+    );
+    let mut error = dx + dy;
+    loop {
+        frame.put(x, y, colour);
+        if x == to.0 && y == to.1 {
+            break;
+        }
+        let doubled = 2 * error;
+        if doubled >= dy {
+            error += dy;
+            x += sx;
+        }
+        if doubled <= dx {
+            error += dx;
+            y += sy;
+        }
+    }
+}
+
+/// **The minimap is the map turned 45 degrees.** A tile maps to the diamond that is the game's own screen: tile (0, 0) is the
+/// diamond's top point, tile (w-1, 0) its right, (w-1, h-1) its bottom and (0, h-1) its left - which is the projection the
+/// world itself is drawn on, and the reason the owner asked for it ("hud should be also 45 degrees turned. Just like map").
+///
+/// The horizontal axis is `tx - ty` and the vertical `tx + ty`, exactly as the isometric world uses.
+fn projected(tile: (f32, f32), rect: (i32, i32, u32, u32), width: u16, height: u16) -> (i32, i32) {
+    let (x, y, w, h) = rect;
+    let across = f32::from(width.max(1)).max(1.0) - 1.0;
+    let down = f32::from(height.max(1)).max(1.0) - 1.0;
+    // One scale for both axes would make a non-square map a diamond of the wrong shape; these keep each axis' extremes on the
+    // box's own extremes, so the map is always as large as it can be inside the minimap.
+    // The diamond's points land on the box's own outermost pixels: `w - 1` pixels are addressable, so the span is `w - 1`.
+    let half_w = (w.saturating_sub(1)) as f32 / 2.0;
+    let sx = if across > 0.0 { half_w / across } else { 0.0 };
+    let sy = if down > 0.0 {
+        (h.saturating_sub(1)) as f32 / (2.0 * down)
+    } else {
+        0.0
+    };
+    let cx = x as f32 + (w.saturating_sub(1)) as f32 / 2.0;
+    // `v` is `tx + ty`, which runs from 0 to `2 * down`: the top point of the diamond is the box's top edge, not its middle.
+    let cy = y as f32;
+    (
+        (cx + (tile.0 - tile.1) * sx).round() as i32,
+        (cy + (tile.0 + tile.1) * sy).round() as i32,
+    )
+}
+
+/// Where a tile stands on the minimap, in pixels.
+#[must_use]
+pub fn minimap_point(
+    tile: (u16, u16),
+    rect: (i32, i32, u32, u32),
+    width: u16,
+    height: u16,
+) -> (i32, i32) {
+    projected((f32::from(tile.0), f32::from(tile.1)), rect, width, height)
+}
+
+/// **The tile under a minimap pixel**, or nothing when the pixel is one of the box's empty corners: the minimap fills a
+/// diamond inside a rectangle, and a click on the corner of the rectangle is a click on nothing.
 #[must_use]
 pub fn minimap_tile(
     pixel: (i32, i32),
     rect: (i32, i32, u32, u32),
-    map_width: u16,
-    map_height: u16,
+    width: u16,
+    height: u16,
 ) -> Option<(u16, u16)> {
     let (x, y, w, h) = rect;
-    if w == 0 || h == 0 || u32::from(map_width) == 0 || u32::from(map_height) == 0 {
+    if w == 0 || h == 0 || width == 0 || height == 0 {
         return None;
     }
-    if pixel.0 < x || pixel.1 < y || pixel.0 >= x + w as i32 || pixel.1 >= y + h as i32 {
-        return None;
+    let across = f32::from(width) - 1.0;
+    let down = f32::from(height) - 1.0;
+    let half_w = (w.saturating_sub(1)) as f32 / 2.0;
+    let sx = if across > 0.0 { half_w / across } else { 0.0 };
+    let sy = if down > 0.0 {
+        (h.saturating_sub(1)) as f32 / (2.0 * down)
+    } else {
+        0.0
+    };
+    let cx = x as f32 + (w.saturating_sub(1)) as f32 / 2.0;
+    // `v` is `tx + ty`, which runs from 0 to `2 * down`: the top point of the diamond is the box's top edge, not its middle.
+    let cy = y as f32;
+    let dx = pixel.0 as f32 - cx;
+    let dy = pixel.1 as f32 - cy;
+    let (u, v) = (
+        if sx > 0.0 { dx / sx } else { 0.0 },
+        if sy > 0.0 { dy / sy } else { 0.0 },
+    );
+    // **The diamond, not the box.** `u` is tx - ty and `v` is tx + ty, so a point is on the map when its distance from the
+    // diamond's centre, in both axes together, is within one tile: the box's four corners are empty ground and a click there
+    // is a click on nothing.
+    if across > 0.0 && down > 0.0 {
+        let reach = u.abs() / across + (v - down).abs() / down;
+        if reach > 1.0 + 0.5 / across {
+            return None;
+        }
     }
-    let across = u32::try_from(pixel.0 - x).ok()? * u32::from(map_width) / w;
-    let down = u32::try_from(pixel.1 - y).ok()? * u32::from(map_height) / h;
-    Some((
-        u16::try_from(across.min(u32::from(map_width) - 1)).ok()?,
-        u16::try_from(down.min(u32::from(map_height) - 1)).ok()?,
-    ))
+    let tx = (u + v) / 2.0;
+    let ty = (v - u) / 2.0;
+    // **Rounded, not truncated**: a pixel is a whole number and a tile is barely one, so truncation puts a click one tile
+    // short of where the picture drew it (measured: tile (32, 32) drew at (780, 703) and read back as (31, 31)).
+    let clamp = |value: f32, most: f32| value.round().clamp(0.0, most) as u16;
+    Some((clamp(tx, across), clamp(ty, down)))
 }
 
-/// The minimap's place in the frame: **inside the panel's right zone**, two pixels a tile where that fits, and centred in
-/// the zone - which is what keeps it against the right edge of a wide frame without a second anchoring rule.
+/// **Where the camera is looking, drawn on the minimap.** The camera sees a rectangle of the world, which on a diamond
+/// minimap is a slanted parallelogram - the owner's "rectangle (empty fill, white margin)". Its size is the proportion of the
+/// map the camera covers, so zooming in shrinks it.
+#[must_use]
+pub fn minimap_view(
+    camera: &Camera,
+    rect: (i32, i32, u32, u32),
+    width: u16,
+    height: u16,
+) -> [(i32, i32); 4] {
+    let corners = camera.visible_corners().map(|corner| {
+        // Clamped to the map: a camera looking off the edge is still somewhere on the minimap, at the edge.
+        (
+            corner.0.clamp(0.0, f32::from(width.saturating_sub(1))),
+            corner.1.clamp(0.0, f32::from(height.saturating_sub(1))),
+        )
+    });
+    corners.map(|corner| projected(corner, rect, width, height))
+}
+
+/// **The minimap's box on screen**, from the frame's size and the map's: the public door to the layout's right zone, so a
+/// click handler and the drawing code ask the same question.
 #[must_use]
 pub fn minimap_rect(
     frame_width: u32,
@@ -978,19 +1122,9 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
     // The speed selector sits under the minimap, where pacing belongs (D101): the bar's five slots are the game's.
     speed_selector_in(frame, &layout, speed);
 
-    let (mx, my, mw, mh) = fit_minimap(&layout, snapshot.width, snapshot.height);
-    if mw > 0 && mh > 0 && mx >= 0 && my >= 0 {
-        // The box, then the map: unexplored ground is nearly black, so without an edge the minimap is a hole.
-        frame.fill_rect(mx - 1, my - 1, mw as i32 + 2, 1, palette::MARK);
-        frame.fill_rect(mx - 1, my + mh as i32, mw as i32 + 2, 1, palette::MARK);
-        frame.fill_rect(mx - 1, my, 1, mh as i32, palette::MARK);
-        frame.fill_rect(mx + mw as i32, my, 1, mh as i32, palette::MARK);
-        let map = minimap(snapshot, mw / u32::from(snapshot.width).max(1));
-        for py in 0..map.height {
-            for px in 0..map.width {
-                frame.put(mx + px as i32, my + py as i32, map.pixel(px, py));
-            }
-        }
+    let rect = fit_minimap(&layout, snapshot.width, snapshot.height);
+    if rect.2 > 0 && rect.3 > 0 && rect.0 >= 0 && rect.1 >= 0 {
+        draw_minimap(frame, snapshot, rect, hud.view);
     }
 
     // **The help box**, above the panel on the left: what the pointer is over, in one line. It is the cheapest teaching

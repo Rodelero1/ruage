@@ -2636,6 +2636,15 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D107 - The minimap is the world's projection, and its box is the camera
+
+The minimap uses the same isometric projection as the world (`u = tx - ty`, `v = tx + ty`), so a player reads one picture in
+two sizes. The view box is the camera's **four screen corners picked back to tiles** and projected - a slanted parallelogram,
+not a bounding box, because a box would say the view is axis-aligned in tile space when it is not. `minimap_tile` returns
+`None` outside the diamond, so the dead corners of a rectangular frame cannot move the camera somewhere that is not on the map;
+a drag that leaves the box is clamped rather than cancelled. The old square `ui::minimap` is deleted: two printers of one
+picture is how the panel height drifted to two numbers earlier in this project.
+
 ## D106 - The farm ring is content's, and reachability is asked last
 
 `[build] farm` names the plot and `[build] farm_spacing` is how many farm widths sit between the town centre and the mill. The

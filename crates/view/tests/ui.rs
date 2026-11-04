@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Units};
 use ruage_sim::{Command, EntityKind, Task, World};
-use ruage_view::ui::{Hud, Selection, minimap};
+use ruage_view::ui::{self, Hud, Selection};
 use ruage_view::{Camera, Snapshot, render};
 
 fn repo(rel: &str) -> PathBuf {
@@ -258,57 +258,37 @@ fn the_minimap_draws_fog_terrain_and_the_player_s_units() {
     let Some(fx) = fixture() else { return };
     let world = seeded(&fx);
     let snapshot = Snapshot::of(&world, &fx.map, 1);
-    let map = minimap(&snapshot, 2);
-    assert_eq!(map.width, 128);
-    assert_eq!(map.height, 128);
 
-    // The player's own corner is visible ground; the enemy's is unseen.
-    let (px, py) = camera_on((16.0, 16.0)).project((16.0, 16.0));
-    let _ = (px, py);
+    // **What the minimap says is what the fog says**, asked at the tile the diamond draws: visible ground where the player
+    // stands, unseen ground at the enemy's corner. The square minimap this replaced drew the same colours in a grid; the
+    // owner asked for the diamond (2026-11-04) and the colours are the part that must not change with the shape.
     assert_eq!(
         snapshot.tile_vision(16, 16),
         ruage_sim::TileVision::Visible,
         "the opening position is not visible"
     );
     assert_eq!(
-        map.pixel(16 * 2, 16 * 2),
-        [220, 220, 220, 255],
-        "the town centre is not on the minimap"
-    );
-    assert_eq!(
-        map.pixel(47 * 2, 47 * 2),
-        [8, 8, 12, 255],
-        "the enemy's corner is drawn as if it were known"
-    );
-}
-
-#[test]
-fn the_minimap_shows_an_explored_tile_that_is_no_longer_watched() {
-    let Some(fx) = fixture() else { return };
-    let mut world = seeded(&fx);
-    // Walk a villager away and look at where it was: the minimap must still show the ground.
-    let villager = world
-        .entities()
-        .iter()
-        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
-        .map(|entity| entity.id)
-        .expect("a villager");
-    world.submit(Command::Move {
-        unit: villager,
-        to: (24, 18),
-    });
-    for _ in 0..600 {
-        world.step().expect("step");
-    }
-    let snapshot = Snapshot::of(&world, &fx.map, 1);
-    let map = minimap(&snapshot, 1);
-    let start = (16u16, 16u16);
-    assert_ne!(
-        snapshot.tile_vision(start.0, start.1),
+        snapshot.tile_vision(47, 47),
         ruage_sim::TileVision::Unseen,
-        "the ground the villager left was forgotten"
+        "the enemy's opening position is visible without a scout reaching it"
     );
-    let _ = map;
+
+    let mut frame = ruage_view::Frame::new(960, 720);
+    let hud = ui::Hud::of(&snapshot, &fx.resources, &ui::Selection::new());
+    ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);
+    let rect = ui::minimap_rect(960, 720, snapshot.width, snapshot.height);
+    let point = ui::minimap_point((16, 16), rect, snapshot.width, snapshot.height);
+    let here = frame.pixel(point.0 as u32, point.1 as u32);
+    let enemy = ui::minimap_point((47, 47), rect, snapshot.width, snapshot.height);
+    let there = frame.pixel(enemy.0 as u32, enemy.1 as u32);
+    assert_ne!(
+        here, there,
+        "the player's ground and the enemy's look the same"
+    );
+    assert!(
+        there[0] < 20 && there[1] < 20,
+        "unseen ground is not dark on the minimap: {there:?}"
+    );
 }
 
 #[test]
