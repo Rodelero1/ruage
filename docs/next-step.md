@@ -28,6 +28,50 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 12, 2026-11-04 - M3c attempted again and **not landed**: the blocker is the gather approach, not the mover
+>
+> **The ask:** "Proceed" after M3a. Took M3c (the body's shape against the ground) with the prototype from Session 10 plus
+> M3a now in.
+>
+> **What passed with the change in** (all three written first, RED shown, GREEN after):
+>
+> - `a_body_never_overlaps_the_wall_it_leans_on`: a villager ordered **into** a house had its disc **538 raw units** inside
+>   the wall with a 4,000 body; with `ground_overlap` + "a step may not make it worse" it never touches it.
+> - `a_body_standing_in_a_wall_walks_out_of_it`: a body spawned on a house tile was **frozen for ever**; with the relaxation
+>   it walks out.
+> - `a_one_tile_doorway_is_still_walkable`: the shape rule does not brick a gate.
+> - Everything in `building_passage`, `passage`, `collision`, `evasion`, `rally`, `gather`, `build` - **except three animal
+>   tests**.
+>
+> **The blocker, now measured properly instead of guessed.** With the change in,
+> `the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body` fails with the villager **5.32 tiles** from the sheep,
+> `task = Gather { node: 129 }` (the sheep's own id - not an id mix-up), and **`path_length = 0`**: it has no route at all
+> and `move_body` is never called. So this is **not** the mover, and it is not the shape rule: the **gather approach** plans
+> once, loses its route when the sheep is herded, and never replans - it stands there with the order still live. That is the
+> deck's own failure class, "unit stuck", and the deck's own answer applies: *"expand search area once, otherwise give the
+> closest point path"* - a planner that always answers a route turns a silent stall into a visible walk.
+>
+> Two smaller fixture truths the same run established: `a_live_animal_is_a_gather_source` places its sheep at `centre + 1`,
+> which is **inside the town centre's 2x2 solid core** - unreachable by any rule, and it only ever passed because a body's
+> *centre* could stand at the core's corner; and `a_sheep_stops_at_the_drop_site` measures the sheep against the town
+> centre's **anchor tile**, where the rule it means is "beside the building" (its own footprint edge).
+>
+> **State:** reverted, clean at `af41441`, suite green (662/0/19). Prototype updated at
+> `/opt/data/cache/m3-findings/{lib.rs.m3-v2,building_passage.rs.m3-v2}` - `ground_overlap`, the disc rule, the back-off, the
+> plan margin of `radius + step`, and the three tests.
+>
+> **Order for the next session:**
+>
+> 1. **The gather approach to a moving target** (M3b, now the blocker for everything else): a test where the sheep is herded
+>    away and the villager must follow - `path_length` must never sit at 0 with a live `Gather`. Suspects, in order: the
+>    replan key (it may only retrigger when the *goal tile* changes, and it is the goal *point* that moves), and a failed
+>    plan leaving the route empty instead of retrying. The deck's closest-point-path rule is the shape of the fix.
+> 2. **The two animal fixtures above** (a sheep inside a building's core; "beside" measured from the anchor tile rather than
+>    the footprint).
+> 3. **M3c** again, unchanged, once 1 and 2 are green - it was one mechanism away from landing.
+>
+> **Still the owner's call:** bump-and-repath versus the pushing this engine does now.
+
 > # Session 11, 2026-11-04 - M3a landed: the goal is the middle of a tile (the owner: "Proceed worth m3")
 >
 > **Landed** - `docs/reviews/2026-11-04-the-goal-is-the-middle-of-a-tile.md`, D114, commit on `main` after `91e9236`.
