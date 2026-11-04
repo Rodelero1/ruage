@@ -475,3 +475,27 @@ fn an_availability_tech_with_one_marker_is_not_granted() {
 }
 
 const HOUSE: u32 = 70;
+
+/// **The interface has a word for the age, and the word is content's.** A map cannot say which of two ages is later, and
+/// the tech ids do not either (dark 104, feudal 101, castle 102, imperial 103), so `[age] order` names the sequence and
+/// `World::age_name` reads it. Without an order the answer is `None` rather than the alphabetically last age.
+#[test]
+fn the_age_is_named_in_the_order_content_gives() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    assert_eq!(world.age_name(1).as_deref(), Some("dark_age"));
+
+    feudal(&mut world, 1);
+    assert_eq!(
+        world.age_name(1).as_deref(),
+        Some("feudal_age"),
+        "the Feudal Age is not named after it is researched"
+    );
+
+    world.grant_tech(1, 102).expect("the Castle Age");
+    assert_eq!(
+        world.age_name(1).as_deref(),
+        Some("castle_age"),
+        "a later age does not replace the earlier one"
+    );
+}

@@ -26,6 +26,7 @@ fn snapshot(forest: &[(u16, u16)], entities: Vec<EntityView>) -> Snapshot {
         population: 0,
         population_cap: 0,
         outcome: None,
+        age: None,
         visible: vec![u64::MAX; (usize::from(SIZE) * usize::from(SIZE)).div_ceil(64)],
         explored: vec![u64::MAX; (usize::from(SIZE) * usize::from(SIZE)).div_ceil(64)],
         entities,

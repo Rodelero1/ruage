@@ -98,6 +98,7 @@ fn things_are_painted_from_the_back_of_the_diamond_to_the_front() {
         population: 0,
         population_cap: 0,
         outcome: None,
+        age: None,
         visible: vec![u64::MAX; 16],
         explored: vec![u64::MAX; 16],
         entities: vec![
@@ -209,6 +210,7 @@ fn a_worker_behind_a_bush_is_not_hidden_by_it() {
         population: 0,
         population_cap: 0,
         outcome: None,
+        age: None,
         visible: vec![u64::MAX; 16],
         explored: vec![u64::MAX; 16],
         entities: vec![worker.clone(), bush.clone()],

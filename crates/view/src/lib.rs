@@ -134,6 +134,8 @@ pub struct Snapshot {
     pub population: u32,
     pub population_cap: u32,
     pub outcome: Option<MatchOutcome>,
+    /// The age the player has reached, in the pack's words: the bar's middle reads it, and the view never decides it.
+    pub age: Option<String>,
     /// Fog: one bit per tile, row-major, of what the player sees *now*.
     pub visible: Vec<u64>,
     /// Fog: one bit per tile, row-major, of what the player has ever seen.
@@ -239,6 +241,7 @@ impl Snapshot {
             population: world.population(player),
             population_cap: world.population_cap(player),
             outcome: world.outcome(),
+            age: world.age_name(player),
             visible: world.visible_mask(player),
             explored,
             entities,

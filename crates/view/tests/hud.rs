@@ -18,6 +18,7 @@ fn snapshot() -> Snapshot {
         population: 5,
         population_cap: 15,
         outcome: None,
+        age: None,
         visible: vec![u64::MAX; 16],
         explored: vec![u64::MAX; 16],
         entities: Vec::new(),
@@ -182,6 +183,9 @@ fn panel(
         population_cap: snapshot.population_cap,
         selected,
         outcome,
+        age: None,
+        help: None,
+        bar_hover: None,
         notice: None,
     }
 }
@@ -331,6 +335,9 @@ fn each_stock_column_shows_its_name() {
         population_cap: 15,
         selected: Vec::new(),
         outcome: None,
+        age: None,
+        help: None,
+        bar_hover: None,
         notice: None,
     };
     ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);
@@ -347,6 +354,9 @@ fn each_stock_column_shows_its_name() {
         population_cap: 15,
         selected: Vec::new(),
         outcome: None,
+        age: None,
+        help: None,
+        bar_hover: None,
         notice: None,
     };
     ui::hud(&mut unnamed, &bare, &snapshot, ruage_view::Speed::One);

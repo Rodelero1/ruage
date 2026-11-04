@@ -142,6 +142,10 @@ pub struct MetricsSection {
 pub struct Ages {
     /// Tech role -> requirement. Keyed by role because a tech has no name in the dat (D17).
     pub requires: BTreeMap<String, AgeRequirement>,
+    /// **The ages in order, oldest first.** A map cannot say "which of these is later" - and the tech ids do not either
+    /// (dark 104, feudal 101, castle 102, imperial 103 in this pack) - so the order is content's, like every other name
+    /// (D17). Empty means "no order given", and then no age is reported rather than the alphabetically last one.
+    pub order: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -329,6 +333,9 @@ struct RawEconomy {
 struct RawAges {
     #[serde(default)]
     requires: BTreeMap<String, RawAgeRequirement>,
+    /// The ages in order, oldest first: `["dark_age", "feudal_age", ...]`.
+    #[serde(default)]
+    order: Vec<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -758,6 +765,18 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         }
     }
 
+    // **Every age in the order must be a tech this pack names**, or the interface would have a word for an age that cannot
+    // be researched - a typo that would otherwise show as an age that never arrives.
+    for role in &raw.age.order {
+        if !raw.tech_role.contains_key(role) {
+            return Err(invalid(
+                path,
+                "age.order",
+                format!("{role:?} is not a name in this pack's [tech_role] table"),
+            ));
+        }
+    }
+
     Ok(Economy {
         schema: raw.schema,
         farm: Farm {
@@ -880,6 +899,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             .collect::<Result<_, _>>()?,
         tech_role: raw.tech_role,
         age: Ages {
+            order: raw.age.order,
             requires: raw
                 .age
                 .requires

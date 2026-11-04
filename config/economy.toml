@@ -252,6 +252,11 @@ imperial_age = 103  # 1000 food + 800 gold, at the town centre: named for comple
 # The Castle Age is the exception: two Castle Age buildings *or* a single Castle reach the Imperial Age.
 #
 # `of` lists the roles that count; `single` lists roles that satisfy the requirement on their own.
+# **The ages in order**, oldest first. A map cannot say which of two ages is later, and the tech ids do not either
+# (dark 104, feudal 101, castle 102, imperial 103 in the reference pack), so the order the interface shows is content's -
+# the same rule as every other name here (D17). `dark_age` is the starting age: free, no requirement, never "researched".
+order = ["dark_age", "feudal_age", "castle_age", "imperial_age"]
+
 [age.requires]
 feudal_age = { count = 2, of = ["mill", "mining_camp", "barracks"] }
 castle_age = { count = 2, of = ["blacksmith", "market", "stable", "archery_range_3"] }

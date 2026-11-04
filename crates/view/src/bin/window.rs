@@ -111,6 +111,8 @@ struct App {
     /// the selection changes or an order lands, never per frame - it is a query over every tech the building knows.
     card: Vec<(ui::CardButton, ruage_sim::CardTarget)>,
     card_hover: Option<usize>,
+    /// Which of the bar's five buttons the pointer is on.
+    bar_hover: Option<usize>,
     /// Paused freezes the accumulator rather than the loop: the window keeps drawing, the match stops.
     paused: bool,
     /// The window's pace (1x, 1.5x, 2x, 3x, 5x). **Presentation only**: the simulation is fixed-rate (D16), so a speed
@@ -152,6 +154,7 @@ impl App {
             menu_hover: None,
             card: Vec::new(),
             card_hover: None,
+            bar_hover: None,
             paused: false,
             pace: Pace::new(Speed::One),
             cursor: (0, 0),
@@ -190,6 +193,24 @@ impl App {
                 // The HUD's speed selector first: it is drawn over the world, so a click on it is a click on the HUD and
                 // must not also select whatever stands under it.
                 let (frame_width, frame_height) = self.frame_size();
+                let layout = ui::Layout::of(frame_width, frame_height);
+                // **The bar's five buttons**: the menu works, the rest say they are not built. A button that opens
+                // nothing and says nothing is the one thing worse than no button.
+                if let Some(index) = ui::bar_button_at(self.cursor_pixel, &layout) {
+                    match index {
+                        0 => {
+                            self.menu_open = true;
+                            self.menu_hover = None;
+                        }
+                        _ => {
+                            self.notice = Some((
+                                format!("{} is not built yet", ui::BAR_LABELS[index]),
+                                self.ticks,
+                            ));
+                        }
+                    }
+                    return;
+                }
                 if let Some(speed) = ui::speed_at(self.cursor_pixel, frame_width, frame_height) {
                     self.pace.set(speed);
                     eprintln!("speed -> {}", speed.label());
@@ -461,6 +482,19 @@ impl App {
             .filter(|(_, at)| self.ticks.saturating_sub(*at) < notice_ticks)
             .map(|(text, _)| text.clone());
         let (menu_open, menu_hover) = (self.menu_open, self.menu_hover);
+        // **The help line**: what the pointer is over, in words the interface already has - a button's name and price, or
+        // why it would be refused. openaok's `SetWorldHint`, and the cheapest teaching device in the interface.
+        let help = self.card_hover.and_then(|index| {
+            self.card.get(index).map(|(button, _)| {
+                let mut line = format!("{} x{}", button.name.to_uppercase(), button.costs.len().max(1));
+                if let Some(refusal) = &button.refusal {
+                    line = format!("{} - {}", button.name.to_uppercase(), refusal);
+                }
+                let _ = &mut line;
+                line
+            })
+        });
+        let bar_hover = self.bar_hover;
         let (Some(world), Some(surface), Some(window)) = (
             self.world.as_ref(),
             self.surface.as_mut(),
@@ -503,6 +537,8 @@ impl App {
         // A refusal stays on the panel for three seconds of match time: long enough to read, short enough that it does not
         // become furniture.
         hud.notice = notice;
+        hud.help = help;
+        hud.bar_hover = bar_hover;
         ui::hud(&mut frame, &hud, &snapshot, self.pace.speed());
         let buttons: Vec<ui::CardButton> =
             self.card.iter().map(|(button, _)| button.clone()).collect();
@@ -654,10 +690,12 @@ impl ApplicationHandler for App {
                 self.cursor_point = self.camera.pick_point(pixel);
                 self.cursor_pixel = pixel;
                 let (width, height) = self.frame_size();
+                let layout = ui::Layout::of(width, height);
                 if self.menu_open {
                     self.menu_hover = ui::menu_at(pixel, width, height);
                 } else {
                     self.card_hover = ui::card_at(pixel, self.card.len(), width, height);
+                    self.bar_hover = ui::bar_button_at(pixel, &layout);
                 }
             }
             WindowEvent::MouseInput {

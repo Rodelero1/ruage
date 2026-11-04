@@ -9339,6 +9339,26 @@ impl World {
         items
     }
 
+    /// **The age this player has reached**, as the pack names it: the last name in `[age] order` whose tech is researched,
+    /// or the first name when none is. `None` when the pack gives no order - a pack without one must not be guessed at,
+    /// and the alphabetically last key is not "the latest age".
+    #[must_use]
+    pub fn age_name(&self, player: u8) -> Option<String> {
+        let economy = self.economy.as_ref()?;
+        let first = economy.age.order.first()?.clone();
+        let done = self.researched(player);
+        let mut reached = first;
+        for role in &economy.age.order {
+            let Some(id) = economy.tech_role.get(role) else {
+                continue;
+            };
+            if done.contains(id) {
+                reached = role.clone();
+            }
+        }
+        Some(reached)
+    }
+
     /// The role name a unit id carries in the pack, if any: the inverse of `role_unit`, so a card can name a unit without
     /// the window holding a second copy of the vocabulary.
     #[must_use]

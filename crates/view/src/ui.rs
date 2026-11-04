@@ -179,6 +179,12 @@ pub struct Hud {
     pub population_cap: u32,
     pub selected: Vec<SelectedRow>,
     pub outcome: Option<ruage_sim::MatchOutcome>,
+    /// **The age this player has reached**, in the pack's words (`"feudal_age"`), for the bar's middle.
+    pub age: Option<String>,
+    /// **What the pointer is over**, as one line for the help box: a button's name and price, or a refusal.
+    pub help: Option<String>,
+    /// Which of the bar's five buttons the pointer is on, for its hover face.
+    pub bar_hover: Option<usize>,
     /// **Why the last order was refused**, in the engine's own words, or `None` when the last order was taken. The
     /// window sets it from `submit_checked`'s error; a HUD that stays silent about a refusal makes an ignored order look
     /// like a bug in the game rather than a bug in the order.
@@ -221,6 +227,9 @@ impl Hud {
             population_cap: snapshot.population_cap,
             selected,
             outcome: snapshot.outcome,
+            age: snapshot.age.clone(),
+            help: None,
+            bar_hover: None,
             notice: None,
         }
     }
@@ -319,7 +328,7 @@ pub fn hud_swatch_x(column: usize) -> u32 {
 /// are the bar's five buttons, laid out by `Layout` so they stay against the right edge on any width.
 #[must_use]
 pub fn speed_boxes(frame_width: u32, frame_height: u32) -> [Rect; 5] {
-    Layout::of(frame_width, frame_height).bar_buttons
+    Layout::of(frame_width, frame_height).speed
 }
 
 /// Which speed a click at a pixel picks, if any.
@@ -342,10 +351,44 @@ pub fn speed_selector(frame: &mut Frame, speed: crate::Speed) {
     speed_selector_in(frame, &layout, speed);
 }
 
+/// The names on the bar's five buttons, in the game's order. Placeholders - the owner's choice - but words, not icons.
+pub const BAR_LABELS: [&str; 5] = ["MENU", "STATS", "CHAT", "DIPLO", "TECH"];
+
+/// Which of the bar's five buttons a pixel picks, if any.
+#[must_use]
+pub fn bar_button_at(pixel: (i32, i32), layout: &Layout) -> Option<usize> {
+    layout.bar_buttons.iter().position(|&(x, y, w, h)| {
+        pixel.0 >= x && pixel.0 < x + w as i32 && pixel.1 >= y && pixel.1 < y + h as i32
+    })
+}
+
+/// Draw the bar's five buttons: a labelled widget each, in `WidgetState`, so the bar is the game's bar and not a row of
+/// blank boxes.
+fn bar_buttons_in(frame: &mut Frame, layout: &Layout, hovered: Option<usize>) {
+    for (index, rect) in layout.bar_buttons.into_iter().enumerate() {
+        let state = if Some(index) == hovered {
+            WidgetState::Hover
+        } else {
+            WidgetState::Normal
+        };
+        draw_widget(frame, rect, state);
+        let label = BAR_LABELS[index];
+        let width = crate::font::text_width(label, 1);
+        let (x, y, w, h) = rect;
+        frame.draw_text(
+            x + (w as i32 - width) / 2,
+            y + (h as i32 - crate::font::HEIGHT) / 2,
+            label,
+            1,
+            palette::HUD_TEXT,
+        );
+    }
+}
+
 /// The selector, for a caller that has the layout already: `hud` does, and re-deriving it per part was **316 us a frame**
 /// against 151-195 for the whole HUD before the layout existed. The layout is cheap; four of them per frame is not.
 fn speed_selector_in(frame: &mut Frame, layout: &Layout, speed: crate::Speed) {
-    let boxes = layout.bar_buttons;
+    let boxes = layout.speed;
     for (index, rect) in boxes.into_iter().enumerate() {
         let chosen = crate::Speed::ALL[index] == speed;
         let state = if chosen {
@@ -394,7 +437,11 @@ pub struct Layout {
     pub stock: Vec<Rect>,
     pub population: Rect,
     pub age: Rect,
+    /// **The game's five top-bar buttons** - menu, statistics, chat, diplomacy, tech tree - on the bar's right.
     pub bar_buttons: [Rect; 5],
+    /// The speed selector, under the minimap: pacing belongs to the window, not to the game's bar (D101), and the bar's
+    /// five slots are the game's own buttons.
+    pub speed: [Rect; 5],
     /// The panel's three zones: the command grid, the selected object, the minimap - the game's own arrangement.
     pub grid: Rect,
     pub slots: Vec<Rect>,
@@ -478,6 +525,21 @@ impl Layout {
             (minimap.0 - 8 - selected_x).max(0) as u32,
             panel_h.saturating_sub(12),
         );
+        // The speed selector sits at the **bottom right of the selected zone**: pacing is the window's, not the game's bar
+        // (D101), and the bar's five slots are the game's own buttons. The notice takes the same row's left.
+        let speed_w = 26u32;
+        let speed_gap = 4u32;
+        let speed_total = 5 * speed_w + 4 * speed_gap;
+        let speed_right = (minimap.0 - 8).max(speed_total as i32);
+        let speed: [Rect; 5] = std::array::from_fn(|index| {
+            let column = u32::try_from(index).unwrap_or(0);
+            (
+                speed_right - speed_total as i32 + (column * (speed_w + speed_gap)) as i32,
+                panel.1 + panel_h as i32 - 26,
+                speed_w,
+                18,
+            )
+        });
         let help = (
             8,
             (panel.1 - 28).max(bar_h as i32),
@@ -495,6 +557,7 @@ impl Layout {
             population,
             age,
             bar_buttons,
+            speed,
             grid,
             slots,
             selected,
@@ -792,7 +855,20 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
             scale,
             palette::HUD_TEXT,
         );
-        speed_selector_in(frame, &layout, speed);
+        // **The bar's middle says what age the match is in**, and its right is the game's five buttons.
+        if let Some(age) = &hud.age {
+            let (ax, ay, aw, ah) = layout.age;
+            let label = age.to_uppercase().replace('_', " ");
+            let width = crate::font::text_width(&label, 1);
+            frame.draw_text(
+                ax + (aw as i32 - width) / 2,
+                ay + (ah as i32 - crate::font::HEIGHT) / 2,
+                &label,
+                1,
+                palette::HUD_TEXT,
+            );
+        }
+        bar_buttons_in(frame, &layout, hud.bar_hover);
     }
 
     // **From the layout, not from a second height.** The panel used to be filled from `hud_panel_height()` while the zones
@@ -881,6 +957,9 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
         }
     }
 
+    // The speed selector sits under the minimap, where pacing belongs (D101): the bar's five slots are the game's.
+    speed_selector_in(frame, &layout, speed);
+
     let (mx, my, mw, mh) = fit_minimap(&layout, snapshot.width, snapshot.height);
     if mw > 0 && mh > 0 && mx >= 0 && my >= 0 {
         // The box, then the map: unexplored ground is nearly black, so without an edge the minimap is a hole.
@@ -893,6 +972,29 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
             for px in 0..map.width {
                 frame.put(mx + px as i32, my + py as i32, map.pixel(px, py));
             }
+        }
+    }
+
+    // **The help box**, above the panel on the left: what the pointer is over, in one line. It is the cheapest teaching
+    // device in the interface - openaok's `SetWorldHint`, and the reason a player learns what a button does without a
+    // manual.
+    if let Some(help) = &hud.help {
+        let (hx, hy, hw, hh) = layout.help;
+        if hw > 0 {
+            frame.fill_rect(hx, hy, hw as i32, hh as i32, palette::PANEL);
+            let (x, y, w, h) = (hx, hy, hw as i32, hh as i32);
+            frame.fill_rect(x, y, w, 1, palette::MARK);
+            frame.fill_rect(x, y + h - 1, w, 1, palette::MARK);
+            let room = usize::try_from((hw as i32 - 8) / (crate::font::WIDTH + crate::font::GAP))
+                .unwrap_or(0);
+            let line: String = help.to_uppercase().chars().take(room).collect();
+            frame.draw_text(
+                hx + 4,
+                hy + (hh as i32 - crate::font::HEIGHT) / 2,
+                &line,
+                1,
+                palette::HUD_TEXT,
+            );
         }
     }
 

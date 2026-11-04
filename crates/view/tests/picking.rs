@@ -58,6 +58,7 @@ fn snapshot(entities: Vec<EntityView>) -> Snapshot {
         population: 1,
         population_cap: 5,
         outcome: None,
+        age: None,
         visible: vec![u64::MAX; 16],
         explored: vec![u64::MAX; 16],
         entities,
