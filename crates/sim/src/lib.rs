@@ -9328,15 +9328,11 @@ impl World {
                         .map(|err| err.to_string()),
                 })
                 .collect();
-            // A card is read like a menu: the affordable-and-available things first, then the rest, each in id order.
-            researched.sort_by_key(|item| {
-                (
-                    item.refusal.is_some(),
-                    match item.target {
-                        CardTarget::Tech(id) => id,
-                        CardTarget::Unit(id) => id,
-                    },
-                )
+            // **A slot does not move when the money changes.** The first version put the affordable things first, so a
+            // button jumped to another slot the moment it became affordable - which is how a player clicks the wrong one.
+            // The order is the pack's: what the building makes, then its techs by id.
+            researched.sort_by_key(|item| match item.target {
+                CardTarget::Tech(id) | CardTarget::Unit(id) => id,
             });
             items.extend(researched);
         }

@@ -12,7 +12,7 @@
 > | # | step | state |
 > |---|---|---|
 > | U1 | anchored layout, widget states, widescreen | **landed** - `docs/reviews/2026-11-03-the-bar-gets-a-shape.md` |
-> | U2 | the 5x3 command grid with pages, selected-object area | after U1 |
+> | U2 | the 5x3 command grid with pages, selected-object area | **landed** (grid + named selection; pages wait for a pack that needs them) - `docs/reviews/2026-11-03-what-is-selected-named.md` |
 > | U3 | age readout, five top-bar buttons, rollover help box | after U2 |
 > | U4 | input occlusion from what was painted | after U3 |
 > | U5 | hotkeys (content table) | waits for U2 |

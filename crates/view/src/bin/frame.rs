@@ -180,7 +180,16 @@ fn main() -> ExitCode {
     // The HUD goes in the diagnostic picture too: a step that draws numbers has to be looked at, not only asserted on.
     // It is the whole HUD now - the panel, the minimap and any banner - because a diagnostic that draws less than the
     // window is a diagnostic that can pass while the window is wrong.
-    let hud = ui::Hud::of_selected(&snapshot, &resources, &selected);
+    let mut hud = ui::Hud::of_selected(&snapshot, &resources, &selected);
+    // **The pack names what is selected**, exactly as the window does: a diagnostic that shows an empty name is a
+    // diagnostic that hides the bug it was built to show.
+    for row in &mut hud.selected {
+        if let Some(unit) = row.unit {
+            row.name = world
+                .role_name(unit)
+                .unwrap_or_else(|| format!("unit {unit}"));
+        }
+    }
     ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);
     // `... ppm 1 menu`: the same picture with the Escape menu over it, so the modal can be looked at without a display.
     // The command card, when what is selected is one of the player's buildings: the diagnostic shows what the window shows.

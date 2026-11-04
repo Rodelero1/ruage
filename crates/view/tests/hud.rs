@@ -203,6 +203,8 @@ fn count_colour(frame: &Frame, x: u32, y: u32, w: u32, h: u32, colour: [u8; 4]) 
 fn row(hp_fraction: f32) -> ui::SelectedRow {
     ui::SelectedRow {
         id: 83,
+        unit: Some(83),
+        name: "VILLAGER".to_owned(),
         kind: ruage_sim::EntityKind::Unit,
         hp_fraction,
         carry: 0,
@@ -443,5 +445,55 @@ fn the_menu_washes_the_world_and_writes_its_rows() {
         washed[1] < palette::GRASS[1],
         "the menu did not dim the world: {washed:?} against {:?}",
         palette::GRASS
+    );
+}
+
+/// **The selected zone says what is selected, and how hurt it is.** A player who clicks a building wants its name and its
+/// health; the zone has had the room since U1 and showed a list of unlabelled bars.
+#[test]
+fn the_selected_zone_names_and_measures() {
+    let snapshot = snapshot();
+    let mut frame = Frame::new(960, 720);
+    let hud = panel(&snapshot, vec![row(0.4)], None);
+    ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);
+    let zone = ui::Layout::of(960, 720).selected;
+
+    assert!(
+        count_colour(
+            &frame,
+            (zone.0 + 8) as u32,
+            (zone.1 + 10) as u32,
+            120,
+            12,
+            palette::HUD_TEXT
+        ) > 0,
+        "the zone does not name what is selected"
+    );
+    // The wide health bar: 40% of the zone's width, in the red a hurt thing gets.
+    let bar_w = zone.2 as i32 - 16;
+    assert_eq!(
+        frame.pixel((zone.0 + 8 + bar_w / 4) as u32, (zone.1 + 28) as u32),
+        palette::HP_RED,
+        "the zone's health bar is not red at 40%"
+    );
+
+    let mut bare = Frame::new(960, 720);
+    ui::hud(
+        &mut bare,
+        &panel(&snapshot, Vec::new(), None),
+        &snapshot,
+        ruage_view::Speed::One,
+    );
+    assert_eq!(
+        count_colour(
+            &bare,
+            (zone.0 + 8) as u32,
+            (zone.1 + 10) as u32,
+            120,
+            12,
+            palette::HUD_TEXT
+        ),
+        0,
+        "nothing is selected and the zone still names something"
     );
 }

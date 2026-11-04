@@ -489,6 +489,17 @@ impl App {
         // The HUD reads the same snapshot the picture was drawn from - stock, population - so what it reports cannot
         // drift from what is on the screen (D74).
         let mut hud = ui::Hud::of_selected(&snapshot, &self.config.resources, &selected);
+        // **The pack names what is selected.** The view has no vocabulary of its own (D17): the window asks the
+        // simulation, which holds the economy's `[role]` table.
+        for row in &mut hud.selected {
+            if let Some(unit) = row.unit {
+                row.name = world
+                    .role_name(unit)
+                    .unwrap_or_else(|| format!("unit {unit}"));
+            } else {
+                row.name = "resource".to_owned();
+            }
+        }
         // A refusal stays on the panel for three seconds of match time: long enough to read, short enough that it does not
         // become furniture.
         hud.notice = notice;

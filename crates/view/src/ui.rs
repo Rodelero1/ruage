@@ -153,6 +153,11 @@ impl Selection {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectedRow {
     pub id: u32,
+    /// The unit or building the entity is, so the panel can ask the pack for its name. `None` for a resource node.
+    pub unit: Option<u32>,
+    /// **The pack's word for it** (`"villager"`), filled by the caller that has the content - the view never guesses a name,
+    /// and a pack that renames its villagers renames the panel.
+    pub name: String,
     pub kind: EntityKind,
     /// Zero when the entity has no health bar worth drawing (a resource node).
     pub hp_fraction: f32,
@@ -199,6 +204,8 @@ impl Hud {
             .filter_map(|id| snapshot.entities.iter().find(|entity| entity.id == *id))
             .map(|entity| SelectedRow {
                 id: entity.id,
+                unit: entity.unit,
+                name: String::new(),
                 kind: entity.kind,
                 hp_fraction: entity.hp_fraction,
                 carry: entity.carry,
@@ -292,7 +299,11 @@ pub fn stock_name_origin(column: usize) -> (i32, i32) {
 #[must_use]
 pub fn notice_origin(frame_height: u32) -> (i32, i32) {
     let layout = Layout::of(960, frame_height);
-    (layout.selected.0, layout.selected.1 + 2)
+    // The bottom of the selected zone: the name and the health own its top, and a refusal is read after the order.
+    (
+        layout.selected.0 + 8,
+        layout.selected.1 + layout.selected.3 as i32 - 10,
+    )
 }
 
 /// Where a stock column's swatch starts. **The pack's order is the display order**, so a pack with three resources
@@ -528,9 +539,10 @@ pub fn hud_panel_height() -> u32 {
 #[must_use]
 pub fn selection_row_origin(row: usize, frame_height: u32) -> (i32, i32) {
     let layout = Layout::of(960, frame_height);
+    // Below the name and the health bar, which own the top of the zone.
     (
-        layout.selected.0,
-        layout.selected.1 + 12 + row as i32 * ROW_HEIGHT,
+        layout.selected.0 + 8,
+        layout.selected.1 + 40 + row as i32 * ROW_HEIGHT,
     )
 }
 
@@ -816,9 +828,34 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
             let (nx, ny) = notice_origin(frame.height);
             frame.draw_text(nx, ny, notice, 1, palette::REFUSED);
         }
-        // **A row per selected thing, five at most.** The panel is a list, not a summary: a player who boxed six villagers
+        // **What is selected, by name**, at the top of its zone: the pack's word, its health as a bar and a number, and
+        // how many are selected when more than one is.
+        if let Some(first) = hud.selected.first() {
+            let (x, y, w, _) = layout.selected;
+            let title = if hud.selected.len() > 1 {
+                format!("{} x{}", first.name.to_uppercase(), hud.selected.len())
+            } else {
+                first.name.to_uppercase()
+            };
+            frame.draw_text(x + 8, y + 10, &title, 2, palette::HUD_TEXT);
+            // The health of the first selected thing, across the zone: wide enough to read at a glance.
+            let bar_w = w.saturating_sub(16) as i32;
+            let (bx, by) = (x + 8, y + 26);
+            frame.fill_rect(bx, by, bar_w, 6, palette::HP_TRACK);
+            let lit = (bar_w as f32 * first.hp_fraction.clamp(0.0, 1.0)) as i32;
+            let colour = if first.hp_fraction > 0.5 {
+                palette::HP_GREEN
+            } else {
+                palette::HP_RED
+            };
+            frame.fill_rect(bx, by, lit, 6, colour);
+            let percent = (first.hp_fraction.clamp(0.0, 1.0) * 100.0) as u32;
+            let used = frame.draw_number(bx + bar_w + 4, by - 1, percent, 1, palette::HUD_TEXT);
+            let _ = used;
+        }
+        // **A row per selected thing, ten at most.** The panel is a list, not a summary: a player who boxed six villagers
         // sees six bars and can see which one is hurt.
-        for (index, row) in hud.selected.iter().take(5).enumerate() {
+        for (index, row) in hud.selected.iter().take(6).enumerate() {
             let (x, y) = selection_row_origin(index, frame.height);
             frame.fill_rect(x, y, ROW_BAR, 4, palette::HP_TRACK);
             let lit = (ROW_BAR as f32 * row.hp_fraction.clamp(0.0, 1.0)) as i32;

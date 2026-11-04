@@ -162,3 +162,27 @@ fn a_town_centre_offers_its_ages() {
         "the town centre does not offer the Feudal Age: {names:?}"
     );
 }
+
+/// **A slot does not move when a button becomes available.** The first version sorted the card by affordability, so a
+/// button jumped to another slot the moment the age opened it - which is how a player clicks the wrong one. The order is
+/// the pack's, and it is the same before and after the Feudal Age opens the spear line.
+#[test]
+fn a_card_slot_does_not_move_when_a_button_opens() {
+    let Some(mut world) = fresh() else { return };
+    let barracks = a_finished_barracks(&mut world);
+    let before: Vec<CardTarget> = world
+        .card(1, barracks)
+        .iter()
+        .map(|item| item.target)
+        .collect();
+    world.grant_tech(1, 101).expect("the Feudal Age");
+    let after: Vec<CardTarget> = world
+        .card(1, barracks)
+        .iter()
+        .map(|item| item.target)
+        .collect();
+    assert_eq!(
+        before, after,
+        "the card reordered itself when a button became available"
+    );
+}
