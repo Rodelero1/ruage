@@ -41,11 +41,21 @@ impl Selection {
             // must select it, not only its anchor tile.
             .filter(|entity| covers(entity, tile))
             .collect();
-        // A unit standing on a building is what the player meant: units first.
+        // **A resource node is inspectable by anybody.** Every node a map seeds belongs to Gaia (player 0), so "only your
+        // own" would mean none of them - and the owner's ask is exactly to read a tree's wood and a farm's food
+        // (2026-11-04). Another player's units and buildings stay out of the selection: seeing an enemy's hit points is its
+        // own slice, with its own rules about what the fog lets you know.
+        let node = snapshot
+            .entities
+            .iter()
+            .find(|entity| matches!(entity.kind, EntityKind::Resource(_)) && covers(entity, tile));
+        // A unit standing on a building (or on a node) is what the player meant: units first, then buildings, then nodes.
         let chosen = own
             .iter()
+            .copied()
             .find(|entity| entity.kind == EntityKind::Unit)
-            .or_else(|| own.first());
+            .or_else(|| own.first().copied())
+            .or(node);
         self.ids.clear();
         if let Some(entity) = chosen {
             self.ids.push(entity.id);
@@ -161,6 +171,14 @@ pub struct SelectedRow {
     pub kind: EntityKind,
     /// Zero when the entity has no health bar worth drawing (a resource node).
     pub hp_fraction: f32,
+    /// Hit points as they stand - the number a **node** shows instead of a bar, because nothing records what it started
+    /// with (`0.0` as a fraction of nothing tells a player nothing).
+    pub hp: u32,
+    /// What the entity still holds, in whole resources: a tree's wood, a farm's food, a bush's berries.
+    pub amount: u32,
+    /// **Which resource that is, in the pack's own word** (`"wood"`), resolved by whoever holds the content. `None` for
+    /// everything that holds nothing, so the panel never prints a number without saying whose number it is.
+    pub resource: Option<String>,
     pub carry: u32,
     pub construction: Option<f32>,
     pub garrison: u32,
@@ -212,17 +230,33 @@ impl Hud {
         let selected = ids
             .iter()
             .filter_map(|id| snapshot.entities.iter().find(|entity| entity.id == *id))
-            .map(|entity| SelectedRow {
-                id: entity.id,
-                unit: entity.unit,
-                name: String::new(),
-                kind: entity.kind,
-                hp_fraction: entity.hp_fraction,
-                carry: entity.carry,
-                construction: entity.construction,
-                garrison: entity.garrison,
-                pending: entity.pending,
-                pose: entity.pose,
+            .map(|entity| {
+                let resource = entity
+                    .resource
+                    .and_then(|slot| resources.name(slot))
+                    .map(str::to_owned);
+                SelectedRow {
+                    id: entity.id,
+                    unit: entity.unit,
+                    // **A node has no role**, so the pack has no word for it: its column gives the title instead ("wood"),
+                    // which is the same word the stock bar uses. A unit or a building is named by the caller that holds the
+                    // content, and left blank here.
+                    name: if entity.unit.is_none() {
+                        resource.clone().unwrap_or_default()
+                    } else {
+                        String::new()
+                    },
+                    kind: entity.kind,
+                    hp_fraction: entity.hp_fraction,
+                    hp: entity.hp,
+                    amount: entity.amount,
+                    resource,
+                    carry: entity.carry,
+                    construction: entity.construction,
+                    garrison: entity.garrison,
+                    pending: entity.pending,
+                    pose: entity.pose,
+                }
             })
             .collect();
         Hud {
@@ -586,10 +620,12 @@ pub fn hud_panel_height() -> u32 {
 #[must_use]
 pub fn selection_row_origin(row: usize, frame_height: u32) -> (i32, i32) {
     let layout = Layout::of(960, frame_height);
-    // Below the name and the health bar, which own the top of the zone.
+    // Below the name, the health line and the holdings line, which own the top of the zone. It was +40 until a node's
+    // holdings needed a band of their own: 34 + the font's 7 pixels is 41, so the first row starts at 46 and six rows still
+    // fit a 142-pixel panel.
     (
         layout.selected.0 + 8,
-        layout.selected.1 + 40 + row as i32 * ROW_HEIGHT,
+        layout.selected.1 + 46 + row as i32 * ROW_HEIGHT,
     )
 }
 
@@ -1129,20 +1165,34 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
                 first.name.to_uppercase()
             };
             frame.draw_text(x + 8, y + 10, &title, 2, palette::HUD_TEXT);
-            // The health of the first selected thing, across the zone: wide enough to read at a glance.
+            // The health of the first selected thing, across the zone: wide enough to read at a glance. **A resource node
+            // has no maximum on record**, so a bar would be a bar of nothing: it gets its hit points as a number in the
+            // same band, which is what the owner asked to see on a tree ("showing hit points and volume of wood").
             let bar_w = w.saturating_sub(16) as i32;
             let (bx, by) = (x + 8, y + 26);
-            frame.fill_rect(bx, by, bar_w, 6, palette::HP_TRACK);
-            let lit = (bar_w as f32 * first.hp_fraction.clamp(0.0, 1.0)) as i32;
-            let colour = if first.hp_fraction > 0.5 {
-                palette::HP_GREEN
-            } else {
-                palette::HP_RED
-            };
-            frame.fill_rect(bx, by, lit, 6, colour);
-            let percent = (first.hp_fraction.clamp(0.0, 1.0) * 100.0) as u32;
-            let used = frame.draw_number(bx + bar_w + 4, by - 1, percent, 1, palette::HUD_TEXT);
-            let _ = used;
+            if first.unit.is_some() {
+                frame.fill_rect(bx, by, bar_w, 6, palette::HP_TRACK);
+                let lit = (bar_w as f32 * first.hp_fraction.clamp(0.0, 1.0)) as i32;
+                let colour = if first.hp_fraction > 0.5 {
+                    palette::HP_GREEN
+                } else {
+                    palette::HP_RED
+                };
+                frame.fill_rect(bx, by, lit, 6, colour);
+                let percent = (first.hp_fraction.clamp(0.0, 1.0) * 100.0) as u32;
+                let used = frame.draw_number(bx + bar_w + 4, by - 1, percent, 1, palette::HUD_TEXT);
+                let _ = used;
+            } else if first.hp > 0 {
+                let label = format!("HP {}", first.hp);
+                frame.draw_text(bx, by - 1, &label, 1, palette::HUD_TEXT);
+            }
+            // **What it still holds, and whose number it is.** One line under the health, in the pack's word for the
+            // column - "WOOD 87", "FOOD 213" - so a tree, a bush, a mine and a farm all read the same way and a pack that
+            // renames a resource renames this too.
+            if let (Some(resource), true) = (first.resource.as_deref(), first.amount > 0) {
+                let label = format!("{} {}", resource.to_uppercase(), first.amount);
+                frame.draw_text(x + 8, y + 34, &label, 1, palette::HUD_TEXT);
+            }
         }
         // **A row per selected thing, ten at most.** The panel is a list, not a summary: a player who boxed six villagers
         // sees six bars and can see which one is hurt.

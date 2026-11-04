@@ -69,6 +69,8 @@ fn entity(id: u32, kind: EntityKind, at: (f32, f32), footprint: (u32, u32)) -> E
         construction: None,
         garrison: 0,
         amount: 0,
+        hp: 25,
+        resource: None,
         pending: 0,
         remembered: false,
         footprint,

@@ -20,6 +20,8 @@ fn unit(id: u32, at: (f32, f32), hp_fraction: f32) -> EntityView {
         construction: None,
         garrison: 0,
         amount: 0,
+        hp: 25,
+        resource: None,
         pending: 0,
         remembered: false,
         footprint: (1, 1),

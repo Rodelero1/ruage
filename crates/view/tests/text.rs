@@ -97,3 +97,25 @@ fn every_glyph_fits_the_box() {
         }
     }
 }
+
+/// **A space is a break, not nothing.** The font has no space glyph, and a character it has no shape for "takes no room at
+/// all" - so every word space in the HUD collapsed: the panel read `WOOD100` and `HP88`, and the age bar's `FEUDAL AGE`
+/// was one word (found by looking at a rendered frame, 2026-11-04). A space must advance the pen and paint nothing.
+#[test]
+fn a_space_takes_room_and_paints_nothing() {
+    let mut spaced = Frame::new(120, 16);
+    let mut tight = Frame::new(120, 16);
+    let drawn_spaced = spaced.draw_text(0, 0, "A B", 1, [255, 255, 255, 255]);
+    let drawn_tight = tight.draw_text(0, 0, "AB", 1, [255, 255, 255, 255]);
+    assert!(
+        drawn_spaced > drawn_tight,
+        "a space took no room: {drawn_spaced} against {drawn_tight}"
+    );
+    assert_eq!(
+        font::text_width("A B", 1),
+        font::text_width("AB", 1) + drawn_spaced - drawn_tight,
+        "the measured width and the drawn width disagree about the space"
+    );
+    let count = |frame: &Frame| frame.pixels.iter().filter(|byte| **byte == 255).count();
+    assert_eq!(count(&spaced), count(&tight), "the space painted something");
+}

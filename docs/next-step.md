@@ -28,6 +28,33 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 7, 2026-11-04 - resource nodes in the panel (the owner's ask, questions open)
+>
+> **The ask, in his words:** *"I would like trees to be clickable showing hit points and volume of wood they have. Same
+> for farm, can I see amount of food it has left? Same for berries, stone and gold. These resources need to be visible in
+> the central part of the bottom bar."*
+>
+> **What is already true, verified in the tree rather than assumed:**
+>
+> - `Snapshot`'s `EntityView` carries `hp`, `amount` (whole units, `entity.amount / scale`) and `player`, so the data
+>   reaches the view already - this is a **panel and selection** change, not a simulation one.
+> - `Selection::click` filters to `player == snapshot.player` and to `Unit | Building`, so a node (player 0, Gaia) can
+>   never be selected; a farm can, and is.
+> - `ui::SelectedRow` has no amount field, and `hp_fraction` is zero for a node, so even a selected one would draw nothing.
+> - A map's nodes carry **no unit id** (`unit: None`), so the pack cannot name a tree: a node knows its resource column
+>   (`Resource(slot)`), its hp (20/25/30 for a standing tree, `0` for a bush or a mine) and its amount.
+> - A farm is a building whose `amount` is the food left, with hit points of its own.
+>
+> **LANDED** as D111 - `docs/reviews/2026-11-04-a-node-in-the-panel.md`. The owner's one clarification: **"left click on
+> resource (berry bush, farm, mine...) just shows its statistics. Nothing else."** So: a node is selectable whoever owns it
+> (they are all Gaia's), the click only selects, `HP n` is a number because a node has no maximum on record, and the holdings
+> line reads `WOOD 100` / `FOOD 213` in the pack's own word for the column (`World::held_slot` -> `resources.name`). The
+> unasked-for half of the work was the font: **every word in the interface had been running together** because a space took
+> no room - `font::SPACE` fixes that, and it was found by rendering a frame and reading it, not by a test.
+>
+> Still open on this subject: **enemy** hit points on click, a band or double-click that sweeps nodes, and a node's maximum
+> hit points (a new simulation field, not a drawing change).
+
 ## Earlier queue entries (history)
 
 > # Session 5, 2026-11-03 - the interface, after openaok

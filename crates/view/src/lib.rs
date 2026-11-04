@@ -94,7 +94,13 @@ pub struct EntityView {
     /// Position in tiles, continuous: a unit between two tiles is drawn between them.
     pub position: (f32, f32),
     /// 1.0 for a finished thing, a fraction for one being built, zero for a node.
+    ///
+    /// A **node has no maximum on record** - its `hp` is its health - so this is not a fraction of anything and the panel
+    /// must not draw a bar from it. `hp` below is what a node reports.
     pub hp_fraction: f32,
+    /// Hit points as they stand. For a unit or a building the fraction above is the readable form; for a node this number
+    /// is the only honest one, because nothing stores what a tree started with.
+    pub hp: u32,
     pub pose: Pose,
     /// What a worker is carrying, in whole resources.
     pub carry: u32,
@@ -104,6 +110,10 @@ pub struct EntityView {
     pub garrison: u32,
     /// What is left in a resource node, in whole resources.
     pub amount: u32,
+    /// **Which column `amount` is in**, when this entity holds one: the node's own `Resource(slot)`, or the column content
+    /// says a farm fills. `None` for everything that holds nothing. The panel prints the pack's name for it, so the view
+    /// never learns what wood is (D17).
+    pub resource: Option<usize>,
     /// Units a building is making, the one in progress included; zero for everything else.
     pub pending: usize,
     /// Whether this entity is **remembered** rather than watched: its ground is explored, nothing of the player's can
@@ -203,6 +213,8 @@ impl Snapshot {
                 construction,
                 garrison,
                 amount: (entity.amount.raw() / scale).max(0) as u32,
+                resource: world.held_slot(entity.id),
+                hp: entity.hp.max(0) as u32,
                 pending: world.pending_orders(entity.id),
                 footprint: entity
                     .unit
@@ -596,6 +608,13 @@ impl Frame {
         let mut at = x;
         let mut drew = false;
         for character in text.chars() {
+            // **A space is room without a shape** (`font::SPACE`): the font has no blank glyph, so without this every word
+            // break in the interface collapsed and `WOOD 100` was painted as `WOOD100`.
+            if character == ' ' {
+                // The same arithmetic `text_width` uses: a space is a `SPACE`-wide box with the usual gap after it.
+                at += (font::SPACE + font::GAP) * scale;
+                continue;
+            }
             let Some(rows) = font::glyph(character) else {
                 // **A character this font has no shape for is not drawn and takes no room.** The alternative - a box or a
                 // question mark - would put a lie on the screen in place of somebody's language.

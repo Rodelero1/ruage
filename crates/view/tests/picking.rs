@@ -23,6 +23,8 @@ fn unit(id: u32, at: (f32, f32)) -> EntityView {
         construction: None,
         garrison: 0,
         amount: 0,
+        hp: 25,
+        resource: None,
         pending: 0,
         remembered: false,
         footprint: (1, 1),
@@ -162,4 +164,67 @@ fn a_minimap_pixel_is_a_tile() {
         None,
         "outside the box is not a tile"
     );
+}
+
+/// A resource node: Gaia's, with no role (a map node carries no unit id) and something in it.
+fn node(id: u32, at: (f32, f32), slot: usize, amount: u32) -> EntityView {
+    EntityView {
+        player: 0,
+        kind: EntityKind::Resource(slot),
+        unit: None,
+        amount,
+        ..unit(id, at)
+    }
+}
+
+/// **A tree can be clicked.** The owner's ask: *"trees ... clickable showing hit points and volume of wood they have"*.
+/// Selection only ever took the player's own units and buildings, so a node could not be inspected at all - the click
+/// landed on nothing and cleared the selection.
+#[test]
+fn a_click_on_a_tree_selects_it() {
+    let camera = camera();
+    let snapshot = snapshot(vec![node(11, (10.0, 10.0), 1, 100)]);
+    let mut selection = ui::Selection::new();
+    selection.click(&snapshot, &camera, pixel(&camera, (10.0, 10.0)));
+    assert_eq!(
+        selection.ids,
+        vec![11],
+        "the click did not select the node the player pointed at"
+    );
+}
+
+/// **A villager standing on a node is what the click meant.** Nodes and bodies share a tile often - a lumberjack works from
+/// the tile beside a tree, and a ground node can be walked on - so the order of preference has to be units first, then
+/// buildings, then nodes.
+#[test]
+fn a_unit_on_a_nodes_tile_is_what_the_click_means() {
+    let camera = camera();
+    let snapshot = snapshot(vec![node(11, (10.0, 10.0), 1, 100), unit(12, (10.0, 10.0))]);
+    let mut selection = ui::Selection::new();
+    selection.click(&snapshot, &camera, pixel(&camera, (10.0, 10.0)));
+    assert_eq!(
+        selection.ids,
+        vec![12],
+        "clicking a villager standing on a node selected the node instead"
+    );
+}
+
+/// **Somebody else's node is still inspectable** - every map node is Gaia's, so "only your own" would mean none of them -
+/// while another player's units and buildings stay out of the selection until enemy HP is a slice of its own.
+#[test]
+fn a_click_on_an_enemy_building_selects_nothing_but_a_node_is_gaia() {
+    let camera = camera();
+    let snapshot = snapshot(vec![
+        enemy(13, (10.0, 10.0)),
+        node(14, (14.0, 10.0), 1, 100),
+    ]);
+    let mut selection = ui::Selection::new();
+    selection.click(&snapshot, &camera, pixel(&camera, (10.0, 10.0)));
+    assert!(
+        selection.ids.is_empty(),
+        "an enemy's unit was selected: {:?}",
+        selection.ids
+    );
+    selection.click(&snapshot, &camera, pixel(&camera, (14.0, 10.0)));
+    assert_eq!(selection.ids, vec![14], "a neutral node was not selectable");
 }

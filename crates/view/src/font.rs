@@ -14,6 +14,10 @@ pub const WIDTH: i32 = 5;
 pub const HEIGHT: i32 = 7;
 /// The gap between glyphs, in font pixels.
 pub const GAP: i32 = 1;
+/// How wide a **space** is, in font pixels: a space is not a shape, so it is a width rather than a bitmap. Half a glyph
+/// plus the gap is the smallest break that reads as one - before this the font gave a space no room at all, and every
+/// word in the HUD ran together (`WOOD100`, `HP88`, `FEUDALAGE`; found by looking at a rendered frame, 2026-11-04).
+pub const SPACE: i32 = WIDTH / 2 + GAP;
 
 /// Digits `0..=9`, seven rows each, the low five bits read left to right (bit 4 is the leftmost column).
 pub const DIGITS: [[u8; 7]; 10] = [
@@ -198,6 +202,15 @@ pub fn text_width(text: &str, scale: i32) -> i32 {
     let mut total = 0;
     let mut drawn = 0;
     for character in text.chars() {
+        // A space is room without a shape: it advances like a glyph and paints nothing.
+        if character == ' ' {
+            if drawn > 0 {
+                total += GAP * scale;
+            }
+            total += SPACE * scale;
+            drawn += 1;
+            continue;
+        }
         if glyph(character).is_none() {
             continue;
         }

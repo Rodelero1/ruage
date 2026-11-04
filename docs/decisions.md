@@ -2636,6 +2636,29 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D111 - A resource node may be inspected, and a click shows rather than orders
+
+The owner's ask (2026-11-04): *"I would like trees to be clickable showing hit points and volume of wood they have. Same for
+farm, can I see amount of food it has left? Same for berries, stone and gold ... in the central part of the bottom bar"* -
+and his one clarification: *"left click on resource (berry bush, farm, mine...) just shows its statistics. Nothing else."*
+
+1. **A click on a node selects it and nothing more.** It orders no gather; that stays where it was. A click that both
+   selected and commanded would make inspecting a forest an accident.
+2. **Nodes are inspectable whoever owns them.** Every node a map seeds belongs to Gaia (player 0), so "only your own" would
+   exclude all of them. Another player's units and buildings stay out of the selection: enemy hit points are a separate
+   item with their own question about what the fog lets a player know.
+3. **A node's hit points are a number, not a bar.** The simulation stores no maximum for a node - its `hp` *is* its health -
+   so a fraction would be a fraction of itself. A unit or a building has a maximum from the pack, and keeps its bar.
+4. **The panel says whose number it is.** `World::held_slot` answers which resource column an entity holds: a node's own
+   kind, or, for a **farm**, content's `[farm] resource` - the same table the gather rules ask, so there is one answer to
+   "what does a farm yield". The pack names the column; the view never learns what wood is (D17).
+5. **A space is a width in the font, not a missing glyph.** The font has no blank shape and "a character with no shape takes
+   no room", so every word in the interface ran together (`WOOD100`, `HP88`, `FEUDALAGE`) until a rendered frame was read.
+   `font::SPACE` is half a glyph plus the gap and paints nothing.
+
+Not decided here: enemy hit points on click, a band or double-click that sweeps nodes, and a node's maximum hit points
+(which would be a new field in the simulation, not a drawing change).
+
 ## D110 - The step walks the segment, and bodies still slide
 
 D109 said continuous steering is a pass over path, arrival and collision. This is the first slice of that pass, and the

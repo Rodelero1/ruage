@@ -154,21 +154,43 @@ fn main() -> ExitCode {
         .and_then(|(w, h)| Some((w.parse::<u32>().ok()?, h.parse::<u32>().ok()?)))
         .unwrap_or((640, 480));
     let camera = Camera::new((width, height)).centred_on(focus);
-    // What the diagnostic selects: the player's first unit (ring, health bar), or - with `card` as the fifth argument - the
-    // first building, so the command card can be looked at without a display.
-    let want_buildings = args.get(4).is_some_and(|arg| arg == "card");
-    let kind = if want_buildings {
-        EntityKind::Building
-    } else {
-        EntityKind::Unit
+    // What the diagnostic selects: the player's first unit (ring, health bar), the first building with `card` as the fifth
+    // argument, so the command card can be looked at without a display, or **a resource node** with `node` - the panel's
+    // hit points and holdings lines are a picture, and a picture has to be looked at (`SELECTING A NODE`, 2026-11-04).
+    let mode = args.get(4).map(String::as_str);
+    let selected: Vec<u32> = match mode {
+        Some("node") => snapshot
+            .entities
+            .iter()
+            .filter(|entity| matches!(entity.kind, EntityKind::Resource(_)))
+            // The tree nearest the camera's focus, so the node in the panel is the node in the picture.
+            .min_by(|a, b| {
+                let distance = |entity: &&ruage_view::EntityView| {
+                    let (dx, dy) = (entity.position.0 - focus.0, entity.position.1 - focus.1);
+                    dx * dx + dy * dy
+                };
+                distance(a)
+                    .partial_cmp(&distance(b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|entity| entity.id)
+            .into_iter()
+            .collect(),
+        _ => {
+            let kind = if mode == Some("card") {
+                EntityKind::Building
+            } else {
+                EntityKind::Unit
+            };
+            snapshot
+                .entities
+                .iter()
+                .filter(|entity| entity.player == player && entity.kind == kind)
+                .map(|entity| entity.id)
+                .take(1)
+                .collect()
+        }
     };
-    let selected: Vec<u32> = snapshot
-        .entities
-        .iter()
-        .filter(|entity| entity.player == player && entity.kind == kind)
-        .map(|entity| entity.id)
-        .take(1)
-        .collect();
     let mut frame = render_with(
         &snapshot,
         &camera,

@@ -7049,6 +7049,37 @@ impl World {
         }
     }
 
+    /// **Which resource column this entity holds, if it holds one.** The panel asks so it can print a number *and say whose
+    /// number it is*: a node knows its column from its kind, while a **farm is a building** whose column only content knows
+    /// (`economy.farm.resource`). `None` for a villager, a house, an arrow.
+    #[must_use]
+    pub fn held_slot(&self, id: EntityId) -> Option<usize> {
+        let entity = self.find(id)?;
+        match entity.kind {
+            // A node's own kind is its column: the dat's wood line, resolved by the pack.
+            EntityKind::Resource(slot) => Some(slot),
+            // A **farm is a building**, and the only thing that knows which column a farm fills is content: `[farm]
+            // resource` in `economy.toml`. Asking the same table the gather rules ask keeps one answer to "what does a
+            // farm yield" instead of a second one in the panel.
+            EntityKind::Building => {
+                let farm = self.farm_unit()?;
+                let unit = entity.unit?;
+                let root = |unit: u32| self.units.as_ref().map_or(unit, |units| units.root(unit));
+                if root(unit) != root(farm) {
+                    return None;
+                }
+                self.economy
+                    .as_ref()?
+                    .farm
+                    .resource
+                    .as_deref()
+                    .and_then(|name| self.slot_of(name))
+            }
+            // A villager's load and a building's queue are not a resource node's holdings.
+            EntityKind::Unit | EntityKind::Projectile => None,
+        }
+    }
+
     /// How many waypoints are left on this entity's route: 0 means it is standing on its goal (or has none).
     #[must_use]
     pub fn path_length(&self, id: EntityId) -> usize {

@@ -229,6 +229,9 @@ fn row(hp_fraction: f32) -> ui::SelectedRow {
         name: "VILLAGER".to_owned(),
         kind: ruage_sim::EntityKind::Unit,
         hp_fraction,
+        hp: 25,
+        amount: 0,
+        resource: None,
         carry: 0,
         construction: None,
         garrison: 0,
@@ -564,5 +567,174 @@ fn the_selected_zone_names_and_measures() {
         ),
         0,
         "nothing is selected and the zone still names something"
+    );
+}
+
+/// A node's row, as the HUD builds it: no role name (the pack has no word for a tree), the column's name instead, its hit
+/// points as a number because a node has no maximum on record, and what is left in it.
+fn node_row() -> ui::SelectedRow {
+    ui::SelectedRow {
+        id: 11,
+        unit: None,
+        name: "wood".to_owned(),
+        kind: ruage_sim::EntityKind::Resource(1),
+        hp_fraction: 1.0,
+        hp: 20,
+        amount: 87,
+        resource: Some("wood".to_owned()),
+        carry: 0,
+        construction: None,
+        garrison: 0,
+        pending: 0,
+        pose: ruage_view::Pose::Idle,
+    }
+}
+
+/// **The panel says what a node holds.** The owner asked for a tree's hit points and wood, a farm's food, and the same for
+/// berries, stone and gold - in the middle of the bottom bar, which is the selected zone.
+///
+/// A node has no maximum health on record (its `hp` *is* its health), so it cannot have a fraction bar: it gets the number.
+#[test]
+fn the_panel_says_what_a_node_holds() {
+    let snapshot = snapshot();
+    let mut frame = Frame::new(960, 720);
+    ui::hud(
+        &mut frame,
+        &panel(&snapshot, vec![node_row()], None),
+        &snapshot,
+        ruage_view::Speed::One,
+    );
+    let zone = ui::Layout::of(960, 720).selected;
+    // Where the health bar would be: this row has no bar, it has "HP 20".
+    assert!(
+        count_colour(
+            &frame,
+            (zone.0 + 8) as u32,
+            (zone.1 + 25) as u32,
+            120,
+            9,
+            palette::HUD_TEXT
+        ) > 0,
+        "the panel does not write a node's hit points"
+    );
+    // The line under it: the column's name and what is left.
+    assert!(
+        count_colour(
+            &frame,
+            (zone.0 + 8) as u32,
+            (zone.1 + 34) as u32,
+            120,
+            9,
+            palette::HUD_TEXT
+        ) > 0,
+        "the panel does not write what the node holds"
+    );
+
+    // An empty band proves the two above are about the node and not about the panel's own furniture.
+    let mut bare = Frame::new(960, 720);
+    ui::hud(
+        &mut bare,
+        &panel(&snapshot, Vec::new(), None),
+        &snapshot,
+        ruage_view::Speed::One,
+    );
+    assert_eq!(
+        count_colour(
+            &bare,
+            (zone.0 + 8) as u32,
+            (zone.1 + 34) as u32,
+            120,
+            9,
+            palette::HUD_TEXT
+        ),
+        0,
+        "with nothing selected the holdings line is still written"
+    );
+}
+
+/// **The HUD names a node from the pack and carries its numbers.** `Hud::of_selected` is what the window calls; a node has
+/// no unit id, so the name has to come from its resource column - and a farm is a building, whose column is content's
+/// (`[farm] resource`), never the view's guess.
+#[test]
+fn the_hud_reads_a_nodes_column_and_holdings() {
+    let resources = ruage_data::load_resources_file(
+        &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/resources.toml"),
+    )
+    .expect("resources.toml");
+    let wood = resources.slot_of("wood").expect("a wood column");
+    let snapshot = snapshot();
+    let mut node = node_row();
+    node.kind = ruage_sim::EntityKind::Resource(wood);
+    node.resource = None;
+    node.name = String::new();
+    let mut world = snapshot.clone();
+    world.entities.push(ruage_view::EntityView {
+        id: 11,
+        player: 0,
+        kind: ruage_sim::EntityKind::Resource(wood),
+        unit: None,
+        position: (10.0, 10.0),
+        hp_fraction: 1.0,
+        pose: ruage_view::Pose::Idle,
+        carry: 0,
+        construction: None,
+        garrison: 0,
+        amount: 87,
+        pending: 0,
+        remembered: false,
+        footprint: (1, 1),
+        shape: ruage_view::Silhouette::Dot,
+        mark: ruage_view::Mark::None,
+        hp: 20,
+        resource: Some(wood),
+    });
+    let hud = ui::Hud::of_selected(&world, &resources, &[11]);
+    let row = hud.selected.first().expect("the node is selected");
+    assert_eq!(row.name, "wood", "the panel has no word for the node");
+    assert_eq!(row.amount, 87, "the panel lost the amount");
+    assert_eq!(row.hp, 20, "the panel lost the hit points");
+    assert_eq!(
+        row.resource.as_deref(),
+        Some("wood"),
+        "the row does not say whose number 87 is"
+    );
+    let _ = &node;
+}
+
+/// **A farm shows both**: its health as a bar (a farm has a maximum, so a fraction means something) **and** the food left
+/// in it. This is the row the owner asked about by name ("same for farm, can I see amount of food it has left?"), and it
+/// is the one case with a bar and a holdings line in the same panel.
+#[test]
+fn a_farm_shows_its_health_and_the_food_left() {
+    let snapshot = snapshot();
+    let mut frame = Frame::new(960, 720);
+    let mut farm = row(1.0);
+    farm.unit = Some(259);
+    farm.name = "FARM".to_owned();
+    farm.kind = ruage_sim::EntityKind::Building;
+    farm.amount = 213;
+    farm.resource = Some("food".to_owned());
+    ui::hud(
+        &mut frame,
+        &panel(&snapshot, vec![farm], None),
+        &snapshot,
+        ruage_view::Speed::One,
+    );
+    let zone = ui::Layout::of(960, 720).selected;
+    assert_eq!(
+        frame.pixel((zone.0 + 8 + 4) as u32, (zone.1 + 28) as u32),
+        palette::HP_GREEN,
+        "a farm at full health has no green bar"
+    );
+    assert!(
+        count_colour(
+            &frame,
+            (zone.0 + 8) as u32,
+            (zone.1 + 34) as u32,
+            160,
+            9,
+            palette::HUD_TEXT
+        ) > 0,
+        "the panel does not say how much food the farm has left"
     );
 }
