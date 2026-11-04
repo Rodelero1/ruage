@@ -54,6 +54,36 @@
 >
 > Still open on this subject: **enemy** hit points on click, a band or double-click that sweeps nodes, and a node's maximum
 > hit points (a new simulation field, not a drawing change).
+>
+> # Session 8, 2026-11-04 - enemy hit points on click (the owner's next ask)
+>
+> **The ask:** *"Enemy hit points on click"* - the board item that D111 deliberately left out.
+>
+> **Where the boundary already falls, verified:** the snapshot only carries what the player can see (`visible_to`; a unit
+> out of sight is gone, a building or node seen before stays as a remembered one), so "select an enemy" cannot be a peek at
+> the fog. Orders are built from the entity **under the pointer** and only from the player's own units, so a selected enemy
+> cannot be ordered. `World::card` already refuses a building that is not the player's, which is the one thing that would
+> matter once an enemy building can be selected - and it is pinned by a test in this slice rather than trusted.
+>
+> **The rule:** own unit, **enemy unit**, own building, **enemy building**, node - units before buildings because that is the
+> order the picture is drawn in, and ours before theirs among equals. An enemy standing on a farm or a node is therefore what
+> the click means, which is the one a player is reaching for. The panel then shows what it shows for anything else:
+> the pack's name and a health bar, because an enemy unit and building both have a maximum the pack knows.
+>
+> **LANDED** - `docs/reviews/2026-11-04-enemy-hit-points-on-click.md`, D112. The enemy selects, the panel shows its name and
+> health, and the fog stays the filter. **The slice's real find was a bug older than the slice:** `hp_fraction` divided an
+> enemy's hits by the *viewing* player's maximum health, so once player 1 had Loom a full-health enemy villager read **0.625**
+> - and the same wrong bar had been drawn over the enemy's head on the map all along. The maximum is the owner's now.
+> `World::card`'s refusal of another player's building is pinned by a test, because with enemy buildings selectable that
+> guard is load-bearing; orders were never at risk (`order_at` commands only the player's own units).
+>
+> **Named rather than changed:** a *remembered* enemy building (seen before, not watched now) carries **live** hit points in
+> the snapshot, and its health bar is drawn live on the map. Freezing a memory would be a change in `Snapshot::of` (a captured
+> hp at the moment of last sight), which is a different slice with its own question - what a player should be told about a
+> building they are not watching.
+>
+> **Next on the board:** the movement pass's M2 (route corners at the obstacles' edges rather than tile centres), and the
+> farm/nodes items the owner listed earlier (band selection of nodes, a node's maximum hit points).
 
 ## Earlier queue entries (history)
 

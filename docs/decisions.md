@@ -2636,6 +2636,28 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D112 - An enemy may be inspected, and an enemy's maximum health is the owner's
+
+The owner, one line after D111: *"Enemy hit points on click"* - the half D111 explicitly left out.
+
+1. **Another player's units and buildings are selectable**, after your own: the order is own unit, enemy unit, own building,
+   enemy building, node - units before buildings because that is the order the picture is drawn in, and yours before theirs
+   among equals. So an enemy standing on a farm or a node is what the click means.
+2. **The fog is the filter, not the selection.** An enemy is in the snapshot only while the player can see them
+   (`Snapshot::of`'s rule: a unit out of sight is gone), so "select an enemy" cannot be a peek at a place nobody is
+   watching. Pinned by `an_enemy_across_the_map_is_not_in_the_snapshot`.
+3. **An enemy's maximum health is the owner's.** Health upgrades (Loom, Masonry) belong to whoever researched them;
+   dividing an enemy's hit points by the *viewer's* maximum made a full-health enemy read as 25 of 40 - `hp_fraction`
+   0.625 - once an enemy could be selected at all. That was my own bug, present since the snapshot was written, and it also
+   put the same wrong bar over the enemy's head on the map.
+4. **No card for somebody else's building.** `World::card` already refused a building that is not the player's; a test now
+   pins it, because with enemy buildings selectable the guard is load-bearing rather than unreachable. Orders were never at
+   risk: they are built from the entity under the pointer and only from the player's own units in the selection.
+
+**Named rather than changed:** a *remembered* enemy building (seen before, not watched now) carries **live** hit points in
+the snapshot, and its health bar is drawn live on the map. Freezing a memory means capturing the hp at the moment of last
+sight, which is its own slice with its own question - what a player should be told about a building they are not watching.
+
 ## D111 - A resource node may be inspected, and a click shows rather than orders
 
 The owner's ask (2026-11-04): *"I would like trees to be clickable showing hit points and volume of wood they have. Same for

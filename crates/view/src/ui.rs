@@ -9,6 +9,15 @@ use ruage_sim::{Command, EntityKind};
 
 use crate::{Camera, Frame, Snapshot, covers, palette};
 
+/// The first **unit** in a list of candidates under the pointer, or `None`: a click means the body it landed on before the
+/// ground that body is standing on (a farm is a floor, a node's tile can be walked).
+fn first_unit<'a>(entities: &[&'a crate::EntityView]) -> Option<&'a crate::EntityView> {
+    entities
+        .iter()
+        .copied()
+        .find(|entity| entity.kind == EntityKind::Unit)
+}
+
 /// What a player has selected, by entity id, in the order they selected it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Selection {
@@ -28,8 +37,8 @@ impl Selection {
         snapshot.entities.iter().find(|entity| entity.id == id)
     }
 
-    /// A click selects what is under the cursor: units before buildings, the nearest first, and only what
-    /// the player is allowed to own - clicking the ground clears the selection.
+    /// A click selects what is under the cursor: units before buildings, your own before somebody else's, and a resource
+    /// node last - clicking the ground clears the selection.
     pub fn click(&mut self, snapshot: &Snapshot, camera: &Camera, pixel: (i32, i32)) {
         let tile = camera.pick(pixel);
         let own: Vec<&crate::EntityView> = snapshot
@@ -41,20 +50,28 @@ impl Selection {
             // must select it, not only its anchor tile.
             .filter(|entity| covers(entity, tile))
             .collect();
-        // **A resource node is inspectable by anybody.** Every node a map seeds belongs to Gaia (player 0), so "only your
-        // own" would mean none of them - and the owner's ask is exactly to read a tree's wood and a farm's food
-        // (2026-11-04). Another player's units and buildings stay out of the selection: seeing an enemy's hit points is its
-        // own slice, with its own rules about what the fog lets you know.
+        // **Somebody else's things are inspectable**: the owner asked for enemy hit points on click (2026-11-04), and a
+        // resource node is nobody's - every node a map seeds belongs to Gaia (player 0), so "only your own" would mean none
+        // of them. What keeps this honest is the snapshot, not this filter: an enemy is in it only while the player can see
+        // them, so a click can never reach past the fog.
+        let theirs: Vec<&crate::EntityView> = snapshot
+            .entities
+            .iter()
+            .filter(|entity| entity.player != snapshot.player)
+            .filter(|entity| matches!(entity.kind, EntityKind::Unit | EntityKind::Building))
+            .filter(|entity| covers(entity, tile))
+            .collect();
         let node = snapshot
             .entities
             .iter()
             .find(|entity| matches!(entity.kind, EntityKind::Resource(_)) && covers(entity, tile));
-        // A unit standing on a building (or on a node) is what the player meant: units first, then buildings, then nodes.
-        let chosen = own
-            .iter()
-            .copied()
-            .find(|entity| entity.kind == EntityKind::Unit)
+        // **Units before buildings, ours before theirs** - the order the picture is drawn in, and the order that makes a
+        // click mean what it looks like: a body standing on a farm is the thing a player clicked, and among bodies the
+        // player's own is the one whose orders are theirs to give.
+        let chosen = first_unit(&own)
+            .or_else(|| first_unit(&theirs))
             .or_else(|| own.first().copied())
+            .or_else(|| theirs.first().copied())
             .or(node);
         self.ids.clear();
         if let Some(entity) = chosen {

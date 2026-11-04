@@ -60,6 +60,22 @@ fn spawn(
     at: (u16, u16),
     amount: u32,
 ) -> EntityId {
+    let player = if matches!(kind, EntityKind::Resource(_)) {
+        0
+    } else {
+        1
+    };
+    spawn_for(world, player, kind, unit, at, amount)
+}
+
+fn spawn_for(
+    world: &mut World,
+    player: u8,
+    kind: EntityKind,
+    unit: Option<u32>,
+    at: (u16, u16),
+    amount: u32,
+) -> EntityId {
     let id = EntityId(
         world
             .entities()
@@ -73,11 +89,7 @@ fn spawn(
     world
         .submit_checked(Command::Spawn {
             id,
-            player: if matches!(kind, EntityKind::Resource(_)) {
-                0
-            } else {
-                1
-            },
+            player,
             kind,
             unit,
             position: (
@@ -130,4 +142,37 @@ fn a_house_holds_nothing() {
     let house = world.role_unit("house").expect("a house role");
     let entity = spawn(&mut world, EntityKind::Building, Some(house), at, 0);
     assert_eq!(world.held_slot(entity), None, "a house is not a resource");
+}
+
+/// **A command card is only ever about your own building.** Once an enemy building can be selected, the panel will offer a
+/// card for it, and a card is buttons: `World::card` must answer *nothing* for somebody else's barracks. It already does
+/// (`card` refuses a building that is not the player's) - this pins it, because the guard is now load-bearing rather than
+/// unreachable.
+#[test]
+fn a_card_is_only_ever_about_your_own_building() {
+    let Some(mut world) = fresh() else { return };
+    let Some(at) = open_spot(&world) else { return };
+    let barracks = world.role_unit("barracks").expect("a barracks role");
+    let theirs = spawn_for(&mut world, 2, EntityKind::Building, Some(barracks), at, 0);
+    assert!(
+        world.card(1, theirs).is_empty(),
+        "the panel would offer the enemy's own buttons"
+    );
+
+    // The control: the player's own town centre does have a card, so the refusal above is about ownership and not about a
+    // building that offers nothing.
+    let centre = world
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.player == 1
+                && entity.kind == EntityKind::Building
+                && entity.construction.is_none()
+        })
+        .map(|entity| entity.id)
+        .expect("the seeded base has a finished building");
+    assert!(
+        !world.card(1, centre).is_empty(),
+        "the player's own town centre offers no card, so the test proves nothing"
+    );
 }

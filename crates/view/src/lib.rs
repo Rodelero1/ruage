@@ -190,8 +190,12 @@ impl Snapshot {
                 continue;
             }
             let garrison = inside.get(&entity.id.0).copied().unwrap_or(0);
+            // **The maximum is the owner's, not the viewer's.** Upgrades that raise health (Loom, Masonry) belong to the
+            // player who researched them, so dividing an enemy's hits by *your* maximum reads a full-health enemy as hurt -
+            // 25 of 40, once an enemy is selectable at all (2026-11-04, `an_enemy_at_full_health_reads_as_full`). For your
+            // own entities the two are the same player.
             let max_hp = match entity.unit {
-                Some(unit) => world.max_hp_of(player, unit).unwrap_or(entity.hp),
+                Some(unit) => world.max_hp_of(entity.player, unit).unwrap_or(entity.hp),
                 None => entity.hp,
             };
             let construction = entity

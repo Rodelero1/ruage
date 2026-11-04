@@ -209,10 +209,14 @@ fn a_unit_on_a_nodes_tile_is_what_the_click_means() {
     );
 }
 
-/// **Somebody else's node is still inspectable** - every map node is Gaia's, so "only your own" would mean none of them -
-/// while another player's units and buildings stay out of the selection until enemy HP is a slice of its own.
+/// **Somebody else's things are inspectable too** (the owner, 2026-11-04: "enemy hit points on click"), and a node beside
+/// them still is. This replaces the earlier rule - which refused an enemy outright - rather than being deleted: the refusal
+/// was right until the owner asked for the enemy's numbers.
+///
+/// What keeps it honest is not the filter here but the snapshot: an enemy is only in it when the player can see them
+/// (`Snapshot::of`'s fog rule), so a click cannot reach past the fog.
 #[test]
-fn a_click_on_an_enemy_building_selects_nothing_but_a_node_is_gaia() {
+fn a_click_on_an_enemy_selects_it_and_a_node_beside_it_still_selects() {
     let camera = camera();
     let snapshot = snapshot(vec![
         enemy(13, (10.0, 10.0)),
@@ -220,11 +224,46 @@ fn a_click_on_an_enemy_building_selects_nothing_but_a_node_is_gaia() {
     ]);
     let mut selection = ui::Selection::new();
     selection.click(&snapshot, &camera, pixel(&camera, (10.0, 10.0)));
-    assert!(
-        selection.ids.is_empty(),
-        "an enemy's unit was selected: {:?}",
-        selection.ids
+    assert_eq!(
+        selection.ids,
+        vec![13],
+        "an enemy's unit was not selectable"
     );
     selection.click(&snapshot, &camera, pixel(&camera, (14.0, 10.0)));
     assert_eq!(selection.ids, vec![14], "a neutral node was not selectable");
+}
+
+/// **An enemy building too** - that is the number a player wants before a siege. What it must *not* do is offer its command
+/// card; `World::card` refuses a building that is not the player's, and a sim test pins that rather than trusting it.
+#[test]
+fn a_click_on_an_enemy_building_selects_it() {
+    let camera = camera();
+    let snapshot = snapshot(vec![EntityView {
+        player: 2,
+        kind: EntityKind::Building,
+        footprint: (2, 2),
+        ..unit(21, (10.0, 10.0))
+    }]);
+    let mut selection = ui::Selection::new();
+    selection.click(&snapshot, &camera, pixel(&camera, (11.0, 11.0)));
+    assert_eq!(
+        selection.ids,
+        vec![21],
+        "an enemy's building was not selectable"
+    );
+}
+
+/// **Yours wins a tie.** If one of your units stands where the click lands, the click meant your unit - even when an enemy is
+/// inside the same tile, which is a crowd, not a targeting decision.
+#[test]
+fn an_own_unit_beats_an_enemy_on_the_same_tile() {
+    let camera = camera();
+    let snapshot = snapshot(vec![enemy(13, (10.0, 10.0)), unit(12, (10.0, 10.0))]);
+    let mut selection = ui::Selection::new();
+    selection.click(&snapshot, &camera, pixel(&camera, (10.0, 10.0)));
+    assert_eq!(
+        selection.ids,
+        vec![12],
+        "the click took the enemy over the player's own unit"
+    );
 }
