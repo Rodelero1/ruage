@@ -2617,6 +2617,21 @@ impl World {
         )
     }
 
+    /// **The middle of a tile, which is where a body sent to that tile stands** (D114).
+    ///
+    /// `tile` is a tile's *corner*: the anchor a building's footprint and a spawn position are placed from. It was also the
+    /// point every walk aimed at, so a tile order ended where four cells meet - half a tile off the middle of the tile the
+    /// player clicked, and exactly on a wall's corner when one of those four cells was solid. Two tests say so directly
+    /// (`tile_goal.rs`): a walk to a tile stopped 10,000 raw units from its middle, and a walk to a tile beside a house
+    /// stopped **0** units from the house.
+    fn tile_centre(&self, (x, y): (u16, u16)) -> (Fixed, Fixed) {
+        let half = self.scale / 2;
+        (
+            Fixed::from_raw(i64::from(x) * self.scale + half),
+            Fixed::from_raw(i64::from(y) * self.scale + half),
+        )
+    }
+
     fn insert(&mut self, entity: Entity) -> Result<(), SimError> {
         if self.find(entity.id).is_some() {
             return Err(SimError::DuplicateEntity(entity.id));
@@ -3348,7 +3363,7 @@ impl World {
         if !self.on_map(to.0, to.1) {
             return Err(SimError::OffMap { tile: to });
         }
-        let goal = self.tile(to);
+        let goal = self.tile_centre(to);
         self.plan_path_for(unit, entity.position, goal)?;
         Ok(goal)
     }
@@ -3378,7 +3393,11 @@ impl World {
             .filter(|entity| matches!(self.goal_of(entity), Some((tile, true)) if tile == wanted))
             .count();
         let slot = self.slot_for(wanted, already_heading);
-        let goal = if slot == wanted { to } else { self.tile(slot) };
+        let goal = if slot == wanted {
+            to
+        } else {
+            self.tile_centre(slot)
+        };
         let goal = self.check_order_at(unit, goal)?;
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
         let route = self.plan_path_for(unit, entity.position, goal)?;
@@ -3393,7 +3412,7 @@ impl World {
         // Any earlier order is superseded: a new order is not a second one running alongside.
         self.resuming.remove(&unit);
         if patrol {
-            self.patrols.insert(unit, self.tile(here));
+            self.patrols.insert(unit, self.tile_centre(here));
         } else {
             self.patrols.remove(&unit);
         }
@@ -6774,7 +6793,7 @@ impl World {
                         if !self.is_free_ground(cx, cy) {
                             continue;
                         }
-                        let candidate = self.tile((cx, cy));
+                        let candidate = self.tile_centre((cx, cy));
                         if let Ok(route) = self.plan_path(from, candidate, 0) {
                             self.paths.insert(
                                 unit,
@@ -6974,7 +6993,7 @@ impl World {
                 }
             }
         }
-        best.map(|(_, at)| self.tile(at))
+        best.map(|(_, at)| self.tile_centre(at))
     }
 
     /// The nearest of `candidates` to `from`, by squared tile distance with the tile as the tie-break.
@@ -7641,16 +7660,16 @@ impl World {
                 Ok(())
             }
             Command::Move { unit, to } => {
-                let goal = self.tile(to);
+                let goal = self.tile_centre(to);
                 self.start_walk(unit, goal, false, false)
             }
             Command::WalkTo { unit, to } => self.start_walk(unit, to, false, false),
             Command::AttackMove { unit, to } => {
-                let goal = self.tile(to);
+                let goal = self.tile_centre(to);
                 self.start_walk(unit, goal, true, false)
             }
             Command::Patrol { unit, to } => {
-                let goal = self.tile(to);
+                let goal = self.tile_centre(to);
                 self.start_walk(unit, goal, true, true)
             }
             Command::Delete { entity, .. } => {

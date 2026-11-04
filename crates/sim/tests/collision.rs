@@ -117,10 +117,20 @@ fn a_walker_does_not_finish_on_top_of_a_friend() {
         world.step().expect("step");
     }
 
-    assert_ne!(
-        tile_of(&world, walker),
-        tile_of(&world, stander),
-        "the walker finished standing inside its friend"
+    // **The rule is a distance, not a tile.** Two bodies 0.7 of a tile apart in the same tile are not inside each other;
+    // the standoff is what `collide` owes, and it is what this asserts now that a tile order means the middle of the tile
+    // (D114) - the old tile comparison was a proxy that only held while orders aimed at corners.
+    let reach = world.reach_between(walker, stander).raw();
+    let (a, b) = (
+        world.position(walker).expect("alive"),
+        world.position(stander).expect("alive"),
+    );
+    let (dx, dy) = (a.0.raw() - b.0.raw(), a.1.raw() - b.1.raw());
+    let squared = dx * dx + dy * dy;
+    assert!(
+        squared >= reach * reach,
+        "the walker finished {} raw units from its friend, inside the {reach} their footprints need",
+        (squared as f64).sqrt() as i64
     );
 }
 

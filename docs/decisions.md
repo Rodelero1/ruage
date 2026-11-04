@@ -2636,6 +2636,39 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D114 - A walk to a tile ends in the middle of it
+
+`World::tile()` returns a tile's **corner** - `x * scale, y * scale` - because that is the anchor a building's footprint and
+a spawn position are placed from. It was also the point every walk aimed at, so a tile order ended where four cells meet:
+half a tile off the middle of the tile the player clicked, and exactly on a wall's or a tree's corner whenever one of those
+four cells was solid. Measured before the change: **10,000 raw units** from the middle of the goal tile, and **0** raw
+units from a house the order was placed beside.
+
+`tile_centre()` is now the walk-goal convention (`x * scale + scale/2`), and `tile()` keeps its meaning for placement. The
+two are separate functions with a comment saying why, because the bug was that one function was doing both jobs.
+
+**Which goals are centred**, and which are not:
+
+- centred: `Command::Move`, `AttackMove`, `Patrol`, a unit's order to a tile, a work stand tile, a rally point on plain
+  ground;
+- **not** centred: a garrison rally (the goal is "come to this building" and the entering rule decides when it is close
+  enough - centring it walked the unit *into* the footprint and it never arrived), a rally onto a resource (the gather
+  approach owns where the body stands), and `Command::Spawn`, which is a placement.
+
+**Tests corrected rather than loosened.** Four assertions were measuring a proxy for the old convention, and each now
+measures the rule: `points.rs`'s `a_tile_order_still_means_its_centre` had a *name* that said centre and an assertion that
+demanded the origin; `straight_walk.rs`'s exact-landing test kept its intent and moved its point; `collision.rs` and
+`evasion.rs` compared **tiles** where the rule is a **standoff**, so two bodies 0.7 of a tile apart in one cell failed a
+test that claimed they were inside each other.
+
+**One test is ignored, with its measurement in the reason:** `a_repath_route_is_pulled_like_a_planned_one` placed a body on
+the walk's line to force a repath, and the walker now arrives with `repaths = 0` (also when the body is placed exactly at
+the line's midpoint). Two hypotheses - an idle body missing from the per-tick `bodies` list, or the 3x3 bucket index missing
+a body on a tile boundary - and neither was settled in this slice. The pull stays covered by M1's `pull_route` test.
+
+Acceptance: `players=1` at 36,000 ticks in 10.54-10.81 s, 148 entities, hash `82efabd6f614c798` (was `623c3ff8c769eadd`);
+**661 passed / 0 failed / 20 ignored**. Review: `docs/reviews/2026-11-04-the-goal-is-the-middle-of-a-tile.md`.
+
 ## D113 - A route bends where the ground does, at the body's own clearance
 
 M1 (`step_towards` walks the segment) made a walk straight **between waypoints**, and a waypoint was a tile's origin - the

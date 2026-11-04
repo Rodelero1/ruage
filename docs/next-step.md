@@ -28,6 +28,32 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 11, 2026-11-04 - M3a landed: the goal is the middle of a tile (the owner: "Proceed worth m3")
+>
+> **Landed** - `docs/reviews/2026-11-04-the-goal-is-the-middle-of-a-tile.md`, D114, commit on `main` after `91e9236`.
+> `tile_centre()` is the walk-goal convention; `tile()` keeps placement. Measured before it: a villager stopped **10,000 raw
+> units** from the middle of its goal tile and **0** raw units from a house it was sent beside. 661/0/20; acceptance
+> `players=1`, 36,000 ticks, 10.54-10.81 s, hash `82efabd6f614c798`.
+>
+> **What this slice cost, and why it was worth it:** five assertions across four test files were measuring a proxy for the
+> corner convention (tiles where the rule is a standoff, a row change where the rule is "went round"), and one test's *name*
+> said "centre" while its assertion demanded the origin. All five now measure the rule. That is the strongest argument that
+> the convention was wrong: the suite had been agreeing with it.
+>
+> **Open, and the next three items in order:**
+>
+> 1. **A body on the walk's line no longer forces a repath** (`evasion.rs::a_repath_route_is_pulled_like_a_planned_one`,
+>    now `#[ignore]`d with the measurement in its reason): `repaths = 0` and the walker arrives, even with the body placed at
+>    the line's exact midpoint. Two untested hypotheses: the per-tick `bodies` list may not carry an idle body, or
+>    `blocker_at`'s 3x3 tile bucket misses a body standing on a tile boundary. **Check `bodies_at` first** - it is the one
+>    that indexes by tile, and a body on a boundary is in a bucket a nearby candidate may not look in.
+> 2. **Spawns still sit on tile corners** while walks aim at centres: a freshly trained unit appears at a corner. Unify, and
+>    the rally ring (which is content-dependent) decides where.
+> 3. **M3c, the body's shape against the ground**, unchanged from Session 10: `ground_overlap`, `step_is_walkable`
+>    refusing a step that makes the overlap worse, the back-off when neither forward nor sideways is legal, and the plan
+>    margin of `radius + one tick's step`. The prototype is at `/opt/data/cache/m3-findings/`. With M3a in, the
+>    `two_trees_touching_at_a_corner_leave_no_gap` failure it used to trigger should be gone - that was the corner goal.
+
 > # Session 10, 2026-11-04 - M3 attempted and **not landed**: the body's shape against the ground is not a one-file change
 >
 > **The ask:** the owner said "Proceed" after M2 landed (`ddcad16`). M3 was scoped as "`step_is_walkable` asks the shape,

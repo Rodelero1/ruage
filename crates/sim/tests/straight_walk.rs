@@ -203,8 +203,9 @@ fn a_walk_lands_exactly_on_its_point() {
     for _ in 0..2_000 {
         world.step().expect("step");
         let position = world.position(villager).expect("alive");
-        if position.0.raw() == i64::from(goal.0) * scale
-            && position.1.raw() == i64::from(goal.1) * scale
+        // **The middle of the goal tile is the point** (D114): a tile order is not a corner, and the landing is still exact.
+        if position.0.raw() == i64::from(goal.0) * scale + scale / 2
+            && position.1.raw() == i64::from(goal.1) * scale + scale / 2
         {
             return;
         }

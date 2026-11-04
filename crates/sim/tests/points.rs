@@ -50,6 +50,16 @@ fn tile_position(world: &World, x: u16, y: u16) -> (Fixed, Fixed) {
     )
 }
 
+/// **Where a body ends up when it is sent to a tile**: the middle of it (D114). The origin above stays the anchor a spawn
+/// and a building's footprint are placed from, so the two are named differently on purpose.
+fn tile_centre(world: &World, x: u16, y: u16) -> (Fixed, Fixed) {
+    let scale = world.scale();
+    (
+        Fixed::from_raw(i64::from(x) * scale + scale / 2),
+        Fixed::from_raw(i64::from(y) * scale + scale / 2),
+    )
+}
+
 fn place_unit(world: &mut World, id: EntityId, x: u16, y: u16) {
     let unit = world.start_villager_unit().expect("a villager role");
     let scale = world.scale();
@@ -191,7 +201,7 @@ fn a_tile_order_still_means_its_centre() {
     }
     assert_eq!(
         world.position(villager),
-        Some(tile_position(&world, x + 3, y)),
+        Some(tile_centre(&world, x + 3, y)),
         "a tile order is the centre of that tile"
     );
 }
