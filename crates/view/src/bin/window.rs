@@ -496,7 +496,11 @@ impl App {
         // why it would be refused. openaok's `SetWorldHint`, and the cheapest teaching device in the interface.
         let help = self.card_hover.and_then(|index| {
             self.card.get(index).map(|(button, _)| {
-                let mut line = format!("{} x{}", button.name.to_uppercase(), button.costs.len().max(1));
+                let mut line = format!(
+                    "{} x{}",
+                    button.name.to_uppercase(),
+                    button.costs.len().max(1)
+                );
                 if let Some(refusal) = &button.refusal {
                     line = format!("{} - {}", button.name.to_uppercase(), refusal);
                 }
@@ -604,9 +608,11 @@ impl ApplicationHandler for App {
         if self.window.is_some() {
             return;
         }
+        // **16:9 to start with.** The interface is anchored, so any width works; a 4:3 window on a widescreen monitor was
+        // the one shape the HUD never had to prove itself in, and F11 goes borderless fullscreen for the rest.
         let attributes = Window::default_attributes()
             .with_title("ruage")
-            .with_inner_size(winit::dpi::LogicalSize::new(960.0, 720.0));
+            .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 720.0));
         let window = match event_loop.create_window(attributes) {
             Ok(window) => std::rc::Rc::new(window),
             Err(err) => {
@@ -649,6 +655,18 @@ impl ApplicationHandler for App {
                     Key::Named(NamedKey::Escape) => {
                         self.menu_open = !self.menu_open;
                         self.menu_hover = None;
+                    }
+                    // F11 is borderless fullscreen, on whatever screen the window is on: the layout is anchored, so a
+                    // 21:9 monitor is a longer middle rather than a broken interface.
+                    Key::Named(NamedKey::F11) => {
+                        if let Some(window) = self.window.as_ref() {
+                            let fullscreen = window.fullscreen().is_some();
+                            window.set_fullscreen(if fullscreen {
+                                None
+                            } else {
+                                Some(winit::window::Fullscreen::Borderless(None))
+                            });
+                        }
                     }
                     // Space freezes the match, not the window: the camera and the picture stay live.
                     Key::Named(NamedKey::Space) => {

@@ -227,13 +227,19 @@ fn the_interface_owns_its_pixels() {
     for frame in [(960u32, 720u32), (1280, 540), (800, 600)] {
         let layout = Layout::of(frame.0, frame.1);
         // Inside the bars: the interface.
-        assert!(ui::over_hud((4, 4), &layout), "the top bar is not the interface");
+        assert!(
+            ui::over_hud((4, 4), &layout),
+            "the top bar is not the interface"
+        );
         assert!(
             ui::over_hud((4, frame.1 as i32 - 4), &layout),
             "the panel is not the interface"
         );
         // Inside the view: the world.
-        let middle = (frame.0 as i32 / 2, (layout.view.1 + layout.view.3 as i32) / 2);
+        let middle = (
+            frame.0 as i32 / 2,
+            (layout.view.1 + layout.view.3 as i32) / 2,
+        );
         assert!(!ui::over_hud(middle, &layout), "the map is not the world");
         // Just under the bar and just above the panel are still the world (the one-pixel edges belong to the bars).
         assert!(

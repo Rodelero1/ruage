@@ -30,6 +30,13 @@ pixels immediately inside each edge; and a pixel outside the frame is the world,
 - The HUD's own cost is unchanged at **117 us** a frame (measured in U3 and re-measured here; the benchmark is one
   draw per iteration).
 
+## The window itself: 16:9 to start, F11 for the rest
+
+The owner asked for the game to run on wide screens, and the layout being anchored is only half of it: the window opened at
+**960x720**, the one shape where the HUD never had to prove itself. It now opens at **1280x720** and **F11 toggles borderless
+fullscreen** on whatever screen it is on, so a 21:9 monitor is a longer middle rather than a broken interface. Rendered and
+looked at: 1280x540 (21:9-ish), 1600x900 and 960x720 all place the bars and their zones without overlap or clipping.
+
 ## Stability
 
 - **The load-bearing order is gone from the input path.** Menu, card, bar buttons, speed and minimap still each take their
