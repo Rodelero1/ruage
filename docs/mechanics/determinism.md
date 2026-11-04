@@ -132,6 +132,26 @@ ordered tick would move every fight's outcome by up to one tick and re-baseline 
 missing is the test, not the decision:** nothing in `crates/sim/tests/` pins what happens when two units
 kill each other on the same tick, so the behaviour is real but unexamined. Recorded here and as **U18**.
 
+## The shape of the whole tick, from DE's side (2026-11-04)
+
+`librematch/genie` now publishes the original's per-tick order as three ordered arrays
+(`crates/engine/genie-core/src/world/schedule.rs`, lines 20-120), each step's doc naming the exe routine it ports:
+
+- **before the players**, one step: `Commands` (the update's count and time, the streams' frame seed, the players'
+  recorded commands);
+- **for each player, Gaia first**, ten steps in order: `Clock`, `OpenGates`, `StartWork`, `Groups`, `WorldPlayer`,
+  **`Objects`**, `NewTiles`, `ScoutMap`, `CloseGates`, `ClearTiles`;
+- **after the players**, nine: `Draw`, `Ghosts`, `Watched`, `Reseed`, `Turn`, `Victory`, `FrameSeed`, `LastRandoms`,
+  `Vision`.
+
+That is **DE build 158041's** order, read from x64 `0x14…` addresses, so it is evidence about the engine family and not a
+reading of our binary: HD 5.7's order has not been read, and the corpus is where it would be (`BaseWorld::update`, the
+routine that calls the victory check and the players' vision pass). What it changes here is the question, not the answer:
+U18 is no longer "what is the order?" in the abstract but "does HD put `Objects` in the same place?" — one step among ten,
+after `Groups` and before `NewTiles`, with vision once at the very end. Two consequences if it holds there: a group's
+motion is computed from the state the `Groups` step saw, before any object of that player moves; and the victory check
+sees the whole tick's damage, both of which our single ordered-by-id pass gets for free by being simultaneous.
+
 ## The other way out of the simultaneous volley (2026-10-31)
 
 `Zaydme/openaok` proves a second answer to the same problem, and it is worth naming before anyone reopens the

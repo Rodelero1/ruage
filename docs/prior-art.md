@@ -1099,3 +1099,109 @@ site is remembered by distance — not either function.
   to design, not a constant to paste. The algorithm is unchanged: one A\* with a cost model.
 - **U18 unchanged, fourth week.** `world/step.rs` changed only types.
 - **U8** — nothing new; whether the pack carries the names is still ours to decide.
+
+## 2026-11-04 — genie spends a day proving a refactor changed nothing, and the tick's order arrives as a list
+
+**Forty-three commits, 630 files, +27,748/−22,356, and the only two behaviour changes are a bitfield and a `bool` that
+became an enum. That is the finding: the discipline is the artefact, and two mechanics facts fell out of it.**
+
+`librematch/genie` (`add94a62→d3890afe`, 43 commits, 630 files, +27,748/−22,356 — much of it a move, the saved world's
+load and its 48 tests from `genie-oracle` into `genie-core`; head has since moved one commit on, `910cd74`, crate
+metadata). One programme (FD-043) in four sweeps, every commit ending "Bit for bit: ...":
+
+- **T9b** turns every `-> bool` whose name asks no question into an enum of its outcomes, dozens of them (`Payment`,
+  `QueueOutcome`, `ProductionStart`, `Research`, `HitEnd`, `OwnerChange`, `RetargetCheck`, `TreeSearch`, `LetOut` whose
+  "stayed" is the game's 0, `IdleOutcome` whose "acted" is the game's 6 and "idle" its 5), and the `bool` *parameters*
+  become enums of their two choices (`SiteSearch`, `DropMeasure`, `OrderForce`, `TargetRules`, `PopulationTest`).
+- **T8** deletes every trait whose second implementation was a test double, and rewrites those tests on real world
+  fixtures. `UnitSide`'s 30 methods become `UnitView`'s own; a search's three closures become an `ObjectsRef`; 11
+  `unsupported(` sites and 3 `missing_data(` sites go with the trait's default bodies. Their `CODING_STYLE.md` now
+  states the rule: *a test double alone justifies no trait*.
+- **T16** derives what was written by hand: 81 `Display`, 55 operators, 12 `FromRepr`.
+- **T13** moves the load of a saved object and of the world into `genie-core`, because the oracle's import was "a second
+  description of genie-core's state" and a field added to `Unit` without its line there started at `Default`.
+
+**The two semantic touches**, both in `world/`: `step.rs`'s `player.sharing` (a `bool`) becomes
+`ally_sharing.contains(AllySharing::RESOURCES)` — ally sharing is a bitfield and resources are one bit of it; and
+`world_update.rs`'s `file_step` `bool` becomes `ListCount { GoesOn, Again }` — the loop's index does not advance past an
+object that leaves, because the list's last object took its slot (the swap-remove). The second is unchanged, and it is
+the mechanism U18's finding rests on.
+
+**The week's best accidental publication is `world/schedule.rs`** (lines 20–120): the tick as three ordered arrays —
+`BEFORE_PLAYERS` is Commands; `EACH_PLAYER` is Clock, OpenGates, StartWork, Groups, WorldPlayer, **Objects**, NewTiles,
+ScoutMap, CloseGates, ClearTiles; `AFTER_PLAYERS` is Draw, Ghosts, Watched, Reseed, Turn, Victory, FrameSeed,
+LastRandoms, Vision — with each step's doc naming the routine it ports. It is **DE build 158041's** order (x64 `0x14…`
+addresses), not HD 5.7's, so what transfers is the shape; HD's own order is unverified and is the thing to look for in
+our corpus before anyone treats the list as ours.
+
+**The mechanics, out of the "what the real side showed" lists the test rewrites produced** — the most informative part of
+a refactor week:
+
+- **Search radius is measured from the footprint, and it is not attack range.** A tower's search radius counts from its
+  footprint; a stand-ground leash counts from the unit's footprint; and a soldier standing ground **attacks only within
+  its weapon range** — it finds an enemy 4.5 tiles off and leaves it. Attribute 23 is search radius (U21's table); it is
+  a different number from attack range and obeys a different distance.
+- **A capture flag reaches the unit AI only through the sight registry**: an object outside it is never taken by sight.
+  `CaptureKind` is 0 none, 1 by sight, 2 again, 3 livestock; `TileSight` is unknown 0, explored `0x80`, seen `0xf`;
+  `TransportMode` is new −1, move 0, work 1; `UnitAiKind` is only *constructed* for 2..=0x13 and its default is Soldier.
+- **The shore test aliases zones by their low byte**: the transport's "near" test is given the zone's low byte, so zone
+  256 aliases zone 0 — genie proves it with a checkerboard of one-tile patches. A transport's shore point is the last
+  water tile on the path to the land, and a tile below the map's west edge reads as land (terrain 0).
+- **What a save does not hold**: the load *builds* the objects-in-sight registry, the hunted animals' origins and the
+  watched (ghost) lists, and stops every player at the load (`watch_at_load`); the save carries none of them
+  (`world/load/world/loaded.rs`).
+
+**The gather search is the live divergence, not a note.** `gathering/gather_search.rs` (lines 386–500) is the contract of
+`FUN_140c49760`: a breadth-first walk from the unit's tile, over tiles the player has **explored** and the unit can
+**stand on**, out to the unit's **line of sight + 5** (distance counted 1.4 per diagonal step + 0.61, truncated), its
+queue kept sorted by distance; a candidate must hold an amount, auto-gather as the kind and not be the AI's current
+target; and **at most 30 objects are reach-tested** (`const TESTED: i32 = 30`, the exe's `0x1e`) before the best fallback
+wins, even if something closer was never tested. With a drop site the origin moves: the queue sorts from a point 0.75 of
+the site and 0.25 of the unit, a first pass starts from the site's **footprint** tiles reaching the site's LOS + 10, and
+if it finds nothing a second pass starts from the unit at LOS + 5, carrying the first pass's 30 tests on.
+
+Ours is a global distance sort with no bound: `Sim::nearest_drop_site` (`crates/sim/src/lib.rs:2657`) takes the nearest
+own building by squared distance, and the scripts' `nearest_resource` (`crates/sim/src/script.rs:624`) sorts every node
+of a kind after a `can_reach` **on each of them** — the full path search per candidate that once cost 37× the rest of a
+run (`nodes_of_slot`'s doc, `crates/sim/src/lib.rs:1895`). So the game's rule answers two questions we answer differently:
+*what is inside this villager's sight* (nothing → nothing, here → the far side of the map), and *how much work is one
+search allowed* (30 reach tests, here: every candidate). Recorded as **U22**.
+
+**Divergence, on the axes that matter.** Engine/content boundary (D17): unchanged — their build layer still holds what
+the exe hardcodes, and this week added nothing to it. Asset pipeline (D18): nothing, either side. Tick: their fix is a
+declared schedule with the routine per step, ours is a Rust loop with our own order; the schedule is DE's, so the
+difference is now nameable per step but still unmeasured on HD. Platform: no change (wasm already there). Licence and
+language: unchanged, AGPL-3.0 and Rust.
+
+**Study list.** `crates/engine/genie-core/src/world/schedule.rs` lines 20–120 — the three arrays and the routine behind
+each step, twenty minutes. `crates/engine/genie-core/src/gathering/gather_search.rs` lines 386–500 — the search's full
+contract and its four constants (`30`, `LOS+5`, `1.4`/`0.61`, `0.75`/`0.25`), the most useful page either project
+published this week; then `gather_search/passes.rs` for the queue's sort. `crates/engine/genie-core/src/world/load/world/loaded.rs`
+— what a load builds that a save does not hold. `world/world_update.rs`'s `file_step` — U18's mechanism in thirty lines.
+`CODING_STYLE.md` §5 and §7 — "traits as capabilities", "parse, don't validate", "collect's target type chooses how a
+walk with errors ends": their rules are adapted from two published essays (Endler's *Thinking in Traits*, King's *Parse,
+don't validate*), so read the essays, not their file.
+
+**Never copy.** genie is **AGPL-3.0**. This week's temptation is a doc comment: the *numbers* in `gather_search.rs` are
+facts about the game (the exe's `0x1e`, the LOS + 5 reach, the 1.4-per-diagonal measure), and the *file* —
+`Pass`, `SearchSite`, `ResourceWorld`, its prose and its order of tests — is theirs. The schedule's step order and the
+routine addresses are facts; the enum names, their docs and the three-array shape are their transcription. `CODING_STYLE.md`
+is theirs twice over: it condenses two essays and a house style. Cite the correspondence, write our own table from our own
+data, and do not move any of it into `crates/` — the "it is only a small function" case again, this time for a search.
+
+**Open questions.**
+
+- **U22 new — how far, and how hard, does the game look for a resource?** LOS + 5 from the unit, explored and standable
+  tiles only, at most 30 reach tests, and from a drop site a footprint-seeded pass at the site's LOS + 10 before the unit's
+  own. Our drop-site and script searches are unbounded distance sorts. The cheap half (a bound and a cap) is also the
+  performance half; the expensive half is the two-pass site search, which changes which tree a camp serves — the rule the
+  2026-11-03 step touched from the other side. Queued test-first in `docs/next-step.md`.
+- **U18 stands, fifth week.** `world/step.rs`, `world_update.rs` and `schedule.rs` all changed this week; the loop's order
+  did not (a `bool` became `ListCount`, a `bool` became a bitfield test). The schedule now names every step of the tick,
+  which sharpens the question rather than answering ours: their order is DE 158041's, and HD 5.7's `BaseWorld::update`
+  has not been read.
+- **U21 unchanged** — nothing new on attributes 1 and 12; the two tests queued on 2026-11-03 are still owed, and this
+  week's "search radius counts from the footprint" is about attribute 23, not either of them.
+- **U19, U20 unchanged.** **U8** nothing new. **U12** unchanged (no step interval in this week's diff; 20 Hz still their
+  number, and still DE's).
+- **U7** no new value; the movement pauses named on 2026-11-03 are still their reading.

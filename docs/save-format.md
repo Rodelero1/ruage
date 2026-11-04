@@ -216,6 +216,13 @@ or a recording of it, whose total length pins the last save. **The old ask - two
 longer needed.** What is still owed is the *content* of the state: stockpiles, population and entities, which the
 clock cannot supply and sections 2-4 do.
 
+**What the save does not hold, and a load must build (2026-11-04, from genie).** `genie-core` splits the two loads
+(`crates/engine/genie-core/src/world/load/world/loaded.rs`): a world loaded from a **recording's header** gets a fresh
+objects-in-sight registry sized to its players, the hunted animals' origins and the watched (ghost) lists; a world loaded
+from a **save** gets none of them, and genie's test asserts the registry's absence for the save case. The game's own load
+builds them, so the bytes of a save are not by themselves a start state: if our reader ever resumes a match rather than
+reproducing one, these are the structures it has to reconstruct, and they are not in the file.
+
 ## The tool
 
 `tools/savegame.py` - `inflate`, `Header.parse`, `iter_strings`, and a one-file description on stdout. `inflate` refuses

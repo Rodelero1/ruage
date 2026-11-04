@@ -2875,6 +2875,18 @@ Neither is part of the save-reader work in hand; they are the next engine slices
   250 after Horse Collar, 220 for the Chinese.
 
 
+## Queued, not this step: U22 from the 2026-11-04 prior-art run
+
+`librematch/genie`'s port of the resource search (`crates/engine/genie-core/src/gathering/gather_search.rs`, lines
+386-500) states the rule we do not have: a walk from the unit's tile over explored and standable tiles only, out to the
+unit's **line of sight + 5**; at most **30 objects reach-tested** (the exe's `0x1e`) before the best fallback wins; and
+from a drop site a first pass seeded from the site's footprint at the site's **LOS + 10**, then the unit's own at LOS + 5.
+Ours are unbounded distance sorts (`Sim::nearest_drop_site`, the scripts' `nearest_resource`, which runs a `can_reach` on
+every candidate). Three tests, in this order: a search does not answer beyond the unit's LOS + 5; a drop-site search
+starts from the site's footprint at the site's LOS + 10; after 30 reach tests the fallback wins. Recorded as **U22** in
+`docs/mechanics/README.md`; evidence in `docs/prior-art.md`, 2026-11-04.
+
+
 ## The AI queue, as it stands (2026-11-01)
 
 The owner's decisions are D94 (AI lives in `config/ai/`, apart from the mechanics config), D95 (the AI names **lines**,
