@@ -472,11 +472,12 @@ impl Layout {
         // bar, where the map is a quarter of the width. A flat diamond twice as wide as it is tall is bounded by the *panel's
         // height*, not by the screen: `2 x (panel - 12)` px wide fills the bar vertically, and a wider box than that would only
         // add empty corners. 160 was the old fixed width - under half of what the bar can hold at 1280.
+        // **The diamond fills the bar, and the box is the diamond's own shape.** The owner: "bar is the same height, minimap
+        // fills it vertically and proportionally grows horizontally" (2026-11-04). A 2:1 diamond that fills a 130-pixel-tall
+        // interior is 260 pixels wide - that is the arithmetic, and a wider box would only add empty corners, while a wider
+        // *diamond* would mean a taller bar.
         let minimap_h = panel_h.saturating_sub(12);
-        let minimap_w = (width / 4)
-            .min(minimap_h.saturating_mul(2))
-            .max(160)
-            .min(width / 3);
+        let minimap_w = (minimap_h.saturating_mul(2)).min(width / 3).max(160);
         let minimap = (
             width.saturating_sub(8 + minimap_w) as i32,
             panel.1 + 6,
@@ -1009,19 +1010,13 @@ pub fn minimap_rect(
 }
 
 /// The minimap fitted inside a layout's right zone, for a caller that has the layout already.
-fn fit_minimap(layout: &Layout, map_width: u16, map_height: u16) -> (i32, i32, u32, u32) {
-    let zone = layout.minimap;
-    let (map_w, map_h) = (u32::from(map_width).max(1), u32::from(map_height).max(1));
-    // Two pixels a tile, and never larger than the zone: a 64-tile map at two pixels is 128, and the zone is tall enough
-    // for it at any sane panel; a bigger map shrinks to fit rather than spilling over the selected object.
-    let scale = 2u32.min(zone.2 / map_w).min(zone.3 / map_h).max(1);
-    let (width, height) = (map_w * scale, map_h * scale);
-    (
-        zone.0 + (zone.2.saturating_sub(width) / 2) as i32,
-        zone.1 + (zone.3.saturating_sub(height) / 2) as i32,
-        width,
-        height,
-    )
+fn fit_minimap(layout: &Layout, _map_width: u16, _map_height: u16) -> (i32, i32, u32, u32) {
+    // **The zone itself.** This used to shrink the picture to "two pixels a tile" and centre the result, which was right
+    // when the minimap was a square grid of tiles: a 64-tile map drew 128x128 inside a 160-pixel box. With an isometric
+    // diamond the projection already keeps the map's own proportions, so fitting it twice only made it small - the owner
+    // asked twice for a bigger minimap and the second request ("fills it vertically and proportionally grows horizontally")
+    // is exactly what handing the whole zone to the diamond does.
+    layout.minimap
 }
 
 /// The middle of the outcome banner: a strip across the play area, in colour because the font has no words (D82).
