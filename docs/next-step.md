@@ -42,11 +42,11 @@
 >
 > **Open, and the next three items in order:**
 >
-> 1. **A body on the walk's line no longer forces a repath** (`evasion.rs::a_repath_route_is_pulled_like_a_planned_one`,
->    now `#[ignore]`d with the measurement in its reason): `repaths = 0` and the walker arrives, even with the body placed at
->    the line's exact midpoint. Two untested hypotheses: the per-tick `bodies` list may not carry an idle body, or
->    `blocker_at`'s 3x3 tile bucket misses a body standing on a tile boundary. **Check `bodies_at` first** - it is the one
->    that indexes by tile, and a body on a boundary is in a bucket a nearby candidate may not look in.
+> 1. ~~A body on the walk's line no longer forces a repath~~ **RESOLVED, same day, no defect:** the mover slides past a
+>    body on the other axis before it ever replans (D98a), and a walk from a corner to a centre always has that other axis.
+>    Centre to centre, the slide is the step already refused and the repath happens. The fixture now spawns the walker in the
+>    middle of its tile; the test is `#[ignore]`-free again and passes. **Lesson for the next fixture:** a walk's *shape*
+>    decides which mover rule answers it, so a body-on-the-line fixture must be exactly on the line.
 > 2. **Spawns still sit on tile corners** while walks aim at centres: a freshly trained unit appears at a corner. Unify, and
 >    the rally ring (which is content-dependent) decides where.
 > 3. **M3c, the body's shape against the ground**, unchanged from Session 10: `ground_overlap`, `step_is_walkable`

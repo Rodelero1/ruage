@@ -2661,10 +2661,15 @@ demanded the origin; `straight_walk.rs`'s exact-landing test kept its intent and
 `evasion.rs` compared **tiles** where the rule is a **standoff**, so two bodies 0.7 of a tile apart in one cell failed a
 test that claimed they were inside each other.
 
-**One test is ignored, with its measurement in the reason:** `a_repath_route_is_pulled_like_a_planned_one` placed a body on
-the walk's line to force a repath, and the walker now arrives with `repaths = 0` (also when the body is placed exactly at
-the line's midpoint). Two hypotheses - an idle body missing from the per-tick `bodies` list, or the 3x3 bucket index missing
-a body on a tile boundary - and neither was settled in this slice. The pull stays covered by M1's `pull_route` test.
+**The repath test's premise was the fixture, not a defect - found the same day, not a bug.** `a_repath_route_is_pulled_like_a_planned_one`
+places a body on the walk's line to force a repath, and after centring the goals the walker arrived with `repaths = 0`. The
+cause is the mover's own order of answers: from a *corner* to a *centre* the walk carries a small vertical component, so when
+the body blocks the step the mover **slides** on the other axis and gets past without replanning. From **centre to centre**
+the walk has one axis only, the slide is the very step that was refused, and the mover reaches its repath rule - so the
+fixture now spawns the walker at the middle of its tile and the body at the line's exact midpoint, and the test measures the
+pulled route again. **Sliding before replanning is the design** (D98a): a nudge is cheaper than a search and is what a player
+sees as a unit stepping round one body. The two hypotheses I wrote down first - an idle body missing from `bodies`, or the
+3x3 bucket index - were both wrong, and neither mechanism was ever at fault.
 
 Acceptance: `players=1` at 36,000 ticks in 10.54-10.81 s, 148 entities, hash `82efabd6f614c798` (was `623c3ff8c769eadd`);
 **661 passed / 0 failed / 20 ignored**. Review: `docs/reviews/2026-11-04-the-goal-is-the-middle-of-a-tile.md`.

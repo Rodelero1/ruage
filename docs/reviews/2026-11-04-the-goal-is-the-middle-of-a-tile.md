@@ -40,13 +40,19 @@ a proxy for it:
    moved from the corner to the centre; the intent is unchanged and the test still passes.
 3. `collision.rs`, `evasion.rs` (three assertions) — tile comparisons replaced by the standoff, as above.
 
-**One test is now ignored, and that is my error to report:** `evasion.rs::a_repath_route_is_pulled_like_a_planned_one`
-placed a body on the walk's line to force a repath. With centred goals the walker **arrives without a repath at all**
-(`repaths=0`) — including after I placed the body *exactly* at the midpoint of the line, computed from the walker's start
-and the goal's centre. Two hypotheses, neither tested: the per-tick `bodies` list may not carry an idle body, or
-`blocker_at`'s 3×3 tile bucket misses a body standing on a tile boundary. I could not settle it inside this slice, so the
-test carries the measurement and both hypotheses in its `#[ignore]` reason, and `docs/next-step.md` Session 11 repeats
-them. The pull itself stays covered by M1's `pull_route` unit test.
+**A test that stopped measuring anything, and why — reported as an error because I first got the cause wrong.**
+`evasion.rs::a_repath_route_is_pulled_like_a_planned_one` places a body on the walk's line to force a repath. With centred
+goals the walker **arrived with `repaths = 0`**, and I could not explain it, so I `#[ignore]`d the test with two
+hypotheses: an idle body missing from the per-tick `bodies` list, or `blocker_at`'s 3×3 tile bucket missing a body on a tile
+boundary.
+
+**Both were wrong, and there was no defect.** The mover answers a blocked step in a fixed order: ground, then the order's
+own business, then the standoff, then **slide on one axis**, then one nudge, then a repath. From a *corner* to a *centre*
+the walk carries a small vertical component, so the body that blocks the step can be **slid past** on the other axis — the
+unit arrives, correctly, without ever replanning. From **centre to centre** the walk has one axis only, the slide is the
+step that was already refused, and the mover reaches its repath rule. The fixture now spawns the walker at the middle of its
+tile and the body at the line's exact midpoint, and the test measures the pull again. Sliding before replanning is the
+design, not a workaround (D98a) — the ignored test was my fixture asking a question the engine never had to answer.
 
 **A claim I made and then withdrew, in the same session:** while the evasion fixtures spawned at tile centres I measured the
 blocked-unit walker at **3,863** raw units from a body whose standoff is 8,000, wrote that into a test comment as a

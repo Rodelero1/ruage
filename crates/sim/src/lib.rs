@@ -8935,7 +8935,7 @@ impl World {
                     .paths
                     .get(&id)
                     .and_then(|route| route.points.last().copied())
-                    .unwrap_or_else(|| self.tile(goal));
+                    .unwrap_or_else(|| self.tile_centre(goal));
                 let radius = self.body_radius(self.find(id).and_then(|entity| entity.unit));
                 let planned = match self.walk.as_ref() {
                     Some(walk) => short_range(walk, self.scale, from, aim, radius, &obstacles)

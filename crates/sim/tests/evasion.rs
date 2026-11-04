@@ -393,11 +393,6 @@ fn an_arms_route_ends_where_it_can_strike() {
 /// are repaths rather than first plans. The route the unit is handed after a repath must be the pulled one: three points
 /// around a single body on a row, not seven nodes through every tile of the detour.
 #[test]
-#[ignore = "premise broken by D114 and not yet explained: a body placed exactly on the walk's line no longer forces a \
-            repath (repaths=0, the walker arrives at the goal), so there is no repathed route to measure. Recorded in \
-            docs/next-step.md, Session 11, with two hypotheses: the per-tick `bodies` list may not carry an idle body, or \
-            the bucket index misses a body on a tile boundary. The pull itself is still covered by the M1 unit test of \
-            `pull_route` and by the planned-route test."]
 fn a_repath_route_is_pulled_like_a_planned_one() {
     let Some(mut world) = fresh() else { return };
     let Some((x, y)) = open_row(&world, 8) else {
@@ -405,11 +400,21 @@ fn a_repath_route_is_pulled_like_a_planned_one() {
     };
     let walker = next_id(&world);
     let sitter = EntityId(walker.0 + 1);
-    spawn_villager(&mut world, walker, x, y);
-    // **Exactly on the line the walk will take**: from the walker's tile corner to the middle of the goal tile. A body a
-    // quarter of a tile off it is a different test, and that is what the old fixture became when tile goals were centred.
+    // **The walk must be exactly horizontal, and the body exactly on it.** Both matter, and both are what this fixture
+    // stopped being when tile goals were centred (D114): from a corner to a centre the walk carries a small vertical
+    // component, so the mover *slides* past the body on the other axis and never needs a repath - it arrived, with
+    // `repaths = 0`, and the test failed asking why nothing had been measured. From centre to centre there is one axis
+    // only, the slide is the step that was already refused, and the mover reaches its repath.
     let scale = world.scale();
-    let start = (i64::from(x) * scale, i64::from(y) * scale);
+    let start = (
+        i64::from(x) * scale + scale / 2,
+        i64::from(y) * scale + scale / 2,
+    );
+    spawn_villager_at(
+        &mut world,
+        walker,
+        (Fixed::from_raw(start.0), Fixed::from_raw(start.1)),
+    );
     let goal_at = (
         i64::from(x + 6) * scale + scale / 2,
         i64::from(y) * scale + scale / 2,
