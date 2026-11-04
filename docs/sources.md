@@ -18,6 +18,30 @@ logged as a question (e.g. U11 farming).
   all rights reserved). Read the decompilation for behaviour and cite the module; never copy its expression (see
   `docs/licensing.md`), and note its addresses are AoC/PS2, not HD 5.7.
 
+## Prior art: how openage handles the layer the talk does not
+
+**SFTtech/openage** (GPL-3.0, C++ reimplementation, read at `master` on 2026-11-04). Asked the same question M3 ran into — who
+*collides* a body with the ground and unsticks it — because the Klingers deck ends at "brute-force smooth".
+
+- `libopenage/gamestate/system/move.cpp`, `Move::move_default`: a path becomes a **keyframe curve**, not a follower. Per leg
+  it charges a turn-in-place delay (`angle / Turn.turn_speed`), then a straight move (`distance / Move.speed`), and writes
+  `set_position(start + total_time, waypoint)` into the future. There is **no per-tick move, no ground test, no body-to-body
+  collision, no re-plan mid-walk, no arrival radius and no unstuck**. If the pathfinder does not answer `FOUND`, `find_path`
+  returns `{}` and the unit does nothing at all — the same silent stall as our M3b freeze.
+- Their **waypoint convention is ours, derived independently**: start position, then `tile.to_phys3_center()` for every
+  intermediate waypoint, then the **exact end point** last. That is exactly M3a ("the goal is the middle of a tile").
+- Their pathfinder is **flow-field, not hull-based**: `pathfinding/{cost_field, integration_field, flow_field, sector, portal,
+  integrator}` — sectors and portals, a wavefront integration field from the target with an optional LOS pass, a flow field
+  built from it, cached per (portal, sector) and **evicted when the cost field goes dirty** (so a dropped building invalidates
+  reachability without per-unit repaths). The Supreme-Commander-2 family: cheap for many units sharing a destination, and
+  grid-only — no body radius anywhere, which is why openage never needed M3.
+- Their tracker has **zero issues titled "collision" or "avoidance"**, and the one "stuck" fix (`#860`, 2017) is a gatherer
+  whose dropsite was not found. The follower layer is simply not built there either.
+
+**Verdict:** openage confirms the trap and supplies one convention we had already reasoned out; it is not a source for the
+collision/arrival/stuck layer, and it is a reminder that a grid-only planner makes that layer unnecessary by making units
+non-physical. Worth re-reading only if planning *cost* becomes our bottleneck, where its caching is the better design.
+
 ## Numbers used in `docs/mechanics/`
 
 | Source | Used for | Trust |
