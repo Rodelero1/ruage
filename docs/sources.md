@@ -5,6 +5,19 @@ trust it. Version caveat throughout: **most community documentation describes DE
 this project targets HD 5.7. Where they disagree, the dat wins and the disagreement is
 logged as a question (e.g. U11 farming).
 
+## Pathfinding: a first-party description of the short-range algorithm
+
+- **Raymi Klingers (Engineering Director, Forgotten Empires), "25+ Years of Pathfinding Problems with C++"**, Meeting C++
+  2025. Slides: `meetingcpp.com/mcpp/slides/2025/25+ Years of Pathfinding Problems442903.pdf` (104 pages). The original
+  short-range pathfinder (pages 21-38) and their replacement for it (pages 82-96): shrink the unit to a point, expand the
+  obstructions (axis-aligned rectangles), ray at the goal, edge-walk the union turning right at ends and left at
+  intersections, re-ray at every vertex, brute-force smooth — all in `> < == + -`, because precision is what broke the
+  original. Our mapping and plan: `docs/pathfinding-from-the-talk.md`.
+- No AoE2 source has ever been released. What exists: pre-release **binaries** (Hidden Palace: seven 1998-99 AoK builds), and
+  a matching **decompilation** of AoC 1.0c / AoK 2.0a / the PS2 ELF (`samuelcaldas/age-of-empires-2-decomp`, no licence —
+  all rights reserved). Read the decompilation for behaviour and cite the module; never copy its expression (see
+  `docs/licensing.md`), and note its addresses are AoC/PS2, not HD 5.7.
+
 ## Numbers used in `docs/mechanics/`
 
 | Source | Used for | Trust |
@@ -22,6 +35,19 @@ logged as a question (e.g. U11 farming).
 | [Jineapple's Infosheet (Steam)](https://steamcommunity.com/sharedfiles/filedetails/?id=2169547705) | Attack delay, reload resampling to 1/60 s, Matt Pritchard's float/OOS quote | High for mechanics, DE-era |
 | [Tech tree lies (Steam)](https://steamcommunity.com/sharedfiles/filedetails/?id=191310499) | Proof that speed bonuses multiply **reload** (Celts ×0.8, Japanese ×0.75) | High — fits the dat's type-5 encoding |
 
+## Pathfinding: a first-party description of the short-range algorithm
+
+- **Raymi Klingers (Engineering Director, Forgotten Empires), "25+ Years of Pathfinding Problems with C++"**, Meeting C++
+  2025. Slides: `meetingcpp.com/mcpp/slides/2025/25+ Years of Pathfinding Problems442903.pdf` (104 pages). The original
+  short-range pathfinder (pages 21-38) and their replacement for it (pages 82-96): shrink the unit to a point, expand the
+  obstructions (axis-aligned rectangles), ray at the goal, edge-walk the union turning right at ends and left at
+  intersections, re-ray at every vertex, brute-force smooth — all in `> < == + -`, because precision is what broke the
+  original. Our mapping and plan: `docs/pathfinding-from-the-talk.md`.
+- No AoE2 source has ever been released. What exists: pre-release **binaries** (Hidden Palace: seven 1998-99 AoK builds), and
+  a matching **decompilation** of AoC 1.0c / AoK 2.0a / the PS2 ELF (`samuelcaldas/age-of-empires-2-decomp`, no licence —
+  all rights reserved). Read the decompilation for behaviour and cite the module; never copy its expression (see
+  `docs/licensing.md`), and note its addresses are AoC/PS2, not HD 5.7.
+
 ## Tooling and format references
 
 | Source | Used for |
@@ -38,6 +64,19 @@ logged as a question (e.g. U11 farming).
 | [Ghidra 12.1.4](https://github.com/NationalSecurityAgency/ghidra/releases/tag/Ghidra_12.1.4_build) | The decompiler REA drives on this box, pinned: REA 6.8.0 rejects 12.2 as `config_drift` |
 | `Age2HD/AoK HD.exe` (the install) | The authority for behaviour the saves cannot show. Measured: i386 PE, 7,521,280 bytes, PE timestamp 2018-08-22T18:26:19Z |
 
+## Pathfinding: a first-party description of the short-range algorithm
+
+- **Raymi Klingers (Engineering Director, Forgotten Empires), "25+ Years of Pathfinding Problems with C++"**, Meeting C++
+  2025. Slides: `meetingcpp.com/mcpp/slides/2025/25+ Years of Pathfinding Problems442903.pdf` (104 pages). The original
+  short-range pathfinder (pages 21-38) and their replacement for it (pages 82-96): shrink the unit to a point, expand the
+  obstructions (axis-aligned rectangles), ray at the goal, edge-walk the union turning right at ends and left at
+  intersections, re-ray at every vertex, brute-force smooth — all in `> < == + -`, because precision is what broke the
+  original. Our mapping and plan: `docs/pathfinding-from-the-talk.md`.
+- No AoE2 source has ever been released. What exists: pre-release **binaries** (Hidden Palace: seven 1998-99 AoK builds), and
+  a matching **decompilation** of AoC 1.0c / AoK 2.0a / the PS2 ELF (`samuelcaldas/age-of-empires-2-decomp`, no licence —
+  all rights reserved). Read the decompilation for behaviour and cite the module; never copy its expression (see
+  `docs/licensing.md`), and note its addresses are AoC/PS2, not HD 5.7.
+
 ## Rules for using these
 
 1. **The dat outranks any wiki.** Community numbers describe DE; where the dat differs, the
@@ -48,6 +87,19 @@ logged as a question (e.g. U11 farming).
 3. **Never assume an id.** The one wrong conclusion in this project so far — "the DBA
    multiplier is missing" — came from assuming tech 200 was Double-Bit Axe. Match by cost
    and research time. This is now a rule, not a note.
+
+## Pathfinding: a first-party description of the short-range algorithm
+
+- **Raymi Klingers (Engineering Director, Forgotten Empires), "25+ Years of Pathfinding Problems with C++"**, Meeting C++
+  2025. Slides: `meetingcpp.com/mcpp/slides/2025/25+ Years of Pathfinding Problems442903.pdf` (104 pages). The original
+  short-range pathfinder (pages 21-38) and their replacement for it (pages 82-96): shrink the unit to a point, expand the
+  obstructions (axis-aligned rectangles), ray at the goal, edge-walk the union turning right at ends and left at
+  intersections, re-ray at every vertex, brute-force smooth — all in `> < == + -`, because precision is what broke the
+  original. Our mapping and plan: `docs/pathfinding-from-the-talk.md`.
+- No AoE2 source has ever been released. What exists: pre-release **binaries** (Hidden Palace: seven 1998-99 AoK builds), and
+  a matching **decompilation** of AoC 1.0c / AoK 2.0a / the PS2 ELF (`samuelcaldas/age-of-empires-2-decomp`, no licence —
+  all rights reserved). Read the decompilation for behaviour and cite the module; never copy its expression (see
+  `docs/licensing.md`), and note its addresses are AoC/PS2, not HD 5.7.
 
 ## Found via enhansome/enhansome-aoe2 (curated list, checked 2026-10-28)
 
