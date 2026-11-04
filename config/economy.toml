@@ -89,6 +89,14 @@ drop_site_spacing = 5
 # Note this counts the **town centre**, which the reference implementation's own camp rule does not (`town = false` there);
 # the owner asked for it explicitly and it is the behaviour a player expects, so it is recorded as our difference.
 spaced_roles = ["lumber_camp"]
+# **The farm ring** (the owner's note, 2026-11-04): "mill should be built 2 farms away from the town centre, then it should
+# be possible to build farms around the town centre and around the mill right next to them. And houses and other buildings
+# should be constructed in a way to allow such farm placement."
+#   * `farm` names the plot that fills the ring;
+#   * `farm_spacing` is how many farm widths sit between the town centre and the mill (2 is the owner's number).
+# The ring a house may not be built in is `farm_spacing` plots plus one tile of clearance, measured from the town centre.
+farm = "farm"
+farm_spacing = 2
 # Which roles block movement once built. A wall is a building whose tile nobody can walk through;
 # nothing else this pack builds does, which is why the rule is content's list and not a class id.
 # PROVENANCE: dat ids (the pack's four wall types are 72/117/119/155).

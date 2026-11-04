@@ -7027,7 +7027,11 @@ impl World {
             .as_ref()
             .and_then(|economy| economy.farm.resource.as_deref())
             .and_then(|name| self.slot_of(name));
-        let mut best: Option<(i64, u32, EntityId)> = None;
+        // **Cheap first, expensive last, and only for the nearest few.** Reachability costs a path search per candidate, and
+        // this function is asked every time a node runs dry - over a map with 118 nodes that was 236 path searches for one
+        // villager, and the acceptance run's slow ticks spent **1,336 path searches a tick** in exactly this loop. The sort is
+        // distance-only; the walk is asked of the nearest eight, which is more than a worker will ever pass up in practice.
+        let mut candidates: Vec<(i64, u32, EntityId)> = Vec::new();
         for entity in &self.entities {
             if entity.id == old || entity.id == worker {
                 continue;
@@ -7067,27 +7071,32 @@ impl World {
                 }
                 _ => false,
             };
-            // Reachability is part of the choice, and a node's own tile is usually **blocked** (a tree, a mine, a
-            // farm), so the question is whether a worker can reach somewhere it can *work* it - the same tile
-            // `work_position` picks when the gather order is given. Asking `can_reach(node.position)` refused every
-            // tree, which is how the first version sent every lumberjack to Idle.
-            let reachable = self.can_reach(from, entity.position)
-                || self
-                    .work_position(from, entity.position)
-                    .is_some_and(|stand| self.can_reach(from, stand));
-            if !same || !reachable {
+            if !same {
                 continue;
             }
             let dx = entity.position.0.raw() - from.0.raw();
             let dy = entity.position.1.raw() - from.1.raw();
-            let key = (dx * dx + dy * dy, entity.id.0, entity.id);
-            if best
-                .is_none_or(|(best_distance, best_id, _)| (key.0, key.1) < (best_distance, best_id))
+            candidates.push((dx * dx + dy * dy, entity.id.0, entity.id));
+        }
+        candidates.sort_unstable();
+        candidates.truncate(8);
+        // Reachability is part of the choice, and a node's own tile is usually **blocked** (a tree, a mine, a farm), so the
+        // question is whether a worker can reach somewhere it can *work* it - the same tile `work_position` picks when the
+        // gather order is given. Asking `can_reach(node.position)` refused every tree, which is how the first version sent
+        // every lumberjack to Idle.
+        for (_, _, id) in candidates {
+            let Some(entity) = self.find(id) else {
+                continue;
+            };
+            if self.can_reach(from, entity.position)
+                || self
+                    .work_position(from, entity.position)
+                    .is_some_and(|stand| self.can_reach(from, stand))
             {
-                best = Some(key);
+                return Some(id);
             }
         }
-        best.map(|(_, _, id)| id)
+        None
     }
 
     /// What may be gathered from an entity, and whether the thing being worked sets the pace: a farm
@@ -9590,6 +9599,36 @@ impl World {
         })
     }
 
+    /// **The unit a farm plot is**, from content (`[build] farm`): `None` when the pack has no farms, which means no rings
+    /// are reserved and every placement rule behaves as it did before the owner's note (2026-11-04).
+    #[must_use]
+    pub fn farm_unit(&self) -> Option<u32> {
+        self.economy
+            .as_ref()
+            .and_then(|economy| economy.build.farm.as_deref())
+            .and_then(|role| self.role_unit(role))
+    }
+
+    /// **How far the farm ring reaches from the town centre**, in tiles: `[build] farm_spacing` farm widths plus one tile of
+    /// clearance. Farms and drop sites may stand inside it; a house may not, which is the owner's "houses should be
+    /// constructed in a way to allow such farm placement".
+    #[must_use]
+    pub fn farm_ring_end(&self) -> u32 {
+        let Some(farm) = self.farm_unit() else {
+            return 0;
+        };
+        let width = self
+            .units
+            .as_ref()
+            .and_then(|units| units.footprint(farm))
+            .map_or(3, |(width, _)| width);
+        let spacing = self
+            .economy
+            .as_ref()
+            .map_or(2, |economy| economy.build.farm_spacing);
+        spacing * width + 1
+    }
+
     /// **Whether a role must not be built where a drop site already serves the resource** - content's `[build]
     /// spaced_roles`, so the owner's lumber-camp rule is a word in the pack rather than a name in the engine.
     #[must_use]
@@ -9597,6 +9636,38 @@ impl World {
         self.economy
             .as_ref()
             .is_some_and(|economy| economy.build.spaced_roles.iter().any(|named| named == role))
+    }
+
+    /// The worker variant the pack uses for a resource (`[gather.variant]`): content's own answer to "which unit carries
+    /// this", already used to pick what a villager becomes when it is sent to a node.
+    #[must_use]
+    pub fn gather_variant(&self, resource: &str) -> Option<u32> {
+        self.economy
+            .as_ref()
+            .and_then(|economy| economy.gather.variant.get(resource).copied())
+    }
+
+    /// **The drop sites a worker of this variant may hand a load in at**, in the order the buildings stand: the same edge the
+    /// path to a drop site follows (`drop_sites` on the worker's row), so a farm ring is drawn around the buildings that
+    /// actually take food rather than around every camp on the map.
+    #[must_use]
+    pub fn drop_sites_of(&self, player: u8, variant: Option<u32>) -> Vec<EntityId> {
+        let (Some(units), Some(variant)) = (self.units.as_ref(), variant) else {
+            return Vec::new();
+        };
+        let Some(accepted) = units.unit(variant).map(|stats| &stats.drop_sites) else {
+            return Vec::new();
+        };
+        self.entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::Building && entity.player == player)
+            .filter(|entity| {
+                entity.unit.is_some_and(|unit| {
+                    accepted.contains(&unit) || accepted.contains(&units.root(unit))
+                })
+            })
+            .map(|entity| entity.id)
+            .collect()
     }
 
     /// **Whether a building is a drop site at all**: some worker in the pack lists it among the places it can hand a load

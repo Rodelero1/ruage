@@ -270,10 +270,16 @@ pub struct Build {
     /// (its own AI's rule: "a drop site already this near a forest, mine or forage makes another there pointless"). Content
     /// so a pack with bigger maps or cheaper camps can say otherwise.
     pub drop_site_spacing: u32,
-    /// **Which roles must not be built where a drop site already serves the resource** (the owner's rule: a lumber camp
+    /// Which roles must not be built where a drop site already serves the resource (the owner's rule: a lumber camp
     /// near the town centre or another camp is a walk saved twice). Content names them, like `blocking_roles`: the owner
     /// asked for lumber camps, and a mine can join the list without the engine learning either word.
     pub spaced_roles: Vec<String>,
+    /// **The role whose building is a farm plot**, if the pack has one: farms are placed in rings around the town centre and
+    /// around the mill, which is a placement rule rather than a gather rule (the owner's note, 2026-11-04).
+    pub farm: Option<String>,
+    /// **How many farm widths to leave between the town centre and the mill** (the owner: "mill should be built 2 farms away
+    /// from the town centre"). The ring a house may not be built in is this plus one, measured in tiles.
+    pub farm_spacing: u32,
     /// Which roles block movement once built: walls and their kin. Empty means nothing built blocks,
     /// which is how every pack behaved before walls existed (D54).
     pub blocking_roles: Vec<String>,
@@ -523,6 +529,12 @@ struct RawBuild {
     /// Roles that must not be built where a drop site already serves the resource. Empty by default: no spacing rule.
     #[serde(default)]
     spaced_roles: Vec<String>,
+    /// The role whose building is a farm plot. Unset means the pack has no farms and no rings are reserved.
+    #[serde(default)]
+    farm: Option<String>,
+    /// Farm widths between the town centre and the mill: 2 is the owner's number.
+    #[serde(default = "default_farm_spacing")]
+    farm_spacing: u32,
     /// Defaulted to empty: a pack that says nothing about walls builds nothing that blocks.
     #[serde(default)]
     blocking_roles: Vec<String>,
@@ -535,6 +547,12 @@ struct RawBuild {
 /// implementation's `kCovered`, which its AI derives from the original's placement rules.
 fn default_drop_site_spacing() -> u32 {
     5
+}
+
+/// Two farm widths between the town centre and the mill: the owner's number (2026-11-04), and the game's own habit - a mill
+/// with two plots between it and the centre leaves room for the ring that follows the first farms.
+fn default_farm_spacing() -> u32 {
+    2
 }
 
 #[derive(Deserialize)]
@@ -830,6 +848,26 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         }
     }
 
+    if let Some(farm) = &raw.build.farm
+        && !raw.role.contains_key(farm)
+    {
+        return Err(invalid(
+            path,
+            "build.farm",
+            format!("{farm:?} is not a name in this pack's [role] table"),
+        ));
+    }
+    if !(1..=4).contains(&raw.build.farm_spacing) {
+        return Err(invalid(
+            path,
+            "build.farm_spacing",
+            format!(
+                "{} is not between 1 and 4 farm widths",
+                raw.build.farm_spacing
+            ),
+        ));
+    }
+
     // Every role with a spacing rule must be a role this pack has, or the rule silently applies to nothing.
     for role in &raw.build.spaced_roles {
         if !raw.role.contains_key(role) {
@@ -917,6 +955,8 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             repair_hp_per_second: MaybeFixed::from_f64(raw.build.repair_hp_per_second),
             drop_site_spacing: raw.build.drop_site_spacing,
             spaced_roles: raw.build.spaced_roles,
+            farm: raw.build.farm.clone(),
+            farm_spacing: raw.build.farm_spacing,
             blocking_roles: raw.build.blocking_roles,
             requires: raw.build.requires,
         },

@@ -13,6 +13,8 @@ use serde::Deserialize;
 
 use ruage_data::Policy;
 
+use ruage_fixed::Fixed;
+
 use crate::{Command, EntityId, EntityKind, Task, World};
 
 /// The scenario format's own version. It is not a config file: it describes a match, so it moves
@@ -455,55 +457,72 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
             let worker = nth_villager(world, player, *villager)
                 .ok_or_else(|| format!("player {player} has no villager {villager}"))?;
             let unit = role_of(world, role)?;
-            let at = match where_.as_deref() {
-                None | Some("near_town_center") => {
-                    free_tile_near(world, player, unit, Some(worker))
-                }
-                Some(resource) => {
-                    // A building placed for a resource is a building placed *at* that resource: a lumber camp beside
-                    // the wood is the whole point of a lumber camp, and one beside the town centre is wood spent on a
-                    // longer walk.
-                    let slot = world.slot_of(resource).ok_or_else(|| {
+            // **A farm goes in the ring**, not beside the berries: the plots belong around the town centre and then around the
+            // mill, and `where = "food"` on a farm rule is the pack saying what it feeds on, not where it stands. The step and
+            // the rule resolvers share this branch, because a role means the same thing in both.
+            let at = if world.farm_unit() == Some(unit) {
+                farm_site(world, player, unit, food_variant(world), Some(worker))
+            } else {
+                match where_.as_deref() {
+                    None | Some("near_town_center") => {
+                        free_tile_near(world, player, unit, Some(worker))
+                    }
+                    Some(resource) => {
+                        // A building placed for a resource is a building placed *at* that resource: a lumber camp beside
+                        // the wood is the whole point of a lumber camp, and one beside the town centre is wood spent on a
+                        // longer walk.
+                        let slot = world.slot_of(resource).ok_or_else(|| {
                         format!(
                             "where = {resource:?} names no resource in the pack, so there is nothing to build beside"
                         )
                     })?;
-                    let centre = town_center_of(world, player).ok_or_else(|| {
-                        format!("player {player} has no town centre to measure a walk from")
-                    })?;
-                    // **A camp where a drop site already serves the resource is a wasted camp.** The reference
-                    // implementation's rule (`kCovered = 5` tiles, the town centre not counting) skips nodes an existing
-                    // drop site already serves and takes the next; farms are not drop sites, so their near-the-mill rule is
-                    // untouched by this.
-                    let variant = world.entity(worker).and_then(|entity| entity.variant);
-                    let spacing = world.drop_site_spacing();
-                    let camp = world.build_spaces_drop_sites(role);
-                    let mut chosen = None;
-                    for nth in 0..16 {
-                        let Some(candidate) = nearest_resource(world, centre, slot, nth) else {
-                            break;
+                        let centre = town_center_of(world, player).ok_or_else(|| {
+                            format!("player {player} has no town centre to measure a walk from")
+                        })?;
+                        // **A camp where a drop site already serves the resource is a wasted camp.** The reference
+                        // implementation's rule (`kCovered = 5` tiles, the town centre not counting) skips nodes an existing
+                        // drop site already serves and takes the next; farms are not drop sites, so their near-the-mill rule is
+                        // untouched by this.
+                        let variant = world.entity(worker).and_then(|entity| entity.variant);
+                        let spacing = world.drop_site_spacing();
+                        let camp = world.build_spaces_drop_sites(role);
+                        let mut chosen = None;
+                        let here = world.position(centre);
+                        let candidates = match here {
+                            Some(here) => nearest_nodes(world, here, slot, 16),
+                            None => Vec::new(),
                         };
-                        let covered = camp
-                            && world.position(candidate).is_some_and(|position| {
-                                world.drop_site_within(
-                                    player,
-                                    variant,
-                                    world.tile_of_position(position),
-                                    spacing,
-                                    true,
-                                )
-                            });
-                        if !covered {
-                            chosen = Some(candidate);
-                            break;
+                        for candidate in candidates {
+                            let covered = camp
+                                && world.position(candidate).is_some_and(|position| {
+                                    world.drop_site_within(
+                                        player,
+                                        variant,
+                                        world.tile_of_position(position),
+                                        spacing,
+                                        true,
+                                    )
+                                });
+                            if covered {
+                                continue;
+                            }
+                            // The walk is the expensive question, so it is asked last, and only of a node that survived every cheap test.
+                            if here.is_none_or(|here| {
+                                world
+                                    .position(candidate)
+                                    .is_some_and(|at| world.can_reach(here, at))
+                            }) {
+                                chosen = Some(candidate);
+                                break;
+                            }
                         }
-                    }
-                    let node = chosen.ok_or_else(|| {
+                        let node = chosen.ok_or_else(|| {
                         format!(
                             "player {player} has no {resource} node that a drop site does not already serve"
                         )
                     })?;
-                    free_tile_near_node(world, node, unit, player, Some(worker))
+                        free_tile_near_node(world, node, unit, player, Some(worker))
+                    }
                 }
             };
             let at =
@@ -615,6 +634,26 @@ fn nth_villager(world: &World, player: u8, index: usize) -> Option<EntityId> {
         .nth(index)
 }
 
+/// **The nearest nodes of a kind, sorted by (distance, id), with no reachability test at all.** Reachability is a path
+/// search per node, so a caller that walks a list of candidates must not pay it for nodes it will never choose: the camp
+/// rule used to call `nearest_resource` sixteen times, each of which sorted every node on the map *and* path-searched to
+/// each - 840 ms per firing, every five seconds, in the late match (measured with `RUAGE_PROFILE_RULES`).
+fn nearest_nodes(world: &World, from: (Fixed, Fixed), slot: usize, limit: usize) -> Vec<EntityId> {
+    let mut nodes: Vec<(i64, u32, EntityId)> = world
+        .entities()
+        .iter()
+        .filter(|entity| entity.kind == EntityKind::Resource(slot))
+        .map(|entity| {
+            let dx = entity.position.0.raw() - from.0.raw();
+            let dy = entity.position.1.raw() - from.1.raw();
+            (dx * dx + dy * dy, entity.id.0, entity.id)
+        })
+        .collect();
+    nodes.sort_unstable();
+    nodes.truncate(limit);
+    nodes.into_iter().map(|(_, _, id)| id).collect()
+}
+
 /// The `nth` nearest node of a kind that the villager can actually walk to, ordered by
 /// (distance, id) so the choice is deterministic and two villagers told `nth = 0` and `nth = 1` land
 /// on different nodes.
@@ -676,6 +715,7 @@ fn free_tile_near_node(
     // **Wide enough for a footprint, not for a tile.** The search used to span four tiles, which is plenty for a point and
     // too little for a farm: a 3x3 plot needs its whole footprint free, and around a bush among trees a four-tile ring
     // found a corner at best - 46 refusals of "no free tile for a farm" in one acceptance run.
+    let ring = Ring::of(world, player, unit);
     for radius in 1..=8u16 {
         for dy in 0..=radius {
             for dx in 0..=radius {
@@ -688,6 +728,7 @@ fn free_tile_near_node(
                     if world.is_free_ground(x, y)
                         && world.site_fits(player, unit, (x, y))
                         && world.site_has_lane(player, unit, (x, y))
+                        && ring.allows((x, y))
                         && reachable(world, builder, (x, y))
                     {
                         return Some((x, y));
@@ -697,6 +738,137 @@ fn free_tile_near_node(
         }
     }
     None
+}
+
+/// **Where a building may stand relative to the town centre**, in the farm ring's own terms (the owner's note, 2026-11-04:
+/// "houses and other buildings should be constructed in a way to allow such farm placement").
+///
+/// A farm fills the ring and may stand anywhere; a drop site may stand in its outer half - the mill is *two farm widths out*,
+/// which is the whole point of the ring; anything else stands outside it. A pack with no `[build] farm` has no ring and every
+/// building is free, which is what this returned before the rule existed.
+///
+/// Built **once per placement**, not once per candidate tile: `is_drop_site` walks the whole unit table, and asking it for
+/// 289 candidate tiles per site search was the difference between a 36-second acceptance run and a 104-second one.
+struct Ring {
+    centre: Option<(i64, i64)>,
+    farm: Option<u32>,
+    unit: u32,
+    drop: bool,
+    far: i64,
+    near: i64,
+}
+
+impl Ring {
+    fn of(world: &World, player: u8, unit: u32) -> Self {
+        let far = i64::from(world.farm_ring_end());
+        let scale = world.scale();
+        Ring {
+            centre: town_center_of(world, player)
+                .and_then(|id| world.position(id))
+                .map(|at| (at.0.raw() / scale, at.1.raw() / scale)),
+            farm: world.farm_unit(),
+            unit,
+            drop: far > 0 && world.is_drop_site(unit),
+            far,
+            near: far.saturating_sub(2),
+        }
+    }
+
+    /// Whether a building of this kind may stand here.
+    fn allows(&self, site: (u16, u16)) -> bool {
+        if self.far == 0 || self.farm == Some(self.unit) {
+            return true;
+        }
+        let Some((cx, cy)) = self.centre else {
+            return true;
+        };
+        let (dx, dy) = (i64::from(site.0) - cx, i64::from(site.1) - cy);
+        let distance = dx * dx + dy * dy;
+        // Squared, so the comparison is exact and no rounding decides a site.
+        if self.drop {
+            distance >= self.near * self.near
+        } else {
+            distance >= self.far * self.far
+        }
+    }
+}
+
+/// The worker variant that carries **food**, from the pack's own gather table (`[gather.variant]`): the farm ring is drawn
+/// around the buildings that variant may hand a load in at, which is the pack saying "where does this go" rather than the
+/// engine assuming a mill.
+fn food_variant(world: &World) -> Option<u32> {
+    world.gather_variant("food")
+}
+
+/// **A farm site: in the ring around the town centre first, then around the mill.** The owner's picture - farms around the
+/// centre, and the next ring around the mill right next to them - so the search is by distance from the centre outward, and a
+/// mill is tried only when the centre's ring is full.
+fn farm_site(
+    world: &World,
+    player: u8,
+    unit: u32,
+    variant: Option<u32>,
+    builder: Option<EntityId>,
+) -> Option<(u16, u16)> {
+    let mut origins: Vec<(u16, u16)> = Vec::new();
+    let scale = world.scale();
+    // **The town centre and the buildings that take food** - not every camp on the map. A ring drawn around a lumber camp put
+    // farms at the far side of the base with a long walk to any drop site; the food worker's own `drop_sites` list is the
+    // pack's answer to "where does this load go" and it is already the edge the return path follows.
+    if let Some(centre) = town_center_of(world, player).and_then(|id| world.position(id)) {
+        origins.push((
+            u16::try_from(centre.0.raw() / scale).ok()?,
+            u16::try_from(centre.1.raw() / scale).ok()?,
+        ));
+    }
+    for site in world.drop_sites_of(player, variant) {
+        let Some(at) = world.position(site) else {
+            continue;
+        };
+        if let (Ok(x), Ok(y)) = (
+            u16::try_from(at.0.raw() / scale),
+            u16::try_from(at.1.raw() / scale),
+        ) {
+            origins.push((x, y));
+        }
+    }
+    // **Gather first, walk last.** `reachable` is a path search, so asking it per candidate turned one farm order into seconds:
+    // 256 candidates times an A* is how a 3-second rule became a five-minute match. Geometry is cheap and can be checked for
+    // every tile; the builder's walk is the expensive question and belongs on the handful of sites that survived.
+    let mut candidates: Vec<(u16, u16)> = Vec::new();
+    for origin in origins {
+        for radius in 1..=10u16 {
+            for dy in 0..=radius {
+                for dx in 0..=radius {
+                    for (x, y) in [
+                        (origin.0 + dx, origin.1 + dy),
+                        (origin.0 + dx, origin.1.wrapping_sub(dy)),
+                        (origin.0.wrapping_sub(dx), origin.1 + dy),
+                        (origin.0.wrapping_sub(dx), origin.1.wrapping_sub(dy)),
+                    ] {
+                        if world.is_free_ground(x, y)
+                            && world.site_fits(player, unit, (x, y))
+                            && world.site_has_lane(player, unit, (x, y))
+                        {
+                            candidates.push((x, y));
+                        }
+                        if candidates.len() >= 8 {
+                            break;
+                        }
+                    }
+                }
+            }
+            if candidates.len() >= 8 {
+                break;
+            }
+        }
+        if candidates.len() >= 8 {
+            break;
+        }
+    }
+    candidates
+        .into_iter()
+        .find(|site| reachable(world, builder, *site))
 }
 
 /// Can `builder` walk to that tile? A site elsewhere on the map is a site nobody can raise.
@@ -739,6 +911,7 @@ fn free_tile_near(
     // build your first house too close to the Town Center; make sure there will be enough room for farms later"* - and
     // the reason a base that packs itself against the centre has nowhere left to put a plot. Radius 2-3 is tried only if
     // nothing further out fits.
+    let ring = Ring::of(world, player, unit);
     for radius in 4..=12u16 {
         for dy in 0..=radius {
             for dx in 0..=radius {
@@ -751,6 +924,7 @@ fn free_tile_near(
                     if world.is_free_ground(x, y)
                         && world.site_fits(player, unit, (x, y))
                         && world.site_has_lane(player, unit, (x, y))
+                        && ring.allows((x, y))
                         && reachable(world, builder, (x, y))
                     {
                         return Some((x, y));
@@ -772,6 +946,7 @@ fn free_tile_near(
                     if world.is_free_ground(x, y)
                         && world.site_fits(player, unit, (x, y))
                         && world.site_has_lane(player, unit, (x, y))
+                        && ring.allows((x, y))
                         && reachable(world, builder, (x, y))
                     {
                         return Some((x, y));
@@ -1128,50 +1303,67 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Vec<Command>, String> {
             let worker = idle_villager(world, player)
                 .ok_or_else(|| format!("player {player} has no idle villager to build with"))?;
             let unit = role_of(world, role)?;
-            let at = match where_.as_deref() {
-                None | Some("near_town_center") => {
-                    free_tile_near(world, player, unit, Some(worker))
-                }
-                Some(resource) => {
-                    let slot = world.slot_of(resource).ok_or_else(|| {
-                        format!("the content pack defines no resource called {resource:?}")
-                    })?;
-                    let centre = town_center_of(world, player).ok_or_else(|| {
-                        format!("player {player} has no town centre to measure a walk from")
-                    })?;
-                    // **A camp where a drop site already serves the resource is a wasted camp.** The reference
-                    // implementation's rule (`kCovered = 5` tiles, the town centre not counting) skips nodes an existing
-                    // drop site already serves and takes the next; farms are not drop sites, so their near-the-mill rule is
-                    // untouched by this.
-                    let variant = world.entity(worker).and_then(|entity| entity.variant);
-                    let spacing = world.drop_site_spacing();
-                    let camp = world.build_spaces_drop_sites(role);
-                    let mut chosen = None;
-                    for nth in 0..16 {
-                        let Some(candidate) = nearest_resource(world, centre, slot, nth) else {
-                            break;
-                        };
-                        let covered = camp
-                            && world.position(candidate).is_some_and(|position| {
-                                world.drop_site_within(
-                                    player,
-                                    variant,
-                                    world.tile_of_position(position),
-                                    spacing,
-                                    true,
-                                )
-                            });
-                        if !covered {
-                            chosen = Some(candidate);
-                            break;
-                        }
+            // **A farm goes in the ring**, not beside the berries: the plots belong around the town centre and then around the
+            // mill, and `where = "food"` on a farm rule is the pack saying what it feeds on, not where it stands. The step and
+            // the rule resolvers share this branch, because a role means the same thing in both.
+            let at = if world.farm_unit() == Some(unit) {
+                farm_site(world, player, unit, food_variant(world), Some(worker))
+            } else {
+                match where_.as_deref() {
+                    None | Some("near_town_center") => {
+                        free_tile_near(world, player, unit, Some(worker))
                     }
-                    let node = chosen.ok_or_else(|| {
+                    Some(resource) => {
+                        let slot = world.slot_of(resource).ok_or_else(|| {
+                            format!("the content pack defines no resource called {resource:?}")
+                        })?;
+                        let centre = town_center_of(world, player).ok_or_else(|| {
+                            format!("player {player} has no town centre to measure a walk from")
+                        })?;
+                        // **A camp where a drop site already serves the resource is a wasted camp.** The reference
+                        // implementation's rule (`kCovered = 5` tiles, the town centre not counting) skips nodes an existing
+                        // drop site already serves and takes the next; farms are not drop sites, so their near-the-mill rule is
+                        // untouched by this.
+                        let variant = world.entity(worker).and_then(|entity| entity.variant);
+                        let spacing = world.drop_site_spacing();
+                        let camp = world.build_spaces_drop_sites(role);
+                        let mut chosen = None;
+                        let here = world.position(centre);
+                        let candidates = match here {
+                            Some(here) => nearest_nodes(world, here, slot, 16),
+                            None => Vec::new(),
+                        };
+                        for candidate in candidates {
+                            let covered = camp
+                                && world.position(candidate).is_some_and(|position| {
+                                    world.drop_site_within(
+                                        player,
+                                        variant,
+                                        world.tile_of_position(position),
+                                        spacing,
+                                        true,
+                                    )
+                                });
+                            if covered {
+                                continue;
+                            }
+                            // The walk is the expensive question, so it is asked last, and only of a node that survived every cheap test.
+                            if here.is_none_or(|here| {
+                                world
+                                    .position(candidate)
+                                    .is_some_and(|at| world.can_reach(here, at))
+                            }) {
+                                chosen = Some(candidate);
+                                break;
+                            }
+                        }
+                        let node = chosen.ok_or_else(|| {
                         format!(
                             "player {player} has no {resource} node that a drop site does not already serve"
                         )
                     })?;
-                    free_tile_near_node(world, node, unit, player, Some(worker))
+                        free_tile_near_node(world, node, unit, player, Some(worker))
+                    }
                 }
             };
             let at = at.ok_or_else(|| format!("no free tile for a {role}"))?;
@@ -1251,11 +1443,9 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Vec<Command>, String> {
                     });
                 }
             }
-            if commands.is_empty() {
-                return Err(format!(
-                    "player {player} has no idle {role} with anywhere left to look"
-                ));
-            }
+            // **Nothing to do is not a refusal.** A scout that is already walking was sent somewhere by this same rule a
+            // moment ago; reporting "no idle scout" every four seconds filled the run's refusal list with 389 lines that said
+            // the rule was working. A role the pack does not have is still an error, and `role_of` says so above.
             Ok(commands)
         }
         RuleAction::Attack { attacker, target } => {

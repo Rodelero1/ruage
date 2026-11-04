@@ -2636,6 +2636,19 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D106 - The farm ring is content's, and reachability is asked last
+
+`[build] farm` names the plot and `[build] farm_spacing` is how many farm widths sit between the town centre and the mill. The
+ring's reach is `spacing x farm width + 1`, the width taken from the dat's own footprint. A farm fills the ring; a drop site
+may stand in its outer half (the mill *is* the ring's outer edge); everything else stands outside it. A pack with no `[build]
+farm` has no ring and every building is free, which is the behaviour that came before.
+
+**The rule that came out of the performance bug: a reachability test is asked last, and of the fewest candidates.** Three
+places were doing a path search per candidate - the camp rule (840 ms a firing), the farm search (256 candidates) and
+`nearest_like` (**1,336 path searches in one tick**) - and each looked innocent on its own. Geometry (`is_free_ground`,
+`site_fits`, a distance sort) is cheap and can be asked of everything; the walk is a search and belongs on the handful of
+sites that survived. Measured: 104 s -> 11.9 s, with a byte-identical acceptance hash.
+
 ## D105 - A birth is never inside a building, and a rally into one walks to the door
 
 Two rules that the opening scout exposed rather than caused:
