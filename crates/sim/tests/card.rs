@@ -103,22 +103,22 @@ fn a_town_centre_offers_a_villager() {
     );
 }
 
-/// **A card says why a button would be refused**, in the engine's words - the same `check_train` the order goes through, so a
-/// button can never be offered for an order that would be refused.
+/// **A card does not offer what the age forbids.** The owner asked for this in as many words (2026-11-04): "Imperial Age
+/// upgrades should not show in Feudal Age". The spear line is not a greyed button in the Dark Age - it is not on the card.
 #[test]
-fn a_barracks_card_refuses_the_spear_line_until_it_is_unlocked() {
+fn a_barracks_card_hides_the_spear_line_until_it_is_unlocked() {
     let Some(mut world) = fresh() else { return };
     let barracks = a_finished_barracks(&mut world);
     let spearman = world.role_unit("spearman").expect("a spearman role");
 
     let card = world.card(1, barracks);
-    let item = card
-        .iter()
-        .find(|item| item.target == CardTarget::Unit(spearman))
-        .expect("the spear line is on a barracks' card, refused or not");
     assert!(
-        item.refusal.is_some(),
-        "the spearman is gated in the Dark Age and the card offered it"
+        card.iter()
+            .all(|item| item.target != CardTarget::Unit(spearman)),
+        "a Dark Age barracks offers the spear line: {:?}",
+        card.iter()
+            .map(|item| (&item.name, &item.refusal))
+            .collect::<Vec<_>>()
     );
 
     world.grant_tech(1, 101).expect("the Feudal Age");
@@ -163,9 +163,10 @@ fn a_town_centre_offers_its_ages() {
     );
 }
 
-/// **A slot does not move when a button becomes available.** The first version sorted the card by affordability, so a
-/// button jumped to another slot the moment the age opened it - which is how a player clicks the wrong one. The order is
-/// the pack's, and it is the same before and after the Feudal Age opens the spear line.
+/// **A slot does not move when money arrives, and a newly allowed item is appended.** The first version sorted the card by
+/// affordability, so a button jumped to another slot the moment it became affordable - which is how a player clicks the
+/// wrong one. The order is the pack's; an age that opens a new item appends it rather than reshuffling what is already
+/// there (that is the one reorder the player can see coming, because the age is their own decision).
 #[test]
 fn a_card_slot_does_not_move_when_a_button_opens() {
     let Some(mut world) = fresh() else { return };
@@ -182,7 +183,12 @@ fn a_card_slot_does_not_move_when_a_button_opens() {
         .map(|item| item.target)
         .collect();
     assert_eq!(
-        before, after,
-        "the card reordered itself when a button became available"
+        before,
+        after[..before.len()],
+        "the card reordered itself when a button became available: {before:?} then {after:?}"
+    );
+    assert!(
+        after.len() > before.len(),
+        "the Feudal Age opened nothing on a barracks' card: {after:?}"
     );
 }

@@ -804,7 +804,7 @@ pub enum SimError {
     MatchOver,
 }
 
-impl fmt::Display for SimError {
+impl std::fmt::Display for SimError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SimError::TooManyEntities { max } => write!(
@@ -9295,6 +9295,11 @@ impl World {
             && let Some(made) = economy.train.by_building.get(&root)
         {
             for candidate in made {
+                let refusal = self.check_train(entity, *candidate).err();
+                // Hidden, not refused: the age's answer is not a choice the player can take (see `SimError::is_gate`).
+                if refusal.as_ref().is_some_and(|err| self.is_age_gate(err)) {
+                    continue;
+                }
                 let costs = self
                     .units
                     .as_ref()
@@ -9307,10 +9312,7 @@ impl World {
                         .role_name(*candidate)
                         .unwrap_or_else(|| format!("unit {candidate}")),
                     costs,
-                    refusal: self
-                        .check_train(entity, *candidate)
-                        .err()
-                        .map(|err| err.to_string()),
+                    refusal: refusal.map(|err| err.to_string()),
                 });
             }
         }
@@ -9320,16 +9322,20 @@ impl World {
                 .techs
                 .iter()
                 .filter(|(_, tech)| u32::try_from(tech.location).ok() == Some(root))
-                .map(|(id, tech)| CardItem {
-                    target: CardTarget::Tech(*id),
-                    name: self
-                        .tech_role_name(*id)
-                        .map_or_else(|| format!("tech {id}"), str::to_owned),
-                    costs: self.cost_slots(&tech.costs),
-                    refusal: self
-                        .check_research(entity, *id)
-                        .err()
-                        .map(|err| err.to_string()),
+                .filter_map(|(id, tech)| {
+                    // One refusal, asked once: the gate check and the sentence are the same answer.
+                    let refusal = self.check_research(entity, *id).err();
+                    if refusal.as_ref().is_some_and(|err| self.is_age_gate(err)) {
+                        return None;
+                    }
+                    Some(CardItem {
+                        target: CardTarget::Tech(*id),
+                        name: self
+                            .tech_role_name(*id)
+                            .map_or_else(|| format!("tech {id}"), str::to_owned),
+                        costs: self.cost_slots(&tech.costs),
+                        refusal: refusal.map(|err| err.to_string()),
+                    })
                 })
                 .collect();
             // **A slot does not move when the money changes.** The first version put the affordable things first, so a
@@ -9429,6 +9435,38 @@ impl World {
             let dx = entity.position.0.raw() - here.0.raw();
             let dy = entity.position.1.raw() - here.1.raw();
             dx * dx + dy * dy <= reach * reach
+        })
+    }
+
+    /// **Whether a refusal is the age talking rather than a price or a building the player could put up now.** The owner's
+    /// note (2026-11-04): "techs, upgrades and units should be shown based on age the player is in. Imperial Age upgrades
+    /// should not show in Feudal Age." So an item whose answer is "not available", "not upgraded", "your civ bars it", or "a
+    /// *later age* is missing" is hidden, while "you need two dark age buildings" or "not enough food" stays on the card with
+    /// the engine's sentence: those are things the player can act on in this age.
+    #[must_use]
+    pub fn is_age_gate(&self, err: &SimError) -> bool {
+        match err {
+            SimError::UnitUnavailable { .. }
+            | SimError::UnitNotUpgraded { .. }
+            | SimError::UnitBarred { .. }
+            | SimError::TechBarred { .. }
+            | SimError::AlreadyResearched { .. } => true,
+            SimError::MissingPrerequisite { missing, .. } => self.is_age_tech(*missing),
+            _ => false,
+        }
+    }
+
+    /// **Whether a tech is one of the pack's ages** (`[age] order`): the question "is this gap an age, or something the
+    /// player can close now" cannot be answered by the dat's numbering (dark 104, feudal 101, castle 102, imperial 103).
+    #[must_use]
+    pub fn is_age_tech(&self, tech: u32) -> bool {
+        self.economy.as_ref().is_some_and(|economy| {
+            economy
+                .age
+                .order
+                .iter()
+                .filter_map(|role| economy.tech_role.get(role).copied())
+                .any(|id| id == tech)
         })
     }
 

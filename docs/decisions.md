@@ -2636,6 +2636,16 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D104 - A card offers what the age allows
+
+An item whose refusal is **the age** is hidden; an item whose refusal is a price, a queue or a building the player could put
+up now stays on the card, greyed, with the engine's own sentence. The classification lives on `World::is_age_gate`, not on
+`SimError`: it needs the pack's `[age] order` to know that the missing prerequisite is an age (the dat's numbering says
+nothing), and putting it on the error type forced `AgeNeedsBuildings` into the gate set, which hid the button that tells the
+player how to age up.
+
+Money never moves a slot; an age that opens an item appends it.
+
 ## D103 - A camp is not built where a drop site already serves the resource
 
 Content names the roles that get the rule (`[build] spaced_roles`) and the spacing (`[build] drop_site_spacing = 5`); the
