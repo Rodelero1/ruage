@@ -62,10 +62,18 @@
 >
 > **Order for the next session:**
 >
-> 1. **The gather approach to a moving target** (M3b, now the blocker for everything else): a test where the sheep is herded
->    away and the villager must follow - `path_length` must never sit at 0 with a live `Gather`. Suspects, in order: the
->    replan key (it may only retrigger when the *goal tile* changes, and it is the goal *point* that moves), and a failed
->    plan leaving the route empty instead of retrying. The deck's closest-point-path rule is the shape of the fix.
+> 1. **The gather approach to a moving target** (M3b, now the blocker for everything else) - **mechanism found, fix written
+>    and reverted because it cannot be proved on its own.** The line is
+>    `let next = self.next_waypoint(entity.id).unwrap_or(target)` in the `Task::Gather` and `Task::Return` approach branches:
+>    when the route is spent the unit walks **straight at the target, ignoring ground**. That is why the gatherer freezes
+>    under M3c (the blind line crosses the town centre's core and every step is refused) and why it merely *presses* into
+>    walls today. The fix is an `approach_point(id, target)` helper: follow the route while it has a waypoint, otherwise
+>    **plan again for where the target is now**, and stand still if the plan fails.
+>    **Why it is not landed:** at HEAD the tile-level ground rule masks the blind walk, so no test fails before M3c is in -
+>    and D7 forbids landing production code without a test watched failing. **Land this fix and M3c as one slice**, with the
+>    three animal tests as the acceptance: `a_live_animal_is_a_gather_source`, `a_sheep_stops_at_the_drop_site` and
+>    `the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body` are exactly the three that go red, and they go
+>    green when both are in. The helper's body is in this session's record and takes ten minutes to retype.
 > 2. **The two animal fixtures above** (a sheep inside a building's core; "beside" measured from the anchor tile rather than
 >    the footprint).
 > 3. **M3c** again, unchanged, once 1 and 2 are green - it was one mechanism away from landing.
