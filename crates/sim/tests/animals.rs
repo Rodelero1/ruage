@@ -78,10 +78,17 @@ fn seat(world: &World) -> (EntityId, EntityId, (Fixed, Fixed)) {
         .iter()
         .find(|entity| entity.player == 1 && entity.kind == EntityKind::Building)
         .expect("a town centre");
+    // **The villager, by role.** Since the owner asked for an opening scout (2026-11-04) the player's first unit is a
+    // horseman; a seat found by "first unit" would have sat a sheep down for a scout to gather.
+    let villager_unit = world.start_villager_unit().expect("a villager role");
     let villager = world
         .entities()
         .iter()
-        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
+        .find(|entity| {
+            entity.player == 1
+                && entity.kind == EntityKind::Unit
+                && entity.unit == Some(villager_unit)
+        })
         .expect("a villager");
     (centre.id, villager.id, centre.position)
 }

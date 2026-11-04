@@ -98,7 +98,8 @@ fn a_world_reports_the_entities_it_actually_holds() {
     // capacity bound downstream would be wrong.
     let Some(fx) = fixture() else { return };
     let world = world(&fx, 1);
-    assert_eq!(world.entities().len(), 126, "the authored map seeds 126");
+    // 128 since the opening scout: 10 player entities (2 town centres, 6 villagers, 2 scouts) and 118 nodes.
+    assert_eq!(world.entities().len(), 128, "the authored map seeds 128");
     assert!(
         world.entities().iter().all(|e| e.id.0 > 0),
         "ids start at 1"

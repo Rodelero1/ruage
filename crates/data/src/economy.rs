@@ -174,6 +174,11 @@ pub struct Start {
     pub town_center: String,
     pub villager: String,
     pub villagers_per_player: u32,
+    /// The role a match's **scouting unit** is, if the pack has one (the owner's note, 2026-11-04: "player should start
+    /// with scout cavalry, villagers shouldn't scout"). Content's word, like every other role here.
+    pub scout: Option<String>,
+    /// How many scouts each player begins with. Zero means none, and is the default so a pack that says nothing gets none.
+    pub scouts_per_player: u32,
     /// Tech roles a match begins with, already researched. Without them a match could research
     /// nothing at all: every tech in the table lists the Dark Age as a prerequisite.
     pub techs: Vec<String>,
@@ -545,6 +550,12 @@ struct RawStart {
     town_center: String,
     villager: String,
     villagers_per_player: u32,
+    /// The scouting unit's role, if any. Unset means the pack opens with no scout.
+    #[serde(default)]
+    scout: Option<String>,
+    /// How many scouts each player begins with. Defaulted to none.
+    #[serde(default)]
+    scouts_per_player: u32,
     #[serde(default)]
     techs: Vec<String>,
     #[serde(default)]
@@ -757,6 +768,27 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
     }
     // A start above 50 is a typo, not a game variant: the dat's own largest starting count is
     // nowhere near it, and spawning a thousand villagers would hide the mistake behind lag.
+    // A count with no role is a pack that means to scout and cannot, which is a mistake worth refusing at load rather than
+    // silently opening with no scout.
+    if raw.start.scouts_per_player > 0 && raw.start.scout.is_none() {
+        return Err(invalid(
+            path,
+            "start.scouts_per_player",
+            format!(
+                "{} scouts per player, but start.scout names no role",
+                raw.start.scouts_per_player
+            ),
+        ));
+    }
+    if let Some(scout) = &raw.start.scout
+        && !raw.role.contains_key(scout)
+    {
+        return Err(invalid(
+            path,
+            "start.scout",
+            format!("{scout:?} is not a name in this pack's [role] table"),
+        ));
+    }
     if !(1..=50).contains(&raw.start.villagers_per_player) {
         return Err(invalid(
             path,
@@ -901,6 +933,8 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             town_center: raw.start.town_center,
             villager: raw.start.villager,
             villagers_per_player: raw.start.villagers_per_player,
+            scout: raw.start.scout.clone(),
+            scouts_per_player: raw.start.scouts_per_player,
             techs: raw.start.techs,
             stock: raw.start.stock,
             civs: raw.start.civs,

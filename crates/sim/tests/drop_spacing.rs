@@ -63,12 +63,8 @@ fn bucket(world: &mut World, at: (i64, i64), amount: u32) -> EntityId {
 /// The lumberjack's own unit id, which **is** his variant: the pack says which buildings he may hand wood in at (109 the
 /// town centre, 562 the camp).
 fn lumberjack(world: &World) -> u32 {
-    world
-        .entities()
-        .iter()
-        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
-        .and_then(|entity| entity.unit)
-        .expect("a villager unit")
+    // By role, not "first unit": the player opens with a scout too (2026-11-04), and a horseman carries nothing.
+    world.start_villager_unit().expect("a villager role")
 }
 
 /// **Wood within five tiles of the town centre is served by it**, and wood on the far side of the map is not: the predicate

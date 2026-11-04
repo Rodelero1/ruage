@@ -1350,6 +1350,11 @@ pub struct World {
     /// Where each building's finished units go, by building. A side table: most buildings have none, and
     /// `Entity` is walked every tick.
     rallies: BTreeMap<EntityId, RallyPoint>,
+    /// **Units that were rallied into a building but appeared too far away to enter it**, and the building each is walking
+    /// to. A garrison order is refused for a unit that is not at the door, so a rally to "inside" used to shelter only a
+    /// unit that happened to be born touching the building and silently idled the rest - found when the owner's opening
+    /// scout made the town centre's free tiles crowded enough for a finished villager to appear two tiles out.
+    entering: BTreeMap<EntityId, EntityId>,
     /// The far end of a patrol, by unit: the end it is *not* walking towards. A side table because a
     /// patrol is one order on a few units, while `Task` is walked for every entity on the map.
     patrols: BTreeMap<EntityId, (Fixed, Fixed)>,
@@ -1506,6 +1511,7 @@ impl World {
             team_by_player: [1, 2, 3, 4, 5, 6, 7, 8],
             teams_named: false,
             rallies: BTreeMap::new(),
+            entering: BTreeMap::new(),
             patrols: BTreeMap::new(),
             resuming: BTreeMap::new(),
             stances: BTreeMap::new(),
@@ -2404,6 +2410,22 @@ impl World {
         };
         let tc_speed = resolve(town_center, tc_stats)?;
         let villager_speed = resolve(villager, villager_stats)?;
+        // **A scout, if the pack opens with one** (the owner's note, 2026-11-04). Resolved here, beside the villager's,
+        // because the seeding loop below inserts into `self` and may not hold a borrow of it.
+        let scout = match economy.start.scout.as_deref() {
+            Some(role) if economy.start.scouts_per_player > 0 => {
+                let unit = economy
+                    .role
+                    .get(role)
+                    .copied()
+                    .ok_or_else(|| SimError::NoRole {
+                        role: role.to_owned(),
+                    })?;
+                let stats = units.unit(unit).ok_or(SimError::MissingUnit { id: unit })?;
+                Some((unit, resolve(stats, unit)?, stats.hp))
+            }
+            _ => None,
+        };
 
         let mut centres = map.town_centers.clone();
         centres.sort_by_key(|centre| centre.player);
@@ -2435,6 +2457,8 @@ impl World {
             })?;
             next_id += 1;
 
+            // **A scout, so the map gets looked at** (the owner's note, 2026-11-04). It is content's role, and its speed and
+            // health are the unit's own: nothing here knows that a scout is a horseman.
             for _ in 0..economy.start.villagers_per_player {
                 let spot = free_neighbour(map, here, &used).ok_or(SimError::NoSpace {
                     player: centre.player,
@@ -2458,6 +2482,33 @@ impl World {
                     variant: None,
                 })?;
                 next_id += 1;
+            }
+
+            if let Some((scout_unit, scout_speed, scout_hp)) = scout {
+                for _ in 0..economy.start.scouts_per_player {
+                    let spot = free_neighbour(map, here, &used).ok_or(SimError::NoSpace {
+                        player: centre.player,
+                    })?;
+                    used.insert(spot);
+                    self.insert(Entity {
+                        id: EntityId(next_id),
+                        player: centre.player,
+                        kind: EntityKind::Unit,
+                        unit: Some(scout_unit),
+                        position: self.tile(spot),
+                        speed: scout_speed,
+                        velocity: (Fixed::ZERO, Fixed::ZERO),
+                        hp: scout_hp,
+                        amount: Fixed::ZERO,
+                        task: Task::Idle,
+                        training: None,
+                        construction: None,
+                        researching: None,
+                        carry: Fixed::ZERO,
+                        variant: None,
+                    })?;
+                    next_id += 1;
+                }
             }
         }
 
@@ -3562,11 +3613,24 @@ impl World {
                         .and_then(|entity| entity.unit)
                         .and_then(|unit| self.units.as_ref().and_then(|units| units.unit(unit)))
                         .is_some_and(|stats| stats.garrison > 0);
-                    if room
-                        && self.check_garrison(id, building).is_ok()
-                        && let Some(entity) = self.find_mut(id)
-                    {
-                        entity.task = Task::Garrisoned { building };
+                    if room && self.check_garrison(id, building).is_ok() {
+                        if let Some(entity) = self.find_mut(id) {
+                            entity.task = Task::Garrisoned { building };
+                        }
+                    } else if room {
+                        // **Too far to walk straight in.** A garrison order is refused for a unit that is not at the door,
+                        // so the finished unit walks to the building and enters on arrival (see `entering`). Without this a
+                        // rally to "inside" did nothing at all whenever the spawn tile was not touching the building.
+                        let goal = self
+                            .find(building)
+                            .map(|entity| self.tile_of(entity.position))
+                            .map(|door| self.tile(door));
+                        if let Some(to) = goal {
+                            if let Some(entity) = self.find_mut(id) {
+                                entity.task = Task::Move { to };
+                            }
+                            self.entering.insert(id, building);
+                        }
                     }
                 }
                 Some(RallyPoint::Tile(x, y)) => {
@@ -3664,6 +3728,17 @@ impl World {
                         continue;
                     }
                     if taken[((sy + 2) * SIDE + (sx + 2)) as usize] {
+                        continue;
+                    }
+                    // **Nobody is born inside a building.** The town centre's yard is walkable, so a busy spawn area used to
+                    // put a finished unit in its own building's footprint - and a unit standing there cannot walk in to
+                    // garrison, so a rally to the building silently did nothing (the owner's scout made the area busy enough
+                    // to expose it, 2026-11-04).
+                    if self.entities.iter().any(|entity| {
+                        entity.kind == EntityKind::Building
+                            && entity.hp > 0
+                            && self.footprint_area(entity).contains(&(cx, cy))
+                    }) {
                         continue;
                     }
                     return Some((cx, cy));
@@ -5801,6 +5876,39 @@ impl World {
         } else {
             TileVision::Explored
         }
+    }
+
+    /// **The nearest tile this player has never seen**, which is the only question a scout asks. Bounded: a scout that
+    /// crossed an already-explored half of the map would otherwise be sent to the far corner on every order, so the search
+    /// is a square of `limit` tiles around the unit and the nearest unseen tile in it wins. `explored_bit` is a bitset
+    /// read - no entity scan, unlike `vision`, which asks the same question one tile at a time.
+    #[must_use]
+    pub fn nearest_unseen(&self, player: u8, from: (u16, u16), limit: u16) -> Option<(u16, u16)> {
+        let (width, height) = self.map_size;
+        let (x, y) = (i32::from(from.0), i32::from(from.1));
+        let reach = i32::from(limit);
+        let mut best: Option<(i64, (u16, u16))> = None;
+        for ty in (y - reach).max(0)..=(y + reach).min(i32::from(height) - 1) {
+            for tx in (x - reach).max(0)..=(x + reach).min(i32::from(width) - 1) {
+                let (Ok(tx16), Ok(ty16)) = (u16::try_from(tx), u16::try_from(ty)) else {
+                    continue;
+                };
+                if self.explored_bit(player, (tx16, ty16)) {
+                    continue;
+                }
+                // No walkability test here: a scout may be sent at a tile it cannot stand on, and the order is refused at
+                // the pathfinder with the engine's own sentence, which is a better answer than a silent detour.
+                let dx = i64::from(tx) - i64::from(x);
+                let dy = i64::from(ty) - i64::from(y);
+                let key = dx * dx + dy * dy;
+                if best
+                    .is_none_or(|(best_key, best_tile)| (key, (tx16, ty16)) < (best_key, best_tile))
+                {
+                    best = Some((key, (tx16, ty16)));
+                }
+            }
+        }
+        best.map(|(_, tile)| tile)
     }
 
     /// The tiles this player has **ever** seen, as one bit per tile in row-major order - the grid the fog keeps, handed
@@ -8487,6 +8595,18 @@ impl World {
         }
         let mut resumed: Vec<EntityId> = Vec::new();
         for id in finished {
+            // A unit that arrived at the door of the building it was rallied into goes in, if the building still has room
+            // for it - the walk was the garrison order's first half.
+            if let Some(building) = self.entering.remove(&id) {
+                if self.check_garrison(id, building).is_ok() {
+                    if let Some(entity) = self.find_mut(id) {
+                        entity.task = Task::Garrisoned { building };
+                    }
+                    continue;
+                }
+                self.stand_down(id);
+                continue;
+            }
             if self.resuming.contains_key(&id) {
                 // The fight ended and the unit still has a place to be: attack-move's whole point.
                 resumed.push(id);

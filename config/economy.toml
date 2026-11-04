@@ -122,6 +122,11 @@ rate_from = "dat"
 town_center = "town_center"
 villager = "villager"
 villagers_per_player = 3
+# **A scout, so the map gets looked at** (the owner's note, 2026-11-04: "player should start with scout cavalry, villagers
+# shouldn't scout"). Content names the role; the count is a match rule. The AI sends exactly this role to unseen ground
+# (`do = "explore"` in ai/base.toml), so a villager is never the unit that wanders off to find the map.
+scout = "scout_cavalry"
+scouts_per_player = 1
 # What the match opens with. Every tech in the table lists the Dark Age tech as a prerequisite, so a
 # match that did not start with it could research nothing at all.
 techs = ["dark_age"]

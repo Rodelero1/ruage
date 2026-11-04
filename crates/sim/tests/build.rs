@@ -303,6 +303,10 @@ fn a_named_cost_the_pack_does_not_define_is_refused() {
     // The pack is our own, so the opening stockpile has to be too: the project's names food, wood,
     // gold and stone, and this pack has grain, iron, salt, wool and timber.
     economy.start.stock.clear();
+    // Our pack's unit table is a handful of invented units and has no scout: a start that names one is a load error, which
+    // is the engine being honest about a pack that cannot open the way it says it does.
+    economy.start.scout = None;
+    economy.start.scouts_per_player = 0;
     economy.gather.variant.insert("wood".to_owned(), 83);
     economy
         .gather
@@ -829,6 +833,10 @@ fn a_content_pack_with_our_own_resources_loads_and_spends() {
     // The pack is our own, so the opening stockpile has to be too: the project's names food, wood,
     // gold and stone, and this pack has grain, iron, salt, wool and timber.
     economy.start.stock.clear();
+    // Our pack's unit table is a handful of invented units and has no scout: a start that names one is a load error, which
+    // is the engine being honest about a pack that cannot open the way it says it does.
+    economy.start.scout = None;
+    economy.start.scouts_per_player = 0;
     economy.gather.variant.insert("wood".to_owned(), 83);
     economy
         .gather

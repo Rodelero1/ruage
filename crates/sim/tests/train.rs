@@ -233,7 +233,18 @@ fn a_building_that_is_still_going_up_cannot_train() {
 #[test]
 fn a_second_order_joins_the_queue_and_is_paid_at_once() {
     let Some(fx) = fixture() else { return };
-    let mut world = seeded(&fx);
+    // **One villager at the start**, so the ceiling is not what this test measures: three villagers, a scout and two more
+    // would be five, and since the opening scout (2026-11-04) the fifth slot is the horse. The claim here is about the queue
+    // and the create time, so the opening is made small enough to hold both arrivals.
+    let mut economy = fx.economy.clone();
+    economy.start.villagers_per_player = 1;
+    let mut world = World::new(&fx.settings, 5).expect("world");
+    world
+        .seed_from(&fx.map, &economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
     bank(&mut world, slot("food"), 150);
     let centre = town_center(&world);
     let order = |world: &mut World| {

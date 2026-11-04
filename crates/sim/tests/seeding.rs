@@ -73,14 +73,22 @@ fn a_seeded_map_gives_each_player_a_town_center_and_three_villagers() {
     let world = seeded(&fx);
 
     let owned_count = world.entities().iter().filter(|e| e.player != 0).count();
-    assert_eq!(owned_count, 8, "2 town centres + 3 villagers each");
+    // 2 town centres + 3 villagers + 1 scout each (the owner's note, 2026-11-04).
+    assert_eq!(
+        owned_count, 10,
+        "2 town centres + 3 villagers + a scout each"
+    );
     let players: Vec<u8> = world
         .entities()
         .iter()
         .filter(|e| e.player != 0)
         .map(|e| e.player)
         .collect();
-    assert_eq!(players, vec![1, 1, 1, 1, 2, 2, 2, 2], "grouped by player");
+    assert_eq!(
+        players,
+        vec![1, 1, 1, 1, 1, 2, 2, 2, 2, 2],
+        "grouped by player: a town centre, three villagers and a scout each"
+    );
 
     for player in [1, 2] {
         let owned: Vec<&ruage_sim::Entity> = world
@@ -93,8 +101,20 @@ fn a_seeded_map_gives_each_player_a_town_center_and_three_villagers() {
             .filter(|e| e.kind == EntityKind::Building)
             .count();
         let units = owned.iter().filter(|e| e.kind == EntityKind::Unit).count();
+        let villagers = owned
+            .iter()
+            .filter(|e| e.kind == EntityKind::Unit)
+            .filter(|e| e.unit == Some(fx.economy.role[&fx.economy.start.villager]))
+            .count();
+        let scouts = owned
+            .iter()
+            .filter(|e| e.kind == EntityKind::Unit)
+            .filter(|e| e.unit == Some(fx.economy.role["scout_cavalry"]))
+            .count();
         assert_eq!(buildings, 1, "player {player} has one town centre");
-        assert_eq!(units, 3, "player {player} has three villagers");
+        assert_eq!(villagers, 3, "player {player} has three villagers");
+        assert_eq!(scouts, 1, "player {player} has one scout");
+        assert_eq!(units, 4, "player {player} has three villagers and a scout");
     }
 }
 
@@ -132,9 +152,17 @@ fn villagers_carry_the_stats_from_the_unit_table() {
         .unit(fx.economy.role[&fx.economy.start.town_center])
         .expect("RTWC");
 
+    let scout = fx
+        .units
+        .unit(fx.economy.role["scout_cavalry"])
+        .expect("the scout's row");
     for entity in world.entities().iter().filter(|e| e.player != 0) {
+        // By what the entity *is*, not by "not a building": since the owner asked for an opening scout the player has two
+        // kinds of unit at the start, and a scout's 45 hp is not the villager's 25.
         let stats = if entity.kind == EntityKind::Building {
             tc
+        } else if entity.unit == Some(fx.economy.role["scout_cavalry"]) {
+            scout
         } else {
             villager
         };

@@ -140,10 +140,13 @@ fn a_double_click_takes_the_whole_kind() {
     let mut selection = Selection::new();
     selection.double_click(&snapshot, &camera, (pixel.0 + 2, pixel.1 + 2));
 
+    // **Same kind**, which since the opening scout is not "every unit the player owns": the player has a horseman too, and
+    // double-clicking a villager must not take him.
     let villagers = snapshot
         .entities
         .iter()
         .filter(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
+        .filter(|entity| entity.unit == villager.unit)
         .count();
     assert_eq!(
         selection.ids.len(),
@@ -239,7 +242,11 @@ fn the_hud_names_the_resources_the_pack_has() {
     let names: Vec<&str> = hud.stock.iter().map(|(name, _)| name.as_str()).collect();
     assert!(names.contains(&"food"), "{names:?}");
     assert!(names.contains(&"wood"), "{names:?}");
-    assert_eq!(hud.population, 3, "three villagers at the opening");
+    // Four: three villagers and the opening scout, which is a population slot the player has spent (2026-11-04).
+    assert_eq!(
+        hud.population, 4,
+        "three villagers and a scout at the opening"
+    );
     assert_eq!(hud.population_cap, 5, "a town centre supports five");
     assert_eq!(hud.selected.len(), 1);
     assert_eq!(hud.selected[0].id, villager.id);

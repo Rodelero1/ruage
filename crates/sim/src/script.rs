@@ -13,7 +13,7 @@ use serde::Deserialize;
 
 use ruage_data::Policy;
 
-use crate::{Command, EntityId, EntityKind, World};
+use crate::{Command, EntityId, EntityKind, Task, World};
 
 /// The scenario format's own version. It is not a config file: it describes a match, so it moves
 /// at its own pace and does not share `config/`'s schema constant.
@@ -177,6 +177,12 @@ pub enum RuleAction {
     Attack {
         attacker: String,
         target: String,
+    },
+    /// **Send every idle unit of a role at the nearest ground the player has never seen.** The owner's note (2026-11-04):
+    /// "player should start with scout cavalry, villagers shouldn't scout". The role is the whole guard - a villager is not
+    /// listed, so a villager cannot be sent scouting by this rule, and a pack that wants its villagers to explore says so.
+    Explore {
+        role: String,
     },
 }
 
@@ -1218,6 +1224,39 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Vec<Command>, String> {
                 villager: worker,
                 node: target,
             }])
+        }
+        RuleAction::Explore { role } => {
+            let scout_unit = role_of(world, role)?;
+            let mut commands = Vec::new();
+            for entity in world.entities() {
+                if entity.player != player || entity.kind != EntityKind::Unit {
+                    continue;
+                }
+                if !entity
+                    .unit
+                    .is_some_and(|unit| world.is_family(unit, scout_unit))
+                {
+                    continue;
+                }
+                // Only an idle scout is sent: one already walking somewhere was given that order by a rule with a better
+                // idea, and re-aiming it every cooldown would make it wander in place.
+                if !matches!(entity.task, Task::Idle) {
+                    continue;
+                }
+                let here = world.tile_of_position(entity.position);
+                if let Some(to) = world.nearest_unseen(player, here, 26) {
+                    commands.push(Command::Move {
+                        unit: entity.id,
+                        to,
+                    });
+                }
+            }
+            if commands.is_empty() {
+                return Err(format!(
+                    "player {player} has no idle {role} with anywhere left to look"
+                ));
+            }
+            Ok(commands)
         }
         RuleAction::Attack { attacker, target } => {
             let attacker_unit = role_of(world, attacker)?;

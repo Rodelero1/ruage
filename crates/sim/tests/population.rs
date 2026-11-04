@@ -211,10 +211,11 @@ const SPEARMAN: u32 = 93;
 fn a_town_center_supports_five_units() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    // Three villagers start and the town centre holds five, so two more arrive and no more.
+    // Three villagers and one **scout** start (the owner's note, 2026-11-04), and the town centre holds five, so one more
+    // villager arrives and no more. The scout counts: an opening horseman is a population slot the player has spent.
     assert_eq!(villagers(&world), 3);
-    assert_eq!(fill_to_the_ceiling(&mut world), 2);
-    assert_eq!(villagers(&world), 5);
+    assert_eq!(fill_to_the_ceiling(&mut world), 1);
+    assert_eq!(villagers(&world), 4);
 }
 
 /// The order is not refused at the ceiling: it is held, and its clock does not run.
@@ -394,10 +395,10 @@ fn the_cap_stops_at_what_content_allows() {
     economy.population.cap_default = 8;
     let mut world = seeded_with(&fx, &economy, true);
     a_finished_house(&mut world);
-    // Three villagers and a ceiling of eight: five arrive, where house plus town centre would say
-    // thirteen.
-    assert_eq!(fill_to_the_ceiling(&mut world), 5);
-    assert_eq!(villagers(&world), 8);
+    // Three villagers, one scout and a ceiling of eight: four more villagers arrive - the scout holds the fifth of the
+    // eight - where house plus town centre would say thirteen.
+    assert_eq!(fill_to_the_ceiling(&mut world), 4);
+    assert_eq!(villagers(&world), 7);
 }
 
 /// A queue may be longer than the ceiling, and it drains as the population frees up - that is the rule
@@ -421,8 +422,8 @@ fn a_queue_can_exceed_the_ceiling_and_drains_later() {
     }
     assert_eq!(
         villagers(&world),
-        5,
-        "three started, two arrived, the rest wait"
+        4,
+        "three villagers and a scout started, one more arrived, the rest wait"
     );
 
     a_finished_house(&mut world);

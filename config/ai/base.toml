@@ -22,6 +22,15 @@
 
 schema = 1
 
+# **The scout looks at the map** (the owner's note, 2026-11-04: "player should start with scout cavalry, villagers
+# shouldn't scout"). Exactly one role explores, so a villager is never the unit that wanders off; the four-second cooldown is
+# how often an idle scout picks its next patch of unseen ground.
+[[rule]]
+player = 1
+cooldown_seconds = 4.0
+do = "explore"
+role = "scout_cavalry"
+
 [[rule]]
 player = 1
 cooldown_seconds = 2.0

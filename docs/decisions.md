@@ -2636,6 +2636,20 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D105 - A birth is never inside a building, and a rally into one walks to the door
+
+Two rules that the opening scout exposed rather than caused:
+
+1. **A trained unit's spawn tile is never inside any building's footprint.** The town centre's yard is walkable and free, so
+   `free_spot_near` used to hand a finished villager a tile inside the town centre it had just left - a unit standing where
+   the game does not put one, and (2) made it unable to walk back in.
+2. **A rally to "inside" is a walk, then an entry.** `check_garrison` refuses a unit that is not at the door; the code used
+   to drop that refusal and idle the unit for ever. Now the unit walks to the building and enters on arrival
+   (`World::entering`). This is what the rally means, and the silence was the bug.
+
+Population follows from the first: an opening scout spends one of the town centre's five slots, so a match opens with three
+villagers, one scout and room for one more villager.
+
 ## D104 - A card offers what the age allows
 
 An item whose refusal is **the age** is hidden; an item whose refusal is a price, a queue or a building the player could put
