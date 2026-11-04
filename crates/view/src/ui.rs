@@ -467,12 +467,21 @@ impl Layout {
         let age = (age_x, (bar_h / 2) as i32 - 7, age_w, 14);
 
         // The panel: the grid on the left, the minimap on the right, the selected object in what is left.
-        let minimap_w = 160.min(width / 4);
+        //
+        // **As wide as a 2:1 diamond allows.** The owner asked for a bigger minimap (2026-11-04) and showed the game's own
+        // bar, where the map is a quarter of the width. A flat diamond twice as wide as it is tall is bounded by the *panel's
+        // height*, not by the screen: `2 x (panel - 12)` px wide fills the bar vertically, and a wider box than that would only
+        // add empty corners. 160 was the old fixed width - under half of what the bar can hold at 1280.
+        let minimap_h = panel_h.saturating_sub(12);
+        let minimap_w = (width / 4)
+            .min(minimap_h.saturating_mul(2))
+            .max(160)
+            .min(width / 3);
         let minimap = (
             width.saturating_sub(8 + minimap_w) as i32,
             panel.1 + 6,
             minimap_w,
-            panel_h.saturating_sub(12),
+            minimap_h,
         );
         // A command button is forty pixels square, as the game's are: a name and a price need the room.
         let slot: u32 = 40;
