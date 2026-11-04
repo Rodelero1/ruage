@@ -72,3 +72,40 @@ The three failures of my proportional-step attempt all come from moving the *ste
 at the start of a walk because the step and `collide` disagree about fractional positions, and arrival was an equality until
 it was a radius. This algorithm replaces the thing that was wrong — "walk toward the next tile centre" — instead of bending it.
 D109 records that, and this document is the design the next session starts from.
+
+## Second read of the deck (2026-11-04), asking it about the M3 jam
+
+M1 and M2 were built from this document and are landed (`d8f9751`, `ddcad16`). M3 — the body's *shape* against the ground —
+was attempted and reverted (`docs/next-step.md`, Session 10) because a body with a radius jammed at the foot of buildings.
+Re-read against that specific question, the deck says three things we had not taken, and is **silent on the one thing that
+actually jammed**:
+
+1. **A path is never a failure.** "What if our convex hulls escape our search area? **Expand search area once. Otherwise
+   give the closest point path**", and for the surrounded case: "do all the work, expand once". Our `plan_path` instead
+   returns `NoPath` and the task layer leaves the unit standing where it was — which is precisely the shape of the M3
+   freeze: a `Gather` at a sheep that walked away, the villager 5.37 tiles off with **no route, no refusal and no
+   movement**. A planner that always answers "the closest point I can reach" turns a silent stall into a visible walk, and
+   it is the same idea as the engine's own "a goal on blocked ground means *come as close as you can*". **This is the
+   lecture's most useful line for us and it is not in M2.**
+2. **Exactly-aligned overlapping rectangles are the degenerate case**: "perfectly aligning overlapping rectangles need to be
+   handled as going left or right is wrong here" → "just bridge to the intersected rectangle". Their walk hits it; our
+   graph form does not (it simply has no edge through the pinch), but the family is the one that produced M2's parallel-face
+   bug, and the fix is the same in both forms: detect the degenerate contact instead of deciding left or right.
+3. **The failure taxonomy and the regression harness are the method, not an aside.** Their loop is: run the game, find a
+   bug, fix the algorithm, then re-run **"lots of AI's spamming literally millions of paths"** over the whole suite of >100
+   cases. Their named failure classes are **"weird path"** and **"unit stuck"** — the second is ours from 2026-11-04
+   (a unit that stops with a live order is a bug whatever the cause). Our equivalent of the million-path harness is the
+   acceptance match plus the workspace suite; what we lack is a **class** test: *any* unit with a live order that does not
+   move for N ticks fails, whatever the mechanism. That is cheap to write and would have caught the M3 jam without knowing
+   which layer it lived in.
+4. Minor, and settled differently here: they give the edge walk a terminal condition by **counting turns** (four more rights
+   = still open, four more lefts = in a hole). Our geometry is a shortest-path search, so the equivalent guard is the
+   **window fence** (four thin boxes at the search area's edge), which M2 needed anyway to stop a walk going round the cut
+   end of a wall.
+
+**What the deck does not cover, and what M3 is actually about.** It ends at "brute-force smooth": path *generation*. It says
+nothing about **following** a path — no arrival radius, no standoff between bodies, no unstick, no approach to a target that
+moves. Every one of M3's four failures is in that gap: a goal point on a tile corner a body cannot occupy, a step that could
+not advance or slide, a plan holding 144 raw units of clearance that one step cannot follow, and a gather whose target
+walked away. The design for that layer is ours to write; this deck is not the source for it, and a third reading will not
+turn one up.
