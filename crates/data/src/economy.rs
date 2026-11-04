@@ -261,6 +261,14 @@ impl Train {
 #[derive(Debug, Clone)]
 pub struct Build {
     pub repair_hp_per_second: MaybeFixed,
+    /// **How near an existing drop site makes another pointless**, in tiles: the reference implementation's `kCovered` is 5
+    /// (its own AI's rule: "a drop site already this near a forest, mine or forage makes another there pointless"). Content
+    /// so a pack with bigger maps or cheaper camps can say otherwise.
+    pub drop_site_spacing: u32,
+    /// **Which roles must not be built where a drop site already serves the resource** (the owner's rule: a lumber camp
+    /// near the town centre or another camp is a walk saved twice). Content names them, like `blocking_roles`: the owner
+    /// asked for lumber camps, and a mine can join the list without the engine learning either word.
+    pub spaced_roles: Vec<String>,
     /// Which roles block movement once built: walls and their kin. Empty means nothing built blocks,
     /// which is how every pack behaved before walls existed (D54).
     pub blocking_roles: Vec<String>,
@@ -503,12 +511,25 @@ struct RawTrainEntry {
 #[serde(deny_unknown_fields)]
 struct RawBuild {
     repair_hp_per_second: f64,
+    /// Defaulted to 5 - the reference implementation's own `kCovered` - so a pack that says nothing still gets the game's
+    /// spacing rather than no spacing at all.
+    #[serde(default = "default_drop_site_spacing")]
+    drop_site_spacing: u32,
+    /// Roles that must not be built where a drop site already serves the resource. Empty by default: no spacing rule.
+    #[serde(default)]
+    spaced_roles: Vec<String>,
     /// Defaulted to empty: a pack that says nothing about walls builds nothing that blocks.
     #[serde(default)]
     blocking_roles: Vec<String>,
     /// Defaulted to empty: a pack with no building prerequisites builds anything anywhere (D63).
     #[serde(default)]
     requires: std::collections::BTreeMap<String, String>,
+}
+
+/// A drop site within this many tiles of a forest, mine or forage makes another there pointless: the reference
+/// implementation's `kCovered`, which its AI derives from the original's placement rules.
+fn default_drop_site_spacing() -> u32 {
+    5
 }
 
 #[derive(Deserialize)]
@@ -777,6 +798,17 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         }
     }
 
+    // Every role with a spacing rule must be a role this pack has, or the rule silently applies to nothing.
+    for role in &raw.build.spaced_roles {
+        if !raw.role.contains_key(role) {
+            return Err(invalid(
+                path,
+                "build.spaced_roles",
+                format!("{role:?} is not a name in this pack's [role] table"),
+            ));
+        }
+    }
+
     Ok(Economy {
         schema: raw.schema,
         farm: Farm {
@@ -851,6 +883,8 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         },
         build: Build {
             repair_hp_per_second: MaybeFixed::from_f64(raw.build.repair_hp_per_second),
+            drop_site_spacing: raw.build.drop_site_spacing,
+            spaced_roles: raw.build.spaced_roles,
             blocking_roles: raw.build.blocking_roles,
             requires: raw.build.requires,
         },

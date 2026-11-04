@@ -60,6 +60,10 @@ pub const MAX_RESOURCES: usize = 8;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EntityId(pub u32);
 
+/// How near an existing drop site makes another pointless, when content says nothing: the reference implementation's
+/// `kCovered`, which mirrors the original AI's own placement rule.
+const BUILD_SPACING_DEFAULT: u32 = 5;
+
 /// One damage per second, in the integer millionths `pierce_dps` counts in (D67).
 const DPS_ONE: i64 = 1_000_000;
 
@@ -9384,6 +9388,104 @@ impl World {
                 Some((slot, u32::from(cost.amount)))
             })
             .collect()
+    }
+
+    /// **Whether an existing drop site that accepts this worker's load is already within `tiles` of `at`.** The game AI's
+    /// own rule for a camp: "a drop site already this near a forest, mine or forage makes another there pointless" - the
+    /// reference implementation's `kCovered` is **5 tiles**, and its camp may be at most `sn-camp-max-distance` (25) from
+    /// home. `town` is the reference's own flag: what a camp would serve, the town centre does not already serve ("the Town
+    /// Center counting only if `town`"), which is what lets a mill stand at the berries the town centre sits beside.
+    #[must_use]
+    pub fn drop_site_within(
+        &self,
+        player: u8,
+        variant: Option<u32>,
+        at: (u16, u16),
+        tiles: u32,
+        town: bool,
+    ) -> bool {
+        let (Some(units), Some(variant)) = (self.units.as_ref(), variant) else {
+            return false;
+        };
+        let Some(accepted) = units.unit(variant).map(|stats| &stats.drop_sites) else {
+            return false;
+        };
+        let here = self.tile(at);
+        let reach = i64::from(tiles) * self.scale;
+        self.entities.iter().any(|entity| {
+            if entity.kind != EntityKind::Building || entity.player != player {
+                return false;
+            }
+            if !town && self.is_town_centre(entity.unit) {
+                return false;
+            }
+            let accepts = entity.unit.is_some_and(|unit| {
+                let root = units.root(unit);
+                accepted.contains(&unit) || accepted.contains(&root)
+            });
+            if !accepts {
+                return false;
+            }
+            let dx = entity.position.0.raw() - here.0.raw();
+            let dy = entity.position.1.raw() - here.1.raw();
+            dx * dx + dy * dy <= reach * reach
+        })
+    }
+
+    /// **Whether a role must not be built where a drop site already serves the resource** - content's `[build]
+    /// spaced_roles`, so the owner's lumber-camp rule is a word in the pack rather than a name in the engine.
+    #[must_use]
+    pub fn build_spaces_drop_sites(&self, role: &str) -> bool {
+        self.economy
+            .as_ref()
+            .is_some_and(|economy| economy.build.spaced_roles.iter().any(|named| named == role))
+    }
+
+    /// **Whether a building is a drop site at all**: some worker in the pack lists it among the places it can hand a load
+    /// in. That is the dat's own edge (`drop_sites` per worker), so nothing here learns a role name - and a pack with a new
+    /// camp needs no change to this.
+    #[must_use]
+    pub fn is_drop_site(&self, unit: u32) -> bool {
+        let Some(units) = self.units.as_ref() else {
+            return false;
+        };
+        let root = units.root(unit);
+        units.units.values().any(|worker| {
+            worker
+                .drop_sites
+                .iter()
+                .any(|site| *site == unit || *site == root)
+        })
+    }
+
+    /// Whether a unit id is the match's **town centre**, by the start's own role rather than by a number: the reference
+    /// implementation's placement asks the same question with `train_loc`.
+    #[must_use]
+    pub fn is_town_centre(&self, unit: Option<u32>) -> bool {
+        let (Some(unit), Some(centre)) = (unit, self.start_town_center_unit()) else {
+            return false;
+        };
+        self.units
+            .as_ref()
+            .is_some_and(|units| units.root(unit) == units.root(centre))
+    }
+
+    /// The tile a position falls in, for a caller comparing tiles - the same truncating division `tile_of` does, exposed
+    /// because "which tile is this" is a question content code (and a future UI) asks of the world.
+    #[must_use]
+    pub fn tile_of_position(&self, at: (Fixed, Fixed)) -> (u16, u16) {
+        self.tile_of(at)
+    }
+
+    /// **How far from an existing drop site a new camp may still be worth it**, from content (`[build] drop_site_spacing`),
+    /// defaulting to the reference implementation's 5 tiles.
+    #[must_use]
+    pub fn drop_site_spacing(&self) -> u32 {
+        self.economy
+            .as_ref()
+            .map_or(BUILD_SPACING_DEFAULT, |economy| {
+                economy.build.drop_site_spacing
+            })
     }
 
     /// The unit id behind a role name, from the loaded economy (`[role]` in economy.toml). This is

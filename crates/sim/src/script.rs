@@ -465,8 +465,37 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                     let centre = town_center_of(world, player).ok_or_else(|| {
                         format!("player {player} has no town centre to measure a walk from")
                     })?;
-                    let node = nearest_resource(world, centre, slot, 0).ok_or_else(|| {
-                        format!("player {player} has no {resource} node to build beside")
+                    // **A camp where a drop site already serves the resource is a wasted camp.** The reference
+                    // implementation's rule (`kCovered = 5` tiles, the town centre not counting) skips nodes an existing
+                    // drop site already serves and takes the next; farms are not drop sites, so their near-the-mill rule is
+                    // untouched by this.
+                    let variant = world.entity(worker).and_then(|entity| entity.variant);
+                    let spacing = world.drop_site_spacing();
+                    let camp = world.build_spaces_drop_sites(role);
+                    let mut chosen = None;
+                    for nth in 0..16 {
+                        let Some(candidate) = nearest_resource(world, centre, slot, nth) else {
+                            break;
+                        };
+                        let covered = camp
+                            && world.position(candidate).is_some_and(|position| {
+                                world.drop_site_within(
+                                    player,
+                                    variant,
+                                    world.tile_of_position(position),
+                                    spacing,
+                                    true,
+                                )
+                            });
+                        if !covered {
+                            chosen = Some(candidate);
+                            break;
+                        }
+                    }
+                    let node = chosen.ok_or_else(|| {
+                        format!(
+                            "player {player} has no {resource} node that a drop site does not already serve"
+                        )
                     })?;
                     free_tile_near_node(world, node, unit, player, Some(worker))
                 }
@@ -1104,8 +1133,37 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Vec<Command>, String> {
                     let centre = town_center_of(world, player).ok_or_else(|| {
                         format!("player {player} has no town centre to measure a walk from")
                     })?;
-                    let node = nearest_resource(world, centre, slot, 0).ok_or_else(|| {
-                        format!("player {player} has no {resource} node to build beside")
+                    // **A camp where a drop site already serves the resource is a wasted camp.** The reference
+                    // implementation's rule (`kCovered = 5` tiles, the town centre not counting) skips nodes an existing
+                    // drop site already serves and takes the next; farms are not drop sites, so their near-the-mill rule is
+                    // untouched by this.
+                    let variant = world.entity(worker).and_then(|entity| entity.variant);
+                    let spacing = world.drop_site_spacing();
+                    let camp = world.build_spaces_drop_sites(role);
+                    let mut chosen = None;
+                    for nth in 0..16 {
+                        let Some(candidate) = nearest_resource(world, centre, slot, nth) else {
+                            break;
+                        };
+                        let covered = camp
+                            && world.position(candidate).is_some_and(|position| {
+                                world.drop_site_within(
+                                    player,
+                                    variant,
+                                    world.tile_of_position(position),
+                                    spacing,
+                                    true,
+                                )
+                            });
+                        if !covered {
+                            chosen = Some(candidate);
+                            break;
+                        }
+                    }
+                    let node = chosen.ok_or_else(|| {
+                        format!(
+                            "player {player} has no {resource} node that a drop site does not already serve"
+                        )
                     })?;
                     free_tile_near_node(world, node, unit, player, Some(worker))
                 }

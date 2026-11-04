@@ -2636,6 +2636,20 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D103 - A camp is not built where a drop site already serves the resource
+
+Content names the roles that get the rule (`[build] spaced_roles`) and the spacing (`[build] drop_site_spacing = 5`); the
+predicate asks the *worker's own* variant which buildings accept its load, so the dat's `drop_sites` edge is the only source
+of "drop site". The number and the range are the reference implementation's (OpenAoK, MIT): `kCovered = 5` and
+`sn-camp-max-distance = 25`.
+
+**One deliberate difference**: OpenAoK's camp rule passes `town = false`, so its camps ignore the town centre's coverage. The
+owner asked for the town centre to count, and a camp beside a town centre that already takes wood buys nothing, so our camp
+rule passes `true` and a mill passes `false` (a mill must be able to stand at the berries beside the town centre).
+
+Not yet enforced: the 25-tile range (a far uncovered forest still wins over a near covered one), which needs a decision
+about which of those two is better rather than a number.
+
 ## D102 - A place is approached by its ground, and a unit is evicted before it turns solid
 
 Three rules, learned together because they were one bug wearing three coats, all measured in the acceptance match:
