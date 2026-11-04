@@ -8351,64 +8351,55 @@ impl World {
                 entity.task = task;
             }
         }
-        // Herding (D70): a villager working a herdable animal walks it toward the **nearest drop site of
-        // that villager's player** - not toward itself - and follows it. The animal's route is planned here
-        // rather than every tick, and the villager's cached route is dropped so it steps at where the animal
-        // *is* rather than at where it was when the order was given.
+        // **A shepherd strikes the animal it was sent to work, where the animal stands** (D116, superseding D70's
+        // herding). A gathered herdable used to walk itself to the nearest drop site with the villager trailing behind;
+        // the owner dropped that: *"Sheep are more likely to be found by scout and player and AI are more likely to direct
+        // sheep to the drop site themselves."* So the animal does not steer itself, moving it is an ordinary order, and the
+        // shepherd's job is only the blow - **on arrival**, not on arrival at a drop site.
+        //
+        // The kill is an ordinary attack, so the blow carries its attacker and the last-blow rule decides the meat; death
+        // promotes the animal to its body in place, and the gather order resumes on that body below. Arriving is not
+        // killing.
         for (villager, animal) in herds {
-            let animal_pos = self.find(animal).map(|entity| entity.position);
-            let player = self.find(villager).map(|entity| entity.player);
-            let variant = self.find(villager).and_then(|entity| entity.unit);
-            let (Some(animal_pos), Some(player)) = (animal_pos, player) else {
+            let (Some(here), Some(there)) = (
+                self.find(villager).map(|entity| entity.position),
+                self.find(animal).map(|entity| entity.position),
+            ) else {
                 continue;
             };
-            let Some(drop) = self.nearest_drop_site(player, animal_pos, variant) else {
-                continue;
-            };
-            let Some(drop_pos) = self.find(drop).map(|entity| entity.position) else {
-                continue;
-            };
-            // Arrived: the shepherd **strikes** it where it stopped (D70, the owner's correction: *"shepherd has
-            // to kill the animal. It doesn't change to corpse itself."*). The kill is an ordinary attack, so the
-            // blow carries its attacker and the last-blow rule decides the meat; death promotes the animal to its
-            // body in place, and the gather order is resumed on that body below. Arriving is not killing.
-            //
-            // **Touching, by tile or by footprint** (C2). A sheep stopped by its shepherd's footprint never reaches the
-            // drop site's own tile, so "the same tile" struck nothing and the flock queued for ever beside the mill.
-            let here = self.tile_of(animal_pos);
-            let there = self.tile_of(drop_pos);
-            let (gap_x, gap_y) = (
-                drop_pos.0.raw() - animal_pos.0.raw(),
-                drop_pos.1.raw() - animal_pos.1.raw(),
-            );
+            let (gap_x, gap_y) = (there.0.raw() - here.0.raw(), there.1.raw() - here.1.raw());
+            let squared = gap_x * gap_x + gap_y * gap_y;
             let reach = self.reach_raw(
+                self.find(villager).and_then(|entity| entity.unit),
                 self.find(animal).and_then(|entity| entity.unit),
-                self.find(drop).and_then(|entity| entity.unit),
             );
-            let touching = (here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1)
-                || gap_x * gap_x + gap_y * gap_y <= reach * reach;
-            if touching {
-                self.slaughter.insert(villager, animal);
-                let already = matches!(
-                    self.find(villager).map(|entity| entity.task),
-                    Some(Task::Attack { target, .. }) if target == animal
-                );
-                if !already && let Err(error) = self.start_attack(villager, animal) {
-                    self.refusal = Some((villager, error, self.tick));
-                }
+            // **In reach _plus one step_, or on the animal's own ground.** A body that walks at another stops when the
+            // next step would enter the pair's standoff, so it comes to rest a step *short* of it - measured at 10,399
+            // against a standoff of 10,000, which is why a strict `squared <= reach^2` never fired and the shepherd stood
+            // beside its sheep for the rest of the match. This is the same rule the rest of the engine uses for arrival:
+            // a radius, not an equality (C2).
+            let step = self
+                .find(villager)
+                .and_then(|entity| {
+                    entity
+                        .speed
+                        .div_exact(i64::from(self.tick_rate_hz).max(1))
+                        .ok()
+                })
+                .map_or(0, |delta| delta.raw());
+            let touch = reach + step;
+            let beside = self.tile_of(here) == self.tile_of(there);
+            if !beside && squared > touch * touch {
                 continue;
             }
-            let heading = matches!(
-                self.find(animal).map(|entity| entity.task),
-                Some(Task::Move { to }) if to == drop_pos
+            self.slaughter.insert(villager, animal);
+            let already = matches!(
+                self.find(villager).map(|entity| entity.task),
+                Some(Task::Attack { target, .. }) if target == animal
             );
-            if !heading && self.tile_of(animal_pos) != self.tile_of(drop_pos) {
-                self.walk_towards(animal, drop_pos);
-                if let Some(entity) = self.find_mut(animal) {
-                    entity.task = Task::Move { to: drop_pos };
-                }
+            if !already && let Err(error) = self.start_attack(villager, animal) {
+                self.refusal = Some((villager, error, self.tick));
             }
-            self.paths.remove(&villager);
         }
         // A shepherd whose blow has landed goes back to the work it was sent to do: the animal it was gathering is
         // now a body, and the gather order resumes on the same id (D70, item 3).

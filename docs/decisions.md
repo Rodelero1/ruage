@@ -2636,6 +2636,41 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D116 - A sheep stands still: herding is dropped (supersedes D70's movement)
+
+The owner, on reading that the gather approach loses its route when a node moves:
+
+> "Is it about sheep being herded by shepherd? If yes, I'd like to drop this feature. Sheep are more likely to be found by
+> scout and player and AI are more likely to direct sheep to the drop site themselves."
+
+So a gathered herdable is **worked where it stands**. Moving livestock is an ordinary order its owner gives - the player or
+the AI - and the animal does not steer itself anywhere.
+
+**Removed:** the `herds` pass's drop-site lookup, `walk_towards(animal, drop_pos)`, and the `paths.remove(&villager)` that
+dropped the shepherd's route each tick so it stepped at a moving target. **Kept:** everything about a herdable that is not
+movement - ownership by sight (D70 item 5), the one-blow kill, the shepherd's-knife task name, and the
+slaughter → body → resume-gather chain.
+
+**The strike trigger moved from the drop site to the animal.** It used to fire when the animal *arrived* at the nearest drop
+site; it now fires when the villager is within reach of it. A strict `distance^2 <= reach^2` never fires, because a body
+walking at another comes to rest a step short of the standoff - measured **10,399** against **10,000**. The rule is reach
+**plus one tick's step**, or the animal's own tile: the same "a radius, not an equality" rule the engine uses everywhere
+else for arrival (C2).
+
+**Tests:** `a_sheep_stops_at_the_drop_site` is retired with its rule (an animal arriving at a building no longer happens);
+`a_gathered_sheep_stands_still` and `a_sheep_walks_where_its_owner_points` replace it; `the_villager_follows_the_sheep`
+survives re-worded, its tolerance tightened 6 tiles -> 2 because there is no longer a moving target to trail. One fixture
+was wrong in its own right: `a_live_animal_is_a_gather_source` put the sheep at `centre + 1`, the town centre's **solid
+core**, and had only been passing because a body's centre could stand on the core's corner.
+
+**Consequence for M3:** the automatic moving-target gather is gone, so the blind-walk hazard
+(`next_waypoint(id).unwrap_or(target)`) is no longer in M3c's way. It remains real for a player who walks a sheep away
+mid-gather, and is recorded in `docs/next-step.md` rather than fixed.
+
+Acceptance: **unchanged**, hash `82efabd6f614c798` - that scenario gathers no herdable, which is the honest reading of a
+change the benchmark cannot see. **662 passed / 0 failed / 19 ignored.** Review:
+`docs/reviews/2026-11-04-a-sheep-stands-still.md`.
+
 ## D114 - A walk to a tile ends in the middle of it
 
 `World::tile()` returns a tile's **corner** - `x * scale, y * scale` - because that is the anchor a building's footprint and

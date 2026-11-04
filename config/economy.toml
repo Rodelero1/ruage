@@ -295,9 +295,11 @@ town_center_population = 5
 # array, U8) so they are stated here instead.
 
 [hunt]
-# Herding (owner's rule, D70): an animal being gathered walks toward the nearest drop site of the
-# villager's player, and the villager follows it. Which animals herd is content's answer - the engine
-# knows nothing about sheep (D17).
+# **Livestock.** An animal in this list changes hands by sight (the first player to see it owns it), dies
+# to one blow rather than a fight, and is worked with a shepherd's knife rather than a hunt. It does
+# **not** walk itself anywhere: the owner moves sheep with an ordinary order (D116, which supersedes
+# D70's herding). Which animals are livestock is content's answer - the engine knows nothing about
+# sheep (D17).
 herdable_roles = ["sheep"]
 # Which animals carry meat at all - both kinds, herdable (58) and huntable (9, 10), because a boar or a deer
 # is as edible as a sheep. Herding and meat are two questions, so they are two lists.

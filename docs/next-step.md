@@ -28,6 +28,30 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 13, 2026-11-04 - herding dropped (the owner's call), and M3 unblocked
+>
+> **LANDED** - `docs/reviews/2026-11-04-a-sheep-stands-still.md`, **D116** (supersedes D70's movement). A gathered herdable
+> is worked **where it stands**; moving livestock is an ordinary order. The strike now fires when the shepherd is within
+> reach of the animal, not when the animal reaches a drop site - and "within reach" has to be **reach plus one tick's step**,
+> because a body walking at another rests a step short of the standoff (measured **10,399** against **10,000**).
+> **662 / 0 / 19**; acceptance **unchanged** (`82efabd6f614c798`, 10.39-10.77 s, 148 entities) - that scenario gathers no
+> herdable, which is the honest reading of a change the benchmark cannot see.
+>
+> **Why this matters beyond sheep:** the only *automatic* moving gather target is gone, so the blind-walk hazard
+> (`next_waypoint(id).unwrap_or(target)`) is no longer in M3c's way. It is still real for a player who walks a sheep away
+> mid-gather - keep it in mind, do not chase it now.
+>
+> **Next, in order:**
+>
+> 1. **M3c, the body's shape against the ground** - the prototype at `/opt/data/cache/m3-findings/*-v2` (`ground_overlap`, the
+>    disc rule, the back-off, the `radius + step` plan margin) plus the three tests. Two of the three things that blocked it
+>    are gone: corner goals (D114, landed) and the automatic moving gather (D116, landed). **Expect the plan margin to matter
+>    most** - it is what makes a geometric route followable.
+> 2. **Spawns still sit on tile corners** while walks aim at centres (D114 named it): a freshly trained unit appears at a
+>    corner. The rally ring decides where, and it is content-dependent.
+> 3. The blind approach walk (`approach_point`), which now has no test that fails without M3c - land it *with* something that
+>    does, or leave it.
+
 > # Session 12, 2026-11-04 - M3c attempted again and **not landed**: the blocker is the gather approach, not the mover
 >
 > **The ask:** "Proceed" after M3a. Took M3c (the body's shape against the ground) with the prototype from Session 10 plus

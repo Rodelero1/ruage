@@ -66,11 +66,6 @@ fn seeded(fx: &Fixture) -> World {
     world
 }
 
-/// The tile a fixed position sits on, at the world's scale.
-fn tile_of(position: (Fixed, Fixed), scale: i64) -> (i64, i64) {
-    (position.0.raw() / scale, position.1.raw() / scale)
-}
-
 /// Player 1's town centre and the first villager, the two anchors every test needs.
 fn seat(world: &World) -> (EntityId, EntityId, (Fixed, Fixed)) {
     let centre = world
@@ -160,23 +155,6 @@ fn an_animal(world: &mut World, unit: u32, near: (Fixed, Fixed), offset: i64, hp
     id
 }
 
-/// What this entity is doing, if it is still on the map.
-fn task_of(world: &World, id: EntityId) -> Option<Task> {
-    world
-        .entities()
-        .iter()
-        .find(|entity| entity.id == id)
-        .map(|entity| entity.task)
-}
-
-fn distance(world: &World, a: EntityId, b: (Fixed, Fixed)) -> i64 {
-    let Some(one) = world.position(a) else {
-        return i64::MAX;
-    };
-    let (dx, dy) = (one.0.raw() - b.0.raw(), one.1.raw() - b.1.raw());
-    dx * dx + dy * dy
-}
-
 // PARKED, not passing: increment two of D70 is written but not built. The content and the data side are in
 // place (`[hunt] herdable_roles`, the `sheep` role, `Hunt` in the economy schema); what is missing is the
 // engine half - `gather_source` accepting a live animal, a spawned animal carrying its `food` as its amount,
@@ -201,8 +179,12 @@ fn a_sheep_nobody_is_gathering_stands_still() {
     assert_eq!(before, after, "nothing gathers it, so nothing moves it");
 }
 
+/// **A gathered sheep stands still** (D116, the owner's call). It used to walk itself to the nearest drop site with the
+/// villager trailing behind - "herding", D70. The owner dropped it: *"Sheep are more likely to be found by scout and player
+/// and AI are more likely to direct sheep to the drop site themselves."* So a gathered animal is worked **where it stands**,
+/// and moving it is an ordinary order its owner gives.
 #[test]
-fn a_gathered_sheep_walks_toward_the_drop_site() {
+fn a_gathered_sheep_stands_still() {
     let Some(fx) = fixture() else {
         return;
     };
@@ -210,7 +192,7 @@ fn a_gathered_sheep_walks_toward_the_drop_site() {
     let sheep_unit = world.role_unit("sheep").expect("a sheep role");
     let (_, villager, centre) = seat(&world);
     let sheep = a_sheep(&mut world, sheep_unit, centre, 6);
-    let before = distance(&world, sheep, centre);
+    let before = world.position(sheep).expect("the sheep");
 
     world
         .submit_checked(Command::Gather {
@@ -219,14 +201,54 @@ fn a_gathered_sheep_walks_toward_the_drop_site() {
         })
         .expect("a villager can be sent to a sheep");
 
-    for _ in 0..400 {
+    for _ in 0..600 {
         world.step().expect("stepping");
     }
 
-    let after = distance(&world, sheep, centre);
+    let after = world
+        .position(sheep)
+        .expect("the sheep has not been eaten yet");
+    assert_eq!(
+        after, before,
+        "nothing gathers a sheep *into* walking: it stands where it is until its owner moves it"
+    );
+}
+
+/// **A sheep walks where its owner points** (D116): moving livestock is an ordinary order, which is what the player and the
+/// AI do instead of the animal steering itself.
+#[test]
+fn a_sheep_walks_where_its_owner_points() {
+    let Some(fx) = fixture() else {
+        return;
+    };
+    let mut world = seeded(&fx);
+    let sheep_unit = world.role_unit("sheep").expect("a sheep role");
+    let (_, _, centre) = seat(&world);
+    let sheep = a_sheep(&mut world, sheep_unit, centre, 6);
+    let scale = world.scale();
+    let goal = {
+        let at = world.position(sheep).expect("the sheep");
+        (
+            u16::try_from(at.0.raw() / scale - 3).expect("in range"),
+            u16::try_from(at.1.raw() / scale).expect("in range"),
+        )
+    };
+
+    world
+        .submit_checked(Command::Move {
+            unit: sheep,
+            to: goal,
+        })
+        .expect("a sheep can be ordered like any other body");
+
+    for _ in 0..1_200 {
+        world.step().expect("stepping");
+    }
+    let at = world.position(sheep).expect("the sheep");
+    let (tx, ty) = (at.0.raw() / scale, at.1.raw() / scale);
     assert!(
-        after < before,
-        "the sheep must walk toward the town centre, not away from it: {before} -> {after}"
+        (tx - i64::from(goal.0)).abs() <= 1 && (ty - i64::from(goal.1)).abs() <= 1,
+        "the sheep walked to {tx},{ty} instead of the tile it was sent to: {goal:?}"
     );
 }
 
@@ -247,9 +269,9 @@ fn the_villager_follows_the_sheep() {
         })
         .expect("a villager can be sent to a sheep");
 
-    // Walk a while, then check the pair travelled together: the villager has left where it stood, and it is
-    // near the sheep wherever the sheep has got to. The gap is what "follows" means - the sheep's own
-    // distance to the drop site is the other test's business.
+    // Walk a while, then check the villager arrived at the sheep it was sent to. It used to *trail* a sheep that was
+    // walking itself home (D70); with herding dropped (D116) the sheep stands and this is simply "the gatherer reaches the
+    // node it was ordered to work".
     let started = world.position(villager).expect("the villager");
     for _ in 0..300 {
         world.step().expect("stepping");
@@ -265,46 +287,8 @@ fn the_villager_follows_the_sheep() {
     let scale = world.scale();
     let gap_tiles_squared = (dx * dx + dy * dy) / (scale * scale);
     assert!(
-        gap_tiles_squared <= 36,
-        "the villager stays with the sheep - it is following, not trailing by half the map"
-    );
-}
-
-#[test]
-fn a_sheep_stops_at_the_drop_site() {
-    let Some(fx) = fixture() else {
-        return;
-    };
-    let mut world = seeded(&fx);
-    let sheep_unit = world.role_unit("sheep").expect("a sheep role");
-    let (_, villager, centre) = seat(&world);
-    let sheep = a_sheep(&mut world, sheep_unit, centre, 4);
-
-    world
-        .submit_checked(Command::Gather {
-            villager,
-            node: sheep,
-        })
-        .expect("a villager can be sent to a sheep");
-
-    // Long enough to arrive with a slow villager; the sheep is the quick one, so this is generous.
-    for _ in 0..1_500 {
-        world.step().expect("stepping");
-    }
-
-    let scale = world.scale();
-    let here = tile_of(world.position(sheep).expect("the sheep"), scale);
-    let there = tile_of(centre, scale);
-    assert!(
-        here.0.abs_diff(there.0) <= 2 && here.1.abs_diff(there.1) <= 2,
-        "the sheep should end beside the town centre, not wander past it: {here:?} vs {there:?}"
-    );
-
-    // And it is not still walking: whatever it is doing, it is not on its way somewhere else.
-    let task = task_of(&world, sheep);
-    assert!(
-        !matches!(task, Some(Task::Move { .. })) || here == there,
-        "a sheep that has arrived should not still have a route to run"
+        gap_tiles_squared <= 4,
+        "the villager has to reach the sheep it was sent to, not stop half-way"
     );
 }
 
@@ -322,7 +306,9 @@ fn a_live_animal_is_a_gather_source() {
     let mut world = seeded(&fx);
     let sheep_unit = world.role_unit("sheep").expect("a sheep role");
     let (_, villager, centre) = seat(&world);
-    let sheep = a_sheep(&mut world, sheep_unit, centre, 1);
+    // **Offset 2, not 1.** Offset 1 is the town centre's own 2x2 *solid core* - a sheep standing there is unreachable by
+    // any movement rule, and the test only ever passed because a body's centre could stand on the core's corner (D115).
+    let sheep = a_sheep(&mut world, sheep_unit, centre, 2);
 
     world
         .submit_checked(Command::Gather {
