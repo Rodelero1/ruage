@@ -7,7 +7,7 @@
 use ruage_data::Resources;
 use ruage_sim::{Command, EntityKind};
 
-use crate::{Camera, Frame, Snapshot, covers, palette, player_colour};
+use crate::{Camera, Frame, Snapshot, covers, palette};
 
 /// What a player has selected, by entity id, in the order they selected it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -251,10 +251,6 @@ pub fn hud_bar_height() -> u32 {
     BAR_HEIGHT
 }
 
-/// Where a stock column's **name** starts: under its swatch, one pixel a dot, because a colour is not a name to somebody
-/// who has not played this pack. The bar is tall enough for the numbers (three pixels a dot) above it.
-#[must_use]
-
 /// **Where each stock column starts, and where the population readout goes** - laid out from the numbers themselves rather
 /// than from fixed slots. The bar used to place the population at the *last stock column's* x, which is why the owner saw
 /// stone and population written on top of each other (2026-11-04): a four-digit stonepile ran into a four-digit population
@@ -302,10 +298,6 @@ pub fn notice_origin(frame_height: u32) -> (i32, i32) {
         layout.selected.1 + layout.selected.3 as i32 - 10,
     )
 }
-
-/// Where a stock column's swatch starts. **The pack's order is the display order**, so a pack with three resources
-/// shows three swatches and the view never learns their names.
-#[must_use]
 
 /// The speed selector's five boxes, at the right end of the HUD bar: `(x, y, w, h)` each, in `Speed::ALL` order.
 ///
@@ -865,32 +857,6 @@ fn line_clipped(
         if inside((x, y)) {
             frame.put(x, y, colour);
         }
-        if x == to.0 && y == to.1 {
-            break;
-        }
-        let doubled = 2 * error;
-        if doubled >= dy {
-            error += dy;
-            x += sx;
-        }
-        if doubled <= dx {
-            error += dx;
-            y += sy;
-        }
-    }
-}
-
-/// A one-pixel line, Bresenham: the view box's edges are slanted, so the frame's axis-aligned fills cannot draw them.
-fn line(frame: &mut Frame, from: (i32, i32), to: (i32, i32), colour: [u8; 4]) {
-    let (mut x, mut y) = from;
-    let (dx, dy) = ((to.0 - from.0).abs(), -(to.1 - from.1).abs());
-    let (sx, sy) = (
-        if from.0 < to.0 { 1 } else { -1 },
-        if from.1 < to.1 { 1 } else { -1 },
-    );
-    let mut error = dx + dy;
-    loop {
-        frame.put(x, y, colour);
         if x == to.0 && y == to.1 {
             break;
         }

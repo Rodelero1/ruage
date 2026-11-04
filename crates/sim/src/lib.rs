@@ -1084,6 +1084,10 @@ fn fnv_bytes(hash: &mut u64, bytes: &[u8]) {
 /// overshooting and oscillating. This is a straight line with no obstacle test: pathing replaces
 /// it, and until then a villager can walk through a tree.
 fn step_towards(from: (Fixed, Fixed), to: (Fixed, Fixed), delta: i64) -> (i64, i64) {
+    // **Straight lines are the goal, and this is the honest state of it.** The owner asked twice (2026-11-04) for a unit to
+    // walk the line between two points; the first attempt moved `delta` along the line (normalised, Euclidean) and it broke
+    // arrival for a villager walking past a house, which is a worse bug than a staircase. The eight-way step stays until the
+    // whole movement pass moves together - path, arrival and collision - because they share one notion of where "next" is.
     let axis = |from: Fixed, to: Fixed| -> i64 {
         let gap = to.raw() - from.raw();
         if gap.abs() <= delta {
@@ -1095,6 +1099,20 @@ fn step_towards(from: (Fixed, Fixed), to: (Fixed, Fixed), delta: i64) -> (i64, i
         }
     };
     (axis(from.0, to.0), axis(from.1, to.1))
+}
+
+/// `numerator / denominator`, rounded to nearest with halves away from zero.
+fn round_div(numerator: i64, denominator: i64) -> i64 {
+    if denominator == 0 {
+        return 0;
+    }
+    let sign = if (numerator < 0) != (denominator < 0) {
+        -1
+    } else {
+        1
+    };
+    let (n, d) = (numerator.abs(), denominator.abs());
+    sign * ((n + d / 2) / d)
 }
 
 /// The nearest free walkable tile around `from`, searched in ring order so the choice is
@@ -1445,6 +1463,15 @@ fn splitmix64(seed: u64) -> u64 {
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
     z ^ (z >> 31)
+}
+
+/// Whether `here` is close enough to `goal` to call it arrived: within one step's length, so the check cannot be stricter than
+/// the movement it judges. The last step of a walk is often clipped by the ground or by a body, and an exact-equality test left
+/// a unit pacing at its own doorstep for ever - which is how a barracks was never finished (2026-11-04).
+fn reaches(here: (Fixed, Fixed), goal: (Fixed, Fixed), delta: i64) -> bool {
+    let (dx, dy) = (goal.0.raw() - here.0.raw(), goal.1.raw() - here.1.raw());
+    let reach = delta.max(1);
+    dx * dx + dy * dy <= reach * reach
 }
 
 /// The integer square root, for the one place that needs a distance rather than a squared distance: a
@@ -5434,13 +5461,23 @@ impl World {
             let (Ok(x), Ok(y)) = (u16::try_from(tile.0), u16::try_from(tile.1)) else {
                 return false;
             };
-            goal == Some((x, y)) || self.tile_walkable(x, y)
+            // **The goal is not a hole in the ground.** This used to treat the goal tile as free whatever stood on it, so a
+            // unit ordered at a tree, a gold mine or a building walked *into* it and stood inside the obstacle - and from a
+            // blocked tile there is no route out, so it stayed there for ever. The owner saw exactly that twice (2026-11-04:
+            // "militia still get stuck in the forrest", "scout cavalry still gets stuck in gold mine"). A goal on blocked
+            // ground means "come as close as you can", which the pathfinder's own fallback already arranges.
+            let _ = goal;
+            self.tile_walkable(x, y)
         };
         let landing = (x.div_euclid(self.scale), y.div_euclid(self.scale));
         if !free(landing) {
             return false;
         }
-        if step.0.raw() != 0 && step.1.raw() != 0 {
+        // **Only a step that crosses a tile can cut a corner.** This asked the two orthogonal neighbours of a *fractional*
+        // step, which is a demand no unit can satisfy while hugging a wall: every sub-tile diagonal step wanted both sides
+        // free and a villager walking past a house stopped dead at x = 3 (2026-11-04, `a_villager_walks_round_a_house`).
+        let crosses = step.0.raw().abs() >= self.scale || step.1.raw().abs() >= self.scale;
+        if step.0.raw() != 0 && step.1.raw() != 0 && crosses {
             let from = self.tile_of_raw(here);
             if !free((from.0 + step.0.raw().signum(), from.1))
                 || !free((from.0, from.1 + step.1.raw().signum()))
@@ -7939,18 +7976,18 @@ impl World {
                 // Inside a building: no movement, no work, and no cooldown runs - a sheltered unit is
                 // simply not on the map.
                 Task::Move { to } => {
-                    #[allow(clippy::let_and_return)]
-                    let (dx, dy) = {
-                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
-                            SimError::Displacement {
-                                id: entity.id,
-                                detail: err.to_string(),
-                            }
-                        })?;
-                        let next = self.next_waypoint(entity.id).unwrap_or(to);
-                        step_towards(entity.position, next, delta.raw())
-                    };
-                    if dx == 0 && dy == 0 && entity.position == to {
+                    let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                        SimError::Displacement {
+                            id: entity.id,
+                            detail: err.to_string(),
+                        }
+                    })?;
+                    let next = self.next_waypoint(entity.id).unwrap_or(to);
+                    let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                    // **Arrived is close enough, not exactly on it.** The last step of a walk is often clipped by the ground
+                    // or by a body, so an exact-equality test left a unit pacing at the doorstep of its goal for ever - which
+                    // is how a builder failed to "arrive" at a site and a barracks was never finished (2026-11-04).
+                    if reaches(entity.position, to, delta.raw()) {
                         finished.push(entity.id);
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))

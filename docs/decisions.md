@@ -2636,6 +2636,14 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D109 - Continuous steering is a pass, not a step function
+
+`step_towards` still walks eight-way. Normalising it (so a unit walks the line it was given) was implemented and measured, and
+it broke arrival: path, arrival and collision each decide what "the next point" means, and changing one leaves the other two
+disagreeing. Continuous steering has to change all three at once - aim at a point rather than a tile centre, arrive within a
+radius rather than on a coordinate, and slide a shape along a shape - and land with a test for each. Recorded so the next
+attempt starts from the reason this one failed rather than from the idea.
+
 ## D108 - A unit is painted above a building, and the bar is laid out from its own numbers
 
 A flat-shape renderer has no sprite height, so depth alone hid a villager standing in the back half of a house or a farm. The
