@@ -115,18 +115,21 @@ fn things_are_painted_from_the_back_of_the_diamond_to_the_front() {
         .iter()
         .map(|entity| entity.id)
         .collect();
+    // **Layers, then depth.** Ground cover first, then buildings, then units - the owner's "units should be always visible
+    // over the buildings" (2026-11-04) - and inside each layer, back to front by depth and then by id. Here: resources,
+    // then the building (20) and its neighbour at the same depth, then the units (9, 21) and the front one (22).
     assert_eq!(
         order,
-        vec![20, 9, 21, 22, 10],
-        "expected back (20), then the depth-34 pair by id (9, 21), then the depth-36 unit (22), then the building whose \
-         far corner is 38 - got the front of a diamond drawn over the back of it"
+        vec![10, 20, 9, 21, 22],
+        "expected buildings back to front, then units by depth: resources first, units never covered - got {order:?}"
     );
 }
 
-/// The visible consequence: a unit standing inside a building's footprint but behind its front corner is painted
-/// over by the building, and one in front of the footprint is not.
+/// The visible consequence, which is now the owner's rule rather than the renderer's guess: **a unit is never hidden by a
+/// building**, even standing in the back half of its footprint. The original gets this from the art's height; a flat-shape
+/// renderer gets it from the layer.
 #[test]
-fn a_unit_behind_a_building_is_covered_by_it() {
+fn a_unit_behind_a_building_is_still_painted() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let scale = world.scale();
@@ -179,16 +182,13 @@ fn a_unit_behind_a_building_is_covered_by_it() {
     // marks: a mark is part of the building's paint, and a pixel on a mark is still not a villager.)
     let (px, py) = camera.project((behind.0 as f32, behind.1 as f32));
     let seen = frame.pixel(px as u32, py as u32);
-    assert_ne!(
-        seen,
-        palette::PLAYER_ONE,
-        "a villager standing behind a {0}x{1} building was painted on top of it",
+    // The unit's own colour is not the building's and not the building's mark: **something other than the building is
+    // painted at the villager's own pixel**, which is the claim "units are always visible over buildings" (2026-11-04).
+    assert!(
+        seen != palette::BUILDING && seen != palette::MARK,
+        "a villager standing behind a {0}x{1} building was hidden by it: {seen:?}",
         footprint.0,
         footprint.1
-    );
-    assert!(
-        seen == palette::BUILDING || seen == palette::MARK,
-        "and what is seen there is the building's own paint: {seen:?}"
     );
 }
 

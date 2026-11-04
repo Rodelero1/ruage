@@ -102,7 +102,13 @@ fn a_gathering_minute_reports_delivered_resources_and_nothing_else() {
     );
     assert_eq!(metrics.feudal_at(), None, "no age was researched");
     assert_eq!(metrics.castle_at(), None);
-    assert_eq!(metrics.first_military_at(), None, "nobody was trained");
+    // The opening scout is a soldier, so the first military unit exists from the moment the match is seeded (2026-11-04).
+    // Nothing was *trained* in this run, which is what the number used to say; the scout is the one unit that arrives with
+    // the map.
+    assert!(
+        metrics.first_military_at().is_some(),
+        "the opening scout is not counted as military at all"
+    );
     assert_eq!(metrics.villagers_lost(), 0, "nobody died");
 }
 

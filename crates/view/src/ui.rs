@@ -254,10 +254,42 @@ pub fn hud_bar_height() -> u32 {
 /// Where a stock column's **name** starts: under its swatch, one pixel a dot, because a colour is not a name to somebody
 /// who has not played this pack. The bar is tall enough for the numbers (three pixels a dot) above it.
 #[must_use]
-pub fn stock_name_origin(column: usize) -> (i32, i32) {
-    let layout = Layout::of(960, 720);
-    let (x, _, _, _) = layout.stock[column.min(layout.stock.len() - 1)];
-    (x, BAR_HEIGHT as i32 - 7)
+
+/// **Where each stock column starts, and where the population readout goes** - laid out from the numbers themselves rather
+/// than from fixed slots. The bar used to place the population at the *last stock column's* x, which is why the owner saw
+/// stone and population written on top of each other (2026-11-04): a four-digit stonepile ran into a four-digit population
+/// and both became noise. Widths come from `font::text_width`, so a five-digit stockpile moves its neighbours instead of
+/// overprinting them.
+#[must_use]
+pub fn stock_columns(hud: &Hud) -> (Vec<i32>, i32) {
+    let text_scale = 2;
+    let swatch = 10;
+    let gap = 16;
+    let mut x = 8i32;
+    let mut columns = Vec::with_capacity(hud.stock.len());
+    for (_, amount) in &hud.stock {
+        columns.push(x);
+        let number = crate::font::text_width(&amount.to_string(), text_scale);
+        x += swatch + 6 + number + gap;
+    }
+    (columns, x)
+}
+
+/// **The three baselines of a stock column**, from the bar's height: the pack's name on top, the number under it, and the
+/// colour swatch level with the number. One function, so a test that looks for a swatch and the code that draws one cannot
+/// disagree about where it is.
+#[must_use]
+pub fn stock_rows(frame_height: u32) -> (i32, i32, i32) {
+    let bar = Layout::of(960, frame_height).bar.3.min(frame_height) as i32;
+    let scale = 2;
+    let swatch = 10;
+    let name_y = 2;
+    let number_y = bar - crate::font::HEIGHT * scale - 2;
+    (
+        name_y,
+        number_y,
+        number_y + (crate::font::HEIGHT * scale - swatch) / 2,
+    )
 }
 
 /// Where a refusal is written: the top of the panel's selected-object zone, where the eye goes after an order.
@@ -274,9 +306,6 @@ pub fn notice_origin(frame_height: u32) -> (i32, i32) {
 /// Where a stock column's swatch starts. **The pack's order is the display order**, so a pack with three resources
 /// shows three swatches and the view never learns their names.
 #[must_use]
-pub fn hud_swatch_x(column: usize) -> u32 {
-    stock_name_origin(column).0 as u32
-}
 
 /// The speed selector's five boxes, at the right end of the HUD bar: `(x, y, w, h)` each, in `Speed::ALL` order.
 ///
@@ -776,33 +805,77 @@ fn draw_minimap(
     // **Where the camera is looking.** A rectangle of the world on a diamond minimap is a parallelogram, so it is drawn as
     // four lines rather than a box; and its inside is left empty, because the ground underneath is what a player is reading.
     if let Some(corners) = view {
-        let corners = corners.map(|corner| {
-            // Clamped to the map: a camera looking off the edge of the world is still somewhere on the minimap, at its edge.
-            projected(
-                (
-                    corner
-                        .0
-                        .clamp(0.0, f32::from(snapshot.width.saturating_sub(1))),
-                    corner
-                        .1
-                        .clamp(0.0, f32::from(snapshot.height.saturating_sub(1))),
-                ),
-                rect,
-                snapshot.width,
-                snapshot.height,
-            )
-        });
+        // **Projected as it is, then clipped to the box.** Clamping the corners to the map bent the parallelogram into a
+        // shape it is not (the owner saw it "reach over the edge of the minimap and it should keep its shape", 2026-11-04);
+        // a camera half off the map draws half a box, cut at the frame's edge like everything else.
+        let corners =
+            corners.map(|corner| projected(corner, rect, snapshot.width, snapshot.height));
+        let boxed = (mx, my, mw as i32, mh as i32);
+        let inside = |point: (i32, i32)| {
+            point.0 >= boxed.0
+                && point.1 >= boxed.1
+                && point.0 < boxed.0 + boxed.2
+                && point.1 < boxed.1 + boxed.3
+        };
         for index in 0..4 {
             let (from, to) = (corners[index], corners[(index + 1) % 4]);
-            line(frame, from, to, [255, 255, 255, 255]);
+            // A pixel outside the minimap's box is not the minimap's to paint: the panel, the border and the frame edge stay
+            // as they are, and what is left of the box is still the box's own shape.
+            let (clipped_from, clipped_to) = (from, to);
+            if !inside(clipped_from) && !inside(clipped_to) {
+                continue;
+            }
+            line_clipped(
+                frame,
+                clipped_from,
+                clipped_to,
+                [255, 255, 255, 255],
+                &inside,
+            );
             // The "white margin": a second, greyer line one pixel out, so the box reads as a frame over the ground rather
             // than as a line that happens to be white.
-            line(
+            line_clipped(
                 frame,
                 (from.0, from.1 + 1),
                 (to.0, to.1 + 1),
                 [150, 150, 150, 255],
+                &inside,
             );
+        }
+    }
+}
+
+/// The same line, painted only where `inside` says: the minimap's view box is a shape over a picture, and a shape that runs
+/// past its own frame is a shape that lies about the frame.
+fn line_clipped(
+    frame: &mut Frame,
+    from: (i32, i32),
+    to: (i32, i32),
+    colour: [u8; 4],
+    inside: &dyn Fn((i32, i32)) -> bool,
+) {
+    let (mut x, mut y) = from;
+    let (dx, dy) = ((to.0 - from.0).abs(), -(to.1 - from.1).abs());
+    let (sx, sy) = (
+        if from.0 < to.0 { 1 } else { -1 },
+        if from.1 < to.1 { 1 } else { -1 },
+    );
+    let mut error = dx + dy;
+    loop {
+        if inside((x, y)) {
+            frame.put(x, y, colour);
+        }
+        if x == to.0 && y == to.1 {
+            break;
+        }
+        let doubled = 2 * error;
+        if doubled >= dy {
+            error += dy;
+            x += sx;
+        }
+        if doubled <= dx {
+            error += dx;
+            y += sy;
         }
     }
 }
@@ -995,26 +1068,32 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
     let bar = layout.bar.3.min(frame.height);
     if bar > 0 {
         frame.fill_rect(0, 0, frame.width as i32, bar as i32, palette::HUD_BAR);
-        let scale = 3;
-        let text_y = (bar as i32 - crate::font::HEIGHT * scale) / 2;
-        let swatch = 12;
+        // **Two rows, not one**: the pack's word for the column on top (at one pixel) and the number under it, laid out from
+        // the widths of both. With a 7-pixel glyph and a 30-pixel bar there is room for a name and a number and no room for
+        // them to share a line, which is what the old layout made them do.
+        let text_scale = 2;
+        let swatch = 10;
+        let (name_y, number_y, swatch_y) = stock_rows(frame.height);
+        let (columns, population_x) = stock_columns(hud);
         for (column, (name, amount)) in hud.stock.iter().enumerate() {
-            let x = hud_swatch_x(column) as i32;
+            let x = columns.get(column).copied().unwrap_or(8);
             let colour = palette::STOCK[column.min(palette::STOCK.len() - 1)];
-            frame.fill_rect(x, (bar as i32 - swatch) / 2, swatch, swatch, colour);
-            frame.draw_number(x + swatch + 6, text_y, *amount, scale, palette::HUD_TEXT);
-            // The pack's own word for this column, at one pixel a dot: the swatch says which colour, and a colour is not
-            // a name to somebody who has not played this pack.
-            let (nx, ny) = stock_name_origin(column);
-            frame.draw_text(nx, ny, name, 1, palette::HUD_TEXT);
+            frame.fill_rect(x, swatch_y, swatch, swatch, colour);
+            frame.draw_text(x, name_y, name, 1, palette::HUD_TEXT);
+            frame.draw_number(
+                x + swatch + 6,
+                number_y,
+                *amount,
+                text_scale,
+                palette::HUD_TEXT,
+            );
         }
-        let x = hud_swatch_x(hud.stock.len()) as i32;
-        frame.draw_ratio(
-            x,
-            text_y,
-            hud.population,
-            hud.population_cap,
-            scale,
+        let population = format!("{}/{}", hud.population, hud.population_cap);
+        frame.draw_text(
+            population_x + 8,
+            number_y,
+            &population,
+            text_scale,
             palette::HUD_TEXT,
         );
         // **The bar's middle says what age the match is in**, and its right is the game's five buttons.
@@ -1157,8 +1236,26 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
             }
             _ => palette::LOST,
         };
+        // **A box with a word in it, not a stripe.** The first version painted an 8-pixel band across the whole screen and
+        // no text at all - the owner saw it as "a strange green stripe" (2026-11-04), which is exactly what a full-width
+        // colour band with nothing in it is. The font has letters now, so the banner can say which way the match went.
         let (bx, by) = banner_point(frame.width, frame.height);
-        let _ = bx;
-        frame.fill_rect(0, by as i32 - 4, frame.width as i32, 8, colour);
+        let label = match outcome {
+            ruage_sim::MatchOutcome::Victory { winner } if winner == snapshot.player => "VICTORY",
+            _ => "DEFEAT",
+        };
+        let scale = 2;
+        let text = crate::font::text_width(label, scale);
+        let (w, h) = (text + 36, crate::font::HEIGHT * scale + 14);
+        let x = bx as i32 - w / 2;
+        let y = by as i32 - h / 2;
+        frame.fill_rect(x, y, w, h, colour);
+        frame.draw_text(
+            bx as i32 - text / 2,
+            by as i32 - crate::font::HEIGHT * scale / 2,
+            label,
+            scale,
+            palette::HUD_TEXT,
+        );
     }
 }

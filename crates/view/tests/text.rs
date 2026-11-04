@@ -77,8 +77,8 @@ fn an_unknown_character_is_skipped() {
     assert_eq!(used, font::text_width("AB", 1), "and took no room");
 }
 
-/// Every glyph in the table is 3x5 rows of three bits - a table with a row of `0b1111` would draw a fourth column into the
-/// next glyph's gap, which is the kind of thing that looks like a font bug for a week.
+/// Every glyph in the table is seven rows of five bits - a table with a row of `0b0011_1111` would draw a sixth column into
+/// the next glyph's gap, which is the kind of thing that looks like a font bug for a week.
 #[test]
 fn every_glyph_fits_the_box() {
     for character in font::ALPHABET.chars().chain(font::DIGITS_TEXT.chars()) {
@@ -90,9 +90,9 @@ fn every_glyph_fits_the_box() {
         );
         for row in rows {
             assert_eq!(
-                *row & 0b1111_1000,
+                *row & 0b1110_0000,
                 0,
-                "{character} has a pixel outside three columns"
+                "{character} has a pixel outside five columns"
             );
         }
     }

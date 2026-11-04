@@ -96,10 +96,14 @@ fn the_hud_shows_one_swatch_per_column_and_the_population() {
         ruage_view::Speed::One,
     );
 
-    // A swatch per stock column, in order, each with digits beside it.
+    // A swatch per stock column, in order, each with digits beside it - at the x the HUD itself computed, so this test
+    // cannot drift from the layout the player sees.
+    let layout = panel(&snapshot, Vec::new(), None);
+    let (columns, population_x) = ui::stock_columns(&layout);
     for (column, colour) in palette::STOCK.iter().take(snapshot.stock.len()).enumerate() {
-        let x = ui::hud_swatch_x(column);
-        let y = ui::hud_bar_height() / 2;
+        let x = u32::try_from(columns[column]).expect("a column on screen");
+        let (_, _, swatch_y) = ui::stock_rows(720);
+        let y = u32::try_from(swatch_y + 2).expect("a swatch on screen");
         assert_eq!(
             with_hud.pixel(x + 2, y),
             *colour,
@@ -111,9 +115,16 @@ fn the_hud_shows_one_swatch_per_column_and_the_population() {
         );
     }
 
-    // Population and the game itself are both still there.
+    // Population and the game itself are both still there, and the population is **past the last column**: it used to be
+    // drawn at the last column's own x, which is how stone and population ended up on top of each other (2026-11-04).
     assert!(
-        lit(&with_hud, ui::hud_swatch_x(snapshot.stock.len()), 2, 60, 20) > 0,
+        lit(
+            &with_hud,
+            u32::try_from(population_x).expect("on screen"),
+            2,
+            60,
+            20
+        ) > 0,
         "no population reported"
     );
     // The bottom panel and the minimap **are** painted over the game - that is what a HUD is - so this walks the band
@@ -154,10 +165,16 @@ fn a_pack_with_no_stock_draws_no_swatches() {
         &snapshot,
         ruage_view::Speed::One,
     );
+    let (columns, _) = ui::stock_columns(&panel(&snapshot, Vec::new(), None));
+    let (_, _, swatch_y) = ui::stock_rows(720);
     for (column, colour) in palette::STOCK.iter().enumerate() {
-        let x = ui::hud_swatch_x(column);
+        let x =
+            u32::try_from(columns.get(column).copied().unwrap_or(8)).expect("a column on screen");
         assert_ne!(
-            frame.pixel(x + 2, ui::hud_bar_height() / 2),
+            frame.pixel(
+                x + 2,
+                u32::try_from(swatch_y + 2).expect("a swatch on screen")
+            ),
             *colour,
             "a swatch for column {column} was drawn from nothing"
         );
@@ -310,8 +327,18 @@ fn a_decided_match_paints_a_banner() {
         &snapshot(),
         ruage_view::Speed::One,
     );
+    // **A banner box, not a stripe**: the owner saw the old full-width band as "a strange green stripe" (2026-11-04), and a
+    // box with a word in it is the fix. The centre is the word's ink, so the colour is counted around it.
     let (x, y) = ui::banner_point(960, 720);
-    assert_eq!(won.pixel(x, y), palette::WON, "a win paints the banner");
+    let painted = count_colour(
+        &won,
+        (x - 60) as u32,
+        (y - 14) as u32,
+        120,
+        28,
+        palette::WON,
+    );
+    assert!(painted > 400, "a win paints the banner: {painted} pixels");
 
     let mut lost = Frame::new(960, 720);
     ui::hud(
@@ -320,11 +347,29 @@ fn a_decided_match_paints_a_banner() {
         &snapshot(),
         ruage_view::Speed::One,
     );
-    assert_ne!(lost.pixel(x, y), palette::WON, "a draw is not a win");
     assert_eq!(
-        lost.pixel(x, y),
+        count_colour(
+            &lost,
+            (x - 60) as u32,
+            (y - 14) as u32,
+            120,
+            28,
+            palette::WON
+        ),
+        0,
+        "a draw is not a win"
+    );
+    let painted = count_colour(
+        &lost,
+        (x - 60) as u32,
+        (y - 14) as u32,
+        120,
+        28,
         palette::LOST,
-        "and it is not the ground either"
+    );
+    assert!(
+        painted > 400,
+        "and a draw paints the banner: {painted} pixels"
     );
 
     let mut playing = Frame::new(960, 720);
@@ -360,10 +405,18 @@ fn each_stock_column_shows_its_name() {
         view: None,
     };
     ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);
-    let (x, y) = ui::stock_name_origin(0);
+    let (columns, _) = ui::stock_columns(&hud);
+    let x = u32::try_from(columns[0]).expect("on screen");
     assert!(
-        count_colour(&frame, x as u32, y as u32, 40, 6, palette::HUD_TEXT) > 0,
-        "no name under the first stock column"
+        count_colour(
+            &frame,
+            x,
+            2,
+            40,
+            ruage_view::font::HEIGHT as u32,
+            palette::HUD_TEXT
+        ) > 0,
+        "no name over the first stock column"
     );
 
     let mut unnamed = Frame::new(960, 720);
@@ -381,7 +434,14 @@ fn each_stock_column_shows_its_name() {
     };
     ui::hud(&mut unnamed, &bare, &snapshot, ruage_view::Speed::One);
     assert_eq!(
-        count_colour(&unnamed, x as u32, y as u32, 40, 6, palette::HUD_TEXT),
+        count_colour(
+            &unnamed,
+            x,
+            2,
+            40,
+            ruage_view::font::HEIGHT as u32,
+            palette::HUD_TEXT
+        ),
         0,
         "an empty name paints nothing"
     );

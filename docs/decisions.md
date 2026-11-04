@@ -2636,6 +2636,17 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D108 - A unit is painted above a building, and the bar is laid out from its own numbers
+
+A flat-shape renderer has no sprite height, so depth alone hid a villager standing in the back half of a house or a farm. The
+owner asked for units to be visible over buildings, so `layer_of` has three passes: ground cover, buildings, units - depth
+orders within each. The old rule ("a unit behind a building is covered by it") was a guess about how the art works; this is a
+statement about what the player needs to see.
+
+The top bar is laid out from `font::text_width` rather than from fixed slots. Two numbers that are computed in two places
+drift, and this project has already paid for that once (the panel height, 76 against 142): `stock_columns` and `stock_rows` are
+the only places a stock position is decided, and the tests ask them too.
+
 ## D107 - The minimap is the world's projection, and its box is the camera
 
 The minimap uses the same isometric projection as the world (`u = tx - ty`, `v = tx + ty`), so a player reads one picture in

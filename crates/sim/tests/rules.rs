@@ -260,7 +260,9 @@ fn an_army_counts_soldiers_by_family_and_not_villagers() {
     let militia = world.role_unit("militia").expect("a militia role");
     let man_at_arms = world.role_unit("man_at_arms").expect("a man-at-arms role");
     let before = world.army(1);
-    assert_eq!(before, 0, "the opening seeds villagers, not soldiers");
+    // **One, and it is the scout.** The opening seeds three villagers and a scout (2026-11-04), and a scout is a soldier -
+    // the owner asked for exactly that when he asked for it to be drawn as a triangle.
+    assert_eq!(before, 1, "the opening seeds one soldier: the scout");
     spawn_unit(&mut world, villager, (18, 18));
     assert_eq!(world.army(1), before, "a fourth villager is not an army");
     spawn_unit(&mut world, militia, (19, 18));
@@ -268,8 +270,8 @@ fn an_army_counts_soldiers_by_family_and_not_villagers() {
     spawn_unit(&mut world, man_at_arms, (21, 18));
     assert_eq!(
         world.army(1),
-        3,
-        "two militia and a man-at-arms are three soldiers of one line"
+        4,
+        "the scout, two militia and a man-at-arms are four soldiers"
     );
 }
 

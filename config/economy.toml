@@ -351,7 +351,17 @@ surviving_classes = [3]
 [metrics]
 # What a balance run counts as a **military** unit (D17: the engine never learns that a militia is 74). A role that
 # the pack cannot name is skipped rather than refused - a metric is a measurement, not a rule of the game.
-military_roles = ["militia", "spearman", "pikeman", "halberdier", "mangonel", "trebuchet_packed"]
+military_roles = [
+    "militia",
+    "spearman",
+    "pikeman",
+    "halberdier",
+    "mangonel",
+    "trebuchet_packed",
+    # **A scout is a soldier.** It rides, it fights, and the owner saw it drawn as a worker's square (2026-11-04): "scout
+    # cavalry is also military and should be triangle".
+    "scout_cavalry",
+]
 
 # What stands on a footprint is content's business, not the engine's (D76). Rows run top-to-bottom from the building's
 # anchor tile, which is the diamond's **north corner** (D84); '#' is impassable, '.' is ground a unit may cross. A role with

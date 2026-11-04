@@ -9503,10 +9503,20 @@ impl World {
     #[must_use]
     pub fn role_name(&self, unit: u32) -> Option<String> {
         let economy = self.economy.as_ref()?;
+        // **Through the family.** An age-up replaces a building with its variant (the town centre 109 becomes 71, a house 70
+        // becomes 463), and a lookup on the exact id found nothing - so the owner's selected town centre was called "unit 71"
+        // the moment the Feudal Age arrived ("buildings get reamed upon move to the next age", 2026-11-04).
+        let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
         economy
             .role
             .iter()
-            .find(|(_, id)| **id == unit)
+            .find(|(_, id)| {
+                **id == unit
+                    || self
+                        .units
+                        .as_ref()
+                        .is_some_and(|units| units.root(**id) == root)
+            })
             .map(|(name, _)| name.clone())
     }
 
