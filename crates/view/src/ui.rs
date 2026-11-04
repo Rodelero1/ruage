@@ -240,9 +240,6 @@ impl Hud {
     }
 }
 
-/// The minimap: the whole map at one or two pixels a tile, coloured by fog and terrain, with the player's
-/// own units on top. It is the vision layer's second customer, and the reason `visible_mask` exists.
-
 // --- the HUD ---------------------------------------------------------------------------------
 
 /// The height of the HUD bar: the game is drawn below it, never under it.

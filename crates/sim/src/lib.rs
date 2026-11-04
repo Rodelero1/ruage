@@ -1101,20 +1101,6 @@ fn step_towards(from: (Fixed, Fixed), to: (Fixed, Fixed), delta: i64) -> (i64, i
     (axis(from.0, to.0), axis(from.1, to.1))
 }
 
-/// `numerator / denominator`, rounded to nearest with halves away from zero.
-fn round_div(numerator: i64, denominator: i64) -> i64 {
-    if denominator == 0 {
-        return 0;
-    }
-    let sign = if (numerator < 0) != (denominator < 0) {
-        -1
-    } else {
-        1
-    };
-    let (n, d) = (numerator.abs(), denominator.abs());
-    sign * ((n + d / 2) / d)
-}
-
 /// The nearest free walkable tile around `from`, searched in ring order so the choice is
 /// deterministic and independent of any hash iteration.
 fn free_neighbour(

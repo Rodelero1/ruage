@@ -330,14 +330,7 @@ fn a_decided_match_paints_a_banner() {
     // **A banner box, not a stripe**: the owner saw the old full-width band as "a strange green stripe" (2026-11-04), and a
     // box with a word in it is the fix. The centre is the word's ink, so the colour is counted around it.
     let (x, y) = ui::banner_point(960, 720);
-    let painted = count_colour(
-        &won,
-        (x - 60) as u32,
-        (y - 14) as u32,
-        120,
-        28,
-        palette::WON,
-    );
+    let painted = count_colour(&won, x - 60, y - 14, 120, 28, palette::WON);
     assert!(painted > 400, "a win paints the banner: {painted} pixels");
 
     let mut lost = Frame::new(960, 720);
@@ -348,25 +341,11 @@ fn a_decided_match_paints_a_banner() {
         ruage_view::Speed::One,
     );
     assert_eq!(
-        count_colour(
-            &lost,
-            (x - 60) as u32,
-            (y - 14) as u32,
-            120,
-            28,
-            palette::WON
-        ),
+        count_colour(&lost, x - 60, y - 14, 120, 28, palette::WON),
         0,
         "a draw is not a win"
     );
-    let painted = count_colour(
-        &lost,
-        (x - 60) as u32,
-        (y - 14) as u32,
-        120,
-        28,
-        palette::LOST,
-    );
+    let painted = count_colour(&lost, x - 60, y - 14, 120, 28, palette::LOST);
     assert!(
         painted > 400,
         "and a draw paints the banner: {painted} pixels"
