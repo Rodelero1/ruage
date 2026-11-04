@@ -466,10 +466,27 @@ impl Frame {
         }
     }
 
+    /// Fill a rectangle. **A row at a time, not a pixel at a time**: the panel is a 960x142 rectangle, which is 136,000
+    /// pixel writes for a background nobody will ever look at closely, and it measured at ~130 us of a HUD that cost
+    /// 151-195 us in total. The inside is written with slice copies and only the clipped edges go through `put`.
     pub fn fill_rect(&mut self, x: i32, y: i32, w: i32, h: i32, colour: [u8; 4]) {
-        for dy in 0..h {
-            for dx in 0..w {
-                self.put(x + dx, y + dy, colour);
+        if w <= 0 || h <= 0 {
+            return;
+        }
+        let (width, height) = (self.width as i32, self.height as i32);
+        let x0 = x.max(0);
+        let y0 = y.max(0);
+        let x1 = (x + w).min(width);
+        let y1 = (y + h).min(height);
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        let (left, right) = (x0 as usize, x1 as usize);
+        for row in y0..y1 {
+            let base = (row as usize) * (self.width as usize) * 4;
+            let line = &mut self.pixels[base + left * 4..base + right * 4];
+            for pixel in line.as_chunks_mut::<4>().0 {
+                *pixel = colour;
             }
         }
     }
@@ -686,6 +703,18 @@ pub mod palette {
     /// (D82: digits, no words), so the banner says it this way and the tests name these two colours.
     /// A refused order's words: red enough to read as "no", light enough to read at all.
     pub const REFUSED: [u8; 4] = [230, 110, 100, 255];
+    /// A widget's bevel: one lit edge along the top and left, one shadowed along the bottom and right. Placeholder or not,
+    /// a flat rectangle does not read as a button - the bevel is what says "this can be pressed".
+    pub const BEVEL_LIGHT: [u8; 4] = [120, 126, 148, 255];
+    pub const BEVEL_DARK: [u8; 4] = [8, 8, 10, 255];
+    /// The panel's zones - the command grid, the selected object, the minimap - so the bottom bar reads as three places
+    /// rather than one blank slab.
+    pub const ZONE: [u8; 4] = [24, 25, 31, 255];
+    /// A widget's face, by state: plain, under the pointer, held down, and not available.
+    pub const WIDGET: [u8; 4] = [34, 36, 44, 255];
+    pub const WIDGET_HOVER: [u8; 4] = [58, 62, 78, 255];
+    pub const WIDGET_PRESSED: [u8; 4] = [20, 21, 26, 255];
+    pub const WIDGET_DISABLED: [u8; 4] = [26, 26, 30, 255];
     /// The menu: a wash over the world, and the row the pointer is on.
     pub const MENU_WASH: [u8; 4] = [0, 0, 0, 200];
     pub const MENU_ROW: [u8; 4] = [64, 70, 96, 255];

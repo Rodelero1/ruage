@@ -146,7 +146,14 @@ fn main() -> ExitCode {
             .map(|entity| entity.position)
     });
     let focus = focus.unwrap_or((20.0, 20.0));
-    let camera = Camera::new((640, 480)).centred_on(focus);
+    // The frame's size: `WIDTHxHEIGHT` as the sixth argument, so a widescreen frame can be rendered and looked at -
+    // "it works on a wide screen" has to be something a person can see, not something the code intends.
+    let (width, height) = args
+        .get(5)
+        .and_then(|size| size.split_once('x'))
+        .and_then(|(w, h)| Some((w.parse::<u32>().ok()?, h.parse::<u32>().ok()?)))
+        .unwrap_or((640, 480));
+    let camera = Camera::new((width, height)).centred_on(focus);
     // What the diagnostic selects: the player's first unit (ring, health bar), or - with `card` as the fifth argument - the
     // first building, so the command card can be looked at without a display.
     let want_buildings = args.get(4).is_some_and(|arg| arg == "card");

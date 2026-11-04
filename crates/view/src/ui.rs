@@ -274,77 +274,80 @@ pub fn minimap(snapshot: &Snapshot, pixels_per_tile: u32) -> Frame {
 // --- the HUD ---------------------------------------------------------------------------------
 
 /// The height of the HUD bar: the game is drawn below it, never under it.
+#[must_use]
 pub fn hud_bar_height() -> u32 {
-    30
+    BAR_HEIGHT
 }
 
 /// Where a stock column's **name** starts: under its swatch, one pixel a dot, because a colour is not a name to somebody
 /// who has not played this pack. The bar is tall enough for the numbers (three pixels a dot) above it.
 #[must_use]
 pub fn stock_name_origin(column: usize) -> (i32, i32) {
-    (hud_swatch_x(column) as i32, hud_bar_height() as i32 - 7)
+    let layout = Layout::of(960, 720);
+    let (x, _, _, _) = layout.stock[column.min(layout.stock.len() - 1)];
+    (x, BAR_HEIGHT as i32 - 7)
 }
 
-/// Where a refusal is written: the top line of the bottom panel, where the eye goes after an order.
+/// Where a refusal is written: the top of the panel's selected-object zone, where the eye goes after an order.
 #[must_use]
 pub fn notice_origin(frame_height: u32) -> (i32, i32) {
-    (8, frame_height as i32 - hud_panel_height() as i32 + 3)
+    let layout = Layout::of(960, frame_height);
+    (layout.selected.0, layout.selected.1 + 2)
 }
 
 /// Where a stock column's swatch starts. **The pack's order is the display order**, so a pack with three resources
 /// shows three swatches and the view never learns their names.
+#[must_use]
 pub fn hud_swatch_x(column: usize) -> u32 {
-    8 + column as u32 * 60
+    stock_name_origin(column).0 as u32
 }
 
 /// The speed selector's five boxes, at the right end of the HUD bar: `(x, y, w, h)` each, in `Speed::ALL` order.
 ///
-/// A **segmented control**, not a dropdown: the HUD's font has digits and no words (D82), so a label like "1.5x" cannot be
-/// written - five boxes with the live one filled say the same thing and are clickable.
+/// A **segmented control**, not a dropdown: five boxes with the live one filled say "how fast" and are clickable, and they
+/// are the bar's five buttons, laid out by `Layout` so they stay against the right edge on any width.
 #[must_use]
-pub fn speed_boxes(frame_width: u32) -> [(u32, u32, u32, u32); 5] {
-    let width = 22;
-    let gap = 4;
-    let total = 5 * width + 4 * gap;
-    let left = frame_width.saturating_sub(total + 8);
-    let y = 3;
-    let height = hud_bar_height().saturating_sub(6);
-    std::array::from_fn(|index| {
-        let x = left + index as u32 * (width + gap);
-        (x, y, width, height)
-    })
+pub fn speed_boxes(frame_width: u32, frame_height: u32) -> [Rect; 5] {
+    Layout::of(frame_width, frame_height).bar_buttons
 }
 
-/// Which speed a click at a pixel picks, if any: the selector is the only part of the HUD that takes input.
+/// Which speed a click at a pixel picks, if any.
 #[must_use]
-pub fn speed_at(pixel: (i32, i32), frame_width: u32) -> Option<crate::Speed> {
+pub fn speed_at(pixel: (i32, i32), frame_width: u32, frame_height: u32) -> Option<crate::Speed> {
     if pixel.0 < 0 || pixel.1 < 0 {
         return None;
     }
-    let (x, y) = (pixel.0 as u32, pixel.1 as u32);
-    speed_boxes(frame_width)
+    speed_boxes(frame_width, frame_height)
         .iter()
-        .position(|(bx, by, w, h)| x >= *bx && x < bx + w && y >= *by && y < by + h)
+        .position(|&(bx, by, w, h)| {
+            pixel.0 >= bx && pixel.0 < bx + w as i32 && pixel.1 >= by && pixel.1 < by + h as i32
+        })
         .map(|index| crate::Speed::ALL[index])
 }
 
-/// Draw the selector: one box per speed, the current one filled with the selection colour.
+/// Draw the selector: one widget per speed, the current one held down.
 pub fn speed_selector(frame: &mut Frame, speed: crate::Speed) {
-    for (index, (x, y, w, h)) in speed_boxes(frame.width).into_iter().enumerate() {
+    let layout = Layout::of(frame.width, frame.height);
+    speed_selector_in(frame, &layout, speed);
+}
+
+/// The selector, for a caller that has the layout already: `hud` does, and re-deriving it per part was **316 us a frame**
+/// against 151-195 for the whole HUD before the layout existed. The layout is cheap; four of them per frame is not.
+fn speed_selector_in(frame: &mut Frame, layout: &Layout, speed: crate::Speed) {
+    let boxes = layout.bar_buttons;
+    for (index, rect) in boxes.into_iter().enumerate() {
         let chosen = crate::Speed::ALL[index] == speed;
-        frame.fill_rect(x as i32, y as i32, w as i32, h as i32, palette::HUD_TEXT);
-        let inset = if chosen { 2 } else { 4 };
-        frame.fill_rect(
-            (x + inset) as i32,
-            (y + inset) as i32,
-            (w - inset * 2) as i32,
-            (h - inset * 2) as i32,
-            if chosen {
-                palette::SELECTION
-            } else {
-                palette::HUD_BAR
-            },
-        );
+        let state = if chosen {
+            WidgetState::Pressed
+        } else {
+            WidgetState::Normal
+        };
+        let (x, y, w, h) = rect;
+        draw_widget(frame, rect, state);
+        // The live one says so in the selection colour: the bevel alone is not a readout.
+        if chosen {
+            frame.fill_rect(x + 4, y + 4, w as i32 - 8, h as i32 - 8, palette::SELECTION);
+        }
     }
 }
 
@@ -352,17 +355,183 @@ pub fn speed_selector(frame: &mut Frame, speed: crate::Speed) {
 ///
 /// It reads a `Snapshot` and nothing else (D55): the simulation carries no text, and every number here is one the
 /// engine already keeps. D74 allowed this; D82 chose the bitmap font it is drawn with.
+/// A rectangle as `(x, y, w, h)`, which is how every part of the layout is handed out.
+pub type Rect = (i32, i32, u32, u32);
+
+/// How a widget looks. The states are the interface's grammar: a thing that can be pressed looks one way under the
+/// pointer, another while held, and another when it is not available at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WidgetState {
+    Normal,
+    Hover,
+    Pressed,
+    Disabled,
+}
+
+/// **Where every part of the interface sits.** Anchors, not a table per resolution: what belongs on the right is measured
+/// from the frame's right edge, what belongs on the left from its left, and the middle takes what is left over. One layout
+/// serves 4:3, 16:9 and 21:9, which is the whole of "it has to run on wide screens".
+#[derive(Debug, Clone, PartialEq)]
+pub struct Layout {
+    pub width: u32,
+    pub height: u32,
+    /// The top bar, the map view between the bars, and the bottom bar.
+    pub bar: Rect,
+    pub view: Rect,
+    pub panel: Rect,
+    /// One rectangle per stockpile column, then the population, then the age's box, then the five bar buttons.
+    pub stock: Vec<Rect>,
+    pub population: Rect,
+    pub age: Rect,
+    pub bar_buttons: [Rect; 5],
+    /// The panel's three zones: the command grid, the selected object, the minimap - the game's own arrangement.
+    pub grid: Rect,
+    pub slots: Vec<Rect>,
+    pub selected: Rect,
+    pub minimap: Rect,
+    /// The rollover help's box, above the panel on the left.
+    pub help: Rect,
+}
+
+/// The top bar's height and the panel's: the panel is three command rows deep, because the grid is five by three.
+pub const BAR_HEIGHT: u32 = 30;
+/// Three command rows of 40 and the gaps between them, with room above and below: 128 + 14.
+pub const PANEL_HEIGHT: u32 = 142;
+
+impl Layout {
+    /// The interface for a frame. A frame smaller than the interface gets a smaller interface rather than one drawn off
+    /// the edge: every zone is clamped to what is left, and the widths never go negative.
+    #[must_use]
+    pub fn of(width: u32, height: u32) -> Layout {
+        // On a short frame the bars shrink first, so the map keeps some room to be a map.
+        let bar_h = BAR_HEIGHT.min(height / 3);
+        let panel_h = PANEL_HEIGHT.min(height.saturating_sub(bar_h) / 2);
+        let bar = (0, 0, width, bar_h);
+        let panel = (0, height.saturating_sub(panel_h) as i32, width, panel_h);
+        let view = (
+            0,
+            bar_h as i32,
+            width,
+            height.saturating_sub(bar_h + panel_h),
+        );
+
+        // The bar: the stockpile from the left, the buttons and the speed from the right, the age between them.
+        let stock: Vec<Rect> = (0..4)
+            .map(|column| (8 + column * 60, (bar_h / 2) as i32 - 7, 56, 14))
+            .collect();
+        let population = (8 + 4 * 60, (bar_h / 2) as i32 - 7, 48, 14);
+        let buttons_w = 5 * 26 + 4 * 4;
+        let buttons_x = width.saturating_sub(8 + buttons_w) as i32;
+        let bar_buttons: [Rect; 5] = std::array::from_fn(|index| {
+            (
+                buttons_x + (index as i32) * 30,
+                (bar_h / 2) as i32 - 9,
+                26,
+                18,
+            )
+        });
+        let age_x = population.0 + population.2 as i32 + 12;
+        let age_w = (buttons_x - 12 - age_x).max(0) as u32;
+        let age = (age_x, (bar_h / 2) as i32 - 7, age_w, 14);
+
+        // The panel: the grid on the left, the minimap on the right, the selected object in what is left.
+        let minimap_w = 160.min(width / 4);
+        let minimap = (
+            width.saturating_sub(8 + minimap_w) as i32,
+            panel.1 + 6,
+            minimap_w,
+            panel_h.saturating_sub(12),
+        );
+        // A command button is forty pixels square, as the game's are: a name and a price need the room.
+        let slot: u32 = 40;
+        let pitch: i32 = slot as i32 + 4;
+        let grid_w = 5 * slot + 4 * 4;
+        let grid_h = 3 * slot + 2 * 4;
+        let grid = (
+            8,
+            panel.1 + 7,
+            grid_w,
+            grid_h.min(panel_h.saturating_sub(14)),
+        );
+        let slots: Vec<Rect> = (0..15)
+            .map(|index| {
+                let column = index % 5;
+                let row = index / 5;
+                (grid.0 + column * pitch, grid.1 + row * pitch, slot, slot)
+            })
+            .collect();
+        let selected_x = grid.0 + grid.2 as i32 + 8;
+        let selected = (
+            selected_x,
+            panel.1 + 6,
+            (minimap.0 - 8 - selected_x).max(0) as u32,
+            panel_h.saturating_sub(12),
+        );
+        let help = (
+            8,
+            (panel.1 - 28).max(bar_h as i32),
+            420.min(width.saturating_sub(16)),
+            22,
+        );
+
+        Layout {
+            width,
+            height,
+            bar,
+            view,
+            panel,
+            stock,
+            population,
+            age,
+            bar_buttons,
+            grid,
+            slots,
+            selected,
+            minimap,
+            help,
+        }
+    }
+}
+
+/// **One widget, in a state.** The bevel is what makes a placeholder read as a button: a lit edge above and to the left,
+/// a shadowed one below and to the right, and a face that changes under the pointer and while pressed.
+pub fn draw_widget(frame: &mut Frame, rect: Rect, state: WidgetState) {
+    let (x, y, w, h) = rect;
+    if w < 2 || h < 2 {
+        return;
+    }
+    let face = match state {
+        WidgetState::Normal => palette::WIDGET,
+        WidgetState::Hover => palette::WIDGET_HOVER,
+        WidgetState::Pressed => palette::WIDGET_PRESSED,
+        WidgetState::Disabled => palette::WIDGET_DISABLED,
+    };
+    frame.fill_rect(x, y, w as i32, h as i32, face);
+    // A pressed widget's bevel is the other way about, which is how a physical button reads.
+    let (light, dark) = match state {
+        WidgetState::Pressed => (palette::BEVEL_DARK, palette::BEVEL_LIGHT),
+        _ => (palette::BEVEL_LIGHT, palette::BEVEL_DARK),
+    };
+    frame.fill_rect(x, y, w as i32, 1, light);
+    frame.fill_rect(x, y, 1, h as i32, light);
+    frame.fill_rect(x, y + h as i32 - 1, w as i32, 1, dark);
+    frame.fill_rect(x + w as i32 - 1, y, 1, h as i32, dark);
+}
+
 /// The bottom panel's height: a selection list on the left, and room above the minimap on the right.
 #[must_use]
 pub fn hud_panel_height() -> u32 {
-    76
+    PANEL_HEIGHT
 }
 
 /// The left edge of a selection row's health bar, and its top. Row 0 is nearest the panel's top edge.
 #[must_use]
 pub fn selection_row_origin(row: usize, frame_height: u32) -> (i32, i32) {
-    let top = frame_height as i32 - hud_panel_height() as i32;
-    (8, top + 12 + row as i32 * ROW_HEIGHT)
+    let layout = Layout::of(960, frame_height);
+    (
+        layout.selected.0,
+        layout.selected.1 + 12 + row as i32 * ROW_HEIGHT,
+    )
 }
 
 /// One button on the command card: a name, its price in stock columns, and why it would be refused (if it would).
@@ -374,33 +543,13 @@ pub struct CardButton {
     pub refusal: Option<String>,
 }
 
-/// The card's buttons, four to a row, from the left above the bottom panel. A card that ran off the screen would have
-/// buttons that do not exist, so the layout is bounded by the frame it is given.
+/// **The command grid's slots**, five across and three down, in the panel's left zone - the game's own arrangement, and
+/// the reason a card no longer floats above the panel. A card with more than fifteen things is a card whose last button
+/// does not exist; callers clip.
 #[must_use]
-pub fn card_rows(count: usize, frame_width: u32, frame_height: u32) -> Vec<(i32, i32, u32, u32)> {
-    const PER_ROW: usize = 4;
-    const WIDTH: u32 = 96;
-    const HEIGHT: u32 = 28;
-    const GAP: u32 = 6;
-    let bottom = frame_height.saturating_sub(hud_panel_height());
-    let rows = u32::try_from(count.div_ceil(PER_ROW)).unwrap_or(0);
-    // **Read left to right, top to bottom**, so the first button is the top-left one: the block is placed as a whole above
-    // the panel instead of each row being stacked upward from the bottom.
-    let block = rows * (HEIGHT + GAP);
-    let top = bottom.saturating_sub(8 + block);
-    let _ = frame_width;
-    (0..count)
-        .map(|index| {
-            let column = (index % PER_ROW) as u32;
-            let row = (index / PER_ROW) as u32;
-            (
-                (8 + column * (WIDTH + GAP)) as i32,
-                (top + row * (HEIGHT + GAP)) as i32,
-                WIDTH,
-                HEIGHT,
-            )
-        })
-        .collect()
+pub fn card_rows(count: usize, frame_width: u32, frame_height: u32) -> Vec<Rect> {
+    let layout = Layout::of(frame_width, frame_height);
+    layout.slots.iter().copied().take(count.min(15)).collect()
 }
 
 /// Which button a pixel picks, if any.
@@ -432,37 +581,30 @@ pub fn draw_card(
         .enumerate()
     {
         let button = &buttons[index];
-        let background = if Some(index) == chosen {
-            palette::MENU_ROW
-        } else {
-            palette::PANEL
+        // Every button is a **widget**: a labelled placeholder with a bevel and a state, which is what the owner asked for
+        // instead of bare rectangles drawn to say "icon goes here".
+        let state = match (Some(index) == chosen, button.refusal.is_some()) {
+            (true, _) => WidgetState::Hover,
+            (false, true) => WidgetState::Disabled,
+            (false, false) => WidgetState::Normal,
         };
-        frame.fill_rect(x, y, w as i32, h as i32, background);
-        frame.fill_rect(x, y, w as i32, 1, palette::MARK);
+        draw_widget(frame, (x, y, w, h), state);
         // The name, trimmed to the button: a button is not a paragraph, and a name that overflows its box makes two buttons
-        // look like one.
-        let room = (w as i32 - 6) / (crate::font::WIDTH + crate::font::GAP);
-        let label: String = button
-            .name
-            .to_uppercase()
-            .chars()
-            .take(usize::try_from(room).unwrap_or(0))
-            .collect();
-        frame.draw_text(x + 3, y + 3, &label, 1, palette::HUD_TEXT);
+        // look like one. **Words, not icons** - the owner's placeholder choice - are readable now and replaceable later.
+        let room =
+            usize::try_from((w as i32 - 6) / (crate::font::WIDTH + crate::font::GAP)).unwrap_or(0);
+        let label: String = button.name.to_uppercase().chars().take(room).collect();
+        frame.draw_text(x + 3, y + 4, &label, 1, palette::HUD_TEXT);
         // The price: one number per cost, in the pack's column order.
         let mut at = x + 3;
         for (_, amount) in &button.costs {
-            at = frame.draw_number(at, y + 11, *amount, 1, palette::HUD_TEXT) + 3;
+            at = frame.draw_number(at, y + 12, *amount, 1, palette::HUD_TEXT) + 3;
         }
-        // And why not, if it would not be taken. The words are the engine's; the colour is the view's job.
+        // And why not, if it would not be taken: a red bar and the engine's own words, at the bottom of the button.
         if let Some(refusal) = &button.refusal {
-            frame.fill_rect(x, y + h as i32 - 4, w as i32, 2, palette::REFUSED);
-            let short: String = refusal
-                .to_uppercase()
-                .chars()
-                .take(usize::try_from(room).unwrap_or(0))
-                .collect();
-            frame.draw_text(x + 3, y + 18, &short, 1, palette::REFUSED);
+            frame.fill_rect(x, y + h as i32 - 5, w as i32, 2, palette::REFUSED);
+            let short: String = refusal.to_uppercase().chars().take(room).collect();
+            frame.draw_text(x + 3, y + 22, &short, 1, palette::REFUSED);
         }
     }
 }
@@ -561,7 +703,8 @@ pub fn minimap_tile(
     ))
 }
 
-/// The minimap's place in the frame: bottom-right, **above** the panel, two pixels a tile.
+/// The minimap's place in the frame: **inside the panel's right zone**, two pixels a tile where that fits, and centred in
+/// the zone - which is what keeps it against the right edge of a wide frame without a second anchoring rule.
 #[must_use]
 pub fn minimap_rect(
     frame_width: u32,
@@ -569,12 +712,24 @@ pub fn minimap_rect(
     map_width: u16,
     map_height: u16,
 ) -> (i32, i32, u32, u32) {
-    let scale = 2;
-    let width = u32::from(map_width) * scale;
-    let height = u32::from(map_height) * scale;
+    fit_minimap(
+        &Layout::of(frame_width, frame_height),
+        map_width,
+        map_height,
+    )
+}
+
+/// The minimap fitted inside a layout's right zone, for a caller that has the layout already.
+fn fit_minimap(layout: &Layout, map_width: u16, map_height: u16) -> (i32, i32, u32, u32) {
+    let zone = layout.minimap;
+    let (map_w, map_h) = (u32::from(map_width).max(1), u32::from(map_height).max(1));
+    // Two pixels a tile, and never larger than the zone: a 64-tile map at two pixels is 128, and the zone is tall enough
+    // for it at any sane panel; a bigger map shrinks to fit rather than spilling over the selected object.
+    let scale = 2u32.min(zone.2 / map_w).min(zone.3 / map_h).max(1);
+    let (width, height) = (map_w * scale, map_h * scale);
     (
-        frame_width as i32 - width as i32 - 8,
-        frame_height as i32 - hud_panel_height() as i32 - height as i32 - 8,
+        zone.0 + (zone.2.saturating_sub(width) / 2) as i32,
+        zone.1 + (zone.3.saturating_sub(height) / 2) as i32,
         width,
         height,
     )
@@ -598,7 +753,9 @@ const ROW_BAR: i32 = 60;
 /// is what is selected; the corner is the minimap; a decided match paints a banner across the middle. `Hud::of` builds the
 /// numbers and this draws them - the window's job is to call it, not to decide what a HUD is.
 pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Speed) {
-    let bar = hud_bar_height().min(frame.height);
+    // **One layout per frame**, used by every part: deriving it again in each helper was 316 us against 151-195.
+    let layout = Layout::of(frame.width, frame.height);
+    let bar = layout.bar.3.min(frame.height);
     if bar > 0 {
         frame.fill_rect(0, 0, frame.width as i32, bar as i32, palette::HUD_BAR);
         let scale = 3;
@@ -623,21 +780,38 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
             scale,
             palette::HUD_TEXT,
         );
-        speed_selector(frame, speed);
+        speed_selector_in(frame, &layout, speed);
     }
 
-    let top = frame.height as i32 - hud_panel_height() as i32;
+    // **From the layout, not from a second height.** The panel used to be filled from `hud_panel_height()` while the zones
+    // came from `Layout`: two numbers that had already drifted (76 against 142), so the zones were drawn on ground that was
+    // never painted. The probe caught it; this is the fix.
+    let top = layout.panel.1;
     if top >= bar as i32 && top < frame.height as i32 {
         frame.fill_rect(
-            0,
-            top,
-            frame.width as i32,
-            hud_panel_height() as i32,
+            layout.panel.0,
+            layout.panel.1,
+            layout.panel.2 as i32,
+            layout.panel.3 as i32,
             palette::PANEL,
         );
         // A one-pixel edge along the panel's top: on darkness the panel's own colour is nearly the void's, and a HUD that
         // is drawn but unreadable is the same to a player as one that is not drawn.
         frame.fill_rect(0, top, frame.width as i32, 1, palette::MARK);
+        // **The game's three zones**: the command grid on the left, the selected object in the middle, the minimap on the
+        // right. Each gets its own ground and a line above and below, so the bar reads as three places.
+        for zone in [layout.grid, layout.selected, layout.minimap] {
+            if zone.2 == 0 || zone.3 == 0 {
+                continue;
+            }
+            // **An outline, not a fill.** Filling the three zones was 130,000 pixels a frame - measured at 316-355 us for
+            // the whole HUD against 151-195 before the layout existed - and the zones read by their edges, not their tone.
+            let (x, y, w, h) = (zone.0, zone.1, zone.2 as i32, zone.3 as i32);
+            frame.fill_rect(x, y, w, 1, palette::MARK);
+            frame.fill_rect(x, y + h - 1, w, 1, palette::MARK);
+            frame.fill_rect(x, y, 1, h, palette::MARK);
+            frame.fill_rect(x + w - 1, y, 1, h, palette::MARK);
+        }
         if let Some(notice) = &hud.notice {
             let (nx, ny) = notice_origin(frame.height);
             frame.draw_text(nx, ny, notice, 1, palette::REFUSED);
@@ -670,7 +844,7 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
         }
     }
 
-    let (mx, my, mw, mh) = minimap_rect(frame.width, frame.height, snapshot.width, snapshot.height);
+    let (mx, my, mw, mh) = fit_minimap(&layout, snapshot.width, snapshot.height);
     if mw > 0 && mh > 0 && mx >= 0 && my >= 0 {
         // The box, then the map: unexplored ground is nearly black, so without an edge the minimap is a hole.
         frame.fill_rect(mx - 1, my - 1, mw as i32 + 2, 1, palette::MARK);

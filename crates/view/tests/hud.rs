@@ -117,12 +117,14 @@ fn the_hud_shows_one_swatch_per_column_and_the_population() {
     );
     // The bottom panel and the minimap **are** painted over the game - that is what a HUD is - so this walks the band
     // between them: below the top bar, above the panel, and left of the minimap.
-    let below = ui::hud_bar_height() + 4;
-    let above_panel = 240 - ui::hud_panel_height() - 4;
+    // The band between the bars, exactly: `Layout` says where the panel starts, and a frame too short for the full
+    // panel gets a shorter one, so the band is read from the layout rather than from the panel's nominal height.
+    let layout = ui::Layout::of(320, 240);
+    let below = layout.bar.1 as u32 + layout.bar.3 + 4;
+    let above_panel = (layout.panel.1 - 4).max(below as i32) as u32;
     let (map_left, map_top, ..) = ui::minimap_rect(320, 240, snapshot.width, snapshot.height);
     for y in below..above_panel {
         for x in 0..320 {
-            // The minimap is drawn in this band too, by design: it is the one part of the HUD that is the world.
             // One pixel of slack for the box the minimap is drawn in.
             if x as i32 >= map_left - 1 && y as i32 >= map_top - 1 {
                 continue;
@@ -239,6 +241,8 @@ fn the_selection_panel_paints_a_health_bar() {
     );
     assert_eq!(
         bare.pixel(x as u32 + 2, y as u32 + 1),
+        // The panel's own ground: the zones are drawn as outlines, not fills (a fill of all three was 130,000 pixels a
+        // frame, measured at 316-355 us against 151-195).
         palette::PANEL,
         "and with nothing selected the row is the panel's own background"
     );

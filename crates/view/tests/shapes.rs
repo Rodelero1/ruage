@@ -317,39 +317,43 @@ fn the_speeds_are_exact_and_a_change_mid_match_keeps_the_carry() {
 /// own speed, nothing outside, and the live one drawn filled.
 #[test]
 fn the_speed_selector_picks_one_of_five() {
-    let width = 960;
-    let boxes = ruage_view::ui::speed_boxes(width);
-    for (index, (x, y, w, h)) in boxes.iter().enumerate() {
-        let centre = ((x + w / 2) as i32, (y + h / 2) as i32);
+    // **The frame's own size**, not a nominal one: the selector is laid out for the frame it is drawn in, and a window
+    // that is not 720 tall puts the same boxes somewhere else - which is a click that misses, once.
+    let (width, height) = (960u32, 720u32);
+    let boxes = ruage_view::ui::speed_boxes(width, height);
+    for (index, &(x, y, w, h)) in boxes.iter().enumerate() {
+        let centre = (x + w as i32 / 2, y + h as i32 / 2);
         assert_eq!(
-            ruage_view::ui::speed_at(centre, width),
+            ruage_view::ui::speed_at(centre, width, height),
             Some(Speed::ALL[index]),
             "box {index} at {centre:?} picks its own speed"
         );
         // The boxes are a row that does not overlap: every other box's centre is outside this one.
-        for (other, (ox, oy, ow, oh)) in boxes.iter().enumerate() {
+        for (other, &(ox, oy, ow, oh)) in boxes.iter().enumerate() {
             if other == index {
                 continue;
             }
-            let (ox, oy, ow, oh) = (*ox, *oy, *ow, *oh);
-            let outside = ox + ow <= *x || ox >= x + w || oy + oh <= *y || oy >= y + h;
+            let outside = ox + ow as i32 <= x
+                || ox >= x + w as i32
+                || oy + oh as i32 <= y
+                || oy >= y + h as i32;
             assert!(outside, "boxes {index} and {other} overlap");
         }
     }
     assert_eq!(
-        ruage_view::ui::speed_at((5, 5), width),
+        ruage_view::ui::speed_at((5, 5), width, height),
         None,
         "the left of the bar is the stockpile, not the selector"
     );
 
     // The live speed's box is drawn filled; the others are outlined.
-    let mut one = ruage_view::Frame::new(width, 60);
-    let mut five = ruage_view::Frame::new(width, 60);
+    let mut one = ruage_view::Frame::new(width, height);
+    let mut five = ruage_view::Frame::new(width, height);
     ruage_view::ui::speed_selector(&mut one, Speed::One);
     ruage_view::ui::speed_selector(&mut five, Speed::Five);
     let box_of = |frame: &ruage_view::Frame, index: usize| {
-        let (x, y, w, h) = ruage_view::ui::speed_boxes(width)[index];
-        frame.pixel(x + w / 2, y + h / 2)
+        let (x, y, w, h) = ruage_view::ui::speed_boxes(width, height)[index];
+        frame.pixel((x + w as i32 / 2) as u32, (y + h as i32 / 2) as u32)
     };
     assert_ne!(
         box_of(&one, 0),

@@ -26,29 +26,35 @@ fn count_colour(frame: &Frame, x: u32, y: u32, w: u32, h: u32, colour: [u8; 4]) 
     count
 }
 
-/// **One button per thing, four to a row, inside the frame and above the panel.** A card that runs off the screen is a card
-/// whose last three buttons do not exist.
+/// **One button per thing, five to a row, in the panel's command grid.** The card used to float above the bar; the game's
+/// own arrangement - and the owner's answer - is a five-by-three grid *inside* the bar, so a button is never anywhere but
+/// where the game puts it.
 #[test]
 fn there_is_a_button_per_item() {
     let (width, height) = (960, 720);
     let rows = ui::card_rows(6, width, height);
     assert_eq!(rows.len(), 6, "one rectangle per item");
+    let grid = ui::Layout::of(width, height).grid;
     for (x, y, w, h) in &rows {
-        assert!(*x >= 0 && *y >= 0, "a button starts inside the frame");
         assert!(
-            *x as u32 + w <= width && *y as u32 + h <= height,
-            "a button ends inside the frame"
+            *x >= grid.0 && *y >= grid.1,
+            "a button starts outside the command grid"
         );
         assert!(
-            (*y as u32) + h <= height - ui::hud_panel_height(),
-            "a button overlaps the panel"
+            x + *w as i32 <= grid.0 + grid.2 as i32 && y + *h as i32 <= grid.1 + grid.3 as i32,
+            "a button ends outside the command grid"
         );
     }
-    // The fifth button is on a second row: four to a row, as the layout says.
-    assert_eq!(
-        rows[4].1,
-        rows[0].1 + rows[0].3 as i32 + 6,
-        "the second row is below the first, one gap down"
+    // The fifth is still on the first row, the sixth starts the second: five across, three down.
+    assert_eq!(rows[4].1, rows[0].1, "five to a row");
+    assert!(
+        rows[5].1 > rows[0].1,
+        "the sixth button starts a second row"
+    );
+    assert_eq!(rows[5].0, rows[0].0, "and in the first column");
+    assert!(
+        ui::card_rows(20, width, height).len() == 15,
+        "the grid clips at fifteen"
     );
 }
 

@@ -189,7 +189,8 @@ impl App {
                 }
                 // The HUD's speed selector first: it is drawn over the world, so a click on it is a click on the HUD and
                 // must not also select whatever stands under it.
-                if let Some(speed) = ui::speed_at(self.cursor_pixel, self.camera.viewport.0) {
+                let (frame_width, frame_height) = self.frame_size();
+                if let Some(speed) = ui::speed_at(self.cursor_pixel, frame_width, frame_height) {
                     self.pace.set(speed);
                     eprintln!("speed -> {}", speed.label());
                     return;

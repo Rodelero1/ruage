@@ -1,5 +1,25 @@
 # The effect interpreter, priced from the data
 
+> # Session 5, 2026-11-03 - the interface, after openaok
+>
+> **The owner's answers (this thread):** (1) the bottom bar takes **the game's own shape** - command grid on the left, the
+> selected object in the middle, the minimap on the right, all in one bar; (2) placeholders are **labelled buttons** (a short
+> word inside each), not bare rects; (3) hotkeys **wait** until the grid exists. And: **the game must run on wide screens.**
+>
+> Evaluation: `docs/ui-from-openaok.md` (what a mature AoE2 engine does, what we already have in 2,808 lines, the gap, what
+> not to copy). Order, each a normal step:
+>
+> | # | step | state |
+> |---|---|---|
+> | U1 | anchored layout, widget states, widescreen | **landed** - `docs/reviews/2026-11-03-the-bar-gets-a-shape.md` |
+> | U2 | the 5x3 command grid with pages, selected-object area | after U1 |
+> | U3 | age readout, five top-bar buttons, rollover help box | after U2 |
+> | U4 | input occlusion from what was painted | after U3 |
+> | U5 | hotkeys (content table) | waits for U2 |
+>
+> **Two things taken from openaok on the way** (`docs/ui-from-openaok.md` §6): "drawing and clicking both go through this"
+> as an explicit rule of `ui.rs`, and **refusal as an id** rather than the engine's `Display` sentence.
+>
 > # Session 4, 2026-11-03 - the playable core, on the owner's order
 >
 > **The owner's order (this thread):** postpone saving and recording; fix what is broken, then shape the engine to be
