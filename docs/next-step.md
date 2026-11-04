@@ -28,6 +28,63 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 10, 2026-11-04 - M3 attempted and **not landed**: the body's shape against the ground is not a one-file change
+>
+> **The ask:** the owner said "Proceed" after M2 landed (`ddcad16`). M3 was scoped as "`step_is_walkable` asks the shape,
+> not the landing tile".
+>
+> **What was built and measured, before it was reverted:** a `ground_overlap` measurement (sum of `radius^2 - d^2` over the
+> blocked tiles a body's disc overlaps, zero when clear), `step_is_walkable` refusing any step that makes that number
+> worse, and a back-off candidate when neither forward nor sideways is legal. It fixes the bug it was written for and it was
+> verified doing so:
+>
+> - `a_body_never_overlaps_the_wall_it_leans_on` (new): a villager ordered **into** a house had its disc **630 raw units
+>   inside the wall** with a body of 4,000; with the rule it never touches it. RED before, GREEN after.
+> - `a_body_standing_in_a_wall_walks_out_of_it` (new): a body spawned on a house tile used to be **frozen for ever**
+>   (`step_is_walkable` refused every step whose landing tile was still the house, and a step never crosses a whole tile);
+>   with the "may not make it worse" rule it walks out. RED before, GREEN after.
+> - `a_one_tile_doorway_is_still_walkable` (new): the shape rule must not brick a gate; it does not.
+>
+> **Why it is not landed:** it changed the outcome of **18 existing tests** across gather, build, animals, rally, research
+> and passage, and the causes are not one bug. Four distinct mechanisms were found, in this order:
+>
+> 1. **A goal point is a tile's *corner*.** `World::tile()` returns `x*scale, y*scale`, and it is used as the point a walk
+>    aims at. A body with a radius can never stand on the point where four cells meet when one of them is blocked, so an
+>    order whose goal tile touches a tree presses the body into the clearance ring and it stands at the mouth of the gap
+>    (`two_trees_touching_at_a_corner_leave_no_gap`: stuck at (5,3) aiming at (100000, 80000), the shared corner of the tree
+>    it may not touch). A `tile_centre()` for **walk goals only** (not for placement, which is what `tile()` is for) fixes
+>    that one test and breaks two animal assertions that encode the old corner convention.
+> 2. **The mover has no escape from a "cannot advance, cannot slide" corner.** With a radius the diagonal step into a corner
+>    is refused and *both* axis slides are refused too; the three legal directions are back, back-left and back-right. A
+>    villager that walked to 0.18 of a town centre's core froze for the rest of the match. A back-off candidate fixes that
+>    case in isolation.
+> 3. **The plan and the follower disagree about the clearance.** A route that keeps 144 raw units of clearance is legal and
+>    unfollowable: one diagonal step from it lands 3,144 raw from the corner and is refused. Planning with `radius + one
+>    tick's step` as the margin is the right answer (it made `two_trees` and `rally` pass).
+> 4. **Not everything is the mover.** After 1-3, `the_shepherd_kills_the_sheep...` still froze with the villager 5.37 tiles
+>    from the sheep and **neither of the mover's stop branches firing at all** - `move_body` was never asked to move it, so
+>    the freeze is in the **task layer** (a gather whose target is a moving body, whose approach route is never replanned),
+>    not in the step. That is the piece that needs to be understood before the shape rule can land: it is not a movement
+>    slice, it is the gather-approach slice.
+>
+> **State of the tree:** reverted, clean at `ddcad16`, suite green (660/0/19 at that commit). The prototype is preserved at
+> `/opt/data/cache/m3-findings/{lib.rs.m3,building_passage.rs.m3}` for the next session - a working `ground_overlap`,
+> `step_is_walkable` and back-off, plus the three new tests, none of which need to be rewritten.
+>
+> **How to scope M3 next time, in this order** (each independently landable, each with its own review):
+>
+> - **M3a - the goal is the middle of a tile.** `tile_centre()` for walk goals; fix the two animal assertions that compare
+>   a tile to a corner-anchored position (`a_sheep_stops_at_the_drop_site` wants "beside the town centre", not "exactly
+>   tile (16,16)"). Small, testable, and a prerequisite for anything that reads the body's shape.
+> - **M3b - the gather approach to a moving body.** A `Gather` whose target is a unit (a sheep, a boar) that walks away
+>   leaves the villager standing with no route and no refusal. Find out why the task does not replan; pin it with a test
+>   (villager + a sheep herded 6 tiles away, assert the villager follows) **before** touching the shape rule.
+> - **M3c - the body's shape and the back-off.** The prototype above, with the plan margin (`radius + step`), landed on its
+>   own once a-c are green.
+>
+> **Still the owner's call, unchanged:** bump-and-repath versus the pushing this engine does now (`D110`'s deferral, slide 9
+> of the talk).
+
 > # Session 7, 2026-11-04 - resource nodes in the panel (the owner's ask, questions open)
 >
 > **The ask, in his words:** *"I would like trees to be clickable showing hit points and volume of wood they have. Same
