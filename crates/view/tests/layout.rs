@@ -217,3 +217,43 @@ fn a_widget_shows_its_state() {
     assert_eq!(top, palette::BEVEL_LIGHT, "no lit top edge");
     assert_eq!(bottom, palette::BEVEL_DARK, "no shadowed bottom edge");
 }
+
+/// **A click on the interface never reaches the world.** OpenAoK decides this from the interface art's own pixels; we draw
+/// procedurally, so the layout *is* the mask: the bars and the help box are the interface, and everything between them is
+/// the map. One function answers it, instead of the window remembering to ask the speed box, then the card, then the
+/// minimap, in the right order.
+#[test]
+fn the_interface_owns_its_pixels() {
+    for frame in [(960u32, 720u32), (1280, 540), (800, 600)] {
+        let layout = Layout::of(frame.0, frame.1);
+        // Inside the bars: the interface.
+        assert!(ui::over_hud((4, 4), &layout), "the top bar is not the interface");
+        assert!(
+            ui::over_hud((4, frame.1 as i32 - 4), &layout),
+            "the panel is not the interface"
+        );
+        // Inside the view: the world.
+        let middle = (frame.0 as i32 / 2, (layout.view.1 + layout.view.3 as i32) / 2);
+        assert!(!ui::over_hud(middle, &layout), "the map is not the world");
+        // Just under the bar and just above the panel are still the world (the one-pixel edges belong to the bars).
+        assert!(
+            !ui::over_hud((middle.0, layout.bar.1 + layout.bar.3 as i32 + 2), &layout),
+            "the pixel under the bar is not the world"
+        );
+        assert!(
+            !ui::over_hud((middle.0, layout.panel.1 - 2), &layout),
+            "the pixel above the panel is not the world"
+        );
+    }
+}
+
+/// **A pixel outside the frame is not the interface**, and neither is one on the menu when the menu is closed: a mask that
+/// says "yes" everywhere is a game that cannot be clicked.
+#[test]
+fn outside_the_frame_is_the_world() {
+    let layout = Layout::of(960, 720);
+    assert!(!ui::over_hud((-1, 4), &layout));
+    assert!(!ui::over_hud((4, -1), &layout));
+    assert!(!ui::over_hud((960, 4), &layout));
+    assert!(!ui::over_hud((4, 720), &layout));
+}

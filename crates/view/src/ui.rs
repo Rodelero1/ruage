@@ -609,6 +609,24 @@ pub fn selection_row_origin(row: usize, frame_height: u32) -> (i32, i32) {
     )
 }
 
+/// **Whether a pixel belongs to the interface rather than the map.** One question, one answer, computed from the same
+/// layout that drew it - OpenAoK asks its interface art's own alpha, because its interface is a bitmap; ours is drawn, so
+/// the layout is the mask. The window asks this *before* it decides to select or to box, so a click on the panel can never
+/// also reach the ground behind it, and the special-case order (speed, then card, then minimap) stops being load-bearing.
+#[must_use]
+pub fn over_hud(pixel: (i32, i32), layout: &Layout) -> bool {
+    let inside = |rect: Rect| {
+        let (x, y, w, h) = rect;
+        w > 0
+            && h > 0
+            && pixel.0 >= x
+            && pixel.0 < x + w as i32
+            && pixel.1 >= y
+            && pixel.1 < y + h as i32
+    };
+    inside(layout.bar) || inside(layout.panel)
+}
+
 /// One button on the command card: a name, its price in stock columns, and why it would be refused (if it would).
 #[derive(Debug, Clone, PartialEq)]
 pub struct CardButton {

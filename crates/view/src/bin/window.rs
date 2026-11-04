@@ -230,6 +230,11 @@ impl App {
                         .centred_on((f32::from(tile.0), f32::from(tile.1)));
                     return;
                 }
+                // **Anything else on the interface is still the interface**: the empty parts of the bars swallow the click
+                // rather than selecting whatever is behind them (openaok asks its art's alpha; our layout is the mask).
+                if ui::over_hud(self.cursor_pixel, &layout) {
+                    return;
+                }
                 // Otherwise this is either a click or the start of a box; which one is decided on release.
                 self.press_at = Some(self.cursor_pixel);
             }
@@ -310,6 +315,11 @@ impl App {
         let Some(from) = self.press_at.take() else {
             return;
         };
+        // A press that began on the interface is not a box over the world, even if the pointer left it.
+        let (frame_width, frame_height) = self.frame_size();
+        if ui::over_hud(from, &ui::Layout::of(frame_width, frame_height)) {
+            return;
+        }
         let to = self.cursor_pixel;
         let travelled = (to.0 - from.0).abs() > 4 || (to.1 - from.1).abs() > 4;
         let Some(world) = self.world.as_ref() else {
