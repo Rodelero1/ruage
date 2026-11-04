@@ -28,6 +28,42 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 14, 2026-11-04 - M3c a third time: the rule works, the *route* is what stops a body
+>
+> **The ask:** "proceed" after D116. Took M3c again with the prototype, now that D114 (centred goals) and D116 (no automatic
+> moving target) are in.
+>
+> **The rule works, and its three tests are green** wrote-first: a villager ordered **into** a house had its disc **538 raw
+> units** inside the wall with a 4,000 body (RED) and never touches it (GREEN); a body spawned on a house tile was frozen for
+> ever (RED) and walks out (GREEN); a one-tile doorway stays walkable. `building_passage` 11/11.
+>
+> **What still fails, and the measurement:** eight tests across `animals`, `build`, `rally` and `research`, all of the shape
+> "a worker never arrives". Probe of `the_villager_follows_the_sheep`: after 300 ticks the villager is **8.7 tiles** from the
+> sheep with `Task::Gather`, **`path_length = 5`** - a route, five waypoints, none of them consumed. It is not stuck without a
+> plan; it cannot take the **first step of the plan it has**.
+>
+> **Diagnosis, and it is a mover problem, not a planner one.** The plan's margin (`radius + one step`) guarantees the *planned
+> corridor* is walkable for a follower that is already inside it. It guarantees nothing about the **first leg from where the
+> body actually stands**: a body at or inside that margin - a spawn on a tile corner, a body that slid into it before the
+> plan - has a first waypoint it cannot reach in one straight step, and every candidate step is refused. Under the old
+> tile-level rule the slide eventually pushed it through; with a body's shape it has nowhere to go.
+>
+> **The fix shape is the deck's own rule for this** ("units bump into others, stop and repath around"): **when every
+> candidate step is refused and the body has a route, re-plan from the position it is standing at.** That is a change to the
+> mover with its own tests (a body that cannot take its first step must end up with a *different* first waypoint, and must
+> consume it), and it is the right next slice - not another attempt at the shape rule.
+>
+> **State:** reverted, clean at `1a8910d`, **662 / 0 / 19**. Prototype v3 at
+> `/opt/data/cache/m3-findings/{lib.rs.m3-v3,building_passage.rs.m3-v3}` - the whole change, including the `at_node`
+> "reach plus one step" fix and the `approach_point` blind-walk fix, both of which are needed *with* the shape rule.
+>
+> **Order from here:**
+>
+> 1. **Bump-and-repath in the mover** (above), with its own test: a body whose first waypoint is unreachable must get a route
+>    it can start on.
+> 2. M3c again on top of that - it has been one mechanism away three times, and each mechanism is now named and fixed.
+> 3. Spawns on tile centres (D114's named asymmetry).
+
 > # Session 13, 2026-11-04 - herding dropped (the owner's call), and M3 unblocked
 >
 > **LANDED** - `docs/reviews/2026-11-04-a-sheep-stands-still.md`, **D116** (supersedes D70's movement). A gathered herdable
