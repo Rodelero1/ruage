@@ -521,3 +521,80 @@ fn a_walk_past_a_house_keeps_its_bodys_clearance() {
         (closest as f64).sqrt() as i64
     );
 }
+
+/// **Passage is a property of the ground, not of the body** (D117 - the owner's rule, 2026-11-04).
+///
+/// *"Either fully occupied tiles touch (even by corners) and there is no passage ever at all, or [they] don't, and then
+/// there is passage for anyone. No matter the size of the enveloping circle or number of units."* So the planner's clearance
+/// must **not** be the body's radius: a siege unit with a half-tile circle walks through a one-tile gap exactly as a
+/// villager does, because a one-tile gap is a gap - and a formation that cannot fit squashes through rather than being
+/// refused. The radius still governs how close two **bodies** stand to each other (`collide`), which is where AoE2 spends
+/// it too.
+#[test]
+fn a_big_unit_walks_through_a_one_tile_gap() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let Some(at) = open_patch(&world, 10, 6) else {
+        return;
+    };
+    building(&mut world, 1, "house", at, 0);
+    let width = i64::from(
+        world
+            .footprint_of(world.role_unit("house").expect("house"))
+            .expect("a footprint")
+            .0,
+    );
+    // A second house one tile east: the gap is exactly one tile, open north and south.
+    building(&mut world, 1, "house", (at.0 + width + 1, at.1), 0);
+    let gap = at.0 + width;
+    let role = "trebuchet_packed";
+    let scale = world.scale();
+    let unit = EntityId(fresh_id(&world));
+    let variant = world.role_unit(role).expect("the role");
+    world
+        .submit_checked(Command::Spawn {
+            id: unit,
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: Some(variant),
+            position: (
+                Fixed::from_raw(gap * scale),
+                Fixed::from_raw((at.1 - 3) * scale),
+            ),
+            speed: Fixed::parse("0.8", scale).expect("a walkable speed"),
+            hp: 200,
+            amount: 0,
+        })
+        .expect("the siege unit is placed");
+    world.step().expect("step");
+    let radius = world.body_radius_of(unit);
+    assert!(
+        radius >= scale / 3,
+        "this test needs a body whose circle is big next to the gap: it is {radius}"
+    );
+
+    let goal = (gap, at.1 + 5);
+    world
+        .submit_checked(Command::Move {
+            unit,
+            to: (
+                u16::try_from(goal.0).expect("in range"),
+                u16::try_from(goal.1).expect("in range"),
+            ),
+        })
+        .expect("a one-tile gap is a gap, whatever the circle");
+
+    for _ in 0..2_400 {
+        world.step().expect("step");
+        if let Some(entity) = world.entity(unit) {
+            let (x, y) = (entity.position.0.raw(), entity.position.1.raw());
+            if y >= (goal.1 - 1) * scale && x / scale == gap {
+                return;
+            }
+        }
+    }
+    panic!(
+        "the big body never came through a one-tile gap: {:?}",
+        world.entity(unit).map(|entity| entity.position)
+    );
+}

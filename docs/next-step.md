@@ -28,6 +28,37 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 15, 2026-11-04 - the owner's rule ends M3: passage is the ground's
+>
+> **The owner, in one message, killed the model three sessions had gone into:**
+>
+> > "Either fully occupied tiles touch (even by corners) and there is no passage ever at all, or [they] don't, and then there
+> > is passage for anyone. No matter the size of the enveloping circle or number of units."
+>
+> **D117, landed.** Ground passability is decided by **tiles**; a body's circle governs **bodies** (`collide`) and the
+> drawing, never the ground. **The engine already worked this way** - `Walk::blocked` is per tile and never consults a radius,
+> and the corner rule has been pinned since the passage slice - so the slice is a guard test and the decision, not a change.
+> `a_big_unit_walks_through_a_one_tile_gap` walks a `trebuchet_packed` (radius **0.5**, the biggest land circle in the pack)
+> through a one-tile gap and passes unchanged. **663 / 0 / 19**.
+>
+> **What it cancels, explicitly: M3c.** Judging the ground by the disc means a half-tile circle touches both walls of a
+> one-tile gap, so any deviation from the exact centre line increases the overlap and the body jams - the arithmetic behind
+> the prototype's eight stuck workers. Not deferred: **cancelled.** The prototype stays in `/opt/data/cache/m3-findings/` for
+> the record only.
+>
+> **My error, for the next session's benefit:** I built `ground_overlap`, a radius parameter through the mover and a back-off
+> over three attempts, and the question that settles all of it - *does a circle decide passage?* - is one line to the owner.
+> Ask before the second attempt at a movement model, not after the third.
+>
+> **Still open, and now the only movement item that matters:**
+>
+> 1. **Spawns sit on tile corners** while walks aim at centres (D114's named asymmetry): a freshly trained unit appears at a
+>    corner. The rally ring decides where, and it is content-dependent.
+> 2. **`plan_path_for` expands by the body's radius.** Harmless while every moving body is under half a tile (a one-tile gap
+>    stays passable, exactly), but it must become a follower margin if one ever is not - named in D117 so it is found before
+>    it bites.
+> 3. The blind approach walk (`approach_point`): no test can fail on it alone, so it stays unlanded until something needs it.
+
 > # Session 14, 2026-11-04 - M3c a third time: the rule works, the *route* is what stops a body
 >
 > **The ask:** "proceed" after D116. Took M3c again with the prototype, now that D114 (centred goals) and D116 (no automatic

@@ -2636,6 +2636,41 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D117 - Passage is a property of the ground, not of the body
+
+The owner's rule, given while I was three attempts into making the ground obey a body's radius:
+
+> "Either fully occupied tiles touch (even by corners) and there is no passage ever at all, or [they] don't, and then there
+> is passage for anyone. No matter the size of the enveloping circle or number of units."
+
+**So: ground passability is decided by tiles, and a body's circle is never consulted for it.**
+
+- Occupied tiles that **touch, even at a corner**, leave no passage - ever, for anyone. That is the diagonal rule the engine
+  already had ("two trees touching at a corner leave no gap").
+- Tiles that do **not** touch leave passage for **everyone**: any circle size, any number of units. A formation that cannot
+  fit squashes and goes through; it is not refused.
+- The body's circle still governs **bodies**: `collide`'s standoff between two units, and how the unit is drawn. Different
+  sizes have different circles, and that is what the owner sees when selecting them.
+
+**What this changes in this repository: nothing, which is the finding.** `Walk::blocked` is per tile and a radius never
+enters it; `two_trees_touching_at_a_corner_leave_no_gap` has pinned the corner rule since the passage slice. The slice is a
+test and this record: `a_big_unit_walks_through_a_one_tile_gap` walks a `trebuchet_packed` (radius **0.5**, the biggest land
+circle in the pack) through the one-tile gap between two houses, and it passes unchanged.
+
+**What it cancels: M3 "the body's shape against the ground", i.e. M3c.** That slice judged the ground by the body's disc
+(`ground_overlap`, "a step may not make the overlap worse"), and in a one-tile gap a 0.5-radius disc *touches both walls*:
+the overlap is zero exactly on the centre line and any deviation increases it, so the body can only move perfectly straight
+and jams on the first drift. That arithmetic is what left eight workers stuck in the prototype. It is not how AoE2 works, and
+the owner has said so. The prototype stays at `/opt/data/cache/m3-findings/` for the record; **the model is cancelled, not
+deferred**.
+
+**Named for the future:** `plan_path_for` still expands obstacles by the body's radius. That does not refuse a one-tile gap
+(the expansion is exact and touching is allowed), so it is not wrong today - but if a moving unit ever has a radius above
+half a tile, the planner would refuse a gap the rule says is passable, and the expansion must become a follower margin
+instead.
+
+Review: `docs/reviews/2026-11-04-passage-is-the-grounds.md`. **663 passed / 0 failed / 19 ignored.**
+
 ## D116 - A sheep stands still: herding is dropped (supersedes D70's movement)
 
 The owner, on reading that the gather approach loses its route when a node moves:
