@@ -1205,3 +1205,103 @@ data, and do not move any of it into `crates/` — the "it is only a small funct
 - **U19, U20 unchanged.** **U8** nothing new. **U12** unchanged (no step interval in this week's diff; 20 Hz still their
   number, and still DE's).
 - **U7** no new value; the movement pauses named on 2026-11-03 are still their reading.
+
+## 2026-11-05 — the inside of an object's step has an order, and the game's AI ships as readable rules
+
+**Thirty commits since the head named last time (`910cd74→49222223`). Two-thirds are the refactor's tail — the last
+single-letter bindings, one error type, a clippy gate — and the rest is a new programme, FD-001-D26, which compares one
+routine at a time against its decompile and ports it whole. The tick's shape did not change. What changed is that the
+*inside* of one object's step can now be written down as a sequence.**
+
+- **T17–T20** finish the refactor: every check returns what it found instead of looking it up again, every crate's error
+  is one `GenieError` behind one `GenieResult`, about **10,370 single-letter bindings** take speaking names (that diff is
+  most of the week's line count), and a clippy gate now refuses one-letter identifiers. Still every commit ending "Bit
+  for bit".
+- **FD-043** gives objects their own masters: the import reads an object's own and successor master records, a target's
+  master through its spatial record reads its own first, the capture flag becomes **one column** (`+0x924` is the
+  seer's), and a BUILD's foundation keeps its desolid copy.
+- **FD-001-D26**, eight commits, each a routine: the combat setup (`FUN_14121df60`) as one routine for units and
+  buildings alike; `TRIBE_Combat_Object::update`'s start and the charge's refill; the snow flag's writers; a new unit's
+  default task; the hunter's found farm; `ClosestObject`'s workers cap and unbuilt-farm test.
+
+**The finding: a per-object order.** `world/after_step.rs` (125 lines, new) names what follows an object's step, and it
+is a pipe, not a set: the step → the faith's regeneration → the charge's refill → the passive abilities → the hit-point
+powerup clamp → a building's production → the changed tiles handed to the planners. And where the combat update itself
+sits depends on the object: a **unit's** update starts with it; a **building's** runs it *after* its own gate,
+completion and garrison steps. That is a sub-answer to U18: the order *between* objects is the divergence we know, but
+the order *inside* one is a second, smaller and testable one — our `Sim::step` decides intents in one pass and has no
+per-object pipe at all.
+
+**Facts that fell out, worth having.**
+
+- **Reload is one function** (`combat/reload.rs`, 49 lines): the master's reload plus the object's stinger, minus its
+  powerup, zero below master type 60. Two things we do not model: a per-object stinger and a powerup subtraction. Ours is
+  the dat's reload, tech-scaled — the same shape, with the per-object half absent.
+- **Faith is an attribute at 100**: classes 18 and 53 hold attribute kind 34 there, regeneration adds the master's reload
+  × dt each update, a master with a conversion task uses the player's attribute 282, and a monk's 1.6 refills it in
+  62.5 s. The **charge** starts at the master's maximum, not 0, and refills at its `recharge_rate`.
+- **A salvage pile's decay timer** is the player's attribute 65 × 1000 ms; **snow is 0/1/2**, not a bool, and a farm's
+  death spawn inherits 2 where a built building's death takes 1 back.
+- **A new unit's default task is its master's**: livestock's Artifact (107), a bird's Fly (10), a Make (21), else
+  nothing.
+- **The work command's last byte is retargeting** (`Work::disable_retargeting`), not the carried-resource test genie had
+  read it as; `+0xa14` is the order's source (1 in the constructor, 0 after a failed town-bell return). Their audit found
+  their own misreading. A byte's meaning is a hypothesis until its call site is read.
+- **Player attributes do not stop at 210**: 65 salvage decay, 98/164/246/247/248 paid-cost counters, 249/250 idle
+  villager time, 256 the speed-up range, 282 a converter's faith rate. U8 named the dat's 211-value array; the same
+  numbering continues into engine counters the dat does not carry.
+- **`ClosestObject` filters by a workers cap** ("Too many workers") and, for a search of state 0, passes only a farm that
+  has workers. That is the unit/building/livestock search, not `ClosestResource` — U22's contract is unchanged — but the
+  idea is the same one search over: a node at its worker limit is not a target.
+
+**`yanfengliu/aoe2`** (42 commits, `61758598→45a76681`, 217 files, **MIT**): DE building armour, DE's Dark Age AI economy,
+and DE's selection and command card, each with the project's review rounds recorded as commits. Two things transfer;
+neither is a number.
+
+- **Their building-armour rewrite lands on the rule we already have.** Every hit is per class (Building, Stone Defense,
+  Standard Building, Wall & Gate, Castle), a class the target lacks does nothing, and a hit floors at 1. Our
+  `damage_between` does exactly that with the dat's own class ids and `armour_missing_sentinel`. Their "an Archer takes 1
+  off a House" is a DE figure, not 5.7's; what transfers is the confirmation that per-class attack and armour with a
+  floor of one is the game's shape — already ours.
+- **Their AI begins in the install, not in the binary.** Work 141 reimplements DE's own scripted AI
+  (`resources/_common/ai/Promisory`, from the 2026-10-06 install) as TypeScript rules with named instruments. **Our
+  install ships the same class of file**: `Age2HD/resources/_common/ai/` holds 40 files, 39 of them `.per` — 376 KB of
+  `(defrule … => …)`, 2,238 lines of economy rules alone. `Economy/Dark Age.per` trains villagers under a Loom gate at
+  12 and ages up at 28; `Farming.per` and `Low-pop Villager Distribution.per` sit beside it. An AI for this engine has a
+  content source we own, with no RE and no reimplementation to copy.
+- **Their tick is 100 ms**: a year is five seconds and 50 ticks, and their own plan prices a 2 s reload at 20 ticks. A
+  third choice after genie's 50 ms and openaok's 16 ms — three ports of two games at 50, 100 and 16 ms is more evidence
+  for D16, that the tick is a quantisation of the feel rather than the feel.
+- The rest is divergence without a lesson: a hand-pinned DE dataset in `design/stats/*.csv` (their engine has no dat
+  reader; ours is authoritative by D5, so their values must never reach `config/`), a TypeScript browser engine against
+  our Rust one, and a process that commits its own review rounds.
+
+**Divergence on the axes.** Asset pipeline (D18): nothing, either side. Engine/content boundary (D17): genie's build
+layer grew *object state* (charge, faith, idle time, speed-up), not new shared rules; aoe2's AI is rules in code where
+ours could be rules in the pack — and the scripts already exist. Tick: as above, and unchanged in both. Platform,
+licence, language: unchanged.
+
+**Study list.**
+
+- genie `crates/engine/genie-core/src/world/after_step.rs` lines 30–125 — the phase order after a step, the closest
+  thing either project has to the inside of a tick we do not have.
+- genie `crates/engine/genie-core/src/combat/reload.rs` — 49 lines, one function, the whole of a reload.
+- genie `crates/engine/genie-core/src/map/spatial/closest.rs`, `closest_kept` (~150–210) — the workers cap and the
+  unbuilt-farm test, and how a filter reads a world it may not hold.
+- our own `Age2HD/resources/_common/ai/Economy/Dark Age.per` and `Farming.per` — the original AI's rules, an hour, no
+  binary needed. A design input for whenever an AI step is scheduled, not a step now.
+
+**Never copy.** genie is **AGPL-3.0**. This week's bait is `after_step.rs`'s doc comments and the `FD-001-D26` audit
+prose: the routine addresses (`FUN_14121df60`, `+0x644`, slot numbers) and the phase order are facts about the game, but
+the code, the tests, the split of files and the prose are theirs — and the prose is unusually dense, which makes it the
+easiest thing to lift by accident. aoe2 is **MIT**, so code may legally cross, but its `design/stats/*.csv` is DE's
+numbers hand-transcribed: the licence does not make a value true, and importing it would put the wrong game's constants in
+a 5.7 pack. The `.per` scripts in our install are *read*, not shipped — quoting them into `config/` would redistribute
+the game's own content, which is the same rule as the art.
+
+**Open questions.**
+
+- **U18** gains the per-object phase order above; the order between objects is still DE's and still unread on HD. **U22**
+  unchanged, with the caution that `ClosestObject`'s worker cap is a neighbouring search, not this one. **U12** is now
+  three numbers (50, 100, 16 ms) for two games, and 5.7's own rate is still unmeasured. **U21** unchanged — nothing new
+  on attributes 1 or 12. **U19, U20, U7, U8** unchanged.
