@@ -34,8 +34,8 @@ minimap whose step is 3 px or more the radii are identical, so the shipped map d
 ## Performance
 
 **The number this slice is measured by is the seam count**: **182** panel-coloured pixels inside the map diamond before, **0**
-after, on a fully-explored 64x64 map - and 0 in a second test that reproduces the owner's own geometry (a 64-tile map in a
-231-pixel box, where the tile step is under two pixels).
+after, on a fully-explored 64x64 map - and 0 in a second test on a smaller box (an 860x660 frame gives a 260-pixel minimap), which
+fails on the old code with 182 gaps of its own.
 
 No timing claim is made, and here is why: for a minimap whose step is 3 px or more the radii are **identical** to what they
 were, so the draw count and the pixel count are unchanged - there is nothing added to measure. On the smaller box the floor adds

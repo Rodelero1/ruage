@@ -36,8 +36,8 @@ fn fully_explored(width: u16, height: u16) -> Snapshot {
     }
 }
 
-/// The owner's own geometry: a 64-tile map in a box **231 pixels** across, where the step between neighbouring tile centres
-/// is under two pixels - the case that produced the crossing lines. Same rule, smaller box.
+/// A smaller box - an 860x660 frame gives a **260-pixel** minimap - where the step between neighbouring tile centres is still
+/// under three pixels. Same rule, smaller box: this one fails on the old code with **182** gaps, exactly as the 960x720 case does.
 #[test]
 fn a_small_minimap_box_has_no_gaps_either() {
     let snapshot = fully_explored(64, 64);
@@ -66,7 +66,10 @@ fn a_small_minimap_box_has_no_gaps_either() {
     }
     assert_eq!(
         gaps, 0,
-        "{gaps} panel-coloured pixels inside a {w}-pixel minimap: the tiles do not meet"
+        assert_eq!(
+            gaps, 0,
+            "{gaps} panel-coloured pixels inside a {w}-pixel minimap: the tiles do not meet"
+        );
     );
 }
 
