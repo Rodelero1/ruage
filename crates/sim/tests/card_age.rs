@@ -155,3 +155,40 @@ fn an_unaffordable_item_stays_on_the_card() {
         "the refusal on an unaffordable villager is not about the money or the queue: {refusal}"
     );
 }
+
+/// **A unit is named by its own role, not by a later tier of its family** (the owner's report, 2026-11-04: *"player trains
+/// champions in dark age and has hussar instead of scout cavalry"*).
+///
+/// `role_name` finds a role by **family root**, because an age-up rewrites a building's id and the exact id then has no role
+/// (a town centre becomes 71 and the panel said "unit 71"). But the fallback had no tie-break: the role table is a map
+/// ordered by name, so `find` returned the **alphabetically first** member of the family - and for an upgrade line that is
+/// the *top* tier. A Dark Age militia (74) was labelled **champion** (567), and the opening scout (448) was labelled
+/// **hussar** (441). The simulation always had the right unit; only the name was wrong, which is why every existing test
+/// passed: they compared `role_name` against `role_name`.
+#[test]
+fn a_unit_is_named_by_its_own_role_not_by_a_later_tier() {
+    let Some(world) = fresh() else { return };
+    for role in ["militia", "scout_cavalry", "spearman", "knight", "villager"] {
+        let Some(unit) = world.role_unit(role) else {
+            continue;
+        };
+        assert_eq!(
+            world.role_name(unit).as_deref(),
+            Some(role),
+            "unit {unit} is the pack's `{role}` and must be named that, not `{:?}`",
+            world.role_name(unit)
+        );
+    }
+    // **And the case the family fallback exists for still works**: an age-up replaces a building's id, and the panel has to
+    // keep calling it a town centre. 71 is the Feudal Age town centre.
+    if let Some(unit) = world.role_unit("town_center") {
+        assert_eq!(
+            world.role_name(71).as_deref(),
+            Some("town_center"),
+            "the Feudal town centre (71) is a town centre, not {}",
+            world.role_name(71).unwrap_or_default()
+        );
+        // The exact id still names itself.
+        assert_eq!(world.role_name(unit).as_deref(), Some("town_center"));
+    }
+}

@@ -28,6 +28,39 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 16, 2026-11-04 - two vocabularies, one bug: the owner asks for units without dat ids
+>
+> **The report:** *"player trains champions in dark age and has hussar instead of scout cavalry"*. **It is a name bug, not a
+> simulation one.** `role_name` looked a unit up by family root and had no tie-break, so `find` returned the alphabetically
+> first member of the family - and for an upgrade line that is the **top** tier. Proven by a failing test: `role_name(74)`
+> was `Some("champion")` and the opening scout (448) read `hussar`. A headless dump showed the simulation is right: unit
+> **448** spawns, **74** is what the barracks trains. **Fixed** - exact id first, then the family's base role (which is what
+> the fallback exists for: the Feudal town centre 71), then the family's lowest id, so the order is not alphabetical luck.
+> The tests missed it because they compared `role_name` against `role_name`.
+>
+> **The owner's next question, and it is the right one: get rid of dat unit ids.** *"Each unit having clear parameters -
+> starting availability and which unit it upgrades."* It is **doable**, and it is the end point of D17 (the engine knows
+> kinds, not particulars). The shape:
+>
+> - **pack:** units keyed by **name**, with `upgrades_from = "militia"` (empty for a base unit) and
+>   `available_from = "dark_age"` (or `requires = [...]`). The dat id survives only as provenance the importer writes and
+>   nothing reads.
+> - **engine:** `Entity.unit` becomes a **pack key** - an index the *loader* assigns, not a dat id - so the tick still
+>   compares integers and never strings. `role_unit(name)` -> key; `root(key)` follows `upgrades_from` edges;
+>   `role_name` becomes a field read, and the bug fixed today dies **by construction** (a key *is* a name; there is no family
+>   to disambiguate).
+> - **importer:** the only place dat ids remain: units, the 227 upgrade edges, and **305 `unit = <id>` fields in
+>   `effects.toml`**. An id it cannot name must be a hard failure, not a guess.
+> - **blockers, measured:** **1,389** units of which **28 names are duplicated** (`DOLP3`, `THSWD`, `MPCAV`, `ARTCT`,
+>   `WCTW3`, `SMOKE`, ...), so the pack needs unique keys (a disambiguation rule is a content decision); and the vocabulary is
+>   in the state hash, so **every acceptance hash and recording changes** (named migration, and the hash is the test).
+> - **size:** 150 `role_unit(` call sites (already names - the good news), 108 `entity.unit` uses, 52 equality comparisons,
+>   58 `units.root(` calls.
+>
+> **Order:** this is the next big slice, and it wants its own plan note (`docs/unit-vocabulary.md`) before a line of code:
+> schema, importer refusal rules, the duplicate-name decision, and the hash migration. **Do not start it in a session that is
+> already long** - it touches the importer, the pack schema, the state hash and every test that names a unit.
+
 > # Session 15, 2026-11-04 - the owner's rule ends M3: passage is the ground's
 >
 > **The owner, in one message, killed the model three sessions had gone into:**

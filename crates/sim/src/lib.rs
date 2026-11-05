@@ -9676,16 +9676,27 @@ impl World {
         // becomes 463), and a lookup on the exact id found nothing - so the owner's selected town centre was called "unit 71"
         // the moment the Feudal Age arrived ("buildings get reamed upon move to the next age", 2026-11-04).
         let root = self.units.as_ref().map_or(unit, |units| units.root(unit));
+        // **Its own role first.** A unit the pack names is that unit: 74 is `militia`, 448 is `scout_cavalry`.
+        if let Some((name, _)) = economy.role.iter().find(|(_, id)| **id == unit) {
+            return Some(name.clone());
+        }
+        // **Then the family's base role**, which is what the fallback was added for: an age-up replaces a building's id
+        // (the town centre 109 becomes 71) and the panel still has to call it a town centre.
+        if let Some((name, _)) = economy.role.iter().find(|(_, id)| **id == root) {
+            return Some(name.clone());
+        }
+        // **Then any role in the family, lowest id first.** The order is the tie-break, because a map ordered by name made
+        // "whichever comes first alphabetically" the answer - and for an upgrade line that is the *top* tier: a Dark Age
+        // militia read as `champion` and the opening scout read as `hussar` (the owner's report, 2026-11-04).
         economy
             .role
             .iter()
-            .find(|(_, id)| {
-                **id == unit
-                    || self
-                        .units
-                        .as_ref()
-                        .is_some_and(|units| units.root(**id) == root)
+            .filter(|(_, id)| {
+                self.units
+                    .as_ref()
+                    .is_some_and(|units| units.root(**id) == root)
             })
+            .min_by_key(|(_, id)| **id)
             .map(|(name, _)| name.clone())
     }
 
