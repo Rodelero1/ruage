@@ -28,6 +28,33 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 20, 2026-11-04 - one farmer a farm, and a husk that goes (D122)
+>
+> **The owner:** *"Only 1 farmer per farm (can be constructed by multiple, but only 1 can farm once construction is finished).
+> Once farm expires, it decays and can/needs to be replanted. It will cost 60 wood"*, then *"1 A but vanishing takes some time,
+> husk first ... Husk is effect only and only serves the player who can left click villager, right click on the husk and
+> villager starts planting new farm. It obstructs nothing as if it was not there"*, and *"2 C if there is no empty farm nearby,
+> villager becomes idle."*
+>
+> **Landed:** one farmer a farm (the second is sent to the nearest free farm, or stands idle); an empty farm becomes a **husk**
+> tracked in `World::husks` and removed after `[farm.depletion] husk_seconds = 30`; a husk is **walkable** (tested, not
+> trusted) and **clickable with a villager to replant** - `EntityView::is_husk` + a `Build` order for the farm the husk was, at
+> the pack's 60 wood. An enemy's husk is not ours to replant.
+>
+> **Checked and cleared:** the farm's price was already right. `FARM` (unit 50) costs `[[1, 60]]` = 60 wood. My first "50 food"
+> came from reading unit **259**, the farmer *villager variant*, not the building.
+>
+> **Cost, measured:** whole 36,000-tick match, `HEAD` against this tree, three interleaved runs: **10,389 ms -> 11,887 ms
+> (+14%)**, and the +14% is the match doing more work (148 -> 154 entities, **124 -> 211 repaths**: farms vanish, so they are
+> rebuilt). The new passes are O(entities) every fourth tick.
+>
+> **The hash moved, as it must:** `82efabd6f614c798` -> `4568cef16368bd5a`, still a win (`players=1`).
+>
+> **685 passed / 0 failed / 19 ignored**; clippy and fmt clean.
+>
+> **Next, and not done here:** the husk is a *drawing* the engine keeps alive; the renderer has no husk art yet, so a spent plot
+> draws as the farm it was until it leaves. That belongs with the asset pack, like the portraits.
+
 > # Session 19, 2026-11-04 - a villager is called a Forager (D121)
 >
 > **The owner chose the key** for the job words: **A**, the target's **role name** in `economy.toml`. Landed as a superset of

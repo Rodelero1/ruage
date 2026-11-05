@@ -27,6 +27,7 @@ fn unit(id: u32, at: (f32, f32)) -> EntityView {
         resource: None,
         pending: 0,
         stats: None,
+        is_husk: false,
         remembered: false,
         footprint: (1, 1),
         shape: ruage_view::Silhouette::Square,
@@ -273,6 +274,57 @@ fn an_own_unit_beats_an_enemy_on_the_same_tile() {
 /// **A right click is a point, not a tile** (the owner, 2026-11-04: *"I don't want units to walk to the centre of the
 /// square. That can walk wherever not blocked."*). The click projects to a continuous world position; rounding it to a tile
 /// and passing the *tile* threw that away, so every order - however precisely aimed - ended at the middle of a square.
+/// **A husk is a plot** (the owner, 2026-11-04: *"only serves the player who can left click villager, right click on the
+/// husk and villager starts planting new farm"*). A villager ordered onto a spent farm of his own side plants a new one there,
+/// and the price is the build order's as always - 60 wood, straight out of the pack.
+#[test]
+fn a_right_click_on_a_husk_plants_a_new_farm() {
+    let camera = camera();
+    let mut snapshot = snapshot(vec![unit(7, (9.0, 9.0))]);
+    let mut husk = building(30, (12.0, 12.0), (3, 3));
+    husk.unit = Some(50);
+    husk.is_husk = true;
+    snapshot.entities.push(husk);
+    let mut selection = ui::Selection::new();
+    selection.ids.push(7);
+
+    let aimed = pixel(&camera, (12.5, 12.5));
+    let tile = camera.pick(aimed);
+    let orders = selection.order(&snapshot, &camera, aimed);
+    match orders.first() {
+        Some(ruage_sim::Command::Build { villager, unit, at }) => {
+            assert_eq!(villager.0, 7, "the selected villager plants it");
+            assert_eq!(*unit, 50, "the new farm is the farm the husk was");
+            assert_eq!(
+                *at,
+                (tile.0 as u16, tile.1 as u16),
+                "on the spent plot, not beside it"
+            );
+        }
+        other => panic!("a click on a husk must plant a farm, not {other:?}"),
+    }
+}
+
+/// The same click on somebody else's husk is not a build order: his plot is his to replant.
+#[test]
+fn an_enemy_husk_is_not_ours_to_replant() {
+    let camera = camera();
+    let mut snapshot = snapshot(vec![unit(7, (9.0, 9.0))]);
+    let mut husk = building(30, (12.0, 12.0), (3, 3));
+    husk.player = 2;
+    husk.unit = Some(50);
+    husk.is_husk = true;
+    snapshot.entities.push(husk);
+    let mut selection = ui::Selection::new();
+    selection.ids.push(7);
+
+    let orders = selection.order(&snapshot, &camera, pixel(&camera, (12.5, 12.5)));
+    assert!(
+        !matches!(orders.first(), Some(ruage_sim::Command::Build { .. })),
+        "an enemy's spent farm is not a building site: {orders:?}"
+    );
+}
+
 #[test]
 fn a_right_click_orders_the_point_under_the_cursor() {
     let camera = camera();

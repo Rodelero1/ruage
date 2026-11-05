@@ -208,6 +208,10 @@ pub struct Farm {
     /// (Horse Collar +75, Heavy Plow +125, Crop Rotation +175). The dat names no resources, so this
     /// is an id and content has to say which id means "food per farm" (D28).
     pub food_resource: Option<u32>,
+    /// **How long an empty farm stays as a husk**, in seconds (the owner, 2026-11-04: *"vanishing takes some time, husk
+    /// first ... It obstructs nothing as if it was not there"*). A husk is a picture with a lifetime: it blocks nothing, holds
+    /// nothing and cannot be worked, and after this long it is removed. Content, so a mod can change it.
+    pub husk_seconds: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -479,6 +483,13 @@ struct RawFarm {
 #[serde(deny_unknown_fields)]
 struct RawDepletion {
     food_per_farm: u32,
+    /// Absent means the pack says nothing about husks, and the default below applies.
+    #[serde(default = "default_husk_seconds")]
+    husk_seconds: u32,
+}
+
+fn default_husk_seconds() -> u32 {
+    30
 }
 
 #[derive(Deserialize)]
@@ -888,6 +899,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             unit: raw.farm.unit,
             resource: raw.farm.resource,
             food_resource: raw.farm.food_resource,
+            husk_seconds: raw.farm.depletion.husk_seconds,
         },
         gather: Gather {
             rate_from: raw.gather.rate_from,

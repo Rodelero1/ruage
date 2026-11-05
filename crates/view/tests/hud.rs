@@ -741,6 +741,7 @@ fn the_hud_reads_a_nodes_column_and_holdings() {
         amount: 87,
         pending: 0,
         stats: None,
+        is_husk: false,
         remembered: false,
         footprint: (1, 1),
         shape: ruage_view::Silhouette::Dot,

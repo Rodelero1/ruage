@@ -3044,3 +3044,28 @@ latest.png". Asked how the pack should key the words, he chose **the target's ro
 3. **No match means no job, and the unit keeps the pack's own name** - a villager doing nothing is a Villager.
 4. **One rule, one place.** `ruage_view::label_for(job, role, fallback)` is asserted once and used by the window and the
    diagnostic picture, so the game and the picture cannot disagree about what a thing is called.
+
+## D122 - A farm takes one farmer, and an empty one leaves a husk that goes
+
+*2026-11-04. The owner: "Only 1 farmer per farm (can be constructed by multiple, but only 1 can farm once construction is
+finished). Once farm expires, it decays and can/needs to be replanted. It will cost 60 wood", then: "1 A but vanishing takes
+some time, husk first ... Husk is effect only and only serves the player who can left click villager, right click on the husk
+and villager starts planting new farm. It obstructs nothing as if it was not there", and on the second man: "2 C if there is
+no empty farm nearby, villager becomes idle."*
+
+1. **One farmer a farm, answered rather than refused.** A gather order on a farm that already has a worker on it sends the
+   villager to the **nearest free farm** of his own side - free meaning his, finished, holding food and without a worker - and
+   leaves him **idle** when there is none. Nothing is refused: the order is taken and answered, which is what the owner asked
+   for.
+2. **An empty farm becomes a husk, and the husk has a life.** `is_expired_farm` was already the reading (finished, no food);
+   what is new is that a husk is now **tracked and removed** after `[farm.depletion] husk_seconds` (30, content's number). The
+   clock lives in `World::husks` and is in the state hash: when a husk leaves decides what the match looks like, so two runs
+   that disagree are two matches.
+3. **A husk obstructs nothing and holds nothing.** It was already outside the overlap rule and walkable; the test walks a
+   villager over it to prove it, rather than trusting the code path.
+4. **A husk is a plot.** A villager right-clicked onto a spent farm of his own side gets a **Build order for the farm the husk
+   was** (`EntityView::is_husk` tells the view, and the build order pays the pack's 60 wood). An enemy's husk is not yours to
+   replant.
+5. **The farm's price was already right.** The pack's `FARM` (50) costs `[[1, 60]]` - 60 wood - and the earlier suspicion that
+   it cost 50 food came from reading unit 259, which is the *farmer villager variant*, not the building. Checked, cleared, and
+   recorded here so the next session does not re-suspect it.

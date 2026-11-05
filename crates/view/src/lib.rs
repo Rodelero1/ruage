@@ -119,6 +119,10 @@ pub struct EntityView {
     /// **The numbers the card prints** (owner, 2026-11-04): attack, both armours, range, speed, sight, work rate and carry
     /// capacity, as the owner's own upgrades leave them. `None` for a resource node, which has no unit behind it.
     pub stats: Option<ruage_sim::UnitStats>,
+    /// **A spent farm, waiting to be replanted** (D122). A husk is a picture with a lifetime: it holds nothing, blocks nothing
+    /// and cannot be worked - but a villager clicked onto it plants a new farm there, which is the one thing it is *for*. The
+    /// engine decides what a husk is; the view only asks.
+    pub is_husk: bool,
     /// Whether this entity is **remembered** rather than watched: its ground is explored, nothing of the player's can
     /// see it now, and it is still in the picture because a building the player has seen does not disappear. Units are
     /// never remembered - an army does not leave a photograph behind - and the renderer dims what is remembered, because
@@ -232,6 +236,7 @@ impl Snapshot {
                 stats: entity
                     .unit
                     .and_then(|unit| world.stats_of(entity.player, unit)),
+                is_husk: world.is_expired_farm(entity.id),
                 footprint: entity
                     .unit
                     .and_then(|unit| world.footprint_of(unit))

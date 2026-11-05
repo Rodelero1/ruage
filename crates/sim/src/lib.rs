@@ -1386,6 +1386,12 @@ pub struct World {
     /// Nodes that have given their last wood: removed once no villager is working them, so the tile they stood on becomes
     /// ground a unit may cross (the owner's rule, 2026-10-30 - a spent tree disappears and frees its tile).
     spent_nodes: BTreeSet<EntityId>,
+    /// **Empty farms, and when each one emptied** (the owner, 2026-11-04: *"vanishing takes some time, husk first"*). A husk
+    /// blocks nothing, holds nothing and cannot be worked; it is kept for `husk_ticks` so a player can see the spent plot and
+    /// click a villager onto it to plant a new farm, and then removed.
+    husks: BTreeMap<EntityId, u64>,
+    /// How long a husk stays, in ticks. Zero for a pack with no farms.
+    husk_ticks: u64,
     /// A worker the shares have decided to move to another column, and the node waiting for it: the load in its hands is
     /// banked **first**, at its own drop site, and only then does it take up the new work (the owner's rule, 2026-10-30).
     pending_gather: BTreeMap<EntityId, EntityId>,
@@ -1630,6 +1636,8 @@ impl World {
             shares_scan_tick: 0,
             pending_gather: BTreeMap::new(),
             spent_nodes: BTreeSet::new(),
+            husks: BTreeMap::new(),
+            husk_ticks: 0,
             share_failed: BTreeMap::new(),
             share_moved: BTreeMap::new(),
             share_retry_ticks: 600,
@@ -2263,6 +2271,9 @@ impl World {
     ) -> Result<(), SimError> {
         self.units = Some(units.clone());
         self.economy = Some(economy.clone());
+        // **How long a husk stays** (D122): content's seconds, in ticks. A pack with no `husk_seconds` (or no farms) keeps
+        // husks for ever, which is the behaviour this had before husks existed.
+        self.husk_ticks = u64::from(economy.farm.husk_seconds) * u64::from(self.tick_rate_hz);
         // Which building classes keep a player alive (D59b). The manual's list of things you need not
         // destroy is a list of *classes* - towers 52, walls 27, gates 39, farms 49, relics 1 - so the
         // whole rule is "class 3 counts", with no per-building list to keep in step and nothing to
@@ -6934,6 +6945,82 @@ impl World {
         self.work_position(position, position).is_some()
     }
 
+    /// **Husks go** (D122): an empty farm is a picture with a lifetime, and this is the clock.
+    ///
+    /// The first pass records a farm that has just been emptied; the second removes the ones whose while is over. Both run
+    /// every fourth tick, like the spent-node pass beside it: a husk is a second-scale thing and this is not the tick loop's
+    /// hot path. **Nothing here frees a tile** - a farm's footprint is a floor and a husk blocks nothing, which is what the
+    /// owner asked for ("it obstructs nothing as if it was not there"); the entity that goes is a drawing.
+    fn step_husks(&mut self) {
+        if !self.tick.is_multiple_of(4) {
+            return;
+        }
+        if self.husk_ticks > 0 {
+            let now = self.tick;
+            let empty: Vec<EntityId> = self
+                .entities
+                .iter()
+                .filter(|entity| {
+                    !self.husks.contains_key(&entity.id) && self.is_expired_farm(entity.id)
+                })
+                .map(|entity| entity.id)
+                .collect();
+            for id in empty {
+                self.husks.insert(id, now);
+            }
+        }
+        if self.husks.is_empty() || self.husk_ticks == 0 {
+            return;
+        }
+        let now = self.tick;
+        let gone: Vec<EntityId> = self
+            .husks
+            .iter()
+            .filter(|(_, since)| now.saturating_sub(**since) >= self.husk_ticks)
+            .map(|(id, _)| *id)
+            .collect();
+        for id in gone {
+            self.husks.remove(&id);
+            self.paths.remove(&id);
+            self.entities.retain(|entity| entity.id != id);
+        }
+    }
+
+    /// **The nearest farm of this player's that nobody is working and nothing has eaten** (D122), or `None`.
+    ///
+    /// "Free" is all three of: the right side's, finished, still holding food, and without a villager on it. Reachability is
+    /// the gather order's job, not this search's: a plot behind a wall is offered here and refused by the route, which is the
+    /// same answer the player would get clicking it himself.
+    fn nearest_free_farm(
+        &self,
+        from: (Fixed, Fixed),
+        player: u8,
+        exclude: EntityId,
+    ) -> Option<EntityId> {
+        let mut best: Option<(i64, EntityId)> = None;
+        for entity in &self.entities {
+            if entity.id == exclude || entity.player != player || !self.is_farm_role(entity) {
+                continue;
+            }
+            if entity.construction.is_some() || entity.amount.raw() <= 0 {
+                continue;
+            }
+            if self.entities.iter().any(|other| {
+                other.id != exclude
+                    && matches!(other.task, Task::Gather { node, .. } | Task::Return { node, .. } if node == entity.id)
+            }) {
+                continue;
+            }
+            let dx = entity.position.0.raw() - from.0.raw();
+            let dy = entity.position.1.raw() - from.1.raw();
+            let distance = dx * dx + dy * dy;
+            if best.is_none_or(|(closest, _)| distance < closest) {
+                best = Some((distance, entity.id));
+            }
+        }
+        best.map(|(_, id)| id)
+    }
+
     /// Remove every emptied node that nobody is working any more, and free its tile.
     ///
     /// A node lingers for a tick or two after its last unit, so the villager that emptied it can still be told where to go
@@ -7445,6 +7532,38 @@ impl World {
             .find(villager)
             .map(|entity| entity.player)
             .ok_or(SimError::MissingEntity(villager))?;
+
+        // **One farmer a farm** (the owner, 2026-11-04: *"Only 1 farmer per farm (can be constructed by multiple, but only 1
+        // can farm once construction is finished)"*, and *"if there is no empty farm nearby, villager becomes idle"*).
+        //
+        // A farm is the one node that is also a workplace, so two villagers sent to one crop is not sharing a resource - it
+        // is two men on four tiles, and the game does not allow it. The second order is therefore answered, not refused: the
+        // villager goes to the **nearest free farm** of his own side, and stands idle when there is none.
+        if self.find(node).is_some_and(|entity| self.is_farm_role(entity))
+            && self.entities.iter().any(|other| {
+                other.id != villager
+                    && matches!(other.task, Task::Gather { node: taken, .. } | Task::Return { node: taken, .. } if taken == node)
+            })
+        {
+            let here = self
+                .find(villager)
+                .map(|entity| entity.position)
+                .ok_or(SimError::MissingEntity(villager))?;
+            match self.nearest_free_farm(here, worker_player, villager) {
+                Some(free) => return self.start_gather(villager, free),
+                None => {
+                    // No free plot: he stops where he is. Nothing is refused - the order was taken and answered - so the
+                    // player sees a villager standing, which is what the owner asked for.
+                    let worker = self
+                        .find_mut(villager)
+                        .ok_or(SimError::MissingEntity(villager))?;
+                    worker.task = Task::Idle;
+                    worker.variant = None;
+                    self.paths.remove(&villager);
+                    return Ok(());
+                }
+            }
+        }
         let (variant_id, rate_per_tick, carry_cap) = {
             let units = self.units.as_ref().ok_or(SimError::NoTables)?;
             let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
@@ -9153,6 +9272,7 @@ impl World {
         // Shares: idle villagers follow the table content gives (the game's own AI shape).
         self.step_shares();
         self.step_spent_nodes();
+        self.step_husks();
         // A building at or below its eject fraction throws its garrison out. They are unharmed - the
         // published rule - and they land where they already stand.
         for id in ejected {
@@ -10192,6 +10312,13 @@ impl World {
                 fnv_bytes(&mut hash, &to.0.raw().to_le_bytes());
                 fnv_bytes(&mut hash, &to.1.raw().to_le_bytes());
             }
+        }
+        // **Husks are state**: when each empty farm began its while decides when it leaves the map, so two runs that do not
+        // agree on it are two different matches - and a save that drops it keeps the husk for ever (D122).
+        for (id, since) in &self.husks {
+            fnv_bytes(&mut hash, b"husk");
+            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+            fnv_bytes(&mut hash, &since.to_le_bytes());
         }
         for (id, waiting) in &self.queued {
             fnv_bytes(&mut hash, b"queued");

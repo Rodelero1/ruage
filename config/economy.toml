@@ -27,6 +27,12 @@ use_villager_rate = false
 
 [farm.depletion]
 food_per_farm = 250
+# **How long an empty farm stays as a husk** (the owner, 2026-11-04: *"vanishing takes some time, husk first ... Husk is
+# effect only and only serves the player who can left click villager, right click on the husk and villager starts planting new
+# farm. It obstructs nothing as if it was not there"*). A husk blocks nothing, holds nothing and cannot be worked; it exists to
+# be **seen** and to be clicked with a villager, so it is a picture with a lifetime. 30 s is the owner's "after a while", and
+# it is content so a mod can change it.
+husk_seconds = 30
 # PROVENANCE: published. Not a dat field found so far.
 
 [gather]

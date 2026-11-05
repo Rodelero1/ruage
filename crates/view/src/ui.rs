@@ -144,6 +144,24 @@ impl Selection {
             };
             let unit = ruage_sim::EntityId(*id);
             match (entity.kind, under) {
+                // **A husk is a plot, not a building** (the owner, 2026-11-04: *"only serves the player who can left click
+                // villager, right click on the husk and villager starts planting new farm"*). So a villager ordered onto a
+                // spent farm of his own side is ordered to **plant a new one there** - the unit the husk was is the unit the
+                // new farm is, and the pack's price (60 wood) is paid by the build order as it always is.
+                (EntityKind::Unit, Some(target))
+                    if target.is_husk && target.player == snapshot.player =>
+                {
+                    if let Some(unit) = target.unit {
+                        orders.push(Command::Build {
+                            villager: ruage_sim::EntityId(*id),
+                            unit,
+                            at: (
+                                u16::try_from(tile.0).unwrap_or(0),
+                                u16::try_from(tile.1).unwrap_or(0),
+                            ),
+                        });
+                    }
+                }
                 (EntityKind::Unit, Some(target))
                     if matches!(target.kind, EntityKind::Resource(_)) =>
                 {
