@@ -72,6 +72,7 @@ fn entity(id: u32, kind: EntityKind, at: (f32, f32), footprint: (u32, u32)) -> E
         hp: 25,
         resource: None,
         pending: 0,
+        stats: None,
         remembered: false,
         footprint,
         shape: ruage_view::Silhouette::Square,

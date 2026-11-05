@@ -238,14 +238,25 @@ fn row(hp_fraction: f32) -> ui::SelectedRow {
         garrison: 0,
         pending: 0,
         pose: ruage_view::Pose::Idle,
+        stats: Some(ruage_sim::UnitStats {
+            max_hp: 25,
+            attack: 300,
+            armour_melee: 0,
+            armour_pierce: 0,
+            range: 0,
+            speed: 80,
+            los: 400,
+            work_rate: 100,
+            carry: 10,
+        }),
     }
 }
 
-/// **What is selected is on the screen.** The panel that reads `Hud::of` was written and tested before the window drew it;
-/// the window drew the stock bar and nothing else, so a player could select six villagers and see no sign of it. This is
-/// the test that says the panel is painted, in the colour the health bar's own rule gives it.
+/// **What is selected is on the screen** - and it is a **card**, not a wide bar (owner, 2026-11-04: *"the big long health bar
+/// can be removed"*). The bar that is painted is the small one under the portrait, so this test measures a bar of the
+/// portrait's width where the card's is, and asserts that no run of the track's colour spans the zone any more.
 #[test]
-fn the_selection_panel_paints_a_health_bar() {
+fn the_selection_card_paints_a_small_health_bar_and_no_wide_one() {
     let mut frame = Frame::new(960, 720);
     ui::hud(
         &mut frame,
@@ -254,10 +265,31 @@ fn the_selection_panel_paints_a_health_bar() {
         ruage_view::Speed::One,
     );
     let (x, y) = ui::selection_row_origin(0, frame.height);
+    // The card's own geometry: portrait at +13, the bar three pixels under a 30-pixel portrait.
     assert_eq!(
-        frame.pixel(x as u32 + 2, y as u32 + 1),
+        frame.pixel(x as u32 + 5, y as u32 + 46),
         palette::HP_RED,
-        "a selected thing at 40% health has a red bar in the panel"
+        "a selected thing at 40% health has a red bar under its portrait"
+    );
+    // **The wide bar is gone.** Where it used to be - a continuous track across the zone's width - there is now card ground
+    // and, at most, the portrait's own bar. Counted per row of the zone, the longest run of the track's colour is the bar.
+    let (zx, zy, zw, zh) = ui::Layout::of(frame.width, frame.height).selected;
+    let mut longest = 0u32;
+    let mut run;
+    for py in zy..zy + zh as i32 {
+        run = 0;
+        for px in zx..zx + zw as i32 {
+            if frame.pixel(px as u32, py as u32) == palette::HP_TRACK {
+                run += 1;
+                longest = longest.max(run);
+            } else {
+                run = 0;
+            }
+        }
+    }
+    assert!(
+        longest <= 30,
+        "the panel still paints a {longest}-pixel health bar across its zone; the wide bar was to be removed"
     );
 
     let mut bare = Frame::new(960, 720);
@@ -268,7 +300,7 @@ fn the_selection_panel_paints_a_health_bar() {
         ruage_view::Speed::One,
     );
     assert_eq!(
-        bare.pixel(x as u32 + 2, y as u32 + 1),
+        bare.pixel(x as u32 + 5, y as u32 + 46),
         // The panel's own ground: the zones are drawn as outlines, not fills (a fill of all three was 130,000 pixels a
         // frame, measured at 316-355 us against 151-195).
         palette::PANEL,
@@ -542,12 +574,12 @@ fn the_selected_zone_names_and_measures() {
         ) > 0,
         "the zone does not name what is selected"
     );
-    // The wide health bar: 40% of the zone's width, in the red a hurt thing gets.
-    let bar_w = zone.2 as i32 - 16;
+    // **The card's own bar**, under the portrait: 40% of it is lit, in the red a hurt thing gets. The bar that ran the
+    // zone's whole width was removed at the owner's request (2026-11-04).
     assert_eq!(
-        frame.pixel((zone.0 + 8 + bar_w / 4) as u32, (zone.1 + 28) as u32),
+        frame.pixel((zone.0 + 12) as u32, (zone.1 + 50) as u32),
         palette::HP_RED,
-        "the zone's health bar is not red at 40%"
+        "the card's health bar is not red at 40%"
     );
 
     let mut bare = Frame::new(960, 720);
@@ -587,6 +619,7 @@ fn node_row() -> ui::SelectedRow {
         construction: None,
         garrison: 0,
         pending: 0,
+        stats: None,
         pose: ruage_view::Pose::Idle,
     }
 }
@@ -606,25 +639,25 @@ fn the_panel_says_what_a_node_holds() {
         ruage_view::Speed::One,
     );
     let zone = ui::Layout::of(960, 720).selected;
-    // Where the health bar would be: this row has no bar, it has "HP 20".
+    // Under the portrait, where a unit's card prints `n/m`, a node prints "HP 20": it has no maximum on record.
     assert!(
         count_colour(
             &frame,
-            (zone.0 + 8) as u32,
-            (zone.1 + 25) as u32,
-            120,
+            (zone.0 + 10) as u32,
+            (zone.1 + 56) as u32,
+            60,
             9,
             palette::HUD_TEXT
         ) > 0,
         "the panel does not write a node's hit points"
     );
-    // The line under it: the column's name and what is left.
+    // Beside the portrait: the column's name and what is left, where the card's stat lines would be for a unit.
     assert!(
         count_colour(
             &frame,
-            (zone.0 + 8) as u32,
-            (zone.1 + 34) as u32,
-            120,
+            (zone.0 + 46) as u32,
+            (zone.1 + 17) as u32,
+            90,
             9,
             palette::HUD_TEXT
         ) > 0,
@@ -682,6 +715,7 @@ fn the_hud_reads_a_nodes_column_and_holdings() {
         garrison: 0,
         amount: 87,
         pending: 0,
+        stats: None,
         remembered: false,
         footprint: (1, 1),
         shape: ruage_view::Silhouette::Dot,
@@ -723,7 +757,7 @@ fn a_farm_shows_its_health_and_the_food_left() {
     );
     let zone = ui::Layout::of(960, 720).selected;
     assert_eq!(
-        frame.pixel((zone.0 + 8 + 4) as u32, (zone.1 + 28) as u32),
+        frame.pixel((zone.0 + 12) as u32, (zone.1 + 50) as u32),
         palette::HP_GREEN,
         "a farm at full health has no green bar"
     );

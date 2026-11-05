@@ -1224,6 +1224,27 @@ struct Passing<'a> {
     refused: Vec<(EntityId, EntityId)>,
 }
 
+/// **What a unit's card reads** (2026-11-04): the numbers the bottom-central panel puts beside a portrait.
+///
+/// Fractional quantities are integer **hundredths** - a speed of 96 is 0.96 tiles a second, a range of 400 is four tiles -
+/// so no float crosses this boundary. Attack and armour are hundredths too, for one shape rather than two. Hit points and
+/// capacity are counts, because that is what they are.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnitStats {
+    pub max_hp: i32,
+    /// The larger of class 3 (pierce) and class 4 (melee); a bonus against a unit class is not the card's number.
+    pub attack: i32,
+    /// Class 4: the `0` before the slash.
+    pub armour_melee: i32,
+    /// Class 3: the `0` after it.
+    pub armour_pierce: i32,
+    pub range: i32,
+    pub speed: i32,
+    pub los: i32,
+    pub work_rate: i32,
+    pub carry: i32,
+}
+
 pub struct World {
     tick: u64,
     tick_rate_hz: u32,
@@ -6292,6 +6313,52 @@ impl World {
     /// because a HUD and a health bar both need it, and both are outside the simulation (D55).
     pub fn max_hp_of(&self, player: u8, unit: u32) -> Option<i32> {
         self.max_hp(player, unit).ok()
+    }
+
+    /// **The numbers a unit's card shows** (owner, 2026-11-04: *"let's add a functionality where unit stats are shown in
+    /// the bottom central part ... For units see Selection-Bar.png"*).
+    ///
+    /// The unit table is private to the simulation, so the panel cannot read it; this is the accessor that lets it, and it
+    /// answers in the owner's numbers rather than the dat's: an attack of 400 is four, and the two armours are melee (class 4)
+    /// over pierce (class 3), which is the `0/0` an Archer card shows.
+    ///
+    /// **Attack is the larger of the two display classes**, not the largest number on the unit. A villager carries
+    /// `[[11,3],[4,3],[13,6],[14,0]]`, and 6 is a bonus against buildings; its card says 3. The panel shows what a player
+    /// reads, and a class-specific bonus is not a unit's attack.
+    ///
+    /// Fractional quantities are integer **hundredths** (speed 96 = 0.96 of a tile a second), so nothing here is a float and
+    /// nothing here can desync a tick. Hit points and capacity are counts and stay whole.
+    pub fn stats_of(&self, player: u8, unit_id: u32) -> Option<UnitStats> {
+        let unit = self.units.as_ref()?.unit(unit_id)?;
+        // Effective, not base: an owner's upgrades are what the panel must read (D112's rule, applied to every number).
+        let attacks = self.adjusted(player, unit, "attack");
+        let armours = self.adjusted(player, unit, "armour");
+        let of_class = |list: &[(i16, i16)], class: i16| -> i32 {
+            list.iter()
+                .find(|(key, _)| *key == class)
+                .map(|(_, value)| i32::from(*value))
+                .unwrap_or(0)
+        };
+        let hundredths = |raw: i64| -> i32 { (raw * 100 / self.scale) as i32 };
+        let fractional = |value: ruage_data::MaybeFixed, key: &str| -> i32 {
+            match value.resolve(self.scale, key) {
+                Ok(fixed) => hundredths(fixed.raw()),
+                // An unresolved value is refused at load, so this arm is for a pack that slipped one through: the card
+                // shows zero rather than inventing a number the simulation is not using.
+                Err(_) => 0,
+            }
+        };
+        Some(UnitStats {
+            max_hp: self.max_hp(player, unit_id).ok()?,
+            attack: of_class(&attacks, 3).max(of_class(&attacks, 4)) * 100,
+            armour_melee: of_class(&armours, 4) * 100,
+            armour_pierce: of_class(&armours, 3) * 100,
+            range: fractional(unit.range, "range"),
+            speed: fractional(unit.speed, "speed"),
+            los: fractional(unit.los, "los"),
+            work_rate: fractional(unit.work_rate, "work_rate"),
+            carry: i32::from(unit.carry),
+        })
     }
 
     /// The tiles a unit occupies, from the pack's own radii. Public for the same reason as `max_hp_of`: a

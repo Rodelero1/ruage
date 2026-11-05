@@ -50,6 +50,7 @@ fn node(id: u32, at: (f32, f32), amount: u32) -> EntityView {
         amount,
         resource: None,
         pending: 0,
+        stats: None,
         remembered: false,
         footprint: (1, 1),
         shape: ruage_view::Silhouette::Square,

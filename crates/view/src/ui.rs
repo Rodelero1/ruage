@@ -213,6 +213,9 @@ pub struct SelectedRow {
     /// Units this building is making, the one in progress included.
     pub pending: usize,
     pub pose: crate::Pose,
+    /// **The numbers the card prints**: attack, both armours, range, speed, sight, work rate and carry capacity, effective
+    /// for the owner. `None` for a resource node, which has no unit behind it.
+    pub stats: Option<ruage_sim::UnitStats>,
 }
 
 /// The numbers a player watches: the stockpile, the population, and what is selected.
@@ -284,6 +287,7 @@ impl Hud {
                     garrison: entity.garrison,
                     pending: entity.pending,
                     pose: entity.pose,
+                    stats: entity.stats,
                 }
             })
             .collect();
@@ -644,17 +648,130 @@ pub fn hud_panel_height() -> u32 {
     PANEL_HEIGHT
 }
 
-/// The left edge of a selection row's health bar, and its top. Row 0 is nearest the panel's top edge.
+/// One selection card's width, gap and height, in pixels. A card is the game's: a name, a portrait, the small bar under it
+/// and the numbers beside it.
+const CARD_W: i32 = 118;
+const CARD_GAP: i32 = 4;
+const CARD_H: i32 = 62;
+/// The portrait's side, and the small health bar under it.
+const PORTRAIT: i32 = 30;
+
+/// The left edge of a selection **card**, and its top. Card 0 is nearest the panel's left edge (2026-11-04: the wide health
+/// bar and the row list it fed were replaced by cards, so this is where a card starts rather than where a row's bar did).
 #[must_use]
 pub fn selection_row_origin(row: usize, frame_height: u32) -> (i32, i32) {
     let layout = Layout::of(960, frame_height);
-    // Below the name, the health line and the holdings line, which own the top of the zone. It was +40 until a node's
-    // holdings needed a band of their own: 34 + the font's 7 pixels is 41, so the first row starts at 46 and six rows still
-    // fit a 142-pixel panel.
     (
-        layout.selected.0 + 8,
-        layout.selected.1 + 46 + row as i32 * ROW_HEIGHT,
+        layout.selected.0 + 6 + row as i32 * (CARD_W + CARD_GAP),
+        layout.selected.1 + 4,
     )
+}
+
+/// How many cards fit across the selected zone.
+fn selection_cards_that_fit(zone: (i32, i32, u32, u32)) -> usize {
+    let room = zone.2 as i32 - 12;
+    (room / (CARD_W + CARD_GAP)).max(0) as usize
+}
+
+/// **A number in hundredths, as a player reads it**: 400 is "4", 96 is "0.96", 1859 is "18.59". Integer only - the value
+/// arrives as an integer and no float is created to print it.
+fn card_number(value: i32) -> String {
+    let whole = value / 100;
+    let rest = value % 100;
+    if rest == 0 {
+        format!("{whole}")
+    } else if rest % 10 == 0 {
+        format!("{whole}.{}", rest / 10)
+    } else {
+        format!("{whole}.{rest:02}")
+    }
+}
+
+/// **One card**: the name, a portrait, the small health bar with `n/m` under it, and the numbers beside it (owner,
+/// 2026-11-04, from the game's own selection bar). A worker shows its work rate and a load in hand; a fighting unit shows
+/// attack, both armours and reach; a resource node shows how much it holds.
+fn draw_selection_card(
+    frame: &mut crate::Frame,
+    zone: (i32, i32, u32, u32),
+    index: usize,
+    row: &SelectedRow,
+) {
+    let (x, y) = (zone.0 + 6 + index as i32 * (CARD_W + CARD_GAP), zone.1 + 4);
+    // The card's own ground, one tone above the panel's, so a row of cards reads as cards rather than as one surface.
+    frame.fill_rect(x, y, CARD_W, CARD_H, palette::HUD_BAR);
+    let title: String = row.name.to_uppercase().chars().take(16).collect();
+    frame.draw_text(x + 4, y + 3, &title, 1, palette::HUD_TEXT);
+    // The portrait: a framed square, empty until the renderer has art. A **placeholder that says so** is honest; a made-up
+    // silhouette would read as content the pack does not have.
+    let (px, py) = (x + 4, y + 13);
+    frame.fill_rect(px, py, PORTRAIT, PORTRAIT, palette::PANEL);
+    frame.fill_rect(px, py, PORTRAIT, 1, palette::MARK);
+    frame.fill_rect(px, py + PORTRAIT - 1, PORTRAIT, 1, palette::MARK);
+    frame.fill_rect(px, py, 1, PORTRAIT, palette::MARK);
+    frame.fill_rect(px + PORTRAIT - 1, py, 1, PORTRAIT, palette::MARK);
+    // The small health bar under the portrait, and `n/m` beneath it - the bar the owner kept, and the wide one that went.
+    let (bx, by) = (px, py + PORTRAIT + 3);
+    frame.fill_rect(bx, by, PORTRAIT, 4, palette::HP_TRACK);
+    let lit = (PORTRAIT as f32 * row.hp_fraction.clamp(0.0, 1.0)) as i32;
+    let colour = if row.hp_fraction > 0.5 {
+        palette::HP_GREEN
+    } else {
+        palette::HP_RED
+    };
+    frame.fill_rect(bx, by, lit, 4, colour);
+    let max = row.stats.map(|stats| stats.max_hp).unwrap_or(0);
+    let hp = if max > 0 {
+        format!("{}/{}", row.hp, max)
+    } else {
+        format!("HP {}", row.hp)
+    };
+    frame.draw_text(bx, by + 6, &hp, 1, palette::HUD_TEXT);
+
+    // The numbers, beside the portrait.
+    let (tx, mut ty) = (px + PORTRAIT + 6, y + 13);
+    let line_gap = crate::font::HEIGHT + 2;
+    let mut line = |frame: &mut crate::Frame, text: &str| {
+        frame.draw_text(tx, ty, text, 1, palette::HUD_TEXT);
+        ty += line_gap;
+    };
+    if let Some(stats) = row.stats {
+        line(frame, &format!("ATK {}", card_number(stats.attack)));
+        line(
+            frame,
+            &format!(
+                "ARM {}/{}",
+                card_number(stats.armour_melee),
+                card_number(stats.armour_pierce)
+            ),
+        );
+        if stats.range > 0 {
+            line(frame, &format!("RNG {}", card_number(stats.range)));
+        } else if stats.work_rate > 0 && stats.carry > 0 {
+            line(frame, &format!("WRK {}", card_number(stats.work_rate)));
+        } else {
+            line(frame, &format!("SPD {}", card_number(stats.speed)));
+        }
+    }
+    // A load in hand, in the pack's word for its column; then what a node still holds.
+    if row.carry > 0 {
+        let capacity = row.stats.map(|stats| stats.carry).unwrap_or(0);
+        let label = match row.resource.as_deref() {
+            Some(resource) if capacity > 0 => {
+                format!("{} {}/{}", resource.to_uppercase(), row.carry, capacity)
+            }
+            Some(resource) => format!("{} {}", resource.to_uppercase(), row.carry),
+            None => format!("LOAD {}", row.carry),
+        };
+        frame.draw_text(tx, ty, &label, 1, palette::HUD_TEXT);
+    } else if let (Some(resource), true) = (row.resource.as_deref(), row.amount > 0) {
+        frame.draw_text(
+            tx,
+            ty,
+            &format!("{} {}", resource.to_uppercase(), row.amount),
+            1,
+            palette::HUD_TEXT,
+        );
+    }
 }
 
 /// **Whether a pixel belongs to the interface rather than the map.** One question, one answer, computed from the same
@@ -1092,11 +1209,6 @@ pub fn banner_point(frame_width: u32, frame_height: u32) -> (u32, u32) {
     )
 }
 
-/// How tall one selection row is, in pixels.
-const ROW_HEIGHT: i32 = 12;
-/// How wide a selection row's health bar is, in pixels.
-const ROW_BAR: i32 = 60;
-
 /// **Everything a player watches, in one place.** The top bar is the stock, the population and the speed; the bottom panel
 /// is what is selected; the corner is the minimap; a decided match paints a banner across the middle. `Hud::of` builds the
 /// numbers and this draws them - the window's job is to call it, not to decide what a HUD is.
@@ -1183,70 +1295,13 @@ pub fn hud(frame: &mut Frame, hud: &Hud, snapshot: &Snapshot, speed: crate::Spee
             let (nx, ny) = notice_origin(frame.height);
             frame.draw_text(nx, ny, notice, 1, palette::REFUSED);
         }
-        // **What is selected, by name**, at the top of its zone: the pack's word, its health as a bar and a number, and
-        // how many are selected when more than one is.
-        if let Some(first) = hud.selected.first() {
-            let (x, y, w, _) = layout.selected;
-            let title = if hud.selected.len() > 1 {
-                format!("{} x{}", first.name.to_uppercase(), hud.selected.len())
-            } else {
-                first.name.to_uppercase()
-            };
-            frame.draw_text(x + 8, y + 10, &title, 2, palette::HUD_TEXT);
-            // The health of the first selected thing, across the zone: wide enough to read at a glance. **A resource node
-            // has no maximum on record**, so a bar would be a bar of nothing: it gets its hit points as a number in the
-            // same band, which is what the owner asked to see on a tree ("showing hit points and volume of wood").
-            let bar_w = w.saturating_sub(16) as i32;
-            let (bx, by) = (x + 8, y + 26);
-            if first.unit.is_some() {
-                frame.fill_rect(bx, by, bar_w, 6, palette::HP_TRACK);
-                let lit = (bar_w as f32 * first.hp_fraction.clamp(0.0, 1.0)) as i32;
-                let colour = if first.hp_fraction > 0.5 {
-                    palette::HP_GREEN
-                } else {
-                    palette::HP_RED
-                };
-                frame.fill_rect(bx, by, lit, 6, colour);
-                let percent = (first.hp_fraction.clamp(0.0, 1.0) * 100.0) as u32;
-                let used = frame.draw_number(bx + bar_w + 4, by - 1, percent, 1, palette::HUD_TEXT);
-                let _ = used;
-            } else if first.hp > 0 {
-                let label = format!("HP {}", first.hp);
-                frame.draw_text(bx, by - 1, &label, 1, palette::HUD_TEXT);
-            }
-            // **What it still holds, and whose number it is.** One line under the health, in the pack's word for the
-            // column - "WOOD 87", "FOOD 213" - so a tree, a bush, a mine and a farm all read the same way and a pack that
-            // renames a resource renames this too.
-            if let (Some(resource), true) = (first.resource.as_deref(), first.amount > 0) {
-                let label = format!("{} {}", resource.to_uppercase(), first.amount);
-                frame.draw_text(x + 8, y + 34, &label, 1, palette::HUD_TEXT);
-            }
-        }
-        // **A row per selected thing, ten at most.** The panel is a list, not a summary: a player who boxed six villagers
-        // sees six bars and can see which one is hurt.
-        for (index, row) in hud.selected.iter().take(6).enumerate() {
-            let (x, y) = selection_row_origin(index, frame.height);
-            frame.fill_rect(x, y, ROW_BAR, 4, palette::HP_TRACK);
-            let lit = (ROW_BAR as f32 * row.hp_fraction.clamp(0.0, 1.0)) as i32;
-            let colour = if row.hp_fraction > 0.5 {
-                palette::HP_GREEN
-            } else {
-                palette::HP_RED
-            };
-            frame.fill_rect(x, y, lit, 4, colour);
-            // A load in hand, then a production queue: two numbers, no words.
-            let mut next = x + ROW_BAR + 6;
-            if row.carry > 0 {
-                next = frame.draw_number(next, y - 1, row.carry, 1, palette::HUD_TEXT) + 4;
-            }
-            if row.pending > 0 {
-                frame.draw_number(next, y - 1, row.pending as u32, 1, palette::SELECTION);
-            }
-            // A building going up shows how far it has got, in the order marker's colour.
-            if let Some(progress) = row.construction {
-                let lit = (ROW_BAR as f32 * progress.clamp(0.0, 1.0)) as i32;
-                frame.fill_rect(x, y + 5, lit, 2, palette::ORDER);
-            }
+        // **A card per selected thing** (owner, 2026-11-04: *"let's add a functionality where unit stats are shown in the
+        // bottom central part. the big long health bar can be removed."*). The wide bar that ran the width of the zone is
+        // gone; what a player reads is the game's own card - name, portrait, the small bar under it with `n/m`, and the
+        // numbers beside it. Several units give several cards in a row, which is how a box selection reads.
+        let cards = selection_cards_that_fit(layout.selected);
+        for (index, row) in hud.selected.iter().take(cards).enumerate() {
+            draw_selection_card(frame, layout.selected, index, row);
         }
     }
 

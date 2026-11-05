@@ -26,6 +26,7 @@ fn unit(id: u32, at: (f32, f32)) -> EntityView {
         hp: 25,
         resource: None,
         pending: 0,
+        stats: None,
         remembered: false,
         footprint: (1, 1),
         shape: ruage_view::Silhouette::Square,

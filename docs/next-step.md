@@ -28,6 +28,39 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 18, 2026-11-04 - a card in the bottom bar (D120)
+>
+> **The owner:** *"let's add a functionality where unit stats are shown in the bottom central part. the big long health bar can
+> be removed. For Villager: renamed to match the task he is doing and show stats and carried resources ... For units see
+> Selection-Bar.png for ui example"* → **landed**: cards, the wide bar gone, the numbers on the card.
+>
+> **Answers taken before coding (the clarify was unreadable in Discord, so they were restated as text):** 2A job names come from
+> content, 3A a card per selected unit, 4A the wide bar goes and the small one under the portrait stays, 5A attack + both
+> armours + range.
+>
+> **What the card is:** name, an **empty** portrait frame (no art yet - an honest gap, not an invented silhouette), the small
+> health bar with `hp/max`, then `ATK`, `ARM m/p`, and `RNG` (or `WRK` for a worker) plus `WOOD 7/10` for a load in hand. A
+> resource node prints `HP n` and its remaining amount.
+>
+> **Where the numbers come from:** `World::stats_of(player, unit)` → `UnitStats`, **after the owner's upgrades** (D112's rule
+> applied to every number). Attack is `max(class 3, class 4)`: an archer reads 4, a villager reads 3 and not the 6 of its
+> anti-building bonus. Fractional values cross the boundary as **hundredths** (speed 96 = 0.96), so no float can reach a tick.
+>
+> **Cost:** measured with `cargo run --release -p ruage-view --example hud_cost` against a `HEAD` worktree, interleaved, 2,000
+> draws each: **168.5 µs → 170.8 µs** a frame (median, +1.4%, inside this machine's ±12 µs noise). My first single runs
+> (263.9 vs 291.4) were cold-cache and wrong; the review says so.
+>
+> **Not in this step, and the next thing to do (Villager's job name):** the pack has no vocabulary for *what a villager is
+> working on*. The engine can name the **target** (a bush, a farm, a sheep, a tree, a mine) but the word "Forager" belongs to
+> content, and the key it hangs on is the open question: **the target's role name** (`farm`, `berry_bush`) is readable and
+> moddable; its **dat name** (`VMBAS`-style) is not. Until that is decided, the card says "Villager", which is what the pack
+> says. Asked, not assumed.
+>
+> Also deferred by the owner's own words: *"in the future at least shepherd uses different sprites (carrying staff), hunter
+> carries bow..."* - the portrait is where that lands, and the portrait needs the asset pack.
+>
+> **669 passed / 0 failed / 19 ignored**; acceptance `82efabd6f614c798` unchanged (no tick code).
+
 > # Session 17, 2026-11-04 - the unit vocabulary: plan written, inventory tool landed
 >
 > **The owner accepted the proposal** ("1 I accept the proposal. Proceed"), with the modding requirement attached: *"What if I

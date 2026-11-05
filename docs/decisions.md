@@ -2988,3 +2988,43 @@ Three rules, learned together because they were one bug wearing three coats, all
 `ab314fb1969fde95`, 29 s) but no longer matches HEAD's flow (176 entities, `c12bdc86aab31513`): moving units off ground
 they should not have been standing on changes what happens next. The alternative - keeping villagers inside buildings -
 is not a behaviour worth preserving.
+
+
+## D119 - The unit vocabulary is names, and the upgrade edge belongs to the tech
+
+*2026-11-04. The owner: "I want to get rid of unit IDs. Instead it's like each unit having clear parameters - starting
+availability and which unit it upgrades", and on modding: "What if I chose that scout cavalry will be upgrade of hussar, not
+the other way around?"*
+
+1. **The plan is written before the schema, and measured first.** `docs/unit-vocabulary.md` is the plan;
+   `tools/vocabulary.py` is the inventory every number in it is measured against and it exits non-zero while the pack would
+   block a name-keyed schema (today: **56** unnamed units, **28** duplicated names).
+2. **The edge is the unit of content, not a per-unit field.** An upgrade is `(from, to, tech)`; the tech is the actor. A
+   per-unit `upgrades_from` would be a lossy projection and could not say which of two effects performed an upgrade.
+3. **The line is derived from edges *plus* prerequisites.** An edge whose `from` unit cannot exist when its tech is researched
+   is a safety net, not a rung - the halberdier's `93 -> 359` command is exactly that, because tech 429 requires tech 197,
+   which has already turned every spearman into a pikeman.
+4. **The loader must detect a cycle, not assume acyclic.** The dat has one: `RMSHP` and `SDGAL`, the two fishing-ship effects,
+   upgrade each into the other.
+5. **Two of my own readings were wrong before this settled**, and both the same way: I read the **effect table** as if it were
+   the game's rules. The owner corrected the halberdier twice ("reached from something else than pikeman? How?" then
+   "halberdier replaces only pikeman and pikeman replaces only spearman"). The lesson is the decision: when a data table and a
+   player's rule disagree, the **tech tree** decides, and the table is wiring.
+
+## D120 - A card in the bottom bar, and the wide health bar is gone
+
+*2026-11-04. The owner: "let's add a functionality where unit stats are shown in the bottom central part. the big long health
+bar can be removed. For Villager: renamed to match the task he is doing and show stats and carried resources ... For units see
+Selection-Bar.png for ui example." Answers: cards for several units (3A), the wide bar out and the small one under the portrait
+kept (4A), attack + both armours + range (5A), job names from content (2A).*
+
+1. **One card per selected thing, in a row, as many as fit.** The zone's whole width was one bar; it is now cards.
+2. **The numbers are the owner's, not the viewer's.** `World::stats_of(player, unit)` returns `UnitStats` after that player's
+   upgrades - D112's rule for maximum health, applied to every number. A pack's unit table is not the view's to read.
+3. **Attack is the larger of class 3 and class 4**, which is what the game's own card shows: an archer reads 4 and a villager
+   reads 3, not the 6 its class-13 anti-building bonus carries.
+4. **Hundredths across the boundary.** Speed is 96, not 0.96: integer only, so no float can reach a tick.
+5. **The portrait is an empty frame** until the renderer has art. A placeholder that is visibly empty is honest; an invented
+   silhouette would read as content the pack does not have.
+6. **The job names are not in this step.** They need the pack to say what a *target* implies (a berry bush is a Forager, a farm
+   is a Farmer), and that is a content question with its own answer - the follow-up slice.
