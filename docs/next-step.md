@@ -28,6 +28,22 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 25, 2026-11-05 - the ring is a curve, not a diamond (D125b)
+>
+> **The owner, looking at the rendered frame:** *"I see a diamond, not elipse in the example"* - and he was right. D125 claimed an
+> ellipse and drew `outline_diamond`: a rotated **square** projects to four straight edges, and a square is not a circle. The
+> reasoning in the first version - "a circle in tile space projects to a diamond" - was wrong, and it is corrected in the review.
+>
+> **Landed:** `Frame::outline_ellipse` - `half = rx * sqrt(1 - (dy/ry)^2)` per row and the mirror per column, both axes walked so
+> a shallow slope does not leave the curve dashed. Units use it; **buildings keep the diamond**, because a footprint *is* a tile.
+>
+> **The test pins the difference where the shapes disagree most**: at half height an ellipse is still **86.6%** of its width and a
+> diamond has closed to **50%**. RED, verbatim: *"at half height the ring is 19 px from the centre; an ellipse would be 31, a
+> diamond 18"*. Measured on the rendered frame after the fix: half-width **14 px** at the middle, **12 px** at 50% height -
+> ratio **0.86**.
+>
+> **693 passed / 0 failed / 19 ignored**; acceptance unchanged `4568cef16368bd5a`; clippy and fmt clean.
+
 > # Session 24, 2026-11-05 - a ring the size of the body (D125)
 >
 > **The owner:** *"circle enveloping the units ... Smaller units have smaller circle ... bigger units have bigger circle ...

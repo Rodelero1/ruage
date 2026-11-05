@@ -636,6 +636,46 @@ impl Frame {
         }
     }
 
+    /// Draw the **outline of an ellipse**: a circle on the ground, seen under the isometric projection.
+    ///
+    /// **A diamond is not a circle.** The first version of the unit ring reused `outline_diamond` on the argument that "a
+    /// circle in tile space projects to a diamond" - which is wrong: a rotated square projects to four straight edges, and the
+    /// owner saw it at once ("I see a diamond, not elipse"). A circle of radius `r` centred on the ground projects to
+    /// `x^2/(r*w)^2 + y^2/(r*h)^2 = 1`, so the outline's half-width at height `dy` is `rx * sqrt(1 - (dy/ry)^2)` - at half
+    /// height that is **86.6%** of the full width, where a diamond has already closed to 50%.
+    ///
+    /// Both axes are walked, as the diamond's outline does, so a shallow slope does not leave the curve dashed.
+    pub fn outline_ellipse(&mut self, centre: (i32, i32), radii: (f32, f32), colour: [u8; 4]) {
+        let (rx, ry) = radii;
+        if rx <= 0.0 || ry <= 0.0 {
+            return;
+        }
+        for y in (centre.1 - ry.ceil() as i32)..=(centre.1 + ry.ceil() as i32) {
+            let dy = (y - centre.1) as f32;
+            let across = 1.0 - (dy / ry) * (dy / ry);
+            if across <= 0.0 {
+                continue;
+            }
+            let half = (rx * across.sqrt()).round() as i32;
+            self.put(centre.0 - half, y, colour);
+            self.put(centre.0 + half, y, colour);
+            self.put(centre.0 - half + 1, y, colour);
+            self.put(centre.0 + half - 1, y, colour);
+        }
+        for x in (centre.0 - rx.ceil() as i32)..=(centre.0 + rx.ceil() as i32) {
+            let dx = (x - centre.0) as f32;
+            let down = 1.0 - (dx / rx) * (dx / rx);
+            if down <= 0.0 {
+                continue;
+            }
+            let half = (ry * down.sqrt()).round() as i32;
+            self.put(x, centre.1 - half, colour);
+            self.put(x, centre.1 + half, colour);
+            self.put(x, centre.1 - half + 1, colour);
+            self.put(x, centre.1 + half - 1, colour);
+        }
+    }
+
     /// Draw one glyph of the bitmap font: `rows` are its scanlines, `scale` multiplies each font pixel.
     ///
     /// Returns the width used, so a caller can place the next thing without keeping the font's metrics in its head.
@@ -1189,10 +1229,11 @@ pub fn draw_highlights(
         //
         // A **building** keeps the footprint ring it had: its body *is* its footprint, and a farm's 1.5 radius would draw a
         // ring inside its own walls.
-        let (centre, half) = if entity.kind == EntityKind::Unit {
+        let (centre, half, curved) = if entity.kind == EntityKind::Unit {
             let centre = camera.project(entity.position);
             let scale = entity.radius.max(0.0) * snapshot.ring_scale;
-            (centre, (rx * scale, ry * scale))
+            // **A body is a circle**, so its ring is an ellipse: the owner saw the diamond and said so.
+            (centre, (rx * scale, ry * scale), true)
         } else {
             let (across, down) = entity.footprint;
             let anchor = (
@@ -1202,9 +1243,18 @@ pub fn draw_highlights(
             let (min_x, min_y, max_x, max_y) = footprint_tiles(anchor, entity.footprint);
             let centre =
                 camera.project(((min_x + max_x) as f32 / 2.0, (min_y + max_y) as f32 / 2.0));
-            (centre, (rx * across as f32 * 0.9, ry * down as f32 * 0.9))
+            // A **building** is its footprint, and a footprint is a tile: a diamond is the honest outline there.
+            (
+                centre,
+                (rx * across as f32 * 0.9, ry * down as f32 * 0.9),
+                false,
+            )
         };
-        frame.outline_diamond(centre, half, palette::SELECTION);
+        if curved {
+            frame.outline_ellipse(centre, half, palette::SELECTION);
+        } else {
+            frame.outline_diamond(centre, half, palette::SELECTION);
+        }
         // A health bar above the top vertex, green for what is left and red for what is gone.
         let bar_width = (rx * 0.6).max(8.0) as i32;
         let bar_x = centre.0 - bar_width / 2;

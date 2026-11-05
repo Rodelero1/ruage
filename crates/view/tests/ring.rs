@@ -135,6 +135,48 @@ fn the_ring_is_the_packs_radius_times_the_config_factor() {
     );
 }
 
+/// **A circle, not a diamond.** The owner looked at the rendered frame and said *"I see a diamond, not elipse"* - and it was a
+/// diamond: a rotated square projected is still four straight edges, while a **circle on the ground** projects to an ellipse.
+/// The two disagree most halfway down the ring, where a diamond's outline has already closed to half its width and an
+/// ellipse's is still at 86% of it.
+#[test]
+fn the_ring_is_a_curve_and_not_four_straight_edges() {
+    let radius = 0.5f32;
+    let snapshot = snapshot(vec![unit(1, (10.0, 10.0), radius)]);
+    let camera = camera();
+    let centre = camera.project((10.0, 10.0));
+    let (rx, ry) = camera.radii();
+    let semi_w = radius * snapshot.ring_scale * rx;
+    let semi_h = radius * snapshot.ring_scale * ry;
+
+    let frame = render_with(
+        &snapshot,
+        &camera,
+        &Highlights {
+            selected: &[1],
+            order: None,
+        },
+    );
+    // Halfway down the ellipse: dy = semi_h / 2. The outline there sits at sqrt(1 - 0.25) = 0.866 of the half-width.
+    let y = (centre.1 as f32 + semi_h / 2.0).round() as i32;
+    let mut widest = 0i32;
+    for dx in -80..=80 {
+        let x = centre.0 + dx;
+        if x < 0 || y < 0 || (x as u32) >= frame.width || (y as u32) >= frame.height {
+            continue;
+        }
+        if frame.pixel(x as u32, y as u32) == palette::SELECTION {
+            widest = widest.max((x - centre.0).abs());
+        }
+    }
+    let curved = semi_w * 0.866;
+    let diamond = semi_w * 0.5;
+    assert!(
+        (widest as f32 - curved).abs() < (widest as f32 - diamond).abs(),
+        "at half height the ring is {widest} px from the centre; an ellipse would be {curved:.0}, a diamond {diamond:.0}"
+    );
+}
+
 #[test]
 fn an_unselected_unit_wears_none() {
     let snapshot = snapshot(vec![unit(1, (10.0, 10.0), 0.2)]);
