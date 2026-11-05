@@ -66,10 +66,7 @@ fn a_small_minimap_box_has_no_gaps_either() {
     }
     assert_eq!(
         gaps, 0,
-        assert_eq!(
-            gaps, 0,
-            "{gaps} panel-coloured pixels inside a {w}-pixel minimap: the tiles do not meet"
-        );
+        "{gaps} panel-coloured pixels inside a {w}-pixel minimap: the tiles do not meet"
     );
 }
 
