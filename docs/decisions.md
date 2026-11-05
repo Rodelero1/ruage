@@ -3069,3 +3069,30 @@ no empty farm nearby, villager becomes idle."*
 5. **The farm's price was already right.** The pack's `FARM` (50) costs `[[1, 60]]` - 60 wood - and the earlier suspicion that
    it cost 50 food came from reading unit 259, which is the *farmer villager variant*, not the building. Checked, cleared, and
    recorded here so the next session does not re-suspect it.
+
+## D123 - The vocabulary is `names.toml`, and the husk is the dat's own unit
+
+*2026-11-05. The owner, asked what to call the units that had no usable name: "1 A. I may rename them later on. IIRC language DLL
+files should contain proper names. That way it was possible to translate the game in hex editor. Age2HD could do it differently
+though. If none is found there or in other files, follow A" - and, of the two numbers I chose: "2 can you find in original
+files? It must be somewhere there."*
+
+1. **The names were already found, and already in use.** `resources/en/strings/key-value/key-value-strings-utf8.txt` carries the
+   header *"Strings from Game/en/language.dll"* - the file the owner remembered - and `tools/names.py` (D97) has been joining
+   each unit's `name_str_id` to it all along: `5121 "Villager"`, `5149 "Farm"`, `5409 "Halberdier"`. `config/names.toml` holds
+   **1,390 unique keys for 1,389 units, no duplicates and no gaps**. Option A is therefore unnecessary, and nothing is left to
+   decide.
+2. **My D119 inventory measured the wrong column, and the plan inherited its numbers.** It read the `name` field of
+   `units.toml` - the dat's five-letter codes, kept as provenance - and reported "56 unnamed, 28 duplicated". Both were true of
+   the codes and false of the vocabulary. `tools/vocabulary.py` now reads `names.toml`, so the gate cannot measure the wrong
+   column again; the plan's phase 2 is marked done.
+3. **The husk is a unit in the dat, not an invention of ours.** The farm (50, `FARM`) has **`dead_unit_id = 357`** - unit 357,
+   `FARM_`, string **5407**, hp 0, `resource_decay_rate = 1.0` - which is exactly the "effect only" husk the owner described.
+   The faithful model is to **replace the farm with unit 357** when it empties and let its decay remove it, rather than to keep
+   the farm's id and a flag. That is the next slice; today's engine keeps the farm and a husk timer, and the evidence is
+   recorded so the switch is mechanical.
+4. **The husk's duration is still ours.** 357's `resource_decay_rate = 1.0` is the dat's input, but *what* it decays is not in
+   the dat and the exe is where it would be. `husk_seconds = 30` stays, named as our number.
+5. **"Nearby" has no constant in the original files.** The AI constants carry `sn-lumber-camp-max-distance` and
+   `sn-mining-camp-max-distance` (both commented out) and `sn-camp-max-distance`; **nothing for farms**. `free_farm_radius = 12`
+   is ours, and the review records why.

@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """Inventory the pack's unit vocabulary: what the engine would have to name if unit ids went away.
 
-Reads `config/gamedata/{units,effects}.toml` and `config/economy.toml` and reports, without changing anything:
+**The vocabulary is `config/names.toml`, not the `name` field in `units.toml`.** The first version of this tool read
+`units.toml` and reported "56 unnamed units, 28 duplicated names" - which was true of the dat's five-letter codes (`VMBAS`,
+`BARRICADE`) and false of the vocabulary: `tools/names.py` (D97) already joins each unit's `name_str_id` to the install's
+string table - the file whose own header says it came from `Game/en/language.dll` - and writes a unique snake_case key for
+every unit. The codes stay in `units.toml` as provenance. Reported here rather than quietly fixed: the first inventory measured
+the wrong column and the plan inherited the wrong numbers.
+
+Reads `config/names.toml`, `config/gamedata/{units,effects}.toml` and `config/economy.toml`, and reports:
 
 - units, and how many of their **names are not unique** (a name-keyed pack needs a unique key);
 - the **roles** the engine actually uses, and whether each names a unit that exists and is unique;
@@ -15,6 +22,7 @@ simulation; it is the inventory the plan in `docs/unit-vocabulary.md` is written
 
 from __future__ import annotations
 
+import argparse
 import sys
 import tomllib
 from collections import Counter, defaultdict
@@ -27,31 +35,37 @@ def by_id_name(by_id: dict[int, dict], unit: int) -> str:
     return by_id.get(unit, {}).get("name", str(unit))
 
 
-def load(rel: str) -> dict:
-    with (ROOT / rel).open("rb") as handle:
+def load(rel: str, root: Path = ROOT) -> dict:
+    with (root / rel).open("rb") as handle:
         return tomllib.load(handle)
 
 
-def main() -> int:
-    units = load("config/gamedata/units.toml")
-    effects = load("config/gamedata/effects.toml")
-    economy = load("config/economy.toml")
+def main(argv: list[str] | None = None) -> int:
+    # `--root` exists so the tool can be pointed at a **fixture pack** in a test: a gate that gatekeeps a plan has to be
+    # provable, and proving it against the real 1.2 MB pack would mean editing the real pack.
+    parser = argparse.ArgumentParser(description="Inventory a pack's unit vocabulary.")
+    parser.add_argument("--root", type=Path, default=ROOT, help="a pack root holding config/")
+    args = parser.parse_args(argv)
+    root: Path = args.root
+
+    names = load("config/names.toml", root)["unit"]
+    units = load("config/gamedata/units.toml", root)
+    effects = load("config/gamedata/effects.toml", root)
+    economy = load("config/economy.toml", root)
 
     table = units.get("unit", [])
     by_id = {unit["id"]: unit for unit in table}
-    names = [unit.get("name", "") for unit in table]
-    counts = Counter(names)
-    duplicated = {name: count for name, count in counts.items() if count > 1 and name}
-    unnamed = [unit["id"] for unit in table if not unit.get("name")]
+    # **The keys are `names.toml`'s**, one per unit, and the dat code is provenance that nothing reads.
+    unnamed = [unit["id"] for unit in table if str(unit["id"]) not in names]
+    counts = Counter(names.values())
+    duplicated = {name: count for name, count in counts.items() if count > 1}
 
-    print(f"units: {len(table)}")
-    print(f"  unnamed: {len(unnamed)}")
-    print(f"  duplicate names: {len(duplicated)}")
+    print(f"units: {len(table)} | named: {len(names)}")
+    print(f"  units with no key: {len(unnamed)} {unnamed[:8] if unnamed else ''}")
+    print(f"  duplicate keys: {len(duplicated)}")
     for name in sorted(duplicated)[:12]:
-        ids = sorted(unit["id"] for unit in table if unit.get("name") == name)
+        ids = sorted(int(i) for i, n in names.items() if n == name)
         print(f"    {name}: {ids}")
-    if len(duplicated) > 12:
-        print(f"    ... and {len(duplicated) - 12} more")
 
     # Roles: the engine's vocabulary today. A role that names a missing unit is a hole; two roles naming one unit is a
     # question a name-keyed pack answers by construction (one name per unit).
@@ -111,7 +125,11 @@ def main() -> int:
     for start in incoming:
         seen = set()
         cursor = start
-        for _ in range(len(units) + 1):
+        # **Bound by the unit table, not by the parsed file's top-level keys.** The first version wrote `len(units)`,
+        # which is 1 (the `[unit]` table), so a two-unit cycle was never walked twice and never reported. A generated test
+        # with two units upgrading into each other caught it; the real pack's four-unit fishing-ship cycle was long enough
+        # to be found by luck.
+        for _ in range(len(table) + 1):
             if cursor in seen:
                 cyclic.add(cursor)
                 break

@@ -28,6 +28,36 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 22, 2026-11-05 - the names were already there (D123)
+>
+> **The owner:** *"1 A. I may rename them later on. IIRC language DLL files should contain proper names. That way it was possible
+> to translate the game in hex editor. Age2HD could do it differently though. If none is found there or in other files, follow
+> A"* and *"2 can you find in original files? It must be somewhere there. Otherwise OK."*
+>
+> **1. The names exist, and were already in use.** `resources/en/strings/key-value/key-value-strings-utf8.txt` says in its own
+> header *"Strings from Game/en/language.dll"*; the dat gives every unit a `name_str_id` (83 -> 5121 "Villager", 50 -> 5149
+> "Farm", 359 -> 5409 "Halberdier"); and `tools/names.py` (D97) has been joining them into **`config/names.toml` - 1,390 keys
+> for 1,389 units, no duplicates, no gaps**. **Option A is unnecessary and nothing needs deciding.**
+>
+> **2. My D119 inventory measured the wrong column** - the dat's five-letter codes in `units.toml`, not `names.toml`. "56
+> unnamed, 28 duplicated" was a fact about codes. Corrected in the plan, in D123, and in the tool, which now reads
+> `names.toml` and takes `--root`.
+>
+> **3. The gate had no tests, and one of them found a real bug**: the cycle walk was bounded by the parsed file's top-level key
+> count (1), so a **two-unit** cycle - the smallest, and the shape the real pack has - was never reported. Six fixture tests
+> now pin: no key, duplicate key, a role naming a missing unit, a cycle, and a unit whose dat code is unreadable but whose key
+> is fine. The real pack still reports its own cycle (`RMSHP` 527 / `SDGAL` 1104).
+>
+> **4. The husk is in the dat.** The farm (50) has **`dead_unit_id = 357`** - `FARM_`, string 5407, hp 0,
+> `resource_decay_rate = 1.0` - the "effect only" husk exactly as described. The next slice is to **replace the farm with unit
+> 357** on exhaustion and let its decay remove it; *what* its 1.0 decays is not in the dat, so **30 s stays ours**.
+>
+> **5. "Nearby" has no constant in the original files** - only `sn-lumber-camp-max-distance` / `sn-mining-camp-max-distance`
+> (commented out) and `sn-camp-max-distance`, nothing for farms. **12 tiles stays ours.**
+>
+> **No engine code changed**; **688 passed / 0 failed / 19 ignored** unchanged, acceptance hash `4568cef16368bd5a` unchanged.
+> New: `tools/test_vocabulary.py` (6 tests, python).
+
 > # Session 21, 2026-11-05 - the adversarial review that found five things
 >
 > **The owner:** *"Please do complete adversarial review on performance and stability"* over D120 (the card), D121 (job names)

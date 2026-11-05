@@ -11,8 +11,8 @@ parameters — starting availability and which unit it upgrades." Accepted as th
 | | |
 |---|---|
 | units in the table | **1,389** |
-| units with **no name** | **56** |
-| **duplicate names** | **28** (`BARRICADE` ×4, `BGAA` ×3, `THSWD`, `MPCAV`, `ARTCT`, `DOLP3`, `CARAV`, …) |
+| units with **no key in `config/names.toml`** | **0** |
+| **duplicate keys** | **0** |
 | roles in `economy.toml` (the vocabulary the engine already uses) | **40**, every one naming a unit that exists, no two roles on one unit |
 | upgrade edges in the effect table (`[3, from, to]`, deduplicated) | **222** |
 | bases with several variants (an age-up: normal) | 43 |
@@ -20,6 +20,18 @@ parameters — starting availability and which unit it upgrades." Accepted as th
 | units reached across **different effects** (a real fork) | **2** (`ARRG3` (10) from 102 and 133; `WALL3` (155) from two effects, both from `WALL2`) |
 | units on a **cycle** | **2** (`RMSHP` 527 and `SDGAL` 1104: the two fishing-ship effects upgrade each into the other) |
 | effect fields carrying a bare `unit = <id>` | 0 (units are referenced only through `commands`) |
+
+## Correction, 2026-11-05: the first inventory measured the wrong column
+
+This note first said **"56 units have no name, 28 names are duplicated"**. Both numbers were true of the **dat's five-letter
+codes** in `units.toml` (`VMBAS`, `BARRICADE` ×4) and **false of the vocabulary**: `tools/names.py` (D97) already joins every
+unit's `name_str_id` to the install's string table and writes a unique snake_case key for all 1,389 units. That string table is
+the modern form of the file the owner remembered - its own header reads *"Strings from Game/en/language.dll"*
+(`resources/en/strings/key-value/key-value-strings-utf8.txt`, 12,593 lines: `5121 "Villager"`, `5149 "Farm"`, `5409
+"Halberdier"`). So **phase 2 is already done** and the owner's option A ("dat name plus a numeric suffix") is not needed.
+
+The codes stay in `units.toml` as provenance, and `tools/vocabulary.py` now reads `names.toml`, so the gate cannot measure the
+wrong column again.
 
 ## What the numbers change about the proposal
 
@@ -76,12 +88,9 @@ cycle printed, do not loop), and no assumption that the direction matches the da
 
 ## Phases, each one landable and green
 
-1. **The inventory tool** — `tools/vocabulary.py` (this step). Reads the pack, prints the table above, exits non-zero while
-   the pack would block a name-keyed schema. No engine change.
-2. **Names for everything** — 56 unnamed units and 28 duplicated names need keys, in the **generator** (`tools/genconfig`),
-   not in the generated files. The rule to pick: the dat's own name; on a duplicate, the name plus the smallest distinguishing
-   suffix the importer can derive (a numeric suffix is ugly but honest, and the pack is generated, so a hand-made word would
-   be overwritten). `tools/vocabulary.py` must go green on duplicates and unnamed units.
+1. **The inventory tool** — `tools/vocabulary.py` (landed, and corrected on 2026-11-05 to read `names.toml`). No engine change.
+2. **Names for everything** — **done before this plan was written**, by `tools/names.py` (D97): every unit has a unique key
+   derived from its `name_str_id` through the install's string table. Nothing to decide, nothing to invent.
 3. **Edges into the pack** — the generator emits `[[upgrade]]` for the 223 edges with the tech that carries them; the cycle
    detector refuses the three cycles with a printed path. `units.toml` keeps `id` only as provenance.
 4. **The engine's handle** — `Entity.unit` becomes a **pack key**: an index the loader assigns in name order. The tick keeps
