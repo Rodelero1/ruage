@@ -5,10 +5,18 @@ scout cavalry will be upgrade of hussar, not the other way around?". This step i
 schema: `docs/unit-vocabulary.md` plus `tools/vocabulary.py`, which every number in the plan is measured against. No engine
 code changed.*
 
-**The inventory changed the proposal, which is why it came first.** I had written `upgrades_from = "militia"` per unit. The
-pack cannot express that: **30 units have two possible predecessors** and the upgrade graph has **3 cycles** (527, 528, 1104).
-The unit of content is therefore the **edge** — `from`, `to`, and the `tech` that performs it — which is also the modding
-answer: reversing a line is a data edit and the loader must *detect* a cycle rather than assume acyclic.
+**The owner caught an error in my first reading, and it is the more useful half of this note.** I reported "30 units have two
+possible predecessors" as evidence a per-unit `upgrades_from` could not work. *"Halberdier is reached from something else than
+pikeman? How? Upgrade path is clear pikeman -> halberdier"* - and the pack agrees with him: both the spearman (93) and the
+pikeman (358) edges for the halberdier (359) sit **inside effect 189, the Halberdier tech itself**. One tech in this dat
+replaces *every* earlier tier of a line, so a chain that skips a rung still lands where it should. The correction, measured
+after the tool was fixed to group by effect: **22** units have that same-effect fan-in and only **2** are reached from
+genuinely different effects (`ARRG3` from effects 102 and 133; `WALL3` from two effects that both name `WALL2`). The two units
+on a cycle are the fishing ships (`RMSHP` 527 and `SDGAL` 1104), which two effects really do upgrade into each other.
+
+**The conclusion survives, for the right reason:** the *tech* is the actor in an upgrade, so the edge (from, to, tech) is the
+unit of content, and a per-unit field would be a lossy projection of it. Also unchanged: the modding requirement, since
+reversing a line is a data edit either way.
 
 Measured (2026-11-04, `empires2_x2_p1.dat`): **1,389** units, **56** unnamed, **28** duplicated names (`BARRICADE` ×4,
 `BGAA` ×3, …), **223** upgrade edges, 43 bases with several variants (an age-up: normal), **40** roles the engine already uses

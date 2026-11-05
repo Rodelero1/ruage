@@ -14,16 +14,30 @@ parameters — starting availability and which unit it upgrades." Accepted as th
 | units with **no name** | **56** |
 | **duplicate names** | **28** (`BARRICADE` ×4, `BGAA` ×3, `THSWD`, `MPCAV`, `ARTCT`, `DOLP3`, `CARAV`, …) |
 | roles in `economy.toml` (the vocabulary the engine already uses) | **40**, every one naming a unit that exists, no two roles on one unit |
-| upgrade edges in the effect table (`[3, from, to]`) | **223** |
+| upgrade edges in the effect table (`[3, from, to]`, deduplicated) | **222** |
 | bases with several variants (an age-up: normal) | 43 |
-| **variants with more than one base** | **30** (e.g. the unit our roles call `pikeman` (358) is reached from 93 and from 358's own line) |
-| **cycles in the upgrade graph** | **3** (527, 528, 1104) |
+| units reached by several tiers **inside one effect** (a tech that skips a tier) | **22** |
+| units reached across **different effects** (a real fork) | **2** (`ARRG3` (10) from 102 and 133; `WALL3` (155) from two effects, both from `WALL2`) |
+| units on a **cycle** | **2** (`RMSHP` 527 and `SDGAL` 1104: the two fishing-ship effects upgrade each into the other) |
 | effect fields carrying a bare `unit = <id>` | 0 (units are referenced only through `commands`) |
 
 ## What the numbers change about the proposal
 
-I proposed a per-unit field, `upgrades_from = "militia"`. **The pack says no:** 30 units have two possible predecessors, and
-there are three cycles. A single field per unit cannot express a graph, and would silently pick one parent.
+I proposed a per-unit field, `upgrades_from = "militia"`. **My first reading of the pack said it could not work** — I
+counted "units with two predecessors" and reported 30. **That was wrong, and the owner caught it:** the halberdier (359) is
+reached from the spearman (93) *and* the pikeman (358), but **both edges live in effect 189, the Halberdier tech itself** —
+the dat lets one tech replace *every* earlier tier of a line, so a chain that skips a rung still ends where it should. The
+line is pikeman -> halberdier, exactly as a player knows it. Same shape for the hussar (441): effect 439 lists the scout and
+the light cavalry.
+
+Corrected by the inventory: **22** units have that same-effect fan-in (a tech skipping a tier), and only **2** are reached
+from genuinely different effects (`ARRG3`, and `WALL3` which is a duplicated edge from `WALL2` through two effects). So a
+per-unit field *could* express a line - it simply cannot express **the tech as the actor**, and cannot say which of two
+different effects performed an upgrade.
+
+**The edge model stands, for a better reason than I first gave:** in AoE2 the *tech* is what performs an upgrade ("Halberdier
+replaces spearman and pikeman"), so the tech is the edge's owner. A per-unit field would be a lossy projection of that -
+and the cycle (`RMSHP` <-> `SDGAL`, two effects, one each way) shows the relation is not a forest in principle.
 
 So the **edge** is the unit of content, exactly as AoE2 does it:
 
@@ -76,10 +90,10 @@ cycle printed, do not loop), and no assumption that the direction matches the da
 
 ## Risks, named
 
-- **A pack with a cycle** would hang `root`; the loader must refuse at load time with the cycle printed. Three exist in the
-  dat today, so the detector is not theoretical.
-- **A unit with two bases** makes "the family name" ambiguous — the engine must ask "is this an ancestor of that", not
-  "what is its root".
+- **A pack with a cycle** would hang `root`; the loader must refuse at load time with the cycle printed. One exists in the dat
+  today (the two fishing ships, `RMSHP` and `SDGAL`), so the detector is not theoretical.
+- **An upgrade performed by two different effects** (two units today) makes "the family root" ambiguous — the engine must ask
+  "is this an ancestor of that", not "what is its root".
 - **A missing name** (56 today) would leave a unit unreachable by any content rule; the generator must fail rather than emit
   an unnamed unit.
 - **The hash** moving is the migration's whole cost, and it must not be absorbed into an unrelated change.
