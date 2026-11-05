@@ -34,6 +34,7 @@ fn snapshot(entities: Vec<EntityView>) -> Snapshot {
     Snapshot {
         tick: 0,
         player: 1,
+        scale: 20_000,
         width: 32,
         height: 32,
         terrain: vec![false; 32 * 32],

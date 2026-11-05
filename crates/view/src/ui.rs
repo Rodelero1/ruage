@@ -161,10 +161,21 @@ impl Selection {
                         target: ruage_sim::EntityId(target.id),
                     });
                 }
-                (EntityKind::Unit, _) => orders.push(Command::Move {
-                    unit,
-                    to: (tile_x, tile_y),
-                }),
+                // **A point, not the tile's middle** (the owner, 2026-11-04: *"I don't want units to walk to the centre of
+                // the square. That can walk wherever not blocked."*). The click was projected to a continuous position and
+                // then rounded to a tile, so every order - however precisely aimed - finished at the centre of a square. The
+                // engine already carries this form (`Command::WalkTo`); only the view was throwing the point away.
+                (EntityKind::Unit, _) => {
+                    let point = camera.pick_point(pixel);
+                    let scale = snapshot.scale as f32;
+                    orders.push(Command::WalkTo {
+                        unit,
+                        to: (
+                            ruage_fixed::Fixed::from_raw((point.0 * scale) as i64),
+                            ruage_fixed::Fixed::from_raw((point.1 * scale) as i64),
+                        ),
+                    });
+                }
                 (EntityKind::Building, _) => orders.push(Command::Rally {
                     building: unit,
                     point: Some((tile_x, tile_y)),

@@ -2636,6 +2636,30 @@ rate (D16), a recording is a tick stream, and how fast a person watches is not p
 state. The fractional cases are carried by a thousandths accumulator, so 1.5x runs 1, 2, 1, 2 ticks and never drifts by a
 rounding rule applied per frame.
 
+## D118 - A click is a point, not the middle of a tile
+
+The owner, after D114 made a tile order end in the tile's *centre*:
+
+> "I don't want units to walk to the centre of the square. That can walk wherever not blocked."
+
+Right, and D114 only fixed half of it. A tile order used to end on a tile's **corner**; D114 moved that to the **centre**,
+which is a better corner but still not what a player clicked. The click is projected to a continuous world position, and the
+view threw it away: `Camera::pick_point` gave a position, `Camera::pick` rounded it to a tile, and the order carried the tile.
+
+**Now:** the ground click sends `Command::WalkTo { to: (Fixed, Fixed) }` - the point under the cursor - which the engine has
+carried all along (`start_walk` takes a point; the planner aims at points; `tile_of(point)` is the goal tile for the ground
+test). `Command::Move` (a tile) stays for scripts and the AI, where a *tile* is what the scenario means, and it keeps
+`tile_centre`: a script that says "tile 5,4" has to name a point somewhere, and the middle is the sane one.
+
+**`Snapshot` gained `scale`** to make the conversion honest: the engine's units-per-tile is the pack's parameter, and a
+hard-coded 20,000 in the view would be a second answer to a question the config already answers.
+
+**What does not change:** the ground rule. "Wherever not blocked" is the tile rule (D117): the point's tile must be walkable,
+and a click on a blocked tile still means "come as close as you can" - the planner's goal-tile exemption and the mover's
+standoff, both already in place.
+
+Review: `docs/reviews/2026-11-04-a-click-is-a-point.md`.
+
 ## D117 - Passage is a property of the ground, not of the body
 
 The owner's rule, given while I was three attempts into making the ground obey a body's radius:

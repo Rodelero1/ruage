@@ -93,6 +93,7 @@ fn things_are_painted_from_the_back_of_the_diamond_to_the_front() {
     let mut snapshot = Snapshot {
         tick: 0,
         player: 1,
+        scale: 20_000,
         width: 32,
         height: 32,
         terrain: vec![false; 32 * 32],
@@ -205,6 +206,7 @@ fn a_worker_behind_a_bush_is_not_hidden_by_it() {
     let snapshot = Snapshot {
         tick: 0,
         player: 1,
+        scale: 20_000,
         width: 32,
         height: 32,
         terrain: vec![false; 32 * 32],

@@ -136,6 +136,10 @@ pub struct EntityView {
 pub struct Snapshot {
     pub tick: u64,
     pub player: u8,
+    /// **Engine units per tile.** A click lands on a continuous world position, and turning it into the engine's
+    /// fixed-point needs the same scale the simulation uses - the view holds no copy of it otherwise, and a hard-coded
+    /// 20,000 here would be a second answer to a question the pack already answers.
+    pub scale: i64,
     pub width: u16,
     pub height: u16,
     pub terrain: Vec<bool>,
@@ -246,6 +250,7 @@ impl Snapshot {
         Snapshot {
             tick: world.tick(),
             player,
+            scale,
             width,
             height,
             terrain: map

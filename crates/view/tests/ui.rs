@@ -216,10 +216,22 @@ fn a_right_click_on_the_ground_is_a_move() {
     selection.ids = vec![villager.id];
 
     let orders = selection.order(&snapshot, &camera, (pixel.0 + 1, pixel.1 + 1));
-    assert!(
-        matches!(orders.first(), Some(Command::Move { to, .. }) if *to == (22, 22)),
-        "{orders:?}"
-    );
+    // **A point inside the clicked tile**, not the tile itself (the owner, 2026-11-04: units should walk wherever is not
+    // blocked, not to the middle of the square). The invariant this test owns is that the ground under the cursor is what
+    // the order names; that it is a *point* rather than a tile is `picking.rs`'s
+    // `a_right_click_orders_the_point_under_the_cursor`.
+    let scale = snapshot.scale;
+    match orders.first() {
+        Some(Command::WalkTo { to, .. }) => {
+            let tile = (to.0.raw().div_euclid(scale), to.1.raw().div_euclid(scale));
+            assert_eq!(
+                tile,
+                (i64::from(empty_tile.0), i64::from(empty_tile.1)),
+                "the order landed on tile {tile:?}, not the ground that was clicked"
+            );
+        }
+        other => panic!("a right click on open ground must order a walk: {other:?}"),
+    }
     for order in orders {
         world.submit_checked(order).expect("a move order");
     }

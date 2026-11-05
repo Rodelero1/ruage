@@ -11,6 +11,7 @@ fn snapshot() -> Snapshot {
     Snapshot {
         tick: 40,
         player: 1,
+        scale: 20_000,
         width: 32,
         height: 32,
         terrain: vec![false; 32 * 32],

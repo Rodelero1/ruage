@@ -19,6 +19,7 @@ fn snapshot(forest: &[(u16, u16)], entities: Vec<EntityView>) -> Snapshot {
     Snapshot {
         tick: 0,
         player: 1,
+        scale: 20_000,
         width: SIZE,
         height: SIZE,
         terrain,

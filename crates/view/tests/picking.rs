@@ -53,6 +53,7 @@ fn snapshot(entities: Vec<EntityView>) -> Snapshot {
     Snapshot {
         tick: 0,
         player: 1,
+        scale: 20_000,
         width: 32,
         height: 32,
         terrain: vec![false; 32 * 32],
@@ -265,5 +266,30 @@ fn an_own_unit_beats_an_enemy_on_the_same_tile() {
         selection.ids,
         vec![12],
         "the click took the enemy over the player's own unit"
+    );
+}
+
+/// **A right click is a point, not a tile** (the owner, 2026-11-04: *"I don't want units to walk to the centre of the
+/// square. That can walk wherever not blocked."*). The click projects to a continuous world position; rounding it to a tile
+/// and passing the *tile* threw that away, so every order - however precisely aimed - ended at the middle of a square.
+#[test]
+fn a_right_click_orders_the_point_under_the_cursor() {
+    let camera = camera();
+    let snapshot = snapshot(vec![unit(7, (9.0, 9.0))]);
+    let mut selection = ui::Selection::new();
+    selection.ids.push(7);
+
+    // A place inside a tile but nowhere near its middle.
+    let aimed = (12.35, 11.8);
+    let orders = selection.order(&snapshot, &camera, pixel(&camera, aimed));
+    let Some(ruage_sim::Command::WalkTo { to, .. }) = orders.first() else {
+        panic!("a click on open ground must order a point, not a tile: {orders:?}");
+    };
+    let (want_x, want_y) = (aimed.0 * 20_000.0, aimed.1 * 20_000.0);
+    assert!(
+        (to.0.raw() - want_x as i64).abs() < 600 && (to.1.raw() - want_y as i64).abs() < 600,
+        "the order went to ({}, {}) instead of the clicked point ({want_x}, {want_y})",
+        to.0.raw(),
+        to.1.raw()
     );
 }
