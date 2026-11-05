@@ -30,10 +30,21 @@ the dat lets one tech replace *every* earlier tier of a line, so a chain that sk
 line is pikeman -> halberdier, exactly as a player knows it. Same shape for the hussar (441): effect 439 lists the scout and
 the light cavalry.
 
-Corrected by the inventory: **22** units have that same-effect fan-in (a tech skipping a tier), and only **2** are reached
-from genuinely different effects (`ARRG3`, and `WALL3` which is a duplicated edge from `WALL2` through two effects). So a
-per-unit field *could* express a line - it simply cannot express **the tech as the actor**, and cannot say which of two
-different effects performed an upgrade.
+**And the owner corrected me a second time, correctly.** *"Halberdier replaces only pikeman and pikeman replaces only
+spearman."* Checking the tech tree rather than the effect table settles it: **tech 429 (effect 189, "Halberdier") requires
+tech 197**, which is the Pikeman tech (effect 190, `93 -> 358`). So by the time Halberdier can be researched, every spearman
+has already become a pikeman, and the `93 -> 359` command is **unreachable in play** - a safety net in the dat, not a rule.
+**The effective rule is the chain the owner stated**, with each tech replacing only its immediate predecessor.
+
+Corrected by the inventory: **22** units carry that same-effect fan-in - some of them safety nets of exactly this kind, pruned
+by a prerequisite - and only **2** are reached from genuinely different effects (`ARRG3`, and `WALL3` which is a duplicated
+edge from `WALL2` through two effects). So a per-unit field *could* express a line; what it cannot express is **the tech as
+the actor**, and it cannot say which of two different effects performed an upgrade.
+
+**Consequence for the schema, which is now sharper than either of my earlier readings:** keep the **edges** faithful to the
+dat (each `[[upgrade]]` names its tech), and derive *the line* from **edges plus prerequisites** - an edge whose `from` cannot
+be the player's unit when the tech lands is a safety net, not a rung. That derivation is what the AI's `lines.toml` and the
+panel should read, and it is a content computation, not an engine one.
 
 **The edge model stands, for a better reason than I first gave:** in AoE2 the *tech* is what performs an upgrade ("Halberdier
 replaces spearman and pikeman"), so the tech is the edge's owner. A per-unit field would be a lossy projection of that -
@@ -94,6 +105,8 @@ cycle printed, do not loop), and no assumption that the direction matches the da
   today (the two fishing ships, `RMSHP` and `SDGAL`), so the detector is not theoretical.
 - **An upgrade performed by two different effects** (two units today) makes "the family root" ambiguous — the engine must ask
   "is this an ancestor of that", not "what is its root".
+- **A redundant upgrade command** (the halberdier's spearman entry) reads as a rung if the edges are taken alone. The line must
+  be derived from **edges plus prerequisites**; taking the effect table at face value was my own error twice.
 - **A missing name** (56 today) would leave a unit unreachable by any content rule; the generator must fail rather than emit
   an unnamed unit.
 - **The hash** moving is the migration's whole cost, and it must not be absorbed into an unrelated change.
