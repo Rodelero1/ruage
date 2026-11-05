@@ -28,6 +28,33 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 17, 2026-11-04 - the unit vocabulary: plan written, inventory tool landed
+>
+> **The owner accepted the proposal** ("1 I accept the proposal. Proceed"), with the modding requirement attached: *"What if I
+> chose that scout cavalry will be upgrade of hussar, not the other way around?"*
+>
+> **Landed (no engine change):** `docs/unit-vocabulary.md` - the plan, phases and risks - and **`tools/vocabulary.py`**, the
+> inventory that every number in it is measured against (exits non-zero while the pack would block a name-keyed schema).
+>
+> **What the inventory changed about my own proposal, which is the point of writing it first:**
+>
+> - **A per-unit `upgrades_from` cannot express this pack.** **30** units have *two* possible predecessors, and the graph has
+>   **3 cycles** (527, 528, 1104). The unit of content is therefore the **edge**: `[[upgrade]] from`, `to`, and the `tech`
+>   that performs it - which is also the modding answer: reversing a line is a data edit, and the loader must *detect* a
+>   cycle rather than assume acyclic.
+> - **28 duplicate names**, **56 unnamed units** of 1,389 - so phase 2 is a generator change (names must be keys), not a
+>   hand edit of generated files.
+> - Roles are already clean: **40**, all naming real units, no two roles on one unit - the engine's rule vocabulary is in
+>   better shape than its keys.
+>
+> **Phases, each landable:** (1) inventory tool - *done*; (2) unique names for everything, in `tools/genconfig`;
+> (3) `[[upgrade]]` edges emitted from the 223 effect edges, with the cycle detector refusing the three; (4) `Entity.unit`
+> becomes a **pack key** (an index the loader assigns, so the tick still compares integers); (5) the hash migration, landed
+> alone and re-baselining the acceptance test in the same commit.
+>
+> **Do not start phase 2 in a session that is already long** - it touches the generator, the pack schema, every test that
+> names a unit, and the state hash.
+
 > # Session 16, 2026-11-04 - two vocabularies, one bug: the owner asks for units without dat ids
 >
 > **The report:** *"player trains champions in dark age and has hussar instead of scout cavalry"*. **It is a name bug, not a
