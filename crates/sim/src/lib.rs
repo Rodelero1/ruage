@@ -43,6 +43,28 @@ pub use short::short_range;
 /// The most routes one tick may re-plan because bodies are in the way (D98a). A **performance budget**, not a game
 /// value - the same kind of constant as `MAX_PLAYERS`' neighbour `max_entities`: a crowd in which every unit is blocked
 /// would otherwise buy one path search per unit per tick, and measurably turned a 40,000-tick fixture into minutes.
+/// **The finest scale a map of `tiles` can use before squared distances overflow `i64`** (D128). The arithmetic is
+/// `2 * ((tiles - 1) * scale)^2 <= i64::MAX`, solved for `scale` with integer square roots so the answer is exact.
+#[must_use]
+pub fn max_scale_for(tiles: u64) -> i64 {
+    let span = tiles.saturating_sub(1).max(1);
+    // scale^2 <= i64::MAX / 2 / span^2
+    let limit = (i64::MAX as i128) / 2 / (i128::from(span) * i128::from(span));
+    if limit <= 0 {
+        return 0;
+    }
+    // **Integer square root, no float**: `no_float` is right about this crate, and a float here would be the first one
+    // back into it since D9.
+    let mut root = integer_sqrt_i128(limit);
+    while (root + 1) * (root + 1) <= limit {
+        root += 1;
+    }
+    while root * root > limit {
+        root -= 1;
+    }
+    i64::try_from(root).unwrap_or(i64::MAX)
+}
+
 /// **How many times one route may be re-planned because its ground went stale** (D127). Two is enough for a house built across
 /// a lane and one more obstruction; more turns a hopeless goal into a search every tick.
 const MAX_GROUND_REPLANS: u8 = 2;
@@ -592,6 +614,13 @@ pub enum SimError {
         detail: String,
     },
     Overflow(EntityId),
+    /// **The pack's scale is too fine for its map** (D128): squared distances are computed in `i64`, and beyond this the
+    /// product would overflow - in debug a panic, in release a wrong distance and a wrong decision. Refused at load rather
+    /// than discovered in a match.
+    GeometryOverflow {
+        scale: i64,
+        tiles: u32,
+    },
     /// A config named a unit id the generated table does not contain.
     MissingUnit {
         id: u32,
@@ -824,6 +853,12 @@ impl std::fmt::Display for SimError {
                 id.0
             ),
             SimError::Overflow(id) => write!(f, "entity {} position overflowed i64", id.0),
+            SimError::GeometryOverflow { scale, tiles } => write!(
+                f,
+                "a {tiles}-tile map at scale {scale} overflows squared distances in i64; \\
+                 the largest scale that fits is {}",
+                max_scale_for(u64::from(*tiles))
+            ),
             SimError::MissingUnit { id } => write!(
                 f,
                 "unit {id} is not in the unit table; the config points at an id the data lacks"
@@ -1540,6 +1575,20 @@ fn reaches(here: (Fixed, Fixed), goal: (Fixed, Fixed), delta: i64) -> bool {
 
 /// The integer square root, for the one place that needs a distance rather than a squared distance: a
 /// shot's time of flight. Newton's method on integers, so it is exact and identical on every machine.
+/// Integer square root of a non-negative `i128`, by Newton's method: the largest `r` with `r * r <= value`.
+fn integer_sqrt_i128(value: i128) -> i128 {
+    if value <= 0 {
+        return 0;
+    }
+    let mut guess = value;
+    let mut next = (guess + 1) / 2;
+    while next < guess {
+        guess = next;
+        next = (guess + value / guess) / 2;
+    }
+    guess
+}
+
 fn integer_sqrt(value: i64) -> i64 {
     if value <= 0 {
         return 0;
@@ -1946,31 +1995,31 @@ impl World {
                 None => continue,
             };
             self.share_moved.insert(worker, self.tick);
-            if self
-                .find(worker)
-                .is_some_and(|entity| entity.carry.raw() > 0)
-            {
-                let task = self.find(worker).map(|entity| entity.task);
-                if let Some(Task::Gather {
+            // **One lookup, not four** (D128): this runs per villager per tick. The entity list does not change here, so the
+            // three scans the first version made were pure waste - and one of them was an `expect` that only a broken
+            // invariant could ever have triggered.
+            let Some(worker_entity) = self.find(worker) else {
+                continue;
+            };
+            let carrying = worker_entity.carry.raw() > 0;
+            let task = worker_entity.task;
+            if carrying
+                && let Task::Gather {
                     node: old,
                     rate_per_tick,
                     carry_cap,
                     ..
-                }) = task
-                    && let Some(returning) = self.return_task(
-                        self.find(worker).expect("the worker"),
-                        old,
-                        rate_per_tick,
-                        carry_cap,
-                    )
-                {
-                    if let Some(entity) = self.find_mut(worker) {
-                        entity.task = returning;
-                    }
-                    self.pending_gather.insert(worker, node);
-                    let _ = need;
-                    continue;
+                } = task
+                && let Some(worker_entity) = self.find(worker)
+                && let Some(returning) =
+                    self.return_task(worker_entity, old, rate_per_tick, carry_cap)
+            {
+                if let Some(entity) = self.find_mut(worker) {
+                    entity.task = returning;
                 }
+                self.pending_gather.insert(worker, node);
+                let _ = need;
+                continue;
             }
             if let Err(error) = self.start_gather(worker, node) {
                 self.share_failed.insert(node, self.tick);
@@ -2278,6 +2327,21 @@ impl World {
         economy: &Economy,
         units: &Units,
     ) -> Result<(), SimError> {
+        // **Refuse a pack whose geometry cannot be squared in i64** (D128). Every range and reach test in the tick is
+        // `dx * dx + dy * dy` on raw positions; at the shipped scale of 20,000 on a 64-tile map that is 3.2e12 against
+        // i64's 9.2e18, but a fine scale on a big map would overflow - debug panics, release computes a wrong distance and
+        // paths, shoots and collides on it. A load-time refusal turns that from a match-time mystery into a sentence.
+        let furthest = i64::from(map.width.max(map.height).saturating_sub(1)) * self.scale;
+        if furthest
+            .checked_mul(furthest)
+            .and_then(|dist| dist.checked_mul(2))
+            .is_none()
+        {
+            return Err(SimError::GeometryOverflow {
+                scale: self.scale,
+                tiles: u32::from(map.width.max(map.height)),
+            });
+        }
         self.units = Some(units.clone());
         self.economy = Some(economy.clone());
         // **How long a husk stays** (D122): content's seconds, in ticks. A pack with no `husk_seconds` (or no farms) keeps
@@ -6395,7 +6459,12 @@ impl World {
                 .map(|(_, value)| i32::from(*value))
                 .unwrap_or(0)
         };
-        let hundredths = |raw: i64| -> i32 { (raw * 100 / self.scale) as i32 };
+        // **`i128`, so the multiply cannot overflow before the divide** (D128): a card is drawn once per selection, and the
+        // exact answer costs nothing here.
+        let hundredths = |raw: i64| -> i32 {
+            let value = i128::from(raw) * 100 / i128::from(self.scale.max(1));
+            i32::try_from(value).unwrap_or(i32::MAX)
+        };
         let fractional = |value: ruage_data::MaybeFixed, key: &str| -> i32 {
             match value.resolve(self.scale, key) {
                 Ok(fixed) => hundredths(fixed.raw()),
@@ -8123,9 +8192,19 @@ impl World {
                         })?;
                         // Away from the target, along the line it already lies on: the point reflected
                         // through the attacker's own position.
+                        // **In `i128`, then clamped** (D128): `raw * 2` overflows i64 only for positions no map can hold,
+                        // but the clamp costs one comparison and makes the reflection total.
+                        let reflect = |here: i64, there: i64| -> Fixed {
+                            let point = i128::from(here) * 2 - i128::from(there);
+                            Fixed::from_raw(i64::try_from(point).unwrap_or(if point > 0 {
+                                i64::MAX
+                            } else {
+                                i64::MIN
+                            }))
+                        };
                         let away = (
-                            Fixed::from_raw(entity.position.0.raw() * 2 - victim.0.raw()),
-                            Fixed::from_raw(entity.position.1.raw() * 2 - victim.1.raw()),
+                            reflect(entity.position.0.raw(), victim.0.raw()),
+                            reflect(entity.position.1.raw(), victim.1.raw()),
                         );
                         let (dx, dy) = step_towards(entity.position, away, delta.raw());
                         (Fixed::from_raw(dx), Fixed::from_raw(dy))

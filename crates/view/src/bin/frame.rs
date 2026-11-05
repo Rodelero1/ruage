@@ -70,7 +70,12 @@ fn main() -> ExitCode {
         eprintln!("seeding: {err}");
         return ExitCode::FAILURE;
     }
-    world.load_resources(&resources).ok();
+    // **A bad pack is reported, not swallowed** (D128): a diagnostic that quietly plays a different game from the simulation
+    // is a picture that can look right while being wrong, which is the one thing a diagnostic must never do.
+    if let Err(err) = world.load_resources(&resources) {
+        eprintln!("resources: {err}");
+        return ExitCode::FAILURE;
+    }
     world.load_combat(&combat);
     // **The same tables the window loads.** A diagnostic that plays a different game from the window - no techs, so no
     // research on the card, no rules, so a village that never builds - is a picture that can look right while the window
@@ -119,7 +124,12 @@ fn main() -> ExitCode {
         // `job`: send him to work the nearest tree, so the panel can be looked at **while he works** and not only while he
         // walks - the job name is the thing this diagnostic exists to show (D121).
         let tree = if args.get(4).map(String::as_str) == Some("job") {
-            let at = world.position(villager).expect("the villager");
+            // A diagnostic must not die on a state it did not expect: if the villager went between selection and use, the
+            // `job` mode simply has nothing to show.
+            let Some(at) = world.position(villager) else {
+                eprintln!("selected unit {} is gone", villager.0);
+                return ExitCode::FAILURE;
+            };
             let wood = resources.slot_of("wood");
             world
                 .entities()

@@ -146,9 +146,11 @@ fn run(args: &[String]) -> Result<(), String> {
     world
         .seed_from(&map, &economy, &units)
         .map_err(|err| format!("{err}"))?;
+    // **A mismatch is an error, not a panic** (D128): every other load in this runner propagates, and a runner that dies on a
+    // pack it could have explained is a runner that hides the reason.
     world
         .load_resources(&resources)
-        .expect("the pack fits the stockpile");
+        .map_err(|err| format!("{err}"))?;
     // The share table is behaviour and travels with the personality (D94). A run with no scenario has no AI, and so
     // installs no shares - rather than reading a table from a file nothing consumes.
     if let Some(scenario) = &scenario {

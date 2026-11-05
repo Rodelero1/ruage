@@ -28,6 +28,32 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 28, 2026-11-05 - the external review, checked (D128)
+>
+> **The owner handed over a 141-line external static review and said "please scrutinize".** Fifteen findings, checked one by one
+> against the tree: **nine confirmed, two wrong in severity, four low-value.** Line numbers were accurate; the reviewer could not
+> compile anything and says so.
+>
+> **The two overstatements, with the arithmetic:** `raw * 2` needs a position above **4.6e18** (no map at a scale that fits
+> `i64` can hold one); squared distances overflow only above **scale 32,768 on a full 65,535-tile map**, and the shipped pack is
+> 64 tiles at 20,000 = **3.2e12** against `i64::MAX` **9.2e18**. Right in principle, not live.
+>
+> **Landed:** a **load-time refusal** for a pack whose geometry cannot be squared (`GeometryOverflow`, `max_scale_for`, tested
+> against the arithmetic itself); panics -> errors in `headless`, `batch` and `frame`; **one lookup instead of four** in the share
+> pass; `i128` for the reflection and the stat percentage.
+>
+> **Measured:** acceptance **13,520 -> 12,391 ms (-8.3%)** with the hash **unchanged** (`e4bdd521acaaf342`), which is what makes
+> the comparison a like-for-like - the same match, faster.
+>
+> **Deferred with reasons:** the `EntityId -> index` map (the real fix for the linear `find`, and a slice of its own);
+> `nearest_resource`'s A* per node - the review's best performance finding, needing the short-list treatment and a measurement;
+> the footprint-mask assert; the O(n²) RNG check.
+>
+> **What the review could not see** - behaviour, and it missed the three defects that running found this week (the O(n²) husk
+> pass, the stale-route freeze, the minimap seams). That is the case for this project's method, not a mark against its.
+>
+> **699 passed / 0 failed / 19 ignored**; clippy and fmt clean.
+
 > # Session 27, 2026-11-05 - a stale route is re-planned (D127)
 >
 > **The owner:** *"I still see scout bumping into trees and getting stuck. Can we learn something from

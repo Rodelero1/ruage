@@ -3137,3 +3137,23 @@ https://github.com/glouw/openempire?"*
    steering, which D9 forbids in the tick and which would let a body pass a gap D117 says is closed.
 4. **When the goal is truly unreachable** the unit stops after its two attempts and the engine records `NoPath`: searching every
    tick for an impossible target is the cost D98a's "past" rule was written to avoid.
+
+## D128 - The external review, checked: two severities wrong, five fixes landed
+
+*2026-11-05. The owner handed over an external static review and said "please scrutinize".*
+
+1. **Fifteen findings, checked one by one against the tree.** Nine confirmed, **two wrong in severity** (an `i64` overflow that
+   needs a position no map can hold, and a `raw * 100` whose raw is a unit stat, not a position), four confirmed but low-value.
+   The reviewer's line numbers were accurate; its method could not compile anything, and it says so.
+2. **The latent one is now impossible**: `seed_from` refuses a pack whose `2 * ((tiles - 1) * scale)^2` would not fit `i64`
+   (`SimError::GeometryOverflow`, `max_scale_for`). The shipped pack is **seven orders of magnitude** inside the limit; the guard
+   is for the mod that is not.
+3. **Panics became errors** in the three production binaries: a resource pack that does not fit is reported and exits non-zero,
+   and a diagnostic no longer dies on a vanished selection.
+4. **One lookup, not four**, in the share pass - per villager per tick; measured **-8.3%** on the acceptance match with the hash
+   unchanged, which is what makes the comparison honest.
+5. **`i128` where a multiply can overflow** before a divide, even where the bound is unreachable today: the cost is nothing and
+   the next caller may not be as lucky.
+6. **Deferred, with reasons**: the `EntityId -> index` map (the real fix for #6/#8, and a slice of its own), `nearest_like` and
+   `nearest_resource` (the review's best performance finding - short list first, reachability only on the head - and it needs a
+   measurement), the footprint-mask assert, and the O(n²) RNG duplicate check.

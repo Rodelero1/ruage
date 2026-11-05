@@ -173,7 +173,7 @@ fn run() -> Result<(), String> {
                 .map_err(|err| err.to_string())?;
             world
                 .load_resources(&resources)
-                .expect("the pack fits the stockpile");
+                .map_err(|err| err.to_string())?;
             world.apply_policy(&scenario.policy);
             if let Some(combat) = &combat {
                 world.load_combat(combat);
