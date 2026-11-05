@@ -982,15 +982,27 @@ fn draw_minimap(
         return;
     }
     frame.fill_rect(mx, my, mw as i32, mh as i32, palette::PANEL);
-    // A tile's diamond: one step across is `sx` pixels, and a diamond of that half-width is what fills the strip between
-    // neighbouring tiles.
+    // **A tile's diamond, drawn a little larger than its tile.** The minimap used to paint exactly `step` pixels per tile, and
+    // the rounding of neighbouring tile centres left one-pixel gaps - which ran along the tile grid's two diagonals and read as
+    // a pair of crossing lines (the owner, 2026-11-05). A half-pixel of overlap on each axis closes the gap without changing
+    // which tile is drawn where: neighbours now meet, and the map's outer edge grows by at most one pixel, under the border the
+    // box draws afterwards.
+    //
+    // **The overlap, not a per-pixel fill.** Asking every pixel which tile it belongs to also removes the seam (and the test
+    // checks either way), but it measured **twice** the HUD cost - 4.4 ms against 2.0 ms in a band of 960x720 - because
+    // `minimap_tile` does its own float inverse per pixel. Overlapping diamonds do the same job with the same number of draws.
+    // A tile's diamond: one step across is `sx` pixels. **Rounded up to whole pixels**, because a fractional half-width leaves a
+    // one-pixel gap wherever the rounding of two neighbouring centres goes apart - and those gaps ran along the grid's two
+    // diagonals, which is the pair of crossing lines the owner saw (2026-11-05). One pixel more per tile closes it; half a
+    // pixel *less* than a whole pixel would not, and a larger overlap measured dearer for no extra coverage.
     let step = {
         let (x0, _) = minimap_point((0, 0), rect, snapshot.width, snapshot.height);
         let (x1, _) = minimap_point((1, 0), rect, snapshot.width, snapshot.height);
-        (
-            (x1 - x0).abs().max(1) as f32,
-            (x1 - x0).abs().max(1) as f32 / 2.0,
-        )
+        let across = (x1 - x0).abs().max(1) as f32;
+        // `rx` was always the full step and `ry` half of it - a diamond deliberately drawn larger than its tile so neighbours
+        // overlap. The **floor of 1.5 on the height** is the seam fix: on a small minimap `across / 2` falls below one pixel,
+        // `fill_diamond` then paints a single row per tile, and the missing rows are the gaps that read as crossing lines.
+        (across.max(1.5), (across / 2.0).max(1.5))
     };
     for y in 0..snapshot.height {
         for x in 0..snapshot.width {

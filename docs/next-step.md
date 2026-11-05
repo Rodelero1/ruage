@@ -28,6 +28,27 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 26, 2026-11-05 - the minimap's crossing lines were seams (D126)
+>
+> **The owner:** *"Minimap has 2 crossing lines artifact."*
+>
+> **The cause, exactly:** the minimap painted one diamond per tile with `ry = step / 2`. On a 64-tile map in a ~230-pixel box the
+> step between tile centres is **1.82 px**, so `ry = 0.91` - under one pixel - and `fill_diamond` then draws **a single row** per
+> tile. Tile rows are 1.82 px apart, so about every other row was painted; the missing rows are the gaps, and they run along both
+> diagonals of the grid: the two crossing lines.
+>
+> **Fix:** `ry` floored at **1.5 px**. `rx` keeps the full step, as before, so for any minimap whose step is 3 px or more the
+> radii are identical and the work is unchanged.
+>
+> **Two fixes measured and rejected:** a per-pixel fill (correct, **4.4 ms** HUD band against 2.0 ms - `minimap_tile` is a float
+> inverse per pixel, 29k times) and a half-pixel overlap on every diamond (**+1.5 ms**: a third more pixels each, 4,096 tiles).
+>
+> **Measured by seam count, not by time:** **182 -> 0** panel-coloured pixels inside the map diamond, plus a second test at the
+> owner's own box size. No timing claim, because for the shipped map the work is identical and `frame_cost`'s difference method
+> swings between 746 and 1,847 us on the same binary.
+>
+> **694 passed / 0 failed / 19 ignored**; acceptance unchanged `4568cef16368bd5a`; clippy and fmt clean.
+
 > # Session 25, 2026-11-05 - the ring is a curve, not a diamond (D125b)
 >
 > **The owner, looking at the rendered frame:** *"I see a diamond, not elipse in the example"* - and he was right. D125 claimed an
