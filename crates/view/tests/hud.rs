@@ -249,6 +249,7 @@ fn row(hp_fraction: f32) -> ui::SelectedRow {
             work_rate: 100,
             carry: 10,
         }),
+        is_husk: false,
     }
 }
 
@@ -305,6 +306,54 @@ fn the_selection_card_paints_a_small_health_bar_and_no_wide_one() {
         // frame, measured at 316-355 us against 151-195).
         palette::PANEL,
         "and with nothing selected the row is the panel's own background"
+    );
+}
+
+/// **A husk is its farm with a cross over the pictogram** (the owner, 2026-11-05: *"husk can get the same pictogram as farm but
+/// crossed over"*). The card keeps the building's own square - the husk unit has no art yet - and the two diagonals are what
+/// says it is spent.
+#[test]
+fn a_husk_is_drawn_as_its_building_crossed_out() {
+    let snapshot = snapshot();
+    let mut frame = Frame::new(960, 720);
+    // The portrait: card origin + (4, 13), 30 pixels square, its frame one pixel wide. The origin is the **frame's**, not a
+    // guessed height: the panel sits against the bottom edge.
+    let (x, y) = ui::selection_row_origin(0, frame.height);
+    let (px, py) = (x + 4, y + 13);
+
+    let mut husk = row(1.0);
+    husk.is_husk = true;
+    ui::hud(
+        &mut frame,
+        &panel(&snapshot, vec![husk], None),
+        &snapshot,
+        ruage_view::Speed::One,
+    );
+    for step in [1, 8, 14, 27] {
+        assert_eq!(
+            frame.pixel((px + step) as u32, (py + step) as u32),
+            palette::REFUSED,
+            "the down-right diagonal is missing at {step}"
+        );
+        assert_eq!(
+            frame.pixel((px + 29 - step) as u32, (py + step) as u32),
+            palette::REFUSED,
+            "the down-left diagonal is missing at {step}"
+        );
+    }
+
+    // A working farm has no cross: the flag is the only difference.
+    let mut frame = Frame::new(960, 720);
+    ui::hud(
+        &mut frame,
+        &panel(&snapshot, vec![row(1.0)], None),
+        &snapshot,
+        ruage_view::Speed::One,
+    );
+    assert_ne!(
+        frame.pixel((px + 8) as u32, (py + 8) as u32),
+        palette::REFUSED,
+        "an ordinary building must not be crossed out"
     );
 }
 
@@ -645,6 +694,7 @@ fn node_row() -> ui::SelectedRow {
         garrison: 0,
         pending: 0,
         stats: None,
+        is_husk: false,
         pose: ruage_view::Pose::Idle,
     }
 }

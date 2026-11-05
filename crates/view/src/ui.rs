@@ -234,6 +234,10 @@ pub struct SelectedRow {
     /// **The numbers the card prints**: attack, both armours, range, speed, sight, work rate and carry capacity, effective
     /// for the owner. `None` for a resource node, which has no unit behind it.
     pub stats: Option<ruage_sim::UnitStats>,
+    /// **A spent farm**, drawn as its building with a cross over the pictogram (the owner, 2026-11-05: *"husk can get the same
+    /// pictogram as farm but crossed over"*). D122 decided when a farm becomes a husk; this decides how it looks until the
+    /// husk unit (357) has art of its own.
+    pub is_husk: bool,
 }
 
 /// The numbers a player watches: the stockpile, the population, and what is selected.
@@ -306,6 +310,7 @@ impl Hud {
                     pending: entity.pending,
                     pose: entity.pose,
                     stats: entity.stats,
+                    is_husk: entity.is_husk,
                 }
             })
             .collect();
@@ -727,6 +732,15 @@ fn draw_selection_card(
     frame.fill_rect(px, py + PORTRAIT - 1, PORTRAIT, 1, palette::MARK);
     frame.fill_rect(px, py, 1, PORTRAIT, palette::MARK);
     frame.fill_rect(px + PORTRAIT - 1, py, 1, PORTRAIT, palette::MARK);
+    // **A husk is its building with a cross over it** (the owner, 2026-11-05). The pictogram is still the farm's - the husk
+    // unit has no art yet - and the cross is what says *this one is spent*: two diagonals inside the frame, drawn a pixel at a
+    // time because there is no line primitive and a diagonal is not a rectangle.
+    if row.is_husk {
+        for step in 1..PORTRAIT - 1 {
+            frame.fill_rect(px + step, py + step, 1, 1, palette::REFUSED);
+            frame.fill_rect(px + PORTRAIT - 1 - step, py + step, 1, 1, palette::REFUSED);
+        }
+    }
     // The small health bar under the portrait, and `n/m` beneath it - the bar the owner kept, and the wide one that went.
     let (bx, by) = (px, py + PORTRAIT + 3);
     frame.fill_rect(bx, by, PORTRAIT, 4, palette::HP_TRACK);

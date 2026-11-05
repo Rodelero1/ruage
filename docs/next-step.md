@@ -28,6 +28,26 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 23, 2026-11-05 - the husk is drawn as its farm, crossed out (D124)
+>
+> **The owner:** *"As of now, husk can get the same pictogram as farm but crossed over."* The card of a spent farm now draws the
+> building's own square with **two diagonals** in the refusal colour, one pixel at a time - there is no line primitive and a
+> diagonal is not a rectangle.
+>
+> The chain is the one D122 built: `is_expired_farm_ref` (sim) -> `EntityView::is_husk` -> `SelectedRow::is_husk` -> the cross, so
+> the picture cannot disagree with the rule about what a husk is. The pictogram itself is still the empty framed square until the
+> husk unit (`FARM_`, 357) has art; the flag is what will tell the card which pictogram to reach for when it does.
+>
+> **689 passed / 0 failed / 19 ignored**; acceptance **unchanged** at `4568cef16368bd5a` (a drawing-only slice); clippy and fmt
+> clean.
+>
+> **Not measured, and said so in the review:** the tick (6.2 us) and the snapshot (95.3 us) are unaffected by construction - no
+> simulation code and no per-entity view work changed - and `hud_cost` selects a villager, so it would report the same number
+> with or without the cross. Running it to "confirm" would be measuring nothing.
+>
+> **Still ahead:** the farm **replaced by unit 357** on exhaustion, so the husk is the game's own unit rather than a flag on the
+> farm (evidence in D123); and the husk's art.
+
 > # Session 22, 2026-11-05 - the names were already there (D123)
 >
 > **The owner:** *"1 A. I may rename them later on. IIRC language DLL files should contain proper names. That way it was possible
