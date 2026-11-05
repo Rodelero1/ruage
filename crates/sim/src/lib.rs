@@ -43,6 +43,10 @@ pub use short::short_range;
 /// The most routes one tick may re-plan because bodies are in the way (D98a). A **performance budget**, not a game
 /// value - the same kind of constant as `MAX_PLAYERS`' neighbour `max_entities`: a crowd in which every unit is blocked
 /// would otherwise buy one path search per unit per tick, and measurably turned a 40,000-tick fixture into minutes.
+/// **How many times one route may be re-planned because its ground went stale** (D127). Two is enough for a house built across
+/// a lane and one more obstruction; more turns a hopeless goal into a search every tick.
+const MAX_GROUND_REPLANS: u8 = 2;
+
 /// A unit the budget leaves out simply waits this tick, which is what a blocked unit does anyway, and tries again next.
 const MAX_REPATHS_PER_TICK: usize = 4;
 
@@ -1193,7 +1197,9 @@ struct Rot {
 /// tile that body occupies. The blocked tile is the body's own, so it is not stored twice.
 struct Repath {
     unit: EntityId,
-    body: EntityId,
+    /// The body the route must now avoid, or `None` when the obstruction is **ground** - a stale route whose waypoints
+    /// have turned into blocked tiles (D127). Nothing is added to the avoid set in that case.
+    body: Option<EntityId>,
     goal: (u16, u16),
 }
 
@@ -1208,6 +1214,9 @@ struct Route {
     /// second obstruction on the same route is answered by refusing the step and re-planning, or a crowded base becomes
     /// villagers stepping aside for each other and never arriving.
     gave_way: bool,
+    /// How many times this route has been re-planned because its **ground** went stale. Capped: a route whose goal is buried
+    /// behind new walls would otherwise search again on every tick, which is the cost D98a's "past" rule exists to avoid.
+    stalls: u8,
 }
 
 /// What one tick of the movement pass carries between steps: the bodies that can be in the way, who has a step to take,
@@ -5672,7 +5681,8 @@ impl World {
         }
         let here = entity.position;
         let radius = self.body_radius(entity.unit);
-        let goal_tile = self.goal_of(entity).map(|(tile, _)| tile);
+        let goal = self.goal_of(entity);
+        let goal_tile = goal.map(|(tile, _)| tile);
         // **Ground first.** A step that lands on blocked ground, or cuts the corner of one, is not a step - the mover
         // slides along the axis that is clear, which is how it gets round a building instead of through it.
         if !self.step_is_walkable(here, (dx, dy), goal_tile) {
@@ -5682,6 +5692,21 @@ impl World {
                 }
                 if self.step_is_walkable(here, (sx, sy), goal_tile) {
                     return (sx, sy);
+                }
+            }
+            // **Ground, not a body** (D127). No slide means the route's next waypoint is now blocked - a house was built
+            // across it, or the unit was nudged off the line the geometry planned through. Standing still was the old answer,
+            // and it was for ever: nothing re-examined the route, so the unit pushed at the wall for the rest of the match
+            // (the owner: *"I still see scout bumping into trees and getting stuck"*). `openempire` re-plans every 25 cycles
+            // whether or not it can name the reason; this asks for one, at most twice per route.
+            if let Some((goal_tile, _)) = goal {
+                let stalls = self.paths.get(&id).map_or(0, |route| route.stalls);
+                if stalls < MAX_GROUND_REPLANS && pass.repaths.len() < MAX_REPATHS_PER_TICK {
+                    pass.repaths.push(Repath {
+                        unit: id,
+                        body: None,
+                        goal: goal_tile,
+                    });
                 }
             }
             return (Fixed::ZERO, Fixed::ZERO);
@@ -5698,7 +5723,6 @@ impl World {
         if Self::order_target(entity) == Some(other) {
             return stop;
         }
-        let goal = self.goal_of(entity);
         if let Some((goal_tile, true)) = goal
             && self.tile_of(other_at) == goal_tile
         {
@@ -5791,7 +5815,7 @@ impl World {
             if !near_goal && !known && pass.repaths.len() < MAX_REPATHS_PER_TICK {
                 pass.repaths.push(Repath {
                     unit: id,
-                    body: other,
+                    body: Some(other),
                     goal: goal_tile,
                 });
             }
@@ -9136,7 +9160,7 @@ impl World {
         if !pass.repaths.is_empty() {
             for Repath {
                 unit: id,
-                body: other,
+                body,
                 goal,
             } in pass.repaths
             {
@@ -9149,7 +9173,9 @@ impl World {
                     .get(&id)
                     .map(|route| route.avoiding.clone())
                     .unwrap_or_default();
-                avoiding.insert(other);
+                if let Some(other) = body {
+                    avoiding.insert(other);
+                }
                 let obstacles: BTreeSet<(u16, u16)> = avoiding
                     .iter()
                     .filter_map(|other| {
@@ -9180,12 +9206,19 @@ impl World {
                 };
                 match planned {
                     Some(points) => {
+                        // A ground stall spends one of the route's two re-plans; a body repath leaves the count alone.
+                        let stalls = if body.is_none() {
+                            self.paths.get(&id).map_or(0, |route| route.stalls) + 1
+                        } else {
+                            self.paths.get(&id).map_or(0, |route| route.stalls)
+                        };
                         self.paths.insert(
                             id,
                             Route {
                                 points,
                                 avoiding,
                                 gave_way,
+                                stalls,
                             },
                         );
                         self.repath_count += 1;
@@ -9194,7 +9227,7 @@ impl World {
                         // The body joins the route's avoid set even though the search failed - the original's list is
                         // filled *before* the repath, and this is why it matters: without it the same hopeless search
                         // is re-run every tick, at four whole-map explorations a tick in a crowded fight.
-                        if let Some(route) = self.paths.get_mut(&id) {
+                        if let (Some(route), Some(other)) = (self.paths.get_mut(&id), body) {
                             route.avoiding.insert(other);
                         }
                         // A reaction the engine gives itself has no caller: its refusal goes into state, where the
@@ -10418,6 +10451,13 @@ impl World {
             for (x, y) in &route.points {
                 fnv_bytes(&mut hash, &x.raw().to_le_bytes());
                 fnv_bytes(&mut hash, &y.raw().to_le_bytes());
+            }
+            // A route's stall count decides **whether it may be re-planned again**, so it is state: two runs that disagree
+            // about it diverge the moment an obstruction appears (D127). Written only when non-zero, so a world that never
+            // stalls hashes as it did before this existed.
+            if route.stalls != 0 {
+                fnv_bytes(&mut hash, b"stalls");
+                fnv_bytes(&mut hash, &[route.stalls]);
             }
             // The bodies a route is planned around decide where the unit goes next, so they are state. Written only
             // when non-empty, so a world that never collides hashes exactly as one written before D98a.

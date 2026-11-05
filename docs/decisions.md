@@ -3120,3 +3120,20 @@ be centered on the center of the base of the unit." Answers: **selected units on
 5. **Buildings keep their footprint ring.** A farm's radius is 1.5, which would draw a ring *inside* its own walls; a building's
    body is its footprint, so the old rule stays for buildings and the new one applies to units.
 6. **Selected only**, so the game does not spend draw calls on units nobody is looking at.
+
+## D127 - A route whose ground goes stale is re-planned, at most twice
+
+*2026-11-05. The owner: "I still see scout bumping into trees and getting stuck. Can we learn something from
+https://github.com/glouw/openempire?"*
+
+1. **The gap**: `collide` re-planned when a **body** blocked a step, and did nothing when **ground** did - it slid on one axis if
+   it could, and otherwise returned zero, for ever.
+2. **The fix**: a ground refusal asks for a re-plan of the route, **capped at two** per route (`MAX_GROUND_REPLANS`), through the
+   same per-tick budget the body repaths use. The count lives on the route, is part of the state hash, and only a ground re-plan
+   spends one.
+3. **From `openempire`**: the principle that a route must be re-examined rather than walked into. Its implementation - re-plan
+   every 25 cycles for every unit, in ten slices, plus boid wall-push - is recorded in `docs/sources.md` and **not** copied: the
+   timer is a search per unit per 25 ticks (unmeasured here, and more work than a stall check), and the wall push is float
+   steering, which D9 forbids in the tick and which would let a body pass a gap D117 says is closed.
+4. **When the goal is truly unreachable** the unit stops after its two attempts and the engine records `NoPath`: searching every
+   tick for an impossible target is the cost D98a's "past" rule was written to avoid.

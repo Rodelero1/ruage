@@ -28,6 +28,31 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 27, 2026-11-05 - a stale route is re-planned (D127)
+>
+> **The owner:** *"I still see scout bumping into trees and getting stuck. Can we learn something from
+> https://github.com/glouw/openempire?"*
+>
+> **The gap, precisely:** `collide` re-planned when a **body** blocked a step and did nothing when **ground** did - slide on one
+> axis if possible, otherwise stand still, for ever. A route goes stale for ground reasons constantly: a house built across it, a
+> nudge off the line, a pulled corner clipping a tree.
+>
+> **The fix:** a ground refusal asks for a re-plan, **at most twice per route** (`MAX_GROUND_REPLANS`), through the existing
+> per-tick budget; the count is on the route and in the state hash. Test: a villager walking a clear lane with a house dropped
+> across it twenty ticks in - it stopped at `(659850, 810000)` for 2,400 ticks before, and arrives now.
+>
+> **From `openempire` (`src/Units.c`)**, notes in `docs/sources.md`: it re-plans **every path every 25 cycles**
+> (`CONFIG_UNIT_PATHING_TIMEOUT_CYCLES`), ten slices a tick, unconditionally - no reason needed - and its boid layer adds a
+> **wall push** that slides units off obstacles. Copied: the principle. Not copied: the timer (a search per unit per 25 ticks,
+> more work than a stall check) and the wall push (float steering, forbidden in the tick by D9, and it would let a body through a
+> gap D117 closes).
+>
+> **Cost, measured:** 36,000-tick match, three runs each: **11,944 ms -> 13,520 ms (+13%)**, with 154 -> 152 entities and
+> **211 -> 237 repaths** - the match now goes further because stuck villagers arrive. Hash `4568cef16368bd5a` ->
+> `e4bdd521acaaf342`, still a win.
+>
+> **696 passed / 0 failed / 19 ignored**; clippy and fmt clean.
+
 > # Session 26, 2026-11-05 - the minimap's crossing lines were seams (D126)
 >
 > **The owner:** *"Minimap has 2 crossing lines artifact."*

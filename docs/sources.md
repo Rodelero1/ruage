@@ -139,3 +139,37 @@ pickers; four entries are worth keeping on the watch list, in order of expected 
 
 **Not useful yet:** unit-counter charts, civ pickers, replay packers, tournament boards. Recorded here so the
 next session does not re-read the list looking for the same things.
+
+## Prior art: `glouw/openempire` — the mover that never gets stuck
+
+`openempire` is an open-source Age of Empires 1 in C. Its movement layer (`src/Units.c`, 1,749 lines) is the closest thing to
+the layer this project's M1-M3 work has been building, and it answers the "unit bumps into a tree and stops" problem in a way
+that is worth copying and worth contrasting.
+
+**What it does**
+
+1. **A straight line when the line is clear, A\* otherwise.** `FindPath` asks `Unit_HasDirectPath` first and only falls back to
+   `Field_PathAStar`. One search per order, not per tick.
+2. **Every unit with a path re-plans every 25 cycles** (`CONFIG_UNIT_PATHING_TIMEOUT_CYCLES`), spread over ten slices a tick
+   (`CONFIG_UNITS_REPATH_SLICE_SIZE`) so no frame pays for the whole army. The comment in `Repath` is the whole idea:
+   *"DOES NOT NEED TO BE THREADED - GIVES A MORE NATURAL FEEL TO HAVE THE PATHER REPATH IN TIME SLICES."*
+3. **Steering, not just waypoints**: `CalculateBoidStressors` sums three pushes - alignment with neighbours, separation from
+   neighbours, and **wall push** (`WallPushBoids`, which reads the grid's blocked tiles and repels the unit from them). A unit
+   that walks into a wall is pushed sideways by the wall itself, so it slides off obstacles without a special case.
+4. **A stressor deadzone** (`CONFIG_UNITS_STRESSOR_DEADZONE` 10): pushes below it are ignored, so a unit does not jitter on a
+   crowd of one.
+5. **Recovery is a first-class path**: `Units_FreeAllPathsForRecovery` drops every path and marks each unit
+   `must_repath_with_recover`, because *"PATHS ARE NOT TRANSFERRED OVER THE WIRE"*.
+
+**What it costs, and where this project differs**
+
+- The re-plan is **unconditional** - it does not detect that a unit is stuck, it simply looks again on a timer. That is robust
+  against reasons nobody predicted, at the price of a search every 25 cycles per unit (sliced).
+- Its steering is **continuous and float-based**; this engine's mover is integer-only (D9), so a wall-push would have to be
+  expressed in fixed point and would interact with the tile-passage rule (D117) - a push that shoves a body through a gap the
+  tiles say is closed is exactly what D117 forbids.
+
+**What this project took (D127)**: the *principle* that a route must be re-examined rather than walked into, done cheaply and
+deterministically - a ground refusal asks for **at most two** re-plans per route, and the count is part of the state hash.
+**What it did not take**: the 25-cycle unconditional re-plan (a search per unit per 25 ticks is affordable but there is no
+measurement yet that it buys anything the stall check misses) and boid steering (floats, and a different passage model).
