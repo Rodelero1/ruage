@@ -28,6 +28,29 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 19, 2026-11-04 - a villager is called a Forager (D121)
+>
+> **The owner chose the key** for the job words: **A**, the target's **role name** in `economy.toml`. Landed as a superset of
+> that, and the reason is in the data: the reference pack has **40 roles and none of them is a tree, a bush or a mine** - they
+> cover buildings, animals and soldiers - so a role-only key would have left the woodcutter, the forager-by-bush and both miners
+> with no name. `config/jobs.toml` therefore accepts **`target`** (a role: `farm` -> Farmer, `sheep` -> Shepherd, `deer` ->
+> Hunter) **or `column`** (a resource: `wood` -> Lumberjack, `food` -> Forager, `gold`/`stone` -> their miners); a role is
+> checked first so a pack that later adds a `tree` role overrides the column entry without moving anything; an entry with
+> neither key is refused at load, because a rule that can never match is a rule the author meant to be a rule.
+>
+> **The engine says which target, content says the word.** `World::work_target(id)` -> the target's role and column; `Jobs::
+> name_for(role, column)` -> the word; `ruage_view::label_for(job, role, fallback)` -> one precedence rule used by the window
+> and the diagnostic picture alike.
+>
+> **Verified end to end, not asserted:** the diagnostic binary prints what it called the thing it drew (a 7-pixel font cannot
+> be read back reliably). Tick 400, the villager the AI put on berries: `selected 2 is "Forager"`. Tick 60, before any work:
+> `selected 2 is "villager"`. Both the job path and the fallback, from the real pack.
+>
+> **Process error, reported:** the loader and the accessor were written before their tests in this slice, which is not the order
+> D7 asks for; the tests were written immediately after and do catch regressions, but the rule was still skipped once.
+>
+> **680 passed / 0 failed / 19 ignored.**
+
 > # Session 18, 2026-11-04 - a card in the bottom bar (D120)
 >
 > **The owner:** *"let's add a functionality where unit stats are shown in the bottom central part. the big long health bar can

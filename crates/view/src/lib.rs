@@ -993,6 +993,15 @@ pub(crate) fn player_colour(player: u8) -> [u8; 4] {
 /// Draw a snapshot. Everything on the ground is a **diamond** - the game's own 2:1 isometric grid - a building is
 /// a diamond as big as its pack footprint, a unit is a dot in its player's colour, and nothing here knows what a
 /// unit *is* beyond its kind, its player and the space it takes up (D55).
+/// **What to call one selected thing** (D121), in one place so the window and the diagnostic picture cannot disagree.
+///
+/// A worker gets the **job** content names for what he is working on (`"Forager"`); otherwise the pack's **role** for the
+/// unit (`"villager"`); otherwise what the row already says, which for a resource node is its column (`"wood"`).
+#[must_use]
+pub fn label_for(job: Option<String>, role: Option<String>, fallback: String) -> String {
+    job.or(role).unwrap_or(fallback)
+}
+
 pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
     let mut frame = Frame::new(camera.viewport.0, camera.viewport.1);
     let (rx, ry) = camera.radii();

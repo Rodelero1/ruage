@@ -116,10 +116,35 @@ fn main() -> ExitCode {
         .find(|entity| entity.player == player && entity.kind == EntityKind::Unit)
         .map(|entity| entity.id)
     {
-        world.submit(Command::Move {
-            unit: villager,
-            to: (24, 20),
-        });
+        // `job`: send him to work the nearest tree, so the panel can be looked at **while he works** and not only while he
+        // walks - the job name is the thing this diagnostic exists to show (D121).
+        let tree = if args.get(4).map(String::as_str) == Some("job") {
+            let at = world.position(villager).expect("the villager");
+            let wood = resources.slot_of("wood");
+            world
+                .entities()
+                .iter()
+                .filter(|entity| matches!(entity.kind, EntityKind::Resource(slot) if Some(slot) == wood))
+                .min_by_key(|entity| {
+                    let dx = entity.position.0.raw() - at.0.raw();
+                    let dy = entity.position.1.raw() - at.1.raw();
+                    (dx / 1000) * (dx / 1000) + (dy / 1000) * (dy / 1000)
+                })
+                .map(|entity| entity.id)
+        } else {
+            None
+        };
+        match tree {
+            Some(node) => {
+                world.submit(Command::Gather { villager, node });
+            }
+            None => {
+                world.submit(Command::Move {
+                    unit: villager,
+                    to: (24, 20),
+                });
+            }
+        }
     }
     for _ in 0..ticks {
         if let Err(err) = world.step() {
@@ -205,12 +230,25 @@ fn main() -> ExitCode {
     let mut hud = ui::Hud::of_selected(&snapshot, &resources, &selected);
     // **The pack names what is selected**, exactly as the window does: a diagnostic that shows an empty name is a
     // diagnostic that hides the bug it was built to show.
+    let jobs = ruage_data::load_jobs_file(&config.join("jobs.toml")).unwrap_or_default();
     for row in &mut hud.selected {
-        if let Some(unit) = row.unit {
-            row.name = world
-                .role_name(unit)
-                .unwrap_or_else(|| format!("unit {unit}"));
-        }
+        // **The job first** (D121), exactly as the window does it, so the picture cannot disagree with the game.
+        let job = world
+            .work_target(ruage_sim::EntityId(row.id))
+            .and_then(|target| {
+                let column = target.column.and_then(|slot| resources.name(slot));
+                jobs.name_for(target.role.as_deref(), column)
+                    .map(str::to_owned)
+            });
+        let role = row.unit.and_then(|unit| world.role_name(unit));
+        let fallback = if row.unit.is_some() {
+            format!("unit {}", row.unit.unwrap_or(0))
+        } else {
+            "resource".to_owned()
+        };
+        row.name = ruage_view::label_for(job, role, fallback);
+        // A picture cannot be read back here, so the diagnostic says out loud what it called the thing it drew.
+        eprintln!("selected {} is \"{}\"", row.id, row.name);
     }
     hud.view = Some(camera.visible_corners());
     ui::hud(&mut frame, &hud, &snapshot, ruage_view::Speed::One);

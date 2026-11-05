@@ -1,0 +1,50 @@
+# What a villager is called while he is working
+#
+# The owner's ask (2026-11-04): *"For Villager: renamed to match the task he is doing and show stats and carried resources"* -
+# a villager on berries is a **Forager**, on a farm a **Farmer**, on a sheep a **Shepherd**. The engine knows the *task*; the
+# words are content, so they live here (D17) and a mod renames every one of them without touching code.
+#
+# **Two keys, because one does not cover the ground.** A target that `economy.toml` gives a role is named by that role
+# (`target = "farm"`). A tree, a bush and a mine have no role in the reference pack - its 40 roles cover buildings, animals and
+# soldiers - so those are named by the **column** the target holds (`column = "wood"`). A role is checked first, so a pack that
+# adds a role for trees overrides the column entry without moving anything.
+#
+# **A villager doing nothing is a Villager**: no entry matches, and the card falls back to the pack's own name for the unit.
+
+schema = 1
+
+# --- where a role names the target ---------------------------------------------------------------------------------------
+
+[[job]]
+target = "farm"
+name = "Farmer"
+
+[[job]]
+target = "sheep"
+name = "Shepherd"
+
+[[job]]
+target = "deer"
+name = "Hunter"
+
+[[job]]
+target = "wild_boar"
+name = "Hunter"
+
+# --- where only the column names it --------------------------------------------------------------------------------------
+
+[[job]]
+column = "food"
+name = "Forager"
+
+[[job]]
+column = "wood"
+name = "Lumberjack"
+
+[[job]]
+column = "gold"
+name = "Gold Miner"
+
+[[job]]
+column = "stone"
+name = "Stone Miner"

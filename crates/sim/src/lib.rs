@@ -1229,6 +1229,17 @@ struct Passing<'a> {
 /// Fractional quantities are integer **hundredths** - a speed of 96 is 0.96 tiles a second, a range of 400 is four tiles -
 /// so no float crosses this boundary. Attack and armour are hundredths too, for one shape rather than two. Hit points and
 /// capacity are counts, because that is what they are.
+/// **What a worker's target is**, for the panel's job name (D121): the pack's role for it, and the resource column it
+/// holds. Either may be absent - a tree has a column and no role, a building site has neither - and the content decides
+/// which word that means.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkTarget {
+    /// The target's role name in the pack's economy table (`"farm"`, `"sheep"`), when it has one.
+    pub role: Option<String>,
+    /// The resource column the target holds, when it holds one.
+    pub column: Option<usize>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnitStats {
     pub max_hp: i32,
@@ -6358,6 +6369,25 @@ impl World {
             los: fractional(unit.los, "los"),
             work_rate: fractional(unit.work_rate, "work_rate"),
             carry: i32::from(unit.carry),
+        })
+    }
+
+    /// **What a worker is working on** (D121), as the panel needs it: the target's **role name** when the pack gives it one
+    /// (`"farm"`, `"sheep"`) and the **resource column** the target holds when it holds one. The words are content's;
+    /// this is the engine's answer to *which* target, and nothing here knows that a woodcutter is called a Lumberjack.
+    ///
+    /// `None` when the unit is not working on anything - idle, walking, fighting - and then the caller keeps the pack's own
+    /// name for the unit, which is what a villager with nothing to do is.
+    pub fn work_target(&self, id: EntityId) -> Option<WorkTarget> {
+        let entity = self.entity(id)?;
+        let target = match entity.task {
+            Task::Gather { node, .. } | Task::Return { node, .. } => node,
+            _ => return None,
+        };
+        let target_entity = self.entity(target)?;
+        Some(WorkTarget {
+            role: target_entity.unit.and_then(|unit| self.role_name(unit)),
+            column: self.held_slot(target),
         })
     }
 

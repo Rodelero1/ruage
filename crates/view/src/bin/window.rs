@@ -33,6 +33,8 @@ struct Config {
     units: Units,
     combat: ruage_data::Combat,
     resources: ruage_data::Resources,
+    /// **What a working villager is called** (D121), from `jobs.toml`: content's words, not the engine's.
+    jobs: ruage_data::Jobs,
     // A window that plays the pack but installs no behaviour shows villagers standing on a berry bush: the content
     // policy only *reallocates* villagers, and without the rules nothing trains or builds. So the view loads what the
     // headless runner loads - research, civs and the scenario - rather than a subset that looks alive.
@@ -66,6 +68,9 @@ fn load(config: &Path) -> Result<Config, String> {
         scenario: load_scenario_file(&config.join("acceptance.toml"))
             .map_err(|err| format!("acceptance.toml: {err}"))?,
         resources,
+        // An absent file is a pack without job names: every worker keeps his unit's role, which is what the panel said
+        // before this table existed.
+        jobs: ruage_data::load_jobs_file(&config.join("jobs.toml")).unwrap_or_default(),
     })
 }
 
@@ -568,13 +573,27 @@ impl App {
         // **The pack names what is selected.** The view has no vocabulary of its own (D17): the window asks the
         // simulation, which holds the economy's `[role]` table.
         for row in &mut hud.selected {
-            if let Some(unit) = row.unit {
-                row.name = world
-                    .role_name(unit)
-                    .unwrap_or_else(|| format!("unit {unit}"));
+            // **The job first** (D121): a villager on berries is a Forager, on a farm a Farmer, and the words come from
+            // `jobs.toml` - content names the job, the engine only says which target he is working on. With no job, the
+            // pack's role for the unit; with no role, the row's own word (a node's column).
+            let job = world
+                .work_target(ruage_sim::EntityId(row.id))
+                .and_then(|target| {
+                    let column = target
+                        .column
+                        .and_then(|slot| self.config.resources.name(slot));
+                    self.config
+                        .jobs
+                        .name_for(target.role.as_deref(), column)
+                        .map(str::to_owned)
+                });
+            let role = row.unit.and_then(|unit| world.role_name(unit));
+            let fallback = if row.unit.is_some() {
+                format!("unit {}", row.unit.unwrap_or(0))
             } else {
-                row.name = "resource".to_owned();
-            }
+                "resource".to_owned()
+            };
+            row.name = ruage_view::label_for(job, role, fallback);
         }
         // A refusal stays on the panel for three seconds of match time: long enough to read, short enough that it does not
         // become furniture.

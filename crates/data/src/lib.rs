@@ -18,6 +18,7 @@ mod civs;
 mod combat;
 mod cost;
 mod economy;
+mod jobs;
 mod map;
 mod overrides;
 mod pack;
@@ -33,6 +34,7 @@ pub use economy::{
     Build, Decay, Economy, Farm, Footprint, Gather, Policy, Population, ShareRow, Start,
     load_economy_file, load_economy_str,
 };
+pub use jobs::{JobDef, Jobs, load_jobs_file, load_jobs_str};
 pub use map::{Map, ResourceNode, Terrain, TownCentre, load_map_file, load_map_str};
 pub use overrides::{Overrides, load_overrides_file, load_overrides_str};
 pub use pack::{ContentPack, PACK_FILES, pack_path};

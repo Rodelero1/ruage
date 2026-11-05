@@ -308,6 +308,31 @@ fn the_selection_card_paints_a_small_health_bar_and_no_wide_one() {
     );
 }
 
+/// **What to call a selected thing** (D121): the job content names first, then the pack's role, then whatever the row
+/// already said. The order is the whole rule, so it is asserted once, here, rather than rediscovered in two binaries.
+#[test]
+fn a_job_beats_a_role_and_a_role_beats_nothing() {
+    assert_eq!(
+        ruage_view::label_for(
+            Some("Forager".to_owned()),
+            Some("villager".to_owned()),
+            "villager".to_owned()
+        ),
+        "Forager",
+        "a villager on berries is a Forager"
+    );
+    assert_eq!(
+        ruage_view::label_for(None, Some("villager".to_owned()), "villager".to_owned()),
+        "villager",
+        "with no job, the pack's role is the name"
+    );
+    assert_eq!(
+        ruage_view::label_for(None, None, "wood".to_owned()),
+        "wood",
+        "a node keeps its column's word"
+    );
+}
+
 /// **The minimap is drawn where `minimap_rect` says, and it is a diamond.** The owner asked for the interface to be turned
 /// like the map (2026-11-04), so the middle of the box is map and its four corners are not: the panel shows through where the
 /// diamond does not reach.

@@ -3028,3 +3028,19 @@ kept (4A), attack + both armours + range (5A), job names from content (2A).*
    silhouette would read as content the pack does not have.
 6. **The job names are not in this step.** They need the pack to say what a *target* implies (a berry bush is a Forager, a farm
    is a Farmer), and that is a content question with its own answer - the follow-up slice.
+
+## D121 - A working villager is named by his job, and the words are content
+
+*2026-11-04. The owner: "For Villager: renamed to match the task he is doing and show stats and carried resources - see
+latest.png". Asked how the pack should key the words, he chose **the target's role name** (option A).*
+
+1. **The engine says which target; content says the word.** `World::work_target(id)` returns the target's **role name**
+   (`"farm"`, `"sheep"`) and the **resource column** it holds. `config/jobs.toml` maps those to `"Farmer"`, `"Shepherd"`,
+   `"Forager"`. Nothing in `crates/` knows that a woodcutter is called a Lumberjack.
+2. **A column key exists because a role key could not cover the ground.** The reference pack's 40 roles cover buildings,
+   animals and soldiers but **no tree, bush or mine** - so `target = "tree"` would never match and a woodcutter would have no
+   name. The loader therefore accepts `target` (a role) or `column` (a resource), refuses an entry with neither, and a role
+   wins when both match, so a pack that adds roles for its trees overrides the column entry without moving anything.
+3. **No match means no job, and the unit keeps the pack's own name** - a villager doing nothing is a Villager.
+4. **One rule, one place.** `ruage_view::label_for(job, role, fallback)` is asserted once and used by the window and the
+   diagnostic picture, so the game and the picture cannot disagree about what a thing is called.
