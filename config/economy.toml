@@ -25,6 +25,11 @@ use_villager_rate = false
 # While true, the farmer variant's own work_rate is ignored in favour of `rate` above.
 # Flip to true to test the 0.530 reading without editing any code.
 
+# **How far a second farmer will look for a free plot** (the owner, 2026-11-04: *"2 C if there is no empty farm nearby,
+# villager becomes idle"* - **nearby**, not anywhere on the map). Tiles, from the villager's own feet. A plot beyond this is
+# not "nearby": the villager stands idle instead of walking half the map to a field the player did not mean to send him to.
+free_farm_radius = 12
+
 [farm.depletion]
 food_per_farm = 250
 # **How long an empty farm stays as a husk** (the owner, 2026-11-04: *"vanishing takes some time, husk first ... Husk is

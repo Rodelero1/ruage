@@ -6960,8 +6960,11 @@ impl World {
             let empty: Vec<EntityId> = self
                 .entities
                 .iter()
+                // **One pass, no lookups.** The first version asked `is_expired_farm(id)` per entity, which does a linear
+                // `find` for an entity the loop already holds - O(n^2) every fourth tick, and it showed: the tick went
+                // 5.9 -> 7.4 us (+23%) when this pass landed. The check here is on the entity in hand.
                 .filter(|entity| {
-                    !self.husks.contains_key(&entity.id) && self.is_expired_farm(entity.id)
+                    !self.husks.contains_key(&entity.id) && self.is_expired_farm_ref(entity)
                 })
                 .map(|entity| entity.id)
                 .collect();
@@ -6997,6 +7000,14 @@ impl World {
         player: u8,
         exclude: EntityId,
     ) -> Option<EntityId> {
+        // **"Nearby", in the owner's word** - content's radius, in tiles. A plot across the map is not offered: the villager
+        // stands idle instead, which is the answer the owner gave.
+        let radius = self
+            .economy
+            .as_ref()
+            .map_or(0, |economy| i64::from(economy.farm.free_farm_radius))
+            * self.scale;
+        let limit = radius.saturating_mul(radius);
         let mut best: Option<(i64, EntityId)> = None;
         for entity in &self.entities {
             if entity.id == exclude || entity.player != player || !self.is_farm_role(entity) {
@@ -7014,6 +7025,9 @@ impl World {
             let dx = entity.position.0.raw() - from.0.raw();
             let dy = entity.position.1.raw() - from.1.raw();
             let distance = dx * dx + dy * dy;
+            if distance > limit {
+                continue;
+            }
             if best.is_none_or(|(closest, _)| distance < closest) {
                 best = Some((distance, entity.id));
             }
@@ -7118,13 +7132,15 @@ impl World {
     /// knows that a building with nothing left in it and no construction in progress is not in the way.
     #[must_use]
     pub fn is_expired_farm(&self, id: EntityId) -> bool {
-        let Some(entity) = self.find(id) else {
-            return false;
-        };
-        if !self.is_farm_role(entity) {
-            return false;
-        }
-        entity.construction.is_none() && entity.amount.raw() <= 0
+        self.find(id)
+            .is_some_and(|entity| self.is_expired_farm_ref(entity))
+    }
+
+    /// The same answer for an entity the caller **already holds** - the snapshot asks it once per entity per frame, and asking
+    /// by id there was a linear `find` per entity, which is O(n^2) on the frame path.
+    #[must_use]
+    pub fn is_expired_farm_ref(&self, entity: &Entity) -> bool {
+        self.is_farm_role(entity) && entity.construction.is_none() && entity.amount.raw() <= 0
     }
 
     /// Is this entity a farm, by the role content calls `[farm] unit`? By family, so an upgraded farm counts.

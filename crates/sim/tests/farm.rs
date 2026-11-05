@@ -177,6 +177,119 @@ fn a_second_farmer_with_no_free_farm_becomes_idle() {
     );
 }
 
+/// **"Nearby" means nearby** (the owner's word). A free farm on the other side of the map is not offered to a second farmer:
+/// he stands idle, which is what "2 C" says, rather than walking 40 tiles to a field nobody sent him to.
+#[test]
+fn a_free_farm_far_away_does_not_take_the_second_farmer() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let (x, y) = clear_ground(&world);
+    let here = a_farm(&mut world, (x, y), 50);
+    // A free plot far from the working one: beyond `[farm] free_farm_radius`.
+    let far = a_farm(&mut world, (x + 40, y), 50);
+    let first = a_villager(&mut world, (x, y + 3));
+    let second = a_villager(&mut world, (x + 1, y + 3));
+
+    world
+        .submit_checked(Command::Gather {
+            villager: first,
+            node: here,
+        })
+        .expect("the first farmer takes the near farm");
+    world
+        .submit_checked(Command::Gather {
+            villager: second,
+            node: here,
+        })
+        .expect("the order is taken");
+    world.step().expect("stepping");
+
+    assert_eq!(working_on(&world, first), Some(here));
+    assert_ne!(
+        working_on(&world, second),
+        Some(far),
+        "a plot 40 tiles away is not nearby: the villager idles instead"
+    );
+    assert_eq!(
+        world.entity(second).map(|entity| entity.task),
+        Some(Task::Idle),
+        "with no free farm nearby, the second villager is idle"
+    );
+}
+
+/// **Both orders in the same tick**, which is what a box selection sends: the second must not slip in before the first has a
+/// task. This is the case a check that runs only "when the order is applied" can miss, so it is tested separately.
+#[test]
+fn two_orders_in_one_tick_still_take_two_farms() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let (x, y) = clear_ground(&world);
+    let a = a_farm(&mut world, (x, y), 50);
+    let b = a_farm(&mut world, (x + 3, y), 50);
+    let first = a_villager(&mut world, (x, y + 3));
+    let second = a_villager(&mut world, (x + 1, y + 3));
+
+    // Both submitted before any tick runs.
+    world
+        .submit_checked(Command::Gather {
+            villager: first,
+            node: a,
+        })
+        .expect("first order");
+    world
+        .submit_checked(Command::Gather {
+            villager: second,
+            node: a,
+        })
+        .expect("second order, same tick");
+    world.step().expect("stepping");
+
+    let one = working_on(&world, first);
+    let two = working_on(&world, second);
+    assert_eq!(one, Some(a), "the first keeps the farm he named");
+    assert_eq!(
+        two,
+        Some(b),
+        "and the second gets the other plot, not the same one"
+    );
+}
+
+/// **A villager whose farm turns into a husk and then vanishes is not left holding a dead id.** He takes the last load home,
+/// the husk's while passes, and the entity goes: the villager must end up doing something - idle or at another node - rather
+/// than standing with a task that names a thing which no longer exists.
+#[test]
+fn a_villager_survives_his_farm_vanishing() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let (x, y) = clear_ground(&world);
+    let farm = a_farm(&mut world, (x, y), 1);
+    let farmer = a_villager(&mut world, (x, y + 3));
+    world
+        .submit_checked(Command::Gather {
+            villager: farmer,
+            node: farm,
+        })
+        .expect("a farm with one unit of food");
+
+    // Past the husk's whole life and well beyond: the entity is gone, and the villager has had time to settle.
+    for _ in 0..30 * 40 + 1200 {
+        world.step().expect("stepping");
+    }
+    assert!(world.entity(farm).is_none(), "the husk is gone");
+    let task = world.entity(farmer).map(|entity| entity.task);
+    assert!(
+        !matches!(task, Some(Task::Gather { node, .. }) if node == farm),
+        "the villager still holds the vanished farm as his node: {task:?}"
+    );
+    assert!(
+        world.entity(farmer).is_some(),
+        "and he is still on the map, not removed with the husk"
+    );
+}
+
 #[test]
 fn an_emptied_farm_leaves_a_husk_that_nothing_blocks_and_then_goes() {
     let Some(mut world) = fresh() else {

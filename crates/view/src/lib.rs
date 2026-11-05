@@ -187,6 +187,11 @@ impl Snapshot {
         // it per tile - which this used to do - scans every entity per tile.
         let remembered_ground = world.explored_mask(player);
 
+        // **One card's numbers per (owner, unit), not per entity.** `stats_of` clones the unit's attack and armour lists and
+        // resolves four fractional values through their decimal text; asking it once per entity per frame did that 128 times
+        // a frame for a handful of distinct units. A snapshot that lasted a frame cannot contain a change to them anyway.
+        let mut stats_cache: std::collections::BTreeMap<(u8, u32), Option<ruage_sim::UnitStats>> =
+            std::collections::BTreeMap::new();
         let mut entities = Vec::new();
         for entity in world.entities() {
             // A player is not shown what they cannot see: that is the only filter here, and it is the simulation's
@@ -233,10 +238,12 @@ impl Snapshot {
                 pending: world.pending_orders(entity.id),
                 // **The owner's own numbers**, resolved by the simulation: a pack's unit table is not the view's to read,
                 // and an enemy's card must show what *their* research produced, not the viewer's (D112).
-                stats: entity
-                    .unit
-                    .and_then(|unit| world.stats_of(entity.player, unit)),
-                is_husk: world.is_expired_farm(entity.id),
+                stats: entity.unit.and_then(|unit| {
+                    *stats_cache
+                        .entry((entity.player, unit))
+                        .or_insert_with(|| world.stats_of(entity.player, unit))
+                }),
+                is_husk: world.is_expired_farm_ref(entity),
                 footprint: entity
                     .unit
                     .and_then(|unit| world.footprint_of(unit))

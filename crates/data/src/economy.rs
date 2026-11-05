@@ -212,6 +212,9 @@ pub struct Farm {
     /// first ... It obstructs nothing as if it was not there"*). A husk is a picture with a lifetime: it blocks nothing, holds
     /// nothing and cannot be worked, and after this long it is removed. Content, so a mod can change it.
     pub husk_seconds: u32,
+    /// **How far a second farmer looks for a free plot**, in tiles (the owner: *"if there is no empty farm nearby, villager
+    /// becomes idle"*). Beyond this a free farm is not "nearby" and the villager stands.
+    pub free_farm_radius: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -471,6 +474,8 @@ struct RawFarm {
     rate: f64,
     use_villager_rate: bool,
     depletion: RawDepletion,
+    #[serde(default = "default_free_farm_radius")]
+    free_farm_radius: u32,
     #[serde(default)]
     unit: Option<String>,
     #[serde(default)]
@@ -490,6 +495,10 @@ struct RawDepletion {
 
 fn default_husk_seconds() -> u32 {
     30
+}
+
+fn default_free_farm_radius() -> u32 {
+    12
 }
 
 #[derive(Deserialize)]
@@ -900,6 +909,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             resource: raw.farm.resource,
             food_resource: raw.farm.food_resource,
             husk_seconds: raw.farm.depletion.husk_seconds,
+            free_farm_radius: raw.farm.free_farm_radius,
         },
         gather: Gather {
             rate_from: raw.gather.rate_from,

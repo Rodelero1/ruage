@@ -28,6 +28,36 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 21, 2026-11-05 - the adversarial review that found five things
+>
+> **The owner:** *"Please do complete adversarial review on performance and stability"* over D120 (the card), D121 (job names)
+> and D122 (farms). Attack pass, not summary: **five defects, four fixed here, one a rule the owner had stated and the code had
+> not.**
+>
+> 1. **"Nearby" was never implemented** - the second farmer was sent to the nearest free farm *anywhere*. Now `[farm]
+>    free_farm_radius = 12` (content) and a test with the only free plot 40 tiles away, where he stands.
+> 2. **The husk pass was O(n^2)**: `is_expired_farm(entity.id)` does a linear `find`, per entity, every fourth tick. Measured
+>    **step 5.9 -> 7.4 us (+23%)**; fixed to test the entity in hand, back to **6.0-6.2 us**.
+> 3. **The snapshot was O(n^2) too**, and re-derived every card per entity (cloning attack/armour lists, resolving fractions
+>    through decimal text). Fixed: entity-based husk test plus a per-`(owner, unit)` cache. **Snapshot 111.4 -> 95.3 us
+>    (-14.4%)** - cheaper than before the card existed.
+> 4. **A husk removed under a live task**: tested that the villager is not removed with it and does not keep the dead node.
+> 5. **Two orders in one tick** (a box selection): tested, two plots, never one crop shared.
+>
+> **My own correction:** the D122 review blamed the whole +14% match time on "the match doing more work". Half right - the match
+> *is* bigger (154 vs 148 entities, 211 vs 124 repaths), **and** the pass cost +1.4 us a tick. The microbenchmark separated
+> what the wall clock could not.
+>
+> **New tool:** `crates/view/examples/step_cost.rs` - times `World::step` and `Snapshot::of` separately, so a slice that touches
+> either can be priced rather than described. `crates/view/examples/hud_cost.rs` does the same for the HUD.
+>
+> **Still open, named:** `nearest_free_farm` is O(entities) per redirected order; `is_farm_role` costs a role lookup per entity
+> in the husk pass (a cached farm-unit set would remove it); the husk has no art; and no test replays a match across a husk's
+> expiry - the replay suite should own that.
+>
+> **688 passed / 0 failed / 19 ignored**; clippy and fmt clean; acceptance hash **unchanged at `4568cef16368bd5a`** (the radius
+> did not change this match, which is worth knowing before assuming a correctness fix is behaviourally free).
+
 > # Session 20, 2026-11-04 - one farmer a farm, and a husk that goes (D122)
 >
 > **The owner:** *"Only 1 farmer per farm (can be constructed by multiple, but only 1 can farm once construction is finished).
