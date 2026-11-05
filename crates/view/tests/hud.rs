@@ -22,6 +22,7 @@ fn snapshot() -> Snapshot {
         age: None,
         visible: vec![u64::MAX; 16],
         explored: vec![u64::MAX; 16],
+        ring_scale: 1.5,
         entities: Vec::new(),
     }
 }
@@ -792,6 +793,7 @@ fn the_hud_reads_a_nodes_column_and_holdings() {
         pending: 0,
         stats: None,
         is_husk: false,
+        radius: 0.2,
         remembered: false,
         footprint: (1, 1),
         shape: ruage_view::Silhouette::Dot,

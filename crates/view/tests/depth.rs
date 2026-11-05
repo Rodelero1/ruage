@@ -74,6 +74,7 @@ fn entity(id: u32, kind: EntityKind, at: (f32, f32), footprint: (u32, u32)) -> E
         pending: 0,
         stats: None,
         is_husk: false,
+        radius: 0.2,
         remembered: false,
         footprint,
         shape: ruage_view::Silhouette::Square,
@@ -106,6 +107,7 @@ fn things_are_painted_from_the_back_of_the_diamond_to_the_front() {
         age: None,
         visible: vec![u64::MAX; 16],
         explored: vec![u64::MAX; 16],
+        ring_scale: 1.5,
         entities: vec![
             in_front.clone(),
             building.clone(),
@@ -219,6 +221,7 @@ fn a_worker_behind_a_bush_is_not_hidden_by_it() {
         age: None,
         visible: vec![u64::MAX; 16],
         explored: vec![u64::MAX; 16],
+        ring_scale: 1.5,
         entities: vec![worker.clone(), bush.clone()],
     };
     let order = ruage_view::draw_order(&snapshot);

@@ -4,6 +4,16 @@
 
 schema = 1
 
+[ring]
+# **How much larger than their body the selection ring is drawn** (owner, 2026-11-05: *"Units have around legs a circle ... Sizes
+# of the circles should be parameters of units (in config only, not shown in unit details)"*), with the answers: selected units
+# only, the pack's `radius` times a factor, drawn as an ellipse on the ground plane.
+#
+# The ring is `radius * scale` in tiles, so 1.5 draws a villager's ring 0.3 tiles across - around the feet rather than through
+# them, while the collision number (0.2) stays the one that decides standoff (D117). Set 1.0 to make the ring *be* the collision
+# circle exactly.
+scale = 1.5
+
 [farm]
 # Which building is a farm, and what working it yields: both are content, because the engine has no
 # idea what a farm is. A farm is the one building worth gathering from.

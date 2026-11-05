@@ -123,6 +123,9 @@ pub struct EntityView {
     /// and cannot be worked - but a villager clicked onto it plants a new farm there, which is the one thing it is *for*. The
     /// engine decides what a husk is; the view only asks.
     pub is_husk: bool,
+    /// **The body's own circle, in tiles** - the pack's `radius`, the number that decides body-to-body standoff (D117) and now
+    /// the size of the ring drawn under a selected unit (D125). The view never invents it: the simulation answers.
+    pub radius: f32,
     /// Whether this entity is **remembered** rather than watched: its ground is explored, nothing of the player's can
     /// see it now, and it is still in the picture because a building the player has seen does not disappear. Units are
     /// never remembered - an army does not leave a photograph behind - and the renderer dims what is remembered, because
@@ -162,6 +165,9 @@ pub struct Snapshot {
     /// Fog: one bit per tile, row-major, of what the player has ever seen.
     pub explored: Vec<u64>,
     pub entities: Vec<EntityView>,
+    /// **How much larger than the body the selection ring is drawn** (D125, the owner's `k`): `radius * ring_scale`. Content,
+    /// because a ring that matches the collision circle exactly reads as cutting through the feet.
+    pub ring_scale: f32,
 }
 
 impl Snapshot {
@@ -244,6 +250,7 @@ impl Snapshot {
                         .or_insert_with(|| world.stats_of(entity.player, unit))
                 }),
                 is_husk: world.is_expired_farm_ref(entity),
+                radius: world.body_radius_of(entity.id) as f32 / scale as f32,
                 footprint: entity
                     .unit
                     .and_then(|unit| world.footprint_of(unit))
@@ -286,6 +293,7 @@ impl Snapshot {
             visible: world.visible_mask(player),
             explored,
             entities,
+            ring_scale: world.ring_scale_percent() as f32 / 100.0,
         }
     }
 
@@ -345,7 +353,8 @@ impl Camera {
     }
 
     /// Half a tile's width and height in pixels: the diamond's radii.
-    fn radii(&self) -> (f32, f32) {
+    #[must_use]
+    pub fn radii(&self) -> (f32, f32) {
         (self.scale() / 2.0, self.scale() / 4.0)
     }
 
@@ -1173,14 +1182,28 @@ pub fn draw_highlights(
         if !highlights.selected.contains(&entity.id) {
             continue;
         }
-        let (across, down) = entity.footprint;
-        let anchor = (
-            entity.position.0.floor() as i32,
-            entity.position.1.floor() as i32,
-        );
-        let (min_x, min_y, max_x, max_y) = footprint_tiles(anchor, entity.footprint);
-        let centre = camera.project(((min_x + max_x) as f32 / 2.0, (min_y + max_y) as f32 / 2.0));
-        let half = (rx * across as f32 * 0.9, ry * down as f32 * 0.9);
+        // **A unit's ring is its own body's**, not its footprint's (owner, 2026-11-05: *"Units have around legs a circle.
+        // Smaller units have smaller circle ... bigger units have bigger circle"*). The pack's radius is the number the
+        // simulation uses for standoff, so the ring the player sees is the ring that decides spacing - times content's
+        // `ring_scale`, because a ring drawn exactly on the collision circle cuts through the sprite's feet.
+        //
+        // A **building** keeps the footprint ring it had: its body *is* its footprint, and a farm's 1.5 radius would draw a
+        // ring inside its own walls.
+        let (centre, half) = if entity.kind == EntityKind::Unit {
+            let centre = camera.project(entity.position);
+            let scale = entity.radius.max(0.0) * snapshot.ring_scale;
+            (centre, (rx * scale, ry * scale))
+        } else {
+            let (across, down) = entity.footprint;
+            let anchor = (
+                entity.position.0.floor() as i32,
+                entity.position.1.floor() as i32,
+            );
+            let (min_x, min_y, max_x, max_y) = footprint_tiles(anchor, entity.footprint);
+            let centre =
+                camera.project(((min_x + max_x) as f32 / 2.0, (min_y + max_y) as f32 / 2.0));
+            (centre, (rx * across as f32 * 0.9, ry * down as f32 * 0.9))
+        };
         frame.outline_diamond(centre, half, palette::SELECTION);
         // A health bar above the top vertex, green for what is left and red for what is gone.
         let bar_width = (rx * 0.6).max(8.0) as i32;

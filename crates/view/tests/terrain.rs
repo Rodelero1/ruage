@@ -30,6 +30,7 @@ fn snapshot(forest: &[(u16, u16)], entities: Vec<EntityView>) -> Snapshot {
         age: None,
         visible: vec![u64::MAX; (usize::from(SIZE) * usize::from(SIZE)).div_ceil(64)],
         explored: vec![u64::MAX; (usize::from(SIZE) * usize::from(SIZE)).div_ceil(64)],
+        ring_scale: 1.5,
         entities,
     }
 }
@@ -52,6 +53,7 @@ fn node(id: u32, at: (f32, f32), amount: u32) -> EntityView {
         pending: 0,
         stats: None,
         is_husk: false,
+        radius: 0.2,
         remembered: false,
         footprint: (1, 1),
         shape: ruage_view::Silhouette::Square,

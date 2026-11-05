@@ -6333,6 +6333,16 @@ impl World {
 
     /// The most health this unit could have for this player, after every research that grants it. Public
     /// because a HUD and a health bar both need it, and both are outside the simulation (D55).
+    /// **How much larger than the body the selection ring is drawn** (D125), from content. View-side only: nothing in the tick
+    /// reads it, so it cannot desync anything.
+    /// The same number in **hundredths**, so no float enters the simulation (D9's `no_float` guard is the reason).
+    #[must_use]
+    pub fn ring_scale_percent(&self) -> i32 {
+        self.economy
+            .as_ref()
+            .map_or(150, |economy| economy.ring.scale_percent)
+    }
+
     pub fn max_hp_of(&self, player: u8, unit: u32) -> Option<i32> {
         self.max_hp(player, unit).ok()
     }

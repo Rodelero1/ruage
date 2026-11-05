@@ -25,6 +25,7 @@ fn unit(id: u32, at: (f32, f32), hp_fraction: f32) -> EntityView {
         pending: 0,
         stats: None,
         is_husk: false,
+        radius: 0.2,
         remembered: false,
         footprint: (1, 1),
         shape: ruage_view::Silhouette::Square,
@@ -47,6 +48,7 @@ fn snapshot(entities: Vec<EntityView>) -> Snapshot {
         age: None,
         visible: vec![u64::MAX; 16],
         explored: vec![u64::MAX; 16],
+        ring_scale: 1.5,
         entities,
     }
 }

@@ -3096,3 +3096,27 @@ files? It must be somewhere there."*
 5. **"Nearby" has no constant in the original files.** The AI constants carry `sn-lumber-camp-max-distance` and
    `sn-mining-camp-max-distance` (both commented out) and `sn-camp-max-distance`; **nothing for farms**. `free_farm_radius = 12`
    is ours, and the review records why.
+
+## D125 - A selected unit wears a ring the size of its own body
+
+*2026-11-05. The owner: "Now I would like to proceed with circle enveloping the units ... Units have around legs a circle.
+Smaller units have smaller circle (infantry, villagers...) and bigger units have bigger circle (cavalry, elephants, siege
+units, ships...). Sizes of the circles should be parameters of units (in config only, not shown in unit details). They should
+be centered on the center of the base of the unit." Answers: **selected units only**, **the pack's radius times a factor**
+(`k = 1.5`), **an ellipse on the ground plane**.*
+
+1. **The size is the pack's `radius`, which already exists** - 0.2 for a villager or any infantryman, 0.25 for cavalry, 0.5 for
+   siege and ships, 1.0-2.0 for buildings. Before this, every selected thing wore a ring the size of its **footprint**, and a
+   unit's footprint is one tile: a villager, a knight and a trebuchet all wore the same 0.9-tile diamond.
+2. **The ring is `radius * k`, with `k` in content** (`[ring] scale = 1.5` in `economy.toml`). Exactly the collision radius
+   would draw the ring through the sprite's feet; `k = 1.0` still means "the ring *is* the collision circle", which is why the
+   knob exists rather than a hard-coded fudge.
+3. **`k` crosses the boundary as hundredths** (`ring_scale_percent`, 150) because a float in the simulation is a desync
+   (D9). The `no_float` guard caught my first version, which returned `f32` from a `World` method - the guard was right and the
+   accessor now answers an `i32`.
+4. **An ellipse, not a screen circle**: the ring is a diamond outline under the isometric projection, which is what a ground
+   circle looks like in this view. Measured on a rendered frame at 960x720: a villager's ring is **29 px wide and 15 px tall**,
+   the 2:1 squash of the projection.
+5. **Buildings keep their footprint ring.** A farm's radius is 1.5, which would draw a ring *inside* its own walls; a building's
+   body is its footprint, so the old rule stays for buildings and the new one applies to units.
+6. **Selected only**, so the game does not spend draw calls on units nobody is looking at.

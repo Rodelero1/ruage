@@ -68,6 +68,8 @@ impl Footprint {
 
 #[derive(Debug, Clone)]
 pub struct Economy {
+    /// **How much larger than their body a unit's selection ring is drawn** (D125). View-side only: no tick reads it.
+    pub ring: Ring,
     /// Which buildings may create which units. Authored (see `config/economy.toml`): the dat
     /// carries unit costs and create times but not the building-to-unit edge we read.
     pub train: Train,
@@ -217,6 +219,14 @@ pub struct Farm {
     pub free_farm_radius: u32,
 }
 
+/// The selection ring's scale, as content (D125).
+#[derive(Debug, Clone, Copy)]
+pub struct Ring {
+    /// `radius * scale`, **in hundredths** - 150 is one and a half - so the number that crosses into the simulation is an
+    /// integer. The `no_float` guard is right: a float in the tick is a desync waiting for a different CPU (D9).
+    pub scale_percent: i32,
+}
+
 #[derive(Debug, Clone)]
 pub struct Gather {
     pub rate_from: String,
@@ -327,6 +337,8 @@ struct RawFootprint {
 #[serde(deny_unknown_fields)]
 struct RawEconomy {
     schema: u32,
+    #[serde(default)]
+    ring: RawRing,
     farm: RawFarm,
     gather: RawGather,
     train: RawTrain,
@@ -482,6 +494,25 @@ struct RawFarm {
     resource: Option<String>,
     #[serde(default)]
     food_resource: Option<u32>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRing {
+    #[serde(default = "default_ring_scale")]
+    scale: f64,
+}
+
+fn default_ring_scale() -> f64 {
+    1.5
+}
+
+impl Default for RawRing {
+    fn default() -> Self {
+        RawRing {
+            scale: default_ring_scale(),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -901,6 +932,9 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
 
     Ok(Economy {
         schema: raw.schema,
+        ring: Ring {
+            scale_percent: (raw.ring.scale * 100.0).round() as i32,
+        },
         farm: Farm {
             rate: MaybeFixed::from_f64(raw.farm.rate),
             use_villager_rate: raw.farm.use_villager_rate,

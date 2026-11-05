@@ -28,6 +28,29 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 24, 2026-11-05 - a ring the size of the body (D125)
+>
+> **The owner:** *"circle enveloping the units ... Smaller units have smaller circle ... bigger units have bigger circle ...
+> centered on the center of the base of the unit"*, then the answers: **selected only**, **the pack's radius times `k`**
+> (chosen `k = 1.5`), **an ellipse on the ground plane**.
+>
+> **Landed:** a selected **unit** wears a ring of `radius * ring_scale` tiles centred on its feet, drawn as a diamond outline
+> (a ground circle under the isometric projection). The size was already in the pack - 0.2 infantry/villager, 0.25 cavalry,
+> 0.3 some archers, 0.5 siege/ships - and it is the same number the simulation uses for standoff (D117). `k` is content:
+> `[ring] scale = 1.5`; `1.0` makes the ring *be* the collision circle.
+>
+> **Buildings keep their footprint ring** - a farm's radius is 1.5 and would draw a ring inside its own walls.
+>
+> **`no_float` caught my first accessor** (`World::ring_scale() -> f32`); it now answers `ring_scale_percent() -> i32`, and the
+> guard is green. That is the rule doing its job on a *display* value, which is the case most likely to slip through.
+>
+> **One of my measurements was wrong, again a measurement and not the code:** `ring_width` counted the longest horizontal run
+> of ring pixels; an outlined diamond has two pixels on its widest row, so it read 7 px for every unit and "proved" a bug that
+> was not there. It measures the extent between the leftmost and rightmost ring pixel now.
+>
+> **692 passed / 0 failed / 19 ignored**; acceptance unchanged `4568cef16368bd5a`; frame 7,972 µs at 960x720 / 128 entities,
+> HUD band 2,336 µs - unchanged in kind, because the ring is still one outline per selected unit.
+
 > # Session 23, 2026-11-05 - the husk is drawn as its farm, crossed out (D124)
 >
 > **The owner:** *"As of now, husk can get the same pictogram as farm but crossed over."* The card of a spent farm now draws the
