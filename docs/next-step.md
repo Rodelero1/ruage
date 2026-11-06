@@ -28,6 +28,22 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 35, 2026-11-07 - the second review's loader block, and the split
+>
+> **Two things, both pushed.** (1) **D136**: `lib.rs` split, three slices - `world/movement.rs` (369), `world/memory.rs` (280),
+> `world/gather.rs` (357); `lib.rs` **11,073 -> 10,103**; the acceptance hash `f328ebc8d4d34b78` identical after every slice,
+> which is the proof that a move changed nothing. Remaining files: `orders`, `production`, `combat`, `state`, `selection`;
+> then stage 2, cutting `step` (1,559 lines) into phases. (2) **the second review's loader block**: 41 findings against
+> `crates/data/src/` given a verdict each - **17 confirmed, 15 confirmed but low, 3 partly, 2 fixed tonight, 4 refuted** -
+> in `docs/reviews/2026-11-07-second-review-the-rest.md`. The best find is one defect in three hats: the economy loader
+> never checks that the role and resource names it copies into its tables exist.
+>
+> **Still to read from that review**: sim 63, tests 59 (10 already settled), config 26, other 16.
+>
+> **Open questions for the owner** (asked with no deadline, in the review's last section): loader strictness for wrong-but-
+> harmless values; delete or implement `Civ::bars`; wire `pack.rs`'s `bytes` map through or delete it; FNV vs a cryptographic
+> pack hash; refuse duplicate `at_villagers` rows or let the later one win.
+
 > # Session 34, 2026-11-06 - the 17x tick was a failed re-plan a tick (D135), and D134 merges
 >
 > **Session 33's open question, answered the same evening.** The D134 match ran at 3.5 ms a tick against 0.3 with the same
