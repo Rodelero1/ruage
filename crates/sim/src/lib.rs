@@ -28,7 +28,9 @@ mod path;
 mod script;
 mod short;
 pub use metrics::Metrics;
-pub use path::{Walk, find_path, find_path_avoiding, line_clear, line_clear_avoiding};
+pub use path::{
+    Walk, find_path, find_path_avoiding, line_clear, line_clear_avoiding, nearest_reachable,
+};
 use ruage_fixed::Fixed;
 pub use script::{
     Outcome, Personality, Rule, RuleAction, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind,
@@ -1334,6 +1336,9 @@ pub struct World {
     /// How many times a blocked unit has re-planned its route. **Instrumentation, not state**: nothing reads it and it
     /// is not hashed; a test counts it to prove a known obstacle is not re-planned every tick (D98a).
     repath_count: u64,
+    /// How many ground re-plans **failed**. A counter, like `repath_count`, and not state: it exists so a test can say
+    /// "this unit tried twice and stopped" instead of "this unit searched all match" (D135).
+    repath_failures: u64,
     /// How many times a step made room instead of being refused (C1b). A counter, like `repath_count`, because it is a
     /// reaction the engine gives itself and has no caller to report to.
     made_room_count: u64,
@@ -1720,6 +1725,7 @@ impl World {
             garrison_eject_at: Fixed::ZERO,
             paths: BTreeMap::new(),
             repath_count: 0,
+            repath_failures: 0,
             made_room_count: 0,
             resources: None,
             sim_rng: Pcg32::new(seed, SIM_STREAM),
@@ -2089,6 +2095,11 @@ impl World {
     /// never reads it and it is not hashed; a test counts it to prove a known obstacle is not re-planned every tick.
     pub fn repaths(&self) -> u64 {
         self.repath_count
+    }
+
+    /// How many ground re-plans failed: the measure of a unit caught against ground it cannot answer for (D135).
+    pub fn repath_failures(&self) -> u64 {
+        self.repath_failures
     }
 
     /// How many steps have made room for a body in the way (C1b). Exposed so a test can say a nudge happened **once**.
@@ -3484,9 +3495,45 @@ impl World {
         if !self.on_map(to.0, to.1) {
             return Err(SimError::OffMap { tile: to });
         }
-        let goal = self.tile_centre(to);
-        self.plan_path_for(unit, entity.position, goal)?;
-        Ok(goal)
+        self.walk_goal(unit, entity.position, self.tile_centre(to))
+    }
+
+    /// **The nearest legal standing point** to a walk order's target (D134; the owner's answer to *"close as it can"*:
+    /// *"nearest legal standing point"*), already planned: `Ok` means a route to it exists.
+    ///
+    /// A walk order names a **place**. A place on blocked ground - the middle of a wood, a wall, a building's footprint -
+    /// is a request to come as close to it as the ground allows, and a place no route reaches is the same request. So the
+    /// order's own goal becomes a tile a body can stand on, decided once, when the order is given: no later re-plan, crowd
+    /// slot, stall check or repath ever aims at a point nobody can occupy.
+    ///
+    /// **Only walk orders come here.** A gather, build or attack order names a *thing*, and "unreachable" is the answer
+    /// those have to keep - a tree behind a wall is a refusal, not a walk to the fence (item 9's rule).
+    fn walk_goal(
+        &self,
+        unit: EntityId,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+    ) -> Result<(Fixed, Fixed), SimError> {
+        match self.plan_path_for(unit, from, to) {
+            Ok(_) => Ok(to),
+            Err(SimError::NoPath { .. }) => {
+                let Some(walk) = self.walk.as_ref() else {
+                    return Err(SimError::NoPath {
+                        from: self.tile_of(from),
+                        to: self.tile_of(to),
+                    });
+                };
+                let (start, goal) = (self.tile_of(from), self.tile_of(to));
+                let (tile, _) = nearest_reachable(walk, start, goal).ok_or(SimError::NoPath {
+                    from: start,
+                    to: goal,
+                })?;
+                let stand = self.tile_centre(tile);
+                self.plan_path_for(unit, from, stand)?;
+                Ok(stand)
+            }
+            Err(other) => Err(other),
+        }
     }
 
     /// Start a walk: an ordinary move, an attack-move, or a patrol. `patrol` only decides whether the
@@ -3501,6 +3548,10 @@ impl World {
         fighting: bool,
         patrol: bool,
     ) -> Result<(), SimError> {
+        // **Every click is accepted** (D134): a target on blocked ground becomes the nearest legal standing point before
+        // anything is planned, slotted or stored, so the order's goal is always a tile a body can occupy.
+        let from = self.find(unit).map_or(to, |entity| entity.position);
+        let to = self.walk_goal(unit, from, to)?;
         // Crowd slots are **tiles** (a place to stand), so the point becomes a tile for the slot search and survives as
         // the goal when this unit takes the clicked tile itself (A).
         let wanted = self.tile_of(to);
@@ -9330,6 +9381,20 @@ impl World {
                         // The body joins the route's avoid set even though the search failed - the original's list is
                         // filled *before* the repath, and this is why it matters: without it the same hopeless search
                         // is re-run every tick, at four whole-map explorations a tick in a crowded fight.
+                        self.repath_failures += 1;
+                        // **A failed re-plan spends one of the route's two attempts** (D135). D127 counted the successful
+                        // ones only, so ground that answers "no" was asked again on the next tick and the next: measured on
+                        // the D134 branch, 2,533 failed searches in 12,000 ticks - 8.1 s of a 20 s run - and every one of
+                        // them a full search over the map. A body repath needs no counter: the body joins the avoid set
+                        // below and the next request finds it already known.
+                        // The count lives on the route, which is where D127 put it - and a unit that has **no** route and a
+                        // goal it cannot reach is exactly the case that looped: `get_mut` returned `None`, nothing was
+                        // counted, and the request came back every tick. So an entry is created for it.
+                        if body.is_none() || !self.paths.contains_key(&id) {
+                            let stalls = self.paths.get(&id).map_or(0, |route| route.stalls) + 1;
+                            let route = self.paths.entry(id).or_default();
+                            route.stalls = stalls;
+                        }
                         if let (Some(route), Some(other)) = (self.paths.get_mut(&id), body) {
                             route.avoiding.insert(other);
                         }

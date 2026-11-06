@@ -3261,3 +3261,53 @@ have 0 wood, then grass and dirt passable, wood impassable."*
 3. **Nothing is truncated**: the match is decided at **1,527.6 s** (seed 7), so a 1,800 s limit ends a finished match
    rather than a live one - and the headless output before and after the change is identical line for line in its
    refusals.
+
+
+## D134 - Every click is accepted: a walk order's blocked target becomes the nearest legal standing point
+
+*2026-11-06. The owner: "clicking into the middle of the forest ends up with error message. It has to be allowed. Scout
+cavalry will simply try to close to the point as close as it can without running into trees."*
+
+1. **A walk order is never refused for the ground.** A target on blocked ground - the middle of a wood, a wall, a building's
+   footprint - is a request to come as close to it as the ground allows. `Move`, `AttackMove`, `Patrol` and `WalkTo` are
+   accepted and walked, and so is **any target no route reaches** (a courtyard behind a wall): same request, same answer.
+2. **The order's own goal becomes the nearest legal standing point** (the owner: *"nearest legal standing point"*), decided
+   **once, when the order is given** - `World::walk_goal`, used by `check_order` and `start_walk` - so no later re-plan,
+   crowd slot, stall check or repath aims at a tile nobody can occupy. That is what removed the second half of the bug: the
+   first version only fixed the plan, and the mover then re-planned every tick at the clicked tree.
+3. **Walk around, not straight in** (the owner: *"walk around"*): the route is planned to the standing point by the normal
+   planners, so the unit follows the ground instead of pressing at the wood's face.
+4. **`nearest_reachable`** (`path.rs`) is the search: best-first over free tiles ordered by distance to the click alone, so
+   the first tile off the queue is the reachable tile closest to it; ties break by `(y, x)`, never by iteration order. It is
+   bounded by the map and runs once per order.
+5. **Gather, build and attack orders keep their refusals**, and the suite says so: `a_node_with_no_path_is_refused_at_order_time`
+   and `an_unreachable_site_is_refused_before_the_wood_is_spent` both fail if the snap is put in the shared planner - which is
+   how the first attempt was built, and the suite caught it in one run. A tree behind a wall is not "walk to the fence", and
+   a build the builder cannot reach must not spend the wood.
+6. **The bug the test caught first was mine**: the first version of the search returned the tile the unit already stood on -
+   it is free by definition - so every order resolved to "stay where you are". The test failed with *"it never left its spawn
+   tile"*, and the search now excludes its own start unless nothing else is reachable.
+
+8. **It arrived with a 17x cost, and D135 is what removed it.** The match this rule produces ran **3.5 ms a tick against
+   0.3** from tick ~10,000. The cause was not the click: a **failed** ground re-plan cost one search every tick (D135), and
+   the new trajectory walked into that state. With D135 landed the same match is **11.8 s** again, at a hash D134 fixed.
+
+## D135 - A re-plan that fails spends one of the route's two attempts
+
+*2026-11-06. Found by chasing the 17x tick that D134's acceptance match ran into: 3.5 ms a tick instead of 0.3 with the same
+31 units, tasks, path lengths and plan count.*
+
+1. **A failed ground re-plan is counted.** D127 caps ground re-plans at two per route - the count is `Route::stalls`, and it
+   was incremented **only on success**. Ground that answers "no" therefore got asked again on the next tick, and the next:
+   the cap never engaged on the case it existed for.
+2. **A unit with no route entry is the case that looped.** `stalls` lives on the route, so a unit with a goal it cannot reach
+   and **no** route (`get_mut` → `None`) counted nothing at all. A failed re-plan now creates the entry when it is missing.
+3. **Measured**, acceptance match, 36,000 ticks: re-plan attempts **11,260 → 192**, failures **11,070 → 4**, time spent
+   re-planning **35.4 s → 13.3 ms**, whole match **47.5 s → 11.8 s**.
+4. **The world state does not move**: the hash is `f328ebc8d4d34b78` before and after the fix, 141 entities, 187 made_room.
+   The change removes searches that changed nothing - which is why it is a performance fix and not a behaviour one.
+5. **The test states the budget, not the timing**: `crates/sim/tests/repath_budget.rs` builds the case (a wall across the
+   world and a walled goal) and asserts **at most two failed re-plans in 600 ticks**. Watched failing first: **177**.
+6. **A cost that is not a function of the entity count is a defect.** The count of bodies could not have predicted this;
+   what predicted it was per-tick time split from the AI's time, then the repath counter. That pair of instruments is worth
+   keeping in mind for the next "why is this match slow".

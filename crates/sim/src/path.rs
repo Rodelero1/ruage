@@ -264,3 +264,68 @@ pub fn find_path_avoiding(
     }
     None
 }
+
+/// **Every click is accepted** (D134, the owner 2026-11-06): the free tile nearest to `to` that a body standing at `from`
+/// can actually reach, and the route to it.
+///
+/// Best-first from `from` over **free** tiles, ordered by the distance to `to` alone, so the first tile taken off the queue
+/// is the reachable tile closest to the click and the search stops as soon as one is found. Ties break by `(y, x)` - never
+/// by iteration order - so two runs choose the same tile.
+///
+/// `from` may itself be blocked: a villager stands on the tile of the tree it is working and must still be able to leave.
+/// A tile and the route to it, which is what "the nearest place you may stand" answers.
+pub type Standing = ((u16, u16), Vec<(u16, u16)>);
+
+pub fn nearest_reachable(walk: &Walk, from: (u16, u16), to: (u16, u16)) -> Option<Standing> {
+    let mut open: BinaryHeap<Reverse<(u32, u16, u16)>> = BinaryHeap::new();
+    let mut seen: BTreeSet<(u16, u16)> = BTreeSet::new();
+    let mut came: BTreeMap<(u16, u16), (u16, u16)> = BTreeMap::new();
+    open.push(Reverse((octile(from, to), from.1, from.0)));
+    seen.insert(from);
+    while let Some(Reverse((_, y, x))) = open.pop() {
+        let here = (x, y);
+        // **Not `from` itself**: it is free by definition, so returning it would say "the closest legal tile is where you
+        // already stand" every time - the bug this test caught first. It is the answer only if nothing else is reachable.
+        if here != from && !walk.blocked(x, y) {
+            let mut path = vec![here];
+            let mut cursor = here;
+            while let Some(&previous) = came.get(&cursor) {
+                if previous == from {
+                    break;
+                }
+                path.push(previous);
+                cursor = previous;
+            }
+            path.reverse();
+            return Some((here, path));
+        }
+        for dy in -1i32..=1 {
+            for dx in -1i32..=1 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                let (Some(nx), Some(ny)) = (
+                    u16::try_from(i32::from(x) + dx).ok(),
+                    u16::try_from(i32::from(y) + dy).ok(),
+                ) else {
+                    continue;
+                };
+                if !walk.contains(nx, ny) || walk.blocked(nx, ny) || seen.contains(&(nx, ny)) {
+                    continue;
+                }
+                // The same corner rule as the search: a diagonal may not cut between two blocked tiles.
+                if dx != 0 && dy != 0 && (walk.blocked(nx, y) || walk.blocked(x, ny)) {
+                    continue;
+                }
+                seen.insert((nx, ny));
+                came.insert((nx, ny), here);
+                open.push(Reverse((octile((nx, ny), to), ny, nx)));
+            }
+        }
+    }
+    // Nothing else is reachable: the tile it already stands on is the nearest legal standing point.
+    if !walk.blocked(from.0, from.1) {
+        return Some((from, Vec::new()));
+    }
+    None
+}

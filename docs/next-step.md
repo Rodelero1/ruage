@@ -28,6 +28,64 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 34, 2026-11-06 - the 17x tick was a failed re-plan a tick (D135), and D134 merges
+>
+> **Session 33's open question, answered the same evening.** The D134 match ran at 3.5 ms a tick against 0.3 with the same
+> 23 buildings / 31 units / 101 nodes, the same tasks, path lengths and plan count. Splitting the headless loop put it in the
+> **simulation** (28.9 s against 1.7 s; AI unchanged), and the instrument that named it was the re-plan path: **2,559
+> attempts, 2,533 failures, 8.1 s of a 20 s run, 3.2 ms per failed search.**
+>
+> **Why the cap never engaged:** D127's two-per-route budget counts `Route::stalls`, incremented **only on success**. Ground
+> that answers "no" was asked again every tick - and for a unit with **no route entry** at all (`paths.get_mut` → `None`,
+> the case this match was in) there was no counter to fail to increment.
+>
+> **D135:** a failed re-plan spends one of the two attempts, and creates the route entry when there is none. Measured:
+> attempts **11,260 → 192**, failures **11,070 → 4**, re-plan time **35.4 s → 13.3 ms**, match **47.5 s → 11.8 s**, and the
+> **hash does not move** (`f328ebc8d4d34b78`, 141 entities, 187 made_room) - every search removed decided nothing.
+> Test first: `crates/sim/tests/repath_budget.rs` asserts at most two failed re-plans in 600 ticks, watched failing at
+> **177**. Review: `docs/reviews/2026-11-06-a-failed-replan-costs-a-tick.md`.
+>
+> **D134 merges with it** (`d134-click-accepted` → `main`): the click rule, its four tests, and the walls test that now
+> asserts the ring is not crossed rather than that the order is refused. Acceptance baseline moves by design -
+> **`f328ebc8d4d34b78`** / 141 / 190 repaths - with walled-off refusals **203 → 1** and the wall clock back at ~11.8 s.
+> **711 passed / 0 failed / 20 ignored.**
+>
+> **Two lessons worth keeping:** a cap that counts successes caps nothing on the case it exists for; and a fixture that does
+> not reproduce the bug passes for free - the first `repath_budget` map (walls five tiles wide) could be walked around and
+> went green before the fix.
+>
+> **Still open:** the circle-clearance rule (*"the circle has to stay away from tree square"*, every body, tangency allowed -
+> the other half of the owner's bug report), D131's head-on overlap, and the army-size pair.
+
+> # Session 33, 2026-11-06 - every click is accepted (D134), and the tick that costs 17x (open)
+>
+> **The owner, on a wedged scout:** *"clicking into the middle of the forest ends up with error message. It has to be
+> allowed. Scout cavalry will simply try to close to the point as close as it can without running into trees."* Nine
+> questions were answered the same evening; the answers are in D134.
+>
+> **Landed on the branch `d134-click-accepted`, not on `main`**: `World::walk_goal` turns a walk order's target into the
+> **nearest legal standing point** when the order is given (blocked *or* unreachable), `nearest_reachable` in `path.rs`
+> answers it, and `Move`/`AttackMove`/`Patrol`/`WalkTo` are never refused for the ground. Gather, build and attack keep their
+> refusals - two existing tests (`a_node_with_no_path_is_refused_at_order_time`,
+> `an_unreachable_site_is_refused_before_the_wood_is_spent`) fail if the snap goes into the shared planner, which is how the
+> first attempt was built. **710 passed / 0 failed / 20 ignored**; the review is
+> `docs/reviews/2026-11-06-every-click-is-accepted.md`.
+>
+> **Why it is a branch.** In the acceptance match the click costs nothing measurable (the fallback ran **twice**, 16 node
+> expansions) but the match it produces runs **3.5 ms a tick against 0.3** from tick ~10,000: **simulation 28.9 s against
+> 1.7 s**, AI unchanged. At tick 12,000 both worlds have 23 buildings / 31 units / 101 nodes, the same tasks, the same path
+> lengths and the same plan count - nothing countable differs, only where the bodies stand. **That is a defect of the
+> engine, not of the click**: a tick whose cost is not a function of the entity count. `perf` is not installed here and
+> every counter I could add without it is equal between the runs.
+>
+> **Next step is that slow state**, not D134: dump the world at tick 12,000 of the branch's match (hash `e78d90b6aae58e74`)
+> and bisect the per-tick cost by entity, task and tile. When it is understood, D134 merges and the acceptance baseline
+> moves by design (`f328ebc8d4d34b78`, 141 entities, 190 repaths, walled-off refusals **203 -> 1**).
+>
+> **Still open from the owner's list:** D131's head-on overlap (his own argument - a villager is thinner than a tile - favours
+> letting bodies take a side), the army-size pair, and the circle-clearance rule (*"the circle has to stay away from tree
+> square"*, every body, tangency allowed), which is the other half of this bug report.
+
 > # Session 32, 2026-11-06 - passage is the surface (D132) and the match is thirty minutes (D133)
 >
 > **The owner answered the two content questions that needed no research** (of the six in Session 31's list):
