@@ -268,8 +268,29 @@ pub struct Runner {
     pub outcomes: Vec<(f64, Outcome)>,
 }
 
+/// **A time becomes a tick, or the run is refused** (second review, `script.rs:287` and `:307`).
+///
+/// `f64 as i64` **saturates**, so the old `u64::try_from(tick as i64)` could never fail and its "does not fit in a tick"
+/// message was dead code: a step at 1e300 seconds was accepted as 9.2e18 ticks, which is a run that can never reach it. The
+/// check has to happen **before** the cast, in the same words the refusal already used.
+fn tick_at(seconds: f64, tick_rate_hz: u32, at_least: u64, what: &str) -> Result<u64, String> {
+    let ticks = (seconds * f64::from(tick_rate_hz)).round();
+    if !ticks.is_finite() || ticks < 0.0 || ticks > i64::MAX as f64 {
+        return Err(format!("{what} at {seconds} s does not fit in a tick"));
+    }
+    Ok(((ticks as i64) as u64).max(at_least))
+}
+
 impl Runner {
     pub fn new(scenario: &Scenario, tick_rate_hz: u32) -> Result<Self, String> {
+        // **A runner needs a clock** (second review, `script.rs:271`): at zero ticks a second every time rounds to tick 0,
+        // and the reporting path divides by the rate. A runner that cannot keep time is a broken run, not a quiet one.
+        if tick_rate_hz == 0 {
+            return Err(
+                "a runner needs a tick rate above zero: nothing can happen at zero ticks a second"
+                    .to_owned(),
+            );
+        }
         if scenario.schema != SCENARIO_SCHEMA {
             return Err(format!(
                 "the scenario is schema {}, this build reads {SCENARIO_SCHEMA}",
@@ -284,9 +305,7 @@ impl Runner {
                     step.at_seconds
                 ));
             }
-            let tick = (step.at_seconds * f64::from(tick_rate_hz)).round();
-            let tick = u64::try_from(tick as i64)
-                .map_err(|_| format!("a step at {} s does not fit in a tick", step.at_seconds))?;
+            let tick = tick_at(step.at_seconds, tick_rate_hz, 0, "a step")?;
             steps.push((tick, step.player, step.kind.clone()));
         }
         steps.sort_by_key(|(tick, player, _)| (*tick, *player));
@@ -304,9 +323,8 @@ impl Runner {
                     rule.cooldown_seconds
                 ));
             }
-            let at = ((rule.at_seconds * f64::from(tick_rate_hz)).round() as i64).max(0) as u64;
-            let cool =
-                ((rule.cooldown_seconds * f64::from(tick_rate_hz)).round() as i64).max(1) as u64;
+            let at = tick_at(rule.at_seconds, tick_rate_hz, 0, "a rule")?;
+            let cool = tick_at(rule.cooldown_seconds, tick_rate_hz, 1, "a cooldown")?;
             rules.push((at, cool, rule.clone()));
         }
         let rules_len = rules.len();
@@ -586,9 +604,13 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 .entities()
                 .iter()
                 .filter(|entity| {
+                    // The **family**: a step that names militia after the upgrade must find the man-at-arms (second
+                    // review, `script.rs:583`), or the step refuses with "no unit militia" while the unit stands there.
                     entity.player == player
                         && entity.kind == EntityKind::Unit
-                        && entity.unit == Some(attacker_unit)
+                        && entity
+                            .unit
+                            .is_some_and(|unit| world.is_family(unit, attacker_unit))
                 })
                 .map(|entity| entity.id)
                 .max()
@@ -1158,10 +1180,15 @@ fn when_holds(world: &World, rule: &Rule) -> bool {
         let Some(wanted) = world.role_unit(role) else {
             return false;
         };
+        // **The family, not one id** (second review, `script.rs:1162`): `has_unit = "militia"` is still true when the
+        // militia has been upgraded, which is the question the author asked. Exact-id matching made the condition go
+        // silently false the moment the upgrade landed.
         let found = world.entities().iter().any(|entity| {
             entity.player == player
                 && entity.kind == EntityKind::Unit
-                && entity.unit == Some(wanted)
+                && entity
+                    .unit
+                    .is_some_and(|unit| world.is_family(unit, wanted))
         });
         if !found {
             return false;

@@ -3396,3 +3396,42 @@ is the check, and a failure is remembered.*
    bookkeeping - *"the rule was refused 29 times in 30 s for nine walled nodes"*.
 6. **The acceptance match does not move**: `f328ebc8d4d34b78`, 141 entities, 188 repaths, 187 made-room, 574 refusal lines -
    identical, because `config/acceptance.toml` carries no gather rule at all, so this change is for the packs that do.
+
+
+## D139 - The second review's sim block: seven fixes, and what the block actually was
+
+*2026-11-07. The 63 findings filed against `crates/sim/src/`. Read against the current tree; seven fixed here.*
+
+1. **The block is not the engine core.** 19 findings against `script.rs`, 14 `bin/batch.rs`, 12 `bin/headless.rs`, 9
+   `metrics.rs`, 9 `path.rs` - the script layer, the two tools, the metrics watcher and the path module. `lib.rs`, where
+   `step`, the mover and the economy live, was not in it.
+2. **A class-level correction, third time tonight:** `f64 as i64`/`as u32` **saturate** (Rust 1.45+). Of the five findings
+   built on casts, three are wrong about the mechanism ("wrap", "panic in debug", "`Infinity as i64` is `i64::MIN`"), and one
+   is right for the opposite reason - the range check never fired because the cast *succeeded*, clamped.
+3. **Fixed (7), each with a test watched failing first except the binary rename:**
+   - `path.rs:127` - `line_clear` refused a line whose **start** tile is occupied, while `find_path` allows a blocked start
+     on purpose; every unit on a node paid a full A* for a line it could see.
+   - `path.rs:127` - the same closure tested containment *and* `blocked()`, which already answers `true` off-map: a second
+     bounds check per tile.
+   - `path.rs:33` - `Walk::from_map` now asserts `terrain.len() == width * height` in debug builds; `Map` is public and
+     fixtures build it directly.
+   - `script.rs:1162` - `has_unit` matched one unit id, so `has_unit = "militia"` went false at the man-at-arms upgrade.
+     `is_family` now.
+   - `script.rs:583` - an attack step naming `militia` refused with *"no unit militia"* after the upgrade. `is_family` now.
+   - `script.rs:271/287/307` - `Runner::new` accepted `tick_rate_hz = 0`, and accepted `at_seconds = 1e300` as 9.2e18 ticks
+     through the saturating cast, making its own "does not fit in a tick" message unreachable. Both refuse now.
+   - `bin/batch.rs` - the binary was documented as **`ruage-batch`** in its own USAGE, in `SPEC.md`, in `next-step.md` and
+     in `config/acceptance.toml`, and cargo built it as **`batch`**: every documented invocation named a file that did not
+     exist. The file is renamed `src/bin/ruage-batch.rs`, and a live `--seeds 7` run prints `#f328ebc8d4d34b78`.
+4. **Refuted (6)**: saturating occupant counters (deliberate, documented); `octile`'s `as u32` (max ~3,610 for u16 tiles);
+   `index`'s `None` (it *is* the bounds guard); `metrics`' multiply (seven orders inside `i64`); `nth_villager` exact id (one
+   villager role, no upgrade in 5.7); and the two cast-mechanism claims above.
+5. **Deferred (26 with reasons, 24 cheap and queued).** The queue's head, and the reason it is the head:
+   - `script.rs:1533/1541` - **the enemy selectors can aim at a Gaia town centre or a foundation**; `enemy_town_center` does
+     not filter `player != 0` and neither filters `construction.is_none()`.
+   - `script.rs:1103` - a rule condition naming a role or resource the pack lacks makes the rule silently **never fire**,
+     with nothing in `rule_refusals` - the D137 defect, one layer up.
+   - `batch.rs:192`, `headless.rs:181` - a `duration_seconds` of 1e300 is a 9.2e18-iteration loop; `tick_at` applies.
+   - `headless.rs:300` - `players=` prints the highest player id, not the count.
+6. **Acceptance unmoved**: `f328ebc8d4d34b78`, 141 entities, 188 repaths, 187 made-room, 574 refusals, **11.47 / 11.51 s**
+   over two idle runs. The 16.97 s figure I reported earlier was a run whose compile overlapped the suite; withdrawn.

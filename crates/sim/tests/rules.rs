@@ -398,3 +398,163 @@ role = "house"
         "one villager on the gold is work the rule can see"
     );
 }
+
+/// **A condition about a kind of unit survives the upgrade it names** (second review, `script.rs:1162`).
+///
+/// `has_unit = "militia"` asks whether the player has a militia. A man-at-arms *is* a militia one rung up, and the engine
+/// already has the word for that (`is_family`, the variant root) - `building_count` and the attack rule ask it that way.
+/// Asking by exact unit id makes the condition go false the moment the upgrade lands, silently.
+#[test]
+fn has_unit_survives_the_upgrade_it_names() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let unit = world.role_unit("man_at_arms").expect("a man-at-arms role");
+    let id = EntityId(9_500);
+    world
+        .submit_checked(ruage_sim::Command::Spawn {
+            id,
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(20 * world.scale()),
+                Fixed::from_raw(20 * world.scale()),
+            ),
+            speed: Fixed::ZERO,
+            hp: 45,
+            amount: 0,
+        })
+        .expect("the man-at-arms lands");
+    world.step().expect("step");
+
+    let scenario: Scenario = toml::from_str(
+        r#"
+schema = 2
+duration_seconds = 60.0
+
+[[rule]]
+player = 1
+cooldown_seconds = 2.0
+when = { has_unit = "militia" }
+do = "build"
+role = "house"
+"#,
+    )
+    .expect("a rule the format can read");
+    let before = houses(&world);
+    let mut runner = Runner::new(&scenario, 20).expect("a runner");
+    for _ in 0..120 {
+        runner.due(&mut world);
+        world.step().expect("stepping");
+    }
+    assert!(
+        houses(&world) > before,
+        "a man-at-arms is militia's family: the condition must hold and the house go up (it was {before})"
+    );
+}
+
+/// **A step naming a role finds the family, not one unit id** (`script.rs:583`).
+///
+/// A step that says `attacker = "militia"` after the upgrade would otherwise refuse with *"no unit militia"* while the
+/// player's man-at-arms stands there.
+#[test]
+fn a_step_naming_a_role_finds_the_upgraded_unit() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let unit = world.role_unit("man_at_arms").expect("a man-at-arms role");
+    world
+        .submit_checked(ruage_sim::Command::Spawn {
+            id: EntityId(9_501),
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(22 * world.scale()),
+                Fixed::from_raw(22 * world.scale()),
+            ),
+            speed: Fixed::ZERO,
+            hp: 45,
+            amount: 0,
+        })
+        .expect("the man-at-arms lands");
+    world.step().expect("step");
+
+    let scenario: Scenario = toml::from_str(
+        r#"
+schema = 2
+duration_seconds = 2.0
+
+[[step]]
+at_seconds = 0.0
+player = 1
+kind = "attack"
+attacker = "militia"
+target = "enemy_unit"
+"#,
+    )
+    .expect("a scenario the format can read");
+    let mut runner = Runner::new(&scenario, 20).expect("a runner");
+    runner.due(&mut world);
+    world.step().expect("stepping");
+    let refused = runner
+        .outcomes
+        .iter()
+        .find_map(|(_, outcome)| match outcome {
+            ruage_sim::Outcome::Refused(reason) => Some(reason.clone()),
+            _ => None,
+        });
+    assert!(
+        refused.as_deref() != Some("player 1 has no unit militia"),
+        "the step must find the family, not one id: {refused:?}"
+    );
+}
+
+/// **A step at a time that cannot be a tick is refused, not clamped** (`script.rs:287`).
+///
+/// `f64 as i64` saturates, so `u64::try_from` never fails and the "does not fit in a tick" message was dead code: a step
+/// at 1e300 seconds was accepted as "in 9.2e18 ticks", which is a run that never reaches it.
+#[test]
+fn a_step_at_an_impossible_time_is_refused() {
+    let scenario: Scenario = toml::from_str(
+        r#"
+schema = 2
+duration_seconds = 2.0
+
+[[step]]
+at_seconds = 1e300
+player = 1
+kind = "gather"
+villager = 0
+resource = "wood"
+"#,
+    )
+    .expect("a scenario the format can read");
+    let err = Runner::new(&scenario, 20)
+        .err()
+        .expect("a step at 1e300 s is not a tick");
+    assert!(
+        err.contains("does not fit"),
+        "the refusal must say the time does not fit in a tick: {err}"
+    );
+}
+
+/// **A runner needs a clock** (`script.rs:271`): a tick rate of zero turns every time into zero and divides by it later.
+#[test]
+fn a_runner_never_has_a_zero_tick_rate() {
+    let scenario: Scenario = toml::from_str(
+        r#"
+schema = 2
+duration_seconds = 2.0
+"#,
+    )
+    .expect("a scenario the format can read");
+    let err = Runner::new(&scenario, 0)
+        .err()
+        .expect("zero ticks a second is not a clock");
+    assert!(
+        err.contains("tick rate"),
+        "the refusal must name the tick rate: {err}"
+    );
+}

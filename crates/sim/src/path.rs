@@ -31,6 +31,18 @@ pub struct Walk {
 
 impl Walk {
     pub fn from_map(map: &Map) -> Self {
+        // **`Map` is public, so this is where a broken one stops** (second review, `path.rs:33`). The loader refuses a map
+        // whose terrain array does not match its size, but tests and fixtures build `Map` directly, and indexing one by
+        // `width`/`height` would then read one tile's ground for another - a walkability bug with no error and no symptom
+        // except units crossing a wall. Debug builds say so; release builds cost nothing.
+        debug_assert_eq!(
+            map.terrain.len(),
+            usize::from(map.width) * usize::from(map.height),
+            "a map's terrain must be width * height: {} entries for {}x{}",
+            map.terrain.len(),
+            map.width,
+            map.height
+        );
         let blocked = map
             .terrain
             .iter()
@@ -128,7 +140,12 @@ pub fn line_clear_avoiding(
         let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
             return false;
         };
-        walk.contains(x, y) && !walk.blocked(x, y) && !avoid.contains(&(x, y))
+        // **The start tile is not an obstruction to its own line** (second review, `path.rs:127`). `find_path` allows a
+        // blocked start on purpose - *"a villager stands on the tile of the tree it is working, and must be able to walk
+        // off it"* - and refusing the same line here made every such unit pay a full A* search for a line it could see.
+        // `blocked` answers `true` for ground off the map as well, so the containment test that used to sit in front of it
+        // was a second bounds check per tile walked.
+        !walk.blocked(x, y) && !avoid.contains(&(x, y))
     };
     let (x0, y0) = (i64::from(from.0), i64::from(from.1));
     let (x1, y1) = (i64::from(to.0), i64::from(to.1));
@@ -140,7 +157,8 @@ pub fn line_clear_avoiding(
         if (x, y) == (x1, y1) {
             return true;
         }
-        if !free(x, y) {
+        // The first tile is where the body already is: it cannot obstruct its own line.
+        if (x, y) != (x0, y0) && !free(x, y) {
             return false;
         }
         let e2 = 2 * err;
