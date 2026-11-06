@@ -1436,6 +1436,10 @@ pub struct World {
     husks: BTreeMap<EntityId, u64>,
     /// How long a husk stays, in ticks. Zero for a pack with no farms.
     husk_ticks: u64,
+    /// **The chopped remainder, in thousandths of a hit point, per tree** (D129). A chop of 1.5 hit points a second at
+    /// 20 Hz is 75 thousandths a tick: without a carry the tick could only take whole points and every tree would fall in
+    /// one blow. State, because it decides when the next point comes off.
+    fell_carry: BTreeMap<EntityId, i64>,
     /// A worker the shares have decided to move to another column, and the node waiting for it: the load in its hands is
     /// banked **first**, at its own drop site, and only then does it take up the new work (the owner's rule, 2026-10-30).
     pending_gather: BTreeMap<EntityId, EntityId>,
@@ -1696,6 +1700,7 @@ impl World {
             spent_nodes: BTreeSet::new(),
             husks: BTreeMap::new(),
             husk_ticks: 0,
+            fell_carry: BTreeMap::new(),
             share_failed: BTreeMap::new(),
             share_moved: BTreeMap::new(),
             share_retry_ticks: 600,
@@ -8601,14 +8606,33 @@ impl World {
                 Some(Task::Gather { node, .. }) => node,
                 _ => continue,
             };
-            let per_tick = self.economy.as_ref().map_or(0, |economy| {
-                economy.gather.fell_hp_per_tick(self.tick_rate_hz)
-            });
+            // **The rate is per second, and the remainder is kept** (D129). The pack says 1.5 hit points a second; at
+            // 20 Hz that is 75 thousandths a tick, so the carry hands over a whole point every 13.3 ticks. Multiplying by
+            // the tick rate instead - which is what this did until D129 - made it 30 points a tick, and every tree in the
+            // forest fell to the first blow.
+            let milli_per_second = self
+                .economy
+                .as_ref()
+                .map_or(0, |economy| economy.gather.fell_milli_per_second);
+            let hz = i64::from(self.tick_rate_hz.max(1));
+            let mut loss = 0;
+            if milli_per_second > 0 {
+                // The carry is in **thousandths of a hit point, per tick, scaled by the tick rate** - so one whole hit
+                // point is `1_000 * hz` of it. A 1.5 hp/s chop at 20 Hz adds 1,500 a tick and crosses 20,000 every
+                // 13.3 ticks.
+                let whole = 1_000 * hz;
+                let carry = self.fell_carry.entry(node).or_insert(0);
+                *carry = carry.saturating_add(milli_per_second);
+                loss = *carry / whole;
+                *carry %= whole;
+            }
             if let Some(target) = self.find_mut(node) {
-                // Accumulate in whole points so a slow chop still lands: a tree falls when its hit points reach zero and
-                // **stays where it stands** until the wood is gone.
-                let loss = per_tick;
+                // A tree falls when its hit points reach zero and **stays where it stands** until the wood is gone.
+                let loss = i32::try_from(loss).unwrap_or(i32::MAX);
                 target.hp = (target.hp - loss).max(0);
+            }
+            if loss == 0 && milli_per_second == 0 {
+                self.fell_carry.remove(&node);
             }
         }
         for (worker, take, kept) in takes {
@@ -10453,6 +10477,13 @@ impl World {
         }
         // **Husks are state**: when each empty farm began its while decides when it leaves the map, so two runs that do not
         // agree on it are two different matches - and a save that drops it keeps the husk for ever (D122).
+        // **A chopped remainder is state**: it decides which tick the next hit point comes off, so two runs that disagree
+        // about it fall the same tree on different ticks (D129).
+        for (id, carry) in &self.fell_carry {
+            fnv_bytes(&mut hash, b"fell");
+            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+            fnv_bytes(&mut hash, &carry.to_le_bytes());
+        }
         for (id, since) in &self.husks {
             fnv_bytes(&mut hash, b"husk");
             fnv_bytes(&mut hash, &id.0.to_le_bytes());

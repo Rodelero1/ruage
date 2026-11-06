@@ -28,6 +28,28 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 29, 2026-11-05 - a tree took one blow; and the second review, triaged (D129)
+>
+> **Second external review**: 205 findings over 176 files, `kimi-k2.7-code`, 42m45s, **partial** (107 of 176 items failed).
+> Triaged in `docs/reviews/2026-11-05-second-review-triage.md` - checked, right; checked, wrong; and what was not checked.
+>
+> **The catch of the day, filed as a performance complaint**: `fell_hp_per_tick` **multiplied** the per-second chop rate by
+> the tick rate instead of dividing. 1.5 hp/s at 20 Hz became **30 hp a tick**, so a 20 hp tree fell to its **first** blow -
+> 0.05 s against an intended 13.3 s - and the felling rule has never run in a match. No test asserted the rate; the depletion
+> tests ask with `amount`, which instant felling satisfies.
+>
+> **Fixed (D129)**: the rate is converted once at load to `Gather::fell_milli_per_second`, and `World::fell_carry` keeps the
+> remainder per node (one whole point is `1_000 * hz` of it), hashed as state. Three tests watched failing first; a tree now
+> falls on tick **267** at 20 Hz - 13.35 s, the seventh chop.
+>
+> **Acceptance changes by design**: `e4bdd521acaaf342` / 152 entities / 237 repaths -> **`394c4892aac776d2`** / **141** /
+> **184**. Timing unmoved: **12,383 ms median against 12,391**. **702 passed / 0 failed / 19 ignored**.
+>
+> **Five questions for the owner** (they need his decisions, not mine): the chop pace; `army_at_least = 3` vs a comment that
+> says eight; Grass-only `is_walkable` against D117's dirt and forest; `duration_seconds = 2400` in a file that says
+> "thirty-minute"; and whether to revisit reachability in the node lookup, which two reviews now want and which our own
+> measurement says cost 37x the run.
+
 > # Session 28, 2026-11-05 - the external review, checked (D128)
 >
 > **The owner handed over a 141-line external static review and said "please scrutinize".** Fifteen findings, checked one by one

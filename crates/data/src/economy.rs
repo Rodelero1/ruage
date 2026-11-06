@@ -242,24 +242,10 @@ pub struct Gather {
     /// rule, 2026-10-30): the dat gives them 20 hit points (25, 30 for variants) and no wood until they come down. Authored
     /// pacing, because the dat does not say how fast a chop is; zero turns felling off and every node yields as it stands.
     pub fell_hp_per_second: f64,
-}
-
-impl Gather {
-    /// Hit points a villager takes off a standing tree **per tick**, rounded up so a slow chop still lands. Here rather
-    /// than in the simulation because this is where the fractional rate lives: the tick only ever sees whole hit points
-    /// (D9 - no floats near the simulation's state).
-    #[must_use]
-    pub fn fell_hp_per_tick(&self, tick_rate_hz: u32) -> i32 {
-        let per_tick = self.fell_hp_per_second * f64::from(tick_rate_hz.max(1));
-        if per_tick <= 0.0 {
-            0
-        } else {
-            #[allow(clippy::cast_possible_truncation)]
-            {
-                per_tick.ceil() as i32
-            }
-        }
-    }
+    /// **The same rate in thousandths of a hit point per second**, converted once at load so the tick never touches a
+    /// float (D9). A chop of 1.5 hp/s is `1_500`; the simulation keeps the remainder as a carry, which is what makes
+    /// "1.5 a second" mean 1.5 and not "two a second" or "sixty a tick" (D129).
+    pub fell_milli_per_second: i64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -960,6 +946,21 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
                     });
                 }
                 value
+            },
+            // **Thousandths, rounded once, here** (D129): the tick adds this and divides by the tick rate, keeping the
+            // remainder, so the rate is exact at any tick rate and no float enters the simulation.
+            fell_milli_per_second: {
+                let value = raw.gather.fell_hp_per_second.unwrap_or(0.0);
+                if !value.is_finite() || value < 0.0 || value > 1_000.0 {
+                    return Err(ConfigError::Invalid {
+                        key: "gather.fell_hp_per_second".to_owned(),
+                        detail: format!("{value} is not a rate of hit points per second"),
+                    });
+                }
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    (value * 1_000.0).round() as i64
+                }
             },
         },
         train: {

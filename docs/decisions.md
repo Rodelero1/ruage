@@ -3157,3 +3157,20 @@ https://github.com/glouw/openempire?"*
 6. **Deferred, with reasons**: the `EntityId -> index` map (the real fix for #6/#8, and a slice of its own), `nearest_like` and
    `nearest_resource` (the review's best performance finding - short list first, reachability only on the head - and it needs a
    measurement), the footprint-mask assert, and the O(n²) RNG duplicate check.
+
+## D129 - The chop is a rate per second, and its remainder is carried
+
+*2026-11-05. Found by the second external review; the review filed it as a performance complaint and did not notice the arithmetic.*
+
+1. **`fell_hp_per_second` is divided by the tick rate, never multiplied by it.** The pack says 1.5 hit points a second; the
+   tick turned that into **30 a tick at 20 Hz**, so every tree fell to its first blow - 0.05 s against an intended 13.3 s.
+   The felling mechanic had never run in a match.
+2. **The rate is converted once, at load**, into `Gather::fell_milli_per_second` (thousandths). The tick adds it to a
+   per-node carry and takes a whole point every `1_000 * hz` of it, so "1.5 a second" is exact at any tick rate and no float
+   enters the simulation (D9).
+3. **The carry is state and is hashed.** It decides which tick the next point comes off; two runs that disagree about it
+   fall the same tree on different ticks.
+4. **The rate is content.** `fell_hp_per_second = 0` still turns felling off; the loader refuses a negative or absurd rate
+   rather than propagating it.
+5. **A rate needs a test that states it.** "The tree is down by 15 s" was true before the fix, for the wrong reason - the
+   pair of tests (standing at 10 s, down by 15 s) is what makes the rate observable.
