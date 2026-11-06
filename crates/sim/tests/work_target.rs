@@ -4,31 +4,13 @@
 //! Written against the pack rather than a fixture: the point of the accessor is that it reads the *real* role table and the
 //! *real* column of a node, and a made-up world would prove neither.
 
-use std::path::PathBuf;
-
 use ruage_data::Resources;
 use ruage_sim::{Command, EntityId, EntityKind, World};
 
-fn repo(rel: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join(rel)
-}
+mod common;
 
 fn fresh() -> Option<(World, Resources)> {
-    let units = repo("config/gamedata/units.toml");
-    if !units.exists() {
-        return None;
-    }
-    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).ok()?;
-    let settings = ruage_data::load_sim_file(&repo("config/sim.toml")).ok()?;
-    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).ok()?;
-    let economy = ruage_data::load_economy_file(&repo("config/economy.toml")).ok()?;
-    let units = ruage_data::load_units_file(&units).ok()?;
-    let mut world = World::new(&settings, 7).ok()?;
-    world.seed_from(&map, &economy, &units).ok()?;
-    world.load_resources(&resources).ok()?;
-    Some((world, resources))
+    common::fresh_with_resources()
 }
 
 fn villager(world: &World) -> EntityId {

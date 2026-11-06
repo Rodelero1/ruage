@@ -4,33 +4,13 @@
 //! the anchor, the `.` cells stay walkable, and demolition frees precisely what the mask blocked - the same function
 //! answers both questions, so the two cannot drift.
 
-use std::path::PathBuf;
-
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, World};
 
-fn repo(rel: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join(rel)
-}
+mod common;
 
 fn fresh() -> Option<World> {
-    let units = repo("config/gamedata/units.toml");
-    if !units.exists() {
-        return None;
-    }
-    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).ok()?;
-    let settings = ruage_data::load_sim_file(&repo("config/sim.toml")).ok()?;
-    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).ok()?;
-    let economy = ruage_data::load_economy_file(&repo("config/economy.toml")).ok()?;
-    let units = ruage_data::load_units_file(&units).ok()?;
-    let combat = ruage_data::load_combat_file(&repo("config/combat.toml")).ok()?;
-    let mut world = World::new(&settings, 7).ok()?;
-    world.seed_from(&map, &economy, &units).ok()?;
-    world.load_resources(&resources).ok()?;
-    world.load_combat(&combat);
-    Some(world)
+    common::fresh()
 }
 
 /// Player 1's Town Centre and where it stands.

@@ -15,6 +15,8 @@ use std::path::PathBuf;
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, World};
 
+mod common;
+
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -34,13 +36,18 @@ fn fixture() -> Option<Fixture> {
     if !units.exists() {
         return None;
     }
-    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).ok()?;
+    let resources = common::present(
+        &repo("config/resources.toml"),
+        ruage_data::load_resources_file,
+    );
     Some(Fixture {
-        settings: ruage_data::load_sim_file(&repo("config/sim.toml")).ok()?,
-        map: ruage_data::load_map_file(&repo("config/map.toml"), &resources).ok()?,
-        economy: ruage_data::load_economy_file(&repo("config/economy.toml")).ok()?,
+        settings: common::present(&repo("config/sim.toml"), ruage_data::load_sim_file),
+        map: common::present(&repo("config/map.toml"), |path| {
+            ruage_data::load_map_file(path, &resources)
+        }),
+        economy: common::present(&repo("config/economy.toml"), ruage_data::load_economy_file),
         resources,
-        units: ruage_data::load_units_file(&units).ok()?,
+        units: common::must("load_units_file", ruage_data::load_units_file(&units)),
     })
 }
 

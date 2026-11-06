@@ -28,6 +28,41 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 30, 2026-11-06 - a fixture that cannot read its pack says so (D130)
+>
+> **Where session 29 ended:** `24f72cc` pushed, **702 passed / 0 failed / 19 ignored**, and five questions waiting on the
+> owner - none of them answerable by me (chop pace, `army_at_least` against its own prose, Grass-only `is_walkable`,
+> `duration_seconds`, reachability in the node lookup). The owner, in a new thread: *"Please overtake [...] and continue
+> with findings."* So this session takes the first item the triage left unfixed and needs no decision: **the harness.**
+>
+> **The hole.** 36 of the 82 `crates/sim/tests` files load the pack through `ruage_data::load_*(..).ok()?` - **220** loader
+> calls, plus the `World::new` / `seed_from` / `load_*` calls beside them - so **every** load error becomes `None`, `fresh()`
+> returns `None`, and each test takes the `else { return }` at its head and reports **passed**. Truncate
+> `config/economy.toml` and a third of the suite goes *greener*, not red. The other 46 files in the same directory already do
+> it right (`expect("economy.toml")`), which is what makes the minority a defect rather than a house style.
+>
+> **What the drift had already built.** Eight hand-copied `fresh()` bodies differing only in which tables they load, and
+> `farm_ring.rs` still carrying a comment - *"Enough wood and food that a rule is refused for placement, never for price"* -
+> over `for slot in 0..4 { let _ = slot; }`. The stockpile it describes was deleted; a no-op loop compiles, so nothing said so.
+>
+> **D130 - the rule.** The generated pack's *absence* skips a fixture; a pack that is *present and will not load* fails it,
+> with the file's name and the loader's error. One loader in `crates/sim/tests/common/mod.rs`, five entry points for the five
+> shapes the copies had, `present()` for every other table.
+>
+> **Slices, one commit:** (1) the extraction, behaviour unchanged, suite still **702 green**; (2) the strictness, with a
+> meta-test over a **broken copy** of the pack and over a **directory with no pack**, RED first; (3) the suite-level A/B -
+> truncate `economy.toml` and run one test binary: **green before, red after**.
+>
+> **Found on the way (D131).** The first fixture that ran once the harness stopped skipping failed: `footprint.rs`'s
+> corridor map put its wood nodes on grass, the loader refused the map, `.ok()?` ate the refusal, and
+> `a_head_on_pair_in_a_one_tile_corridor_passes` had **never run**. With forest rows under its trees it runs, and it fails -
+> the pair overlaps by **628 raw units** at tick 66 (7,372 against the 8,000 their footprints need). Ignored with that
+> reason, and the repair is the next step, not this one.
+>
+> **Then:** adversarial review with a measured number (nothing on the tick path changes, so the measurement is the suite's
+> own wall time and the acceptance hash, which must not move), then push. The five session-29 questions stay open and are not
+> guessed at.
+
 > # Session 29, 2026-11-05 - a tree took one blow; and the second review, triaged (D129)
 >
 > **Second external review**: 205 findings over 176 files, `kimi-k2.7-code`, 42m45s, **partial** (107 of 176 items failed).

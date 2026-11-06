@@ -3174,3 +3174,42 @@ https://github.com/glouw/openempire?"*
    rather than propagating it.
 5. **A rate needs a test that states it.** "The tree is down by 15 s" was true before the fix, for the wrong reason - the
    pair of tests (standing at 10 s, down by 15 s) is what makes the rate observable.
+
+
+## D130 - A fixture that cannot read its pack fails, and names the file
+
+*2026-11-06. The second external review's test-hygiene batch, checked: 36 of the 82 sim test files turned every load error
+into `None`, so their tests reported **passed** while asserting nothing.*
+
+1. **The generated pack's absence skips a fixture.** `config/gamedata/` is produced from the game's install and is not
+   committed (D8), so a fresh checkout has no pack and those tests must not fail because of it.
+2. **A pack that is present and will not load fails the fixture**, with the file's path and the loader's error in the
+   message. The distinction is whether `config/gamedata/units.toml` - the pack's own marker - exists, never whether an error
+   was returned.
+3. **One loader.** `crates/sim/tests/common/mod.rs` holds the only copy: five entry points for the five shapes the eight
+   hand-copied `fresh()` bodies had, every other table through `present()`, which panics. A test file keeps a one-line
+   delegate so that no call site has to move.
+4. **The rule is testable, so it is tested.** `crates/sim/tests/fixture_rules.rs` drives the loader over a *broken copy* of
+   the pack (must panic, naming the file) and over a directory with no pack (must return `None`). Watched failing first: the
+   broken case returned `None`.
+5. **Why it is more than tidiness.** The suite is the only thing that says the engine still behaves. A harness that turns
+   "I could not read the content" into "the test passed" reports a green suite over a broken tree - the same failure as
+   piping `cargo test` through `tail`, a green that is not evidence.
+
+
+## D131 - The make-room step has never run, and it fails: two head-on bodies overlap
+
+*2026-11-06. Found by D130 within the hour: a fixture that had been skipping since the loader gained its forest-tile check.*
+
+1. `crates/sim/tests/footprint.rs`'s inline corridor map declared its wood nodes on **grass** - `terrain` was `G` on every
+   row - and `load_map_str` refuses a wood node that is not on a forest tile. `.ok()?` turned that refusal into `None`, so
+   `a_head_on_pair_in_a_one_tile_corridor_passes` returned at its first line and reported **passed**. The map now has
+   forest rows where its tree rows are, and the test runs.
+2. **It fails.** The pair comes **7,372 raw units** apart on tick 66, against the **8,000** their footprints need -
+   `reach_between`, computed from the pack's radii, not a number written into the test. The mechanism is sequential
+   integration: the second mover of the tick is checked against the first's *new* position, finds itself "already inside"
+   (D52's rule 3) and is therefore allowed to close the gap further.
+3. **The test is ignored with that reason on it**, not deleted and not weakened. A red that is no longer watched is how
+   this was lost the first time.
+4. **The repair is the next step**: a step whose candidate lies inside the reach may not *reduce* the gap, for either
+   mover, whichever order the pass visits them in - and if that cannot hold for both, the pair waits a tick instead.

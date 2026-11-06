@@ -7,37 +7,13 @@
 //!
 //! Written before the implementation (D7, SPEC §11).
 
-use std::path::PathBuf;
-
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, World};
 
-fn repo(rel: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join(rel)
-}
+mod common;
 
 fn fresh() -> Option<World> {
-    if !repo("config/gamedata/units.toml").exists() {
-        return None;
-    }
-    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).ok()?;
-    let settings = ruage_data::load_sim_file(&repo("config/sim.toml")).ok()?;
-    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).ok()?;
-    let economy = ruage_data::load_economy_file(&repo("config/economy.toml")).ok()?;
-    let units = ruage_data::load_units_file(&repo("config/gamedata/units.toml")).ok()?;
-    let combat = ruage_data::load_combat_file(&repo("config/combat.toml")).ok()?;
-    let mut world = World::new(&settings, 7).ok()?;
-    world.seed_from(&map, &economy, &units).ok()?;
-    world.load_resources(&resources).ok()?;
-    world.load_combat(&combat);
-    // The research tables are what make an age mean anything: without them `unit_available` has nothing to say and every
-    // item looks available.
-    let techs = ruage_data::load_techs_file(&repo("config/gamedata/techs.toml")).ok()?;
-    let effects = ruage_data::load_effects_file(&repo("config/gamedata/effects.toml")).ok()?;
-    world.load_research(&techs, &effects).ok()?;
-    Some(world)
+    common::fresh_research()
 }
 
 fn next_id(world: &World) -> EntityId {

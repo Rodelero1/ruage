@@ -12,6 +12,8 @@ use std::path::PathBuf;
 
 use ruage_sim::{SimError, World, max_scale_for};
 
+mod common;
+
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -29,11 +31,16 @@ fn shipped() -> Option<(
     if !units_path.exists() {
         return None;
     }
-    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).ok()?;
-    let settings = ruage_data::load_sim_file(&repo("config/sim.toml")).ok()?;
-    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).ok()?;
-    let economy = ruage_data::load_economy_file(&repo("config/economy.toml")).ok()?;
-    let units = ruage_data::load_units_file(&units_path).ok()?;
+    let resources = common::present(
+        &repo("config/resources.toml"),
+        ruage_data::load_resources_file,
+    );
+    let settings = common::present(&repo("config/sim.toml"), ruage_data::load_sim_file);
+    let map = common::present(&repo("config/map.toml"), |path| {
+        ruage_data::load_map_file(path, &resources)
+    });
+    let economy = common::present(&repo("config/economy.toml"), ruage_data::load_economy_file);
+    let units = common::must("load_units_file", ruage_data::load_units_file(&units_path));
     Some((settings, map, economy, units, resources))
 }
 

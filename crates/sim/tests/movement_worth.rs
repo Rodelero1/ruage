@@ -9,6 +9,8 @@ use std::path::PathBuf;
 
 use ruage_sim::{EntityKind, Runner, Task, World, find_path, line_clear, load_scenario_file};
 
+mod common;
+
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -19,8 +21,13 @@ fn project_map() -> Option<(ruage_data::Map, ruage_data::Resources)> {
     if !repo("config/gamedata/units.toml").exists() {
         return None;
     }
-    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).ok()?;
-    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).ok()?;
+    let resources = common::present(
+        &repo("config/resources.toml"),
+        ruage_data::load_resources_file,
+    );
+    let map = common::present(&repo("config/map.toml"), |path| {
+        ruage_data::load_map_file(path, &resources)
+    });
     Some((map, resources))
 }
 

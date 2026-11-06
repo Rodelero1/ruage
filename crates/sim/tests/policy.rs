@@ -8,6 +8,8 @@ use std::path::PathBuf;
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, World, load_scenario_file};
 
+mod common;
+
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -303,15 +305,20 @@ fn seeded_fixture() -> Option<World> {
     if !units.exists() {
         return None;
     }
-    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).ok()?;
-    let settings = ruage_data::load_sim_file(&repo("config/sim.toml")).ok()?;
-    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).ok()?;
-    let economy = ruage_data::load_economy_file(&repo("config/economy.toml")).ok()?;
-    let units = ruage_data::load_units_file(&units).ok()?;
-    let combat = ruage_data::load_combat_file(&repo("config/combat.toml")).ok()?;
-    let mut world = World::new(&settings, 7).ok()?;
-    world.seed_from(&map, &economy, &units).ok()?;
-    world.load_resources(&resources).ok()?;
+    let resources = common::present(
+        &repo("config/resources.toml"),
+        ruage_data::load_resources_file,
+    );
+    let settings = common::present(&repo("config/sim.toml"), ruage_data::load_sim_file);
+    let map = common::present(&repo("config/map.toml"), |path| {
+        ruage_data::load_map_file(path, &resources)
+    });
+    let economy = common::present(&repo("config/economy.toml"), ruage_data::load_economy_file);
+    let units = common::must("load_units_file", ruage_data::load_units_file(&units));
+    let combat = common::present(&repo("config/combat.toml"), ruage_data::load_combat_file);
+    let mut world = common::must("World::new", World::new(&settings, 7));
+    common::must("seed_from", world.seed_from(&map, &economy, &units));
+    common::must("load_resources", world.load_resources(&resources));
     world.load_combat(&combat);
     Some(world)
 }
