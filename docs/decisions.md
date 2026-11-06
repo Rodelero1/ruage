@@ -3233,6 +3233,21 @@ into `None`, so their tests reported **passed** while asserting nothing.*
      No engine change; turns an absolute invariant into a bounded one and writes down that a pair may overlap by 0.05 tiles
      for the ticks of a pass.
 
+8. **What the first-party deck says about the policy, added 2026-11-06 while checking the research thread** (Klingers,
+   Meeting C++ 2025, page 9 - `docs/pathfinding-from-the-talk.md`): *"In Age of Empires 2: Units bump into others, stop and
+   repath around. **No pushing allowed**. Formations allow for some friendly overlap."* Consequences, which narrow the
+   choice:
+   - **B is not the game.** Two bodies do not slip past each other; overlap in AoE2 belongs to **formations**, not to a
+     corridor pass. B stays buildable as our own rule, but it can no longer be argued as fidelity.
+   - **A stall in a one-tile corridor is correct behaviour, not a defect** - the game's own answer to two head-on units with
+     no room is to stand there and re-plan. That makes A/C honest and makes "they must always get through" a requirement
+     nobody has asked for.
+   - **The deck's model is the fix's shape**: a unit is a point, every obstruction is expanded by that unit's radius, so the
+     other body *is* an expanded obstacle. Separation then comes from the geometry of the plan, not from a pairwise reach
+     test applied after the step - which is exactly the asymmetry this decision is about (rule 9 steps first and asks later).
+   - **What the deck does not cover**: it ends at "brute-force smooth" - path *generation*. Following, standoff, arrival and
+     unstick are absent, and this overlap lives in that gap, so a further reading will not settle it.
+
 
 ## D132 - Passage is the surface: grass and dirt, never wood
 
