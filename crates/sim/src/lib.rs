@@ -19,8 +19,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 
 use ruage_data::{
-    CommandApply, Cost, CostResource, Economy, Effects, Map, MaybeFixed, Policy, Resources,
-    Sim as Settings, Unit, Units,
+    CommandApply, Cost, CostResource, Economy, Effects, Map, Policy, Resources, Sim as Settings,
+    Unit, Units,
 };
 
 mod metrics;
@@ -217,7 +217,7 @@ pub fn damage_between(attacks: &[(i16, i16)], armours: &[(i16, i16)], rules: &Da
 /// to be scaled before it is added to a raw value: nine speed additions ship in the data (+0.35 tiles
 /// per second is one), and adding 0.35 to a raw fixed value would move the unit by a twenty-thousandth
 /// of a tile per second and look like nothing happened.
-fn scale_fixed(base: Fixed, scale: i64, modifiers: &[&ruage_data::Modifier]) -> Fixed {
+pub(crate) fn scale_fixed(base: Fixed, scale: i64, modifiers: &[&ruage_data::Modifier]) -> Fixed {
     let mut raw = base.raw() as f64;
     // A kind-0 `set` replaces the base rather than adjusting it, and it has to be honoured here or the
     // attributes that only ever arrive as sets - Andean Sling's removal of a skirmisher's dead zone
@@ -1314,7 +1314,7 @@ pub struct World {
     /// Cloned at seed time so a command can be resolved without threading references through the
     /// tick loop. A replay carries ids, never numbers.
     pub(crate) units: Option<Units>,
-    economy: Option<Economy>,
+    pub(crate) economy: Option<Economy>,
     /// Per player, per resource. Index is `player - 1`; player 0 has no stockpile and neither does
     /// anything above `MAX_PLAYERS`. The width is a constant because the row is an array, and the
     /// pack is checked against it when it is loaded - so a slot is always inside the row.
@@ -1392,13 +1392,13 @@ pub struct World {
     build_queue: BuildQueue,
     /// Unit families whose meat can be gathered: both animal kinds, from content's `[hunt] animal_roles`.
     /// Resolved at seed so the engine never learns what a sheep is (D17, D70).
-    animals: BTreeSet<u32>,
+    pub(crate) animals: BTreeSet<u32>,
     /// The smaller list: animals that walk to a drop site when a villager works them, from
     /// `[hunt] herdable_roles`. A boar is food but not herdable (D70).
-    herdable: BTreeSet<u32>,
+    pub(crate) herdable: BTreeSet<u32>,
     /// Bodies: what a slaughtered animal becomes in place, from `[hunt] carcass_roles`. A carcass is gathered
     /// from, and it is a named unit rather than an inference from having no health (D70).
-    carcasses: BTreeSet<u32>,
+    pub(crate) carcasses: BTreeSet<u32>,
     /// Animal unit -> the body it leaves, from the pack's own `dead_unit`. Resolved at seed so a death in the
     /// tick needs a map lookup and not a table read (item 2, D70/D71).
     animal_bodies: BTreeMap<u32, u32>,
@@ -1448,7 +1448,7 @@ pub struct World {
     fell_carry: BTreeMap<EntityId, i64>,
     /// A worker the shares have decided to move to another column, and the node waiting for it: the load in its hands is
     /// banked **first**, at its own drop site, and only then does it take up the new work (the owner's rule, 2026-10-30).
-    pending_gather: BTreeMap<EntityId, EntityId>,
+    pub(crate) pending_gather: BTreeMap<EntityId, EntityId>,
     /// Villagers the policy has already given an order to, and when: the guard that stops the pass re-issuing the same
     /// gather order - and paying for a path search - every second.
     share_moved: BTreeMap<EntityId, u64>,
@@ -3082,7 +3082,7 @@ impl World {
     ///
     /// `radius` is the body's own footprint: a route for a scout is not a route for a house. A caller that only asks whether
     /// a place is reachable passes `0`, because the question is about walls, not clearance.
-    fn plan_path(
+    pub(crate) fn plan_path(
         &self,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
@@ -5084,7 +5084,7 @@ impl World {
     }
 
     /// Every modifier of `attribute` that applies to `unit`, from the techs `player` has researched.
-    fn modifiers_for(
+    pub(crate) fn modifiers_for(
         &self,
         player: u8,
         unit: &Unit,
@@ -6367,7 +6367,7 @@ impl World {
         })
     }
 
-    fn work_position(
+    pub(crate) fn work_position(
         &self,
         from: (Fixed, Fixed),
         target: (Fixed, Fixed),
@@ -6528,7 +6528,7 @@ impl World {
     /// "Free" is all three of: the right side's, finished, still holding food, and without a villager on it. Reachability is
     /// the gather order's job, not this search's: a plot behind a wall is offered here and refused by the route, which is the
     /// same answer the player would get clicking it himself.
-    fn nearest_free_farm(
+    pub(crate) fn nearest_free_farm(
         &self,
         from: (Fixed, Fixed),
         player: u8,
@@ -6678,7 +6678,7 @@ impl World {
     }
 
     /// Is this entity a farm, by the role content calls `[farm] unit`? By family, so an upgraded farm counts.
-    fn is_farm_role(&self, entity: &Entity) -> bool {
+    pub(crate) fn is_farm_role(&self, entity: &Entity) -> bool {
         if entity.kind != EntityKind::Building {
             return false;
         }
@@ -6907,351 +6907,6 @@ impl World {
             return None;
         }
         Some(self.herdable.contains(&unit))
-    }
-
-    /// The nearest **other** node of the same kind: the same resource column for a tree or a mine, the same family for
-    /// an animal (the next sheep, not a boar), the same role for a farm with food left in it. Reachability is part of
-    /// the choice, because a node behind a wall is not somewhere a worker can be sent (item 9's rule).
-    fn nearest_like(
-        &self,
-        from: (Fixed, Fixed),
-        old: EntityId,
-        worker: EntityId,
-    ) -> Option<EntityId> {
-        let source = self.find(old)?;
-        let kind = source.kind;
-        let unit = source.unit;
-        let family = unit.and_then(|unit| self.units.as_ref().map(|units| units.root(unit)));
-        // A farm is a **building** that fills the same column a bush does, so "the next source of food" has to cross the
-        // two kinds. Without this a forager whose berries are gone has nowhere to go: eighteen of them stood on the empty
-        // berry patch at 2,400 s and the match never spent another stick of wood.
-        let farm_slot = self
-            .economy
-            .as_ref()
-            .and_then(|economy| economy.farm.resource.as_deref())
-            .and_then(|name| self.slot_of(name));
-        // **Cheap first, expensive last, and only for the nearest few.** Reachability costs a path search per candidate, and
-        // this function is asked every time a node runs dry - over a map with 118 nodes that was 236 path searches for one
-        // villager, and the acceptance run's slow ticks spent **1,336 path searches a tick** in exactly this loop. The sort is
-        // distance-only; the walk is asked of the nearest eight, which is more than a worker will ever pass up in practice.
-        let mut candidates: Vec<(i64, u32, EntityId)> = Vec::new();
-        for entity in &self.entities {
-            if entity.id == old || entity.id == worker {
-                continue;
-            }
-            if matches!(entity.kind, EntityKind::Resource(_)) && !self.node_workable(entity.id) {
-                continue;
-            }
-            let same = match (kind, entity.kind) {
-                (EntityKind::Resource(slot), EntityKind::Resource(other)) => slot == other,
-                // ... and a finished farm, for the column a farm fills.
-                (EntityKind::Resource(slot), EntityKind::Building) => {
-                    farm_slot == Some(slot)
-                        && entity.construction.is_none()
-                        && entity.amount.raw() > 0
-                }
-                (EntityKind::Unit, EntityKind::Unit) => {
-                    // Another animal of the same family, and still alive: a carcass is not something to hunt.
-                    entity.hp > 0
-                        && unit.is_some_and(|unit| {
-                            entity.unit.is_some_and(|other| {
-                                other == unit
-                                    || family.is_some_and(|family| {
-                                        self.units
-                                            .as_ref()
-                                            .is_some_and(|units| units.root(other) == family)
-                                    })
-                            })
-                        })
-                }
-                (EntityKind::Building, EntityKind::Building) => {
-                    // Another finished farm with food left in it.
-                    entity.construction.is_none()
-                        && entity.amount.raw() > 0
-                        && unit.is_some_and(|unit| {
-                            entity.unit.is_some_and(|other| self.is_family(other, unit))
-                        })
-                }
-                _ => false,
-            };
-            if !same {
-                continue;
-            }
-            let dx = entity.position.0.raw() - from.0.raw();
-            let dy = entity.position.1.raw() - from.1.raw();
-            candidates.push((dx * dx + dy * dy, entity.id.0, entity.id));
-        }
-        candidates.sort_unstable();
-        candidates.truncate(8);
-        // Reachability is part of the choice, and a node's own tile is usually **blocked** (a tree, a mine, a farm), so the
-        // question is whether a worker can reach somewhere it can *work* it - the same tile `work_position` picks when the
-        // gather order is given. Asking `can_reach(node.position)` refused every tree, which is how the first version sent
-        // every lumberjack to Idle.
-        for (_, _, id) in candidates {
-            let Some(entity) = self.find(id) else {
-                continue;
-            };
-            if self.can_reach(from, entity.position)
-                || self
-                    .work_position(from, entity.position)
-                    .is_some_and(|stand| self.can_reach(from, stand))
-            {
-                return Some(id);
-            }
-        }
-        None
-    }
-
-    /// What may be gathered from an entity, and whether the thing being worked sets the pace: a farm
-    /// does (its own work rate), a tree does not (the villager's variant does).
-    ///
-    /// The farm is content's idea (D27). The engine knows two kinds of gatherable thing only because
-    /// `[farm]` names a building and the resource it yields.
-    fn gather_source(&self, node: EntityId) -> Result<(String, Option<MaybeFixed>), SimError> {
-        let entity = self
-            .find(node)
-            .cloned()
-            .ok_or(SimError::MissingEntity(node))?;
-        if let EntityKind::Resource(slot) = entity.kind {
-            let name = self
-                .resources
-                .as_ref()
-                .and_then(|resources| resources.name(slot))
-                .ok_or_else(|| SimError::NoVariant {
-                    task: format!("slot {slot}"),
-                    detail: "the content pack names no resource in this column".to_owned(),
-                })?;
-            return Ok((name.to_owned(), None));
-        }
-        let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
-        // A live animal is a source of food, and its meat is what it carries (D70). Content names which
-        // units are animals, so the engine never learns what a sheep is. A body is not a source: only a
-        // living animal yields, and what it leaves is the carcass rule's business (level 3 of this slice).
-        if entity.kind == EntityKind::Unit
-            && let Some(unit) = entity.unit
-            && self.units.as_ref().is_some_and(|units| {
-                let root = units.root(unit);
-                // Alive, it is an animal; dead, it is a body - and a body is gathered from with no health at
-                // all, which is why the carcass list is content rather than an inference (D70).
-                self.animals.contains(&root) && entity.hp > 0 || self.carcasses.contains(&root)
-            })
-        {
-            let resource = economy
-                .hunt
-                .resource
-                .clone()
-                .ok_or_else(|| SimError::NoVariant {
-                    task: "hunt".to_owned(),
-                    detail: "[hunt] names no resource for an animal to yield".to_owned(),
-                })?;
-            return Ok((resource, None));
-        }
-        let farm_unit = economy
-            .farm
-            .unit
-            .as_ref()
-            .and_then(|role| economy.role.get(role).copied());
-        if farm_unit.is_none() || entity.kind != EntityKind::Building || entity.unit != farm_unit {
-            return Err(SimError::NotAResource { id: node });
-        }
-        if entity.construction.is_some() {
-            // A plot holds its food from the moment it is marked out, but nothing comes out of it
-            // until it is finished.
-            return Err(SimError::BuildingNotReady { id: node });
-        }
-        let resource = economy
-            .farm
-            .resource
-            .clone()
-            .ok_or_else(|| SimError::NoVariant {
-                task: "farm".to_owned(),
-                detail: "[farm] names no resource for the farm to yield".to_owned(),
-            })?;
-        // `use_villager_rate` picks who sets the pace: the building's own work rate, or the
-        // variant's. It is a data question, so content holds the answer.
-        let rate = (!economy.farm.use_villager_rate).then_some(economy.farm.rate);
-        Ok((resource, rate))
-    }
-
-    fn start_gather(&mut self, villager: EntityId, node: EntityId) -> Result<(), SimError> {
-        // A deliberate order supersedes a share reassignment that was waiting on a deposit: without this, a villager told
-        // to do something else would still be yanked to the column it was pulled towards, once its load went in.
-        self.pending_gather.remove(&villager);
-        // Whose techs apply: the villager's owner's (a rate modifier is the worker's, not the node's).
-        let worker_player = self
-            .find(villager)
-            .map(|entity| entity.player)
-            .ok_or(SimError::MissingEntity(villager))?;
-
-        // **One farmer a farm** (the owner, 2026-11-04: *"Only 1 farmer per farm (can be constructed by multiple, but only 1
-        // can farm once construction is finished)"*, and *"if there is no empty farm nearby, villager becomes idle"*).
-        //
-        // A farm is the one node that is also a workplace, so two villagers sent to one crop is not sharing a resource - it
-        // is two men on four tiles, and the game does not allow it. The second order is therefore answered, not refused: the
-        // villager goes to the **nearest free farm** of his own side, and stands idle when there is none.
-        if self.find(node).is_some_and(|entity| self.is_farm_role(entity))
-            && self.entities.iter().any(|other| {
-                other.id != villager
-                    && matches!(other.task, Task::Gather { node: taken, .. } | Task::Return { node: taken, .. } if taken == node)
-            })
-        {
-            let here = self
-                .find(villager)
-                .map(|entity| entity.position)
-                .ok_or(SimError::MissingEntity(villager))?;
-            match self.nearest_free_farm(here, worker_player, villager) {
-                Some(free) => return self.start_gather(villager, free),
-                None => {
-                    // No free plot: he stops where he is. Nothing is refused - the order was taken and answered - so the
-                    // player sees a villager standing, which is what the owner asked for.
-                    let worker = self
-                        .find_mut(villager)
-                        .ok_or(SimError::MissingEntity(villager))?;
-                    worker.task = Task::Idle;
-                    worker.variant = None;
-                    self.paths.remove(&villager);
-                    return Ok(());
-                }
-            }
-        }
-        let (variant_id, rate_per_tick, carry_cap) = {
-            let units = self.units.as_ref().ok_or(SimError::NoTables)?;
-            let economy = self.economy.as_ref().ok_or(SimError::NoTables)?;
-
-            let (resource, farm_rate) = self.gather_source(node)?;
-            // The load has a column to land in, and that is checked here rather than discovered at
-            // the deposit: an order naming a resource the stockpile has no column for is refused now.
-            self.slot_of(&resource)
-                .ok_or_else(|| SimError::UnknownResourceName {
-                    name: resource.clone(),
-                })?;
-            // Which task the node presents. An **animal is hunted** (the hunter's bow: VMHUN carries `range = 3.0`)
-            // and a **herdable is herded** (the shepherd's knife), which is the owner's rule and is why the pack names
-            // both tasks. Everything else comes from content's resource -> task map, and a pack that names no hunt or
-            // herd task falls back to that map rather than refusing the order.
-            let animal_task = match self.find(node).map(|entity| (entity.kind, entity.unit)) {
-                Some((EntityKind::Unit, Some(unit))) if self.herdable.contains(&unit) => {
-                    Some("herd")
-                }
-                Some((EntityKind::Unit, Some(unit))) if self.animals.contains(&unit) => {
-                    Some("hunt")
-                }
-                _ => None,
-            };
-            let task_name = animal_task
-                .filter(|task| economy.gather.variant.contains_key(*task))
-                .map(str::to_owned)
-                .or_else(|| economy.gather.resource_task.get(&resource).cloned())
-                .ok_or_else(|| SimError::NoVariant {
-                    task: resource.clone(),
-                    detail: "no [gather.resource_task] entry for this resource".to_owned(),
-                })?;
-            let variant_id =
-                *economy
-                    .gather
-                    .variant
-                    .get(&task_name)
-                    .ok_or_else(|| SimError::NoVariant {
-                        task: task_name.clone(),
-                        detail: "no such task in [gather.variant]".to_owned(),
-                    })?;
-            let variant = units.unit(variant_id).ok_or_else(|| SimError::NoVariant {
-                task: task_name.clone(),
-                detail: format!("unit {variant_id} is not in the unit table"),
-            })?;
-            if variant.carry == 0 {
-                return Err(SimError::NoVariant {
-                    task: task_name.clone(),
-                    detail: "a variant that cannot carry anything cannot gather".to_owned(),
-                });
-            }
-            let rate = match farm_rate {
-                Some(rate) => {
-                    rate.resolve(self.scale, "farm.rate")
-                        .map_err(|err| SimError::NoVariant {
-                            task: "farm".to_owned(),
-                            detail: err.to_string(),
-                        })?
-                }
-                None => variant
-                    .work_rate
-                    .resolve(self.scale, "work_rate")
-                    .map_err(|err| SimError::NoVariant {
-                        task: task_name.clone(),
-                        detail: err.to_string(),
-                    })?,
-            };
-            // Gather rate and carry capacity are resolved *here*, when the order lands, from the
-            // variant and the owner's modifiers: a load already in hand keeps the numbers it started
-            // with, which is what "the resources have to be gathered first" means.
-            let rate = scale_fixed(
-                rate,
-                self.scale,
-                &self.modifiers_for(worker_player, variant, "gather_rate"),
-            );
-            // The carry cap is content arithmetic on a whole number, so it goes through the same
-            // fixed-point helper as speed and gather rate rather than through `apply_scalar` (D67).
-            let carry = scale_fixed(
-                Fixed::from_raw(i64::from(variant.carry) * self.scale),
-                self.scale,
-                &self.modifiers_for(worker_player, variant, "carry"),
-            );
-            // Rounded, not truncated: 10 x 1.25 is 12.5 and the game's Wheelbarrow gives 13. A
-            // truncating division here would quietly take a villager's load down by one.
-            let carry_cap = u32::try_from((carry.raw() + self.scale / 2) / self.scale)
-                .unwrap_or(u32::from(variant.carry));
-            // Exactness is the D10 invariant: a rate that does not split into whole per-tick
-            // amounts would drift, so it is an error rather than a rounded accumulation.
-            let rate_per_tick = rate
-                .div_exact(i64::from(self.tick_rate_hz))
-                .map_err(|err| SimError::NoVariant {
-                    task: task_name.clone(),
-                    detail: err.to_string(),
-                })?;
-            (variant_id, rate_per_tick, carry_cap)
-        };
-
-        let from = self
-            .find(villager)
-            .map(|entity| entity.position)
-            .ok_or(SimError::MissingEntity(villager))?;
-        let to = self
-            .find(node)
-            .map(|entity| entity.position)
-            .ok_or(SimError::MissingEntity(node))?;
-        // A building's own tile is blocked, so a worker stands *beside* it. Planning to the centre
-        // would walk the villager into the building, and the walk home would then start from a
-        // blocked tile and never find a route.
-        let route = if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
-            match self.work_position(from, to) {
-                Some(stand) => self.plan_path(from, stand, 0)?,
-                None => self.plan_path(from, to, 0)?,
-            }
-        } else {
-            self.plan_path(from, to, 0)?
-        };
-        self.paths.insert(
-            villager,
-            Route {
-                points: route,
-                ..Route::default()
-            },
-        );
-
-        let worker = self
-            .find_mut(villager)
-            .ok_or(SimError::MissingEntity(villager))?;
-        worker.variant = Some(variant_id);
-        worker.task = Task::Gather {
-            node,
-            rate_per_tick,
-            carry_cap,
-            progress: Fixed::ZERO,
-        };
-        // The load is the villager's, not the node's: re-tasking onto the next tree (or the next sheep) must not spill
-        // what is already in its hands. It used to be zeroed here, which was invisible until a worker could move on by
-        // itself.
-        Ok(())
     }
 
     fn apply(&mut self, command: Command) -> Result<(), SimError> {

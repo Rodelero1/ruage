@@ -40,6 +40,17 @@ This slice needed **7 more fields** `pub(crate)`: `explored`, `map_size`, `memor
 `units` - and one doc comment had to follow its function: the `sighting` doc was left behind over `tile_of_raw` by the cut,
 which the compiler would not catch and a reader would.
 
+## Slice 3: `world/gather.rs`
+
+`nearest_like`, `gather_source`, `start_gather` - **345 lines**, moved unchanged. All three are `pub(crate)` (the retarget
+path and `apply` call them). This slice needed:
+
+- **7 fields**: `animals`, `carcasses`, `economy`, `herdable`, `pending_gather`, `units` (`tick_rate_hz` was already exposed)
+- **5 helpers** `pub(crate)`: `is_farm_role`, `modifiers_for`, `nearest_free_farm`, `plan_path`, `work_position`
+- **1 free function** `pub(crate)`: `scale_fixed`
+- and `MaybeFixed` stopped being used in `lib.rs`, which the build said out loud as an unused import - the kind of tidying a
+  move does for free
+
 ## Performance
 
 A move cannot change behaviour, and the number that proves it is the acceptance hash:
@@ -52,8 +63,8 @@ A move cannot change behaviour, and the number that proves it is the acceptance 
 
 The hash is the claim; the timing is a single run and is not evidence of improvement.
 
-`crates/sim/src/lib.rs`: **11,073 → 10,719 → 10,449 lines**; `world/movement.rs` **369**, `world/memory.rs` **280**.
-Both slices leave the hash at `f328ebc8d4d34b78`.
+`crates/sim/src/lib.rs`: **11,073 → 10,719 → 10,449 → 10,103 lines**; `world/movement.rs` **369**, `world/memory.rs`
+**280**, `world/gather.rs` **357**. Every slice leaves the hash at `f328ebc8d4d34b78`.
 
 **711 passed / 0 failed / 20 ignored**; clippy and fmt clean.
 
