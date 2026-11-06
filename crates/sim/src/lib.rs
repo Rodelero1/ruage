@@ -2050,7 +2050,12 @@ impl World {
     /// 2026-10-29). `start_gather` plans the walk and is the one authority on whether a node can be worked, so this
     /// returns a few candidates in distance order and the caller stops at the first that starts. A node that fails is
     /// remembered (`share_failed`) instead of being retried every second - 0 A.D.'s `lastFailedGather`.
-    fn nodes_of_slot(&self, from: (Fixed, Fixed), slot: usize, limit: usize) -> Vec<EntityId> {
+    pub(crate) fn nodes_of_slot(
+        &self,
+        from: (Fixed, Fixed),
+        slot: usize,
+        limit: usize,
+    ) -> Vec<EntityId> {
         let mut nodes: Vec<(i64, u32, EntityId)> = Vec::new();
         for entity in &self.entities {
             if self.node_slot(entity.id) != Some(slot) {
@@ -2165,7 +2170,16 @@ impl World {
     /// Submit a command, refusing one that cannot be applied *at all* before it is queued. A bad
     /// order should be an error in the caller's face, not a villager who idles for ten minutes.
     pub fn submit_checked(&mut self, command: Command) -> Result<(), SimError> {
-        self.validate(&command)?;
+        if let Err(error) = self.validate(&command) {
+            // **A gather order refused for the ground is remembered** (D138). A script's gather action picks by distance
+            // and asks nothing - a path search per candidate cost 37x the run - so `start_gather` is the one authority,
+            // and this refusal is the only evidence the picker will ever get. Without the entry a rule would take the
+            // same walled-off tree every cooldown for the whole match: measured, 29 refusals in 30 s.
+            if let (Command::Gather { node, .. }, SimError::NoPath { .. }) = (&command, &error) {
+                self.share_failed.insert(*node, self.tick);
+            }
+            return Err(error);
+        }
         self.submit(command);
         Ok(())
     }

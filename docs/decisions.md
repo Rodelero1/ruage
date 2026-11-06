@@ -3366,3 +3366,33 @@ cavalry will simply try to close to the point as close as it can without running
 6. **The shipped pack is clean**: a cross-check of every reference in `config/economy.toml` against its own `[role]` and
    `[tech_role]` tables found **0 mismatches** before the check was written, so this change refuses nothing today and the
    acceptance hash does not move.
+
+
+## D138 - One picker, and it asks nothing: the script's gather action follows `nodes_of_slot`
+
+*2026-11-06. The owner, on the reachability question: **"B"** - no reachability test in the picker; the order's own plan
+is the check, and a failure is remembered.*
+
+1. **There were two pickers.** `World::nodes_of_slot` (the economy pass's) already had the rule that was measured in
+   2026-10-29: distance order, **no reachability test** - `can_reach` is a full path search, and asking it of six nodes once
+   a second per player cost **37x the rest of the run** (400 game-seconds: 319 ms -> 11.9 s) - with failures remembered in
+   `share_failed` and retried after `share_retry_ticks` (600 ticks, 30 s). The **script's** `nearest_resource` kept its own
+   copy that did the expensive thing: a `can_reach` per node of the resource, on **every** call.
+2. **And it asked the wrong question.** It tested `can_reach(node.position)`, and a tree's own tile is blocked ground, so
+   the answer was structurally pessimistic - `world/gather.rs` carries the note from the first version, which sent every
+   lumberjack to Idle that way.
+3. **So the script now asks the engine**: `nearest_resource` is `world.nodes_of_slot(here, slot, nth + 1)` and takes the
+   nth. One picker, one rule, and the expensive-but-wrong test is gone rather than duplicated. The acceptance map has
+   **90** wood nodes, so a gather rule used to cost up to 90 searches per firing and now spends none.
+4. **`start_gather` and `validate` are the authorities**, and they are the only places a search is spent. A refusal is
+   **remembered**: `start_gather` records `share_failed` when its plan fails, and `submit_checked` records it when
+   `validate` refuses a `Command::Gather` with `NoPath` - the second is the one that matters for scripts, because a
+   walled-off node is refused at **order** time (`check_order` is `&self` and cannot book anything), and without that entry
+   a rule took the same walled tree every cooldown: **measured, 29 refusals in 30 s**.
+5. **The test** (`crates/sim/tests/gather_pick.rs`) is a walled-off near wood, a reachable far one, and a gather rule, and
+   it asserts three things at once: the picker **takes the walled node** (so it is not pre-filtering), the far block is
+   **worked** (so a refusal is not a dead end), and the refusals stay **bounded by the walled nodes, not by the firings**
+   (so the memory works). RED, watched: *"it refused nothing, so it pre-filtered"*, then - with the picker changed and no
+   bookkeeping - *"the rule was refused 29 times in 30 s for nine walled nodes"*.
+6. **The acceptance match does not move**: `f328ebc8d4d34b78`, 141 entities, 188 repaths, 187 made-room, 574 refusal lines -
+   identical, because `config/acceptance.toml` carries no gather rule at all, so this change is for the packs that do.

@@ -331,13 +331,24 @@ impl World {
         // A building's own tile is blocked, so a worker stands *beside* it. Planning to the centre
         // would walk the villager into the building, and the walk home would then start from a
         // blocked tile and never find a route.
-        let route = if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
+        let planned = if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
             match self.work_position(from, to) {
-                Some(stand) => self.plan_path(from, stand, 0)?,
-                None => self.plan_path(from, to, 0)?,
+                Some(stand) => self.plan_path(from, stand, 0),
+                None => self.plan_path(from, to, 0),
             }
         } else {
-            self.plan_path(from, to, 0)?
+            self.plan_path(from, to, 0)
+        };
+        let route = match planned {
+            Ok(route) => route,
+            Err(error) => {
+                // **A node nobody can work is remembered here** (D138). The picker asks nothing - a search per candidate
+                // cost 37x the run - so this refusal is the only evidence it will ever get, and `share_failed` is the book
+                // both the economy pass and the script read (0 A.D.'s `lastFailedGather`). Without it a rule would take
+                // the same walled-off tree every cooldown for the whole match.
+                self.share_failed.insert(node, self.tick);
+                return Err(error);
+            }
         };
         self.paths.insert(
             villager,

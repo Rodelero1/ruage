@@ -654,27 +654,22 @@ fn nearest_nodes(world: &World, from: (Fixed, Fixed), slot: usize, limit: usize)
     nodes.into_iter().map(|(_, _, id)| id).collect()
 }
 
-/// The `nth` nearest node of a kind that the villager can actually walk to, ordered by
-/// (distance, id) so the choice is deterministic and two villagers told `nth = 0` and `nth = 1` land
-/// on different nodes.
+/// The `nth` nearest node of a resource, **by distance alone** (D138, the owner's choice: *"B"*).
 ///
-/// Reachability is part of the choice, not a check afterwards: a tree behind a wall is not a tree
-/// this villager can be sent to, and the script should pick the next one rather than refuse.
+/// Ordered by (distance, id), so the choice is deterministic and two villagers told `nth = 0` and `nth = 1` land on
+/// different nodes.
+///
+/// The engine's own picker is `World::nodes_of_slot`, and this asks it rather than keeping a second opinion: distance
+/// order, **no reachability test** - `can_reach` is a full path search, and asking it of every candidate node once a
+/// second per player cost **37x the whole run** (400 game-seconds: 319 ms -> 11.9 s, 2026-10-29) - with nodes that failed
+/// remembered in `share_failed` and skipped until `share_retry_ticks` has passed. `start_gather` is the one authority on
+/// whether a node can be worked, and it is the only place a search is spent.
+///
+/// The copy this replaces did ask `can_reach` of every node of the resource on every call, and it asked it of the node's
+/// **own** position, which is blocked ground for a tree - so the question was the expensive one *and* the wrong one.
 fn nearest_resource(world: &World, from: EntityId, slot: usize, nth: usize) -> Option<EntityId> {
     let here = world.position(from)?;
-    let mut nodes: Vec<(i64, u32, EntityId)> = world
-        .entities()
-        .iter()
-        .filter(|entity| entity.kind == EntityKind::Resource(slot))
-        .filter(|entity| world.can_reach(here, entity.position))
-        .map(|entity| {
-            let dx = entity.position.0.raw() - here.0.raw();
-            let dy = entity.position.1.raw() - here.1.raw();
-            (dx * dx + dy * dy, entity.id.0, entity.id)
-        })
-        .collect();
-    nodes.sort_unstable();
-    nodes.get(nth).map(|(_, _, id)| *id)
+    world.nodes_of_slot(here, slot, nth + 1).get(nth).copied()
 }
 
 /// The first free tile within two of this player's town centre, in a fixed scan order.

@@ -28,6 +28,20 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 38, 2026-11-07 - D138: one picker, and it asks nothing
+>
+> **The owner chose B.** The script's `nearest_resource` no longer runs a path search per candidate node (90 wood nodes on
+> the acceptance map) and no longer asks the wrong question (`can_reach` on a tree's own blocked tile); it delegates to
+> `World::nodes_of_slot`, which is the economy pass's picker and already carried the measured rule. Failures are booked in
+> `share_failed` by `start_gather` **and** by `submit_checked` - the second matters because a walled node is refused in
+> `validate`, which is `&self` and cannot book. Two REDs, both watched (pre-filtering, then 29 refusals in 30 s).
+> Acceptance byte-identical; **720 passed / 0 failed / 19 ignored**.
+>
+> **Next, in order**: (1) the sim block of the second review (63 findings, still unread); (2) the remaining 34 loader
+> findings; (3) the stall class test the deck's regression method suggests (a unit with a live order that has not moved for
+> N ticks). **Owner questions still open**: `Civ::bars`, `pack.rs` bytes map, FNV vs SHA-256, duplicate `at_villagers`,
+> army size, loader strictness.
+
 > # Session 37, 2026-11-07 - D131 decided: no pushing allowed
 >
 > **The owner chose A.** `bound_to_reach` in `world/movement.rs`: rules 4 and 9 no longer step a body into another's reach.
