@@ -3311,3 +3311,26 @@ cavalry will simply try to close to the point as close as it can without running
 6. **A cost that is not a function of the entity count is a defect.** The count of bodies could not have predicted this;
    what predicted it was per-tick time split from the AI's time, then the repath counter. That pair of instruments is worth
    keeping in mind for the next "why is this match slow".
+
+
+## D137 - A name content writes must exist in the pack's own tables
+
+*2026-11-06. The second review's findings against `economy.rs:1010/1065/1083`, checked (the triage of 2026-11-05 verified
+14 of 205; the loader block of 41 came next).*
+
+1. **The loader already refused four of these**: a `build.farm`, a `build.spaced_roles` entry, `build.farm_spacing` and an
+   `age.order` name that are not in the pack. My first draft of the review said it checked **none** of them; that was wrong
+   and is corrected in the review and the SPEC row.
+2. **Six places accepted the same mistake**, where a typo is a silent no-op at runtime: `build.requires` (on **both** sides -
+   the building and the building it needs), `build.blocking_roles`, `footprint` keys, the four `hunt` lists,
+   `age.requires`' keys and its `of`/`single`.
+3. **The refusal names the key and the name**: *"`\"sheeep\"` is not a name in this pack's [role] table"* under
+   `hunt.herdable_roles`. "Invalid" is what the typo already was.
+4. **`[metrics] military_roles` stays lenient, deliberately.** Its own comment says a role the pack cannot name is skipped
+   because a metric is a measurement, not a rule of the game - so the review's request to check it is **refused**, with the
+   comment as the evidence.
+5. **Seven tests, watched failing first** (30 passed / 7 failed before the code): one per place, each swapping one real name
+   in `config/economy.toml` for one the pack does not have, and each asserting the refusal names the key and the name.
+6. **The shipped pack is clean**: a cross-check of every reference in `config/economy.toml` against its own `[role]` and
+   `[tech_role]` tables found **0 mismatches** before the check was written, so this change refuses nothing today and the
+   acceptance hash does not move.

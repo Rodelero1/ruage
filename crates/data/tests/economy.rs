@@ -512,3 +512,111 @@ fn a_mark_naming_no_role_is_rejected() {
         .to_string();
     assert!(err.contains("no_such_building"), "got: {err}");
 }
+
+/// The shipped pack, with **one** name swapped for one the pack does not have. The file must load before the swap, or the
+/// test measures the swap instead of the refusal.
+fn pack_with(from: &str, to: &str) -> String {
+    let text = std::fs::read_to_string(repo("config/economy.toml")).expect("config/economy.toml");
+    assert!(
+        text.contains(from),
+        "config/economy.toml no longer contains {from:?}: this test's premise has moved"
+    );
+    text.replacen(from, to, 1)
+}
+
+/// The refusal, as text, must name **the key** and **the name that is not there** - a message that says only "invalid" is
+/// no better than the silent no-op these checks replace.
+fn refused(pack: &str, key: &str, name: &str) {
+    let err = load_economy_str(pack, "economy.toml")
+        .expect_err("a name the pack does not have is a refusal");
+    let text = err.to_string();
+    assert!(
+        text.contains(key) && text.contains(name),
+        "the refusal must name {key:?} and {name:?}: {text}"
+    );
+}
+
+/// **Every name content writes must exist in the pack's own tables** (second review, `economy.rs:1010/1065/1083`).
+///
+/// The loader already refuses a bad `build.farm`, `build.spaced_roles` entry and `age.order` name. It accepted the same
+/// mistake in six other places, where a typo is a silent no-op at runtime: a prerequisite that never matches, a wall role
+/// that blocks nothing, a footprint nobody uses, a hunt list that names nobody, an age requirement that never counts.
+///
+/// Written before the implementation (D7, SPEC §11).
+#[test]
+fn a_build_prerequisite_whose_role_does_not_exist_is_refused() {
+    refused(
+        &pack_with(
+            "siege_workshop = \"blacksmith\"",
+            "siege_workshop = \"blacksmithh\"",
+        ),
+        "build.requires",
+        "blacksmithh",
+    );
+}
+
+#[test]
+fn a_build_prerequisite_named_by_a_role_the_pack_lacks_is_refused() {
+    refused(
+        &pack_with(
+            "siege_workshop = \"blacksmith\"",
+            "siege_workshopp = \"blacksmith\"",
+        ),
+        "build.requires",
+        "siege_workshopp",
+    );
+}
+
+#[test]
+fn a_blocking_role_the_pack_lacks_is_refused() {
+    refused(
+        &pack_with(
+            "blocking_roles = [\"palisade_wall\"]",
+            "blocking_roles = [\"palisade_walll\"]",
+        ),
+        "build.blocking_roles",
+        "palisade_walll",
+    );
+}
+
+#[test]
+fn a_footprint_for_a_role_the_pack_lacks_is_refused() {
+    refused(
+        &pack_with("[footprint.farm]", "[footprint.farmm]"),
+        "footprint",
+        "farmm",
+    );
+}
+
+#[test]
+fn a_hunt_list_naming_a_role_the_pack_lacks_is_refused() {
+    refused(
+        &pack_with(
+            "herdable_roles = [\"sheep\"]",
+            "herdable_roles = [\"sheeep\"]",
+        ),
+        "hunt.herdable_roles",
+        "sheeep",
+    );
+}
+
+#[test]
+fn an_age_requirement_for_a_tech_role_the_pack_lacks_is_refused() {
+    refused(
+        &pack_with("feudal_age = { count = 2", "feudal_agee = { count = 2"),
+        "age.requires",
+        "feudal_agee",
+    );
+}
+
+#[test]
+fn an_age_requirement_counting_a_role_the_pack_lacks_is_refused() {
+    refused(
+        &pack_with(
+            "of = [\"mill\", \"mining_camp\", \"barracks\"]",
+            "of = [\"milll\", \"mining_camp\", \"barracks\"]",
+        ),
+        "age.requires",
+        "milll",
+    );
+}

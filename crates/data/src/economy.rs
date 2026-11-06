@@ -916,7 +916,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         }
     }
 
-    Ok(Economy {
+    let economy = Economy {
         schema: raw.schema,
         ring: Ring {
             scale_percent: (raw.ring.scale * 100.0).round() as i32,
@@ -1096,7 +1096,71 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         conquest: Conquest {
             surviving_classes: raw.conquest.surviving_classes,
         },
-    })
+    };
+    check_references(&economy, path)?;
+    Ok(economy)
+}
+
+/// **Every name content writes must exist in the pack's own tables** (D137).
+///
+/// The loader already refuses a `build.farm`, a `build.spaced_roles` entry and an `age.order` name that are not in the
+/// pack. It accepted the same mistake in six other places, where a typo is a **silent no-op** at runtime: a prerequisite
+/// that never matches, a wall role that blocks nothing, a footprint nobody uses, a hunt list that names nobody, an age
+/// that can never be counted. The message names the key and the name, because "invalid" is what the typo already was.
+///
+/// `[metrics] military_roles` is deliberately **not** checked: its own comment says a role the pack cannot name is skipped,
+/// because a metric is a measurement rather than a rule of the game.
+fn check_references(economy: &Economy, path: &str) -> Result<(), ConfigError> {
+    let role = |name: &str, key: &str| -> Result<(), ConfigError> {
+        if economy.role.contains_key(name) {
+            Ok(())
+        } else {
+            Err(invalid(
+                path,
+                key,
+                format!("{name:?} is not a name in this pack's [role] table"),
+            ))
+        }
+    };
+    let tech = |name: &str, key: &str| -> Result<(), ConfigError> {
+        if economy.tech_role.contains_key(name) {
+            Ok(())
+        } else {
+            Err(invalid(
+                path,
+                key,
+                format!("{name:?} is not a name in this pack's [tech_role] table"),
+            ))
+        }
+    };
+    // A prerequisite has a role on both sides: the building and the building it needs.
+    for (who, needs) in &economy.build.requires {
+        role(who, "build.requires")?;
+        role(needs, "build.requires")?;
+    }
+    for name in &economy.build.blocking_roles {
+        role(name, "build.blocking_roles")?;
+    }
+    for name in economy.footprint.keys() {
+        role(name, "footprint")?;
+    }
+    for (key, list) in [
+        ("hunt.herdable_roles", &economy.hunt.herdable_roles),
+        ("hunt.animal_roles", &economy.hunt.animal_roles),
+        ("hunt.carcass_roles", &economy.hunt.carcass_roles),
+        ("hunt.butcher_roles", &economy.hunt.butcher_roles),
+    ] {
+        for name in list {
+            role(name, key)?;
+        }
+    }
+    for (name, requirement) in &economy.age.requires {
+        tech(name, "age.requires")?;
+        for counted in requirement.of.iter().chain(&requirement.single) {
+            role(counted, "age.requires")?;
+        }
+    }
+    Ok(())
 }
 
 pub fn load_economy_file(path: &Path) -> Result<Economy, ConfigError> {

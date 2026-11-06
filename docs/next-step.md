@@ -28,6 +28,22 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 36, 2026-11-07 - D137, every name must exist
+>
+> The loader block's best finding, implemented test-first: **six places accepted a role or tech-role name the pack does not
+> have** (`build.requires` both sides, `build.blocking_roles`, `footprint` keys, the four `hunt` lists, `age.requires` keys
+> and `of`/`single`), while four others were already refused. Seven tests, **watched failing first** (30 passed / 7 failed),
+> each swapping one real name in `config/economy.toml`; the refusal names the key and the name. `[metrics] military_roles`
+> is **refused** as a finding - the pack's own comment says a metric is a measurement, not a rule (D137.4).
+>
+> **The shipped pack was clean before the check existed** (0 mismatches over 40 roles + 6 tech roles), so the acceptance hash
+> `f328ebc8d4d34b78` does not move. Review: `docs/reviews/2026-11-06-every-name-must-exist.md`.
+>
+> **Open**: the other 34 findings of that block (17 confirmed, 15 low, 3 partly, 2 refuted - verdicts in
+> `docs/reviews/2026-11-07-second-review-the-rest.md`), then sim 63, tests 59, config 26. **Owner questions still open**:
+> loader strictness for wrong-but-harmless values; `Civ::bars`; `pack.rs`'s `bytes` map; FNV vs SHA-256; duplicate
+> `at_villagers` rows.
+
 > # Session 35, 2026-11-07 - the second review's loader block, and the split
 >
 > **Two things, both pushed.** (1) **D136**: `lib.rs` split, three slices - `world/movement.rs` (369), `world/memory.rs` (280),
