@@ -45,11 +45,11 @@ infinity do reach `Fixed::parse`, which refuses them rather than rounding.
 | 11 | `combat.rs:65` integer division truncates the sentinel | **confirmed, low** | `9999.9` → `9999`. Armour classes are integers, so a whole-number check at load is the right fix. |
 | 12 | `economy.rs:935` `scale_percent` cast unchecked | **partly confirmed** | It is unchecked: `(raw.ring.scale * 100.0).round() as i32`. It does **not** wrap - it saturates. A bounds check is still worth having. |
 | 13 | `economy.rs:252` `fell_hp_per_tick` per tick, `f64` in the tick | **fixed** | D129: the rate converts once at load into `fell_milli_per_second` and the tick carries an integer remainder. The review's arithmetic underneath was wrong by 1,600×. |
-| 14 | `economy.rs:1010` cross-references not validated (`build.requires`, `footprint`, `hunt.*`, `age.*`, `start.stock`) | **confirmed** | None of those vocabularies is checked at load; a typo becomes a silent no-op. This is the single largest real find in this block. |
+| 14 | `economy.rs:1010` cross-references not validated (`build.requires`, `footprint`, `hunt.*`, `age.*`, `start.stock`) | **confirmed, narrower than filed** | **Four of these *are* checked**: `age.order` (line 882), `build.farm`, `build.farm_spacing`, `build.spaced_roles`. **Not** checked: `build.requires` (either side), `build.blocking_roles`, `footprint` keys, every `hunt` list, `age.requires` keys and its `of`/`single`, `metrics.military_roles`. `start.stock` needs the resources table, which this loader does not have. |
 | 15 | `economy.rs:430` share total uses `u32` sum | **confirmed, low** | Arithmetic is right that it can overflow; reaching it needs a row summing above 4.29e9 %, which only a hand-written pack can write. A `u64` accumulator is one token. |
 | 16 | `economy.rs:442` duplicate `at_villagers` rows accepted | **confirmed** | The row sum is validated (`sums to {total}%, not 100%`); duplicate thresholds are not. |
-| 17 | `economy.rs:1083` `[hunt]` role lists unvalidated | **confirmed** | Same as #14, narrower: four lists, none checked against `[role]`. |
-| 18 | `economy.rs:1065` `age.requires` keys unchecked | **confirmed** | `age.order` *is* validated against `[tech_role]`; the requirement entries are not, so a typo silently blocks an age. |
+| 17 | `economy.rs:1083` `[hunt]` role lists unvalidated | **confirmed** | Four lists (`herdable_roles`, `animal_roles`, `carcass_roles`, `butcher_roles`), none checked against `[role]` - the loader validates `build.spaced_roles` the same way twenty lines earlier, so the omission is inconsistency rather than design. |
+| 18 | `economy.rs:1065` `age.requires` keys unchecked | **confirmed** | `age.order` *is* validated (against `[tech_role]`, line 882); the requirement entries and their `of`/`single` role lists are not - so a typo silently blocks an age. |
 | 19 | `jobs.rs:91` duplicate `target`/`column` accepted | **confirmed, low** | `name_for` takes the first match; nothing rejects a duplicate. |
 | 20 | `lib.rs:188` `resolve` round-trips through `format!` | **refuted in mechanism, confirmed as a guard gap** | `{}` never emits an exponent for `f64`, so the round-trip is exact; NaN/Inf do reach the parser, which refuses them. A `is_finite()` guard is cheap tidiness, not a defect. |
 | 21 | `map.rs:75` `is_walkable` accepts only Grass | **fixed** | D132, tonight: `Grass \| Dirt`, with the owner's own words in the comment. Its interchange with `Terrain::walkable()` is now documented at both ends. |
@@ -74,12 +74,18 @@ infinity do reach `Fixed::parse`, which refuses them rather than rounding.
 | 40 | `units.rs:308` variant parents unvalidated (missing parent, cycle > 1) | **partly confirmed** | `root()` has an eight-hop cycle guard and its doc says so, so a cycle cannot hang the tick - it returns the wrong unit, silently. Load-time validation is absent. |
 | 41 | `units.rs:308` (second finding, same lines) self-loop rejected, longer cycle not | **confirmed, low** | Same code as #40. |
 
+<!-- corrected: the first draft of this file claimed the economy loader "copies role and resource names into its tables
+without checking they exist". It checks four of them - `age.order`, `build.farm`, `build.farm_spacing`,
+`build.spaced_roles` - and the rows below now say which are checked and which are not. -->
+
 **Tally, counted from the table rather than by eye: 17 confirmed (a real fix behind each), 15 confirmed but low, 3 partly
 confirmed, 2 fixed tonight (D129, D132), 2 refuted outright, and 2 that are "refuted in mechanism, confirmed in effect" -
 `Civ::bars` (a dead stub, not a broken rule) and `resolve`'s round-trip (safe as written, missing a finite guard).**
-The two that matter most are **#14/#17/#18** - one defect wearing three hats: the economy loader copies role and resource
-names into its tables without checking they exist, so a typo in content is a silent no-op at runtime instead of a refusal
-at load.
+The three that matter most are **#14/#17/#18** - one defect wearing three hats, **narrower than filed**: the loader already
+refuses a `build.farm`, a `build.spaced_roles` entry and an `age.order` name that are not in the pack's own tables, and it
+does **not** refuse the same mistake in `build.requires`, `build.blocking_roles`, `footprint` keys, the four `hunt` lists,
+`age.requires`' keys and its `of`/`single`, or `metrics.military_roles`. That is the fix worth making - and it is an
+inconsistency in an otherwise strict loader, not a gap in its design.
 
 ## What is not in this pass
 

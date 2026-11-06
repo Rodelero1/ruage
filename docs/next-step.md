@@ -35,8 +35,10 @@
 > which is the proof that a move changed nothing. Remaining files: `orders`, `production`, `combat`, `state`, `selection`;
 > then stage 2, cutting `step` (1,559 lines) into phases. (2) **the second review's loader block**: 41 findings against
 > `crates/data/src/` given a verdict each - **17 confirmed, 15 confirmed but low, 3 partly, 2 fixed tonight, 4 refuted** -
-> in `docs/reviews/2026-11-07-second-review-the-rest.md`. The best find is one defect in three hats: the economy loader
-> never checks that the role and resource names it copies into its tables exist.
+> in `docs/reviews/2026-11-07-second-review-the-rest.md`. The best find is one defect in three hats, narrower than filed: the economy
+> loader refuses a `build.farm`, a `build.spaced_roles` entry and an `age.order` name that are not in its tables, and accepts
+> the same mistake in `build.requires`, `build.blocking_roles`, `footprint` keys, the four `hunt` lists and `age.requires`.
+> My first draft of the review said it checked none of them - corrected before the commit.
 >
 > **Still to read from that review**: sim 63, tests 59 (10 already settled), config 26, other 16.
 >
