@@ -1305,3 +1305,92 @@ the game's own content, which is the same rule as the art.
   unchanged, with the caution that `ClosestObject`'s worker cap is a neighbouring search, not this one. **U12** is now
   three numbers (50, 100, 16 ms) for two games, and 5.7's own rate is still unmeasured. **U21** unchanged — nothing new
   on attributes 1 or 12. **U19, U20, U7, U8** unchanged.
+
+## 2026-11-06 — genie writes down what the game's hash order costs, and aoe2 shows the install's AI is a baseline, not a gospel
+
+**`librematch/genie`** (16 commits, `49222223→58a360a6`, **AGPL-3.0**): the FD-001-D26 grind continues through DE-only
+combat machinery; the more useful half of the tick is one commit about determinism.
+
+- The ports are the 2013 game's, not ours: auras and the powerup update (`FUN_141204a10`, `combat/aura/`,
+  `combat/powerup.rs` 599 lines), the stingers (`combat/stingers/`, ~1,200 lines — a hit's timed burns and slows), slot
+  22's kill credits, `lockdown.rs`, `hp_transforms.rs`, `task_change.rs`. 5.7 has no auras, no stingers, no powerup
+  columns, so nothing here is a 5.7 mechanic. What transfers is an *order*: `world/after_step.rs`'s `finish_own_update`
+  now reads regeneration → charge refill → passive abilities → **powerup update → stinger update** → the hit-point
+  clamp → a building's production. Two phases are inserted where the 2026-11-05 note had the clamp follow the
+  abilities directly.
+- **`adfce951` is a rule set, not a port.** `CODING_STYLE.md` §12 gains four bullets: the simulation holds no `HashMap`
+  or `HashSet` (`clippy.toml`'s `disallowed-types` fails the build); a container the game walks that is keyed by **game
+  data** is ported by its MSVC hash order (`math/msvc.rs`: FNV-1a over the key's bytes, `hash & mask`, a new key in
+  front of its bucket's elements); a container the game keys by an **address** has an order no process repeats — *"the
+  game's own replay included"* — so the port either walks it in a fixed order and tests more than one, or takes the
+  order the game gives most often (each address key as if alone in its bucket, i.e. insertion order); and those rules
+  are what let genie play one game beside the game's own clients.
+
+**`yanfengliu/aoe2`** (72 commits, `45a76681→513f3172`, **MIT**): two-thirds is work 142, DE's command-card keys
+(military card, every building's card, Space/Home/zoom, go-to and select-all, twenty control groups) — UI parity with no
+engine lesson, plus work 143's CI sharding. Two things transfer.
+
+- **The install's AI is now a measured method, not an idea.** Work 144 M2 (`src/game/simulation/aiDarkAgeBoom.ts`, 219
+  lines) reimplements DE's Dark Age boom by citing the installed scripts line by line (`units.per` 293–376,
+  `gatherers.per` 79–97, `buildings.per` 4216–4260, `const.per` 4570–4611), and **the scripts lost when followed**:
+  DE's Feudal farm count and its seventh Dark Age farm were tried and dropped because each cost Ages in self-play. So
+  the install's AI is a source of numbers, and the A/B is what decides — D5's rule for the dat, applied to the AI.
+- **Their judging discipline is the transferable part.** AI changes now run five seeds on each of five maps (55
+  seat-records, `scripts/selfplay-ab.mjs`, deterministic) because a one-seed judgement had passed a change that lost on
+  the others. Our `boom_probe.rs` is the same class of test on one seed.
+- **Shared gathering is a cross-check on two of our rules, and their defect is one we already guard.** DE's text names
+  a worker limit for the **Farm alone** (strings 26149, 26895, 44433): a tree, carcass, mine or bush takes any number of
+  the human player's villagers, a Farm takes one, and an extra stands idle. Ours already does both — `lib.rs:7655`
+  "One farmer a farm" (owner, 2026-11-04) and two villagers on one stump (`whole_units.rs:133`). Their root cause is
+  the interesting one: a herdable walked onto the villagers' cell, their path search **refused a blocked start**, every
+  approach and drop-off search from that cell failed, and the villager idled beside the sheep it was ordered onto. Our
+  `short_range` pins exactly that (`the_start_tile_is_not_a_wall`, `short_range.rs:186`) and `find_path` documents the
+  same exemption, so the class is guarded in both searches — a shipped failure, not a hypothetical.
+
+**`Divy1211/AoE2DE_UGC_Guide`** (2 commits): one documentation correction — the trigger effect "Freeze Object" is
+**Stop Object plus stance No Attack**, not a movement lock. Triggers are scenario-only and not in `crates/sim`, so
+nothing to act on; recorded because the old text would have been wrong if anyone wrote the effect from it.
+
+**Divergence on the axes.** Asset pipeline (D18): nothing, either side. Engine/content (D17): genie's build layer grew
+DE combat state, not shared rules; aoe2's AI is still rules in code where ours could be rules in the pack — and work
+144 is now the worked example of turning a `.per` script into numbers. Determinism: genie's new rules are a refinement
+of our constraint 3 and evidence *for* it (below). Tick: no new number. Platform, language, licence: unchanged.
+
+- **Our constraint 3 already holds, and genie names the part we did not have.** `crates/` holds no `HashMap` or
+  `HashSet` at all (grep, 2026-11-06), and `determinism.md` already demands iteration by entity id. The addition is
+  that in the original some orders are **not reproducible by anyone**, because the key is a pointer — the strongest
+  evidence yet that "bit-exact HD" is not well-defined in those places, which supports D16's fixed-order, seconds-not-
+  ticks design rather than undercutting it. Cost of adopting: nothing. One sentence belongs in `determinism.md` when
+  and if 5.7 evidence arrives; DE's is not 5.7's.
+
+**Study list.**
+
+- genie `CODING_STYLE.md` §12, the four hash bullets (~645–665), and `crates/engine/genie-core/src/math/msvc.rs`
+  `MapHash` (~340–405) — an enum and a ten-line `insert_in_bucket`, the whole of an order that no client repeats.
+- genie `crates/engine/genie-core/src/world/after_step.rs` 88–125 — `finish_own_update`, with the two inserted phases.
+- aoe2 `docs/work/144_ai-dark-age-boom/plan.md` (285 lines) and `src/game/simulation/aiDarkAgeBoom.ts` — how a `.per`
+  script becomes numbers, which of them were tried, and which lost.
+- aoe2 `src/game/simulation/bridge/gatherCarryOn.ts` and `toResourceStep.ts` — the Farm-only worker rule and the
+  blocked-start fix, readable under MIT.
+
+**Never copy.** genie is **AGPL-3.0**. This tick's nearest miss is `math/msvc.rs`: porting MSVC's `unordered_map` is
+exactly the "it was only a small function" shape — an enum, a hash, a bucket mask and a ten-line insert — and it is
+theirs. The *facts* (FNV-1a over the key's bytes, `hash & mask`, insert before the bucket's first element, address keys
+unordered) are facts about MSVC and the game and can be re-derived; the file, its names, its tests and its prose do
+not cross. The same for `stingers/` and `aura/`: dense enough to translate wholesale, and none of it 5.7's. aoe2 is
+**MIT**, so code may legally cross, but `aiDarkAgeBoom.ts`'s numbers are **DE's script figures**: they must not reach
+`config/`, exactly as their `design/stats/*.csv` must not.
+
+**Open questions.**
+
+- **U22** — `gathering/closest_resource.rs` moved (+100 −28) but only to parameter structs (`SoughtResource`,
+  `Gatherer`); the search's contract is unchanged, so the 2026-11-05 reading stands. The caution sharpens: DE's own
+  text names a worker limit for the **Farm alone**, so `ClosestObject`'s workers cap must not become a general
+  per-node cap when the resource search is written.
+- **U18** — the order inside one object gains two phases; the order between objects is still DE's and still unread on
+  HD 5.7.
+- **U12** — no new number: still 50, 100 and 16 ms for two games, and 5.7's own rate unmeasured.
+- **U5** — genie's new `movement/top_speed.rs` (570 lines) derives a unit's top speed from the master's speed at slot
+  `0xe8` plus powerups and stingers. That is DE's stack; 5.7's speed stays `animation_info.speed`, so this is not an
+  answer, only the shape DE gave the same question.
+- **U21, U19, U20, U7, U8** — unchanged.
