@@ -3261,3 +3261,35 @@ have 0 wood, then grass and dirt passable, wood impassable."*
 3. **Nothing is truncated**: the match is decided at **1,527.6 s** (seed 7), so a 1,800 s limit ends a finished match
    rather than a live one - and the headless output before and after the change is identical line for line in its
    refusals.
+
+
+## D134 - Every click is accepted: a walk order's blocked target becomes the nearest legal standing point
+
+*2026-11-06. The owner: "clicking into the middle of the forest ends up with error message. It has to be allowed. Scout
+cavalry will simply try to close to the point as close as it can without running into trees."*
+
+1. **A walk order is never refused for the ground.** A target on blocked ground - the middle of a wood, a wall, a building's
+   footprint - is a request to come as close to it as the ground allows. `Move`, `AttackMove`, `Patrol` and `WalkTo` are
+   accepted and walked, and so is **any target no route reaches** (a courtyard behind a wall): same request, same answer.
+2. **The order's own goal becomes the nearest legal standing point** (the owner: *"nearest legal standing point"*), decided
+   **once, when the order is given** - `World::walk_goal`, used by `check_order` and `start_walk` - so no later re-plan,
+   crowd slot, stall check or repath aims at a tile nobody can occupy. That is what removed the second half of the bug: the
+   first version only fixed the plan, and the mover then re-planned every tick at the clicked tree.
+3. **Walk around, not straight in** (the owner: *"walk around"*): the route is planned to the standing point by the normal
+   planners, so the unit follows the ground instead of pressing at the wood's face.
+4. **`nearest_reachable`** (`path.rs`) is the search: best-first over free tiles ordered by distance to the click alone, so
+   the first tile off the queue is the reachable tile closest to it; ties break by `(y, x)`, never by iteration order. It is
+   bounded by the map and runs once per order.
+5. **Gather, build and attack orders keep their refusals**, and the suite says so: `a_node_with_no_path_is_refused_at_order_time`
+   and `an_unreachable_site_is_refused_before_the_wood_is_spent` both fail if the snap is put in the shared planner - which is
+   how the first attempt was built, and the suite caught it in one run. A tree behind a wall is not "walk to the fence", and
+   a build the builder cannot reach must not spend the wood.
+6. **The bug the test caught first was mine**: the first version of the search returned the tile the unit already stood on -
+   it is free by definition - so every order resolved to "stay where you are". The test failed with *"it never left its spawn
+   tile"*, and the search now excludes its own start unless nothing else is reachable.
+
+8. **Not on `main` yet, and why.** The rule is right and the tests pass, but the acceptance match it produces runs
+   **3.5 ms a tick against 0.3** from tick ~10,000 - a 17x **simulation** cost with the same 31 units, the same tasks, the
+   same path lengths and the same plan count in both worlds. That state is a defect of its own (a tick whose cost is not a
+   function of the entity count), it is not identified, and `perf` is not installed here. The branch
+   `d134-click-accepted` carries the fix and its review; `main` stays at `48f8157` until the slow state is understood.

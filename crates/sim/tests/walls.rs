@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Units};
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, SimError, World};
+use ruage_sim::{Command, EntityId, EntityKind, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -134,10 +134,28 @@ fn a_wall_of_walls_closes_the_way() {
     ring(&mut world, "palisade_wall", 9_900);
     let unit = walker(&mut world, 9_950, (26, 30));
 
-    let err = world
+    // **The click is accepted and the ring is still not crossed** (D134, the owner 2026-11-06: an order on unreachable
+    // ground is "come as close as you can", not an error). What this test is about is the wall, not the refusal: the unit
+    // walks up to it and stays outside. Before D134 the same test asserted a `NoPath` refusal, which was the old rule.
+    world
         .submit_checked(Command::Move { unit, to: (30, 30) })
-        .expect_err("nothing can walk through a closed ring of walls");
-    assert!(matches!(err, SimError::NoPath { .. }), "got {err:?}");
+        .expect("a click is a click: it walks as close as the walls allow");
+    for _ in 0..600 {
+        world.step().expect("step");
+    }
+    let entity = world.entity(unit).expect("the walker");
+    let tile = (
+        entity.position.0.raw().div_euclid(world.scale()),
+        entity.position.1.raw().div_euclid(world.scale()),
+    );
+    assert_ne!(tile, (30, 30), "it stood inside a closed ring of walls");
+    assert!(
+        world.tile_walkable(
+            u16::try_from(tile.0).expect("in range"),
+            u16::try_from(tile.1).expect("in range")
+        ),
+        "it stopped on blocked ground at {tile:?}"
+    );
 }
 
 #[test]

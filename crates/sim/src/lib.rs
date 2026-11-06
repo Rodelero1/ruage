@@ -28,7 +28,9 @@ mod path;
 mod script;
 mod short;
 pub use metrics::Metrics;
-pub use path::{Walk, find_path, find_path_avoiding, line_clear, line_clear_avoiding};
+pub use path::{
+    Walk, find_path, find_path_avoiding, line_clear, line_clear_avoiding, nearest_reachable,
+};
 use ruage_fixed::Fixed;
 pub use script::{
     Outcome, Personality, Rule, RuleAction, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind,
@@ -3484,9 +3486,45 @@ impl World {
         if !self.on_map(to.0, to.1) {
             return Err(SimError::OffMap { tile: to });
         }
-        let goal = self.tile_centre(to);
-        self.plan_path_for(unit, entity.position, goal)?;
-        Ok(goal)
+        self.walk_goal(unit, entity.position, self.tile_centre(to))
+    }
+
+    /// **The nearest legal standing point** to a walk order's target (D134; the owner's answer to *"close as it can"*:
+    /// *"nearest legal standing point"*), already planned: `Ok` means a route to it exists.
+    ///
+    /// A walk order names a **place**. A place on blocked ground - the middle of a wood, a wall, a building's footprint -
+    /// is a request to come as close to it as the ground allows, and a place no route reaches is the same request. So the
+    /// order's own goal becomes a tile a body can stand on, decided once, when the order is given: no later re-plan, crowd
+    /// slot, stall check or repath ever aims at a point nobody can occupy.
+    ///
+    /// **Only walk orders come here.** A gather, build or attack order names a *thing*, and "unreachable" is the answer
+    /// those have to keep - a tree behind a wall is a refusal, not a walk to the fence (item 9's rule).
+    fn walk_goal(
+        &self,
+        unit: EntityId,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+    ) -> Result<(Fixed, Fixed), SimError> {
+        match self.plan_path_for(unit, from, to) {
+            Ok(_) => Ok(to),
+            Err(SimError::NoPath { .. }) => {
+                let Some(walk) = self.walk.as_ref() else {
+                    return Err(SimError::NoPath {
+                        from: self.tile_of(from),
+                        to: self.tile_of(to),
+                    });
+                };
+                let (start, goal) = (self.tile_of(from), self.tile_of(to));
+                let (tile, _) = nearest_reachable(walk, start, goal).ok_or(SimError::NoPath {
+                    from: start,
+                    to: goal,
+                })?;
+                let stand = self.tile_centre(tile);
+                self.plan_path_for(unit, from, stand)?;
+                Ok(stand)
+            }
+            Err(other) => Err(other),
+        }
     }
 
     /// Start a walk: an ordinary move, an attack-move, or a patrol. `patrol` only decides whether the
@@ -3501,6 +3539,10 @@ impl World {
         fighting: bool,
         patrol: bool,
     ) -> Result<(), SimError> {
+        // **Every click is accepted** (D134): a target on blocked ground becomes the nearest legal standing point before
+        // anything is planned, slotted or stored, so the order's goal is always a tile a body can occupy.
+        let from = self.find(unit).map_or(to, |entity| entity.position);
+        let to = self.walk_goal(unit, from, to)?;
         // Crowd slots are **tiles** (a place to stand), so the point becomes a tile for the slot search and survives as
         // the goal when this unit takes the clicked tile itself (A).
         let wanted = self.tile_of(to);
