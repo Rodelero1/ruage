@@ -3221,8 +3221,25 @@ into `None`, so their tests reported **passed** while asserting nothing.*
 6. **The invariant is asserted elsewhere and holds.** `collision.rs` checks every pair of a three-unit converging crowd
    after 600 ticks; what breaks the pair rule is a genuine **head-on pass in ground too narrow to pass in** - two bodies of
    `radius = 0.2` need **0.4** of a tile, and the lateral nudge of rule 6 offers a quarter of a tile, once per route.
-7. **Options, priced, for the owner** - this is a gameplay rule and D110 already says those are his, not an engine
-   correctness bug I may pick:
+7. **DECIDED 2026-11-06: option A, scoped to two players' units.** The owner: *"I think A should be it. I do remember in
+   original game that narrow passes with 2 units passing in opposing directions were a problem."* Implementation:
+   `World::bound_to_reach` in `crates/sim/src/world/movement.rs` - rules 4 (same tile, both moving) and 9 (give way) no
+   longer hand a body its full step into another body's space; the largest step that keeps the pair at or outside `reach` is
+   tried by halving, five integer probes, no sqrt. **The bar applies to units of two different non-neutral players**, because:
+   - the deck's own page 9 says *"formations allow for some friendly overlap"*, so friends brushing past is the game, not a
+     bug;
+   - measured, bounding **every** pair broke the acceptance match: **164 entities against 141**, both players still alive at
+     1,800 s where the baseline had eliminated one, refusals **574 -> 1,021**. With the hostile-only scope the match is
+     **byte-identical**: hash `f328ebc8d4d34b78`, 141 entities, 188 repaths, 187 made-room, 574 refusals, 11.7 s.
+   - **A body at rest is not bounded either**: a resource node carries no radius, so `reach` falls back to a whole tile, and
+     the bound then forbade a villager from standing beside a tree it had been sent to chop - seven gather and rally tests
+     failed, one villager stopping 5 tiles out on the node's boundary circle. Rules 4 and 9 are about two bodies that both
+     want the ground.
+   - The cost, as priced in A: a head-on pair in a one-tile corridor now **stops** instead of passing. The corridor test was
+     renamed from `..._passes` to `..._never_overlaps` and asserts the invariant over 2,000 ticks plus that the pair actually
+     met - the old name asserted the behaviour the owner has now ruled out.
+
+8. **The options, kept for the record - the owner chose A:
    - **A: bound the give-way step** so it never ends inside the reach - zero overlap, but a head-on pair in a one-tile
      corridor **deadlocks**, and in the open it jams after the first quarter-tile nudge, because rule 6 allows one nudge per
      route.
@@ -3233,7 +3250,7 @@ into `None`, so their tests reported **passed** while asserting nothing.*
      No engine change; turns an absolute invariant into a bounded one and writes down that a pair may overlap by 0.05 tiles
      for the ticks of a pass.
 
-8. **What the first-party deck says about the policy, added 2026-11-06 while checking the research thread** (Klingers,
+9. **What the first-party deck says about the policy, added 2026-11-06 while checking the research thread** (Klingers,
    Meeting C++ 2025, page 9 - `docs/pathfinding-from-the-talk.md`): *"In Age of Empires 2: Units bump into others, stop and
    repath around. **No pushing allowed**. Formations allow for some friendly overlap."* Consequences, which narrow the
    choice:

@@ -244,12 +244,31 @@ impl World {
         if gap_x * gap_x + gap_y * gap_y < reach * reach {
             return (dx, dy);
         }
+        // **Whose ground is it** (D131 A): the reach is a bar between **two players' units**, because that is the pass the
+        // owner remembers being a problem (*"narrow passes with 2 units passing in opposing directions"*). Two of your own
+        // villagers brushing past each other is how AoE2 moves a crowd - the deck's own page 9 says *"formations allow for
+        // some friendly overlap"* - and bounding those as well measured a match that no longer resolved: 164 entities
+        // against 141, both players alive at 1,800 s where the baseline had eliminated one, refusals 574 -> 1,021.
+        let hostile = entity.player >= 1
+            && self
+                .find(other)
+                .is_some_and(|other| other.player >= 1 && other.player != entity.player);
+        let give = |step: (Fixed, Fixed)| {
+            if hostile {
+                self.bound_to_reach(here, other_at, step, reach)
+            } else {
+                step
+            }
+        };
         // 4. A body standing on the **mover's own tile** is not something a plan can route around: the search would have
         //     to leave the tile it starts in, and what it found was a nine-waypoint route that walked backwards. The unit
         //     waits instead - which is what a follower does while the body ahead of it moves on. **Only while it moves**:
         //     a body at rest will not get out of the way, and waiting on it is waiting for ever.
         if self.tile_of_raw(other_at) == self.tile_of_raw(here) && pass.moving.contains(&other) {
-            return self.wait_or_give_way(id, other, dx, dy, &mut pass.refused);
+            if self.wait_or_give_way(id, other, &mut pass.refused) {
+                return give((dx, dy));
+            }
+            return stop;
         }
         // 5. One axis alone, in a fixed order so two runs slide the same way.
         for (sx, sy) in [(dx.raw(), 0i64), (0, dy.raw())] {
@@ -324,11 +343,52 @@ impl World {
         //    tick 40,000 to 400,000 beside an idle friend). The step is taken and the repath above routes round it from
         //    the next tick - the overlap is at most one footprint, and it resolves; a frozen unit never does.
         if !pass.moving.contains(&other) {
+            // **The bound does not apply to a body at rest** (measured: seven gather and rally tests failed when it did).
+            // A resource node carries no radius, so `reach` falls back to a whole tile - and a villager must be able to
+            // stand beside a tree to chop it, which the bound forbade: it stopped 5 tiles out, on the boundary circle of a
+            // node it was walking to. The rule D131 is about is two bodies that both want the ground (rules 4 and 9), not
+            // a mover against something that will never yield.
             return (dx, dy);
         }
         // 9. Otherwise wait - unless the blocker refused a step at this unit on the same tick, in which case one of the
-        //    two has to give way or the pair is jammed.
-        self.wait_or_give_way(id, other, dx, dy, &mut pass.refused)
+        //    two has to give way or the pair is jammed. The give-way step is **bounded by the reach** (D131 A): a jam is
+        //    never permanent, and a pair never overlaps.
+        if self.wait_or_give_way(id, other, &mut pass.refused) {
+            return give((dx, dy));
+        }
+        stop
+    }
+
+    /// **A step may not end inside the pair's reach** (D131 option A, the owner's call 2026-11-06: *"I think A should be
+    /// it"*, with his own memory that *"narrow passes with 2 units passing in opposing directions were a problem"*).
+    ///
+    /// Two rules used to hand a body its **full** step into another body's space: 8 (a blocker at rest) and 9 (give way).
+    /// Measured on the one-tile corridor, the pair ended **7,372** raw units apart against the **8,000** their radii need -
+    /// 628 inside, 1/32 of a tile. AoE2's answer to the same geometry is *"units bump into others, stop and repath around.
+    /// No pushing allowed"* (Klingers, Meeting C++ 2025, page 9), so the pair is allowed to **stop**; what it is not
+    /// allowed to do is overlap.
+    ///
+    /// Halving rather than arithmetic: the constraint is a circle around the other body, so the largest fitting step is
+    /// found by trying the step and then 1/2, 1/4, ... of it - five integer probes at worst, all in fixed point, no sqrt.
+    fn bound_to_reach(
+        &self,
+        here: (Fixed, Fixed),
+        other: (Fixed, Fixed),
+        step: (Fixed, Fixed),
+        reach: i64,
+    ) -> (Fixed, Fixed) {
+        for shift in 0..=5 {
+            let div = 1i64 << shift;
+            let (nx, ny) = (step.0.raw() / div, step.1.raw() / div);
+            let (gx, gy) = (
+                other.0.raw() - (here.0.raw() + nx),
+                other.1.raw() - (here.1.raw() + ny),
+            );
+            if gx * gx + gy * gy >= reach * reach {
+                return (Fixed::from_raw(nx), Fixed::from_raw(ny));
+            }
+        }
+        (Fixed::ZERO, Fixed::ZERO)
     }
 
     /// Stand still for a body in the way - unless that body refused a step at **this** one on the same tick, in which
@@ -341,18 +401,16 @@ impl World {
         &self,
         id: EntityId,
         other: EntityId,
-        dx: Fixed,
-        dy: Fixed,
         refused: &mut Vec<(EntityId, EntityId)>,
-    ) -> (Fixed, Fixed) {
+    ) -> bool {
         if refused
             .iter()
             .any(|(unit, body)| *unit == other && *body == id)
         {
-            return (dx, dy);
+            return true;
         }
         refused.push((id, other));
-        (Fixed::ZERO, Fixed::ZERO)
+        false
     }
 
     /// The entity an order is trying to reach, when the order has one. `Move` has none - its goal is a place, and that

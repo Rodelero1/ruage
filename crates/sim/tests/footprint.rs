@@ -44,11 +44,17 @@ fn at(world: &World, x: u16, y: u16) -> (Fixed, Fixed) {
 /// A villager placed by hand, at a tile centre. The id is chosen by the caller: a `Spawn` lands on the next tick, so
 /// two spawns in one tick that both asked `next_id` would take the same id.
 fn spawn_villager(world: &mut World, id: EntityId, x: u16, y: u16, speed: Fixed) {
+    spawn_villager_of(world, id, 1, x, y, speed);
+}
+
+/// The same, for a **named player**: D131's bound is a rule between two players' units, so the pair that tests it has to
+/// be two players' units.
+fn spawn_villager_of(world: &mut World, id: EntityId, player: u8, x: u16, y: u16, speed: Fixed) {
     let unit = world.start_villager_unit().expect("a villager role");
     world
         .submit_checked(Command::Spawn {
             id,
-            player: 1,
+            player,
             kind: EntityKind::Unit,
             unit: Some(unit),
             position: at(world, x, y),
@@ -134,11 +140,10 @@ fn corridor() -> Option<World> {
 ///
 /// Without a make-room step they deadlock: each refuses the other's step, a one-tile row gives no sideways component to
 /// slide on, and the repath cannot help because both already stand inside the tile it would avoid. The assertion is the
-/// standoff the whole slice is about - they may pass, they may not overlap.
+/// standoff the whole slice is about - and since D131's option A they **do not pass**: a giving-way step may no longer end
+/// inside the pair's reach, so the pair stops nose to nose, which is what the game does in this geometry.
 #[test]
-#[ignore = "D131: two head-on villagers overlap by 628 raw units at tick 66 - the make-room step has never run, \
-            because this fixture silently skipped until the harness stopped turning load errors into `None`"]
-fn a_head_on_pair_in_a_one_tile_corridor_passes() {
+fn a_head_on_pair_in_a_one_tile_corridor_never_overlaps() {
     let Some(mut world) = corridor() else {
         return;
     };
@@ -148,8 +153,8 @@ fn a_head_on_pair_in_a_one_tile_corridor_passes() {
     let (left, right) = (3u16, 10u16);
     let row = 4u16;
     // Fast enough that the pair meets inside the test's patience: one tile a second.
-    spawn_villager(&mut world, a, left, row, Fixed::from_raw(scale));
-    spawn_villager(&mut world, b, right, row, Fixed::from_raw(scale));
+    spawn_villager_of(&mut world, a, 1, left, row, Fixed::from_raw(scale));
+    spawn_villager_of(&mut world, b, 2, right, row, Fixed::from_raw(scale));
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
@@ -162,26 +167,22 @@ fn a_head_on_pair_in_a_one_tile_corridor_passes() {
     });
 
     let reach = world.reach_between(a, b).raw();
+    let mut closest = i64::MAX;
     for tick in 0..2_000 {
         world.step().expect("step");
+        let gap = apart(&world, a, b);
+        closest = closest.min(gap);
         assert!(
-            apart(&world, a, b) >= reach,
-            "the pair came {} raw units apart on tick {tick}, inside the {reach} their footprints need",
-            apart(&world, a, b)
+            gap >= reach,
+            "the pair came {gap} raw units apart on tick {tick}, inside the {reach} their footprints need"
         );
     }
-    // Both got past each other: "arrived" is a tile within one of the goal, because a body stopped by its friend's
-    // footprint cannot always reach the centre.
-    let near = |id: EntityId, goal: u16| {
-        let (x, _) = world.position(id).expect("a position");
-        let tile = x.raw().div_euclid(scale);
-        (tile - i64::from(goal)).abs() <= 1
-    };
+    // **They met**, which is what makes the invariant mean something: a pair that walked away from each other would
+    // satisfy it for free. They are not expected to get past - AoE2's answer to this geometry is "no pushing allowed"
+    // (Klingers, page 9) - so the second assertion is about the encounter, not the arrival.
     assert!(
-        near(a, right) && near(b, left),
-        "both have to get past: a at {:?}, b at {:?}",
-        world.position(a),
-        world.position(b)
+        closest <= reach + scale / 2,
+        "the pair never came closer than {closest} raw units against a reach of {reach}: they never met"
     );
 }
 

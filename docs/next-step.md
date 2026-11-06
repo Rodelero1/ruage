@@ -28,6 +28,23 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 37, 2026-11-07 - D131 decided: no pushing allowed
+>
+> **The owner chose A.** `bound_to_reach` in `world/movement.rs`: rules 4 and 9 no longer step a body into another's reach.
+> Scoped by measurement twice - to **two players' units** (bounding every pair cost 23 entities and left both players alive:
+> 164 vs 141, refusals 574 -> 1,021) and **never to a body at rest** (a node's fallback reach is a whole tile; it stopped a
+> villager 5 tiles from its tree and failed seven tests). With both scopes the acceptance match is byte-identical
+> (`f328ebc8d4d34b78`, 141 entities, 188 repaths, 11.7 s).
+>
+> The corridor test is renamed `..._never_overlaps`, spawns **two players'** villagers, and asserts the invariant **and** that
+> they met. **719 passed / 0 failed / 19 ignored.** Review: `docs/reviews/2026-11-06-no-pushing-allowed.md`.
+>
+> **Next, in order**: (1) the sim block of the second review (63 findings, unread); (2) the remaining 34 loader findings;
+> (3) D131's honest follow-up - an **enemy** pair that jams in a corridor now waits forever unless the repath finds another
+> way, so a "unit with a live order that has not moved for N ticks" class test is the cheap guard the deck's own regression
+> loop suggests. **Owner questions still open**: 2 (`Civ::bars`), 3 (`pack.rs` bytes map), 4 (FNV vs SHA-256), 5 (duplicate
+> `at_villagers`), plus reachability option 2 and army size 3.
+
 > # Session 36, 2026-11-07 - D137, every name must exist
 >
 > The loader block's best finding, implemented test-first: **six places accepted a role or tech-role name the pack does not
