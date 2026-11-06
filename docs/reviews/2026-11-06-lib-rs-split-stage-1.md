@@ -30,6 +30,16 @@ To make the move compile, and only that:
 
 Nothing else changed. No logic, no ordering, no constants.
 
+## Slice 2: `world/memory.rs`
+
+`sighting`, `observe_for`, `observes`, `observe`, `vision`, `nearest_unseen`, `explored_mask`, `visible_to`,
+`visible_mask`, `sight_of`, `covers`, `explored_bit` - **267 lines**, moved unchanged. `observe`, `sight_of` and `vision` are `pub(crate)`
+because the tick and the tests call them; the rest are internal.
+
+This slice needed **7 more fields** `pub(crate)`: `explored`, `map_size`, `memory`, `observers`, `tick`, `tick_rate_hz`,
+`units` - and one doc comment had to follow its function: the `sighting` doc was left behind over `tile_of_raw` by the cut,
+which the compiler would not catch and a reader would.
+
 ## Performance
 
 A move cannot change behaviour, and the number that proves it is the acceptance hash:
@@ -42,7 +52,8 @@ A move cannot change behaviour, and the number that proves it is the acceptance 
 
 The hash is the claim; the timing is a single run and is not evidence of improvement.
 
-`crates/sim/src/lib.rs`: **11,073 → 10,719 lines**; `world/movement.rs` **369**.
+`crates/sim/src/lib.rs`: **11,073 → 10,719 → 10,449 lines**; `world/movement.rs` **369**, `world/memory.rs` **280**.
+Both slices leave the hash at `f328ebc8d4d34b78`.
 
 **711 passed / 0 failed / 20 ignored**; clippy and fmt clean.
 
