@@ -28,6 +28,31 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 32, 2026-11-06 - passage is the surface (D132) and the match is thirty minutes (D133)
+>
+> **The owner answered the two content questions that needed no research** (of the six in Session 31's list):
+> *"If dirt is a surface after the tree was cut and fully gathered from to have 0 wood, then grass and dirt passable, wood
+> impassable"* and *"30 minutes is enough"*. Both landed test-first, both watched failing before the code moved.
+>
+> **D132 - two predicates, told apart.** `Map::is_walkable` (a town-centre site, a seeded body) accepts **grass or dirt**;
+> `Terrain::walkable()` (a route) keeps grass, dirt **and** forest, because terrain is ground and the tree is the obstacle
+> (D84, the owner's 2026-10-31 rule). A cut wood needs no terrain change: `Walk` counts **occupants**, so the tile frees when
+> the node goes - which is the mechanism the owner described and the code already had.
+>
+> **D133 - one number in three places.** `duration_seconds = 1800.0` (was 2400), the prose already said thirty, and the
+> canonical command plays 36,000 ticks = 1,800 s at 20 Hz. A test now ties the file to the command.
+>
+> **Measured**: acceptance **unchanged** - hash `394c4892aac776d2`, 141 entities, 184 repaths, 187 made_room - because the
+> seeder's candidate tiles were grass already; the headless refusal log is identical line for line before and after, and the
+> match is still decided at **1,527.6 s**, so the shorter limit truncates nothing. Timing 10,936 / 11,346 / 11,345 ms, median
+> **11,346** - not a claim, the same hash means the same match. **707 passed / 0 failed / 20 ignored**, clippy and fmt clean.
+>
+> **Still open from the six**: 1 (D131 - the three options, with the owner's own point that a villager is thinner than a
+> tile, which argues for B), 2 (chop pace: already the dat's - VMBAS `attacks = [3, 3, 6, 0]`, `reload_time = 2.0`, so
+> 3 hp / 2 s = 1.5 hp/s), 3 (army size: the game's own scripts say `sn-minimum-attack-group-size 10`,
+> `sn-maximum-attack-group-size 80`, and `Dr3/shared.per` attacks with **16-36 in four groups**), 6 (reachability in the
+> node lookup - the bounded designs are priced in the reply).
+
 > # Session 31, 2026-11-06 - the harness's first dividend: a head-on pair overlaps by one step (D131)
 >
 > **Step 1 of the evening is pushed (`62fa76a`)**: D130, the loader that no longer turns "I could not read the content" into

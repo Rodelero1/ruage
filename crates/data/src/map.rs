@@ -72,8 +72,12 @@ impl Map {
             .copied()
     }
 
+    /// Whether a **town centre or seeded body may stand here** - a surface, not a route. Dirt counts: it is the
+    /// surface a tile has after its tree has been cut and fully gathered, and the owner's rule (2026-11-06) is
+    /// *"grass and dirt passable, wood impassable"*. Forest does not, because a wood is where trees stand - the
+    /// route rule for movement is `Terrain::walkable` (forest **floor** is walkable; the tree on it is the obstacle).
     pub fn is_walkable(&self, x: u16, y: u16) -> bool {
-        self.terrain_at(x, y) == Some(Terrain::Grass)
+        matches!(self.terrain_at(x, y), Some(Terrain::Grass | Terrain::Dirt))
     }
 }
 

@@ -12,7 +12,9 @@
 # The match is won by razing the town centre, which is what `ruage-batch` reports an outcome for.
 
 schema = 2
-duration_seconds = 2400.0
+# Thirty minutes, which is what the prose above has always said and what the canonical command plays: 1,800 s at
+# 20 Hz is 36,000 ticks. The owner, 2026-11-06: "30 minutes is enough".
+duration_seconds = 1800.0
 
 # The behaviour is not here: it lives in `config/ai/base.toml` (D94). A scenario keeps what is scripted for this match.
 ai = "base"

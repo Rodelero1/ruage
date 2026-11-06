@@ -3232,3 +3232,32 @@ into `None`, so their tests reported **passed** while asserting nothing.*
    - **C: keep it and bound it** - a giving-way step may close by at most one step, and the test asserts `reach - one step`.
      No engine change; turns an absolute invariant into a bounded one and writes down that a pair may overlap by 0.05 tiles
      for the ticks of a pass.
+
+
+## D132 - Passage is the surface: grass and dirt, never wood
+
+*2026-11-06. The owner, asked D117's question: "If dirt is a surface after the tree was cut and fully gathered from to
+have 0 wood, then grass and dirt passable, wood impassable."*
+
+1. **A town-centre site and a seeded body stand on grass or dirt, never on forest.** `Map::is_walkable` is
+   `Grass | Dirt`; it was `Grass` alone.
+2. **The route rule is unchanged and is a different question.** `Terrain::walkable()` keeps grass, dirt **and** forest,
+   because terrain is ground and the **tree** is the obstacle (the owner's 2026-10-31 rule, D84). A cleared wood therefore
+   becomes walkable ground the moment its node goes - no terrain mutation, nothing new in the hash.
+3. **Two questions, two predicates, and now two doc comments.** `Map::is_walkable` answers "may something be placed
+   here?", `Terrain::walkable` answers "is this surface ground?". They had been one predicate in the code's mind.
+4. **Both directions are tested**: a map whose town centre stands on dirt loads, and one whose town centre stands in the
+   woods is refused **by tile** (`(2, 0)` in the message), not by a general "not on open ground".
+5. **The shipped pack does not move**: the acceptance hash is unchanged (`394c4892aac776d2`, 141 entities, 184 repaths,
+   187 made_room) because the seeder's candidate tiles were grass already. The rule is for content that has dirt.
+
+## D133 - The acceptance match is thirty minutes
+
+*The owner: "30 minutes is enough."*
+
+1. `config/acceptance.toml` sets `duration_seconds = 1800.0`; it was `2400.0` - forty - while the file's own prose said
+   "a thirty-minute game" and the canonical command played `--ticks 36000` = 1,800 s at 20 Hz. One number, three places.
+2. **A test ties the file to the command**: 1,800 s is 36,000 ticks, which is what the documented run passes.
+3. **Nothing is truncated**: the match is decided at **1,527.6 s** (seed 7), so a 1,800 s limit ends a finished match
+   rather than a live one - and the headless output before and after the change is identical line for line in its
+   refusals.

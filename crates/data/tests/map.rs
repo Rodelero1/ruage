@@ -289,3 +289,46 @@ fn an_unknown_terrain_letter_names_the_ones_that_exist() {
         "the error must name the letters that exist: {text}"
     );
 }
+
+/// **The owner's passage rule** (2026-11-06): *"grass and dirt passable, wood impassable"*. Dirt is the surface a tile
+/// has after its tree has been cut and fully gathered, so a town centre that refused dirt would be refusing ground the
+/// player cleared for it.
+const SURFACES: &str = r#"
+schema = 1
+[map]
+width = 3
+height = 1
+terrain = [
+  "GDF",
+]
+[[map.town_center]]
+player = 1
+x = 0
+y = 0
+[[map.town_center]]
+player = 2
+x = 1
+y = 0
+"#;
+
+#[test]
+fn a_town_centre_site_may_be_grass_or_dirt_and_never_wood() {
+    let map = load_map_str(SURFACES, "surfaces.toml", &project()).expect("a map of three surfaces");
+    assert!(map.is_walkable(0, 0), "grass is a site");
+    assert!(
+        map.is_walkable(1, 0),
+        "dirt is a site: it is the surface left after the tree on it was cut and gathered"
+    );
+    assert!(!map.is_walkable(2, 0), "a wood is not a site");
+}
+
+#[test]
+fn a_town_centre_in_the_woods_is_refused_by_tile() {
+    let wooded = SURFACES.replace("x = 1", "x = 2");
+    let err = load_map_str(&wooded, "surfaces.toml", &project()).expect_err("a wood is not a site");
+    let text = err.to_string();
+    assert!(
+        text.contains("(2, 0)"),
+        "the refusal must name the tile it refused: {text}"
+    );
+}

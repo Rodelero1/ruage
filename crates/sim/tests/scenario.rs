@@ -1239,3 +1239,15 @@ fn a_scenario_that_carries_no_personality_may_carry_its_own_shares() {
     assert_eq!(scenario.policy.share[0].per.get("wood"), Some(&100));
     assert_eq!(scenario.rule.len(), 1, "its own rules, and its own shares");
 }
+
+/// **The match is thirty minutes** (owner, 2026-11-06: *"30 minutes is enough"*). The file's own prose said "a
+/// thirty-minute game" while `duration_seconds` said 2,400 - forty - and the canonical command plays `--ticks 36000`,
+/// which is thirty minutes at 20 Hz. One number, three places, and this is the number.
+#[test]
+fn the_acceptance_match_lasts_the_thirty_minutes_the_command_plays() {
+    let scenario = load_scenario_file(&repo("config/acceptance.toml")).expect("it parses");
+    assert_eq!(
+        scenario.duration_seconds, 1_800.0,
+        "1800 s at 20 Hz is the 36,000 ticks the documented command passes; this file says thirty minutes in prose"
+    );
+}
