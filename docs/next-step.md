@@ -28,6 +28,34 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 31, 2026-11-06 - the harness's first dividend: a head-on pair overlaps by one step (D131)
+>
+> **Step 1 of the evening is pushed (`62fa76a`)**: D130, the loader that no longer turns "I could not read the content" into
+> "the test passed". Its first dividend arrived within the hour - see Session 30 above - and this block is the finding it
+> produced, which needs one decision before any code moves.
+>
+> **What fails.** `crates/sim/tests/footprint.rs::a_head_on_pair_in_a_one_tile_corridor_passes`, a test that had never
+> executed because its inline map was refused by the loader (wood on grass) and `.ok()?` ate the refusal. With the map fixed
+> it runs and breaks its own invariant: two villagers walking head-on come **7,372 raw units** apart on tick 66, against the
+> **8,000** their footprints need - an overlap of **628 raw**, one step (1,000 raw, 0.05 tiles) minus the 372 they were
+> already inside by.
+>
+> **The mechanism**, read in `collide` and checked against the arithmetic: rule 9, `wait_or_give_way`, returns the **full**
+> step for the unit that gives way, so the giver closes from exactly `reach` to `reach - step`. Rule 8 (a body at rest) is
+> not the cause: at tick 66 both are mid-route.
+>
+> **The invariant itself is sound and asserted elsewhere**: `collision.rs` checks every pair of a three-unit converging
+> crowd after 600 ticks, and passes. What breaks it is a **head-on pass in ground too narrow to pass in**.
+>
+> **Three options, priced in D131 §7.** A bounds the give-way step (no overlap, but a one-tile corridor deadlocks and the
+> open jams after rule 6's single nudge); B makes bodies slip past laterally (a gameplay change, with a measured mosh-pit
+> regression attached to removing the nudge cap); C keeps the behaviour and bounds the invariant at `reach - one step`
+> (no engine change, no hash change, and it writes the 0.05-tile overlap down as a rule). **Recommended: C.**
+>
+> **This is the owner's call, not mine** - D110 already recorded that the original's "units bump into others, stop and
+> repath around; no pushing" is a gameplay rule and is not adopted until he says so, and B is the first push-like mechanic
+> the engine would own.
+
 > # Session 30, 2026-11-06 - a fixture that cannot read its pack says so (D130)
 >
 > **Where session 29 ended:** `24f72cc` pushed, **702 passed / 0 failed / 19 ignored**, and five questions waiting on the

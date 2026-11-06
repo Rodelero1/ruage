@@ -3213,3 +3213,22 @@ into `None`, so their tests reported **passed** while asserting nothing.*
    this was lost the first time.
 4. **The repair is the next step**: a step whose candidate lies inside the reach may not *reduce* the gap, for either
    mover, whichever order the pass visits them in - and if that cannot hold for both, the pair waits a tick instead.
+
+5. **The mechanism, confirmed against the arithmetic.** Rule 9 (`wait_or_give_way`) returns the **full** step for the unit
+   that gives way, so when the other has already refused, the giver closes from exactly `reach` (8,372) to `reach - step`
+   (**7,372**) - one step, 1,000 raw, 0.05 tiles. Rule 8 is not the cause: at tick 66 both bodies are mid-route (7 tiles at
+   1 tile/s is 140 ticks, so they meet at 66), so neither is "at rest".
+6. **The invariant is asserted elsewhere and holds.** `collision.rs` checks every pair of a three-unit converging crowd
+   after 600 ticks; what breaks the pair rule is a genuine **head-on pass in ground too narrow to pass in** - two bodies of
+   `radius = 0.2` need **0.4** of a tile, and the lateral nudge of rule 6 offers a quarter of a tile, once per route.
+7. **Options, priced, for the owner** - this is a gameplay rule and D110 already says those are his, not an engine
+   correctness bug I may pick:
+   - **A: bound the give-way step** so it never ends inside the reach - zero overlap, but a head-on pair in a one-tile
+     corridor **deadlocks**, and in the open it jams after the first quarter-tile nudge, because rule 6 allows one nudge per
+     route.
+   - **B: let them slip past** - give way laterally, each body to its own side, until clear. Nearest to how the game looks,
+     but it needs rule 6's cap relaxed, and that cap exists because uncapped nudging turned a base into a mosh pit
+     (measured then: 89 wood / 20 food / 50 gold at 1,600 s against 729 / 792 / 370).
+   - **C: keep it and bound it** - a giving-way step may close by at most one step, and the test asserts `reach - one step`.
+     No engine change; turns an absolute invariant into a bounded one and writes down that a pair may overlap by 0.05 tiles
+     for the ticks of a pass.
