@@ -69,42 +69,30 @@ own start unless nothing else is reachable.
 
 ## Performance
 
-**The rule works; the match it produces is four times slower, and that is why this is a branch and not `main`.**
+**The rule works, and the 17x tick it exposed is D135** - found and fixed before this merged, which is why the branch
+`d134-click-accepted` is now `main`:
 
-The click itself costs nothing measurable: the fallback search ran **twice** in the whole acceptance match (**16** node
-expansions in total), and the plan count is the same as before (22,691 against 22,882 at tick 18,000).
-
-What changes is **where the match goes** - two snapped orders are enough to send it down a different trajectory:
-
-| | before (D132/D133, `main`) | this branch |
+| | `main` before (D132/D133) | this change, after D135 |
 |---|---|---|
-| `"the target is walled off"` refusals, 36,000 ticks | **203** | **1** |
+| `"the target is walled off"` refusals, 36,000 ticks | **203** | **0** |
 | refusals of every kind | 777 | **574** |
-| acceptance hash / entities / repaths | `394c4892aac776d2` / 141 / 184 | **`f328ebc8d4d34b78`** / 141 / **190** |
-| wall time, release, three runs | 11,199 ms | **46,307 / 46,795 / 46,447 ms (median 46,307)** |
+| acceptance hash / entities / repaths | `394c4892aac776d2` / 141 / 184 | **`f328ebc8d4d34b78`** / 141 / **188** |
+| wall time, release, three runs | 11,199 ms | **11,828 ms** median (11,719 / 12,055 / 11,828) |
 
-Per-thousand-tick cost, both builds, same command:
+The click itself costs nothing measurable: the fallback search ran **twice** in the whole match (16 node expansions), and
+the plan count is unchanged. What the click changes is **where the match goes**, and the trajectory it walks into turned out
+to be a state where a **failed** ground re-plan cost one whole search **every tick** - `2,559` attempts and `2,533`
+failures by tick 12,000, `3.2 ms` each. D127's two-per-route budget counted successes only, so ground that answered "no"
+was asked again forever, and a unit with no route entry had no counter to fail to increment.
 
-```
- SNAP     t=9000  217.5 ms   t=10000 2013.4 ms   t=12000 3724.1 ms   t=18000 3518.4 ms
- NO SNAP  t=9000  229.1 ms   t=10000  304.0 ms   t=12000  417.4 ms   t=18000  289.5 ms
-```
+| | D134 alone | D134 + D135 |
+|---|---|---|
+| simulation time, 36,000 ticks | **28.9 s** | **~1.7 s** |
+| whole match, release | **47,496 ms** | **11,828 ms** |
+| state hash | `f328ebc8d4d34b78` | **`f328ebc8d4d34b78`** |
 
-Split at 18,000 ticks: **AI 2,294 ms, simulation 28,942 ms** with the snap; **AI 2,749 ms, simulation 1,724 ms** without.
-So it is `World::step`, not the rule engine, and it is 17x.
-
-**And the two worlds are the same shape.** At tick 12,000 both have 23 buildings, 31 units and 101 resource nodes, the same
-task histogram, the same path lengths (0, 1, 2, 3 waypoints), the same `nearest_like` count (218) and the same plan count.
-Nothing I can count differs; what differs is *where the bodies stand*. So some per-tick loop in the simulation has a state
-whose cost is not a function of the entity count - and this branch merely walked into it.
-
-**Not identified tonight.** `perf` is not installed on this host, and every counter I could add without a profiler (plans,
-fallbacks, search expansions, replacement-node lookups) is equal between the two runs. That is the honest state of it.
-
-That is also the finding worth keeping: **a state exists in which a 31-unit tick costs 3.5 ms instead of 0.3 ms**, and a
-player can reach it by clicking. Finding it is the next step, and it is a bigger prize than the click rule.
-
-**${PASSED} passed / 0 failed / ${IGNORED} ignored** on this branch; clippy and fmt clean. `main` is untouched at `48f8157`.
+**The hash does not move between D134-alone and D134+D135**: the searches D135 removed decided nothing. The behaviour is
+D134's; the cost is the old one.
 
 ## Stability
 
@@ -115,9 +103,9 @@ player can reach it by clicking. Finding it is the next step, and it is a bigger
 | the tile a body already stands on | accepted, plan is empty, the body stays on its tile (test) |
 | a body standing on **blocked** ground (a villager on its tree) | the search skips its own blocked start and still finds a way out |
 | nothing else reachable at all | the search returns the body's own tile, so the order is accepted and does nothing |
-| gather / build / attack on unreachable targets | still refused, by two existing tests (above) |
+| gather / build / attack on unreachable targets | still refused, by two existing tests (`a_node_with_no_path_is_refused_at_order_time`, `an_unreachable_site_is_refused_before_the_wood_is_spent`) |
 | determinism | the queue is ordered by `(h, y, x)`; the same command gives the same hash on every run |
-| the AI's own orders | refusals fall from 777 to 574 and walled-off ones from 203 to 1 - this is the behaviour the owner asked for, and it is what moved the match into the slow state |
+| the AI's own orders | refusals fall from 777 to 574 and walled-off ones from 203 to 0 - this is the behaviour the owner asked for, and it is what moved the match into the slow state D135 then fixed |
 
 ## What this does not fix
 
@@ -128,4 +116,4 @@ player can reach it by clicking. Finding it is the next step, and it is a bigger
 - `D131`'s head-on overlap is still ignored, with its reason on it.
 - The refusal message itself still exists in the engine for the two cases above; a player will not see it for a click.
 
-****710 passed / 0 failed / 20 ignored**; clippy and fmt clean.
+****711 passed / 0 failed / 20 ignored**; clippy and fmt clean.

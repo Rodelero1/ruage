@@ -3288,8 +3288,26 @@ cavalry will simply try to close to the point as close as it can without running
    it is free by definition - so every order resolved to "stay where you are". The test failed with *"it never left its spawn
    tile"*, and the search now excludes its own start unless nothing else is reachable.
 
-8. **Not on `main` yet, and why.** The rule is right and the tests pass, but the acceptance match it produces runs
-   **3.5 ms a tick against 0.3** from tick ~10,000 - a 17x **simulation** cost with the same 31 units, the same tasks, the
-   same path lengths and the same plan count in both worlds. That state is a defect of its own (a tick whose cost is not a
-   function of the entity count), it is not identified, and `perf` is not installed here. The branch
-   `d134-click-accepted` carries the fix and its review; `main` stays at `48f8157` until the slow state is understood.
+8. **It arrived with a 17x cost, and D135 is what removed it.** The match this rule produces ran **3.5 ms a tick against
+   0.3** from tick ~10,000. The cause was not the click: a **failed** ground re-plan cost one search every tick (D135), and
+   the new trajectory walked into that state. With D135 landed the same match is **11.8 s** again, at a hash D134 fixed.
+
+## D135 - A re-plan that fails spends one of the route's two attempts
+
+*2026-11-06. Found by chasing the 17x tick that D134's acceptance match ran into: 3.5 ms a tick instead of 0.3 with the same
+31 units, tasks, path lengths and plan count.*
+
+1. **A failed ground re-plan is counted.** D127 caps ground re-plans at two per route - the count is `Route::stalls`, and it
+   was incremented **only on success**. Ground that answers "no" therefore got asked again on the next tick, and the next:
+   the cap never engaged on the case it existed for.
+2. **A unit with no route entry is the case that looped.** `stalls` lives on the route, so a unit with a goal it cannot reach
+   and **no** route (`get_mut` → `None`) counted nothing at all. A failed re-plan now creates the entry when it is missing.
+3. **Measured**, acceptance match, 36,000 ticks: re-plan attempts **11,260 → 192**, failures **11,070 → 4**, time spent
+   re-planning **35.4 s → 13.3 ms**, whole match **47.5 s → 11.8 s**.
+4. **The world state does not move**: the hash is `f328ebc8d4d34b78` before and after the fix, 141 entities, 187 made_room.
+   The change removes searches that changed nothing - which is why it is a performance fix and not a behaviour one.
+5. **The test states the budget, not the timing**: `crates/sim/tests/repath_budget.rs` builds the case (a wall across the
+   world and a walled goal) and asserts **at most two failed re-plans in 600 ticks**. Watched failing first: **177**.
+6. **A cost that is not a function of the entity count is a defect.** The count of bodies could not have predicted this;
+   what predicted it was per-tick time split from the AI's time, then the repath counter. That pair of instruments is worth
+   keeping in mind for the next "why is this match slow".

@@ -1336,6 +1336,9 @@ pub struct World {
     /// How many times a blocked unit has re-planned its route. **Instrumentation, not state**: nothing reads it and it
     /// is not hashed; a test counts it to prove a known obstacle is not re-planned every tick (D98a).
     repath_count: u64,
+    /// How many ground re-plans **failed**. A counter, like `repath_count`, and not state: it exists so a test can say
+    /// "this unit tried twice and stopped" instead of "this unit searched all match" (D135).
+    repath_failures: u64,
     /// How many times a step made room instead of being refused (C1b). A counter, like `repath_count`, because it is a
     /// reaction the engine gives itself and has no caller to report to.
     made_room_count: u64,
@@ -1722,6 +1725,7 @@ impl World {
             garrison_eject_at: Fixed::ZERO,
             paths: BTreeMap::new(),
             repath_count: 0,
+            repath_failures: 0,
             made_room_count: 0,
             resources: None,
             sim_rng: Pcg32::new(seed, SIM_STREAM),
@@ -2091,6 +2095,11 @@ impl World {
     /// never reads it and it is not hashed; a test counts it to prove a known obstacle is not re-planned every tick.
     pub fn repaths(&self) -> u64 {
         self.repath_count
+    }
+
+    /// How many ground re-plans failed: the measure of a unit caught against ground it cannot answer for (D135).
+    pub fn repath_failures(&self) -> u64 {
+        self.repath_failures
     }
 
     /// How many steps have made room for a body in the way (C1b). Exposed so a test can say a nudge happened **once**.
@@ -9372,6 +9381,20 @@ impl World {
                         // The body joins the route's avoid set even though the search failed - the original's list is
                         // filled *before* the repath, and this is why it matters: without it the same hopeless search
                         // is re-run every tick, at four whole-map explorations a tick in a crowded fight.
+                        self.repath_failures += 1;
+                        // **A failed re-plan spends one of the route's two attempts** (D135). D127 counted the successful
+                        // ones only, so ground that answers "no" was asked again on the next tick and the next: measured on
+                        // the D134 branch, 2,533 failed searches in 12,000 ticks - 8.1 s of a 20 s run - and every one of
+                        // them a full search over the map. A body repath needs no counter: the body joins the avoid set
+                        // below and the next request finds it already known.
+                        // The count lives on the route, which is where D127 put it - and a unit that has **no** route and a
+                        // goal it cannot reach is exactly the case that looped: `get_mut` returned `None`, nothing was
+                        // counted, and the request came back every tick. So an entry is created for it.
+                        if body.is_none() || !self.paths.contains_key(&id) {
+                            let stalls = self.paths.get(&id).map_or(0, |route| route.stalls) + 1;
+                            let route = self.paths.entry(id).or_default();
+                            route.stalls = stalls;
+                        }
                         if let (Some(route), Some(other)) = (self.paths.get_mut(&id), body) {
                             route.avoiding.insert(other);
                         }
