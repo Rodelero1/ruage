@@ -3439,9 +3439,14 @@ impl World {
             let here = self.tile_of(position);
             let there = self.tile_of(victim);
             let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
-            let contact = self.reach_raw(source.unit, self.find(target).and_then(|e| e.unit));
+            let target_body = self.find(target);
+            let contact = self.reach_raw(source.unit, target_body.and_then(|e| e.unit));
             let in_reach = if range.raw() > 0 {
-                squared <= range.raw() * range.raw()
+                // **Box to box** (D142): the route ends where the blow can land, and that is the target's edge.
+                target_body.is_some_and(|body| {
+                    self.gap_squared_to(position, self.body_radius(source.unit), body)
+                        <= range.raw() * range.raw()
+                })
             } else {
                 adjacent || squared <= contact * contact
             };
@@ -6111,6 +6116,94 @@ impl World {
         }
     }
 
+    /// A unit's attack range in raw units, from the dat (0 for melee).
+    fn unit_range(&self, unit: Option<u32>) -> i64 {
+        self.units
+            .as_ref()
+            .and_then(|units| {
+                unit.and_then(|unit| units.unit(units.root(unit)))
+                    .map(|stats| (units, stats))
+            })
+            .and_then(|(_, stats)| stats.range.resolve(self.scale, "range").ok())
+            .map_or(0, |range| range.raw())
+    }
+
+    /// **The squared gap between a body's box and a target's**, in engine units: zero when they touch or overlap (D142).
+    ///
+    /// A unit's box is a square of its own `radius` about its centre; a **building's is the rectangle its footprint
+    /// covers**, which is anchored at a corner and is not centred on its position - `radius_x`/`radius_y` from the dat, so
+    /// a town centre is four tiles wide and its wall is two tiles from its middle. The attacker's own radius shrinks the
+    /// target's box, which is the same arithmetic as growing the attacker to a point.
+    fn gap_squared_to(&self, from: (Fixed, Fixed), radius: i64, target: &Entity) -> i64 {
+        let (left, top, right, bottom) = if target.kind == EntityKind::Building {
+            let tiles = self.footprint_area(target);
+            let (Some(x0), Some(x1)) = (
+                tiles.iter().map(|tile| tile.0).min(),
+                tiles.iter().map(|tile| tile.0).max(),
+            ) else {
+                return 0;
+            };
+            let (Some(y0), Some(y1)) = (
+                tiles.iter().map(|tile| tile.1).min(),
+                tiles.iter().map(|tile| tile.1).max(),
+            ) else {
+                return 0;
+            };
+            (
+                i64::from(x0) * self.scale,
+                i64::from(y0) * self.scale,
+                (i64::from(x1) + 1) * self.scale,
+                (i64::from(y1) + 1) * self.scale,
+            )
+        } else {
+            let own = self.body_radius(target.unit);
+            (
+                target.position.0.raw() - own,
+                target.position.1.raw() - own,
+                target.position.0.raw() + own,
+                target.position.1.raw() + own,
+            )
+        };
+        let (left, top, right, bottom) =
+            (left - radius, top - radius, right + radius, bottom + radius);
+        let px = from.0.raw();
+        let py = from.1.raw();
+        let dx = if px < left {
+            left - px
+        } else if px > right {
+            px - right
+        } else {
+            0
+        };
+        let dy = if py < top {
+            top - py
+        } else if py > bottom {
+            py - bottom
+        } else {
+            0
+        };
+        dx * dx + dy * dy
+    }
+
+    /// **Would this attacker's blow land from where it stands?** The question `step` asks before it swings, exposed so the
+    /// rule has a test that does not need a played-out match (D142).
+    #[must_use]
+    pub fn in_strike_range(&self, attacker: EntityId, target: EntityId) -> bool {
+        let (Some(source), Some(victim)) = (self.find(attacker), self.find(target)) else {
+            return false;
+        };
+        let range = self.unit_range(source.unit);
+        if range > 0 {
+            // **Box to box** (D142): the dat's range is measured between the bodies' edges, so a 4x4 town centre is hit
+            // from its wall. Centre to centre made every building two tiles nearer than it looks.
+            let gap = self.gap_squared_to(source.position, self.body_radius(source.unit), victim);
+            return gap <= range * range;
+        }
+        let here = self.tile_of(source.position);
+        let there = self.tile_of(victim.position);
+        here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1
+    }
+
     /// The point a shot is really aimed at, after the archer's accuracy has had its say.
     ///
     /// Accuracy is a percentage (attribute 11): the dat gives an archer 80, a hand cannoneer 65, every
@@ -7222,18 +7315,18 @@ impl World {
                     min_range,
                     ..
                 } => {
-                    let Some((victim, victim_unit)) = self
+                    let Some(target_body) = self
                         .find(target)
                         // A tree cannot bleed, and a **body** cannot be fought: a carcass keeps the entity's
                         // id, so "the target is gone" stopped being how a fight with an animal ends (item 2).
                         // Without this an army swings at a corpse for the rest of the match.
                         .filter(|v| !matches!(v.kind, EntityKind::Resource(_)) && v.hp > 0)
-                        .map(|v| (v.position, v.unit))
                     else {
                         // The target is gone - or is now a body. The attacker stands down on the next tick.
                         finished.push(entity.id);
                         continue;
                     };
+                    let (victim, victim_unit) = (target_body.position, target_body.unit);
                     // A melee attacker strikes from the tile next to its target; anything with reach
                     // strikes from as far as that reach goes, and walks until it is inside it. Both
                     // are measured on the same squared distance, in engine units, so the rule is one
@@ -7248,7 +7341,13 @@ impl World {
                     // touches the target's (C2) - a body stopped short by a friend's footprint is still in contact.
                     let contact = self.reach_raw(entity.unit, victim_unit);
                     let in_reach = if range.raw() > 0 {
-                        squared <= range.raw() * range.raw()
+                        // **Box to box** (D142): the dat's range is measured between the bodies' edges, so a 4x4 town
+                        // centre is hit from its wall rather than its middle.
+                        self.gap_squared_to(
+                            entity.position,
+                            self.body_radius(entity.unit),
+                            target_body,
+                        ) <= range.raw() * range.raw()
                     } else {
                         adjacent || squared <= contact * contact
                     };

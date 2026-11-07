@@ -3499,3 +3499,30 @@ objects reach-tested. Adopted as proposed, implemented, measured, and **reverted
 7. **What this costs the "cheap" claim**: the digest's own sentence says "the cap is a fidelity rule *and* the performance
    bound; adopting the bound and the cap is cheap". The cap is free; the bound is not, and the only way to know was to
    measure it.
+
+
+## D142 - A shot is measured to the wall, not the middle: reach is box to box
+
+*2026-11-07. Step 3 of four from the prior-art watch (openaok's divergence note, 2026-10-29), adopted.*
+
+1. **What the original does**: attack reach is compared **box to box** - a unit is its dat size box, a building its
+   footprint - and the primary report's caveat ("the missing datum is a building footprint, which our schema has not got")
+   **expired at D76**, since every building has a `[footprint.*]` mask and a dat-derived extent.
+2. **What we did**: `squared <= range * range` on **centre to centre**. For a unit target that is the same thing to within
+   0.4 tiles; for a building it put the wall **two tiles** inside the reach, so a skirmisher could hit a town centre from
+   two tiles outside its own range.
+3. **The change**: `World::gap_squared_to(from, radius, target)` - a unit's box is a square of its `radius` about its
+   centre, a building's is the rectangle `footprint_area` covers (anchored at a **corner**, so not centred on its
+   position), and the attacker's radius shrinks the target box, which is the same arithmetic as growing the attacker to a
+   point. **Both** sites that ask the question use it: the tick's blow and the route-ending test (E1b) - a rule and the
+   engine disagreeing about reach is this project's most repeated defect class.
+4. **`World::in_strike_range(attacker, target)`** is public so the rule has a test without a played-out match, and
+   `unit_range` was extracted beside it. The box test shipped first answering the **old** way, so the RED was a boolean, not
+   a compile error: *"the range is 4.0 tiles; the skirmisher stands 6.3 from the middle and 1.8 from the wall"*.
+5. **A second test pins what must not move**: two units 3.2 tiles apart are inside a 4.0 range, two at 5.0 are not.
+6. **One existing test was re-stated, and said so**: `fletching_adds_a_tile_of_reach` asserted the archer's exact tile (11
+   then 10), a proxy for "Fletching is worth a tile of closing distance"; with the 0.4-tile box margin the archer stops a
+   fraction earlier and both runs floor to 10. It now asserts the **distance moved** (>= half a tile without, < half with).
+7. **The acceptance match is byte-identical** - `f328ebc8d4d34b78`, 141 entities, 188 repaths, 574 refusals, 10.82/10.83 s -
+   and that is stated as what it is: this scenario does not probe the difference (its ranged units shoot at units, whose box
+   is their own radius), not as evidence that the change is inert.

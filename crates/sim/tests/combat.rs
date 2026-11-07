@@ -520,17 +520,27 @@ fn fletching_adds_a_tile_of_reach() {
             world.step().expect("step");
         }
         (
-            world.position(archer).expect("archer").0.raw() / world.scale(),
+            world.position(archer).expect("archer").0.raw(),
             world.entity(victim).expect("victim").hp,
         )
     };
 
+    let started = 10 * 20_000;
     let (walked_to, plain_hp) = run(false);
     let (stayed_at, fletched_hp) = run(true);
-    assert_eq!(walked_to, 11, "without Fletching the archer closes a tile");
-    assert_eq!(
-        stayed_at, 10,
-        "with Fletching it reaches from where it stands"
+    // **The distance, not the tile.** This used to assert the exact tile the archer stood on (11 without Fletching, 10
+    // with), which was a proxy for "it had to close" - and since reach became box to box (D142) the archer can shoot from
+    // 0.4 tiles further out, so it stops a fraction of a tile earlier and the integer floors to 10 either way. The
+    // behaviour the test is for is unchanged: Fletching is worth a tile of closing distance.
+    assert!(
+        walked_to - started >= 10_000,
+        "without Fletching the archer must close at least half a tile: it moved {} raw units",
+        walked_to - started
+    );
+    assert!(
+        stayed_at - started < 10_000,
+        "with Fletching it reaches from where it stands: it moved {} raw units",
+        stayed_at - started
     );
     assert!(plain_hp < 500 && fletched_hp < 500, "both archers shot");
 }

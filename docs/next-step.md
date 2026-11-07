@@ -28,6 +28,22 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 40, 2026-11-07 - steps 1-3 of the four, and the one that failed its measurement
+>
+> **1. DONE** - the binary's module map (D140): `tools/exe_map.py`, 84 source paths, 541 classes, 31 `Comm*`, U12 given its
+> shape. **2. ADOPTED, MEASURED, REVERTED** - the gather radius bound (D141) starved the base: 141 -> 129 entities and both
+> players alive at 30 minutes. The corrected shape is queued: **two stages**, the AI choosing an area and the unit a node in
+> sight of it. **3. DONE** - reach is box to box (D142), both call sites, one existing test re-stated with its reason.
+>
+> **4. NEXT - the four pathing techniques** (landmark A* estimate, budget by route length, per-tick search budget, re-sort
+> last tick's order). These answer the deferred `path.rs` findings of the second review (a `BTreeMap` per search, no node
+> budget). Do it as its own performance step: measure the acceptance match before and after, and put the numbers in the
+> review. **Not a behaviour change** unless a budget truncates a search - if it does, that is a decision, not an
+> implementation detail.
+>
+> Also queued from the sim-block review: the enemy selectors (Gaia / foundations), rule conditions naming roles the pack
+> lacks, and the batch/headless duration hang.
+
 > # Session 39, 2026-11-07 - the four adopted from the prior-art watch, one at a time
 >
 > **The owner's instruction:** *"Adopt as proposed one after another. Each step - compact, implement, adversarial review
