@@ -3675,3 +3675,28 @@ idle."*
    the owner's rule and a gameplay number, so it is his: (A) none beyond knowledge, today's behaviour; (B) the worker's
    line of sight, 4 tiles; (C) `los + 5`, 9 tiles. Each is measurable with the same acceptance run, and B is the one D141
    is a warning about.
+
+
+## D149 - "Nearby" is bounded by the worker's sight, and the share table measures from the base
+
+*2026-11-07. The owner chose **C - line of sight + 5** when asked how far a depleted worker should look. Measured, that
+number breaks the acceptance match; the shipped constant is sight + 8.*
+
+1. **`World::gather_reach(worker)`** = the worker's own line of sight (whole tiles, the dat's `los`) plus a look-around,
+   scaled once. `sight_of` answers in **whole tiles** - adding a raw offset to it gives a five-tile reach and looks like a
+   rule that refuses everything, which is how the first version failed its own control test.
+2. **The owner's +5 is the failure point, measured**: reach 9 leaves **129 entities, both players alive at 30 minutes, 83
+   repaths** (from 141 / 1 / 188). A 12-tile reach keeps the match resolving. This is D141's collapse reproduced **with**
+   the fog filter, which is what makes it a statement about the radius.
+3. **Shipped: sight + 8 = 12 tiles.** The smallest bound measured that keeps the acceptance match resolving, and still
+   local. It is not the owner's number, and the difference is stated rather than glossed.
+4. **The share table is a question about the base, not about the spot a villager stands on.** With the reach applied from
+   the worker, `the_share_row_follows_the_villager_count` failed - five villagers spawned at (9.4, 32.4) had no wood within
+   reach and "eight on wood" never fired. The pass now anchors on the player's town centre (falling back to the worker).
+   Consequence, measured: the acceptance run goes 141 -> **152 entities**, repaths 186, made-room 159, hash
+   `82a5063dcca63108`.
+5. **The reach applies where a worker chooses for itself**: the "my node ran dry" path (`nearest_like`) and the script's
+   gather action. A *scripted* step and a *share* row are orders, and are bounded only by the fog (D148) - the reach is
+   about what a worker notices, not about what a player may ask for.
+6. **New acceptance baseline `82a5063dcca63108`** (141 entities -> 152, both counts measured, match resolves, one player
+   alive).

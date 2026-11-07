@@ -710,13 +710,9 @@ fn nearest_nodes(world: &World, from: (Fixed, Fixed), slot: usize, limit: usize)
 /// The copy this replaces did ask `can_reach` of every node of the resource on every call, and it asked it of the node's
 /// **own** position, which is blocked ground for a tree - so the question was the expensive one *and* the wrong one.
 fn nearest_resource(world: &World, from: EntityId, slot: usize, nth: usize) -> Option<EntityId> {
-    let here = world.position(from)?;
-    // The picker asks **for a player**, not for the world (D148): a rule may not use what its player has not scouted.
-    let who = world.entity(from)?.player;
-    world
-        .nodes_of_slot(here, who, slot, nth + 1)
-        .get(nth)
-        .copied()
+    // The picker asks **for the worker**, not for the world (D148): a rule may not use what its player has not scouted,
+    // and it looks no further than the worker's own reach (D149).
+    world.nodes_of_slot(from, slot, nth + 1).get(nth).copied()
 }
 
 /// The first free tile within two of this player's town centre, in a fixed scan order.

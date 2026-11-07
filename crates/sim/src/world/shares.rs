@@ -3,6 +3,20 @@
 //! Split out of `lib.rs` under D145, verbatim.
 use crate::{EntityId, EntityKind, MAX_PLAYERS, Task, World};
 impl World {
+    /// The player's town centre, as the anchor the share table measures from: the building of the start's town-centre
+    /// family. `None` when the player has none left, in which case the caller measures from the worker itself.
+    fn base_of(&self, player: u8) -> Option<EntityId> {
+        let centre = self.start_town_center_unit()?;
+        self.entities
+            .iter()
+            .find(|entity| {
+                entity.player == player
+                    && entity.kind == EntityKind::Building
+                    && entity.unit.is_some_and(|unit| self.is_family(unit, centre))
+            })
+            .map(|entity| entity.id)
+    }
+
     /// Enforce the share table, once a second. One villager per pass - the table is a preference, not a teleport - and
     /// only idle villagers or ones on an over-manned resource are moved, so a player's own orders survive.
     ///
@@ -170,14 +184,17 @@ impl World {
             let Some(worker) = poached else {
                 continue;
             };
-            let here = match self.find(worker) {
-                Some(entity) => entity.position,
-                None => continue,
-            };
+            if self.find(worker).is_none() {
+                continue;
+            }
             // The worker may be carrying: then the load goes to a drop site **first** and the new order waits in
             // `pending_gather`. A villager pulled off wood with ten wood in its arms and sent straight to a farm has
             // thrown those ten away, which is not what a player sees.
-            let node = match self.nodes_of_slot(here, player, slot, 3).into_iter().next() {
+            // **The share table is a question about the base, not about the spot the villager happens to stand on**
+            // (D149): "eight on wood" means wood near *your* town centre. Measured from the worker instead, a villager
+            // spawned away from its base found nothing within its own reach and never moved (the policy test caught it).
+            let anchor = self.base_of(player).unwrap_or(worker);
+            let node = match self.nodes_of_slot(anchor, slot, 3).into_iter().next() {
                 Some(node) => node,
                 None => continue,
             };

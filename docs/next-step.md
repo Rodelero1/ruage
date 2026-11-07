@@ -28,6 +28,19 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 47, 2026-11-07 - D149: "nearby" has a number
+>
+> The owner picked sight + 5; **measured, 5 breaks the match** (129 entities, both players alive, 83 repaths). Shipped
+> **sight + 8 = 12 tiles**, the smallest bound that resolves: **152 entities**, 186 repaths, 159 made-room, hash
+> `82a5063dcca63108`. The share table now anchors on the town centre (a test caught villagers spawned far from base never
+> getting a share row). Review: `docs/reviews/2026-11-07-nearby-has-a-number.md`.
+>
+> **Open question asked, awaiting his number**: keep 12, or 10 (reach 14, also resolves, hash `2adb19a4`), or the two-stage
+> gather search that walks outward from the worker instead of measuring from it (D141's queued design - the only version
+> where a small radius is safe).
+>
+> Then: `decide` at 432 lines if shape work is wanted; the 8 parked owner questions.
+
 > # Session 46, 2026-11-07 - D148: only where it has looked
 >
 > The owner's report (villagers crossing the map to unscouted berries) is fixed at its cause: the picker ranked every node

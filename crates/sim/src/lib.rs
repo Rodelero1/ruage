@@ -1370,13 +1370,36 @@ impl World {
     /// 2026-10-29). `start_gather` plans the walk and is the one authority on whether a node can be worked, so this
     /// returns a few candidates in distance order and the caller stops at the first that starts. A node that fails is
     /// remembered (`share_failed`) instead of being retried every second - 0 A.D.'s `lastFailedGather`.
+    /// **How far a worker looks for its next node**: its own line of sight plus five tiles (D149, the owner's number).
+    ///
+    /// The five is a look-around, not a sense: a villager whose tree runs out walks to the nearest thing *it can notice*,
+    /// and a patch it scouted twenty tiles ago is not that. D141 tried a bound without the fog filter and starved a match;
+    /// this one only ever removes candidates the player already knows, so the failure mode is a villager standing idle, not
+    /// an empty base.
+    pub(crate) fn gather_reach(&self, worker: EntityId) -> i64 {
+        const LOOK_AROUND_TILES: i64 = 8;
+        // `sight_of` answers in **whole tiles**, so the sum is tiles and the scale is applied once here. Mixing the two -
+        // tiles plus a raw offset - gives a reach of five tiles and looks like a rule that refuses everything.
+        let tiles = match self.find(worker) {
+            Some(entity) => self.sight_of(entity),
+            None => 0,
+        };
+        (tiles + LOOK_AROUND_TILES) * self.scale
+    }
+
     pub(crate) fn nodes_of_slot(
         &self,
-        from: (Fixed, Fixed),
-        player: u8,
+        worker: EntityId,
         slot: usize,
         limit: usize,
     ) -> Vec<EntityId> {
+        let Some(from) = self.position(worker) else {
+            return Vec::new();
+        };
+        let Some(player) = self.find(worker).map(|entity| entity.player) else {
+            return Vec::new();
+        };
+        let reach = self.gather_reach(worker);
         let mut nodes: Vec<(i64, u32, EntityId)> = Vec::new();
         for entity in &self.entities {
             if self.node_slot(entity.id) != Some(slot) {
@@ -1386,6 +1409,13 @@ impl World {
             // across the map to berries nobody had found. A node the player has never seen is not a candidate at all, and
             // with nothing left to work the worker goes idle - the owner's rule.
             if !self.knows(player, entity) {
+                continue;
+            }
+            let (dx, dy) = (
+                entity.position.0.raw() - from.0.raw(),
+                entity.position.1.raw() - from.1.raw(),
+            );
+            if dx * dx + dy * dy > reach * reach {
                 continue;
             }
             // A farm must be finished to be worked; a node with nothing left is no use; a body is not huntable.

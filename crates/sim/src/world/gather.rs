@@ -25,6 +25,9 @@ impl World {
         // **The worker only chooses among what its player has scouted** (D148). Without this a node that runs dry sends the
         // villager to the next node *in the world*, which is how villagers crossed the map to berries nobody had found.
         let who = self.find(worker)?.player;
+        // **And only what is nearby** (D149): the owner's reach, the worker's line of sight plus five tiles. Beyond it the
+        // worker stands idle rather than walking the map.
+        let reach = self.gather_reach(worker);
         let unit = source.unit;
         let family = unit.and_then(|unit| self.units.as_ref().map(|units| units.root(unit)));
         // A farm is a **building** that fills the same column a bush does, so "the next source of food" has to cross the
@@ -48,6 +51,13 @@ impl World {
                 continue;
             }
             if !self.knows(who, entity) {
+                continue;
+            }
+            let (dx, dy) = (
+                entity.position.0.raw() - from.0.raw(),
+                entity.position.1.raw() - from.1.raw(),
+            );
+            if dx * dx + dy * dy > reach * reach {
                 continue;
             }
             let same = match (kind, entity.kind) {

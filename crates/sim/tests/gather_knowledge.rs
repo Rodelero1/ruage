@@ -200,3 +200,78 @@ fn a_worker_goes_to_food_it_has_found() {
          filter refuses what it should allow"
     );
 }
+
+/// **A worker looks around itself, not across the map** (D149, the owner's number: line of sight plus five tiles).
+///
+/// The patch at `far_x` is **scouted** first, by walking the scout over it, so the only thing that can keep the villager
+/// away is the distance. A villager's line of sight is four tiles and its look-around is eight, so its search reaches
+/// twelve.
+#[test]
+fn a_worker_does_not_look_beyond_its_reach() {
+    let Some(mut world) = world_of(&map(20)) else {
+        return;
+    };
+    let far = food_at(&world, 20, 6);
+    let held_before = amount_of(&world, far).expect("the far patch");
+    scout_the_tile(&mut world, 18, 6);
+    assert_eq!(
+        amount_of(&world, far),
+        Some(held_before),
+        "the scout must not eat the patch it reveals"
+    );
+
+    play(&mut world, 60);
+
+    assert_eq!(
+        amount_of(&world, far),
+        Some(held_before),
+        "fifteen tiles is past a villager's reach (sight 4 + 8) and the patch was scouted: a villager walked to it anyway"
+    );
+}
+
+/// The control for the reach: the same scouted patch, **six tiles** from the bush the villager was working, is inside the
+/// twelve-tile search and must be taken. A reach that refused everything would pass the test above and fail this one.
+#[test]
+fn a_worker_takes_the_next_node_inside_its_reach() {
+    let Some(mut world) = world_of(&map(11)) else {
+        return;
+    };
+    let far = food_at(&world, 11, 6);
+    let held_before = amount_of(&world, far).expect("the patch inside reach");
+    scout_the_tile(&mut world, 10, 6);
+
+    play(&mut world, 60);
+
+    assert!(
+        amount_of(&world, far).is_none_or(|amount| amount < held_before),
+        "six tiles is inside a villager's reach and the patch was scouted, but it still holds {} raw units",
+        amount_of(&world, far).unwrap_or(held_before)
+    );
+}
+
+/// Walk the **scout** (not a villager) over a tile, so the fog clears there without putting a worker beside the patch.
+fn scout_the_tile(world: &mut World, x: u16, y: u16) {
+    let scale = world.scale();
+    let scout = world
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.player == 1
+                && entity.kind == EntityKind::Unit
+                && entity.unit.is_some_and(|unit| !world.is_worker(unit))
+        })
+        .map(|entity| entity.id)
+        .expect("player 1 starts with a scout");
+    world
+        .submit_checked(ruage_sim::Command::WalkTo {
+            unit: scout,
+            to: (
+                Fixed::from_raw(i64::from(x) * scale),
+                Fixed::from_raw(i64::from(y) * scale),
+            ),
+        })
+        .expect("a walk order is accepted");
+    for _ in 0..(20 * u64::from(world.tick_rate_hz())) {
+        world.step().expect("step");
+    }
+}
