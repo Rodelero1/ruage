@@ -37,11 +37,14 @@ faster by finding different routes has not been optimised.
 cargo run --release --offline -p ruage-sim --example path_cost
 ```
 
+Two independent A/B samples, each a release build measured on the same machine (`before` = `path.rs` stashed, `after` =
+restored), so the figures are a range rather than one run dressed as a fact:
+
 | search | before (`BTreeMap`) | after (flat `Vec`) | speed-up | checksum |
 |---|---|---|---|---|
-| corner to corner, 61 waypoints | **50.5 µs** | **8.9 µs** | **5.7×** | `5229cf3a75f30d00` both |
-| mid, ~10 tiles, 10 waypoints | **5.2 µs** | **2.0 µs** | **2.6×** | `4382e97fe9580fd0` both |
-| short, ~3 tiles, 2 waypoints | **1.2 µs** | **0.9 µs** | **1.3×** | `f627a98f64d14910` both |
+| corner to corner, 61 waypoints | **50.5 / 52.3 µs** | **8.9 / 9.7 µs** | **5.7-5.9×** | `5229cf3a75f30d00` all four runs |
+| mid, ~10 tiles, 10 waypoints | **5.2 / 5.4 µs** | **2.0 / 2.3 µs** | **2.6×** | `4382e97fe9580fd0` all four |
+| short, ~3 tiles, 2 waypoints | **1.2 / 1.2 µs** | **0.9 / 1.0 µs** | **1.3×** | `f627a98f64d14910` all four |
 
 Three lengths on purpose: a flat array costs `O(cells)` to zero, so a change priced only on the long case would be priced
 wrong — and it does lose that cost on short searches, just not enough to lose the race (1.2 → 0.9 µs).
