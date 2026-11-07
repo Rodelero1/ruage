@@ -422,9 +422,42 @@ role = "house"
 #[test]
 fn a_scenario_researches_a_tech_named_by_a_role() {
     let Some(fx) = fixture() else { return };
-    // Three villagers on gold first: the pack starts a match with an empty bank, and Loom costs 50,
-    // so the scenario has to earn it - which is also the honest check that research and gathering
-    // live in the same economy.
+    // **Scout the gold first** (D148). A scripted gather names a node the *player* may order work at, and the picking
+    // rules now refuse a node nobody has scouted - the owner's rule. Player 1's gold sits 9.4 tiles from its town centre,
+    // just outside the starting sight, so the scenario walks a villager over it first, which is exactly how a player finds
+    // it in the game.
+    let mut world = world(&fx, 12_345);
+    let scale = world.scale();
+    let gold_slot = slot("gold");
+    // Player 1's side of the mirrored map is the half below x = 30; the gold there is the one the scenario wants.
+    let gold = world
+        .entities()
+        .iter()
+        .filter(|entity| matches!(entity.kind, EntityKind::Resource(s) if s == gold_slot))
+        .filter(|entity| {
+            entity.position.0.raw() < 30 * scale && entity.position.1.raw() < 25 * scale
+        })
+        .map(|entity| entity.position)
+        .next()
+        .expect("the map has gold on player 1's side");
+    let scout = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
+        .map(|entity| entity.id)
+        .expect("player 1 has a unit");
+    world
+        .submit_checked(Command::WalkTo {
+            unit: scout,
+            to: gold,
+        })
+        .expect("a walk order is accepted");
+    for _ in 0..(20 * u64::from(world.tick_rate_hz())) {
+        world.step().expect("step");
+    }
+
+    // Three villagers on gold: the pack starts a match with an empty bank, and Loom costs 50, so the scenario has to earn
+    // it - which is also the honest check that research and gathering live in the same economy.
     let text = r#"
 schema = 2
 duration_seconds = 220
@@ -459,7 +492,7 @@ kind = "research"
 building = "town_center"
 tech = "loom"
 "#;
-    let (world, runner) = play(&fx, text, 12_345);
+    let (world, runner) = play_with(world, text);
     assert!(
         runner
             .outcomes

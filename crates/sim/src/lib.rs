@@ -1373,12 +1373,19 @@ impl World {
     pub(crate) fn nodes_of_slot(
         &self,
         from: (Fixed, Fixed),
+        player: u8,
         slot: usize,
         limit: usize,
     ) -> Vec<EntityId> {
         let mut nodes: Vec<(i64, u32, EntityId)> = Vec::new();
         for entity in &self.entities {
             if self.node_slot(entity.id) != Some(slot) {
+                continue;
+            }
+            // **A worker only knows what has been scouted** (D148): distance over every node in the world sent villagers
+            // across the map to berries nobody had found. A node the player has never seen is not a candidate at all, and
+            // with nothing left to work the worker goes idle - the owner's rule.
+            if !self.knows(player, entity) {
                 continue;
             }
             // A farm must be finished to be worked; a node with nothing left is no use; a body is not huntable.

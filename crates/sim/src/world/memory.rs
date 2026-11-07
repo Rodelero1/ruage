@@ -267,7 +267,19 @@ impl World {
         let dy = y - i64::from(tile.1);
         dx * dx + dy * dy <= radius * radius
     }
-    fn explored_bit(&self, player: u8, tile: (u16, u16)) -> bool {
+    /// **Has `player` ever seen this?** (D148)
+    ///
+    /// A resource node never moves, so "explored" is exactly "found": the fog keeps a tile for the whole match once it has
+    /// been looked at, and a worker cannot be sent to berries nobody has scouted. The observer (player 0) sees all of it.
+    pub(crate) fn knows(&self, player: u8, entity: &Entity) -> bool {
+        if player == 0 {
+            return true;
+        }
+        let tile = self.tile_of(entity.position);
+        self.explored_bit(player, tile)
+    }
+
+    pub(crate) fn explored_bit(&self, player: u8, tile: (u16, u16)) -> bool {
         let (width, height) = self.map_size;
         if tile.0 >= width || tile.1 >= height {
             return false;

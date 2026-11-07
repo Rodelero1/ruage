@@ -711,7 +711,12 @@ fn nearest_nodes(world: &World, from: (Fixed, Fixed), slot: usize, limit: usize)
 /// **own** position, which is blocked ground for a tree - so the question was the expensive one *and* the wrong one.
 fn nearest_resource(world: &World, from: EntityId, slot: usize, nth: usize) -> Option<EntityId> {
     let here = world.position(from)?;
-    world.nodes_of_slot(here, slot, nth + 1).get(nth).copied()
+    // The picker asks **for a player**, not for the world (D148): a rule may not use what its player has not scouted.
+    let who = world.entity(from)?.player;
+    world
+        .nodes_of_slot(here, who, slot, nth + 1)
+        .get(nth)
+        .copied()
 }
 
 /// The first free tile within two of this player's town centre, in a fixed scan order.

@@ -3648,3 +3648,30 @@ both were fixed rather than asked about.*
    findings were written into `docs/reviews/` before it expired and survive; the 49 tests / 26 config / 16 other findings
    were never written out and **cannot be recovered verbatim**. Findings get committed to `docs/reviews/` as they are
    triaged.
+
+
+## D148 - A worker only goes where it has looked
+
+*2026-11-07. The owner: "villagers go across the map to gather berries even when they were not found before… Villagers are
+supposed to look for resources which are nearby when their current supply is depleted. If nothing is found, they should be
+idle."*
+
+1. **The picker asked the world, not the player.** `nodes_of_slot` (the script's gather action and the share pass) and
+   `nearest_like` (the "my node ran dry" path) both ranked **every node in the world** by distance. A berry patch in
+   unexplored fog was therefore a legitimate target, which is what the owner watched.
+2. **D141 was the wrong axis.** A radius (`los + 5`) was tried and reverted by measurement (141 -> 129 entities, one player
+   alive). The engine already keeps a per-player fog and a **resource node never moves**, so "found" is exactly "its tile
+   has been explored" - a fact the picker ignored.
+3. **`World::knows(player, entity)`**: one predicate on the fog (`explored_bit`), observer (0) sees everything. Used at every
+   automatic pick; `nodes_of_slot` takes the player as a parameter because the question is *whose* knowledge.
+4. **Scripted steps are not exempt.** A scenario `gather` step goes through the same picker, so it too must name a node the
+   player has scouted; `a_scenario_researches_a_tech_named_by_a_role` was rewritten to walk a unit over the gold first
+   (player 1's gold is 9.4 tiles out, just past the starting sight) rather than given a bypass.
+5. **The acceptance hash changed on purpose, from `f328ebc8d4d34b78` to `dfc835be5d880a47`**, and what moved is known
+   exactly: counts identical (141 entities, 1 player, 188 repaths, 187 made-room), and a `--dump` diff shows **one line** -
+   node 117 keeping 90 raw units (0.09 of a resource) that the old picker spent on an unseen node. Every earlier slice was
+   proved by an unmoved hash; this one is proved by explaining the diff.
+6. **"Nearby" is still unbounded.** Among *known* nodes the nearest is taken however far. The radius is the second half of
+   the owner's rule and a gameplay number, so it is his: (A) none beyond knowledge, today's behaviour; (B) the worker's
+   line of sight, 4 tiles; (C) `los + 5`, 9 tiles. Each is measurable with the same acceptance run, and B is the one D141
+   is a warning about.

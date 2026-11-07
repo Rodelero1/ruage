@@ -28,6 +28,21 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 46, 2026-11-07 - D148: only where it has looked
+>
+> The owner's report (villagers crossing the map to unscouted berries) is fixed at its cause: the picker ranked every node
+> in the world; it now asks `World::knows(player, entity)` (the per-player fog), in `nodes_of_slot` (script action + shares)
+> and `nearest_like` (node ran dry). RED watched, control passed before the change. **New acceptance baseline
+> `dfc835be5d880a47`** (was `f328ebc8d4d34b78`): counts identical, `--dump` diff is one line - node 117 keeps 90 raw units.
+> Suite 735/0/19. Review: `docs/reviews/2026-11-07-only-where-it-has-looked.md`.
+>
+> **OPEN AND ASKED: the "nearby" radius** - the second half of his rule. Among known nodes the picker still takes the
+> nearest however far. Options: (A) none, today; (B) the worker's line of sight, 4 tiles; (C) `los + 5`, 9 tiles (D141's
+> number, which broke a match when applied to *all* nodes - unknown whether it does with the fog filter). Measuring any of
+> them costs one acceptance run plus the two knowledge tests.
+>
+> Then: the D141 two-stage gather search (bounded BFS from the worker, then the picker), and `decide` at 432 lines.
+
 > # Session 45, 2026-11-07 - D147: a length that is a length, and half a table
 >
 > Second review [74] [173] [184] [112], the deferred items with a named remedy, both fixed test-first: `duration_seconds`

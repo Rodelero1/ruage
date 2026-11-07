@@ -22,6 +22,9 @@ impl World {
     ) -> Option<EntityId> {
         let source = self.find(old)?;
         let kind = source.kind;
+        // **The worker only chooses among what its player has scouted** (D148). Without this a node that runs dry sends the
+        // villager to the next node *in the world*, which is how villagers crossed the map to berries nobody had found.
+        let who = self.find(worker)?.player;
         let unit = source.unit;
         let family = unit.and_then(|unit| self.units.as_ref().map(|units| units.root(unit)));
         // A farm is a **building** that fills the same column a bush does, so "the next source of food" has to cross the
@@ -42,6 +45,9 @@ impl World {
                 continue;
             }
             if matches!(entity.kind, EntityKind::Resource(_)) && !self.node_workable(entity.id) {
+                continue;
+            }
+            if !self.knows(who, entity) {
                 continue;
             }
             let same = match (kind, entity.kind) {

@@ -177,7 +177,7 @@ impl World {
             // The worker may be carrying: then the load goes to a drop site **first** and the new order waits in
             // `pending_gather`. A villager pulled off wood with ten wood in its arms and sent straight to a farm has
             // thrown those ten away, which is not what a player sees.
-            let node = match self.nodes_of_slot(here, slot, 3).into_iter().next() {
+            let node = match self.nodes_of_slot(here, player, slot, 3).into_iter().next() {
                 Some(node) => node,
                 None => continue,
             };
