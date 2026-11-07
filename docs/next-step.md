@@ -28,6 +28,26 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 39, 2026-11-07 - the four adopted from the prior-art watch, one at a time
+>
+> **The owner's instruction:** *"Adopt as proposed one after another. Each step - compact, implement, adversarial review
+> on performance and stability."* The order, from the digest's own ranking:
+>
+> 1. **DONE - the binary's module map** (`tools/exe_map.py`, `docs/binary-class-map.md`, D140). 84 source paths, 541
+>    classes, 31 `Comm*`; the DE build root as provenance; U7's six-pather shape confirmed from a second source; U12 given
+>    its shape (turn sync + cmd count + checksum) with the rate left open and the arithmetic written down.
+> 2. **NEXT - the gather search's radius bound** (genie's `LOS + 5`, at most 30 objects tested). Ours has no radius bound
+>    at all after D138, so a villager's "nearest" can be across the map. **Gameplay: the owner's call** - he adopted the
+>    list as proposed, so implement it; the test is a node beyond the bound not being chosen.
+> 3. **Attack reach box-to-box** (openaok). We measure centre-to-centre; the original measures between the dat's boxes,
+>    and since D76 we *have* building footprints, so the digest's "missing datum" caveat has expired. Changes the
+>    acceptance match's combat, so measure the hash and report it.
+> 4. **Four pathing techniques** (landmark A* estimate, budget by route length, per-tick search budget, re-sort last
+>    tick's order) - the answer to the deferred `path.rs` findings, as its own performance step with numbers before/after.
+>
+> Each step: compact (this file), implement test-first, adversarial review with Performance **and** Stability sections,
+> commit and push.
+
 > # Session 38, 2026-11-07 - D138: one picker, and it asks nothing
 >
 > **The owner chose B.** The script's `nearest_resource` no longer runs a path search per candidate node (90 wood nodes on

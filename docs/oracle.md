@@ -37,7 +37,7 @@ oracle you obtain by pressing "Save", not by writing a game bot.
 | U6 rate of fire (shots fired over an interval) | **yes** |
 | U8 civ `resources` array meaning (compare civs across saves) | **partly** |
 | U2 effect-type semantics (research a tech, diff the save) | **yes** — the cleanest method available |
-| U7 pathing algorithm / tie-breaks | **no** — needs per-tick trajectories |
+| U7 pathing algorithm / tie-breaks | **no** — needs per-tick trajectories; the *module map* behind it is named by the binary (`docs/binary-class-map.md`: `path.cpp` and `pathsys.cpp` separately, `motion.cpp`, `move_obj.cpp`) |
 | U10 age-up upgrade timing | **partly** — snapshots catch the aftermath, not the transition |
 
 So D2 resolves to: **file-based oracle, sufficient for the constants and the economy, not
@@ -120,6 +120,16 @@ collapses to the coarsest one.
 a recorded game's periodic sync records (decisive, needs one `.aoe2record` made on the Windows
 box), a save's task progress at a known game time (the save reader currently gets only player
 names), or a decompiled constant.
+
+**The lockstep *shape* is now named, by the binary itself** (`docs/binary-class-map.md`, D140): HD 5.7 carries 31
+`Comm*` classes, and they are a turn-synchronised command stream — `CommPacketSyncTurn`, `CommPacketSyncCmdCount`,
+`CommPacketPlayerCommand`, `CommPacketChecksum`, plus `CommPacketSpeedChange`, `CommPacketResign` and the pre-game state
+packets. So the contract is: per turn, a batch of player commands, a count, and a checksum — which is the ensemble
+lockstep of the era, not a snapshot delta. **What it still does not give is the rate**, and the recording's own numbers
+say the sync is not per sim tick: 31,104 `SYNC` ops over 3,066.04 s is **10.15 a second**, i.e. one every ~98.6 ms —
+which at a 20 Hz sim is every **second** turn. That is a hypothesis with one number behind it, not a settled rate: it is
+equally consistent with a 10 Hz sim, and the 50 ms authoring granularity above is what rules 10 Hz *out* for the dat's
+own values.
 
 ## Real HD recordings, and what the sync cadence says about U12 (measured 2026-10-25)
 

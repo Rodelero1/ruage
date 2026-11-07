@@ -3435,3 +3435,30 @@ is the check, and a failure is remembered.*
    - `headless.rs:300` - `players=` prints the highest player id, not the count.
 6. **Acceptance unmoved**: `f328ebc8d4d34b78`, 141 entities, 188 repaths, 187 made-room, 574 refusals, **11.47 / 11.51 s**
    over two idle runs. The 16.97 s figure I reported earlier was a run whose compile overlapped the suite; withdrawn.
+
+
+## D140 - The binary names its own modules, so the map is read from the file we own
+
+*2026-11-07. Step 1 of four adopted from the prior-art watch thread (`docs/reviews/2026-11-07-the-binary-names-itself.md`).*
+
+1. **What was adopted is a method, not a fact.** The thread reported that `AoK HD.exe` carries 78 source paths and 938
+   RTTI class names. Verified here with `tools/exe_map.py`: **84** source paths, **541** classes (from 1,541 descriptors -
+   a PE repeats them), 4 structs, and **31** `Comm*` classes. The digest's counts used a different string minimum.
+2. **The build root is provenance in one line**: `c:\users\jakes_workstation\documents\projects\age_of_empires_2_de\
+   phoenix\age2hd_archive_5.7_with_hotfix` - HD 5.7 was cut from the DE tree, which `SPEC.md` asserted from one string and
+   now has 84 paths behind it.
+3. **The module map confirms U7's shape from a second source**: `path.cpp` **and** `pathsys.cpp` separately, `motion.cpp`,
+   `move_obj.cpp`, `act_gath.cpp`, four `tact_*.cpp` - the same six-pather picture that `docs/movement-in-the-binary.md`
+   built from the decompiled corpus, now rebuildable without the corpus.
+4. **The new part is the class taxonomy.** 31 `Comm*` classes name a turn-synchronised command stream:
+   `CommPacketSyncTurn`, `CommPacketSyncCmdCount`, `CommPacketPlayerCommand`, `CommPacketChecksum`, plus speed change,
+   resign, ping/pong and the pre-game state packets. U12's contract has a shape now: **per turn, a command batch, a
+   count, a checksum**.
+5. **The rate is still open, and the arithmetic says why.** 31,104 `SYNC` ops over 3,066.04 s is **10.15/s**, one every
+   ~98.6 ms - every *second* turn at 20 Hz, and equally consistent with a 10 Hz sim, which the dat's 50 ms authoring
+   granularity rules out. Recorded as a hypothesis in `docs/oracle.md`; not a settled rate.
+6. **Nothing is copied.** A class name and a build path are facts about a file this project owns. genie is AGPL-3.0 and
+   the UGC guide GPL-3.0; neither was read for this step, and the thread's own "NEVER COPY" rule is the reason.
+7. **The tool has one rule per lesson already paid for**: a missing binary is an `exit 2`, never an empty map (D130); and a
+   family is a word, not a prefix, because `of_family("Comm")` counted `CommandLineHandler` as a netplay packet until it
+   required a capital after the prefix.

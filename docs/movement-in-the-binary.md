@@ -6,6 +6,10 @@ that carry its own source path, line number and a log string, so the exported ps
 without reading a single expression. `docs/re-toolchain.md` records the toolchain (REA on this box, D86); this file
 records what the movement module *is*.
 
+**Rebuildable without the corpus**: `tools/exe_map.py` reads the same source paths out of `Age2HD/AoK HD.exe` itself
+(84 of them, plus 541 RTTI classes) and writes `docs/binary-class-map.md` - so the map above rests on a file this project
+owns rather than on a decompilation whose strings happen to carry it (D140).
+
 ## The method, so it can be repeated
 
 The corpus is `/opt/data/tools/rea/pseudo-aokhd` (15,465 decompiled functions, one `.c` per function, named by
