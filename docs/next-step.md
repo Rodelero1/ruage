@@ -28,6 +28,19 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 42, 2026-11-07 - D144: four more subjects out of `lib.rs`
+>
+> `lib.rs` **10,216 -> 8,731** with `world/{seed,train,build,research}.rs`; hash `f328ebc8d4d34b78` checked after **each**
+> move, suite 728/0/19 unchanged. Review: `docs/reviews/2026-11-07-four-more-subjects-out-of-lib-rs.md`.
+>
+> **The remaining split work is two different jobs, and the second is the one that helps a reader:**
+> 1. **Stage 1, next slices**: `orders` (`apply` 223 + `validate` 101 + `submit*`), `state` (`state_hash` 343 + `stamp_*` +
+>    `bookkeeping_*`), `combat` (`swing`, `volley`, `spawn_projectile`, `true_aim`, `lead_shot`, `blast_victims`,
+>    `gap_squared_to`, `in_strike_range`), `sites` (`site_refusal`, `site_has_lane`, `site_fits`, `build_site_tiles`,
+>    `footprint_area`, `solid_tiles`, `nearest_drop_site`). Each is a hash-checked mechanical move.
+> 2. **Stage 2, the real one**: `step` is **1,562 lines** in a single function - cutting it into named phases is not
+>    mechanical and is worth more than the six remaining stage-1 slices together.
+
 > # Session 41, 2026-11-07 - the four are done: two adopted, one reverted, one narrowed
 >
 > 1. **D140 the binary's module map** - 84 paths, 541 classes, 31 `Comm*`; U12 has a shape. 2. **D141 the gather radius

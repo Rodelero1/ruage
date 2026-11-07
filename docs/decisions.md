@@ -3552,3 +3552,31 @@ been decisions smuggled in as optimisations.*
    target, not for this scenario, and the review says so rather than quoting 5.7x as a match speed-up.
 5. **Memory also improves**: 32 KB of arrays per search on a 64x64 map against ~4,000 tree nodes (~300 KB) on a
    corner-to-corner search - bounded by the map instead of proportional to the work.
+
+
+## D144 - Four more subjects out of `lib.rs`: seeding, training, construction, research
+
+*2026-11-07. The owner: "Please split lib.rs into smaller files. It is still around 10000 lines." Stage 1 of D136 continues.*
+
+1. **Moved, verbatim, by brace matching**: `world/seed.rs` 475 (`seed_from`, `insert`), `world/train.rs` 368 (`check_train`,
+   `start_train`, `spawn_from_building`, `free_spot_near`), `world/build.rs` 284 (`settle_blind_sites`, `cancel_overbuilt`,
+   `cancel_site`, `refund_unit_cost(_part)`, `work_one_tick`, `check_build`), `world/research.rs` 411 (`check_research`,
+   `start_research`, `modifiers_for`, `adjusted`, `max_hp`, `effective_speed`, `finish_research`, `grow_plots`,
+   `apply_tech`, `upgrade_units`). `lib.rs` **10,216 -> 8,731**.
+2. **The proof is the acceptance hash**, checked after every move rather than once at the end: `f328ebc8d4d34b78`, 141
+   entities, 188 repaths, 187 made-room, identical all four times. A pure move cannot change behaviour, so a hash that
+   moved would mean the slice moved something.
+3. **The compiler wrote the visibility list**, as in D136: fourteen methods and four free functions (`collect_modifiers`,
+   `add_to_class`, `multiply_class`, `scaled_health`) became `pub(crate)`, and `TrainPlan` with them. `pub(crate)` does not
+   change the crate's public API.
+4. **The seam is checked by hand at every cut**, because no compiler catches an orphaned doc comment: each of these four
+   blocks began at a doc comment, so the preceding method kept its own.
+5. **One commit for the four slices, and why**: the cuts were made in one working tree, so the `lib.rs` diff holds all four
+   removals and cannot be staged separately. Each move's hash was verified as it landed, and the gate (728 passed, clippy and
+   fmt clean) covers the final tree.
+6. **What is left is a different job**: `step` is **1,562 lines** in one function, and no file split touches it - that is
+   D136's stage 2, named phases. The remaining stage-1 candidates, in order: `orders` (`apply` 223 + `validate` 101),
+   `state` (`state_hash` 343 + `stamp_*` + `bookkeeping_*`), `combat` (the strike/volley/aim helpers), `sites`
+   (`site_*`, `footprint_area`, `solid_tiles`, `nearest_drop_site`).
+7. **The cost, stated**: about 1,500 lines of `git blame` history now point at a move commit. The mitigation is the one that
+   keeps the code searchable - every doc comment moved verbatim, so the same sentences are one `grep` away.
