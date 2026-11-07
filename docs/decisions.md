@@ -3462,3 +3462,40 @@ is the check, and a failure is remembered.*
 7. **The tool has one rule per lesson already paid for**: a missing binary is an `exit 2`, never an empty map (D130); and a
    family is a word, not a prefix, because `of_family("Comm")` counted `CommandLineHandler` as a netplay packet until it
    required a capital after the prefix.
+
+
+## D141 - The gather radius bound, adopted and then refused by measurement
+
+*2026-11-07. Step 2 of four from the prior-art watch: genie's gather search is a BFS bounded by `LOS + 5`, with at most 30
+objects reach-tested. Adopted as proposed, implemented, measured, and **reverted** - the numbers are the reason.*
+
+1. **What the original does**: the gather search explores **standable tiles** out to the worker's line of sight plus five,
+   and reach-tests at most 30 objects. The digest called the radius "a fidelity rule and cheap".
+2. **The cap is moot for us** and always was: D138 removed the reachability test from the picker, so we spend **one**
+   search per attempt inside `start_gather`, not thirty. The radius is the whole of the fidelity question.
+3. **Implemented**: `World::gather_reach(worker)` = `(los + 5)` tiles in raw units (a villager's `los` is **4**, so
+   **9** tiles), and `nodes_of_slot` refused candidates beyond it. Test first, watched failing: *"the only wood is ~18
+   tiles away and the villager sees nine: the rule must say there is no node"* - it said nothing and sent him across the
+   map, which was the defect.
+4. **Measured, and it breaks the match**: 36,000 ticks, seed 7.
+
+   | | before | bound on |
+   |---|---|---|
+   | entities at 1,800 s | **141** | **129** |
+   | players alive | **1** | **2** |
+   | repaths / made-room | 188 / 187 | 83 / 164 |
+   | refusal lines | 574 | **767** |
+   | hash | `f328ebc8d4d34b78` | `66032535f7d24483` |
+   | wall | 11.5 s | 7.4 s (fewer units, less to do) |
+
+   The match **stops resolving**: neither side eliminates the other by 30 minutes, because the economy idles once the wood
+   within nine tiles is gone.
+5. **Why, and what the original actually pairs with it.** The bound is not wrong; it is the wrong half. Theirs is a BFS
+   **from where the worker stands**, in a game where the AI keeps re-tasking idle villagers and where a player's click is
+   itself the long-range decision. Our `nodes_of_slot` is used for **both** jobs: it is the AI's "what should this villager
+   do" *and* the unit's "which node, exactly". Bounding it applies a short-range rule to a long-range decision.
+6. **Reverted** (`git checkout`), so the tree is back at `f328ebc8d4d34b78`. The corrected shape - a **two-stage** search,
+   the AI choosing an area and the unit choosing a node within sight of it - is queued, not guessed at.
+7. **What this costs the "cheap" claim**: the digest's own sentence says "the cap is a fidelity rule *and* the performance
+   bound; adopting the bound and the cap is cheap". The cap is free; the bound is not, and the only way to know was to
+   measure it.
