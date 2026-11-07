@@ -251,3 +251,50 @@ fn a_missing_resources_file_is_an_error_not_a_default() {
         "the refusal must name the flag as required, not as unknown: {stderr}"
     );
 }
+
+#[test]
+fn half_a_research_table_is_an_error_and_names_the_missing_flag() {
+    // Second review [112]: `--techs` without `--effects` fell through an `if let (Some, Some)` and research was simply
+    // skipped - a run that looks like it researched and did not. Half a table is a mistake, so it is refused.
+    if !have_units() {
+        return;
+    }
+    let [sim, map, economy, units, resources] = paths();
+    // (the flag supplied, the flag omitted, the file supplied)
+    let cases = [
+        ("--techs", "--effects", "config/gamedata/techs.toml"),
+        ("--effects", "--techs", "config/gamedata/effects.toml"),
+    ];
+    for (given, omitted, file) in cases {
+        let out = Command::new(env!("CARGO_BIN_EXE_ruage-headless"))
+            .args([
+                "--config",
+                &sim,
+                "--map",
+                &map,
+                "--economy",
+                &economy,
+                "--units",
+                &units,
+                "--resources",
+                &resources,
+                "--seed",
+                "7",
+                given,
+                file,
+                "--ticks",
+                "10",
+            ])
+            .output()
+            .expect("the headless runner must be executable");
+        assert!(
+            !out.status.success(),
+            "{given} without {omitted} must be refused, not silently skipped"
+        );
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains(omitted),
+            "the refusal must name the missing flag {omitted}: {stderr}"
+        );
+    }
+}

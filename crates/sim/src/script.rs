@@ -254,6 +254,8 @@ pub enum Outcome {
 pub struct Runner {
     steps: Vec<(u64, u8, StepKind)>,
     next: usize,
+    /// How long the scenario runs for, resolved once from its duration and the tick rate.
+    duration_ticks: u64,
     /// Rules with their resolved timings: not before, cooldown, and the tick each last fired (`u64::MAX` = never).
     rules: Vec<(u64, u64, Rule)>,
     /// The tick each rule last fired, by index.
@@ -281,8 +283,19 @@ fn tick_at(seconds: f64, tick_rate_hz: u32, at_least: u64, what: &str) -> Result
     Ok(((ticks as i64) as u64).max(at_least))
 }
 
+impl Scenario {
+    /// **How many ticks this scenario runs for**, bounded to a real tick count (second review [74] [173] [184]).
+    ///
+    /// One definition, used by both runners and by `Runner::new`: the inline `(duration * rate).round() as i64` that the
+    /// two binaries each carried turned a huge duration into `i64::MAX` and a `NaN` into zero without saying anything.
+    pub fn ticks(&self, tick_rate_hz: u32) -> Result<u64, String> {
+        tick_at(self.duration_seconds, tick_rate_hz, 0, "duration_seconds")
+    }
+}
+
 impl Runner {
     pub fn new(scenario: &Scenario, tick_rate_hz: u32) -> Result<Self, String> {
+        let duration_ticks = scenario.ticks(tick_rate_hz)?;
         // **A runner needs a clock** (second review, `script.rs:271`): at zero ticks a second every time rounds to tick 0,
         // and the reporting path divides by the rate. A runner that cannot keep time is a broken run, not a quiet one.
         if tick_rate_hz == 0 {
@@ -331,12 +344,19 @@ impl Runner {
         Ok(Self {
             steps,
             next: 0,
+            duration_ticks,
             rules,
             fired: BTreeMap::new(),
             fired_times: vec![0; rules_len],
             rule_refusals: Vec::new(),
             outcomes: Vec::new(),
         })
+    }
+
+    /// How many ticks this scenario runs for - the number the runners used to compute for themselves.
+    #[must_use]
+    pub fn duration_ticks(&self) -> u64 {
+        self.duration_ticks
     }
 
     pub fn pending(&self) -> bool {
@@ -977,6 +997,16 @@ fn free_tile_near(
 
 pub fn load_scenario_str(text: &str, path: &str) -> Result<Scenario, String> {
     let scenario: Scenario = toml::from_str(text).map_err(|err| format!("{path}: {err}"))?;
+    // **A scenario's length is a length** (second review [74] [173] [184]): `f64 as i64` saturates, so a `NaN` duration
+    // became a *zero-tick match* - it played nothing, exited 0 and reported success - and `1e300` became `i64::MAX`
+    // ticks, a match that never ends. The product is bounded where the rate is known (`Scenario::ticks`); the two things
+    // that can be judged without a clock are judged here, and the refusal names the field.
+    if !scenario.duration_seconds.is_finite() || scenario.duration_seconds < 0.0 {
+        return Err(format!(
+            "{path}: duration_seconds must be a finite, non-negative number of seconds, not {}",
+            scenario.duration_seconds
+        ));
+    }
     // `ai` names a file beside the scenario, so a scenario held only as text cannot honour it. Refusing is the honest
     // answer: silently playing with no rules is an AI that does nothing and a file that says it should do something.
     if let Some(name) = &scenario.ai {

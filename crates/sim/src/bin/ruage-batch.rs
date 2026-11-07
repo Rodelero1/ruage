@@ -189,10 +189,9 @@ fn run() -> Result<(), String> {
             let mut runner =
                 Runner::new(&scenario, world.tick_rate_hz()).map_err(|err| err.to_string())?;
             let mut metrics = Metrics::new(&world, player, &economy.metrics.military_roles);
-            let ticks = u64::try_from(
-                (scenario.duration_seconds * f64::from(world.tick_rate_hz())).round() as i64,
-            )
-            .map_err(|_| "the scenario is longer than a u64 of ticks".to_owned())?;
+            // **One definition of "how long is this match"** (second review [74] [173] [184]): the scenario bounds its own
+            // tick count where the rate is known, so a huge duration is refused instead of saturating to `i64::MAX`.
+            let ticks = scenario.ticks(world.tick_rate_hz())?;
             let mut refused = 0usize;
             for _ in 0..ticks {
                 runner.due(&mut world);

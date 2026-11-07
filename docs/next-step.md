@@ -28,6 +28,25 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 45, 2026-11-07 - D147: a length that is a length, and half a table
+>
+> Second review [74] [173] [184] [112], the deferred items with a named remedy, both fixed test-first: `duration_seconds`
+> was cast with `as i64` (which saturates - `nan` was a zero-tick match that exits 0, `1e300` a match that never ends), and
+> `--techs` without `--effects` skipped research in silence. Now `Scenario::ticks(tick_rate_hz)` is the one definition, used
+> by both runners and by `Runner::new`, and half a research table is an error naming the missing flag. RED watched on both
+> (3 of 4 duration tests; the CLI test with the run exiting 0). Review: `docs/reviews/2026-11-07-a-length-that-is-a-length.md`.
+>
+> **The review's 205-finding JSON is gone** - `/opt/data/cache/documents/` is pruned. 41 loader + 63 sim findings survive in
+> `docs/reviews/`; the **49 tests / 26 config / 16 other** ones were never written out and cannot be recovered verbatim.
+> Lesson recorded in D147.5: commit findings as they are triaged.
+>
+> **Queued with reasons, not lost**: [70] `--dump` CSV escaping (no value it can produce today contains a comma, so no test
+> can be watched failing); [71] `players=` is the highest id, not the count (unobservable while seeding gives `1..=n`; needs a
+> sparse-player or mass-death fixture); [125] [134] [135] the path/gather search questions, still open.
+>
+> **Next, in order**: (1) the D141 two-stage gather search - bounded BFS from the worker, then the picker; (2) `decide` at
+> 432 lines, if shape work is wanted over correctness; (3) the 8 parked owner questions, which still need an owner.
+
 > # Session 44, 2026-11-07 - D146: stage 2 done, `step` is 30 lines
 >
 > `decide()` (432 lines, the one pass over the entity list) fills a `TickWork`; nineteen named phases follow it in the order

@@ -162,12 +162,32 @@ fn run(args: &[String]) -> Result<(), String> {
     }
     // Research is optional like combat: a run that never researches does not need the tables, and a
     // run that does gets a refusal rather than a guess.
-    if let (Some(techs), Some(effects)) = (parsed.get("--techs"), parsed.get("--effects")) {
-        let techs = load_techs_file(Path::new(techs)).map_err(|err| format!("{err}"))?;
-        let effects = load_effects_file(Path::new(effects)).map_err(|err| format!("{err}"))?;
-        world
-            .load_research(&techs, &effects)
-            .map_err(|err| format!("{err}"))?;
+    match (parsed.get("--techs"), parsed.get("--effects")) {
+        (Some(techs), Some(effects)) => {
+            let techs = load_techs_file(Path::new(techs)).map_err(|err| format!("{err}"))?;
+            let effects = load_effects_file(Path::new(effects)).map_err(|err| format!("{err}"))?;
+            world
+                .load_research(&techs, &effects)
+                .map_err(|err| format!("{err}"))?;
+        }
+        (None, None) => {}
+        // **Half a table is not a table** (second review [112]): `if let (Some, Some)` let a run name one file and skip
+        // research entirely, so the match looked researched and was not - a silent difference in behaviour for a typo.
+        // Naming the missing flag is the whole fix; guessing the other file would be worse than refusing.
+        (Some(_), None) => {
+            return Err(
+                "--techs needs --effects: research is a tech table plus the effects it applies, and a run with one of \
+                 them used to skip research without saying so"
+                    .to_owned(),
+            );
+        }
+        (None, Some(_)) => {
+            return Err(
+                "--effects needs --techs: research is a tech table plus the effects it applies, and a run with one of \
+                 them used to skip research without saying so"
+                    .to_owned(),
+            );
+        }
     }
     // The civ table is what turns content's civ name into restrictions, so it is optional in the same
     // way: a run that names a civ but supplies no table is refused rather than played unrestricted.
@@ -178,10 +198,9 @@ fn run(args: &[String]) -> Result<(), String> {
 
     let mut runner = match &scenario {
         Some(scenario) => {
-            let ticks_from_script = u64::try_from(
-                (scenario.duration_seconds * f64::from(world.tick_rate_hz())).round() as i64,
-            )
-            .map_err(|_| "the scenario is longer than a u64 of ticks".to_owned())?;
+            // **One definition of "how long is this match"** (second review [74] [173] [184]): the scenario bounds its own
+            // tick count where the rate is known, so a huge duration is refused instead of saturating to `i64::MAX`.
+            let ticks_from_script = scenario.ticks(world.tick_rate_hz())?;
             let runner = Runner::new(scenario, world.tick_rate_hz())?;
             Some((runner, ticks_from_script))
         }

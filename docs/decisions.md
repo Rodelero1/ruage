@@ -3625,3 +3625,26 @@ been decisions smuggled in as optimisations.*
 6. **What is left is `decide` at 432 lines** - one `for` with a `match` on `Task`, long because the game has that many verbs.
    Cutting it per task would make each arm return a delta and push into `work`: a change of shape for a modest gain, and not
    attempted here.
+
+
+## D147 - A scenario's length is a length, and half a research table is an error
+
+*2026-11-07. Second review [74] [173] [184] [112], the two deferred items with a named remedy. Both were engine defects, so
+both were fixed rather than asked about.*
+
+1. **`duration_seconds` was cast, and `f64 as i64` saturates**: `nan` became **0 ticks** (a match that plays nothing, exits
+   0, reports success) and `1e300` became `i64::MAX` (a match that never ends). The `map_err` guard beside the cast was dead
+   code - the same shape D139 fixed for `at_seconds`.
+2. **One definition of "how long is this match"**: `Scenario::ticks(tick_rate_hz)` (which is `tick_at`) is used by both
+   runners and by `Runner::new`, which stores it and exposes `Runner::duration_ticks()`. The loader refuses a
+   `duration_seconds` that is not finite or is negative; the product is bounded where the rate is known.
+3. **Half a research table is an error.** `if let (Some(techs), Some(effects))` skipped research entirely when one flag was
+   given, so a typo changed the match silently. Now both-or-neither, and the refusal names the flag that is missing.
+4. **Not changed, with reasons recorded**: [70] the `--dump` CSV has no escaping, but no value the `task` column can produce
+   today contains a comma, so no test can be watched failing and a defensive quoting would be untested code; [71] `players=`
+   reports the highest id rather than the count, which is unobservable while seeding gives players `1..=n` - it needs a
+   sparse-player or mass-death fixture; [177] is stale (fixed in D139).
+5. **A process loss, recorded**: the review's 205-finding JSON lived in a pruned cache and is gone. The 41 loader and 63 sim
+   findings were written into `docs/reviews/` before it expired and survive; the 49 tests / 26 config / 16 other findings
+   were never written out and **cannot be recovered verbatim**. Findings get committed to `docs/reviews/` as they are
+   triaged.
