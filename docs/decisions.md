@@ -3604,3 +3604,24 @@ been decisions smuggled in as optimisations.*
    starts with four spaces and `fn `.
 6. **The proof is the hash per move**: `f328ebc8d4d34b78`, 141 entities, 188 repaths, 187 made-room, identical after each of
    the twelve. 728 passed / 0 failed / 19 ignored; clippy and fmt clean.
+
+
+## D146 - Stage 2: `step` becomes a list of named phases
+
+*2026-11-07. The owner: "Proceed", on the note that stage 2 was the next job. `step` was 1,562 lines; it is 30.*
+
+1. **`decide()` is the only pass that touches the entity list.** It changes nothing on `self`, fills a `TickWork` of
+   nineteen vectors, and returns it. Everything after it is a phase that takes what it needs.
+2. **`TickWork` is per-tick state, deliberately not hashed and not carried.** It is created and dropped inside `step`, so it
+   cannot become a second source of truth; if a future phase needs to remember something across ticks, it goes on `World`
+   and into `state_hash`, not into `TickWork`.
+3. **Nothing was re-ordered.** The call sequence is the old statement sequence. A restructure that re-ordered phases would
+   still hash identically in an idle world and differ in a busy one, which would make the hash proof worthless.
+4. **The measured effect is a speed-up, and the cause is not proven**: 11.49-11.58 s before, 10.69-11.03 s after (five runs,
+   36,000 ticks), non-overlapping ranges. Likely the short vector lifetimes and small stack frames; stated as inference.
+5. **Extraction rules that held**: a block is only extractable if its only inputs are `self` and top-level `Vec`s; each such
+   vector is passed **by value** into its phase, `&mut` only where the phase appends to one it does not own (`blows`,
+   `shots`, `ejected`); a phase that uses `?` returns `Result`.
+6. **What is left is `decide` at 432 lines** - one `for` with a `match` on `Task`, long because the game has that many verbs.
+   Cutting it per task would make each arm return a delta and push into `work`: a change of shape for a modest gain, and not
+   attempted here.

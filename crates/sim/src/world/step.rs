@@ -17,6 +17,48 @@ impl World {
     /// Movement is integrated in id order with an exact per-tick delta, so a unit's position
     /// after N ticks is `N * speed / tick_rate` with no accumulated error.
     pub fn step(&mut self) -> Result<(), SimError> {
+        self.drain_orders();
+
+        let mut work = self.decide()?;
+
+        self.resume_fights(work.engaging, work.turning, work.homing);
+
+        self.grant_takes(work.chops, work.takes);
+        self.send_hunters(work.hunts);
+        self.retask_workers(work.retasks);
+        self.apply_switches(work.switches);
+        self.shepherd(work.herds);
+        self.deposit_loads(work.deposits);
+        self.finish_construction(work.builders);
+        self.land_blows(
+            work.strikes,
+            &mut work.blows,
+            &mut work.shots,
+            &mut work.ejected,
+        );
+        self.step_production()?;
+        self.resume_idle(work.finished);
+        self.move_bodies(work.deltas)?;
+
+        self.fly_shots(
+            work.shots,
+            work.landings,
+            work.landed_arrows,
+            &mut work.blows,
+            &mut work.ejected,
+        );
+        self.step_world_timers();
+        self.eject_garrisons(work.ejected);
+        self.sweep_dead(&work.blows);
+        self.tick += 1;
+
+        // What each player saw this tick, stamped with the tick that has just become current, so that
+        // `sighting(..).1 == tick()` means "watched right now" and the age of a belief is `tick() - at`.
+        self.observe();
+        Ok(())
+    }
+    /// **Take the queued orders and apply them**, refusing rather than failing the match.
+    fn drain_orders(&mut self) {
         let queued = std::mem::take(&mut self.queue);
         for command in queued {
             // A command that became impossible between being accepted and landing is **refused, not fatal**: the tile
@@ -28,469 +70,15 @@ impl World {
                 self.refusal = Some((actor, why, self.tick));
             }
         }
+    }
 
-        let tick_rate = i64::from(self.tick_rate_hz);
-
-        // Decide this tick's work in id order, then apply it. Deciding first keeps the second
-        // pass free of lookups, so an entity cannot be moved *and* read from in the same tick in
-        // an order-dependent way.
-        // (index, id, dx, dy): the index is the fast path and the id is the check. `insert` keeps
-        // the list sorted by id, so anything spawned later in the same tick shifts every index after
-        // it - the id is what makes that detectable instead of silently moving the wrong entities.
-        let mut deltas: Vec<(usize, EntityId, Fixed, Fixed)> =
-            Vec::with_capacity(self.entities.len());
-        let mut takes: Vec<(EntityId, i64, Fixed)> = Vec::new();
-        // Workers chopping a standing tree, and the hit points they take off it this tick.
-        let mut chops: Vec<EntityId> = Vec::new();
-        let mut finished: Vec<EntityId> = Vec::new();
-        let mut switches: Vec<(EntityId, Task)> = Vec::new();
-        // A villager working a herdable animal, and the animal: herded after the tick's own movement.
-        let mut herds: Vec<(EntityId, EntityId)> = Vec::new();
-        let mut deposits: Vec<EntityId> = Vec::new();
-        let mut builders: Vec<(EntityId, EntityId)> = Vec::new();
-        let mut strikes: Vec<(EntityId, EntityId)> = Vec::new();
-        // Workers whose node ran dry and who have somewhere else to go, decided in the pass and started after it.
-        let mut retasks: Vec<(EntityId, EntityId)> = Vec::new();
-        // (hunter, animal): a huntable animal in front of a villager, which is an attack rather than a take.
-        let mut hunts: Vec<(EntityId, EntityId)> = Vec::new();
-        // Who hit whom this tick, in order: the last blow decides the meat, and the blow that kills is always one
-        // of this tick's (a victim at or below zero health is promoted before the tick ends). Nothing is carried
-        // between ticks, nothing is hashed, and it is empty in any world where nobody is fighting (item 2).
-        let mut blows: Vec<(EntityId, EntityId)> = Vec::new();
-        // Arrows that landed this tick. They are entities, so they leave the list rather than being
-        // turned idle: an idle arrow would sit in the world forever.
-        let mut landed_arrows: Vec<EntityId> = Vec::new();
-        // (target, damage, where the arrow was aimed): the aim point decides whether the shot is a hit
-        // or a miss, so it has to survive the flight (D42).
-        let mut landings: Vec<Landing> = Vec::new();
-        let mut shots: Vec<Shot> = Vec::new();
-        // Whoever was hit this tick. A building among them may have crossed the eject threshold, and
-        // that is where its garrison comes out (D37).
-        let mut ejected: Vec<EntityId> = Vec::new();
-        // (hunter, target): a hunt that found somebody this tick. Started after the pass, because
-        // `start_attack` plans a route and the pass holds the entity list still.
-        let mut engaging: Vec<(EntityId, EntityId)> = Vec::new();
-        // Patrols that reached their far end and have to turn round.
-        let mut turning: Vec<EntityId> = Vec::new();
-        // Defensive units whose fight left their ground: they go back to the post.
-        let mut homing: Vec<EntityId> = Vec::new();
-        let projectile_step = self.projectile_step;
-
-        // Indexed, not id-collected: resolving each id afterwards is a linear scan per entity,
-        // which makes the whole tick O(n^2). The entity list does not change during this loop, so
-        // an index stays valid and the second pass touches each entity once.
-        for (index, entity) in self.entities.iter().enumerate() {
-            let (dx, dy) = match entity.task {
-                Task::Attack {
-                    target,
-                    range,
-                    min_range,
-                    ..
-                } => {
-                    let Some(target_body) = self
-                        .find(target)
-                        // A tree cannot bleed, and a **body** cannot be fought: a carcass keeps the entity's
-                        // id, so "the target is gone" stopped being how a fight with an animal ends (item 2).
-                        // Without this an army swings at a corpse for the rest of the match.
-                        .filter(|v| !matches!(v.kind, EntityKind::Resource(_)) && v.hp > 0)
-                    else {
-                        // The target is gone - or is now a body. The attacker stands down on the next tick.
-                        finished.push(entity.id);
-                        continue;
-                    };
-                    let (victim, victim_unit) = (target_body.position, target_body.unit);
-                    // A melee attacker strikes from the tile next to its target; anything with reach
-                    // strikes from as far as that reach goes, and walks until it is inside it. Both
-                    // are measured on the same squared distance, in engine units, so the rule is one
-                    // comparison and no square root.
-                    let here = self.tile_of(entity.position);
-                    let there = self.tile_of(victim);
-                    let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
-                    let dx = victim.0.raw() - entity.position.0.raw();
-                    let dy = victim.1.raw() - entity.position.1.raw();
-                    let squared = dx * dx + dy * dy;
-                    // A melee attacker strikes from the next tile, diagonals included, or from where its footprint
-                    // touches the target's (C2) - a body stopped short by a friend's footprint is still in contact.
-                    let contact = self.reach_raw(entity.unit, victim_unit);
-                    let in_reach = if range.raw() > 0 {
-                        // **Box to box** (D142): the dat's range is measured between the bodies' edges, so a 4x4 town
-                        // centre is hit from its wall rather than its middle.
-                        self.gap_squared_to(
-                            entity.position,
-                            self.body_radius(entity.unit),
-                            target_body,
-                        ) <= range.raw() * range.raw()
-                    } else {
-                        adjacent || squared <= contact * contact
-                    };
-                    // A siege engine - and a skirmisher - has a dead zone: inside it the shot is not
-                    // possible however close the target is, so the shooter backs away instead of
-                    // standing there. The distance is measured **to the target's edge**, because two
-                    // bodies cannot share a tile: a skirmisher's one-tile dead zone would otherwise
-                    // never bite on a tile grid, where the closest a neighbour can stand is one tile
-                    // from centre to centre (D44).
-                    let padding = if min_range.raw() > 0 {
-                        self.body_radii(entity.unit, victim_unit)
-                    } else {
-                        0
-                    };
-                    let dead = min_range.raw() + padding;
-                    let too_close = min_range.raw() > 0 && squared < dead * dead;
-                    // A stance decides how much of this fight is the unit's own business: it can refuse
-                    // the chase (stand ground), refuse to leave its post (defensive), or refuse the
-                    // fight altogether (no attack, which the validator already keeps out of here).
-                    let stance = self.stance_of(entity.id);
-                    let off_ground = stance == Stance::Defensive
-                        && self.stances.get(&entity.id).is_some_and(|(_, post)| {
-                            let dx = victim.0.raw() - post.0.raw();
-                            let dy = victim.1.raw() - post.1.raw();
-                            dx * dx + dy * dy > self.aggro_radius * self.aggro_radius
-                        });
-                    if stance == Stance::NoAttack || off_ground {
-                        if off_ground {
-                            homing.push(entity.id);
-                        }
-                        (Fixed::ZERO, Fixed::ZERO)
-                    } else if too_close && stance == Stance::StandGround {
-                        // It cannot shoot what is against it, and it may not step back either.
-                        (Fixed::ZERO, Fixed::ZERO)
-                    } else if too_close {
-                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
-                            SimError::Displacement {
-                                id: entity.id,
-                                detail: err.to_string(),
-                            }
-                        })?;
-                        // Away from the target, along the line it already lies on: the point reflected
-                        // through the attacker's own position.
-                        // **In `i128`, then clamped** (D128): `raw * 2` overflows i64 only for positions no map can hold,
-                        // but the clamp costs one comparison and makes the reflection total.
-                        let reflect = |here: i64, there: i64| -> Fixed {
-                            let point = i128::from(here) * 2 - i128::from(there);
-                            Fixed::from_raw(i64::try_from(point).unwrap_or(if point > 0 {
-                                i64::MAX
-                            } else {
-                                i64::MIN
-                            }))
-                        };
-                        let away = (
-                            reflect(entity.position.0.raw(), victim.0.raw()),
-                            reflect(entity.position.1.raw(), victim.1.raw()),
-                        );
-                        let (dx, dy) = step_towards(entity.position, away, delta.raw());
-                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
-                    } else if in_reach {
-                        strikes.push((entity.id, target));
-                        (Fixed::ZERO, Fixed::ZERO)
-                    } else if stance == Stance::StandGround {
-                        // In reach or not, it does not walk to the fight.
-                        (Fixed::ZERO, Fixed::ZERO)
-                    } else {
-                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
-                            SimError::Displacement {
-                                id: entity.id,
-                                detail: err.to_string(),
-                            }
-                        })?;
-                        let next = self.next_waypoint(entity.id).unwrap_or(victim);
-                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
-                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
-                    }
-                }
-                Task::Build { site } => {
-                    let Some((target, site_unit)) = self.find(site).map(|s| (s.position, s.unit))
-                    else {
-                        finished.push(entity.id);
-                        continue;
-                    };
-                    // Adjacent counts: the site's own tile is where the building will be, so a builder works from the
-                    // tile beside it - or close enough for the two footprints to touch (C2), which is where a footprint
-                    // collision leaves a builder with a friend already on the good tile.
-                    let here = self.tile_of(entity.position);
-                    let there = self.tile_of(target);
-                    let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
-                    let (gap_x, gap_y) = (
-                        target.0.raw() - entity.position.0.raw(),
-                        target.1.raw() - entity.position.1.raw(),
-                    );
-                    let reach = self.reach_raw(entity.unit, site_unit);
-                    let adjacent = adjacent || gap_x * gap_x + gap_y * gap_y <= reach * reach;
-                    if adjacent {
-                        builders.push((entity.id, site));
-                        (Fixed::ZERO, Fixed::ZERO)
-                    } else {
-                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
-                            SimError::Displacement {
-                                id: entity.id,
-                                detail: err.to_string(),
-                            }
-                        })?;
-                        let next = self.next_waypoint(entity.id).unwrap_or(target);
-                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
-                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
-                    }
-                }
-                Task::Return { drop, .. } => {
-                    let Some((target, drop_unit)) = self.find(drop).map(|n| (n.position, n.unit))
-                    else {
-                        finished.push(entity.id);
-                        continue;
-                    };
-                    let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
-                        SimError::Displacement {
-                            id: entity.id,
-                            detail: err.to_string(),
-                        }
-                    })?;
-                    // **Touching the drop site is enough** - any side, any corner (the owner's rule, 2026-10-29). Waiting
-                    // for the final step *onto* the building's own tile is what parked twenty-seven villagers beside a
-                    // mill and five woodcutters beside a lumber camp for a thousand game-seconds, each holding a load
-                    // and each with one waypoint left that they never took.
-                    let here = self.tile_of(entity.position);
-                    let there = self.tile_of(target);
-                    // Touching by tile, or by footprint (C2): a queue of villagers handing in at one town centre is
-                    // stacked 0.4 tiles deep, and the ones at the back are inside the ring but not on a tile centre.
-                    let (gap_x, gap_y) = (
-                        target.0.raw() - entity.position.0.raw(),
-                        target.1.raw() - entity.position.1.raw(),
-                    );
-                    let reach = self.reach_raw(entity.unit, drop_unit);
-                    let touching = (here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1)
-                        || gap_x * gap_x + gap_y * gap_y <= reach * reach
-                        // **Or standing on the building's ground.** A carrier walked into the yard by `approach_tile`
-                        // was two tiles from the anchor and never banked, which cost a third of the economy.
-                        || self.touches_footprint(entity.position, drop);
-                    if touching {
-                        deposits.push(entity.id);
-                        (Fixed::ZERO, Fixed::ZERO)
-                    } else {
-                        let next = self.next_waypoint(entity.id).unwrap_or(target);
-                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
-                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
-                    }
-                }
-                Task::Gather {
-                    node,
-                    rate_per_tick,
-                    carry_cap,
-                    progress,
-                } => {
-                    let _ = progress;
-                    let Some((target, target_is_building, node_unit)) = self
-                        .find(node)
-                        .map(|n| (n.position, n.kind == EntityKind::Building, n.unit))
-                    else {
-                        // The node is gone (a later increment may delete emptied nodes).
-                        finished.push(entity.id);
-                        continue;
-                    };
-                    let here = self.tile_of(entity.position);
-                    let there = self.tile_of(target);
-                    // A node is stood on; a building is worked from the tile beside it, because its
-                    // own tile is blocked and a worker that insisted on it would walk forever.
-                    // **Standing beside a node you cannot stand on counts as working it.** A tree in the forest sits on
-                    // blocked terrain, so a villager that walks up to it stops on the adjacent tile with one waypoint
-                    // left and never arrives: `at_node` was false for ever, `take_amount` never ran, and - because the
-                    // villager was carrying a partial load - the "find the next node" branch did not fire either. Four
-                    // woodcutters did this for a thousand game-seconds beside two spent trees (2026-10-29), which is
-                    // why the wood column produced nothing while the food column produced 1,994.
-                    let beside = target_is_building || !self.tile_walkable(there.0, there.1);
-                    // **Distance, not the exact point** (C2). A body stopped by its friend's footprint stands inside the
-                    // node's own tile but never on its centre, so `position == target` was a deadlock: the second worker
-                    // on a carcass took nothing for the rest of the match (measured: 89 wood / 20 food at 1,600 s). Being
-                    // on the node's ground, or close enough for the two footprints to touch, is being at it.
-                    let (gap_x, gap_y) = (
-                        target.0.raw() - entity.position.0.raw(),
-                        target.1.raw() - entity.position.1.raw(),
-                    );
-                    let squared = gap_x * gap_x + gap_y * gap_y;
-                    let reach = self.reach_raw(entity.unit, node_unit);
-                    let at_node = here == there
-                        || squared <= reach * reach
-                        || (beside
-                            && here.0.abs_diff(there.0) <= 1
-                            && here.1.abs_diff(there.1) <= 1);
-
-                    // A herdable animal is walked to the drop site by the villager working it (D70). The
-                    // node was already read above, so this costs one family lookup and no second scan of the
-                    // world - the first version re-found the node per gatherer per tick, which is O(units).
-                    if !self.herdable.is_empty()
-                        && node_unit.is_some_and(|unit| {
-                            self.units
-                                .as_ref()
-                                .is_some_and(|units| self.herdable.contains(&units.root(unit)))
-                        })
-                    {
-                        herds.push((entity.id, node));
-                    }
-
-                    // A **huntable** animal is shot, not gathered from, and the shot is ordered **before** the walk:
-                    // a hunter that first walked onto the boar would be inside knife range at the first swing, and
-                    // the bow (VMHUN, `range = 3.0`) would never matter. A herdable is walked home first and killed at
-                    // the drop site, which is the herding pass's business.
-                    if self.animal_at(node) == Some(false) {
-                        hunts.push((entity.id, node));
-                    }
-
-                    // Standing still at the thing being worked is what entitles a worker to take
-                    // from it.
-                    if at_node {
-                        // **A standing tree is chopped down first.** Until its hit points are gone it yields nothing;
-                        // when they are, it falls where it stands and is then cut for wood (the owner's rule). A bush or
-                        // a mine has no hit points, so this branch never runs for them.
-                        // Only a **resource node** is felled. A farm is a building with hit points of its own, and
-                        // chopping it was how the first version of this left every farmer standing in a field.
-                        let standing = self
-                            .find(node)
-                            .is_some_and(|n| matches!(n.kind, EntityKind::Resource(_)) && n.hp > 0);
-                        if standing {
-                            chops.push(entity.id);
-                            (Fixed::ZERO, Fixed::ZERO)
-                        } else {
-                            let (take, kept) = self.take_amount(entity);
-                            let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
-                            takes.push((entity.id, take, kept));
-
-                            // Two reasons to head home: the load is full, or the node just gave its
-                            // last. The second matters because a partial load on a dead tree never
-                            // reaches the cap - the villager would stand there for the rest of the
-                            // match holding wood nobody can spend.
-                            let in_hand = entity.carry.raw() + take;
-                            let empty_node = node_left - take <= 0;
-                            let full = in_hand >= i64::from(carry_cap) * self.scale;
-                            // A **full load always goes home**, whether or not anything was taken this tick. Without the
-                            // first clause a villager whose cap was reached by a re-task (a load carried onto the next
-                            // node) stood at that node with no room to take anything, for the rest of the match.
-                            let brimming = entity.carry.raw() >= i64::from(carry_cap) * self.scale;
-                            if brimming
-                                || (take > 0 && (full || empty_node))
-                                || (take == 0 && empty_node && in_hand > 0)
-                            {
-                                switches.extend(
-                                    self.return_task(entity, node, rate_per_tick, carry_cap)
-                                        .map(|task| (entity.id, task)),
-                                );
-                            }
-                            if take == 0 && empty_node {
-                                // Nothing in hand and nothing left here: look for the next node of the same kind before
-                                // standing still. A tree holds 100 wood, so without this a lumberjack works one tree and
-                                // idles for the rest of the match - which is what stopped the acceptance match at 139
-                                // wood (the owner's rule: "move to next tree, next bush, next pile of gold").
-                                let here = entity.position;
-                                match self.nearest_like(here, node, entity.id) {
-                                    Some(next) => retasks.push((entity.id, next)),
-                                    None => finished.push(entity.id),
-                                }
-                            }
-                            (Fixed::ZERO, Fixed::ZERO)
-                        }
-                    } else {
-                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
-                            SimError::Displacement {
-                                id: entity.id,
-                                detail: err.to_string(),
-                            }
-                        })?;
-                        let next = self.next_waypoint(entity.id).unwrap_or(target);
-                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
-                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
-                    }
-                }
-                Task::Fly {
-                    target,
-                    shooter,
-                    damage,
-                    aim,
-                    blast,
-                } => {
-                    // The step is resolved once per tick, outside the borrow: `step_towards` needs no
-                    // table, so the only thing to avoid is touching `self` inside the loop.
-                    let (dx, dy) = step_towards(entity.position, aim, projectile_step);
-                    if dx == 0 && dy == 0 {
-                        // Landing is the only thing an arrow does. Whether it hurts anything is
-                        // decided after the loop, against the target as it stands then: an arrow
-                        // whose target died on the way finds nothing and does not pick another.
-                        landings.push(Landing {
-                            shooter,
-                            target,
-                            damage,
-                            aim,
-                            blast,
-                        });
-                        landed_arrows.push(entity.id);
-                    }
-                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
-                }
-                // Inside a building: no movement, no work, and no cooldown runs - a sheltered unit is
-                // simply not on the map.
-                Task::Move { to } => {
-                    let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
-                        SimError::Displacement {
-                            id: entity.id,
-                            detail: err.to_string(),
-                        }
-                    })?;
-                    let next = self.next_waypoint(entity.id).unwrap_or(to);
-                    let (dx, dy) = step_towards(entity.position, next, delta.raw());
-                    // **Arrived is close enough, not exactly on it.** The last step of a walk is often clipped by the ground
-                    // or by a body, so an exact-equality test left a unit pacing at the doorstep of its goal for ever - which
-                    // is how a builder failed to "arrive" at a site and a barracks was never finished (2026-11-04).
-                    if reaches(entity.position, to, delta.raw()) {
-                        finished.push(entity.id);
-                    }
-                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
-                }
-                Task::Hunt { to } => {
-                    // Looking for a fight first: an enemy in reach is the order's business, and the
-                    // walk is only how the unit got here. Two stances never look: one cannot fight,
-                    // the other does not walk to a fight it was not given.
-                    let may_engage = matches!(
-                        self.stance_of(entity.id),
-                        Stance::Aggressive | Stance::Defensive
-                    );
-                    if let Some(enemy) = may_engage.then(|| self.nearest_enemy(entity)).flatten() {
-                        engaging.push((entity.id, enemy));
-                        (Fixed::ZERO, Fixed::ZERO)
-                    } else {
-                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
-                            SimError::Displacement {
-                                id: entity.id,
-                                detail: err.to_string(),
-                            }
-                        })?;
-                        let next = self.next_waypoint(entity.id).unwrap_or(to);
-                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
-                        if dx == 0 && dy == 0 && entity.position == to {
-                            // Arrival: a patrol turns round, an attack-move stops.
-                            if self.patrols.contains_key(&entity.id) {
-                                turning.push(entity.id);
-                            } else {
-                                finished.push(entity.id);
-                            }
-                        }
-                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
-                    }
-                }
-                Task::Garrisoned { .. } => (Fixed::ZERO, Fixed::ZERO),
-                Task::Idle => {
-                    let dx = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
-                        SimError::Displacement {
-                            id: entity.id,
-                            detail: err.to_string(),
-                        }
-                    })?;
-                    let dy = entity.velocity.1.div_exact(tick_rate).map_err(|err| {
-                        SimError::Displacement {
-                            id: entity.id,
-                            detail: err.to_string(),
-                        }
-                    })?;
-                    (dx, dy)
-                }
-            };
-            deltas.push((index, entity.id, dx, dy));
-        }
-
+    /// Hunts that found an enemy start the fight, patrols at their far end turn, defensive units go home.
+    fn resume_fights(
+        &mut self,
+        engaging: Vec<(EntityId, EntityId)>,
+        turning: Vec<EntityId>,
+        homing: Vec<EntityId>,
+    ) {
         // A hunt that found somebody starts the fight and remembers the walk it interrupted.
         for (hunter, target) in engaging {
             let Some(walk) = self.find(hunter).map(|entity| entity.task) else {
@@ -563,7 +151,10 @@ impl World {
                 None => self.stand_down(id),
             }
         }
+    }
 
+    /// **Grant the harvest**: tree damage in `chops`, then the load in `takes`, in id order.
+    fn grant_takes(&mut self, chops: Vec<EntityId>, takes: Vec<(EntityId, i64, Fixed)>) {
         // Grant takes in id order, each bounded by what the node still holds *at that moment*.
         // Reading the amount before the loop would let two villagers on a one-wood tree take one
         // wood each: the node would clamp at zero and the pair would keep two.
@@ -633,6 +224,10 @@ impl World {
                 entity.carry = Fixed::from_raw(entity.carry.raw() + granted);
             }
         }
+    }
+
+    /// A hunter strikes the animal it was sent to hunt, remembering the gather order to resume on the body.
+    fn send_hunters(&mut self, hunts: Vec<(EntityId, EntityId)>) {
         // A hunt: the villager attacks the animal, and the gather order is remembered so it resumes on the body.
         for (hunter, animal) in hunts {
             self.slaughter.entry(hunter).or_insert(animal);
@@ -644,6 +239,10 @@ impl World {
                 self.refusal = Some((hunter, error, self.tick));
             }
         }
+    }
+
+    /// The next node of the same kind, for a worker whose own ran out.
+    fn retask_workers(&mut self, retasks: Vec<(EntityId, EntityId)>) {
         // The next node of the same kind, for a worker whose own ran out. An ordinary gather order: the load in hand is
         // kept, and the walk is planned by the same code a player's click uses.
         for (worker, node) in retasks {
@@ -651,254 +250,15 @@ impl World {
                 self.refusal = Some((worker, error, self.tick));
             }
         }
-        for (id, task) in switches {
-            // A worker heading home needs a route to the drop site, not just the final position.
-            if let Task::Return { drop, .. } = task {
-                let ends = (
-                    self.find(id).map(|entity| entity.position),
-                    self.find(drop).map(|entity| entity.position),
-                );
-                // **Home is the edge of the building, not its anchor** - see `approach_tile`.
-                // **The anchor's route first, the footprint's only when that route does not exist.** Aiming every carrier
-                // at the building's edge changed the flow of a whole match (176 entities and a won match became 127 and a
-                // draw), so the approach is a fallback for the case that used to fail outright - a drop site whose near
-                // side is built over - and not a new route for every trip.
-                let route = match ends {
-                    (Some(from), Some(to)) => self.plan_path(from, to, 0).ok().or_else(|| {
-                        self.approach_tile(self.tile_of(from), drop)
-                            .and_then(|stand| self.plan_path(from, self.tile(stand), 0).ok())
-                    }),
-                    _ => None,
-                };
-                if let Some(route) = route {
-                    self.paths.insert(
-                        id,
-                        Route {
-                            points: route,
-                            ..Route::default()
-                        },
-                    );
-                }
-            } else {
-                self.paths.remove(&id);
-            }
-            if let Some(entity) = self.find_mut(id) {
-                entity.task = task;
-            }
-        }
-        // **A shepherd strikes the animal it was sent to work, where the animal stands** (D116, superseding D70's
-        // herding). A gathered herdable used to walk itself to the nearest drop site with the villager trailing behind;
-        // the owner dropped that: *"Sheep are more likely to be found by scout and player and AI are more likely to direct
-        // sheep to the drop site themselves."* So the animal does not steer itself, moving it is an ordinary order, and the
-        // shepherd's job is only the blow - **on arrival**, not on arrival at a drop site.
-        //
-        // The kill is an ordinary attack, so the blow carries its attacker and the last-blow rule decides the meat; death
-        // promotes the animal to its body in place, and the gather order resumes on that body below. Arriving is not
-        // killing.
-        for (villager, animal) in herds {
-            let (Some(here), Some(there)) = (
-                self.find(villager).map(|entity| entity.position),
-                self.find(animal).map(|entity| entity.position),
-            ) else {
-                continue;
-            };
-            let (gap_x, gap_y) = (there.0.raw() - here.0.raw(), there.1.raw() - here.1.raw());
-            let squared = gap_x * gap_x + gap_y * gap_y;
-            let reach = self.reach_raw(
-                self.find(villager).and_then(|entity| entity.unit),
-                self.find(animal).and_then(|entity| entity.unit),
-            );
-            // **In reach _plus one step_, or on the animal's own ground.** A body that walks at another stops when the
-            // next step would enter the pair's standoff, so it comes to rest a step *short* of it - measured at 10,399
-            // against a standoff of 10,000, which is why a strict `squared <= reach^2` never fired and the shepherd stood
-            // beside its sheep for the rest of the match. This is the same rule the rest of the engine uses for arrival:
-            // a radius, not an equality (C2).
-            let step = self
-                .find(villager)
-                .and_then(|entity| {
-                    entity
-                        .speed
-                        .div_exact(i64::from(self.tick_rate_hz).max(1))
-                        .ok()
-                })
-                .map_or(0, |delta| delta.raw());
-            let touch = reach + step;
-            let beside = self.tile_of(here) == self.tile_of(there);
-            if !beside && squared > touch * touch {
-                continue;
-            }
-            self.slaughter.insert(villager, animal);
-            let already = matches!(
-                self.find(villager).map(|entity| entity.task),
-                Some(Task::Attack { target, .. }) if target == animal
-            );
-            if !already && let Err(error) = self.start_attack(villager, animal) {
-                self.refusal = Some((villager, error, self.tick));
-            }
-        }
-        // A shepherd whose blow has landed goes back to the work it was sent to do: the animal it was gathering is
-        // now a body, and the gather order resumes on the same id (D70, item 3).
-        if !self.slaughter.is_empty() {
-            let pairs: Vec<(EntityId, EntityId)> = self
-                .slaughter
-                .iter()
-                .map(|(one, other)| (*one, *other))
-                .collect();
-            for (villager, animal) in pairs {
-                let idle = matches!(
-                    self.find(villager).map(|entity| entity.task),
-                    Some(Task::Idle)
-                );
-                if !idle {
-                    continue;
-                }
-                match self.find(animal).map(|entity| entity.hp) {
-                    // Dead: the body is waiting to be worked.
-                    Some(hp) if hp <= 0 => {
-                        if let Err(error) = self.start_gather(villager, animal) {
-                            self.refusal = Some((villager, error, self.tick));
-                        }
-                        self.slaughter.remove(&villager);
-                    }
-                    // Still alive and no longer swinging: try again, and give up on the entry if it will not start
-                    // (a refusal is recorded; re-issuing it every tick would only bury it).
-                    Some(_) => {
-                        if let Err(error) = self.start_attack(villager, animal) {
-                            self.refusal = Some((villager, error, self.tick));
-                            self.slaughter.remove(&villager);
-                        }
-                    }
-                    None => {
-                        self.slaughter.remove(&villager);
-                    }
-                }
-            }
-        }
-        // Deposit whole resources; the fraction stays in hand. Dropping the remainder instead
-        // would quietly destroy a slice of every trip.
-        for id in deposits {
-            let Some((player, task)) = self.find(id).map(|e| (e.player, e.task)) else {
-                continue;
-            };
-            let Task::Return {
-                node,
-                slot,
-                rate_per_tick,
-                carry_cap,
-                ..
-            } = task
-            else {
-                continue;
-            };
-            let raw = self.find(id).map(|e| e.carry.raw()).unwrap_or(0);
-            let whole = raw / self.scale;
-            let slot_player = usize::from(player).wrapping_sub(1);
-            if whole > 0 && slot_player < self.stock.len() {
-                let slot = &mut self.stock[slot_player][slot];
-                *slot = slot.saturating_add(u32::try_from(whole).unwrap_or(u32::MAX));
-            }
-            let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
-            let scale = self.scale;
-            // Going back to work needs a fresh route from the drop site: without one the villager
-            // walks at the node in a straight line and straight through whatever it went around.
-            if node_left > 0 {
-                let ends = (
-                    self.find(id).map(|entity| entity.position),
-                    self.find(node).map(|entity| entity.position),
-                );
-                let route = match ends {
-                    (Some(here), Some(there)) => self.plan_path(here, there, 0).ok(),
-                    _ => None,
-                };
-                if let Some(route) = route {
-                    self.paths.insert(
-                        id,
-                        Route {
-                            points: route,
-                            ..Route::default()
-                        },
-                    );
-                }
-            }
-            // The shares moved this worker while it was carrying: the bank has it now, so it takes up the new column.
-            if let Some(next) = self.pending_gather.remove(&id) {
-                if let Err(error) = self.start_gather(id, next) {
-                    self.refusal = Some((id, error, self.tick));
-                }
-                continue;
-            }
-            let mut spent = false;
-            if let Some(entity) = self.find_mut(id) {
-                entity.carry = Fixed::from_raw(raw - whole * scale);
-                if node_left > 0 {
-                    entity.task = Task::Gather {
-                        node,
-                        rate_per_tick,
-                        carry_cap,
-                        progress: Fixed::ZERO,
-                    };
-                } else {
-                    entity.task = Task::Idle;
-                    spent = true;
-                }
-            }
-            if spent {
-                // The node is finished: go to the next one of the same kind rather than standing down (the owner's
-                // rule). This is where a lumberjack used to stop for the rest of the match after one tree.
-                let here = self.find(id).map(|entity| entity.position);
-                if let Some(next) = here.and_then(|here| self.nearest_like(here, node, id))
-                    && let Err(error) = self.start_gather(id, next)
-                {
-                    self.refusal = Some((id, error, self.tick));
-                }
-            }
-        }
-        // Construction advances one builder-tick per tick of work, so the finish lands exactly on
-        // `create_time x tick_rate` even where HP per second is not a whole number (a mill is
-        // 600 HP over 35 s).
-        for (builder, site) in builders {
-            if self.work_one_tick(site) {
-                let finished = self
-                    .find(site)
-                    .map(|building| (building.player, building.unit));
-                if let Some(building) = self.find_mut(site) {
-                    building.construction = None;
-                }
-                self.foundations.remove(&site);
-                // Finished once is finished for good, for the purposes of prerequisites (D63).
-                if let Some((player, Some(unit))) = finished {
-                    let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
-                    self.built.insert((player, family));
-                }
-                // The builder comes to rest *and forgets its route* (D64). Setting the task to idle was
-                // not enough: the waypoints stayed, and a villager that finished a house on its doorstep
-                // kept walking into the building at its own speed for as long as the match ran.
-                self.stand_down(builder);
-                self.paths.remove(&builder);
-                // The next queued site starts on the tick the last one finished, so a villager with a
-                // queue never stands idle between buildings (D66).
-                let next = self
-                    .build_queue
-                    .get_mut(&builder)
-                    .and_then(|queue| queue.pop_front());
-                if self
-                    .build_queue
-                    .get(&builder)
-                    .is_some_and(|queue| queue.is_empty())
-                {
-                    self.build_queue.remove(&builder);
-                }
-                if let Some((unit, at)) = next
-                    && let Err(why) = self.start_build(builder, unit, at)
-                {
-                    // A queued site is an order the engine gives itself, so its failure goes into state like any other
-                    // (D88's rule). Two orders given in one tick are checked against a world where neither exists yet,
-                    // so overlapping sites are accepted and the second can never start; `let _ =` here left the player's
-                    // queued building gone with no record at all.
-                    self.refusal = Some((builder, why, self.tick));
-                }
-            }
-        }
+    }
+    /// **A blow lands on the tick the attacker is in position**, then every `reload_ticks`, in order.
+    fn land_blows(
+        &mut self,
+        strikes: Vec<(EntityId, EntityId)>,
+        blows: &mut Vec<(EntityId, EntityId)>,
+        shots: &mut Vec<Shot>,
+        ejected: &mut Vec<EntityId>,
+    ) {
         // Melee: a blow lands on the tick the attacker is in position, then every `reload_ticks`.
         //
         // **Blows land in order, so two units cannot trade killing blows** (D88, the owner's decision: "follow
@@ -1006,6 +366,234 @@ impl World {
             }
             ejected.push(target);
         }
+    }
+
+    /// Construction advances one builder-tick per tick, so the finish lands exactly on `create_time x tick_rate`.
+    fn finish_construction(&mut self, builders: Vec<(EntityId, EntityId)>) {
+        // Construction advances one builder-tick per tick of work, so the finish lands exactly on
+        // `create_time x tick_rate` even where HP per second is not a whole number (a mill is
+        // 600 HP over 35 s).
+        for (builder, site) in builders {
+            if self.work_one_tick(site) {
+                let finished = self
+                    .find(site)
+                    .map(|building| (building.player, building.unit));
+                if let Some(building) = self.find_mut(site) {
+                    building.construction = None;
+                }
+                self.foundations.remove(&site);
+                // Finished once is finished for good, for the purposes of prerequisites (D63).
+                if let Some((player, Some(unit))) = finished {
+                    let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
+                    self.built.insert((player, family));
+                }
+                // The builder comes to rest *and forgets its route* (D64). Setting the task to idle was
+                // not enough: the waypoints stayed, and a villager that finished a house on its doorstep
+                // kept walking into the building at its own speed for as long as the match ran.
+                self.stand_down(builder);
+                self.paths.remove(&builder);
+                // The next queued site starts on the tick the last one finished, so a villager with a
+                // queue never stands idle between buildings (D66).
+                let next = self
+                    .build_queue
+                    .get_mut(&builder)
+                    .and_then(|queue| queue.pop_front());
+                if self
+                    .build_queue
+                    .get(&builder)
+                    .is_some_and(|queue| queue.is_empty())
+                {
+                    self.build_queue.remove(&builder);
+                }
+                if let Some((unit, at)) = next
+                    && let Err(why) = self.start_build(builder, unit, at)
+                {
+                    // A queued site is an order the engine gives itself, so its failure goes into state like any other
+                    // (D88's rule). Two orders given in one tick are checked against a world where neither exists yet,
+                    // so overlapping sites are accepted and the second can never start; `let _ =` here left the player's
+                    // queued building gone with no record at all.
+                    self.refusal = Some((builder, why, self.tick));
+                }
+            }
+        }
+    }
+
+    /// **Deposit whole resources; the fraction stays in hand**, and the villager turns back for more.
+    fn deposit_loads(&mut self, deposits: Vec<EntityId>) {
+        // Deposit whole resources; the fraction stays in hand. Dropping the remainder instead
+        // would quietly destroy a slice of every trip.
+        for id in deposits {
+            let Some((player, task)) = self.find(id).map(|e| (e.player, e.task)) else {
+                continue;
+            };
+            let Task::Return {
+                node,
+                slot,
+                rate_per_tick,
+                carry_cap,
+                ..
+            } = task
+            else {
+                continue;
+            };
+            let raw = self.find(id).map(|e| e.carry.raw()).unwrap_or(0);
+            let whole = raw / self.scale;
+            let slot_player = usize::from(player).wrapping_sub(1);
+            if whole > 0 && slot_player < self.stock.len() {
+                let slot = &mut self.stock[slot_player][slot];
+                *slot = slot.saturating_add(u32::try_from(whole).unwrap_or(u32::MAX));
+            }
+            let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
+            let scale = self.scale;
+            // Going back to work needs a fresh route from the drop site: without one the villager
+            // walks at the node in a straight line and straight through whatever it went around.
+            if node_left > 0 {
+                let ends = (
+                    self.find(id).map(|entity| entity.position),
+                    self.find(node).map(|entity| entity.position),
+                );
+                let route = match ends {
+                    (Some(here), Some(there)) => self.plan_path(here, there, 0).ok(),
+                    _ => None,
+                };
+                if let Some(route) = route {
+                    self.paths.insert(
+                        id,
+                        Route {
+                            points: route,
+                            ..Route::default()
+                        },
+                    );
+                }
+            }
+            // The shares moved this worker while it was carrying: the bank has it now, so it takes up the new column.
+            if let Some(next) = self.pending_gather.remove(&id) {
+                if let Err(error) = self.start_gather(id, next) {
+                    self.refusal = Some((id, error, self.tick));
+                }
+                continue;
+            }
+            let mut spent = false;
+            if let Some(entity) = self.find_mut(id) {
+                entity.carry = Fixed::from_raw(raw - whole * scale);
+                if node_left > 0 {
+                    entity.task = Task::Gather {
+                        node,
+                        rate_per_tick,
+                        carry_cap,
+                        progress: Fixed::ZERO,
+                    };
+                } else {
+                    entity.task = Task::Idle;
+                    spent = true;
+                }
+            }
+            if spent {
+                // The node is finished: go to the next one of the same kind rather than standing down (the owner's
+                // rule). This is where a lumberjack used to stop for the rest of the match after one tree.
+                let here = self.find(id).map(|entity| entity.position);
+                if let Some(next) = here.and_then(|here| self.nearest_like(here, node, id))
+                    && let Err(error) = self.start_gather(id, next)
+                {
+                    self.refusal = Some((id, error, self.tick));
+                }
+            }
+        }
+    }
+
+    /// A shepherd strikes the animal it was sent to work, where the animal stands (D116).
+    fn shepherd(&mut self, herds: Vec<(EntityId, EntityId)>) {
+        // **A shepherd strikes the animal it was sent to work, where the animal stands** (D116, superseding D70's
+        // herding). A gathered herdable used to walk itself to the nearest drop site with the villager trailing behind;
+        // the owner dropped that: *"Sheep are more likely to be found by scout and player and AI are more likely to direct
+        // sheep to the drop site themselves."* So the animal does not steer itself, moving it is an ordinary order, and the
+        // shepherd's job is only the blow - **on arrival**, not on arrival at a drop site.
+        //
+        // The kill is an ordinary attack, so the blow carries its attacker and the last-blow rule decides the meat; death
+        // promotes the animal to its body in place, and the gather order resumes on that body below. Arriving is not
+        // killing.
+        for (villager, animal) in herds {
+            let (Some(here), Some(there)) = (
+                self.find(villager).map(|entity| entity.position),
+                self.find(animal).map(|entity| entity.position),
+            ) else {
+                continue;
+            };
+            let (gap_x, gap_y) = (there.0.raw() - here.0.raw(), there.1.raw() - here.1.raw());
+            let squared = gap_x * gap_x + gap_y * gap_y;
+            let reach = self.reach_raw(
+                self.find(villager).and_then(|entity| entity.unit),
+                self.find(animal).and_then(|entity| entity.unit),
+            );
+            // **In reach _plus one step_, or on the animal's own ground.** A body that walks at another stops when the
+            // next step would enter the pair's standoff, so it comes to rest a step *short* of it - measured at 10,399
+            // against a standoff of 10,000, which is why a strict `squared <= reach^2` never fired and the shepherd stood
+            // beside its sheep for the rest of the match. This is the same rule the rest of the engine uses for arrival:
+            // a radius, not an equality (C2).
+            let step = self
+                .find(villager)
+                .and_then(|entity| {
+                    entity
+                        .speed
+                        .div_exact(i64::from(self.tick_rate_hz).max(1))
+                        .ok()
+                })
+                .map_or(0, |delta| delta.raw());
+            let touch = reach + step;
+            let beside = self.tile_of(here) == self.tile_of(there);
+            if !beside && squared > touch * touch {
+                continue;
+            }
+            self.slaughter.insert(villager, animal);
+            let already = matches!(
+                self.find(villager).map(|entity| entity.task),
+                Some(Task::Attack { target, .. }) if target == animal
+            );
+            if !already && let Err(error) = self.start_attack(villager, animal) {
+                self.refusal = Some((villager, error, self.tick));
+            }
+        }
+        // A shepherd whose blow has landed goes back to the work it was sent to do: the animal it was gathering is
+        // now a body, and the gather order resumes on the same id (D70, item 3).
+        if !self.slaughter.is_empty() {
+            let pairs: Vec<(EntityId, EntityId)> = self
+                .slaughter
+                .iter()
+                .map(|(one, other)| (*one, *other))
+                .collect();
+            for (villager, animal) in pairs {
+                let idle = matches!(
+                    self.find(villager).map(|entity| entity.task),
+                    Some(Task::Idle)
+                );
+                if !idle {
+                    continue;
+                }
+                match self.find(animal).map(|entity| entity.hp) {
+                    // Dead: the body is waiting to be worked.
+                    Some(hp) if hp <= 0 => {
+                        if let Err(error) = self.start_gather(villager, animal) {
+                            self.refusal = Some((villager, error, self.tick));
+                        }
+                        self.slaughter.remove(&villager);
+                    }
+                    // Still alive and no longer swinging: try again, and give up on the entry if it will not start
+                    // (a refusal is recorded; re-issuing it every tick would only bury it).
+                    Some(_) => {
+                        if let Err(error) = self.start_attack(villager, animal) {
+                            self.refusal = Some((villager, error, self.tick));
+                            self.slaughter.remove(&villager);
+                        }
+                    }
+                    None => {
+                        self.slaughter.remove(&villager);
+                    }
+                }
+            }
+        }
+    }
+    /// **Production and research**: one pass over the entities, because both timers are the same shape.
+    fn step_production(&mut self) -> Result<(), SimError> {
         // Production: one job per building, finishing exactly on its create time. A unit with
         // nowhere to stand waits inside the building rather than being lost.
         // Production and research: one pass over the entities, because both timers are the same
@@ -1097,6 +685,11 @@ impl World {
                 self.finish_research(player, tech)?;
             }
         }
+        Ok(())
+    }
+
+    /// Units whose job ended go back to what they were doing before it.
+    fn resume_idle(&mut self, finished: Vec<EntityId>) {
         let mut resumed: Vec<EntityId> = Vec::new();
         for id in finished {
             // A unit that arrived at the door of the building it was rallied into goes in, if the building still has room
@@ -1146,7 +739,13 @@ impl World {
                 }
             }
         }
+    }
 
+    /// **The movement pass**: collide, move, repath around bodies, spend reached waypoints.
+    fn move_bodies(
+        &mut self,
+        deltas: Vec<(usize, EntityId, Fixed, Fixed)>,
+    ) -> Result<(), SimError> {
         let mut reached: Vec<(EntityId, (Fixed, Fixed))> = Vec::new();
         // Whatever actually moved this tick is what can see something new (D50a).
         let mut movers: Vec<EntityId> = Vec::new();
@@ -1342,7 +941,18 @@ impl World {
                 path.points.remove(0);
             }
         }
+        Ok(())
+    }
 
+    /// Shots go up, land, and leave the list, after the movement pass and after every blow.
+    fn fly_shots(
+        &mut self,
+        shots: Vec<Shot>,
+        landings: Vec<Landing>,
+        landed_arrows: Vec<EntityId>,
+        blows: &mut Vec<(EntityId, EntityId)>,
+        ejected: &mut Vec<EntityId>,
+    ) {
         // Shots go up, land, and leave the list, all after the movement pass: the entity list is
         // index-stable for the length of that pass, and every one of these changes its shape.
         for shot in shots {
@@ -1408,6 +1018,10 @@ impl World {
             self.entities.retain(|entity| entity.id != id);
         }
         // Animals react to the blows this tick landed, so the leash is judged after them (D71).
+    }
+
+    /// The once-a-pass timers: leashes, herdable conversion, shares, spent nodes, husks.
+    fn step_world_timers(&mut self) {
         self.step_leashes();
         // ... and a herdable changes hands as soon as somebody's unit can see it (item 5).
         self.step_conversion();
@@ -1417,6 +1031,10 @@ impl World {
         self.step_husks();
         // A building at or below its eject fraction throws its garrison out. They are unharmed - the
         // published rule - and they land where they already stand.
+    }
+
+    /// A building at or below its eject fraction throws its garrison out, unharmed and where they stand.
+    fn eject_garrisons(&mut self, ejected: Vec<EntityId>) {
         for id in ejected {
             // Copy what is needed out of the borrow before touching anything mutable.
             let Some((kind, hp, player, unit)) = self
@@ -1455,6 +1073,10 @@ impl World {
         // state hash walks them, so a dead unit's path was part of the hash.
         // A foundation placed blind over something that is already being built is cancelled the moment
         // its owner can see the tile (D61). Done before the sweep so the cancellation dies this tick.
+    }
+
+    /// **The death sweep**: corpses, rot, the dead and their bookkeeping, and the match decision it carries.
+    fn sweep_dead(&mut self, blows: &[(EntityId, EntityId)]) {
         self.settle_blind_sites();
         let mut buried: Vec<EntityId> = Vec::new();
         // A wall's tile, remembered before the sweep: after `retain` the entity is gone and there is no
@@ -1478,7 +1100,7 @@ impl World {
         // Bodies made this tick start rotting on the *next* one: a corpse that lost a tick of food as it appeared
         // would make every arithmetic assertion about meat off by exactly one tick of rot.
         let mut new_rots: Vec<(EntityId, Rot)> = Vec::new();
-        self.promote_dead_animals(&blows, &mut new_rots);
+        self.promote_dead_animals(blows, &mut new_rots);
         // A body is a unit with no health, and it must survive the pass that removes the dead (D70). The set
         // holds ids as well as families, so this costs a lookup and no table walk: the first version cloned
         // the whole unit table here, once per tick.
@@ -1570,12 +1192,505 @@ impl World {
         if something_died {
             self.decide_outcome();
         }
-
-        self.tick += 1;
-
-        // What each player saw this tick, stamped with the tick that has just become current, so that
-        // `sighting(..).1 == tick()` means "watched right now" and the age of a belief is `tick() - at`.
-        self.observe();
-        Ok(())
     }
+
+    /// A task change decided in the pass becomes a route and a task after it.
+    fn apply_switches(&mut self, switches: Vec<(EntityId, Task)>) {
+        for (id, task) in switches {
+            // A worker heading home needs a route to the drop site, not just the final position.
+            if let Task::Return { drop, .. } = task {
+                let ends = (
+                    self.find(id).map(|entity| entity.position),
+                    self.find(drop).map(|entity| entity.position),
+                );
+                // **Home is the edge of the building, not its anchor** - see `approach_tile`.
+                // **The anchor's route first, the footprint's only when that route does not exist.** Aiming every carrier
+                // at the building's edge changed the flow of a whole match (176 entities and a won match became 127 and a
+                // draw), so the approach is a fallback for the case that used to fail outright - a drop site whose near
+                // side is built over - and not a new route for every trip.
+                let route = match ends {
+                    (Some(from), Some(to)) => self.plan_path(from, to, 0).ok().or_else(|| {
+                        self.approach_tile(self.tile_of(from), drop)
+                            .and_then(|stand| self.plan_path(from, self.tile(stand), 0).ok())
+                    }),
+                    _ => None,
+                };
+                if let Some(route) = route {
+                    self.paths.insert(
+                        id,
+                        Route {
+                            points: route,
+                            ..Route::default()
+                        },
+                    );
+                }
+            } else {
+                self.paths.remove(&id);
+            }
+            if let Some(entity) = self.find_mut(id) {
+                entity.task = task;
+            }
+        }
+    }
+
+    /// **Decide the tick, change nothing**: one pass over the entities in id order, filling a `TickWork`.
+    fn decide(&self) -> Result<TickWork, SimError> {
+        let tick_rate = i64::from(self.tick_rate_hz);
+
+        // Decide this tick's work in id order, then apply it. Deciding first keeps the second
+        // pass free of lookups, so an entity cannot be moved *and* read from in the same tick in
+        // an order-dependent way.
+        // (index, id, dx, dy): the index is the fast path and the id is the check. `insert` keeps
+        // the list sorted by id, so anything spawned later in the same tick shifts every index after
+        // it - the id is what makes that detectable instead of silently moving the wrong entities.
+        let mut work = TickWork {
+            deltas: Vec::with_capacity(self.entities.len()),
+            ..TickWork::default()
+        };
+        let projectile_step = self.projectile_step;
+
+        // Indexed, not id-collected: resolving each id afterwards is a linear scan per entity,
+        // which makes the whole tick O(n^2). The entity list does not change during this loop, so
+        // an index stays valid and the second pass touches each entity once.
+        for (index, entity) in self.entities.iter().enumerate() {
+            let (dx, dy) = match entity.task {
+                Task::Attack {
+                    target,
+                    range,
+                    min_range,
+                    ..
+                } => {
+                    let Some(target_body) = self
+                        .find(target)
+                        // A tree cannot bleed, and a **body** cannot be fought: a carcass keeps the entity's
+                        // id, so "the target is gone" stopped being how a fight with an animal ends (item 2).
+                        // Without this an army swings at a corpse for the rest of the match.
+                        .filter(|v| !matches!(v.kind, EntityKind::Resource(_)) && v.hp > 0)
+                    else {
+                        // The target is gone - or is now a body. The attacker stands down on the next tick.
+                        work.finished.push(entity.id);
+                        continue;
+                    };
+                    let (victim, victim_unit) = (target_body.position, target_body.unit);
+                    // A melee attacker strikes from the tile next to its target; anything with reach
+                    // strikes from as far as that reach goes, and walks until it is inside it. Both
+                    // are measured on the same squared distance, in engine units, so the rule is one
+                    // comparison and no square root.
+                    let here = self.tile_of(entity.position);
+                    let there = self.tile_of(victim);
+                    let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
+                    let dx = victim.0.raw() - entity.position.0.raw();
+                    let dy = victim.1.raw() - entity.position.1.raw();
+                    let squared = dx * dx + dy * dy;
+                    // A melee attacker strikes from the next tile, diagonals included, or from where its footprint
+                    // touches the target's (C2) - a body stopped short by a friend's footprint is still in contact.
+                    let contact = self.reach_raw(entity.unit, victim_unit);
+                    let in_reach = if range.raw() > 0 {
+                        // **Box to box** (D142): the dat's range is measured between the bodies' edges, so a 4x4 town
+                        // centre is hit from its wall rather than its middle.
+                        self.gap_squared_to(
+                            entity.position,
+                            self.body_radius(entity.unit),
+                            target_body,
+                        ) <= range.raw() * range.raw()
+                    } else {
+                        adjacent || squared <= contact * contact
+                    };
+                    // A siege engine - and a skirmisher - has a dead zone: inside it the shot is not
+                    // possible however close the target is, so the shooter backs away instead of
+                    // standing there. The distance is measured **to the target's edge**, because two
+                    // bodies cannot share a tile: a skirmisher's one-tile dead zone would otherwise
+                    // never bite on a tile grid, where the closest a neighbour can stand is one tile
+                    // from centre to centre (D44).
+                    let padding = if min_range.raw() > 0 {
+                        self.body_radii(entity.unit, victim_unit)
+                    } else {
+                        0
+                    };
+                    let dead = min_range.raw() + padding;
+                    let too_close = min_range.raw() > 0 && squared < dead * dead;
+                    // A stance decides how much of this fight is the unit's own business: it can refuse
+                    // the chase (stand ground), refuse to leave its post (defensive), or refuse the
+                    // fight altogether (no attack, which the validator already keeps out of here).
+                    let stance = self.stance_of(entity.id);
+                    let off_ground = stance == Stance::Defensive
+                        && self.stances.get(&entity.id).is_some_and(|(_, post)| {
+                            let dx = victim.0.raw() - post.0.raw();
+                            let dy = victim.1.raw() - post.1.raw();
+                            dx * dx + dy * dy > self.aggro_radius * self.aggro_radius
+                        });
+                    if stance == Stance::NoAttack || off_ground {
+                        if off_ground {
+                            work.homing.push(entity.id);
+                        }
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else if too_close && stance == Stance::StandGround {
+                        // It cannot shoot what is against it, and it may not step back either.
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else if too_close {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        // Away from the target, along the line it already lies on: the point reflected
+                        // through the attacker's own position.
+                        // **In `i128`, then clamped** (D128): `raw * 2` overflows i64 only for positions no map can hold,
+                        // but the clamp costs one comparison and makes the reflection total.
+                        let reflect = |here: i64, there: i64| -> Fixed {
+                            let point = i128::from(here) * 2 - i128::from(there);
+                            Fixed::from_raw(i64::try_from(point).unwrap_or(if point > 0 {
+                                i64::MAX
+                            } else {
+                                i64::MIN
+                            }))
+                        };
+                        let away = (
+                            reflect(entity.position.0.raw(), victim.0.raw()),
+                            reflect(entity.position.1.raw(), victim.1.raw()),
+                        );
+                        let (dx, dy) = step_towards(entity.position, away, delta.raw());
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                    } else if in_reach {
+                        work.strikes.push((entity.id, target));
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else if stance == Stance::StandGround {
+                        // In reach or not, it does not walk to the fight.
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        let next = self.next_waypoint(entity.id).unwrap_or(victim);
+                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                    }
+                }
+                Task::Build { site } => {
+                    let Some((target, site_unit)) = self.find(site).map(|s| (s.position, s.unit))
+                    else {
+                        work.finished.push(entity.id);
+                        continue;
+                    };
+                    // Adjacent counts: the site's own tile is where the building will be, so a builder works from the
+                    // tile beside it - or close enough for the two footprints to touch (C2), which is where a footprint
+                    // collision leaves a builder with a friend already on the good tile.
+                    let here = self.tile_of(entity.position);
+                    let there = self.tile_of(target);
+                    let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
+                    let (gap_x, gap_y) = (
+                        target.0.raw() - entity.position.0.raw(),
+                        target.1.raw() - entity.position.1.raw(),
+                    );
+                    let reach = self.reach_raw(entity.unit, site_unit);
+                    let adjacent = adjacent || gap_x * gap_x + gap_y * gap_y <= reach * reach;
+                    if adjacent {
+                        work.builders.push((entity.id, site));
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        let next = self.next_waypoint(entity.id).unwrap_or(target);
+                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                    }
+                }
+                Task::Return { drop, .. } => {
+                    let Some((target, drop_unit)) = self.find(drop).map(|n| (n.position, n.unit))
+                    else {
+                        work.finished.push(entity.id);
+                        continue;
+                    };
+                    let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                        SimError::Displacement {
+                            id: entity.id,
+                            detail: err.to_string(),
+                        }
+                    })?;
+                    // **Touching the drop site is enough** - any side, any corner (the owner's rule, 2026-10-29). Waiting
+                    // for the final step *onto* the building's own tile is what parked twenty-seven villagers beside a
+                    // mill and five woodcutters beside a lumber camp for a thousand game-seconds, each holding a load
+                    // and each with one waypoint left that they never took.
+                    let here = self.tile_of(entity.position);
+                    let there = self.tile_of(target);
+                    // Touching by tile, or by footprint (C2): a queue of villagers handing in at one town centre is
+                    // stacked 0.4 tiles deep, and the ones at the back are inside the ring but not on a tile centre.
+                    let (gap_x, gap_y) = (
+                        target.0.raw() - entity.position.0.raw(),
+                        target.1.raw() - entity.position.1.raw(),
+                    );
+                    let reach = self.reach_raw(entity.unit, drop_unit);
+                    let touching = (here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1)
+                        || gap_x * gap_x + gap_y * gap_y <= reach * reach
+                        // **Or standing on the building's ground.** A carrier walked into the yard by `approach_tile`
+                        // was two tiles from the anchor and never banked, which cost a third of the economy.
+                        || self.touches_footprint(entity.position, drop);
+                    if touching {
+                        work.deposits.push(entity.id);
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else {
+                        let next = self.next_waypoint(entity.id).unwrap_or(target);
+                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                    }
+                }
+                Task::Gather {
+                    node,
+                    rate_per_tick,
+                    carry_cap,
+                    progress,
+                } => {
+                    let _ = progress;
+                    let Some((target, target_is_building, node_unit)) = self
+                        .find(node)
+                        .map(|n| (n.position, n.kind == EntityKind::Building, n.unit))
+                    else {
+                        // The node is gone (a later increment may delete emptied nodes).
+                        work.finished.push(entity.id);
+                        continue;
+                    };
+                    let here = self.tile_of(entity.position);
+                    let there = self.tile_of(target);
+                    // A node is stood on; a building is worked from the tile beside it, because its
+                    // own tile is blocked and a worker that insisted on it would walk forever.
+                    // **Standing beside a node you cannot stand on counts as working it.** A tree in the forest sits on
+                    // blocked terrain, so a villager that walks up to it stops on the adjacent tile with one waypoint
+                    // left and never arrives: `at_node` was false for ever, `take_amount` never ran, and - because the
+                    // villager was carrying a partial load - the "find the next node" branch did not fire either. Four
+                    // woodcutters did this for a thousand game-seconds beside two spent trees (2026-10-29), which is
+                    // why the wood column produced nothing while the food column produced 1,994.
+                    let beside = target_is_building || !self.tile_walkable(there.0, there.1);
+                    // **Distance, not the exact point** (C2). A body stopped by its friend's footprint stands inside the
+                    // node's own tile but never on its centre, so `position == target` was a deadlock: the second worker
+                    // on a carcass took nothing for the rest of the match (measured: 89 wood / 20 food at 1,600 s). Being
+                    // on the node's ground, or close enough for the two footprints to touch, is being at it.
+                    let (gap_x, gap_y) = (
+                        target.0.raw() - entity.position.0.raw(),
+                        target.1.raw() - entity.position.1.raw(),
+                    );
+                    let squared = gap_x * gap_x + gap_y * gap_y;
+                    let reach = self.reach_raw(entity.unit, node_unit);
+                    let at_node = here == there
+                        || squared <= reach * reach
+                        || (beside
+                            && here.0.abs_diff(there.0) <= 1
+                            && here.1.abs_diff(there.1) <= 1);
+
+                    // A herdable animal is walked to the drop site by the villager working it (D70). The
+                    // node was already read above, so this costs one family lookup and no second scan of the
+                    // world - the first version re-found the node per gatherer per tick, which is O(units).
+                    if !self.herdable.is_empty()
+                        && node_unit.is_some_and(|unit| {
+                            self.units
+                                .as_ref()
+                                .is_some_and(|units| self.herdable.contains(&units.root(unit)))
+                        })
+                    {
+                        work.herds.push((entity.id, node));
+                    }
+
+                    // A **huntable** animal is shot, not gathered from, and the shot is ordered **before** the walk:
+                    // a hunter that first walked onto the boar would be inside knife range at the first swing, and
+                    // the bow (VMHUN, `range = 3.0`) would never matter. A herdable is walked home first and killed at
+                    // the drop site, which is the herding pass's business.
+                    if self.animal_at(node) == Some(false) {
+                        work.hunts.push((entity.id, node));
+                    }
+
+                    // Standing still at the thing being worked is what entitles a worker to take
+                    // from it.
+                    if at_node {
+                        // **A standing tree is chopped down first.** Until its hit points are gone it yields nothing;
+                        // when they are, it falls where it stands and is then cut for wood (the owner's rule). A bush or
+                        // a mine has no hit points, so this branch never runs for them.
+                        // Only a **resource node** is felled. A farm is a building with hit points of its own, and
+                        // chopping it was how the first version of this left every farmer standing in a field.
+                        let standing = self
+                            .find(node)
+                            .is_some_and(|n| matches!(n.kind, EntityKind::Resource(_)) && n.hp > 0);
+                        if standing {
+                            work.chops.push(entity.id);
+                            (Fixed::ZERO, Fixed::ZERO)
+                        } else {
+                            let (take, kept) = self.take_amount(entity);
+                            let node_left = self.find(node).map(|n| n.amount.raw()).unwrap_or(0);
+                            work.takes.push((entity.id, take, kept));
+
+                            // Two reasons to head home: the load is full, or the node just gave its
+                            // last. The second matters because a partial load on a dead tree never
+                            // reaches the cap - the villager would stand there for the rest of the
+                            // match holding wood nobody can spend.
+                            let in_hand = entity.carry.raw() + take;
+                            let empty_node = node_left - take <= 0;
+                            let full = in_hand >= i64::from(carry_cap) * self.scale;
+                            // A **full load always goes home**, whether or not anything was taken this tick. Without the
+                            // first clause a villager whose cap was reached by a re-task (a load carried onto the next
+                            // node) stood at that node with no room to take anything, for the rest of the match.
+                            let brimming = entity.carry.raw() >= i64::from(carry_cap) * self.scale;
+                            if brimming
+                                || (take > 0 && (full || empty_node))
+                                || (take == 0 && empty_node && in_hand > 0)
+                            {
+                                work.switches.extend(
+                                    self.return_task(entity, node, rate_per_tick, carry_cap)
+                                        .map(|task| (entity.id, task)),
+                                );
+                            }
+                            if take == 0 && empty_node {
+                                // Nothing in hand and nothing left here: look for the next node of the same kind before
+                                // standing still. A tree holds 100 wood, so without this a lumberjack works one tree and
+                                // idles for the rest of the match - which is what stopped the acceptance match at 139
+                                // wood (the owner's rule: "move to next tree, next bush, next pile of gold").
+                                let here = entity.position;
+                                match self.nearest_like(here, node, entity.id) {
+                                    Some(next) => work.retasks.push((entity.id, next)),
+                                    None => work.finished.push(entity.id),
+                                }
+                            }
+                            (Fixed::ZERO, Fixed::ZERO)
+                        }
+                    } else {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        let next = self.next_waypoint(entity.id).unwrap_or(target);
+                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                    }
+                }
+                Task::Fly {
+                    target,
+                    shooter,
+                    damage,
+                    aim,
+                    blast,
+                } => {
+                    // The step is resolved once per tick, outside the borrow: `step_towards` needs no
+                    // table, so the only thing to avoid is touching `self` inside the loop.
+                    let (dx, dy) = step_towards(entity.position, aim, projectile_step);
+                    if dx == 0 && dy == 0 {
+                        // Landing is the only thing an arrow does. Whether it hurts anything is
+                        // decided after the loop, against the target as it stands then: an arrow
+                        // whose target died on the way finds nothing and does not pick another.
+                        work.landings.push(Landing {
+                            shooter,
+                            target,
+                            damage,
+                            aim,
+                            blast,
+                        });
+                        work.landed_arrows.push(entity.id);
+                    }
+                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                }
+                // Inside a building: no movement, no work, and no cooldown runs - a sheltered unit is
+                // simply not on the map.
+                Task::Move { to } => {
+                    let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                        SimError::Displacement {
+                            id: entity.id,
+                            detail: err.to_string(),
+                        }
+                    })?;
+                    let next = self.next_waypoint(entity.id).unwrap_or(to);
+                    let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                    // **Arrived is close enough, not exactly on it.** The last step of a walk is often clipped by the ground
+                    // or by a body, so an exact-equality test left a unit pacing at the doorstep of its goal for ever - which
+                    // is how a builder failed to "arrive" at a site and a barracks was never finished (2026-11-04).
+                    if reaches(entity.position, to, delta.raw()) {
+                        work.finished.push(entity.id);
+                    }
+                    (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                }
+                Task::Hunt { to } => {
+                    // Looking for a fight first: an enemy in reach is the order's business, and the
+                    // walk is only how the unit got here. Two stances never look: one cannot fight,
+                    // the other does not walk to a fight it was not given.
+                    let may_engage = matches!(
+                        self.stance_of(entity.id),
+                        Stance::Aggressive | Stance::Defensive
+                    );
+                    if let Some(enemy) = may_engage.then(|| self.nearest_enemy(entity)).flatten() {
+                        work.engaging.push((entity.id, enemy));
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        let next = self.next_waypoint(entity.id).unwrap_or(to);
+                        let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                        if dx == 0 && dy == 0 && entity.position == to {
+                            // Arrival: a patrol turns round, an attack-move stops.
+                            if self.patrols.contains_key(&entity.id) {
+                                work.turning.push(entity.id);
+                            } else {
+                                work.finished.push(entity.id);
+                            }
+                        }
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                    }
+                }
+                Task::Garrisoned { .. } => (Fixed::ZERO, Fixed::ZERO),
+                Task::Idle => {
+                    let dx = entity.velocity.0.div_exact(tick_rate).map_err(|err| {
+                        SimError::Displacement {
+                            id: entity.id,
+                            detail: err.to_string(),
+                        }
+                    })?;
+                    let dy = entity.velocity.1.div_exact(tick_rate).map_err(|err| {
+                        SimError::Displacement {
+                            id: entity.id,
+                            detail: err.to_string(),
+                        }
+                    })?;
+                    (dx, dy)
+                }
+            };
+            work.deltas.push((index, entity.id, dx, dy));
+        }
+
+        Ok(work)
+    }
+}
+
+/// **What one tick decided to do, before anything is applied** (D146): the vectors `decide` fills and the phases consume.
+///
+/// It exists so `step` reads as a list of phases rather than 480 lines of declaration and one loop. Nothing here is hashed or
+/// carried between ticks: it dies with the call.
+#[derive(Default)]
+struct TickWork {
+    deltas: Vec<(usize, EntityId, Fixed, Fixed)>,
+    takes: Vec<(EntityId, i64, Fixed)>,
+    chops: Vec<EntityId>,
+    finished: Vec<EntityId>,
+    switches: Vec<(EntityId, Task)>,
+    herds: Vec<(EntityId, EntityId)>,
+    deposits: Vec<EntityId>,
+    builders: Vec<(EntityId, EntityId)>,
+    strikes: Vec<(EntityId, EntityId)>,
+    retasks: Vec<(EntityId, EntityId)>,
+    hunts: Vec<(EntityId, EntityId)>,
+    blows: Vec<(EntityId, EntityId)>,
+    landed_arrows: Vec<EntityId>,
+    landings: Vec<Landing>,
+    shots: Vec<Shot>,
+    ejected: Vec<EntityId>,
+    engaging: Vec<(EntityId, EntityId)>,
+    turning: Vec<EntityId>,
+    homing: Vec<EntityId>,
 }

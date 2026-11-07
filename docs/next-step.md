@@ -28,6 +28,23 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 44, 2026-11-07 - D146: stage 2 done, `step` is 30 lines
+>
+> `decide()` (432 lines, the one pass over the entity list) fills a `TickWork`; nineteen named phases follow it in the order
+> the old statements ran. Hash `f328ebc8d4d34b78` unchanged; measured 11.5 s -> 10.8 s over 36,000 ticks (five runs each side,
+> non-overlapping). Review: `docs/reviews/2026-11-07-step-from-1562-lines-to-30.md`.
+>
+> **Options from here, in the order I would take them:**
+> 1. **Back to the second review's queue**: 118 of 205 findings verified; tests 49, config 26, other 16 left. That is real
+>    work on correctness rather than shape.
+> 2. `decide` per task (`decide_attack`, `decide_gather`, ...) - the last big function, 432 lines, one `match` with eight
+>    arms. Modest gain, real churn.
+> 3. The queued **D141 two-stage gather search** (bounded BFS from the worker, then the picker) - the design the refuted
+>    radius bound was standing in for.
+>
+> **Open owner questions (8)** still parked: loader strictness for wrong-but-harmless values; `Civ::bars` stub; `pack.rs`
+> unused `bytes` map; pack hash FNV vs SHA-256; duplicate `at_villagers` rows; army size 8/12 vs 16/36.
+
 > # Session 43, 2026-11-07 - D145: `lib.rs` 8,731 -> 4,106
 >
 > Sixteen subject files under `crates/sim/src/world/` plus `crates/sim/src/error.rs`. `lib.rs` now holds the crate's nouns
