@@ -209,29 +209,45 @@ pub fn find_path_avoiding(
     // A blocked *start* is allowed and necessary: a villager stands on the tile of the tree it is
     // working, and must be able to walk off it. Only the route is searched, not the standing spot.
 
-    let mut open: BinaryHeap<Reverse<(u32, u32, u16, u16)>> = BinaryHeap::new();
-    let mut best: BTreeMap<(u16, u16), u32> = BTreeMap::new();
-    let mut came: BTreeMap<(u16, u16), (u16, u16)> = BTreeMap::new();
+    let (width, height) = walk.size();
+    let cells = usize::from(width) * usize::from(height);
+    let at = |x: u16, y: u16| usize::from(y) * usize::from(width) + usize::from(x);
 
-    best.insert(from, 0);
+    let mut open: BinaryHeap<Reverse<(u32, u32, u16, u16)>> = BinaryHeap::new();
+    // **Two flat arrays indexed by tile, not two trees** (D143). The maps allocated a node per visited tile and paid a
+    // comparison per lookup; an array is one allocation and arithmetic, and `came` holds the parent's **index** rather
+    // than its coordinates. The ordering of `open` is untouched - same tuples, same comparison - so the route is
+    // identical, which the checksum in `examples/path_cost.rs` is there to prove rather than assume.
+    let mut best: Vec<u32> = vec![u32::MAX; cells];
+    let mut came: Vec<u32> = vec![u32::MAX; cells];
+
+    best[at(from.0, from.1)] = 0;
     open.push(Reverse((octile(from, to), 0, from.1, from.0)));
 
     while let Some(Reverse((_, cost, y, x))) = open.pop() {
         let here = (x, y);
+        let index = at(x, y);
         if here == to {
             let mut path = vec![here];
-            let mut cursor = here;
-            while let Some(&previous) = came.get(&cursor) {
-                if previous == from {
+            let mut cursor = index;
+            loop {
+                let parent = came[cursor];
+                if parent == u32::MAX {
                     break;
                 }
-                path.push(previous);
-                cursor = previous;
+                let parent = parent as usize;
+                if parent == at(from.0, from.1) {
+                    break;
+                }
+                let px = (parent % usize::from(width)) as u16;
+                let py = (parent / usize::from(width)) as u16;
+                path.push((px, py));
+                cursor = parent;
             }
             path.reverse();
             return Some(path);
         }
-        if cost > *best.get(&here).unwrap_or(&u32::MAX) {
+        if cost > best[index] {
             continue;
         }
 
@@ -266,10 +282,10 @@ pub fn find_path_avoiding(
                 }
                 let step = if diagonal { DIAGONAL } else { CARDINAL };
                 let next_cost = cost + step;
-                let entry = best.entry((nx, ny)).or_insert(u32::MAX);
-                if next_cost < *entry {
-                    *entry = next_cost;
-                    came.insert((nx, ny), here);
+                let next_index = at(nx, ny);
+                if next_cost < best[next_index] {
+                    best[next_index] = next_cost;
+                    came[next_index] = index as u32;
                     open.push(Reverse((
                         next_cost + octile((nx, ny), to),
                         next_cost,

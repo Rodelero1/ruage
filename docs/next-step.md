@@ -28,6 +28,23 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 41, 2026-11-07 - the four are done: two adopted, one reverted, one narrowed
+>
+> 1. **D140 the binary's module map** - 84 paths, 541 classes, 31 `Comm*`; U12 has a shape. 2. **D141 the gather radius
+> bound - reverted by measurement** (141 -> 129 entities, match undecided); the corrected **two-stage** search is queued.
+> 3. **D142 reach is box to box** - both call sites, one existing test re-stated. 4. **D143 flat arrays** - 5.7x on long
+> searches, routes byte-identical, match unchanged.
+>
+> **Next, in order of what it unblocks:**
+> 1. **The sim-block review's queued head** (24 cheap findings): the enemy selectors can aim at a Gaia town centre or a
+>    foundation; a rule naming a role the pack lacks never fires and says nothing; `duration_seconds = 1e300` is a 9.2e18
+>    iteration hang in both binaries.
+> 2. **The two-stage gather search** (D141's corrected shape): the AI picks an area, the unit picks a node within sight of
+>    it. Needs the area concept, so it is a design step.
+> 3. **The stall class test** the deck's own regression loop suggests: a unit with a live order that has not moved for N
+>    ticks fails, whatever the mechanism.
+> 4. **Path budgets** (D143's refused half) as decisions with numbers, not as optimisations.
+
 > # Session 40, 2026-11-07 - steps 1-3 of the four, and the one that failed its measurement
 >
 > **1. DONE** - the binary's module map (D140): `tools/exe_map.py`, 84 source paths, 541 classes, 31 `Comm*`, U12 given its

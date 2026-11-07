@@ -3526,3 +3526,29 @@ objects reach-tested. Adopted as proposed, implemented, measured, and **reverted
 7. **The acceptance match is byte-identical** - `f328ebc8d4d34b78`, 141 entities, 188 repaths, 574 refusals, 10.82/10.83 s -
    and that is stated as what it is: this scenario does not probe the difference (its ranged units shoot at units, whose box
    is their own radius), not as evidence that the change is inert.
+
+
+## D143 - The path search keeps two flat arrays, not two trees
+
+*2026-11-07. Step 4 of four from the prior-art watch. Of its four pathing techniques, one applied here and three would have
+been decisions smuggled in as optimisations.*
+
+1. **Taken: flat arrays.** `find_path_avoiding` allocated a `BTreeMap` for the best cost and another for the parent of every
+   visited tile, plus a comparison per lookup. It now allocates **two `Vec<u32>`** indexed `y * width + x`, the second
+   holding the parent's *index* rather than its coordinates. `open` - and therefore the tie-break order - is untouched.
+2. **Refused in this step, with reasons**: a **landmark (ALT) heuristic** is a per-map precomputation whose payoff is on long
+   searches these maps barely have; **budgeting by route length** and a **per-tick search budget** both truncate searches,
+   which means a route that existed sometimes does not - a behaviour change and a decision, exactly the shape of D141, where
+   the last "cheap" bound cost twelve entities. **Re-sorting last tick's order** does not apply: this engine does not sort a
+   per-tick order.
+3. **Measured with a new instrument**: `crates/sim/examples/path_cost.rs` times 2,000 searches at three lengths and prints an
+   **order-sensitive checksum of every route**, so "faster" and "different" cannot be confused.
+   - corner to corner: **50.5 -> 8.9 us** (5.7x)
+   - mid (~10 tiles): **5.2 -> 2.0 us** (2.6x)
+   - short (~3 tiles): **1.2 -> 0.9 us** (1.3x)
+   - all three checksums **identical** before and after.
+4. **Priced honestly at match scale**: the acceptance match is **unchanged** (`f328ebc8d4d34b78`, 141 entities, 188
+   repaths, 11.50/11.48 s) because 188 searches at 50 us is ~0.04 s of an 11.5 s run. The win is for the thousands-of-units
+   target, not for this scenario, and the review says so rather than quoting 5.7x as a match speed-up.
+5. **Memory also improves**: 32 KB of arrays per search on a 64x64 map against ~4,000 tree nodes (~300 KB) on a
+   corner-to-corner search - bounded by the map instead of proportional to the work.
