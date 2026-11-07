@@ -1394,3 +1394,128 @@ not cross. The same for `stingers/` and `aura/`: dense enough to translate whole
   `0xe8` plus powerups and stingers. That is DE's stack; 5.7's speed stays `animation_info.speed`, so this is not an
   answer, only the shape DE gave the same question.
 - **U21, U19, U20, U7, U8** — unchanged.
+
+## 2026-11-07 — aoe2 spends a day measuring DE's AI and two of three rules lose; DE's default speed is 1.7x
+
+**`yanfengliu/aoe2`** (23 commits, `513f3172→d6212a55`, **MIT**, all on 2026-11-06 between 09:24 and 22:39 UTC). Five
+works opened in one day, three of them ports of DE's installed AI scripts, and the shape of the day is the finding: **the
+study, the A/B and the refusal are now one routine**, and two of the three rules that were measured were dropped.
+
+- **Work 147, the computer's spending** (`docs/work/147_ai-spending/plan.md`, 364 lines). M1 read DE's economy AI out of
+  `Promisory/*.per` with line-level citations — the escrow's two-pass hold (release everything, flag each want, add every
+  still-wanted item's cost, hold the sum, so the army spends only what is not held, `escrow.per` 1–3375), the buildings'
+  one-slot queue (`buildings.per` 11918–11939), the headroom rules for Houses, and the flush's wood buffers. M2 shipped
+  the buffers as v0.3.274. M3a then built DE's *whole* farm model and **did not adopt it**: DE's count is `maxfarms`, the
+  split's food villagers less those on sheep, forage, hunt and fish (`init.per` 1660–1671), so a seat with 15 food
+  villagers wants up to 19 farms, and in the lab the farms took the wood of the Siege Workshops (46→39 seat-seeds), the
+  Monasteries (46→43) and a producer floor went red. Their own diagnosis is the useful half: the count is DE's *split's*,
+  and they keep their own split from the Feudal Age, so the count cannot land alone.
+- **The instrument is now stricter than the rule, and it is the transferable part.** A change is judged on **counts over
+  50 seat-seeds per configuration** against a **noise floor** (arm A replayed on seeds 5–9), not on medians: dropped when
+  an Age or a building count falls beyond the floor, and every per-seed loss traced and named — coastal#4 owner 1's army
+  waited on its farms, a raid took 19 of 40 villagers, and it lost its Monastery and its Castle. P1 under it: two-farm-
+  floor breaches 662→403 and 536→342, Siege Workshops 33→36 and 44→46, Ages +5/−2, kept with the losses named.
+- **The walk probe gives our own economy a number it did not have.** Their AI builds one Lumber Camp a match; sampled
+  every 250 ticks, its lumberjacks spend **37% of their samples gathering in the Feudal Age and 23% in the Imperial**, with
+  the distance to the nearest drop site growing **8.6→17.4 tiles**. DE builds another camp whenever the nearest wood is
+  more than 5 tiles from its nearest drop site (`buildings.per` 2173–2189; the first at 10 tiles, 2232–2244). They
+  measured that rule before (work 141 M2a) and **dropped it**: a lumberjack whose woodline ran out walked past the enemy
+  Town Centre, and 83 villagers were lost, 80 of them under its arrows.
+- **Work 150 M1, DE's map sizes** (docs only). Sides Tiny 120 … Ludicrous 480 (`I/scaling.inc` 1–15); Arabia's ring puts
+  the two Town Centres 77–82 tiles apart on Tiny; the start area (3 villagers and a Scout at square distance 5, 5
+  stragglers at 5, sheep at 8 and two pairs at 22, berries 6 at 12, gold 7 at 12 and 4 at 22/28/46, stone 5 at 16, boar 2
+  at 18, deer 20–40, woodlines 15–21, 5 relics, 18 gold tiles of 800 a player). Measured on their engine: DE Tiny costs
+  **1.9× the gates' match and 4.5× on the live path, 2× the heap, 6.4× the save** — and the growth is not pathing (0.1–0.5
+  ms a tick early) but a full render-projection rebuild, 68.5% of a late tick.
+- **Work 149, DE's speeds** (v0.3.275): Slow 1.0×, Casual 1.5×, Normal **1.7×**, Fast 2.0×, starting on Normal; the
+  multiplier stays **presentation-side**, and saves, replays and every tick-counted datum are untouched.
+- **Work 151 M1, DE's training rules** (docs only): every train goal is reset each pass (`units.per` 8–71) and re-set
+  only by a rule that gives a reason; `milunits` splits the reasons into the "usual" family (counters scaled by the
+  target's class counts, deficits, per-civ plan goals) and the flush family (`units.per` 9145–9540); `siegereq` holds
+  every main line from the Castle Age at population 190 until the siege quota stands. So DE has no default unit before
+  the Imperial Age. Design only, M2 waits on their coordinator.
+- Works 146/148 (selection capped at **60**, the group panel, the production queue) and 152 (economy research, a stub) —
+  UI and a plan; no engine lesson.
+
+**Divergence on the axes.**
+
+**Tick and determinism: they reach D16 independently.** The speed multiplier is presentation-side and every tick-counted
+datum is untouched — a shipped project arriving at the split D16 records, which costs us nothing because it is what we do.
+Their 1.0× is 10 ticks a second, so DE's Normal is 17: a fourth rate for U12 (after 50, 100 and 16 ms), and still not
+5.7's.
+
+**The 1.7× matters twice, and both are new.** (1) *Oracle*: any wall-clock interval taken from DE at its default —
+a reload, a gather trip, a unit's crossing — is **1.7× too fast** for HD. U12's capture test and U5's crossing test must
+name the speed setting and divide by it, or they will measure DE's pace and call it 5.7's. (2) *Feel*: if HD's own
+default is the 1.0× baseline (not established by anything read here), then a sim that reproduces HD plays **41% slower**
+than the game a DE player calls Normal, and that is the pace the owner's memory of "the AoE2 feel" is calibrated to. The
+second is a question for the owner, not a finding, and I would put it before any pace calibration rather than after.
+
+**Engine and content: we are already where they are going, and it shows.** Our AI is a rules file (`config/ai/base.toml`,
+D94); theirs is three new TypeScript modules in one day (`aiFlushBuffers.ts`, `bridge/systems/aiFlushBufferPhase.ts`, the
+retained `aiFarmModel.ts`), each a pure rule plus a phase that reads a seat once a decision. Theirs is tested, cited and
+readable; ours can be A/B'd without a build, which is the cheaper side of that trade for exactly this shape of rule and
+the reason D17/D94 exist. But it also means our camp rule is written as ours and not as DE's: `config/ai/base.toml:80`
+asks for `no_building = "lumber_camp"` at ten villagers, i.e. **one camp a match — the shape they have just measured as
+half their wood income**. The mechanism transfers; the magnitude does not (DE's woodlines on a 120×120 map, ours on a
+64×64), so the number to get is ours, and no probe of ours reports a villager's share of time spent gathering while
+theirs does.
+
+**Map geometry is content, and ours is 64×64 against HD's 120×120 floor** (`config/map.toml`). Not a decision change —
+bounded scope, and the owner has priced fidelity — but the DE table is the wrong table for us, and our own install says
+so (§"Our own install, same question" below). What transfers is the method and the price: 4× the cells cost that engine
+1.9× on the gates' path.
+
+**Licence.** Unchanged: MIT, so their code may cross legally, while every AI number in these three works is a DE
+`Promisory` figure and may not.
+
+**Study list.**
+
+- `docs/work/147_ai-spending/plan.md` — the drop rule, the noise floor, the spend and walk probes, M3a's refusal in full.
+  If only one thing is read this week, this one.
+- `docs/work/150_de-map-size/plan.md`, the section "DE's maps, sourced" — the start-area table with `I/*.inc` and
+  `Arabia.rms` line numbers, and the measured price of four times the map.
+- `docs/work/151_ai-train-reasons/plan.md`, items 1–8 — DE's whole training rule set and the `milunits` split: what a
+  "rules in the pack" version of DE's AI would have to carry, if that is ever wanted.
+- `src/game/simulation/aiFlushBuffers.ts` and `bridge/systems/aiFlushBufferPhase.ts` — one DE rule as a pure function
+  with its citations, plus the phase pattern around it (MIT).
+- `scripts/selfplay-ab.mjs`, `scripts/selfplayAuditMatch.mjs` — the A/B instrument with its noise floor; the method is
+  the asset.
+
+**Our own install, same question, different answers (read this tick).**
+`Age2HD/resources/_common/drs/gamedata_x2/Arabia.rms` states 5.7's start area directly, and every number differs from
+DE's table: town centre at 0 and villagers at 6 (171–183), scout at 7–9 (186–191), berries 6 at 10–12 (238–248), near gold
+7 at 12–16 (252–263), medium gold 4 at 18–26 (267–278), far gold 4 at 25–35 (282–293), near stone 5 at 14–18 (297–308),
+far stone 4 at 20–26 (312–322), sheep 4 at 9–11 and 2×2 at 14–30 (325–343), deer 3–4 at 14–22 or 23–30 (345–361), boar 1+1
+at 16–22 (367–382), wolves 2 at 30–40 (386–397), player lands `land_percent 25`, `base_size 9` (25–36). That is the
+cleanest demonstration yet that a DE number is not an HD number: the two Arabias are different scripts, not the same
+script with different tuning. The map *sides* are not in the script (only the `TINY_MAP`/`SMALL_MAP`/`LARGE_MAP`
+branches), so 120 stays DE's figure for HD until a save or a scenario is read — U23.
+
+**Never copy.** aoe2 is MIT, so the code is not the hazard this tick; the numbers are. (1) Every AI value in these
+commits is a DE `Promisory` script figure — the buffers 85/95/225 (and 65/75/79/82/86/235 by civilization),
+`farmmb-cost` 209/215/235, `maxfarms`, the escrow's sums — and `config/ai/` is exactly where our own numbers live, so
+none of them may cross into it, the same rule as `design/stats/*.csv`. (2) The `.per` files and DE's string tables are
+the game's own text, read for facts. (3) The map table is DE's install's geometry, and our install's differs at every
+line, so copying it would be wrong as well as unlicensed. Nothing here is the "it was only a small function" shape —
+the rule-as-pure-function pattern is architecture, and patterns are not code — but the per-civilization tables are data
+and stay out.
+
+**Open questions.**
+
+- **U12** — the 1.7× caution above; no new rate for 5.7, still 50, 100 and 16 ms for two games.
+- **U22** — the contract is unchanged and the farm-only cap caution stands. One boundary to settle before the bound is
+  written: how the opening trips get their target. HD's Arabia stands its nearest gold 12–16 tiles out and its villagers
+  6 tiles out (`Arabia.rms` 183, 259–260), so a strict LOS + 5 search from a villager's own tile is not what assigns the
+  first trips; whether 5.7 gives them by the scenario is unread. The test to avoid is one that stands a villager at the
+  Town Centre and expects the far gold, which would be measuring a question the game does not ask.
+- **U23 (new)** — **what are 5.7's map sides, and how far apart does Arabia's two players stand?** The scripts hold the
+  size *branches* but not the sides, and our own map is 64×64 (`config/map.toml`). Answer: read width and height out of
+  `Age2HD/SaveGame/Random_map.aoe2spgame` (and a `.scx` from `resources/_common/drs/gamedata_x1/`), test-first in
+  `crates/data`, where the save and scenario headers are already parsed. The replay in `SaveGame/` carries a real HD 1v1
+  if the save is not conclusive. Not blocking the sim; blocking any claim that our maps are HD-shaped.
+- **U7** — their measurement is a cost *shape*, not an algorithm: 0.1–0.5 ms a tick early on a 120×120 map, 4.2 ms
+  mid-battle on a 60×36 one, so fights and not distance drive the search. One measurement of ours would say whether the
+  same holds, and it is cheap while the acceptance run already counts repaths.
+- **U18, U19, U20, U21, U5** — unchanged. U20's 250 in `config/economy.toml:44` is still the recorded defect (175 base,
+  +75 per Horse Collar); nothing this tick touches it.
