@@ -3580,3 +3580,27 @@ been decisions smuggled in as optimisations.*
    (`site_*`, `footprint_area`, `solid_tiles`, `nearest_drop_site`).
 7. **The cost, stated**: about 1,500 lines of `git blame` history now point at a move commit. The mitigation is the one that
    keeps the code searchable - every doc comment moved verbatim, so the same sentences are one `grep` away.
+
+
+## D145 - `lib.rs` becomes what the crate *is*; sixteen files say what it *does*
+
+*2026-11-07. The owner: "Go ahead if it is still more than 5000 lines file." 8,731 -> **4,106**.*
+
+1. **Twelve more moves**, all mechanical: `world/step.rs` 1,581 (`step` as a whole function), `world/battle.rs` 665,
+   `error.rs` 475 (`SimError` + `Display`), `world/sites.rs` 461, `world/state.rs` 421, `world/orders.rs` 373,
+   `world/shares.rs` 220, `world/report.rs` 221, `world/livestock.rs` 182, `world/garrison.rs` 108 - with D136's three and
+   D144's four making sixteen subject files.
+2. **`lib.rs` keeps the crate's nouns**: entity and command types, `World`, constants, free functions (FNV, PCG32,
+   `step_towards`, `reaches`, `max_scale_for`), re-exports. The verbs moved out.
+3. **`step` moved whole, on purpose.** It is 1,566 lines in one function and moving the file does not make it shorter. The
+   point of the move is that `lib.rs` is now navigable and the tick is in one place to be cut into phases - that cut is
+   stage 2 and is not mechanical.
+4. **A move-tool defect found and fixed**: the extraction walks back over comments but not over `#[...]` attributes, so
+   `#[must_use]` was left behind while its method left the file - four methods lost it (`in_strike_range`, `card`,
+   `site_fits`, `site_has_lane`). The audit is now mechanical: all **42** must-use methods from `HEAD` checked against the
+   new layout, 46 attributes present across `src/`. The skill's recipe carries the rule.
+5. **Public API is unchanged**, and the near-miss is recorded: a text promotion appended `pub(crate) ` to signatures that
+   were already `pub` (`max_scale_for`, `MAX_PLAYERS`), producing `pub pub(crate)`. Rule: promote only a signature that
+   starts with four spaces and `fn `.
+6. **The proof is the hash per move**: `f328ebc8d4d34b78`, 141 entities, 188 repaths, 187 made-room, identical after each of
+   the twelve. 728 passed / 0 failed / 19 ignored; clippy and fmt clean.

@@ -28,6 +28,21 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 43, 2026-11-07 - D145: `lib.rs` 8,731 -> 4,106
+>
+> Sixteen subject files under `crates/sim/src/world/` plus `crates/sim/src/error.rs`. `lib.rs` now holds the crate's nouns
+> (types, `World`, constants, free functions, re-exports). Hash `f328ebc8d4d34b78` after each of twelve moves; suite
+> 728/0/19. Review: `docs/reviews/2026-11-07-lib-rs-down-to-4106.md`.
+>
+> **The next job is stage 2, and it is the one that matters**: `crates/sim/src/world/step.rs` is **1,581 lines in a single
+> function**. Cutting it into named phases - order intake, walking, gathering, building, training, research, combat,
+> bookkeeping - is behaviour-preserving only if done one phase at a time with the hash checked each time, and it is not a
+> mechanical move. Suggested first cut: the combat/battle phase, because `world/battle.rs` already holds every helper it
+> calls.
+>
+> Secondary: `battle.rs` 665 could split into skirmish / projectiles / aiming; `orders.rs` and `sites.rs` overlap on
+> placement. Neither is urgent.
+
 > # Session 42, 2026-11-07 - D144: four more subjects out of `lib.rs`
 >
 > `lib.rs` **10,216 -> 8,731** with `world/{seed,train,build,research}.rs`; hash `f328ebc8d4d34b78` checked after **each**
