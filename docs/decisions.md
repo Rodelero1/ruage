@@ -3786,3 +3786,28 @@ general functionality matter for now. I think best order of priority is: 1 gener
 5. **UI and graphics already have a foothold**, so they are not greenfield: `crates/view` has the bar, panel, minimap,
    widgets, layout and a frame buffer (U1-U3, SPEC v1.68-1.70), and there is **no renderer** by choice (D18) - graphics
    begins at sprites (SLP) and the entity+state -> sprite binding that the dat's sprite table can generate.
+
+
+## D153 - Gates are a global state, not per-player passability (research only)
+
+*2026-11-08. The owner corrected D54's premise: "Gates are more difficult than 'passable for owner and allies, solid for
+others'. Enemy unit can pass together with your own. Please do mere research." Research is `docs/gates-research.md`.*
+
+1. **D54's sentence is corrected**: *"Not modelled: gates (owner-passable pathing needs a per-player grid)"* is **wrong**. A
+   gate is a **time-varying global state** - open means walkable for everyone, closed means walkable for nobody - so it is
+   `Walk::block`/`unblock` on the one writable grid, never a second grid per player.
+2. **The game's rule, from the wiki**: a gate opens when a **friendly** unit approaches and *"only closes again if no unit
+   stands right under the Gate"*, so *"enemy units can also pass or keep the Gate open on purpose"*; it can be **locked**,
+   even while a foundation, and then does not open even for its owner. A player report says the same from the other side: one
+   enemy soldier under an open gate lets a whole army through.
+3. **0 A.D. implements exactly that shape**: `opened`/`locked` state, a range query restricted to **allies** to trigger
+   opening, close only when *no allies in range and no units inside the gate's obstruction*, and **opening flips a global
+   `SetDisableBlockMovementPathfinding`** rather than any per-player walkability. Read as a model, not copied (GPL-2+).
+4. **The gate is a building in the dat**: class **39**, id 63 `GTAA3`, 4000 hp, LOS 6, 30 stone, 70 s, `dead_unit` 144, **4x1
+   tiles**, built inside an existing wall or wall foundation; repair costs **1.5x build** (45 stone); our pack already
+   excludes class 39 from the conquest condition.
+5. **The one number the data does not give is the trigger radius** - 1, 2, or the gate's LOS of 6. That is a gameplay rule and
+   the owner's to set.
+6. **The hard part is route invalidation**, and both the game and 0 A.D. dodge it the same way: a gate never closes while
+   anything stands in it, so no unit is ever trapped inside a closing gate. That is cheaper than re-planning and is the
+   behaviour to copy.
