@@ -545,3 +545,16 @@ unresolved unless the change runs per tick.
 previous commit measures 25-27 ns/entity with the same probe on the same machine. Something between then and now cost
 ~10 ns per entity per tick and nobody priced it, which is exactly the kind of drift a recorded number is supposed to
 catch. The next pass that touches the tick should A/B against `acd8744` before and after and say what it finds.
+
+## 2026-11-08 - what a frame costs, and the render bill we do not have
+
+*Measured while reading `yanfengliu/aoe2`'s work 154 (render invalidation): `cargo test --release -p ruage-view --test frame_cost -- --ignored --nocapture`.*
+
+| run | µs/frame at 960×720 | entities |
+|---|---|---|
+| snapshot + rasteriser | 1,122 | 128 |
+| the same with the HUD | 871 | 128 |
+
+The HUD reading is *below* the plain one, which is the tell that the two are inside each other's noise: a few hundred µs either way at this size. Against a 20 Hz tick (50,000 µs) a frame is **2.2%** of the budget, and the probe's own bound is 50 ms.
+
+**Why this is written down.** yf measured a per-frame projection rebuild at **68.5% of a late tick** and fixed it this week by invalidating only the changed projections (`src/game/simulation/bridge/renderInvalidation.ts`). The shapes are the same here — `crates/view/src/bin/window.rs` builds a whole `Snapshot::of` each frame — but the sizes are not: a 64×64 map, 128 entities, a software rasteriser. Adopting invalidation now would be a change no measurement asks for. **Run this probe again when the acceptance match holds hundreds of entities**; that is the number that would make the question real, and it is one command.

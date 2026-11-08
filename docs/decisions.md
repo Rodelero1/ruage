@@ -2100,6 +2100,8 @@ Rules that follow, and are what will be built next:
 4. Placement and reachability then ask the footprint, not the anchor: a site may not overlap another footprint, and a
    villager may cross a Town Centre's wings the way the game lets it.
 
+**Evidence, 2026-11-08 — the dat carries this, and the mask's end is unchecked.** `empires2_x2_p1.dat` gives every unit an `obstruction_type`: 0 for 654 populated records, 2 for 257, 3 for 28, 5 for 383, 10 for 11; among the 235 records with `radius_x >= 1.0` (buildings) it is 0 for 63 — the farm, the fish trap, all four town-centre variants, the wonder, gates and their pieces — and 2 for 161. A building of type 0 does not fill its footprint, and up to four `building_annex` pieces name what does: the Town Centre's are 618 (2×2, type 2) at displacement (1.0, −1.0), 619 (3×3, 0) at (−0.5, 0.5), 620 (2×2, 0) at (−1.0, 1.0) and an empty 890. Reading the displacement as from the centre and `radius` as half-extent, the solid piece covers the **right-hand** columns of a 4×4 whose rows this engine anchors at the top-left tile, where the mask above blocks the left-hand ones; which pair of rows depends on the dat's y sign. One test should settle which end is solid before the importer learns to generate the mask — generation is the direction, because it is right for all 63.
+
 ## D77-D79 - The owner's five answers (2026-10-30)
 
 **D77 - Farm upgrades are proportional, not a refill.** Horse Collar (+75), Heavy Plow (+125) and Crop Rotation (+175) are
