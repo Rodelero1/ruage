@@ -3730,3 +3730,33 @@ return to where it gathered last time and only then look for another tree. If 2,
    (`the_ten_minute_scenario_builds_trains_and_fights`, `the_skirmish_only_refuses_what_the_fight_has_taken`, both "player 1
    has no food node number 0 to gather").
 6. **New acceptance baseline `45596da62c9e3668`** (135 entities, 125 repaths, 116 made-room).
+
+
+## D151 - The AI leaves the binary: nine choices enumerated, placement first
+
+*2026-11-07. The owner: "By extract AI I mean removing all the AI controls from the binary and moving it exclusively into ai
+files. Do this first." And: "every unit control should be removed from game code and moved to AI." Answers given to the ten
+questions: translation of the game's `.per` files is allowed; the default/base AI is the target; the share table follows the
+original; disabled rules are extracted too; **pass condition is a working economy and a filling military queue, not victory**.*
+
+1. **The line is choice vs mechanism.** Simulation stays in Rust (movement, collision, pathfinding, damage, harvest rates,
+   production timers, vision, death, rot, validation, geometry). A **choice made for a player** — which node, which tile,
+   which unit, whom to fight, when to redistribute villagers — moves to `config/ai/*.toml`.
+2. **The inventory is `docs/ai-extraction.md`**: nine choices currently in Rust, each with its file and line, plus the rows
+   that must **not** move (`site_fits`/`site_refusal` validation, `approach_tile` geometry, `settle_blind_sites` bookkeeping,
+   `step_leashes`, `step_conversion`, order fulfilment).
+3. **`nearest_like` stays in the engine**: the original's engine also continues a villager on a nearby resource; D148 (only
+   looked-at nodes) and D150 (the look-around) already made it a rule rather than a cheat.
+4. **`step_shares` is half**: the *table* is AI (and already lives in the personality file), the *assignment* is the engine -
+   exactly the split the original uses, where the scripts set `sn-*-gatherer-percentage` and the engine moves the villagers.
+5. **Order: placement first** (`nearest_free_farm` and the `where = "<resource>"` resolution), because it is the one the owner
+   named and the gold loop needs it; then the gold loop itself (scout → sighting → camp tile → villagers); then the combat
+   choices one at a time (D88's blow order makes them entangled); then `resume_idle` and `grow_plots`; `nearest_drop_site`
+   last, because every economy test depends on it.
+6. **Engine gaps to fill, test-first**: a **build-at-a-tile** order (today `where` resolves a resource name to a tile inside
+   the engine), and a **sighting** query the AI can read ("where have I seen gold?"), on the per-player memory that already
+   exists.
+7. **Fidelity is three simple checks**, since their game cannot be run beside ours: every rule cites the file and values it
+   came from; our match's counts are compared against their script's own thresholds (28 villagers before Feudal, 31 -> 40
+   through Feudal, market + blacksmith for Castle with two builders); and the same seed reproduces the same match.
+8. **Pass condition**: a working economy and a military training queue that fills and empties. Victory is not a condition.
