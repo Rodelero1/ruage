@@ -3700,3 +3700,31 @@ number breaks the acceptance match; the shipped constant is sight + 8.*
    about what a worker notices, not about what a player may ask for.
 6. **New acceptance baseline `82a5063dcca63108`** (141 entities -> 152, both counts measured, match resolves, one player
    alive).
+
+
+## D150 - +5 was never the problem: the share table's anchor was
+
+*2026-11-07. The owner's reply to D149's measurement: "+5 doesn't work while +8 does - either (1) an issue when the villager
+started to look for another resource, or (2) a map issue (forest near town centre depleted). If 1, then the villager has to
+return to where it gathered last time and only then look for another tree. If 2, the villager was right to become idle."*
+
+1. **Instrumented, not argued.** Every failed pick printed its worker, position, column and the distance to the nearest
+   **known** node of that column. At +5 the acceptance run had **586 failures, all of them gold (slot 2)**, with the nearest
+   known gold at 9.2-18.5 tiles. The map puts player 1's gold at (24,11)-(25,12) against a town centre at (16,16): **9.4
+   tiles**, so a nine-tile reach misses the base's own gold by 0.2 tiles.
+2. **Hypothesis (2) is false**: wood and berries sit 4-6 tiles from the town centre and **not one wood or food pick failed**.
+   Nothing near the base was exhausted. What is true in it is the conclusion - the villager *was* right to go idle.
+3. **Hypothesis (1) is false where it points, and true one step sideways.** The depletion path already chooses while the
+   worker stands at the node: the owner's rule was implemented explicitly (choose at the node, carry it through the deposit in
+   `pending_gather`) and the test passed **with and without** the patch, so the patch was **reverted** - unprovable code does
+   not ship, and the finding is recorded instead. The faulty anchor was the **share table** (D149.4): measured from the
+   villager, a worker standing away from its base found nothing, and gold was never assigned.
+4. **With the anchor fixed, +5 works**: the acceptance match resolves at reach 9 - **135 entities, one player alive, 125
+   repaths, 116 made-room, hash `45596da62c9e3668`**, three consecutive runs identical. The shipped constant is the owner's
+   own **5**, not 8.
+5. **`nodes_of_slot(worker, slot, limit, reach: Option<i64>)`**: the reach is `Some` when the **engine** chooses (a rule, a
+   share row, a retask) and `None` when a **script points at a resource**. An order is not a guess about what a villager can
+   notice - which is D149.5's own distinction, and applying the reach to scripted steps broke two existing scenarios
+   (`the_ten_minute_scenario_builds_trains_and_fights`, `the_skirmish_only_refuses_what_the_fight_has_taken`, both "player 1
+   has no food node number 0 to gather").
+6. **New acceptance baseline `45596da62c9e3668`** (135 entities, 125 repaths, 116 made-room).

@@ -1377,7 +1377,7 @@ impl World {
     /// this one only ever removes candidates the player already knows, so the failure mode is a villager standing idle, not
     /// an empty base.
     pub(crate) fn gather_reach(&self, worker: EntityId) -> i64 {
-        const LOOK_AROUND_TILES: i64 = 8;
+        const LOOK_AROUND_TILES: i64 = 5;
         // `sight_of` answers in **whole tiles**, so the sum is tiles and the scale is applied once here. Mixing the two -
         // tiles plus a raw offset - gives a reach of five tiles and looks like a rule that refuses everything.
         let tiles = match self.find(worker) {
@@ -1387,11 +1387,14 @@ impl World {
         (tiles + LOOK_AROUND_TILES) * self.scale
     }
 
+    /// **`reach` is the worker's own look-around, or `None` for an order** (D149): "nearby" governs what a worker
+    /// chooses for itself; a player or a script pointing at a resource is not guessing what the villager can notice.
     pub(crate) fn nodes_of_slot(
         &self,
         worker: EntityId,
         slot: usize,
         limit: usize,
+        reach: Option<i64>,
     ) -> Vec<EntityId> {
         let Some(from) = self.position(worker) else {
             return Vec::new();
@@ -1399,7 +1402,6 @@ impl World {
         let Some(player) = self.find(worker).map(|entity| entity.player) else {
             return Vec::new();
         };
-        let reach = self.gather_reach(worker);
         let mut nodes: Vec<(i64, u32, EntityId)> = Vec::new();
         for entity in &self.entities {
             if self.node_slot(entity.id) != Some(slot) {
@@ -1415,7 +1417,7 @@ impl World {
                 entity.position.0.raw() - from.0.raw(),
                 entity.position.1.raw() - from.1.raw(),
             );
-            if dx * dx + dy * dy > reach * reach {
+            if reach.is_some_and(|reach| dx * dx + dy * dy > reach * reach) {
                 continue;
             }
             // A farm must be finished to be worked; a node with nothing left is no use; a body is not huntable.

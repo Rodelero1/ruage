@@ -132,7 +132,11 @@ fn amount_of(world: &World, id: EntityId) -> Option<i64> {
 }
 
 fn play(world: &mut World, seconds: u64) {
-    let scenario = load_scenario_str(RULE, "<knowledge>").expect("the scenario parses");
+    play_rule(world, seconds, RULE);
+}
+
+fn play_rule(world: &mut World, seconds: u64, rule: &str) {
+    let scenario = load_scenario_str(rule, "<knowledge>").expect("the scenario parses");
     let mut runner = Runner::new(&scenario, world.tick_rate_hz()).expect("a runnable scenario");
     let ticks = seconds * u64::from(world.tick_rate_hz());
     for _ in 0..ticks {
@@ -275,3 +279,96 @@ fn scout_the_tile(world: &mut World, x: u16, y: u16) {
         world.step().expect("step");
     }
 }
+
+/// **A depleted worker takes the next tree it can see** (the owner's rule: *"villager has to return to the place where he
+/// gathered the resource the last time and only then to look for another tree"*).
+///
+/// This test **passes on the engine as it stands**, and that is a finding rather than a redundancy: a patch that made the
+/// choice happen explicitly at the node (remembering it in `pending_gather` for after the deposit) changed nothing here,
+/// because the depletion path already chooses while the villager is standing at the node. It is kept as the guard for that
+/// behaviour, and because it is what proved the retasking path is not the reason a small reach starves a match.
+///
+/// The tree at (8, 6) holds one take, so the villager empties it and walks home. The next wood is at (14, 6): **six tiles
+/// from the tree but eleven from the town centre**, so a pick anchored on the worker (which stands *beside* the node it
+/// worked) finds it and a pick anchored on the drop site does not.
+#[test]
+fn a_depleted_worker_takes_the_next_tree_it_can_see() {
+    let Some(mut world) = world_of(NEAR_FAR_MAP) else {
+        return;
+    };
+    let near = food_at(&world, 8, 6);
+    let far = food_at(&world, 14, 6);
+    let held_before = amount_of(&world, far).expect("the far tree");
+    // Scouted, but **fourteen tiles from the town centre and nine from the tree**: whether the villager goes depends only
+    // on where the choice is made.
+    scout_the_tile(&mut world, 12, 6);
+
+    // **No rule**: one order, on one tree. A rule would fire again during the walk home and could pick the far tree from
+    // a point on the way, which is not the question - the question is what the *depletion* path does.
+    let villager = world
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.player == 1
+                && entity.kind == EntityKind::Unit
+                && world.is_worker(entity.unit.unwrap_or(0))
+        })
+        .map(|entity| entity.id)
+        .expect("player 1 starts with a villager");
+    world
+        .submit_checked(ruage_sim::Command::Gather {
+            villager,
+            node: near,
+        })
+        .expect("a gather order is accepted");
+    for _ in 0..(120 * u64::from(world.tick_rate_hz())) {
+        world.step().expect("step");
+    }
+
+    assert!(
+        amount_of(&world, far).is_none_or(|amount| amount < held_before),
+        "the far tree still holds {held_before} raw units: the villager emptied its tree, went home, and the next node was \
+         looked for from the drop site instead of from where it had been working"
+    );
+}
+
+/// One tree two tiles from the town centre holding a **single** take, and one fourteen tiles from the town centre: the
+/// geometry that separates "where I worked" from "where I dropped the load".
+const NEAR_FAR_MAP: &str = r#"
+schema = 1
+[map]
+width = 40
+height = 12
+terrain = [
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGFGGGGGFGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+]
+[[map.resource]]
+kind = "wood"
+amount = 1
+hp = 0
+tiles = [[8,6]]
+[[map.resource]]
+kind = "wood"
+amount = 500
+hp = 0
+tiles = [[14,6]]
+[[map.town_center]]
+player = 1
+x = 3
+y = 6
+[[map.town_center]]
+player = 2
+x = 37
+y = 1
+"#;

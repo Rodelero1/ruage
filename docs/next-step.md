@@ -28,6 +28,18 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 48, 2026-11-07 - D150: +5 was never the problem
+>
+> Instrumented answer to the owner's two hypotheses: 586 failed picks, **all gold**, nearest known gold 9.2-18.5 tiles; the
+> map's gold sits 9.4 tiles from the town centre. No wood/food pick ever failed - the forest was not depleted. The depletion
+> path already chooses at the node (his rule, implemented and reverted as unprovable), and the real fault was the share
+> table's anchor. **With it fixed, sight + 5 resolves the match**: 135 entities, 1 player alive, hash
+> `45596da62c9e3668`, and **5 is the shipped constant**. Review:
+> `docs/reviews/2026-11-07-the-anchor-was-the-problem.md`.
+>
+> Then: `decide` at 432 lines if shape work is wanted; the 8 parked owner questions; D141's two-stage gather search is no
+> longer needed for the radius (it may still help a *scarcer* map).
+
 > # Session 47, 2026-11-07 - D149: "nearby" has a number
 >
 > The owner picked sight + 5; **measured, 5 breaks the match** (129 entities, both players alive, 83 repaths). Shipped

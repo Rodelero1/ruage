@@ -194,7 +194,12 @@ impl World {
             // (D149): "eight on wood" means wood near *your* town centre. Measured from the worker instead, a villager
             // spawned away from its base found nothing within its own reach and never moved (the policy test caught it).
             let anchor = self.base_of(player).unwrap_or(worker);
-            let node = match self.nodes_of_slot(anchor, slot, 3).into_iter().next() {
+            let reach = self.gather_reach(anchor);
+            let node = match self
+                .nodes_of_slot(anchor, slot, 3, Some(reach))
+                .into_iter()
+                .next()
+            {
                 Some(node) => node,
                 None => continue,
             };

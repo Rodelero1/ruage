@@ -452,7 +452,7 @@ fn resolve(world: &World, player: u8, kind: &StepKind) -> Result<Command, String
                 )
             })?;
             let node = match node {
-                None => nearest_resource(world, unit, slot, *nth).ok_or_else(|| {
+                None => nearest_resource(world, unit, slot, *nth, None).ok_or_else(|| {
                     format!("player {player} has no {resource} node number {nth} to gather")
                 })?,
                 Some(role) => {
@@ -709,10 +709,20 @@ fn nearest_nodes(world: &World, from: (Fixed, Fixed), slot: usize, limit: usize)
 ///
 /// The copy this replaces did ask `can_reach` of every node of the resource on every call, and it asked it of the node's
 /// **own** position, which is blocked ground for a tree - so the question was the expensive one *and* the wrong one.
-fn nearest_resource(world: &World, from: EntityId, slot: usize, nth: usize) -> Option<EntityId> {
-    // The picker asks **for the worker**, not for the world (D148): a rule may not use what its player has not scouted,
-    // and it looks no further than the worker's own reach (D149).
-    world.nodes_of_slot(from, slot, nth + 1).get(nth).copied()
+fn nearest_resource(
+    world: &World,
+    from: EntityId,
+    slot: usize,
+    nth: usize,
+    reach: Option<i64>,
+) -> Option<EntityId> {
+    // The picker asks **for the worker**, not for the world (D148): nothing may use what its player has not scouted.
+    // `reach` is the worker's look-around when the *engine* is choosing (a rule), and `None` when a script points at a
+    // resource - an order is not a guess about what the villager can notice (D149).
+    world
+        .nodes_of_slot(from, slot, nth + 1, reach)
+        .get(nth)
+        .copied()
 }
 
 /// The first free tile within two of this player's town centre, in a fixed scan order.
@@ -1460,7 +1470,8 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Vec<Command>, String> {
                     let slot = world.slot_of(resource).ok_or_else(|| {
                         format!("the content pack defines no resource called {resource:?}")
                     })?;
-                    nearest_resource(world, worker, slot, 0).ok_or_else(|| {
+                    let reach = world.gather_reach(worker);
+                    nearest_resource(world, worker, slot, 0, Some(reach)).ok_or_else(|| {
                         format!("player {player} has no {resource} node to gather")
                     })?
                 }
