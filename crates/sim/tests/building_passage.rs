@@ -225,6 +225,101 @@ fn a_villager_walks_round_a_house_rather_than_through_it() {
     );
 }
 
+/// **And a villager walks round a half-built house too** - not only round a finished one.
+///
+/// The foundation case was covered at tile level (`a_foundation_blocks_while_it_is_still_being_built`), which proves the
+/// grid says "blocked"; this proves the **body** honours it: the walker is ordered straight through a site that is still
+/// being built, and never stands on a tile of it, while the site is verifiably still a foundation.
+#[test]
+fn a_villager_walks_round_a_half_built_house() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let Some(at) = open_patch(&world, 5, 5) else {
+        return;
+    };
+    let house = world.role_unit("house").expect("house");
+    let builder = villager(&mut world, (at.0 - 3, at.1));
+    world
+        .submit_checked(Command::Build {
+            villager: builder,
+            unit: house,
+            at: (
+                u16::try_from(at.0).expect("in range"),
+                u16::try_from(at.1).expect("in range"),
+            ),
+        })
+        .expect("a build order");
+
+    // Wait for the foundation itself, and refuse to go on if it has already finished - the walk must meet a *site*.
+    let mut site = None;
+    for _ in 0..600 {
+        world.step().expect("step");
+        site = world
+            .entities()
+            .iter()
+            .find(|entity| {
+                entity.kind == EntityKind::Building
+                    && entity.unit == Some(house)
+                    && entity.construction.is_some()
+                    && tile_of(&world, entity.id) == at
+            })
+            .map(|entity| entity.id);
+        if site.is_some() {
+            break;
+        }
+    }
+    let site = site.expect("the foundation exists");
+    assert!(
+        world
+            .entity(site)
+            .is_some_and(|entity| entity.construction.is_some()),
+        "the site is still being built, which is the point of the test"
+    );
+
+    let footprint = footprint_tiles(&world, "house", at);
+    let start = (at.0 - 4, at.1 + 1);
+    let goal = (at.0 + 6, at.1 + 1);
+    let walker = villager(&mut world, start);
+    world
+        .submit_checked(Command::Move {
+            unit: walker,
+            to: (
+                u16::try_from(goal.0).expect("in range"),
+                u16::try_from(goal.1).expect("in range"),
+            ),
+        })
+        .expect("a move past the site");
+
+    let mut on_the_site = Vec::new();
+    let mut met_a_foundation = false;
+    for tick in 0..1_600 {
+        world.step().expect("step");
+        if world
+            .entity(site)
+            .is_some_and(|entity| entity.construction.is_some())
+        {
+            met_a_foundation = true;
+        }
+        let now = tile_of(&world, walker);
+        if footprint.contains(&now) {
+            on_the_site.push((tick, now));
+        }
+    }
+    assert!(
+        met_a_foundation,
+        "the site finished before the walker met it: the test proves nothing about a half-built house"
+    );
+    assert!(
+        on_the_site.is_empty(),
+        "the walker stood on the half-built house at {on_the_site:?}"
+    );
+    let (x, y) = tile_of(&world, walker);
+    assert!(
+        x >= goal.0 - 1 && (goal.1 - y).abs() <= 1,
+        "and it still arrives: {x} {y} for {goal:?}"
+    );
+}
+
 /// **A foundation blocks from the tick it exists**, not from the tick it finishes: a half-built house is not a gate.
 #[test]
 fn a_foundation_blocks_while_it_is_still_being_built() {
