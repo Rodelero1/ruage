@@ -7,6 +7,7 @@
 pub(crate) mod battle;
 pub(crate) mod build;
 pub(crate) mod garrison;
+pub(crate) mod gates;
 pub(crate) mod gather;
 pub(crate) mod livestock;
 pub(crate) mod memory;

@@ -1057,6 +1057,12 @@ pub struct World {
     /// Unit ids (family roots) that block movement once built, from `[build] blocking_roles` in content.
     /// A wall is the only one this pack names, and the engine learns the word from the pack (D54).
     blocking: BTreeSet<u32>,
+    /// Family roots that are **gates** (D154), from `[build] gate_roles`: a building whose tiles are walkable while it is
+    /// open. Content names them, so the engine learns no dat class.
+    gates: BTreeSet<u32>,
+    /// Which gates are open right now, so the walk grid is unblocked exactly once per opening and re-blocked once per
+    /// closing - `Walk` counts occupants, and an unbalanced pair leaves a tile blocked for ever (or free for ever).
+    open_gates: BTreeSet<EntityId>,
     /// Family root → the solid cells of that building's footprint (D76). A role with no entry blocks its own tile.
     footprints: BTreeMap<u32, ruage_data::Footprint>,
     /// Blast radius per unit id, in engine units: resolved once from the table, because a strike must
@@ -1209,6 +1215,8 @@ impl World {
             observers: [false; MAX_PLAYERS],
             map_size: (0, 0),
             blocking: BTreeSet::new(),
+            gates: BTreeSet::new(),
+            open_gates: BTreeSet::new(),
             footprints: BTreeMap::new(),
             blast: BTreeMap::new(),
             aggro_radius: 0,

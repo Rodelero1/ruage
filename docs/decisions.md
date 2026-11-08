@@ -3811,3 +3811,25 @@ others'. Enemy unit can pass together with your own. Please do mere research." R
 6. **The hard part is route invalidation**, and both the game and 0 A.D. dodge it the same way: a gate never closes while
    anything stands in it, so no unit is ever trapped inside a closing gate. That is cheaper than re-planning and is the
    behaviour to copy.
+
+
+## D154 - Gates: open for anyone, closed for everyone
+
+*2026-11-08. The owner's two numbers: **trigger radius 1**, and **an enemy standing in an open gate keeps it open**. The model
+is D153's research.*
+
+1. **A gate is content, not a class**: `config/economy.toml` gains `gate = 64` (the dat's palisade gate `GTAA2`, 1375 hp, 2x1)
+   and `[build] gate_roles = ["gate"]`, validated like `blocking_roles` - a name that is not a `[role]` is a load error, so the
+   engine still learns no dat class (D17).
+2. **`World::step_gates()` runs before the movement pass**, so a gate that opens this tick is walkable for this tick's steps.
+   It **opens** when a unit of the owner or of a player on its team stands within **one tile** of any gate tile, and **closes**
+   only when **no unit of any side** stands on those tiles - which is what makes an enemy inside keep it open, the owner's
+   rule and the game's.
+3. **The grid is written only on a transition** (`Walk::unblock`/`block`), and `open_gates` remembers the state, because
+   `Walk` counts occupants: an unbalanced pair leaves a tile blocked for ever or free for ever. That invariant is the reason
+   the code is shaped around a `GateChange` list rather than writing inline.
+4. **Inert where no gate exists**: the acceptance match has none, and its hash is byte-identical (`45596da62c9e3668`, 135
+   entities, 125 repaths, 116 made-room). The per-tick cost is one early return.
+5. **Not done, deliberately**: the **lock** (a gate that will not open even for its owner), the placement rule *"a gate must
+   be built inside a wall"*, diagonal gates and the other three wall types, and clearing `open_gates` when a gate dies (a
+   small `BTreeSet` leak, recorded rather than hidden).

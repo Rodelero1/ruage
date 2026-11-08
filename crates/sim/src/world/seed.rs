@@ -243,6 +243,15 @@ impl World {
                 .ok_or_else(|| SimError::NoRole { role: role.clone() })?;
             self.blocking.insert(units.root(unit));
         }
+        self.gates.clear();
+        for role in &economy.build.gate_roles {
+            let unit = economy
+                .role
+                .get(role)
+                .copied()
+                .ok_or_else(|| SimError::NoRole { role: role.clone() })?;
+            self.gates.insert(units.root(unit));
+        }
         self.map_size = (map.width, map.height);
         let words = (usize::from(map.width) * usize::from(map.height)).div_ceil(64);
         self.explored = std::array::from_fn(|_| vec![0u64; words]);

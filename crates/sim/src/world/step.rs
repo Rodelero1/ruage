@@ -38,6 +38,9 @@ impl World {
         );
         self.step_production()?;
         self.resume_idle(work.finished);
+        // **Before the movement pass** (D154): a gate that opens this tick is walkable for this tick's steps; a gate that
+        // closes is solid for them.
+        self.step_gates();
         self.move_bodies(work.deltas)?;
 
         self.fly_shots(

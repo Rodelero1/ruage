@@ -122,6 +122,10 @@ farm_spacing = 2
 # nothing else this pack builds does, which is why the rule is content's list and not a class id.
 # PROVENANCE: dat ids (the pack's four wall types are 72/117/119/155).
 blocking_roles = ["palisade_wall"]
+# **What is a gate** (D153/D154): a building whose tiles are walkable *while it is open*. A gate is not "passable for its
+# owner" - an open gate lets anyone through, enemies included (the game's own rule), so it is a time-varying global state,
+# not a per-player grid. Content names the roles, as it names `blocking_roles`.
+gate_roles = ["gate"]
 
 repair_hp_per_second = -1.0
 # PROVENANCE: unknown, with a dat CANDIDATE: the repair variant VMREP (id 156) carries
@@ -236,6 +240,7 @@ spearman = 93
 # this one thing: `[farm]` says its work yields the `food` column.
 farm = 50       # 45 hp, **60 wood only** (`costs = [[1, 60]]` in units.toml; the old comment here said 35 food + 25 wood and was wrong)
 palisade_wall = 72       # WALL (palisade), 250 hp, 2 wood: the segment in [build] blocking_roles
+gate = 64               # GTAA2, the palisade gate: 1375 hp, 2x1 (`radius = [1.0, 0.5]`), 30 stone, 70 s
 pikeman = 358       # 55 hp: an upgrade, researched (tech 197, Castle Age)
 halberdier = 359    # 60 hp: an upgrade, researched (tech 429, Imperial)
 # The spear line's reason to exist: 38 is the KNIGHT, 100 hp, 60 food + 75 gold, and its armour list carries the

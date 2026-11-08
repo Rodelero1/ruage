@@ -286,6 +286,9 @@ pub struct Build {
     /// Which roles block movement once built: walls and their kin. Empty means nothing built blocks,
     /// which is how every pack behaved before walls existed (D54).
     pub blocking_roles: Vec<String>,
+    /// Roles that are **gates** (D154): a building whose tiles are walkable while it is open. Content names them, like
+    /// `blocking_roles`, so the engine learns neither a dat class nor an id.
+    pub gate_roles: Vec<String>,
     /// Role → the role that must have been **built once** before it may be placed (D63). The game's
     /// building prerequisites: a siege workshop needs a blacksmith, an archery range needs a barracks.
     /// "Built once", not "still standing": the game does not take the right away when the prerequisite
@@ -575,6 +578,8 @@ struct RawBuild {
     /// Defaulted to empty: a pack that says nothing about walls builds nothing that blocks.
     #[serde(default)]
     blocking_roles: Vec<String>,
+    #[serde(default)]
+    gate_roles: Vec<String>,
     /// Defaulted to empty: a pack with no building prerequisites builds anything anywhere (D63).
     #[serde(default)]
     requires: std::collections::BTreeMap<String, String>,
@@ -1015,6 +1020,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
             farm: raw.build.farm.clone(),
             farm_spacing: raw.build.farm_spacing,
             blocking_roles: raw.build.blocking_roles,
+            gate_roles: raw.build.gate_roles,
             requires: raw.build.requires,
         },
         decay: Decay {
@@ -1137,6 +1143,9 @@ fn check_references(economy: &Economy, path: &str) -> Result<(), ConfigError> {
     for (who, needs) in &economy.build.requires {
         role(who, "build.requires")?;
         role(needs, "build.requires")?;
+    }
+    for name in &economy.build.gate_roles {
+        role(name, "build.gate_roles")?;
     }
     for name in &economy.build.blocking_roles {
         role(name, "build.blocking_roles")?;
