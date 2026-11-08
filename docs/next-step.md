@@ -28,6 +28,17 @@
 > adversarial review in `docs/reviews/` with a measured `## Performance` number and a named `## Stability` attack, then
 > commit and push.
 
+> # Session 49, 2026-11-07 - D152: priority order, and what "functionality" actually lacks
+>
+> Order: **1 functionality, 2 UI, 3 graphics, 4 AI, 5 music.** AI deferred (D151 is the plan, not the work).
+>
+> Pathfinding audited with numbers: 8.9 us corner-to-corner (64x64), both-corners diagonal rule, occupied-start refusal,
+> world-level smoothing, and `src/short.rs` for the local case. The review's "sealed map expands the grid" is ~9 us, so it
+> is *not* the next fix. **The functional gaps are the documented ones**: no gates (D54), no unit pushing (D52), fog without
+> occlusion (D50).
+>
+> **Next: gates** - a wall that lets its owner through. Then unit pushing, then fog occlusion.
+
 > # Session 48, 2026-11-07 - D150: +5 was never the problem
 >
 > Instrumented answer to the owner's two hypotheses: 586 failed picks, **all gold**, nearest known gold 9.2-18.5 tiles; the

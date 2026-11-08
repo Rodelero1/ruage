@@ -3760,3 +3760,29 @@ original; disabled rules are extracted too; **pass condition is a working econom
    came from; our match's counts are compared against their script's own thresholds (28 villagers before Feudal, 31 -> 40
    through Feudal, market + blacksmith for Castle with two builders); and the same seed reproduces the same match.
 8. **Pass condition**: a working economy and a military training queue that fills and empties. Victory is not a condition.
+
+
+## D152 - Priority order: functionality, UI, graphics, AI, music - and what "functionality" is missing
+
+*2026-11-07. The owner: "Q9, I don't care about comparison and AI now. That would be addressed later. Pathfinding and
+general functionality matter for now. I think best order of priority is: 1 general functionality, 2 ui, 3 graphics, 4 AI,
+5 music."*
+
+1. **The order is recorded and governs**: general functionality first, then UI, then graphics, then AI (D151 is a plan that
+   waits), then music. No AI work until 1-3 are where he wants them.
+2. **Pathfinding is measured, not assumed.** `find_path_avoiding` costs **8.9 us** corner to corner on a 64x64 map (D143,
+   two flat `Vec<u32>`), applies the **both-corners** rule for diagonals, refuses a line whose start tile is occupied
+   (D139), and the world **smooths** the route by jumping to the furthest node `line_clear_avoiding` reaches (`lib.rs`
+   `plan_path`). A short-range pathfinder module (`src/short.rs`) already exists for the local case the original game uses.
+   The review's "a sealed map expands the whole grid" is true and costs **~9 us**, not a stall - so it is not the next
+   thing to fix, and saying otherwise would be inventing work.
+3. **The functionality gaps are the documented ones**, each with its decision: **no gates** (D54 - a wall blocks its owner
+   too, because pathing is one grid), **no unit pushing** (D52 - overlap is possible and a unit already sharing a tile is
+   never moved aside), **fog without occlusion** (D50 - sight is a disc, not a line through terrain), and **victory rules**
+   beyond the seat (which the owner has now explicitly deprioritised: a working economy and a filling military queue are the
+   pass condition, not victory).
+4. **Order within 1**: **gates first** (a wall the owner can pass is the difference between a wall and an obstacle, and it is
+   a pathing question, which is what he named), then **unit pushing** (D52), then **fog occlusion** (D50).
+5. **UI and graphics already have a foothold**, so they are not greenfield: `crates/view` has the bar, panel, minimap,
+   widgets, layout and a frame buffer (U1-U3, SPEC v1.68-1.70), and there is **no renderer** by choice (D18) - graphics
+   begins at sprites (SLP) and the entity+state -> sprite binding that the dat's sprite table can generate.
