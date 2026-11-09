@@ -858,10 +858,12 @@ pub mod palette {
     pub const CANOPY_SHADE: [u8; 4] = [40, 80, 36, 255];
     /// A tree that has been worked out: the entity stays, the canopy does not.
     pub const STUMP: [u8; 4] = [92, 72, 44, 255];
-    pub const BUILDING: [u8; 4] = [200, 200, 200, 255];
-    /// **A building's walkable part** (D161): the town centre's yard. Lighter than the solid part, so the picture says where a unit
-    /// may stand instead of painting the whole footprint as wall.
-    pub const BUILDING_YARD: [u8; 4] = [170, 178, 170, 255];
+    /// **The impassable part of a building** (D162): dark, so it reads as structure rather than as a floor. It was light grey and a
+    /// light grey block on light grey ground is exactly what made a yard indistinguishable from a wall.
+    pub const BUILDING: [u8; 4] = [96, 100, 108, 255];
+    /// **A building's walkable part** (D161): the town centre's yard - light, because a unit standing there must read as standing on
+    /// ground, and because the gap between this and `BUILDING` *is* the virtual fence the owner asked to see.
+    pub const BUILDING_YARD: [u8; 4] = [188, 196, 184, 255];
     /// **A placement ghost** (D156): the ground will take it, and the ground will not. Green and red rather than the
     /// player's own colour, because these are the two answers to one question - can this be built here - and the answer is the
     /// same whoever is asking.

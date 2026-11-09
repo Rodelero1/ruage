@@ -4025,3 +4025,22 @@ authored**, **the open register, the evidence ladder and broken references**, co
 mention, which is why the sentence is on the page. The U-register is read from one table, so a question written
 anywhere else is not in the open register. Nothing links a decision to the *test* that pins it - the code cites ids
 (155 of 178 `.rs` files do) but there is no check that the cited test still exists.
+
+
+## D162 - The virtual fence was there; it was painted as yard
+
+*2026-11-08. The owner, with three villagers standing on a town centre: *"I still see huge overlap … a virtual border around each building
+and no unit['s] center can cross it … except Farm and Town Center (the fence around the impassable structure in the top quarter) …
+Buildings cannot overlap another building or functioning farm … the drop would happen when the unit center touches this outlying diamond."*
+
+1. **Checked against the engine, rule by rule**: a unit's position **is** its centre and a solid tile is blocked, so no centre crosses -
+   `no_unit_centre_crosses_the_core` now pins it for 1,200 ticks; a **farm's floor is walkable** while it lives; the town centre's mask is
+   exactly **4 solid tiles, a 2x2 at the north corner**, 12 yard (`[TTFF,TTFF,FFFF,FFFF)`) - the owner's "impassable structure in the top
+   quarter"; overlapping a building or a **functioning farm** is refused (`a_building_cannot_be_raised_on_a_live_farm`); and the deposit runs
+   on a tile **beside** the footprint, so the centre touches the border and never enters it.
+2. **So the report was about the picture**: `BUILDING` `[200,200,200]` against `BUILDING_YARD` `[170,178,170]` is not a fence, it is two
+   greys - and a villager in the yard read as a villager in the masonry.
+3. **Fixed by tone and pinned by a test**: the impassable part is **dark slate** `[96,100,108]`, the yard **light** `[188,196,184]`, and the
+   two must stay **60+ luminance apart** or the test fails.
+4. **What this does not fix**: two units can still overlap **each other** - that is unit-unit separation (D131), a different mechanism, and
+   the three villagers in the report were in the yard, not on the wall.

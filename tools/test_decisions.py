@@ -353,6 +353,17 @@ class Cost(unittest.TestCase):
         self.assertLess(elapsed, 2.0, f"a 300 KB section took {elapsed:.1f} s")
 
 
+class TheScan(unittest.TestCase):
+    """A committed page must quote the repository, not whatever is lying in the working tree."""
+
+    def test_the_scan_reads_the_paths_it_is_given_and_nothing_else(self):
+        texts = decisions.scan_sources(["docs/decisions.md"])
+        self.assertEqual(["docs/decisions.md"], list(texts))
+
+    def test_a_path_outside_the_scanned_folders_is_not_read(self):
+        self.assertEqual({}, decisions.scan_sources(["tools/decisions.py"]))
+
+
 class TheCommandLine(unittest.TestCase):
     """The build has to fail politely: a traceback in a make target teaches nobody anything."""
 

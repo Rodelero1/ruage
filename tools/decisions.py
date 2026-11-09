@@ -22,6 +22,7 @@ import argparse
 import html
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -790,21 +791,55 @@ SCAN = [
 SCAN_FILES = ["SPEC.md", "README.md"]
 
 
-def scan_sources() -> dict[str, str]:
-    """Every file whose citations are checked, keyed by repo-relative path."""
+def _in_scope(relative: str) -> bool:
+    """Whether a path is one whose citations the page checks."""
+    if relative in SCAN_FILES:
+        return True
+    parts = Path(relative).parts
+    return (
+        bool(parts)
+        and parts[0] in [folder for folder, _ in SCAN]
+        and relative.endswith(tuple(pattern.replace("*", "") for _, pattern in SCAN))
+        and "site" not in parts
+    )
+
+
+def tracked_paths() -> list[str] | None:
+    """The repository's own files, or None when this is not a git checkout."""
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, text=True, timeout=15
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return [path for path in out.stdout.split("\0") if path]
+
+
+def scan_sources(paths: list[str] | None = None) -> dict[str, str]:
+    """Every file whose citations are checked, keyed by repo-relative path.
+
+    The scope is the **repository**, not the working tree: a page committed from this checkout must not quote an
+    untracked note another session is still writing. `git ls-files` answers that, and a plain walk is the fallback for
+    a checkout that has no git (an export, a tarball).
+    """
+    if paths is None:
+        paths = tracked_paths()
+        if paths is None:
+            paths = [
+                str(path.relative_to(ROOT))
+                for folder, pattern in SCAN
+                if (ROOT / folder).exists()
+                for path in (ROOT / folder).rglob(pattern)
+            ] + SCAN_FILES
     texts: dict[str, str] = {}
-    for folder, pattern in SCAN:
-        base = ROOT / folder
-        if not base.exists():
+    for relative in sorted(paths):
+        if not _in_scope(relative):
             continue
-        for path in sorted(base.rglob(pattern)):
-            if "site" in path.relative_to(ROOT).parts:
-                continue
-            texts[str(path.relative_to(ROOT))] = path.read_text(errors="replace")
-    for name in SCAN_FILES:
-        path = ROOT / name
+        path = ROOT / relative
         if path.exists():
-            texts[name] = path.read_text(errors="replace")
+            texts[relative] = path.read_text(errors="replace")
     return texts
 
 
