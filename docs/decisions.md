@@ -3903,3 +3903,23 @@ tech research. Units and tech can be queued in the building, but they are perfor
 8. **An agent bug, found by the test**: removing the old queue advance left the training slot never cleared, so a town centre
    spawned a villager **every tick** (23 villagers where 4 were expected, ids 9904-9923). Fixed by clearing the slot explicitly.
 9. **Not done**: cancelling a queued job, a building card for villagers, and tech *names* on the bar (the card says `+1`).
+
+
+## D158 - Passing through a house: five hypotheses tested, none held
+
+*2026-11-08. The owner's report with screenshots: *"villager can pass through the built house or stone mine."*
+
+1. **No production code changed.** Five tests were added and four of them hunt the report; each passed against the unfixed engine,
+   which is the finding - not a fix.
+2. **Refuted, with a test each**: a route planned before a house appears goes **round** it; `WalkTo` (the player's right-click
+   point) does not cut through; the **builder is not left inside** the house it finishes; a **miner never stands on the node's own
+   tile**; and the **drawn footprint equals the blocked footprint** for a house (2x2), a barracks (3x3) and a wall (1x1), with the
+   ring around each staying walkable.
+3. **Found, recorded, not fixed**: a walker interrupted by a building **stops one tile short** of its goal - (15,29) for a goal of
+   (16,30) in the first test. That is the D134 "goal snapped once" path, and it belongs with D134's own rule and test.
+4. **The likely truth about the screenshots**: the grey diamonds are buildings (role glyphs: a chevron is a house), the brown ones
+   are resource **piles**, and a mine is one tile in the dat (`STONM` radius 0.5). A unit on the tile *in front of* a building is
+   drawn over the diamond's edge by depth ordering - an art problem, not a collision one.
+5. **To settle it**: was the villager moving or standing, and what order had it been given (gather / build / right-click move /
+   right-click on the building).
+6. **Five permanent guards remain**: any regression on these five paths fails a test rather than reaching a screenshot.
