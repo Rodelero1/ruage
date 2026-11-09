@@ -3833,3 +3833,26 @@ is D153's research.*
 5. **Not done, deliberately**: the **lock** (a gate that will not open even for its owner), the placement rule *"a gate must
    be built inside a wall"*, diagonal gates and the other three wall types, and clearing `open_gates` when a gate dies (a
    small `BTreeSet` leak, recorded rather than hidden).
+
+
+## D155 - Walls by drag: one bend, and a queue that finally works
+
+*2026-11-08. The owner: walls go **vertically, horizontally and at 45 degrees**; *first left click starts placement, second click
+ends it*; *one corner can be done*. His answers: **C** (the view hands the sim a **list** of tiles), **B** (a blocked segment is
+skipped, the rest stands, and the preview shows it red), **A** (the engine picks the bend - 45 degrees first, then straight),
+**5A** (sim and tests first).*
+
+1. **`World::wall_line(from, to)`** in `world/lines.rs` is the *only* answer to "where does the wall go": a plain function, no
+   world, no state, public so the view draws its preview from the same code the command runs. One bend at most: 45 degrees
+   first, then the straight leg; both ends included; a click with no drag is one tile.
+2. **`Command::BuildLine { villager, unit, tiles }`** takes the list. A tile that cannot be built is **skipped** and the line
+   continues **past** it; the whole command fails only when no tile could be built, with the first refusal.
+3. **`Command` is no longer `Copy`** (still `Clone`): a line of a hundred segments is handed over once.
+4. **A pre-existing engine defect was found and fixed**: the build queue's advance path popped a site and called `start_build`,
+   which re-queues when a queue exists - so with **three or more** sites queued the villager finished one, put the next back at
+   the back, and never started another. Split into `start_build_site` (start now, no queue) for the advance path and
+   `start_build` (the player's rule) for orders. The regression test is the four-segment drag.
+5. **Two of the agent's own errors, recorded**: `submit_checked` queues and only `step` applies (a spawn followed immediately by
+   an order is refused `MissingEntity`), and a house is **2x2**, so a six-tile drag past one loses **two** segments, not one.
+6. **Not done**: the UI drag itself (the view has no placement path yet), the other three wall types, and editing a line after
+   the second click.

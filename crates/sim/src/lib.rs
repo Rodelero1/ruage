@@ -507,7 +507,10 @@ pub enum Task {
 }
 
 /// Inputs to the simulation. A replay is a list of these with the ticks they land on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// **Not `Copy`** since D155: a wall drag carries its tiles, and a line of a hundred segments should be handed over once rather
+/// than copied on every pass. `Clone` stays.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     /// Take from a resource node. The rate, the capacity and the variant come from the tables,
     /// not from the command: a replay must not be able to name its own numbers.
@@ -563,6 +566,18 @@ pub enum Command {
     Train {
         building: EntityId,
         unit: u32,
+    },
+    /// Put up a **line** of buildings - walls, in practice (D155): the tiles a drag covered, in order.
+    ///
+    /// The list, not a start-and-end pair, because the view already has to compute the line to draw its preview and its red
+    /// ineligible tiles - and two implementations of "where does the wall go" would disagree. [`World::wall_line`] is that
+    /// one implementation, and the view calls it.
+    ///
+    /// A tile that cannot be built on is **skipped**, not fatal: the rest of the drag still stands (the owner's answer B).
+    BuildLine {
+        villager: EntityId,
+        unit: u32,
+        tiles: Vec<(u16, u16)>,
     },
     /// Put up a building at a tile. Cost and duration come from the unit table.
     Build {
@@ -2092,6 +2107,41 @@ impl World {
         }
     }
 
+    /// **A wall drag** (D155): every tile of the line, in the order the drag was made.
+    ///
+    /// A tile that cannot be built on is **skipped** - the owner's answer B, "skip it, keep going" - so the rest of the wall
+    /// still stands; the whole command fails only when **no** tile could be built, and then with the first refusal, which is
+    /// the one worth reporting. `start_build` prices each segment, so running out of wood mid-line stops the line where the
+    /// money ran out rather than building the far end first.
+    fn start_build_line(
+        &mut self,
+        villager: EntityId,
+        unit_id: u32,
+        tiles: &[(u16, u16)],
+    ) -> Result<(), SimError> {
+        let mut refused: Option<SimError> = None;
+        let mut built = 0usize;
+        for tile in tiles {
+            match self.start_build(villager, unit_id, *tile) {
+                Ok(()) => built += 1,
+                Err(why) => refused = refused.or(Some(why)),
+            }
+        }
+        if built == 0 {
+            return Err(refused.unwrap_or(SimError::EmptyLine));
+        }
+        Ok(())
+    }
+
+    /// **The tiles a wall drag covers** (D155): one bend at most, a 45 degree leg first, then the straight one.
+    ///
+    /// Public because the view draws its preview from it: there must be one answer to "where does the wall go", and it is
+    /// this one (`world::lines::wall_line`, tested without a world).
+    #[must_use]
+    pub fn wall_line(from: (u16, u16), to: (u16, u16)) -> Vec<(u16, u16)> {
+        world::lines::wall_line(from, to)
+    }
+
     fn start_build(
         &mut self,
         villager: EntityId,
@@ -2112,6 +2162,21 @@ impl World {
                 .push_back((unit_id, at));
             return Ok(());
         }
+        self.start_build_site(villager, unit_id, at)
+    }
+
+    /// **Start one site now**, with no regard for a queue (D155).
+    ///
+    /// The queue's own advance path used to call `start_build`, which asks "is there a queue? then queue this instead" -
+    /// so popping a site off a queue of three put it straight back at the back, and a villager that finished a building
+    /// with two more queued **never started either**. Splitting the immediate path out fixes that, and it is what a wall
+    /// line needs: the drag starts its first segment and queues the rest.
+    pub(crate) fn start_build_site(
+        &mut self,
+        villager: EntityId,
+        unit_id: u32,
+        at: (u16, u16),
+    ) -> Result<(), SimError> {
         let BuildPlan {
             total_ticks,
             max_hp,
@@ -2974,7 +3039,9 @@ impl World {
     /// by value.
     fn command_entity(command: &Command) -> EntityId {
         match command {
-            Command::Gather { villager, .. } | Command::Build { villager, .. } => *villager,
+            Command::Gather { villager, .. }
+            | Command::Build { villager, .. }
+            | Command::BuildLine { villager, .. } => *villager,
             Command::Stop { unit }
             | Command::WalkTo { unit, .. }
             | Command::Move { unit, .. }

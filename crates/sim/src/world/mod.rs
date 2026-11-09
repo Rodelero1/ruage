@@ -9,6 +9,7 @@ pub(crate) mod build;
 pub(crate) mod garrison;
 pub(crate) mod gates;
 pub(crate) mod gather;
+pub(crate) mod lines;
 pub(crate) mod livestock;
 pub(crate) mod memory;
 pub(crate) mod movement;

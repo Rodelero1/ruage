@@ -409,7 +409,7 @@ impl World {
                     self.build_queue.remove(&builder);
                 }
                 if let Some((unit, at)) = next
-                    && let Err(why) = self.start_build(builder, unit, at)
+                    && let Err(why) = self.start_build_site(builder, unit, at)
                 {
                     // A queued site is an order the engine gives itself, so its failure goes into state like any other
                     // (D88's rule). Two orders given in one tick are checked against a world where neither exists yet,

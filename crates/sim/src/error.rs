@@ -39,6 +39,8 @@ pub enum SimError {
         player: u8,
     },
     MissingEntity(EntityId),
+    /// A wall drag with no tiles in it (D155): a line of nothing is not an order.
+    EmptyLine,
     /// A gather order whose target is not a resource node.
     NotAResource {
         id: EntityId,
@@ -275,6 +277,7 @@ impl std::fmt::Display for SimError {
                 "no free tile next to player {player}'s town centre to place a villager"
             ),
             SimError::MissingEntity(id) => write!(f, "entity {} does not exist", id.0),
+            SimError::EmptyLine => write!(f, "a wall drag named no tiles"),
             SimError::NotAResource { id } => {
                 write!(f, "entity {} is not a resource node", id.0)
             }
