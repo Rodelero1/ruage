@@ -18,8 +18,9 @@ use std::time::{Duration, Instant};
 
 use ruage_data::{Economy, Map, Units};
 use ruage_sim::{Runner, World, load_scenario_file};
+use ruage_view::placement::Placement;
 use ruage_view::ui;
-use ruage_view::{Camera, Highlights, Pace, Snapshot, Speed, render_with};
+use ruage_view::{Camera, Highlights, Pace, Snapshot, Speed, draw_placement, render_with};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -129,6 +130,9 @@ struct App {
     pace: Pace,
     /// The tile under the pointer, in tile space.
     cursor: (i32, i32),
+    /// **A wall run being dragged** (D156): the first left click starts it, the second places it. `None` when nothing is being
+    /// placed, which is every moment except between the key that starts a placement and the second click.
+    placement: Option<Placement>,
     /// The same click in **continuous** tile coordinates: what a move order carries (A), so a unit walks to the place the
     /// player pointed at rather than to the centre of the diamond under the pointer.
     cursor_point: (f32, f32),
@@ -167,6 +171,7 @@ impl App {
             paused: false,
             pace: Pace::new(Speed::One),
             cursor: (0, 0),
+            placement: None,
             cursor_point: (0.0, 0.0),
             cursor_pixel: (0, 0),
         }
@@ -199,7 +204,10 @@ impl App {
                     }
                     return;
                 }
-                // The HUD's speed selector first: it is drawn over the world, so a click on it is a click on the HUD and
+                // **A placement takes the click before the world does** (D156): the first click starts the run, the second
+                // places it. Clicks on the HUD still belong to the HUD, so the ordering below is restored once the pointer is
+                // over the bar - the placement is asked only once nothing on the interface has claimed the press.
+                // **The HUD's speed selector** is drawn over the world, so a click on it is a click on the HUD and
                 // must not also select whatever stands under it.
                 let (frame_width, frame_height) = self.frame_size();
                 let layout = ui::Layout::of(frame_width, frame_height);
@@ -247,6 +255,12 @@ impl App {
                 if ui::over_hud(self.cursor_pixel, &layout) {
                     return;
                 }
+                // **A placement owns the map's click** (D156): the first press starts the run, the second places it. Nothing is
+                // selected while placing, and an all-red run is not sent - it stays up so the player can drag elsewhere.
+                if self.placement.is_some() {
+                    self.place_at_cursor();
+                    return;
+                }
                 // Otherwise this is either a click or the start of a box; which one is decided on release.
                 self.press_at = Some(self.cursor_pixel);
             }
@@ -256,6 +270,66 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// **Start a wall placement** (D156) for the first selected villager.
+    ///
+    /// Provisional until the villager's build card exists: `B` is the only way in, and the notice says so rather than leaving a
+    /// key that works to nobody's knowledge. The *rules* are not provisional - the ghost, the red segments and the line sent are
+    /// the tested ones in `ruage_view::placement`.
+    fn begin_placement(&mut self) {
+        let Some(world) = self.world.as_ref() else {
+            return;
+        };
+        let Some(unit) = world.role_unit("palisade_wall") else {
+            self.notice = Some(("this pack names no wall to place".to_owned(), self.ticks));
+            return;
+        };
+        let Some(id) = self.selection.ids.first().copied() else {
+            self.notice = Some(("select a villager first".to_owned(), self.ticks));
+            return;
+        };
+        self.placement = Some(Placement::new(ruage_sim::EntityId(id), unit));
+        self.notice = Some((
+            "wall: left click starts the line, left click again places it".to_owned(),
+            self.ticks,
+        ));
+    }
+
+    /// The map click while a placement is up: start the run, or place it.
+    fn place_at_cursor(&mut self) {
+        let Some(mut placement) = self.placement.take() else {
+            return;
+        };
+        let tile = self.cursor_tile();
+        let command = self
+            .world
+            .as_ref()
+            .and_then(|world| placement.click(world, tile));
+        match command {
+            None => {
+                // Still running (first click) or all red (second): either way the placement stays up.
+                self.placement = Some(placement);
+            }
+            Some(command) => {
+                let Some(world) = self.world.as_mut() else {
+                    return;
+                };
+                self.notice = Some(match world.submit_checked(command) {
+                    Ok(()) => ("wall ordered".to_owned(), self.ticks),
+                    Err(why) => (why.to_string(), self.ticks),
+                });
+            }
+        }
+    }
+
+    /// The tile under the pointer, clamped into the map: a click at the edge of the screen is still a tile.
+    fn cursor_tile(&self) -> (u16, u16) {
+        let (x, y) = self.cursor;
+        (
+            u16::try_from(x.clamp(0, i32::from(u16::MAX))).unwrap_or(0),
+            u16::try_from(y.clamp(0, i32::from(u16::MAX))).unwrap_or(0),
+        )
     }
 
     /// Rebuild the command card from what is selected: one building, the player's own, gives buttons.
@@ -567,6 +641,12 @@ impl App {
                 order: self.order,
             },
         );
+        // **The placement ghost, over the ground and under the interface** (D156): green where the wall can stand, red where it
+        // cannot. Drawn from the same `segments` the second click sends, so what the player sees is what is ordered.
+        if let Some(placement) = self.placement.as_ref() {
+            let segments = placement.segments(world);
+            draw_placement(&mut frame, &self.camera, &segments);
+        }
         // The HUD reads the same snapshot the picture was drawn from - stock, population - so what it reports cannot
         // drift from what is on the screen (D74).
         let mut hud = ui::Hud::of_selected(&snapshot, &self.config.resources, &selected);
@@ -702,8 +782,14 @@ impl ApplicationHandler for App {
                     // Escape is the menu, not the end of the match: quitting the process because somebody pressed Escape
                     // is how a player loses a game they were winning.
                     Key::Named(NamedKey::Escape) => {
-                        self.menu_open = !self.menu_open;
-                        self.menu_hover = None;
+                        // **A placement is cancelled before the menu opens** (D156): Escape is "never mind" first, and a menu
+                        // over a live ghost is two ways to say it at once.
+                        if self.placement.take().is_some() {
+                            self.notice = Some(("placement cancelled".to_owned(), self.ticks));
+                        } else {
+                            self.menu_open = !self.menu_open;
+                            self.menu_hover = None;
+                        }
                     }
                     // F11 is borderless fullscreen, on whatever screen the window is on: the layout is anchored, so a
                     // 21:9 monitor is a longer middle rather than a broken interface.
@@ -741,6 +827,12 @@ impl ApplicationHandler for App {
                             }
                             return;
                         }
+                        // **B places a wall** (D156): provisional until the villager's build card exists, and the notice says
+                        // so. Every other building still has no way in from the interface.
+                        if key.as_str().eq_ignore_ascii_case("b") {
+                            self.begin_placement();
+                            return;
+                        }
                         if let Some(index) = key
                             .as_str()
                             .parse::<usize>()
@@ -775,6 +867,11 @@ impl ApplicationHandler for App {
                 self.cursor = self.camera.pick(pixel);
                 self.cursor_point = self.camera.pick_point(pixel);
                 self.cursor_pixel = pixel;
+                // **The ghost follows the pointer** (D156): before the first click there is no run, and `hover` says nothing.
+                let tile = self.cursor_tile();
+                if let Some(placement) = self.placement.as_mut() {
+                    placement.hover(tile);
+                }
                 let (width, height) = self.frame_size();
                 let layout = ui::Layout::of(width, height);
                 if self.menu_open {

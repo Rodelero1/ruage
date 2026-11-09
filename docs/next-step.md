@@ -4182,3 +4182,40 @@ decompiling worth it, because the interesting questions are narrow:
 
 Cost: a session for the map, one or two for the reading. It is *not* on the critical path for `[policy]`, names, or
 groups, so it belongs alongside the evasion slice rather than before it.
+
+
+## Session 46 - walls are placed; the view has no placement path (2026-11-08)
+
+**State**: `main` at `2f37d56`. Suite **749/0/19**, clippy `-D warnings` and fmt clean, acceptance hash
+**`45596da62c9e3668`** (135 entities, 125 repaths, 116 made-room). D153 (gates researched), D154 (gates: radius 1, an enemy
+inside holds one open), D155 (walls by drag) are landed.
+
+**Landed this session**
+
+- **D153** `docs/gates-research.md`: a gate is a **global** open/closed state, not per-player passability (D54 corrected);
+  0 A.D.'s `Gate.js` is the closest model; the trigger radius is the one number the data does not give.
+- **D154** `World::step_gates` before the movement pass; opens for an owner or team-mate **within one tile**, closes only when
+  **no unit of any side** is on its tiles; `Walk` writes only on a transition, `open_gates` keeps it balanced. Gate is content
+  (`gate = 64`, `[build] gate_roles`). Four tests in `crates/sim/tests/gates.rs`.
+- **D155** `World::wall_line(from, to)` in `world/lines.rs` (one bend: 45 degrees first, then straight) and
+  `Command::BuildLine { villager, unit, tiles }` (blocked tiles skipped, the line continues past them). `Command` is no longer
+  `Copy`. **A pre-existing build-queue defect was fixed**: with three or more queued sites the advance path re-queued what it
+  popped, so nothing ever started - split into `start_build_site` (now) and `start_build` (queue if busy).
+
+**Next, in progress: the UI drag (the owner asked for it explicitly after D155)**
+
+What exists: `crates/view` renders and picks (`pick_at`, `camera::tile_at`, `Snapshot`, `ui::Layout`, a command card that only
+offers **train/research on a selected building**). What does **not** exist: any way to place a building, and a villager has no
+card at all. So the slice is:
+
+1. `crates/view/src/placement.rs` - a state machine with no window in it: `begin(tile)`, `hover(tile)`, `tiles()`,
+   `validity(&World)`, `release() -> Option<Command::BuildLine>`; tests in `crates/view/tests/placement.rs` (test-first).
+   `wall_line` is reused, so the preview and the command cannot disagree.
+2. Window wiring in `crates/view/src/bin/window.rs`: a key enters placement for a wall (provisional until the villager build
+   card exists - say so in the UI notice), **first left click starts**, **second left click commits**, right click or Escape
+   cancels, `PointerMoved` updates the hover.
+3. The preview: semi-transparent ghost diamonds, **red where the tile cannot be built on** (the owner's rule from D155's
+   questions), drawn above the ground and below the HUD.
+
+**Then**: the villager build card (so placement is reachable the way a player expects), the gate lock, "a gate must be built
+inside a wall", the other three wall types (`117/119/155`).

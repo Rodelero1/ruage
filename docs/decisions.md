@@ -3856,3 +3856,23 @@ skipped, the rest stands, and the preview shows it red), **A** (the engine picks
    an order is refused `MissingEntity`), and a house is **2x2**, so a six-tile drag past one loses **two** segments, not one.
 6. **Not done**: the UI drag itself (the view has no placement path yet), the other three wall types, and editing a line after
    the second click.
+
+
+## D156 - The drag on screen: two clicks, and a ghost that is the order
+
+*2026-11-08. The owner asked for the UI side of D155.*
+
+1. **`ruage_view::placement::Placement` holds the whole rule with no window in it** - a `winit` loop cannot be driven from a test,
+   so the first click *starts* (returns `None`), the second *places* (returns the command), `hover` lengthens, and `segments`
+   answers per tile with `valid`. Before the first click **nothing is drawn**, because there is no run.
+2. **The ghost is the order**: `tiles()` calls `World::wall_line` - there is no second implementation of "where does the wall go"
+   - and the test asserts the command's `tiles` equal the drawn ones exactly.
+3. **Red is per segment**: `World::is_free_ground` per tile, drawn with the new `Frame::blend_diamond` (integer `>> 8` blend, so
+   two machines draw the same picture) in green `[120,220,140]` or red `[230,80,70]`.
+4. **An all-red second click places nothing and keeps the placement up** - a botched drag costs a click, not the placement.
+5. **Window wiring**: `B` begins a placement for the first selected thing (provisional until the villager's build card exists, and
+   the notice says so); the map's left click belongs to the placement while one is up and never selects; Escape **cancels before
+   it opens the menu**.
+6. **The drawing test was proved by mutation**, because it passed on arrival: ignoring `valid` and always drawing green makes it
+   fail. A drawing test that cannot fail is decoration.
+7. **Not done**: the villager build card (placement is key-only), a single-building ghost, and any cost readout while placing.

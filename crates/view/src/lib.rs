@@ -9,6 +9,8 @@
 //! Floats are allowed here and nowhere near the simulation (D9): pixels are not state.
 
 pub mod font;
+pub mod placement;
+pub use placement::{Placement, Segment, draw_placement};
 pub mod ui;
 
 use ruage_data::Map;
@@ -601,6 +603,55 @@ impl Frame {
         }
     }
 
+    /// Fill a diamond **half-transparent**, blending `colour` over what is already there (D156).
+    ///
+    /// A placement ghost has to be see-through: the player is judging the ground *under* it, and an opaque preview hides the
+    /// very thing it is a preview of. The blend is integer-only (`>> 8` on a 0..=255 weight) so the same picture is drawn on
+    /// every machine, and it shares `fill_diamond`'s clipping - a ghost at the edge of the view costs nothing.
+    pub fn blend_diamond(
+        &mut self,
+        centre: (i32, i32),
+        radii: (f32, f32),
+        colour: [u8; 4],
+        weight: u8,
+    ) {
+        let (rx, ry) = radii;
+        if rx <= 0.0 || ry <= 0.0 || self.width == 0 || self.height == 0 {
+            return;
+        }
+        let w = u32::from(weight);
+        let inv = 255 - w;
+        let top = (centre.1 - ry.ceil() as i32).max(0);
+        let bottom = (centre.1 + ry.ceil() as i32).min(self.height as i32 - 1);
+        if top > bottom {
+            return;
+        }
+        for y in top..=bottom {
+            let dy = (y - centre.1) as f32;
+            let across = 1.0 - (dy.abs() / ry);
+            if across <= 0.0 {
+                continue;
+            }
+            let half = (rx * across).round() as i32;
+            let left = (centre.0 - half).max(0);
+            let right = (centre.0 + half).min(self.width as i32 - 1);
+            if left > right {
+                continue;
+            }
+            let row = y as usize * self.width as usize;
+            let from = (row + left as usize) * 4;
+            let to = (row + right as usize) * 4 + 4;
+            for pixel in self.pixels[from..to].as_chunks_mut::<4>().0 {
+                for channel in 0..3 {
+                    pixel[channel] = u8::try_from(
+                        (u32::from(pixel[channel]) * inv + u32::from(colour[channel]) * w) >> 8,
+                    )
+                    .unwrap_or(u8::MAX);
+                }
+            }
+        }
+    }
+
     /// Draw the **outline** of a diamond: two pixels per scanline, so a marker never hides what it marks.
     ///
     /// Both axes are walked, not just the rows: a row at a time leaves the edge **dashed**, because a shallow slope moves
@@ -804,6 +855,11 @@ pub mod palette {
     /// A tree that has been worked out: the entity stays, the canopy does not.
     pub const STUMP: [u8; 4] = [92, 72, 44, 255];
     pub const BUILDING: [u8; 4] = [200, 200, 200, 255];
+    /// **A placement ghost** (D156): the ground will take it, and the ground will not. Green and red rather than the
+    /// player's own colour, because these are the two answers to one question - can this be built here - and the answer is the
+    /// same whoever is asking.
+    pub const PLACEMENT: [u8; 4] = [120, 220, 140, 255];
+    pub const PLACEMENT_REFUSED: [u8; 4] = [230, 80, 70, 255];
     /// The HUD: a dark bar, light text, and one swatch per stockpile column in the pack's own order.
     pub const HUD_BAR: [u8; 4] = [16, 16, 20, 255];
     /// A building's **mark**: dark enough to read against the grey block, and its own colour so a test can name it.
