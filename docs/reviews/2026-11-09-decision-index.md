@@ -106,6 +106,7 @@ Each of these was run, not reasoned about:
 | a four-digit id | parses as a decision, no longer filed as structure |
 | output piped into `head` | exit 0, no traceback |
 | the page reloaded while it is being written | cannot see a half file: the build writes `.tmp` and `os.replace`s it |
+| an untracked note quoting a decision id nobody has written | **not read**: the reference scan asks `git ls-files`, not the working tree - a page committed from a checkout must not quote another session's unfinished file (found here: it did, and the first committed page listed the other session's D162 as broken) |
 
 **What is not covered, said plainly.** The atomic write has **no test** - proving it needs a fault injected between write
 and rename, and a test that only checks "no `.tmp` was left behind" would pass without the rename as well. The filter
@@ -124,8 +125,8 @@ label is printed next to the sentence it came from.
 - **12 open questions** in the U-register, and **22 decisions** carrying unresolved language.
 - Three decisions live at `###` under their parent (D24a, D94a, D98a) and were invisible to a reading that looks for `##`.
 - Two `## D162` headings, while the other session's work was uncommitted - the duplicate this page exists to surface.
-  (That section is not in this commit; the page was built from the *committed* corpus, so D162 shows as a broken
-  reference until the other session lands and the page is rebuilt.)
+  That session committed it as `2df65a1` while this work was finishing, so the two sections sit side by side in the
+  corpus and the page counts both.
 
 ## Not done
 
