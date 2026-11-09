@@ -72,10 +72,19 @@ fn open_patch(world: &World, width: i64, height: i64) -> Option<(i64, i64)> {
     None
 }
 
-/// The pixel a tile's centre projects to, in a frame at the given size.
+/// A pixel that belongs to **that tile and no other**, and only while the tile is drawn on its own point.
+///
+/// The tile's diamond is centred on `project(x, y)` and its edge is where `|dx|/rx + |dy|/ry == 1`. So a point **45% of the way
+/// to the upper-left vertex** is inside the tile (0.9 of the way to the edge) and *outside* it if the whole thing is drawn half a
+/// tile down-and-right - which is exactly the offset this test exists to catch. It is also far from a role glyph, which sits on
+/// the block's middle.
 fn centre_of(camera: &Camera, tile: (u16, u16)) -> (u32, u32) {
-    let (x, y) = camera.project((f32::from(tile.0) + 0.5, f32::from(tile.1) + 0.5));
-    (x.max(0) as u32, y.max(0) as u32)
+    let (rx, ry) = camera.radii();
+    let (x, y) = camera.project((f32::from(tile.0), f32::from(tile.1)));
+    (
+        (x as f32 - rx * 0.45).max(0.0) as u32,
+        (y as f32 - ry * 0.45).max(0.0) as u32,
+    )
 }
 
 /// **No neighbour of a house is painted as the house.** Every tile around a 2x2 house must still show ground at its centre - if the

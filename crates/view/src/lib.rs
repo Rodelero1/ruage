@@ -1218,7 +1218,10 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
                 };
                 for ty in min_y..=max_y {
                     for tx in min_x..=max_x {
-                        let at = camera.project((tx as f32 + 0.5, ty as f32 + 0.5));
+                        // **The same pixel the ground puts that tile on**: a tile's diamond is centred at the integer point
+                        // `(x, y)` (see the terrain pass above), so a building drawn at `(x + 0.5, y + 0.5)` sat half a tile
+                        // down-and-right of the ground it owns (D160).
+                        let at = camera.project((tx as f32, ty as f32));
                         frame.fill_diamond(at, (rx, ry), colour);
                     }
                 }

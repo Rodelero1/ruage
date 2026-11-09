@@ -3943,3 +3943,19 @@ a **shape**, not a second simulation.*
    and the fog dimming test now samples a tile centre instead of a four-diamond meeting point.
 5. **Cost**: footprint-area diamond fills per building (16 for a town centre, 4 for a house, 1 for a wall) instead of one, each
    clipping to the frame. The simulation is untouched; the acceptance hash is unchanged.
+
+
+## D160 - A tile is the diamond centred on its integer point
+
+*2026-11-08, after D159. The owner: *"Gray fields representing buildings also need to be moved."*
+
+1. **The renderer has two projections and only two**: `camera.project((x, y))` for anything that occupies a tile - a tile is the
+   diamond **centred on its integer point**, which is why neighbours meet edge to edge - and `camera.project(position)` for a body
+   between tiles. The per-tile building pass added in D159 used `(x + 0.5, y + 0.5)`, half a tile down-right of its own ground.
+2. **Fixed to the terrain's own point**, so a building tile and its ground tile are the same diamond.
+3. **The D159 pixel test could not see a half-tile shift**: it sampled 55% of the way down from the tile point, where a shifted diamond
+   still paints. It was moved to **45% of the way to the upper-left vertex** - inside the tile, outside a shifted one - and **proved by
+   mutation**: restoring `+ 0.5` fails with *"the house's own tile (11, 10) is painted as the house"* and a grass pixel.
+4. **`footprint.rs` needed the same sampling change**, having inherited the tile-centre convention.
+5. **A pixel test that passes for a visibly wrong picture is worse than none**, and this one did for exactly one commit. That is the
+   lesson recorded, not the line of arithmetic.

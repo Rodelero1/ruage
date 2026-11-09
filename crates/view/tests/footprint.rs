@@ -172,9 +172,16 @@ fn a_building_is_drawn_as_the_tiles_its_footprint_covers() {
 
     // **One diamond per tile** (D159): the silhouette is exactly the union of the footprint's tiles, so every tile of it is
     // painted at its centre, and the ring around it is not - which is the same set the walk grid blocks.
+    // **The tile's own point**, which is where the terrain pass draws that tile's diamond (D160) - a building is drawn on the
+    // same points as the ground it covers, so the question "is this tile painted as the building" is asked here.
     let tile_pixel = |x: i32, y: i32| -> [u8; 4] {
-        let at = camera.project((x as f32 + 0.5, y as f32 + 0.5));
-        frame.pixel(at.0.max(0) as u32, at.1.max(0) as u32)
+        let (rx, ry) = camera.radii();
+        let at = camera.project((x as f32, y as f32));
+        let (px, py) = (
+            (at.0 as f32 - rx * 0.45).max(0.0) as u32,
+            (at.1 as f32 - ry * 0.45).max(0.0) as u32,
+        );
+        frame.pixel(px, py)
     };
     for y in min_y..=max_y {
         for x in min_x..=max_x {
