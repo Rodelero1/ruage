@@ -3985,7 +3985,7 @@ the game?"* Research: `docs/building-collision.md`.*
 
 ---
 
-## D163 - The decision index is derived from the corpus, and it quotes its evidence
+## D165 - The decision index is derived from the corpus, and it quotes its evidence
 
 *2026-11-09. The owner: "I want to have a page I can browse with a web browser where I could see all the decisions that
 have been made or are yet to be made and how they were made (research, decided by me, reverse engineered, assumed...)
@@ -4020,6 +4020,18 @@ authored**, **the open register, the evidence ladder and broken references**, co
    never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`
    under their parent (D24a, D94a, D98a) and were invisible to a reader looking only for `##`. 4 decisions are
    corrected by a later one, 5 are superseded, 5 ids carry an amendment section.
+
+9. **A review queue, because 166 cards in one scroll is not a review.** Batches of 10, 20 or 50 with a resume point,
+   a verdict on each decision (agree / question / wrong) and a one-line note. The verdicts live in this browser
+   (`localStorage`), **export** writes them to `decisions-review.json` and **import** reads them back - a static page
+   cannot write the repository, so the file is the bridge. The queue is narrowed by the same chips as the register,
+   which is what makes "one part at a time" literal: the three shortest passes are *no stated basis* (35), *unresolved*
+   (22) and *corrected* (4).
+10. **Areas were tried and dropped.** The first version filed decisions under a topic by counting the words and paths
+   they name. It put the **file-oracle** decision (D2) under *movement*, because "step 2b" contains "step", and it
+   needed a date the corpus does not carry to do any better by time (88 of 166 decisions have no date inside their own
+   section). A structure that is wrong one time in five is worse than the batch queue, so the queue has no topics in
+   it - only batches and the evidence chips, which are derived from phrases and can be checked.
 
 **Limits, named.** The basis patterns are a heuristic over English prose: a decision can be tagged from an incidental
 mention, which is why the sentence is on the page. The U-register is read from one table, so a question written

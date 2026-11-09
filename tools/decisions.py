@@ -1,4 +1,4 @@
-"""The decision index: what was decided, how, and what is still open (D163).
+"""The decision index: what was decided, how, and what is still open (D165).
 
 `docs/decisions.md` is 4,000 lines of prose with two different shapes (a table for D1-D16, `## D<n>` sections after
 that), and nothing in it says which rules rest on the dat, which on the owner's word, which on a guess, or which
@@ -254,7 +254,7 @@ def classify_basis(text: str) -> tuple[dict[str, list[str]], list[str]]:
             origins[origin] = found[:3]
 
     # A sentence that names three or more origins is *about* provenance - a taxonomy, a summary, this tool's own
-    # explanation - and counting it makes a decision cite everything. Found on D163, which lists the tag vocabulary
+    # explanation - and counting it makes a decision cite everything. Found on D165, which lists the tag vocabulary
     # and was consequently tagged with eight of them.
     counts: dict[str, set[str]] = {}
     for origin, snippets in origins.items():
@@ -264,7 +264,7 @@ def classify_basis(text: str) -> tuple[dict[str, list[str]], list[str]]:
         origin: [snippet for snippet in snippets if len(counts[snippet]) < 3]
         for origin, snippets in origins.items()
     }
-    # Inside a sentence that quotes the owner, the *categories* are his vocabulary, not our method: D163 quotes him
+    # Inside a sentence that quotes the owner, the *categories* are his vocabulary, not our method: D165 quotes him
     # listing "research, reverse engineered, assumed" and was tagged `binary` by his own word.
     for origin, snippets in list(origins.items()):
         if origin == "owner":
@@ -775,6 +775,24 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;co
 .refs code{color:var(--acc)}
 .stamp{color:var(--dim);font-size:12px;margin-top:18px}
 .hidden{display:none}
+.reviewbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
+.reviewbar select,.reviewbar button{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer}
+.reviewbar button.on{background:#24303f;border-color:var(--acc)}
+.reviewbar label{color:var(--dim);font-size:13px}
+.verdicts{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
+.verdict{background:transparent;border:1px solid var(--line);color:var(--dim);border-radius:999px;padding:2px 10px;font-size:12px;cursor:pointer}
+.verdict:hover{color:var(--ink)}
+.verdict[data-verdict=agree].on{color:#8fd694;border-color:#2f5c3a;background:#1d2a22}
+.verdict[data-verdict=question].on{color:#ffd479;border-color:#5c4a22;background:#2a2519}
+.verdict[data-verdict=wrong].on{color:#ff8fb1;border-color:#5c2b3a;background:#2a1c22}
+#import{max-width:150px;color:var(--dim);font-size:12px}
+#import::file-selector-button{background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;margin-right:6px}
+.reviewbar .import{display:flex;align-items:center;gap:6px}
+.note{flex:1 1 220px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:3px 8px;font-size:12px}
+article.decision.v-agree{border-left-color:#8fd694}
+article.decision.v-question{border-left-color:#ffd479}
+article.decision.v-wrong{border-left-color:#ff8fb1}
+
 /* Light mode overrides the variables, not the rules: the earlier version set a light body and left the cards dark,
    and its selector had a trailing comma so it applied to nothing at all. */
 @media (prefers-color-scheme: light){
@@ -784,44 +802,139 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;co
 }
 """
 
-SCRIPT = """
-(function(){
+SCRIPT = r"""(function(){
+  var KEY='ruage-decisions-review';
   var q=document.getElementById('q'),origins=new Set(),statuses=new Set(),
       cards=[].slice.call(document.querySelectorAll('article.decision')),
-      shown=document.getElementById('shown');
-  function apply(){
-    var term=q.value.toLowerCase(),n=0;
-    cards.forEach(function(card){
-      var okTerm=!term||(card.dataset.id+' '+card.textContent).toLowerCase().indexOf(term)>=0;
-      var okOrigin=true;
-      if(origins.size){
-        var keys=card.dataset.origins.split(' ');
-        okOrigin=false;
-        origins.forEach(function(o){
-          if(o==='none'&&card.dataset.origins==='none')okOrigin=true;
-          else if(o==='unresolved'&&card.dataset.unresolved==='1')okOrigin=true;
-          else if(keys.indexOf(o)>=0)okOrigin=true;
-        });
-      }
-      var okStatus=!statuses.size||statuses.has(card.dataset.status);
-      var ok=okTerm&&okOrigin&&okStatus;
-      card.classList.toggle('hidden',!ok);
-      if(ok)n++;
-    });
-    shown.textContent=n+' of '+cards.length+' shown';
+      shown=document.getElementById('shown'),
+      progress=document.getElementById('review-progress'),
+      batchSel=document.getElementById('batch-size'),
+      flaggedOnly=false,reviewing=false,cursor=0,
+      store=load();
+
+  function load(){
+    try{var s=JSON.parse(localStorage.getItem(KEY));if(s&&s.verdicts)return s;}catch(e){}
+    return {version:1,verdicts:{}};
   }
-  q.addEventListener('input',apply);
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(store));}catch(e){}}
+  function verdictOf(id){return (store.verdicts[id]||{}).verdict||'';}
+  function batch(){return parseInt(batchSel.value,10)||20;}
+
+  function paint(card){
+    var id=card.dataset.id,v=store.verdicts[id]||{};
+    card.classList.remove('v-agree','v-question','v-wrong');
+    if(v.verdict)card.classList.add('v-'+v.verdict);
+    card.querySelectorAll('[data-verdict]').forEach(function(b){
+      b.classList.toggle('on',b.dataset.verdict===v.verdict);});
+    var note=card.querySelector('[data-note]');
+    if(note&&note.value!==(v.note||''))note.value=v.note||'';
+  }
+  function paintAll(){cards.forEach(paint);}
+
+  function matches(card){
+    var term=q.value.toLowerCase();
+    if(term&&(card.dataset.id+' '+card.textContent).toLowerCase().indexOf(term)<0)return false;
+    if(origins.size){
+      var keys=card.dataset.origins.split(' '),hit=false;
+      origins.forEach(function(o){
+        if(o==='none'&&card.dataset.origins==='none')hit=true;
+        else if(o==='unresolved'&&card.dataset.unresolved==='1')hit=true;
+        else if(keys.indexOf(o)>=0)hit=true;});
+      if(!hit)return false;
+    }
+    if(statuses.size&&!statuses.has(card.dataset.status))return false;
+    if(flaggedOnly){
+      var v=verdictOf(card.dataset.id);
+      if(v!=='question'&&v!=='wrong')return false;
+    }
+    return true;
+  }
+
+  function apply(){
+    var list=cards.filter(matches);
+    cards.forEach(function(c){c.classList.add('hidden');});
+    var slice=reviewing?list.slice(cursor,cursor+batch()):list;
+    slice.forEach(function(c){c.classList.remove('hidden');});
+    shown.textContent=slice.length+' of '+cards.length+' shown';
+    var reviewed=cards.filter(function(c){return verdictOf(c.dataset.id);}).length;
+    progress.textContent=reviewed+' of '+cards.length+' reviewed'+
+      (reviewing&&list.length?' \u00b7 batch '+(Math.floor(cursor/batch())+1)+' of '+Math.ceil(list.length/batch()):'');
+  }
+
+  q.addEventListener('input',function(){cursor=0;apply();});
   document.querySelectorAll('.chip').forEach(function(chip){
     chip.addEventListener('click',function(){
       var set=chip.dataset.origin?origins:statuses,key=chip.dataset.origin||chip.dataset.status;
-      if(set.has(key)){set.delete(key)}else{set.add(key)}
+      if(set.has(key))set.delete(key);else set.add(key);
       chip.classList.toggle('on',set.has(key));
-      apply();
+      cursor=0;apply();
     });
   });
-  apply();
-})();
-"""
+
+  document.querySelectorAll('[data-verdict]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var id=btn.dataset.id,v=btn.dataset.verdict;
+      if(verdictOf(id)===v){delete store.verdicts[id];}
+      else{
+        store.verdicts[id]={verdict:v,note:(store.verdicts[id]||{}).note||'',at:new Date().toISOString()};
+      }
+      save();paint(btn.closest('article'));apply();
+    });
+  });
+  document.querySelectorAll('[data-note]').forEach(function(input){
+    input.addEventListener('change',function(){
+      var id=input.dataset.note,entry=store.verdicts[id]||{verdict:'',at:''};
+      entry.note=input.value;entry.at=entry.at||new Date().toISOString();
+      store.verdicts[id]=entry;save();
+    });
+  });
+
+  batchSel.addEventListener('change',function(){cursor=0;apply();});
+  document.getElementById('review-start').addEventListener('click',function(){
+    reviewing=true;cursor=0;apply();
+    document.getElementById('decisions').scrollIntoView();
+  });
+  document.getElementById('review-next').addEventListener('click',function(){
+    var total=cards.filter(matches).length;
+    cursor=Math.min(cursor+batch(),Math.max(0,total-1));reviewing=true;apply();
+    document.getElementById('decisions').scrollIntoView();
+  });
+  document.getElementById('review-prev').addEventListener('click',function(){
+    cursor=Math.max(0,cursor-batch());reviewing=true;apply();
+    document.getElementById('decisions').scrollIntoView();
+  });
+  document.getElementById('review-flagged').addEventListener('click',function(){
+    flaggedOnly=!flaggedOnly;this.classList.toggle('on',flaggedOnly);cursor=0;apply();
+  });
+
+  function exportPayload(){
+    return JSON.stringify({tool:'ruage-decisions',version:1,
+      exported:new Date().toISOString(),verdicts:store.verdicts},null,2);
+  }
+  window.__exportReview=exportPayload;
+  document.getElementById('export').addEventListener('click',function(){
+    var blob=new Blob([exportPayload()],{type:'application/json'}),a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);a.download='decisions-review.json';a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+  });
+  document.getElementById('import').addEventListener('change',function(e){
+    var file=e.target.files[0];if(!file)return;
+    var reader=new FileReader();
+    reader.onload=function(){
+      try{
+        var data=JSON.parse(reader.result);
+        if(data&&data.verdicts){store={version:1,verdicts:data.verdicts};save();paintAll();apply();}
+      }catch(err){alert('that is not a review file');}
+    };
+    reader.readAsText(file);
+  });
+  document.getElementById('reset').addEventListener('click',function(){
+    if(!confirm('clear every verdict in this browser?'))return;
+    store={version:1,verdicts:{}};save();paintAll();apply();
+  });
+
+  paintAll();apply();
+})();"""
 
 
 SCAN = [

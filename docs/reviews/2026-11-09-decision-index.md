@@ -1,6 +1,6 @@
 # The decision index: what it costs, and what it got wrong first
 
-*2026-11-09. D163. The tool is `tools/decisions.py`, its tests are `tools/test_decisions.py`, the page it writes is
+*2026-11-09. D165. The tool is `tools/decisions.py`, its tests are `tools/test_decisions.py`, the page it writes is
 `docs/site/index.html`.*
 
 ## What was built
@@ -50,7 +50,7 @@ mutation instead, and the mutation families that matter are:
    chip returned **0 of 164 shown**. Found in the browser; nothing in the Python suite could have seen it.
 6. **Ids were matched with three digits at most.** a heading with a four-digit id failed the `\b` and was silently filed as *document
    structure* - the quiet failure the whole design is against. Found by a 6,560-decision scaling probe, never by the
-   corpus, which is at D163.
+   corpus, which is at D165.
 7. **A heading that says "not modelled" became a gap.** The new `###` test caught it: the gap list contained the heading
    and its paragraph, so one named limit counted twice.
 8. **The light-mode CSS had a trailing comma** (`.panel,.decision,{...}`), so it applied to nothing, and what it did set
@@ -59,12 +59,12 @@ mutation instead, and the mutation families that matter are:
 10. **The snippet scan was quadratic in section length.** One 300 KB decision took **6.4 s**; a 1 MB one **67 s**. The
     cause was `rfind` from the start of the section for every match, and computing a snippet for matches that were then
     thrown away. Windowed and capped: **0.33 s** and **1.1 s** (19x and 60x).
-11. **The corpus's own vocabulary poisoned the classifier.** D163 lists the tag names, so the decision explaining the
+11. **The corpus's own vocabulary poisoned the classifier.** D165 lists the tag names, so the decision explaining the
     labels was tagged with **eight** of them. A sentence naming three or more origins is now treated as a taxonomy, and
     categories named inside a quotation attributed to the owner are his words, not our method (that one came from the
     owner's own phrase "reverse engineered").
 12. **The id D162 was taken while I worked.** Another session in this tree appended *D162 - the virtual fence* and its own
-    `v1.130` row to the same files, uncommitted. My decision was renumbered to **D163 / v1.131**, and the doc commits are
+    `v1.130` row to the same files, uncommitted. My decision was renumbered to **D165 / v1.131**, and the doc commits are
     built from the *committed* corpus plus my own hunks only - another writer's prose is not mine to commit (AGENTS.md).
     The page found this too: two `## D162` headings is exactly the shape of a duplicate it exists to surface.
 13. **The compact was written after the code.** Step 1 of the routine says persist the state *first*; `docs/next-step.md`,
@@ -116,6 +116,31 @@ page in a browser, which is not repeatable in `make check`. And the classifier's
 `test_every_decision_without_a_basis_is_listed_so_it_can_be_triaged` only asserts that *not all* decisions are uncited,
 which is a weak assertion guarding a strong claim. What makes the claim checkable is the design, not this suite: every
 label is printed next to the sentence it came from.
+
+## The review queue, and the structure that was not built
+
+The owner asked to "review one part at a time". Batches with a resume point answer that without inventing anything;
+a topical split was tried first and **dropped**:
+
+- Counting the words and paths a decision names filed **D2, the file-oracle decision, under *movement*** - "step 2b"
+  contains "step", and ties went to the earlier area. On the real corpus it produced 45 decisions in *movement*, of
+  which the first four were licensing, fixed-point, prior-art and scope decisions.
+- Chapters by week need a date, and **88 of 166 decisions carry no date inside their own section**; the four that do
+  carry a stray one (D86 carries 2018-08-22, from a citation) would be filed in 2018.
+
+So the queue has **no topics in it**: batches of 10/20/50, a verdict (agree / question / wrong) and a note per decision,
+and the register's own evidence chips decide what is in the queue. The three shortest honest passes are *no stated
+basis* (35), *unresolved* (22) and *corrected* (4).
+
+Measured: the page went from **199.6 KB to 267.4 KB** (+67.8 KB, +34%) for 168 cards, i.e. **~400 bytes per decision**
+for three buttons and one input; parse and render are unchanged (the widgets are static HTML, no per-card script).
+Driven in the browser: a verdict and a note survive a reload; `only my flags` narrows to the flagged set; `next` past
+the last batch clamps instead of showing an empty page; a `localStorage.setItem` that throws leaves the verdict applied
+in memory without breaking the page; an import of JSON without a `verdicts` key is refused silently.
+
+**Still not covered, and the same gap as before**: none of that is a Python test. The export button's *payload* is
+reachable as `window.__exportReview()` and was checked; the download itself was not (a blob URL and a synthetic click
+cannot be asserted without a browser harness). The queue's JavaScript is verified by driving it, not by `make check`.
 
 ## What the page found on its first run
 
