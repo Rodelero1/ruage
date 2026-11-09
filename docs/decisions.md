@@ -4163,3 +4163,20 @@ all three silhouettes - so no marker pixel can land on a neighbouring tile, and 
    (feet and a shadow), which is an asset-pack question (D18).
 4. **Two options if the owner wants zero overlap**, both real behaviour changes and both needing his word: **snap the marker to its tile's
    centre** while the body stays continuous, or shrink the marker to `0.25` of a tile.
+
+
+## D167 - Units above buildings again, because both orders were reported
+
+*2026-11-08, sixth round. Measured once more: a villager ordered to the tile **touching** a house's north wall and another to the tile touching its
+south wall both arrive **exactly on their goal tile's centre** - `(40.50, 39.50)` and `(40.50, 42.50)`. There is no reachability asymmetry; the
+engine stops a unit at the tile boundary on every side.*
+
+1. **Both orderings have now been tried and both were reported**: units painted last gave *"a villager can pass through the built house"*; depth-decides
+   (D165) gave *"units are below the dark gray"*. This decision restores **units above buildings** - the owner's 2026-11-04 rule - because the clip
+   from D166 means drawing units last can no longer paint inside a wall.
+2. **All three states of that decision are recorded in the tests' comments**, not just the last one: a test that encodes an owner ruling has to say
+   which ruling, or the next person re-reverses it blind.
+3. **What actually ends this is art, not a rule**: the original draws objects with height (feet, a shadow), and this renderer draws flat shapes with
+   none. That is the asset pack's job (D18).
+4. **Two one-line options if the owner wants them now**: a **dark outline** around a unit's marker so it reads as in front over grey, or **snapping the
+   marker to its tile's centre** so it can never straddle a neighbour. Both change how the game looks, so both are his call.
