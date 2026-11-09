@@ -66,7 +66,7 @@ require-data:
 test: require-data
 	$(CARGO) test --workspace
 
-# The decision index (D165): one browsable page over docs/decisions.md and the U-register. Committed, because the
+# The decision index (D166): one browsable page over docs/decisions.md and the U-register. Committed, because the
 # corpus it renders is committed. `make decisions-check` parses and reports without writing.
 decisions:
 	python3 tools/decisions.py
