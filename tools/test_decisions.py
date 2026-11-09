@@ -40,6 +40,11 @@ class TableForm(unittest.TestCase):
         self.assertIn("generally similar", decision.text)
         self.assertIn("Owner's words", decision.text)
 
+    def test_a_quoted_first_sentence_keeps_its_closing_quote(self):
+        """Splitting a title at the first period cut inside a quotation, leaving `...attainable` unclosed."""
+        text = '| **D1** | 2026-10-23 | **Answered: G1 — "generally similar."** Own engine. | r | c |\n'
+        self.assertTrue(parse(text).decisions["D1"].title.endswith('."'), parse(text).decisions["D1"].title)
+
     def test_a_table_row_does_not_become_a_heading_decision(self):
         text = "| **D2** | 2026-10-23 | A file oracle. | 13 saves. | None. |\n"
         corpus = parse(text)

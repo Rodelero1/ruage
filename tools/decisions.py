@@ -334,6 +334,9 @@ def _table_decisions(text: str, corpus: Corpus) -> None:
 def _title_from_table(body: str) -> str:
     flat = re.sub(r"[*`]", "", body)
     first = flat.split(".")[0]
+    # A period inside a quotation leaves the closing quote behind: `... "attainable.` reads as a typo in the page.
+    if flat[len(first) :].startswith('.\"'):
+        first += '.\"'
     return first.strip()[:120]
 
 

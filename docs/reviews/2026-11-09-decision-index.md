@@ -22,7 +22,7 @@ rather than on an import (the project's compile-RED is weaker evidence than that
 asserts an empty corpus has no unclassified headings, which is true of a parser that returns nothing. It is a control, not
 a test, and it is recorded here rather than quietly counted.
 
-Eleven more tests were written during the work, after the behaviour existed. Those cannot be RED, so each was proved by
+Fourteen more tests were written during the work, after the behaviour existed (45 by the end; 42 at the first commit). Those cannot be RED, so each was proved by
 mutation instead, and the mutation families that matter are:
 
 | mutation | test that fails |
@@ -105,6 +105,7 @@ Each of these was run, not reasoned about:
 | a title with emoji and accents | renders, escaped |
 | a four-digit id | parses as a decision, no longer filed as structure |
 | output piped into `head` | exit 0, no traceback |
+| a quoted first sentence in a table row | the title keeps its closing quote: splitting at the first period left `...attainable` unclosed, proved by mutation |
 | the page reloaded while it is being written | cannot see a half file: the build writes `.tmp` and `os.replace`s it |
 | an untracked note quoting a decision id nobody has written | **not read**: the reference scan asks `git ls-files`, not the working tree - a page committed from a checkout must not quote another session's unfinished file (found here: it did, and the first committed page listed the other session's D162 as broken) |
 
