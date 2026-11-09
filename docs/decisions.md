@@ -4044,3 +4044,18 @@ Buildings cannot overlap another building or functioning farm … the drop would
    two must stay **60+ luminance apart** or the test fails.
 4. **What this does not fix**: two units can still overlap **each other** - that is unit-unit separation (D131), a different mechanism, and
    the three villagers in the report were in the yard, not on the wall.
+
+
+## D163 - The yard is painted as ground, and a switch that turns the next report into data
+
+*2026-11-08. Third report of the same thing. Two changes and one admission.*
+
+1. **A building's walkable part is ground.** The yard was painted in the *entity* pass, which runs back to front by depth; a building's depth
+   is its **front** corner, so it was painted after every unit north of it and covered units standing in its own yard. The yard is now painted
+   with the terrain, **before any entity**; only **solid** tiles stay in the entity pass, so a unit behind a wall is still hidden by it.
+2. **`RUAGE_DEBUG_TILES=1`** prints, once a second, every unit's tile and `walkable`, plus every building's solid mask - so the next report
+   arrives as numbers rather than as a picture.
+3. **Admission**: `yard_drawing_order` passes, and its **mutation did not fail**, so it is a guard, not a proof. Nine hypotheses have now been
+   tested across D158-D163; two were real (the half-tile offset, the yard painted as wall), and the third picture is still not reproduced.
+4. **The three answers the debug output distinguishes**: `walkable=false` on the unit's tile = collision bug, and the mask names the building;
+   `walkable=true` inside a footprint = a wrong mask; `walkable=true` outside = the fault is drawing, i.e. sprite size, not collision.

@@ -638,6 +638,42 @@ impl App {
         // **What each building actually blocks** (D161): the town centre's yard is walkable, and painting the whole footprint as
         // wall is what made a villager standing in it look like a villager inside the building.
         let solids = ruage_view::solids_of(world, &snapshot);
+        // **`RUAGE_DEBUG_TILES=1`**: once a second, every unit's tile and whether the walk grid accepts it, plus every building's
+        // solid mask. A report of "a unit is inside a building" then arrives as data instead of as a picture, which is what three
+        // rounds of screenshots could not settle (D163).
+        if std::env::var("RUAGE_DEBUG_TILES").is_ok()
+            && world.tick() % u64::from(world.tick_rate_hz()) == 0
+        {
+            for entity in world.entities() {
+                if entity.kind != ruage_sim::EntityKind::Unit {
+                    continue;
+                }
+                let tile = world.tile_of_position(entity.position);
+                eprintln!(
+                    "DBG tick={} unit={} tile={:?} walkable={} pos=({},{})",
+                    world.tick(),
+                    entity.id.0,
+                    tile,
+                    world.tile_walkable(tile.0, tile.1),
+                    entity.position.0.raw(),
+                    entity.position.1.raw()
+                );
+            }
+            for entity in world.entities() {
+                if entity.kind != ruage_sim::EntityKind::Building {
+                    continue;
+                }
+                let tile = world.tile_of_position(entity.position);
+                eprintln!(
+                    "DBG tick={} building={} unit={:?} tile={:?} mask={:?}",
+                    world.tick(),
+                    entity.id.0,
+                    entity.unit,
+                    tile,
+                    solids.get(&entity.id.0)
+                );
+            }
+        }
         let mut frame = render_with_solids_and(
             &snapshot,
             &self.camera,

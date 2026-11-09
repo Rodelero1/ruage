@@ -1210,6 +1210,39 @@ pub fn render_with_solids(snapshot: &Snapshot, camera: &Camera, solids: &Solids)
         }
     }
 
+    // **A building's yard is ground** (D163): the walkable part of a footprint is painted here, with the terrain and before every
+    // entity, so a unit standing in it is drawn *on* it. Painting the yard in the entity pass meant the building was painted after
+    // any unit with a smaller depth - which is every unit north of it - and a villager in the yard ended up either hidden or, worse,
+    // half-covered in a way that reads as "standing on the structure".
+    for entity in draw_order(snapshot) {
+        if entity.kind != EntityKind::Building {
+            continue;
+        }
+        let (across, down) = entity.footprint;
+        let anchor = (
+            entity.position.0.floor() as i32,
+            entity.position.1.floor() as i32,
+        );
+        let (min_x, min_y, _, _) = footprint_tiles(anchor, (across, down));
+        let Some(mask) = solids.get(&entity.id) else {
+            continue;
+        };
+        for ty in min_y..=(min_y + down as i32 - 1) {
+            for tx in min_x..=(min_x + across as i32 - 1) {
+                let index = ((ty - min_y) * across as i32 + (tx - min_x)) as usize;
+                if mask.get(index).copied().unwrap_or(true) {
+                    continue;
+                }
+                let tone = if entity.remembered {
+                    as_memory(palette::BUILDING_YARD)
+                } else {
+                    palette::BUILDING_YARD
+                };
+                frame.fill_diamond(camera.project((tx as f32, ty as f32)), (rx, ry), tone);
+            }
+        }
+    }
+
     // One pass, back to front: a diamond grid has an unambiguous front, and sorting by depth is what makes a unit
     // standing in front of a building cover it while one standing behind is covered (`draw_order`).
     for entity in draw_order(snapshot) {
@@ -1273,13 +1306,12 @@ pub fn render_with_solids(snapshot: &Snapshot, camera: &Camera, solids: &Solids)
                             .and_then(|mask| mask.get(index))
                             .copied()
                             .unwrap_or(true);
-                        let tone = if solid {
-                            colour
-                        } else if entity.remembered {
-                            as_memory(palette::BUILDING_YARD)
-                        } else {
-                            palette::BUILDING_YARD
-                        };
+                        // The **yard is ground and was painted with it** (D163); only the structure belongs in this pass, so a
+                        // unit in the yard is never covered by the building it stands in.
+                        if !solid {
+                            continue;
+                        }
+                        let tone = colour;
                         // **The same pixel the ground puts that tile on**: a tile's diamond is centred at the integer point
                         // `(x, y)` (see the terrain pass above), so a building drawn at `(x + 0.5, y + 0.5)` sat half a tile
                         // down-and-right of the ground it owns (D160).
