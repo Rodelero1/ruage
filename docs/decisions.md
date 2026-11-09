@@ -3985,7 +3985,7 @@ the game?"* Research: `docs/building-collision.md`.*
 
 ---
 
-## D166 - The decision index is derived from the corpus, and it quotes its evidence
+## D168 - The decision index is derived from the corpus, and it quotes its evidence
 
 *2026-11-09. The owner: "I want to have a page I can browse with a web browser where I could see all the decisions that
 have been made or are yet to be made and how they were made (research, decided by me, reverse engineered, assumed...)

@@ -213,5 +213,7 @@ D163 = "Graphics"
 D164 = "Project process"
 # written by the graphics session the same evening, and it needs a line like every other decision
 D165 = "Graphics"
-D166 = "Data & tooling"
+# the marker clipped to its own tile, committed the same evening
+D166 = "Graphics"
+D168 = "Data & tooling"
 D167 = "Data & tooling"

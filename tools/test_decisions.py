@@ -1,4 +1,4 @@
-"""The decision index: what `tools/decisions.py` must be able to say about the corpus (D166).
+"""The decision index: what `tools/decisions.py` must be able to say about the corpus (D168).
 
 The index exists because 160-odd decisions live in 4,000 lines of prose and nothing says which of them rest on the
 dat, which on the owner's word, which on a guess, and which are referenced but were never written down. Every test
@@ -160,7 +160,7 @@ class Basis(unittest.TestCase):
         self.assertTrue(decision.uncited)
 
     def test_categories_named_inside_a_quote_from_the_owner_are_his_words_not_our_method(self):
-        """D166 quotes the owner listing "reverse engineered" as a category; that must not tag the decision `binary`."""
+        """D168 quotes the owner listing "reverse engineered" as a category; that must not tag the decision `binary`."""
         text = ('## D99 - X\n\n*2026-11-01. The owner: "research, reverse engineered, assumed - all of it."*\n\n'
                 "It was implemented.\n")
         origins = parse(text).decisions["D99"].origins
@@ -168,7 +168,7 @@ class Basis(unittest.TestCase):
         self.assertNotIn("binary", origins)
 
     def test_a_sentence_that_lists_the_origin_vocabulary_is_not_evidence(self):
-        """D166 explains what the tags mean; the explanation must not become the decision's own basis."""
+        """D168 explains what the tags mean; the explanation must not become the decision's own basis."""
         text = ("## D99 - How the index works\n\nA basis is one of owner, dat, binary, measured, published, "
                 "prior-art, decision, review.\n")
         self.assertEqual({}, parse(text).decisions["D99"].origins)

@@ -1,6 +1,6 @@
 # The step walks the line, and the route bends where the ground does
 
-> # Session 50, 2026-11-09 - D166: the decisions are browsable, and reviewable in batches
+> # Session 50, 2026-11-09 - D168: the decisions are browsable, and reviewable in batches
 >
 > **The owner's ask:** one page that shows every decision, **how it was made**, and what is still missing - "help me to
 > spot gaps and bad decisions". Built: `tools/decisions.py`, 37 tests, output committed at `docs/site/index.html`,

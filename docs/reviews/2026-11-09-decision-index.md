@@ -1,6 +1,6 @@
 # The decision index: what it costs, and what it got wrong first
 
-*2026-11-09. D166. The tool is `tools/decisions.py`, its tests are `tools/test_decisions.py`, the page it writes is
+*2026-11-09. D168. The tool is `tools/decisions.py`, its tests are `tools/test_decisions.py`, the page it writes is
 `docs/site/index.html`.*
 
 ## What was built
@@ -50,7 +50,7 @@ mutation instead, and the mutation families that matter are:
    chip returned **0 of 164 shown**. Found in the browser; nothing in the Python suite could have seen it.
 6. **Ids were matched with three digits at most.** a heading with a four-digit id failed the `\b` and was silently filed as *document
    structure* - the quiet failure the whole design is against. Found by a 6,560-decision scaling probe, never by the
-   corpus, which is at D166.
+   corpus, which is at D168.
 7. **A heading that says "not modelled" became a gap.** The new `###` test caught it: the gap list contained the heading
    and its paragraph, so one named limit counted twice.
 8. **The light-mode CSS had a trailing comma** (`.panel,.decision,{...}`), so it applied to nothing, and what it did set
@@ -59,12 +59,12 @@ mutation instead, and the mutation families that matter are:
 10. **The snippet scan was quadratic in section length.** One 300 KB decision took **6.4 s**; a 1 MB one **67 s**. The
     cause was `rfind` from the start of the section for every match, and computing a snippet for matches that were then
     thrown away. Windowed and capped: **0.33 s** and **1.1 s** (19x and 60x).
-11. **The corpus's own vocabulary poisoned the classifier.** D166 lists the tag names, so the decision explaining the
+11. **The corpus's own vocabulary poisoned the classifier.** D168 lists the tag names, so the decision explaining the
     labels was tagged with **eight** of them. A sentence naming three or more origins is now treated as a taxonomy, and
     categories named inside a quotation attributed to the owner are his words, not our method (that one came from the
     owner's own phrase "reverse engineered").
 12. **The id D162 was taken while I worked.** Another session in this tree appended *D162 - the virtual fence* and its own
-    `v1.130` row to the same files, uncommitted. My decision was renumbered to **D166 / v1.131**, and the doc commits are
+    `v1.130` row to the same files, uncommitted. My decision was renumbered to **D168 / v1.131**, and the doc commits are
     built from the *committed* corpus plus my own hunks only - another writer's prose is not mine to commit (AGENTS.md).
     The page found this too: two `## D162` headings is exactly the shape of a duplicate it exists to surface.
 13. **The compact was written after the code.** Step 1 of the routine says persist the state *first*; `docs/next-step.md`,

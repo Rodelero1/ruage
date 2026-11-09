@@ -1,4 +1,4 @@
-"""The decision index: what was decided, how, and what is still open (D166).
+"""The decision index: what was decided, how, and what is still open (D168).
 
 `docs/decisions.md` is 4,000 lines of prose with two different shapes (a table for D1-D16, `## D<n>` sections after
 that), and nothing in it says which rules rest on the dat, which on the owner's word, which on a guess, or which
@@ -256,7 +256,7 @@ def classify_basis(text: str) -> tuple[dict[str, list[str]], list[str]]:
             origins[origin] = found[:3]
 
     # A sentence that names three or more origins is *about* provenance - a taxonomy, a summary, this tool's own
-    # explanation - and counting it makes a decision cite everything. Found on D166, which lists the tag vocabulary
+    # explanation - and counting it makes a decision cite everything. Found on D168, which lists the tag vocabulary
     # and was consequently tagged with eight of them.
     counts: dict[str, set[str]] = {}
     for origin, snippets in origins.items():
@@ -266,7 +266,7 @@ def classify_basis(text: str) -> tuple[dict[str, list[str]], list[str]]:
         origin: [snippet for snippet in snippets if len(counts[snippet]) < 3]
         for origin, snippets in origins.items()
     }
-    # Inside a sentence that quotes the owner, the *categories* are his vocabulary, not our method: D166 quotes him
+    # Inside a sentence that quotes the owner, the *categories* are his vocabulary, not our method: D168 quotes him
     # listing "research, reverse engineered, assumed" and was tagged `binary` by his own word.
     for origin, snippets in list(origins.items()):
         if origin == "owner":
