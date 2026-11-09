@@ -380,6 +380,37 @@ class ReviewQueue(unittest.TestCase):
         self.assertIn('ruage-decisions-review', html)
 
 
+class Groups(unittest.TestCase):
+    """168 cards in one column is a list nobody scrolls; the register is cut into collapsible bands."""
+
+    def corpus(self, count=30):
+        body = "\n\n".join(f"## D{i} - Rule {i}\n\n**Decided 2026-11-01.** The owner asked." for i in range(1, count + 1))
+        return parse(body)
+
+    def test_the_register_is_cut_into_bands_of_a_fixed_size(self):
+        bands = decisions.groups(self.corpus(30), size=10)
+        self.assertEqual(3, len(bands))
+        self.assertEqual(("D1", "D10", 10), bands[0])
+
+    def test_a_band_is_named_by_the_ids_actually_in_it(self):
+        corpus = parse("## D1 - A\n\n**Decided.**\n\n## D44a - B\n\n**Decided.**\n\n## D45 - C\n\n**Decided.**\n")
+        self.assertEqual([("D1", "D45", 3)], decisions.groups(corpus, size=10))
+
+    def test_each_band_is_a_details_element_so_it_can_collapse(self):
+        html = decisions.render(self.corpus(30), unknowns={}, refs=[], generated="2026-11-09")
+        self.assertEqual(2, html.count('<details class="group"'))  # 30 cards, 25 per band
+        self.assertIn('data-group="0"', html)
+
+    def test_the_band_header_says_how_much_is_in_it(self):
+        html = decisions.render(self.corpus(30), unknowns={}, refs=[], generated="2026-11-09")
+        self.assertIn("D1 - D25", html)
+
+    def test_the_page_can_open_and_close_every_band_at_once(self):
+        html = decisions.render(self.corpus(30), unknowns={}, refs=[], generated="2026-11-09")
+        self.assertIn('id="expand-all"', html)
+        self.assertIn('id="collapse-all"', html)
+
+
 class TheScan(unittest.TestCase):
     """A committed page must quote the repository, not whatever is lying in the working tree."""
 

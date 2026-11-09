@@ -57,6 +57,15 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;co
 .refs code{color:var(--acc)}
 .stamp{color:var(--dim);font-size:12px;margin-top:18px}
 .hidden{display:none}
+details.group{border:1px solid var(--line);border-radius:8px;margin:0 0 12px;padding:0 10px 4px}
+details.group>summary{cursor:pointer;padding:9px 2px;display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;list-style:none}
+details.group>summary::-webkit-details-marker{display:none}
+/* "+" / "-" rather than a triangle glyph: the container's fonts render ▸ as a tofu box, and a 10px
+   CSS triangle reads as an up-arrow at this size. A sign is unambiguous in every font. */
+details.group>summary::before{content:"+";color:var(--acc);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;font-size:15px;line-height:1;width:14px;display:inline-block;text-align:center;margin-right:7px}
+details.group[open]>summary::before{content:"-"}
+details.group .range{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;color:var(--acc);font-size:14px}
+details.group .gcount{color:var(--dim);font-size:12px;margin-left:auto;text-align:right}
 .reviewbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
 .reviewbar select,.reviewbar button{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer}
 .reviewbar button.on{background:#24303f;border-color:var(--acc)}
@@ -67,9 +76,9 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;co
 .verdict[data-verdict=agree].on{color:#8fd694;border-color:#2f5c3a;background:#1d2a22}
 .verdict[data-verdict=question].on{color:#ffd479;border-color:#5c4a22;background:#2a2519}
 .verdict[data-verdict=wrong].on{color:#ff8fb1;border-color:#5c2b3a;background:#2a1c22}
-#import{max-width:150px;color:var(--dim);font-size:12px}
-#import::file-selector-button{background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;margin-right:6px}
-.reviewbar .import{display:flex;align-items:center;gap:6px}
+/* the native file input cannot be themed; it is made invisible and the label is the button */
+.reviewbar .import{position:relative;overflow:hidden;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer;display:inline-block}
+#import{position:absolute;inset:0;opacity:0;cursor:pointer}
 .note{flex:1 1 220px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:3px 8px;font-size:12px}
 article.decision.v-agree{border-left-color:#8fd694}
 article.decision.v-question{border-left-color:#ffd479}
@@ -171,12 +180,16 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <button class="chip" data-origin="none">no basis</button>
 <button class="chip" data-origin="unresolved">unresolved</button>
 </span>
+<button id="expand-all" class="chip">expand all</button>
+<button id="collapse-all" class="chip">collapse all</button>
 <span class="chips" id="statuses">
 <button class="chip" data-status="decided">decided</button>
 <button class="chip" data-status="amended">amended</button>
 <button class="chip" data-status="corrected">corrected</button>
 <button class="chip" data-status="superseded">superseded</button>
 </span><span id="shown" class="count"></span></div>
+<details class="group" id="g-0" data-group="0" open>
+<summary><span class="range">D1 - D24a</span> <span class="gcount">25 decisions · 1 corrected · 2 superseded · 5 with no stated basis</span></summary>
 <article class="decision s-decided" id="d-D1" data-id="D1" data-origins="owner dat binary measured" data-unresolved="0" data-status="decided"
 <div class="head">
 <span class="id">D1</span>
@@ -702,6 +715,9 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D24a" placeholder="note (saved with the verdict)">
 </div>
 </article>
+</details>
+<details class="group" id="g-1" data-group="1" open>
+<summary><span class="range">D25 - D46a</span> <span class="gcount">25 decisions · 2 corrected · 1 superseded · 7 with no stated basis</span></summary>
 <article class="decision s-decided" id="d-D25" data-id="D25" data-origins="published" data-unresolved="0" data-status="decided"
 <div class="head">
 <span class="id">D25</span>
@@ -1180,6 +1196,9 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D46a" placeholder="note (saved with the verdict)">
 </div>
 </article>
+</details>
+<details class="group" id="g-2" data-group="2" open>
+<summary><span class="range">D47 - D66</span> <span class="gcount">25 decisions · 1 corrected · 1 superseded · 7 with no stated basis</span></summary>
 <article class="decision s-decided" id="d-D47" data-id="D47" data-origins="none" data-unresolved="0" data-status="decided"
 <div class="head">
 <span class="id">D47</span>
@@ -1641,6 +1660,9 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D66" placeholder="note (saved with the verdict)">
 </div>
 </article>
+</details>
+<details class="group" id="g-3" data-group="3" open>
+<summary><span class="range">D67 - D94a</span> <span class="gcount">25 decisions · 1 superseded · 5 with no stated basis</span></summary>
 <article class="decision s-decided" id="d-D67" data-id="D67" data-origins="dat prior-art decision" data-unresolved="0" data-status="decided"
 <div class="head">
 <span class="id">D67</span>
@@ -2126,6 +2148,9 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D94a" placeholder="note (saved with the verdict)">
 </div>
 </article>
+</details>
+<details class="group" id="g-4" data-group="4" open>
+<summary><span class="range">D95 - D119</span> <span class="gcount">25 decisions · 7 with no stated basis</span></summary>
 <article class="decision s-decided" id="d-D95" data-id="D95" data-origins="owner" data-unresolved="0" data-status="decided"
 <div class="head">
 <span class="id">D95</span>
@@ -2586,6 +2611,9 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D119" placeholder="note (saved with the verdict)">
 </div>
 </article>
+</details>
+<details class="group" id="g-5" data-group="5" open>
+<summary><span class="range">D120 - D147</span> <span class="gcount">25 decisions · 2 with no stated basis</span></summary>
 <article class="decision s-decided" id="d-D120" data-id="D120" data-origins="owner decision" data-unresolved="0" data-status="decided"
 <div class="head">
 <span class="id">D120</span>
@@ -3098,6 +3126,9 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D147" placeholder="note (saved with the verdict)">
 </div>
 </article>
+</details>
+<details class="group" id="g-6" data-group="6" open>
+<summary><span class="range">D148 - D165</span> <span class="gcount">18 decisions · 2 with no stated basis</span></summary>
 <article class="decision s-decided" id="d-D148" data-id="D148" data-origins="owner measured" data-unresolved="0" data-status="decided"
 <div class="head">
 <span class="id">D148</span>
@@ -3496,12 +3527,13 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D165" placeholder="note (saved with the verdict)">
 </div>
 </article>
+</details>
 </section>
 <section id="dangling"><h2>Referenced but never written</h2>
 <p class="note">Ids named in the docs or the code that no decision section defines. Each is either a missing decision or a typo in a citation; both are cheap to fix and neither is visible in a prose read.</p>
 <ul class="refs">
-<li><span class="id">D115</span> <code>SPEC.md:627</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D115</span> <code>SPEC.md:631</code> | 2026-11-08 | v1.129 - **the yard is not wall, and the outline goes outside (D161)**, with research in `docs/building-collision.md`: the game&#x27;s collision is th</li>
+<li><span class="id">D115</span> <code>SPEC.md:628</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D115</span> <code>SPEC.md:632</code> | 2026-11-08 | v1.129 - **the yard is not wall, and the outline goes outside (D161)**, with research in `docs/building-collision.md`: the game&#x27;s collision is th</li>
 <li><span class="id">D115</span> <code>crates/sim/tests/animals.rs:310</code> // any movement rule, and the test only ever passed because a body&#x27;s centre could stand on the core&#x27;s corner (D115).</li>
 <li><span class="id">D115</span> <code>crates/view/src/lib.rs:1136</code> /// The renderer needs it because a building is not always solid all over: the town centre keeps a **yard** (D115), whose tiles a</li>
 <li><span class="id">D115</span> <code>crates/view/tests/virtual_fence.rs:7</code> //! The engine has enforced exactly that since D115 - the town centre is a **4-tile core plus a walkable yard**, and the walk grid refuses</li>
@@ -3514,36 +3546,36 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-08-the-fence-was-there.md:19</code> the diamond&quot;) is *precisely* what D115 built. The report was right about what he **saw** and wrong about what the engine does - because the</li>
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-08-the-yard-was-painted-as-wall.md:14</code> (`the_town_centre_keeps_its_solid_core_and_its_yard`, D115), and the same thing is visible in an independent project that converts</li>
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-08-three-rounds-of-screenshots.md:12</code> (legal, D115) was painted over by the building&#x27;s own yard tiles. It is now painted with the terrain, **before any entity**, so a unit in</li>
-<li><span class="id">D115</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
-<li><span class="id">D122b</span> <code>SPEC.md:627</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D122b</span> <code>SPEC.md:669</code> | 2026-11-05 | v1.91 - **the adversarial review of the panel and the farm (D122b).** Owner: *&quot;Please do complete adversarial review on performance and stability</li>
+<li><span class="id">D115</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D122b</span> <code>SPEC.md:628</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D122b</span> <code>SPEC.md:670</code> | 2026-11-05 | v1.91 - **the adversarial review of the panel and the farm (D122b).** Owner: *&quot;Please do complete adversarial review on performance and stability</li>
 <li><span class="id">D122b</span> <code>docs/decisions.md:4020</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D122b</span> <code>docs/next-step.md:14</code> &gt; in the numbering four documents still reference), **D115, D124, D126, D136**, and the lettered **D122b, D125b**.</li>
-<li><span class="id">D122b</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
-<li><span class="id">D124</span> <code>SPEC.md:627</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D124</span> <code>SPEC.md:667</code> | 2026-11-05 | v1.93 - **a husk is a farm crossed out (D124).** Owner: *&quot;As of now, husk can get the same pictogram as farm but crossed over.&quot;* A spent farm&#x27;s c</li>
+<li><span class="id">D122b</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D124</span> <code>SPEC.md:628</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D124</span> <code>SPEC.md:668</code> | 2026-11-05 | v1.93 - **a husk is a farm crossed out (D124).** Owner: *&quot;As of now, husk can get the same pictogram as farm but crossed over.&quot;* A spent farm&#x27;s c</li>
 <li><span class="id">D124</span> <code>docs/decisions.md:4020</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D124</span> <code>docs/next-step.md:14</code> &gt; in the numbering four documents still reference), **D115, D124, D126, D136**, and the lettered **D122b, D125b**.</li>
 <li><span class="id">D124</span> <code>docs/next-step.md:562</code> &gt; # Session 23, 2026-11-05 - the husk is drawn as its farm, crossed out (D124)</li>
-<li><span class="id">D124</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
-<li><span class="id">D125b</span> <code>SPEC.md:627</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D125b</span> <code>SPEC.md:665</code> | 2026-11-05 | v1.95 - **the ring is a curve, not a diamond (D125b).** Owner, on the rendered frame: *&quot;I see a diamond, not elipse in the example&quot;* - correct, a</li>
+<li><span class="id">D124</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D125b</span> <code>SPEC.md:628</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D125b</span> <code>SPEC.md:666</code> | 2026-11-05 | v1.95 - **the ring is a curve, not a diamond (D125b).** Owner, on the rendered frame: *&quot;I see a diamond, not elipse in the example&quot;* - correct, a</li>
 <li><span class="id">D125b</span> <code>docs/decisions.md:4020</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D125b</span> <code>docs/next-step.md:14</code> &gt; in the numbering four documents still reference), **D115, D124, D126, D136**, and the lettered **D122b, D125b**.</li>
 <li><span class="id">D125b</span> <code>docs/next-step.md:523</code> &gt; # Session 25, 2026-11-05 - the ring is a curve, not a diamond (D125b)</li>
-<li><span class="id">D125b</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
-<li><span class="id">D126</span> <code>SPEC.md:627</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D126</span> <code>SPEC.md:664</code> | 2026-11-05 | v1.96 - **the minimap&#x27;s crossing lines were seams (D126).** Owner: *&quot;Minimap has 2 crossing lines artifact.&quot;* The minimap painted one diamond per</li>
+<li><span class="id">D125b</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D126</span> <code>SPEC.md:628</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D126</span> <code>SPEC.md:665</code> | 2026-11-05 | v1.96 - **the minimap&#x27;s crossing lines were seams (D126).** Owner: *&quot;Minimap has 2 crossing lines artifact.&quot;* The minimap painted one diamond per</li>
 <li><span class="id">D126</span> <code>docs/decisions.md:4020</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D126</span> <code>docs/next-step.md:14</code> &gt; in the numbering four documents still reference), **D115, D124, D126, D136**, and the lettered **D122b, D125b**.</li>
 <li><span class="id">D126</span> <code>docs/next-step.md:502</code> &gt; # Session 26, 2026-11-05 - the minimap&#x27;s crossing lines were seams (D126)</li>
 <li><span class="id">D126</span> <code>docs/reviews/2026-11-05-a-broken-test-shipped.md:3</code> *Standing correction to D126. The commit `d2cad09` shipped `crates/view/tests/minimap_seams.rs` with a **compile error**: a</li>
 <li><span class="id">D126</span> <code>docs/reviews/2026-11-05-a-broken-test-shipped.md:37</code> not compile. The suite figures stand from D126: **695 passed / 0 failed / 19 ignored**, acceptance hash `4568cef16368bd5a`</li>
-<li><span class="id">D126</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
-<li><span class="id">D136</span> <code>SPEC.md:627</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D136</span> <code>SPEC.md:647</code> | 2026-11-07 | v1.113 - **`lib.rs` 8,731 -&gt; 4,106 (D145).** The owner: *&quot;Go ahead if it is still more than 5000 lines file.&quot;* Twelve more mechanical moves - `wo</li>
-<li><span class="id">D136</span> <code>SPEC.md:648</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
-<li><span class="id">D136</span> <code>SPEC.md:648</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
+<li><span class="id">D126</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D136</span> <code>SPEC.md:628</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D136</span> <code>SPEC.md:648</code> | 2026-11-07 | v1.113 - **`lib.rs` 8,731 -&gt; 4,106 (D145).** The owner: *&quot;Go ahead if it is still more than 5000 lines file.&quot;* Twelve more mechanical moves - `wo</li>
+<li><span class="id">D136</span> <code>SPEC.md:649</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
+<li><span class="id">D136</span> <code>SPEC.md:649</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
 <li><span class="id">D136</span> <code>crates/sim/src/world/gather.rs:3</code> //! Moved out of `lib.rs` unchanged in D136. `nearest_like` is the replacement search - it asks whether a node can actually</li>
 <li><span class="id">D136</span> <code>crates/sim/src/world/memory.rs:3</code> //! Moved out of `lib.rs` unchanged in D136. The anti-cheat is the point of the file: a rule may ask what its player has</li>
 <li><span class="id">D136</span> <code>crates/sim/src/world/movement.rs:3</code> //! Moved out of `lib.rs` unchanged (D136). `collide` is the only entry point the tick uses; everything else answers one</li>
@@ -3561,33 +3593,36 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D136</span> <code>docs/reviews/2026-11-07-lib-rs-down-to-4106.md:18</code> | `world/gather.rs` | 376 | the gather pass (D136) |</li>
 <li><span class="id">D136</span> <code>docs/reviews/2026-11-07-lib-rs-down-to-4106.md:22</code> | `world/memory.rs` | 280 | D127&#x27;s two-attempt memory (D136) |</li>
 <li><span class="id">D136</span> <code>docs/reviews/2026-11-07-lib-rs-down-to-4106.md:54</code> already run in D136 and D144 without loss because those groups happened to contain no must-use methods. The skill&#x27;s</li>
-<li><span class="id">D136</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
-<li><span class="id">D78</span> <code>SPEC.md:627</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D136</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D78</span> <code>SPEC.md:626</code> | 2026-11-09 | v1.134 - **the register collapses into bands (D165)**: 168 cards in **seven `&lt;details&gt;` bands of 25**, cut by **position** rather than by number </li>
+<li><span class="id">D78</span> <code>SPEC.md:628</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
 <li><span class="id">D78</span> <code>docs/behaviour-diff.md:66</code> | 12 | match end (conquest: a razed town centre with villagers alive is not a win) | D59b/D78 | not yet located | **unknown-static** | — |</li>
 <li><span class="id">D78</span> <code>docs/decisions.md:2113</code> **D78 - Victory is conquest.** The match ends when a side has nothing left that keeps it alive (D59&#x27;s rule, unchanged). The</li>
 <li><span class="id">D78</span> <code>docs/decisions.md:4020</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
+<li><span class="id">D78</span> <code>docs/decisions.md:4037</code> **position, not by number range**: the numbering has holes (no D78-D82) and letter suffixes (D44a), so a numeric</li>
 <li><span class="id">D78</span> <code>docs/next-step.md:13</code> &gt; **The finding to act on:** ten ids are cited in the docs or the code and never written - **D78, D79, D81, D82** (a gap</li>
 <li><span class="id">D78</span> <code>docs/oracle.md:267</code> - **Victory: conquest** (our rule, D78). **Population 200** - the AI&#x27;s boom depends on it, so it must match the rule our</li>
-<li><span class="id">D78</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
-<li><span class="id">D78</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
-<li><span class="id">D79</span> <code>SPEC.md:627</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D78</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D78</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D79</span> <code>SPEC.md:628</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
 <li><span class="id">D79</span> <code>docs/decisions.md:2105</code> ## D77-D79 - The owner&#x27;s five answers (2026-10-30)</li>
 <li><span class="id">D79</span> <code>docs/decisions.md:2117</code> **D79 - The rendering order, the map, and the footprints.** Items 10-15 go **window first**: terrain and coloured blocks</li>
 <li><span class="id">D79</span> <code>docs/decisions.md:4020</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D79</span> <code>docs/next-step.md:13</code> &gt; **The finding to act on:** ten ids are cited in the docs or the code and never written - **D78, D79, D81, D82** (a gap</li>
-<li><span class="id">D79</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
-<li><span class="id">D81</span> <code>SPEC.md:627</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D79</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D81</span> <code>SPEC.md:628</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
 <li><span class="id">D81</span> <code>docs/decisions.md:2130</code> **D81 - Assets resolve through a mod chain; the original game is the last link, and its art is never redistributed.**</li>
 <li><span class="id">D81</span> <code>docs/decisions.md:4020</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D81</span> <code>docs/next-step.md:13</code> &gt; **The finding to act on:** ten ids are cited in the docs or the code and never written - **D78, D79, D81, D82** (a gap</li>
 <li><span class="id">D81</span> <code>docs/next-step.md:3636</code> behind it (D81&#x27;s mod chain, install art last, never committed).</li>
 <li><span class="id">D81</span> <code>docs/prior-art.md:705</code> CD&#x27;s cabinet, dump the dat, play from a folder - where ours is D81&#x27;s runtime chain resolved by id. Simpler for</li>
-<li><span class="id">D81</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D81</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
 <li><span class="id">D81</span> <code>docs/ui.md:164</code> 3. The panel&#x27;s **portraits and button icons are install art** through `SpriteRef` and the mod chain (D81), civ-selected by</li>
 <li><span class="id">D82</span> <code>SPEC.md:611</code> | `docs/i18n.md` | current | Translation: three kinds of text (identifiers, display, diagnostics), why the only drawn text is digits today (D82&#x27;s 3x5 font), the</li>
-<li><span class="id">D82</span> <code>SPEC.md:627</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D82</span> <code>SPEC.md:695</code> | 2026-11-03 | v1.64 - **the HUD is drawn (A3).** `ui::Hud::of` and `ui::minimap` existed, were tested, and the window called neither; it drew the top bar and t</li>
-<li><span class="id">D82</span> <code>SPEC.md:758</code> | 2026-10-30 | v1.40 - **the HUD, and a 3x5 font to draw it with** (step 6 of the look, D82&#x27;s bundled bitmap font). `font.rs` carries ten digits and a slash - a</li>
+<li><span class="id">D82</span> <code>SPEC.md:626</code> | 2026-11-09 | v1.134 - **the register collapses into bands (D165)**: 168 cards in **seven `&lt;details&gt;` bands of 25**, cut by **position** rather than by number </li>
+<li><span class="id">D82</span> <code>SPEC.md:628</code> | 2026-11-09 | v1.131 - **the decision index (D165)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D82</span> <code>SPEC.md:696</code> | 2026-11-03 | v1.64 - **the HUD is drawn (A3).** `ui::Hud::of` and `ui::minimap` existed, were tested, and the window called neither; it drew the top bar and t</li>
+<li><span class="id">D82</span> <code>SPEC.md:759</code> | 2026-10-30 | v1.40 - **the HUD, and a 3x5 font to draw it with** (step 6 of the look, D82&#x27;s bundled bitmap font). `font.rs` carries ten digits and a slash - a</li>
 <li><span class="id">D82</span> <code>crates/view/src/font.rs:3</code> //! D82 chose a bundled bitmap font over a TTF because it needs no parser, no dependency and no licence review. It began at</li>
 <li><span class="id">D82</span> <code>crates/view/src/lib.rs:885</code> /// (D82: digits, no words), so the banner says it this way and the tests name these two colours.</li>
 <li><span class="id">D82</span> <code>crates/view/src/ui.rs:478</code> /// engine already keeps. D74 allowed this; D82 chose the bitmap font it is drawn with.</li>
@@ -3597,13 +3632,14 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D82</span> <code>docs/decisions.md:2124</code> ## D80-D82 - The look, the art, and the mods (2026-10-30)</li>
 <li><span class="id">D82</span> <code>docs/decisions.md:2142</code> **D82 - A bitmap font for the HUD, PNG frames as the yardstick, borderless by default.** The HUD uses a bundled bitmap font</li>
 <li><span class="id">D82</span> <code>docs/decisions.md:4020</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
+<li><span class="id">D82</span> <code>docs/decisions.md:4037</code> **position, not by number range**: the numbering has holes (no D78-D82) and letter suffixes (D44a), so a numeric</li>
 <li><span class="id">D82</span> <code>docs/i18n.md:9</code> (D82) - stock, population, tick. No word appears on screen, so no player-visible string exists to translate.</li>
 <li><span class="id">D82</span> <code>docs/i18n.md:14</code> decision than gettext (parser, licence, hinting) which D57/D82 deliberately avoided.</li>
 <li><span class="id">D82</span> <code>docs/next-step.md:13</code> &gt; **The finding to act on:** ten ids are cited in the docs or the code and never written - **D78, D79, D81, D82** (a gap</li>
 <li><span class="id">D82</span> <code>docs/next-step.md:4050</code> (D82&#x27;s 3x5 font) and every other sentence is a developer diagnostic. The order when someone wants it is message keys,</li>
 <li><span class="id">D82</span> <code>docs/reviews/2026-11-03-the-hud-is-drawn.md:24</code> whole vocabulary available - the bundled font has digits and a slash, no words (D82) - so the banner speaks in colour and</li>
-<li><span class="id">D82</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
-<li><span class="id">D82</span> <code>docs/reviews/2026-11-09-decision-index.md:147</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D82</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
+<li><span class="id">D82</span> <code>docs/reviews/2026-11-09-decision-index.md:157</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
 <li><span class="id">D82</span> <code>docs/ui.md:15</code> population), `minimap`, and a 3x5 bitmap font holding **digits only** (`font.rs`, D82). The window draws the world, a HUD</li>
 </ul>
 </section>
@@ -3621,6 +3657,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
       shown=document.getElementById('shown'),
       progress=document.getElementById('review-progress'),
       batchSel=document.getElementById('batch-size'),
+      groups=[].slice.call(document.querySelectorAll('details.group')),
       flaggedOnly=false,reviewing=false,cursor=0,
       store=load();
 
@@ -3668,6 +3705,12 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
     var slice=reviewing?list.slice(cursor,cursor+batch()):list;
     slice.forEach(function(c){c.classList.remove('hidden');});
     shown.textContent=slice.length+' of '+cards.length+' shown';
+    groups.forEach(function(g){
+      var visible=g.querySelectorAll('article.decision:not(.hidden)').length;
+      g.classList.toggle('hidden',visible===0);
+      // Open whatever holds a match: a narrowed list behind seven collapsed headers looks empty.
+      if((reviewing||list.length<cards.length)&&visible)g.open=true;
+    });
     var reviewed=cards.filter(function(c){return verdictOf(c.dataset.id);}).length;
     progress.textContent=reviewed+' of '+cards.length+' reviewed'+
       (reviewing&&list.length?' \u00b7 batch '+(Math.floor(cursor/batch())+1)+' of '+Math.ceil(list.length/batch()):'');
@@ -3676,6 +3719,9 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
   q.addEventListener('input',function(){cursor=0;apply();});
   document.querySelectorAll('.chip').forEach(function(chip){
     chip.addEventListener('click',function(){
+      // `expand all` / `collapse all` are styled as chips but are not filters: without this guard they land in the
+      // statuses set as `undefined` and hide every card (found by clicking collapse-all and watching the list empty).
+      if(!chip.dataset.origin&&!chip.dataset.status)return;
       var set=chip.dataset.origin?origins:statuses,key=chip.dataset.origin||chip.dataset.status;
       if(set.has(key))set.delete(key);else set.add(key);
       chip.classList.toggle('on',set.has(key));
@@ -3701,6 +3747,12 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
     });
   });
 
+  document.getElementById('expand-all').addEventListener('click',function(){
+    groups.forEach(function(g){g.open=true;});
+  });
+  document.getElementById('collapse-all').addEventListener('click',function(){
+    groups.forEach(function(g){if(!g.classList.contains('hidden'))g.open=false;});
+  });
   batchSel.addEventListener('change',function(){cursor=0;apply();});
   document.getElementById('review-start').addEventListener('click',function(){
     reviewing=true;cursor=0;apply();

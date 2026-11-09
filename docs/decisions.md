@@ -4033,6 +4033,13 @@ authored**, **the open register, the evidence ladder and broken references**, co
    section). A structure that is wrong one time in five is worse than the batch queue, so the queue has no topics in
    it - only batches and the evidence chips, which are derived from phrases and can be checked.
 
+11. **The register is cut into collapsible bands of 25, and the band header says what is inside.** Bands are by
+   **position, not by number range**: the numbering has holes (no D78-D82) and letter suffixes (D44a), so a numeric
+   range would name ids that do not exist. Each header carries its own facts - "25 decisions - 1 corrected - 2
+   superseded - 5 with no stated basis" - so a collapsed band still answers "is this worth opening". `expand all` and
+   `collapse all` sit with the filters, a filter reveals the bands that hold matches, and the queue opens whatever band
+   its batch lands in.
+
 **Limits, named.** The basis patterns are a heuristic over English prose: a decision can be tagged from an incidental
 mention, which is why the sentence is on the page. The U-register is read from one table, so a question written
 anywhere else is not in the open register. Nothing links a decision to the *test* that pins it - the code cites ids

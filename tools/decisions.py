@@ -466,6 +466,23 @@ def dangling_refs(defined, texts: dict[str, str]) -> list[Ref]:
     return refs
 
 
+GROUP_SIZE = 25
+
+
+def groups(corpus: Corpus, size: int = GROUP_SIZE) -> list[tuple[str, str, int]]:
+    """The register cut into bands, in id order: `(first id, last id, count)` per band.
+
+    Bands are by **position**, not by number range, because the numbering has holes and letter suffixes (D44a) - a band
+    of numbers would claim ids that do not exist. The label therefore names what is actually in the band.
+    """
+    ordered = sorted(corpus.decisions.values(), key=lambda decision: decision.number)
+    return [
+        (band[0].id, band[-1].id, len(band))
+        for band in (ordered[start : start + size] for start in range(0, len(ordered), size))
+        if band
+    ]
+
+
 def status(decision: Decision, corpus: Corpus) -> str:
     """What this rule is now: still the rule, amended, corrected, or replaced."""
     if decision.corrected_by:
@@ -597,12 +614,38 @@ def render(corpus: Corpus, unknowns: dict[str, Unknown], refs: list[Ref], genera
     add("<button class=\"chip\" data-origin=\"none\">no basis</button>")
     add("<button class=\"chip\" data-origin=\"unresolved\">unresolved</button>")
     add("</span>")
+    add("<button id=\"expand-all\" class=\"chip\">expand all</button>")
+    add("<button id=\"collapse-all\" class=\"chip\">collapse all</button>")
     add("<span class=\"chips\" id=\"statuses\">")
     for name in ("decided", "amended", "corrected", "superseded"):
         add(f"<button class=\"chip\" data-status=\"{name}\">{name}</button>")
     add("</span><span id=\"shown\" class=\"count\"></span></div>")
 
-    for decision in decisions:
+    for index, decision in enumerate(decisions):
+        # Bands are collapsible because the register is longer than anyone scrolls; the header carries what is inside
+        # so a collapsed band still says whether it is worth opening.
+        if index % GROUP_SIZE == 0:
+            if index:
+                add("</details>")
+            band = decisions[index : index + GROUP_SIZE]
+            corrected = sum(1 for item in band if item.corrected_by)
+            superseded = sum(1 for item in band if item.superseded_by)
+            uncited = sum(1 for item in band if item.uncited)
+            facts = [f"{len(band)} decisions"]
+            if corrected:
+                facts.append(f"{corrected} corrected")
+            if superseded:
+                facts.append(f"{superseded} superseded")
+            if uncited:
+                facts.append(f"{uncited} with no stated basis")
+            add(
+                f"<details class=\"group\" id=\"g-{index // GROUP_SIZE}\" "
+                f"data-group=\"{index // GROUP_SIZE}\" open>"
+            )
+            add(
+                f"<summary><span class=\"range\">{_esc(band[0].id)} - {_esc(band[-1].id)}</span> "
+                f"<span class=\"gcount\">{' \u00b7 '.join(facts)}</span></summary>"
+            )
         state = status(decision, corpus)
         origin_keys = " ".join(decision.origins) if decision.origins else "none"
         add(
@@ -669,6 +712,7 @@ def render(corpus: Corpus, unknowns: dict[str, Unknown], refs: list[Ref], genera
         add("</div>")
         add("</article>")
 
+    add("</details>")
     add("</section>")
 
     # ---- dangling -------------------------------------------------------------------------------------------------
@@ -775,6 +819,15 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;co
 .refs code{color:var(--acc)}
 .stamp{color:var(--dim);font-size:12px;margin-top:18px}
 .hidden{display:none}
+details.group{border:1px solid var(--line);border-radius:8px;margin:0 0 12px;padding:0 10px 4px}
+details.group>summary{cursor:pointer;padding:9px 2px;display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;list-style:none}
+details.group>summary::-webkit-details-marker{display:none}
+/* "+" / "-" rather than a triangle glyph: the container's fonts render ▸ as a tofu box, and a 10px
+   CSS triangle reads as an up-arrow at this size. A sign is unambiguous in every font. */
+details.group>summary::before{content:"+";color:var(--acc);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;font-size:15px;line-height:1;width:14px;display:inline-block;text-align:center;margin-right:7px}
+details.group[open]>summary::before{content:"-"}
+details.group .range{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;color:var(--acc);font-size:14px}
+details.group .gcount{color:var(--dim);font-size:12px;margin-left:auto;text-align:right}
 .reviewbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
 .reviewbar select,.reviewbar button{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer}
 .reviewbar button.on{background:#24303f;border-color:var(--acc)}
@@ -785,9 +838,9 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;co
 .verdict[data-verdict=agree].on{color:#8fd694;border-color:#2f5c3a;background:#1d2a22}
 .verdict[data-verdict=question].on{color:#ffd479;border-color:#5c4a22;background:#2a2519}
 .verdict[data-verdict=wrong].on{color:#ff8fb1;border-color:#5c2b3a;background:#2a1c22}
-#import{max-width:150px;color:var(--dim);font-size:12px}
-#import::file-selector-button{background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;margin-right:6px}
-.reviewbar .import{display:flex;align-items:center;gap:6px}
+/* the native file input cannot be themed; it is made invisible and the label is the button */
+.reviewbar .import{position:relative;overflow:hidden;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer;display:inline-block}
+#import{position:absolute;inset:0;opacity:0;cursor:pointer}
 .note{flex:1 1 220px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:3px 8px;font-size:12px}
 article.decision.v-agree{border-left-color:#8fd694}
 article.decision.v-question{border-left-color:#ffd479}
@@ -809,6 +862,7 @@ SCRIPT = r"""(function(){
       shown=document.getElementById('shown'),
       progress=document.getElementById('review-progress'),
       batchSel=document.getElementById('batch-size'),
+      groups=[].slice.call(document.querySelectorAll('details.group')),
       flaggedOnly=false,reviewing=false,cursor=0,
       store=load();
 
@@ -856,6 +910,12 @@ SCRIPT = r"""(function(){
     var slice=reviewing?list.slice(cursor,cursor+batch()):list;
     slice.forEach(function(c){c.classList.remove('hidden');});
     shown.textContent=slice.length+' of '+cards.length+' shown';
+    groups.forEach(function(g){
+      var visible=g.querySelectorAll('article.decision:not(.hidden)').length;
+      g.classList.toggle('hidden',visible===0);
+      // Open whatever holds a match: a narrowed list behind seven collapsed headers looks empty.
+      if((reviewing||list.length<cards.length)&&visible)g.open=true;
+    });
     var reviewed=cards.filter(function(c){return verdictOf(c.dataset.id);}).length;
     progress.textContent=reviewed+' of '+cards.length+' reviewed'+
       (reviewing&&list.length?' \u00b7 batch '+(Math.floor(cursor/batch())+1)+' of '+Math.ceil(list.length/batch()):'');
@@ -864,6 +924,9 @@ SCRIPT = r"""(function(){
   q.addEventListener('input',function(){cursor=0;apply();});
   document.querySelectorAll('.chip').forEach(function(chip){
     chip.addEventListener('click',function(){
+      // `expand all` / `collapse all` are styled as chips but are not filters: without this guard they land in the
+      // statuses set as `undefined` and hide every card (found by clicking collapse-all and watching the list empty).
+      if(!chip.dataset.origin&&!chip.dataset.status)return;
       var set=chip.dataset.origin?origins:statuses,key=chip.dataset.origin||chip.dataset.status;
       if(set.has(key))set.delete(key);else set.add(key);
       chip.classList.toggle('on',set.has(key));
@@ -889,6 +952,12 @@ SCRIPT = r"""(function(){
     });
   });
 
+  document.getElementById('expand-all').addEventListener('click',function(){
+    groups.forEach(function(g){g.open=true;});
+  });
+  document.getElementById('collapse-all').addEventListener('click',function(){
+    groups.forEach(function(g){if(!g.classList.contains('hidden'))g.open=false;});
+  });
   batchSel.addEventListener('change',function(){cursor=0;apply();});
   document.getElementById('review-start').addEventListener('click',function(){
     reviewing=true;cursor=0;apply();

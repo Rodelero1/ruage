@@ -138,6 +138,16 @@ Driven in the browser: a verdict and a note survive a reload; `only my flags` na
 the last batch clamps instead of showing an empty page; a `localStorage.setItem` that throws leaves the verdict applied
 in memory without breaking the page; an import of JSON without a `verdicts` key is refused silently.
 
+**Collapsible bands, and two defects only a browser could show.** The register is cut into seven bands of 25, by
+position rather than by id range (the numbering has holes and `D44a`-style suffixes). Two things broke on the way:
+
+- `expand all` / `collapse all` were styled as chips, so the *filter* handler bound to them, pushed `undefined` into the
+  status set, and hid all 168 cards. Found by clicking the button and looking, not by a test; the handler now ignores
+  chips with no data key.
+- The disclosure caret was `▸` (a tofu box in this container's fonts), then a CSS triangle (rendered as an *up* arrow at
+  10 px). It is now `+` / `-`, which needs no font support at all. Two cosmetic iterations, both recorded because the
+  first one looked fine in the markup and wrong on the screen.
+
 **Still not covered, and the same gap as before**: none of that is a Python test. The export button's *payload* is
 reachable as `window.__exportReview()` and was checked; the download itself was not (a blob URL and a synthetic click
 cannot be asserted without a browser harness). The queue's JavaScript is verified by driving it, not by `make check`.
