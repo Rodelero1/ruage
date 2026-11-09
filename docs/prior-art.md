@@ -1568,3 +1568,13 @@ Our own instrument already exists — `crates/view/tests/frame_cost.rs`, ignored
 - **U22** — unchanged in contract. One caution sharpens: a Town Centre's footprint is three-quarters walkable by D76's own mask, so "seeded from the site's footprint" is mostly open ground, and the solid piece should be excluded from that seed rather than included by area.
 - **U18** — stands; the loop is untouched in 48 commits.
 - **U12, U23, U20, U7** — unchanged. U20's 250 in `config/economy.toml:44` is still the recorded defect.
+
+## 2026-11-09 — a roster and a reformat: nothing to act on
+
+Two projects moved, neither on an engine axis.
+
+**SiegeEngineers/aoc-reference-data, 2 commits (`47c35532` → `6d99a1fc`).** Tournament roster upkeep in `data/players.yaml` and `data/teams.json`: CN ZhongSheng's player list drops four ids, team 45 gains 776, and three DE players are appended. One defect of theirs, noted only so it is not mistaken for a source: the appended `Gengar` reuses **id 775**, which the file already assigns, so ids are no longer unique there. We read this repo for published values, not identity tables; nothing propagates.
+
+**Divy1211/AoE2DE_UGC_Guide, 3 commits (`55a8bfcf` → `0e9cd0d7`).** A generator refactor of the XS function reference: `docs/general/xs/functions/functions.py` now emits per-function `###` sections with a parameter table, collapses deprecated functions into `<details>`, and prints the deprecation *reason* where the old code printed `True` (a real defect, fixed). `functions.json` is untouched and both revisions render **289** functions, so the change is presentation, not new facts. XS is DE's scenario scripting language; our target is HD 5.7 and scenario scripts are out of the slice (D15), so even a semantic change would sit on a later step.
+
+**Nothing actionable.** No U-number is touched; D13, D14, D17 and D18 are unaffected.
