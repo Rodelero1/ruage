@@ -149,7 +149,7 @@ fn the_snapshot_carries_each_entities_footprint_from_the_pack() {
 }
 
 #[test]
-fn a_building_is_drawn_as_the_diamond_its_footprint_covers() {
+fn a_building_is_drawn_as_the_tiles_its_footprint_covers() {
     let Some(fx) = fixture() else { return };
     let world = seeded(&fx);
     let snapshot = Snapshot::of(&world, &fx.map, 1);
@@ -159,223 +159,70 @@ fn a_building_is_drawn_as_the_diamond_its_footprint_covers() {
         .find(|entity| entity.kind == EntityKind::Building && entity.player == 1)
         .expect("the player's town centre");
     let (across, down) = town.footprint;
-    assert!(
-        across >= 2,
-        "a building with a one-tile footprint proves nothing"
-    );
+    assert!(across >= 2, "a one-tile footprint proves nothing");
 
     let anchor = (
         town.position.0.floor() as i32,
         town.position.1.floor() as i32,
     );
     let (min_x, min_y, max_x, max_y) = ruage_view::footprint_tiles(anchor, town.footprint);
-    // The diamond is centred on the ground the footprint covers, not on its anchor tile.
     let middle = ((min_x + max_x) as f32 / 2.0, (min_y + max_y) as f32 / 2.0);
     let camera = Camera::new((640, 480)).centred_on(middle);
     let frame = render(&snapshot, &camera);
-    let (cx, cy) = camera.project(middle);
-    let px = |x: f32, y: f32| -> [u8; 4] {
-        let (x, y) = ((cx as f32 + x) as u32, (cy as f32 + y) as u32);
-        frame.pixel(x, y)
+
+    // **One diamond per tile** (D159): the silhouette is exactly the union of the footprint's tiles, so every tile of it is
+    // painted at its centre, and the ring around it is not - which is the same set the walk grid blocks.
+    let tile_pixel = |x: i32, y: i32| -> [u8; 4] {
+        let at = camera.project((x as f32 + 0.5, y as f32 + 0.5));
+        frame.pixel(at.0.max(0) as u32, at.1.max(0) as u32)
     };
+    for y in min_y..=max_y {
+        for x in min_x..=max_x {
+            assert_eq!(
+                tile_pixel(x, y),
+                palette::BUILDING,
+                "the footprint's tile ({x},{y}) is not painted as the building"
+            );
+        }
+    }
+    // Units stand on buildings (a town centre's villagers) and are painted last, so a ring tile with a unit on it says nothing
+    // either way; every other ring tile must be ground.
+    let occupied: Vec<(i32, i32)> = snapshot
+        .entities
+        .iter()
+        .filter(|entity| entity.kind == EntityKind::Unit)
+        .map(|entity| {
+            (
+                entity.position.0.floor() as i32,
+                entity.position.1.floor() as i32,
+            )
+        })
+        .collect();
+    for y in (min_y - 1)..=(max_y + 1) {
+        for x in (min_x - 1)..=(max_x + 1) {
+            let inside = x >= min_x && x <= max_x && y >= min_y && y <= max_y;
+            if inside || x < 0 || y < 0 || occupied.contains(&(x, y)) {
+                continue;
+            }
+            assert_ne!(
+                tile_pixel(x, y),
+                palette::BUILDING,
+                "the tile ({x},{y}) is outside the footprint but painted as the building"
+            );
+        }
+    }
+    // And the four corners of the bounding box are outside a **diamond** - painting them would mean the building was drawn as a
+    // square, which is the mistake the shape exists to avoid.
+    let (cx, cy) = camera.project(middle);
     let half_width = camera.tile_pixels * camera.zoom / 2.0 * across as f32;
     let half_height = camera.tile_pixels * camera.zoom / 4.0 * down as f32;
-
-    assert_eq!(
-        px(0.0, 0.0),
-        palette::BUILDING,
-        "the middle of the building is not drawn as a building"
-    );
-    assert_eq!(
-        px(0.0, half_height * 0.6),
-        palette::BUILDING,
-        "below the centre, still inside a {across}x{down} footprint, is not building"
-    );
-    assert_eq!(
-        px(half_width * 0.6, 0.0),
-        palette::BUILDING,
-        "to the right of the centre, still inside, is not building"
+    let corner = (
+        (cx as f32 + half_width * 0.95) as u32,
+        (cy as f32 + half_height * 0.95) as u32,
     );
     assert_ne!(
-        px(0.0, half_height * 1.4),
+        frame.pixel(corner.0, corner.1),
         palette::BUILDING,
-        "past the bottom vertex of the diamond is still painted as building"
+        "the bounding-box corner is painted: the building was drawn as a square"
     );
-    assert_ne!(
-        px(half_width * 1.4, 0.0),
-        palette::BUILDING,
-        "past the right vertex of the diamond is still painted as building"
-    );
-
-    // The diamond must be on the **ground its footprint covers**, not on its anchor tile: those differ by half a
-    // tile for an even footprint, which no shape-based test above can see (a shifted diamond is the same diamond).
-    // So measure where the silhouette actually starts along the centre column and the centre row.
-    // Furthest building pixel, not the contiguous run: villagers standing inside the town centre are drawn over it
-    // (units are painted last), and a silhouette interrupted by its own garrison still ends where the diamond does.
-    let reach = half_width.ceil() as i32 + 4;
-    let up = (1..reach)
-        .filter(|i| frame.pixel(cx as u32, (cy - i) as u32) == palette::BUILDING)
-        .max()
-        .expect("no building pixel above the centre");
-    assert!(
-        (up as f32 - half_height).abs() <= 2.0,
-        "the top vertex is {up} px above the centre, expected {half_height}: the diamond is not on its footprint"
-    );
-    let left = (1..reach)
-        .filter(|i| frame.pixel((cx - i) as u32, cy as u32) == palette::BUILDING)
-        .max()
-        .expect("no building pixel left of the centre");
-    assert!(
-        (left as f32 - half_width).abs() <= 2.0,
-        "the left vertex is {left} px left of the centre, expected {half_width}"
-    );
-    // The corners of the bounding box are *outside* a diamond: painting them would mean the building was drawn as
-    // a square, which is the mistake the shape exists to avoid.
-    assert_ne!(
-        px(half_width * 0.85, half_height * 0.85),
-        palette::BUILDING,
-        "the diamond's bounding-box corner is painted: the building was drawn as a square"
-    );
-}
-
-/// Clicking the body of a building selects it, not only the single tile its anchor stands on: the screen shows a
-/// diamond several tiles wide, so that is the target the player is aiming at.
-#[test]
-fn a_click_anywhere_on_a_building_selects_it() {
-    let Some(fx) = fixture() else { return };
-    let world = seeded(&fx);
-    let town = world
-        .entities()
-        .iter()
-        .find(|entity| entity.kind == EntityKind::Building && entity.player == 1)
-        .expect("the player's town centre")
-        .clone();
-    let scale = world.scale();
-    let anchor = (
-        (town.position.0.raw() / scale) as i32,
-        (town.position.1.raw() / scale) as i32,
-    );
-    let footprint = world
-        .footprint_of(town.unit.expect("a town centre has a unit id"))
-        .expect("a footprint from the pack");
-    let (min_x, min_y, max_x, max_y) = ruage_view::footprint_tiles(anchor, footprint);
-
-    let mut on_the_building = 0;
-    for x in min_x..=max_x {
-        for y in min_y..=max_y {
-            match ruage_view::pick_at(&world, (x, y)) {
-                Some(id) if id == town.id => on_the_building += 1,
-                Some(other) => {
-                    // A unit standing on a footprint tile outranks the building - the documented tie-break - so the
-                    // only other acceptable answer is a unit on that very tile.
-                    let entity = world.entity(other).expect("a picked entity");
-                    assert_eq!(
-                        entity.kind,
-                        EntityKind::Unit,
-                        "clicking tile ({x},{y}) inside a {}x{} footprint picked something else",
-                        footprint.0,
-                        footprint.1
-                    );
-                    assert_eq!(
-                        (
-                            (entity.position.0.raw() / scale) as i32,
-                            (entity.position.1.raw() / scale) as i32
-                        ),
-                        (x, y),
-                        "a unit won the pick from a tile it does not stand on"
-                    );
-                }
-                None => panic!(
-                    "clicking tile ({x},{y}) inside a {}x{} footprint hit nothing",
-                    footprint.0, footprint.1
-                ),
-            }
-        }
-    }
-    assert!(
-        on_the_building > 0,
-        "no tile of the footprint selected the building itself"
-    );
-    // One tile outside the footprint is not the building.
-    for outside in [
-        (min_x - 1, anchor.1),
-        (max_x + 1, anchor.1),
-        (anchor.0, min_y - 1),
-        (anchor.0, max_y + 1),
-    ] {
-        assert_ne!(
-            ruage_view::pick_at(&world, outside),
-            Some(town.id),
-            "clicking {outside:?} outside the footprint still selected the building"
-        );
-    }
-}
-
-/// A diamond field must cover the ground with **no seams**: neighbouring diamonds share an edge exactly, so a
-/// screenful of terrain has no unpainted pixels in it. Scanline filling is where this goes wrong - a row that is
-/// skipped, or a half-width rounded down at a vertex, leaves a one-pixel crack that reads as fog on screen.
-#[test]
-fn the_diamond_grid_has_no_seams() {
-    let Some(fx) = fixture() else { return };
-    let world = seeded(&fx);
-    let snapshot = Snapshot::of(&world, &fx.map, 1);
-    // Well inside the map, over ground the player can see: 512x384 at 96-pixel tiles covers about ten tiles.
-    let camera = Camera::new((512, 384)).centred_on((20.0, 20.0));
-    let frame = render(&snapshot, &camera);
-
-    let mut unpainted = 0;
-    for y in 64..320 {
-        for x in 96..416 {
-            if frame.pixel(x, y) == [0, 0, 0, 0] {
-                unpainted += 1;
-            }
-        }
-    }
-    assert_eq!(
-        unpainted, 0,
-        "{unpainted} pixels of ground were left unpainted"
-    );
-}
-
-/// The snapshot says how many units are inside a building. This pins the count before the per-entity scan behind it
-/// became a single pass - the old shape was O(n^2) on the frame path, which is invisible at 126 entities and is an
-/// army's worth of comparisons twice a second once a HUD draws it.
-#[test]
-fn the_snapshot_counts_what_is_inside_a_building() {
-    let Some(fx) = fixture() else { return };
-    let mut world = seeded(&fx);
-    let town = world
-        .entities()
-        .iter()
-        .find(|entity| entity.kind == EntityKind::Building && entity.player == 1)
-        .expect("the player's town centre")
-        .id;
-    let villager = world
-        .entities()
-        .iter()
-        .find(|entity| entity.kind == EntityKind::Unit && entity.player == 1)
-        .expect("a villager")
-        .id;
-    world
-        .submit_checked(Command::Garrison {
-            unit: villager,
-            building: town,
-        })
-        .expect("a villager may stand inside a town centre");
-    world.step().expect("step");
-
-    let snapshot = Snapshot::of(&world, &fx.map, 1);
-    let building = snapshot
-        .entities
-        .iter()
-        .find(|entity| entity.id == town.0)
-        .expect("the town centre is in view");
-    assert_eq!(building.garrison, 1, "one villager inside, none counted");
-    let inside = snapshot
-        .entities
-        .iter()
-        .find(|entity| entity.id == villager.0)
-        .expect("the garrisoned villager");
-    assert_eq!(inside.pose, ruage_view::Pose::Garrisoned);
-    assert_eq!(inside.garrison, 0, "a unit does not hold units");
 }

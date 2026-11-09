@@ -1196,9 +1196,13 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
                 }
             }
             EntityKind::Building => {
-                // The silhouette is the pack's footprint, drawn as the diamond a block of that many tiles makes:
-                // four tiles across is `4 * rx` half-width and `4 * ry` half-height, centred on the ground the
-                // rectangle covers rather than on its anchor tile (D76).
+                // **One diamond per tile of the footprint** (D159). It used to be a single diamond `across * rx` wide,
+                // centred on the block - and that is a *different shape* from the block: the union of four tile diamonds has
+                // four corners that a single diamond does not reach, so a 2x2 house painted its middle and left its own four
+                // corners as grass. The engine blocks those corners (the walk grid takes every tile of the footprint), so the
+                // picture offered ground that the collision refused: a villager walking past a corner it could **not** stand on
+                // looked like a villager walking over the house's tiles. Drawing tile by tile makes the silhouette exactly the
+                // tiles the engine blocks, which is the only thing a tile renderer can promise.
                 let (across, down) = entity.footprint;
                 let anchor = (
                     entity.position.0.floor() as i32,
@@ -1212,7 +1216,13 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
                 } else {
                     palette::BUILDING
                 };
-                frame.fill_diamond(centre, (rx * across as f32, ry * down as f32), colour);
+                for ty in min_y..=max_y {
+                    for tx in min_x..=max_x {
+                        let at = camera.project((tx as f32 + 0.5, ty as f32 + 0.5));
+                        frame.fill_diamond(at, (rx, ry), colour);
+                    }
+                }
+                let _ = (across, down);
                 // **A mark per role** (item 6): a glyph in the building's own outline colour, on the footprint, so a
                 // glance says which building is which. Content names the mark; this crate only knows the shapes.
                 draw_mark(

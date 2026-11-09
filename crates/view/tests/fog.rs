@@ -176,7 +176,9 @@ fn a_remembered_building_is_drawn_dimmer_than_a_watched_one() {
     let (mut world, building, _) = enemy_in_sight(&fx);
     let camera = Camera::new((640, 480)).centred_on((20.0, 20.0));
     let watched = render(&Snapshot::of(&world, &fx.map, 1), &camera);
-    let at = camera.project((20.0, 20.0));
+    // **The tile's centre**, not its corner: a building is drawn tile by tile (D159), so the point where four diamonds meet is
+    // the corner of four tiles and belongs to none of them.
+    let at = camera.project((20.5, 20.5));
     let lit = watched.pixel(at.0 as u32, at.1 as u32);
     assert_eq!(lit, palette::BUILDING, "the watched house was not drawn");
 

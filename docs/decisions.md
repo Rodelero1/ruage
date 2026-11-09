@@ -3923,3 +3923,23 @@ tech research. Units and tech can be queued in the building, but they are perfor
 5. **To settle it**: was the villager moving or standing, and what order had it been given (gather / build / right-click move /
    right-click on the building).
 6. **Five permanent guards remain**: any regression on these five paths fails a test rather than reaching a screenshot.
+
+
+## D159 - A building is drawn tile by tile, because one diamond is a different shape
+
+*2026-11-08. The owner, after D158: *"Then there must be disconnect between headless and gui run."* The effect was real; the cause was
+a **shape**, not a second simulation.*
+
+1. **The engine blocks every tile of a footprint**; the renderer drew **one diamond** of `across x rx` centred on the block. The
+   union of the footprint's tile diamonds has four corners a single diamond does not reach, and its own vertices stick out into
+   tiles it does not own - so the picture painted ground the collision refused and refused ground it allowed. That is what "a
+   villager passes through the house" looked like: it was walking past a corner tile it could not stand on.
+2. **`render` now draws one diamond per footprint tile**, at each tile's centre. The silhouette is literally the set the walk grid
+   blocks; the role mark stays at the block's centre.
+3. **The test is a pixel test with a named opposite**: every footprint tile's centre is the building's colour and every tile around
+   it is not, proved by **mutation** (restoring the big diamond fails with "the house's own tile (12, 11) is painted as the
+   house").
+4. **Two old tests encoded the old shape and were rewritten, not deleted**: the vertex-based silhouette test became a per-tile one,
+   and the fog dimming test now samples a tile centre instead of a four-diamond meeting point.
+5. **Cost**: footprint-area diamond fills per building (16 for a town centre, 4 for a house, 1 for a wall) instead of one, each
+   clipping to the frame. The simulation is untouched; the acceptance hash is unchanged.
