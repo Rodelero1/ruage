@@ -23,6 +23,9 @@ const LOAD_TIME: &[&str] = &[
     "multiply_class",
     "scaled_health",
     "scale_fixed",
+    // The pack's own numbers are `f64` - a node's radius is the dat's `radius_x` - and `load_resources` is where they are
+    // turned into engine units, once, when the world takes its tables. No tick reads a float (D169).
+    "load_resources",
 ];
 
 fn sim_sources() -> Vec<PathBuf> {

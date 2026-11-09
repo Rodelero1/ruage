@@ -42,6 +42,10 @@ impl World {
         // closes is solid for them.
         self.step_gates();
         self.move_bodies(work.deltas)?;
+        // **Settle onto the work** (D169): a worker that has arrived walks the last third of a tile onto the point where its
+        // body and the node's touch. It is a placement, not a walk, because the movement rules only call a route finished on a
+        // tile centre - a route ending 0.7 of a tile out is a route a worker never finishes.
+        self.settle_workers(work.settles);
 
         self.fly_shots(
             work.shots,
@@ -748,6 +752,18 @@ impl World {
     }
 
     /// **The movement pass**: collide, move, repath around bodies, spend reached waypoints.
+    /// **Place an arrived worker at its working standoff** (D169). A placement rather than a walk, deliberately: the movement
+    /// rules finish a route on a tile centre, and the point where two bodies touch is not one. The caller has already checked
+    /// that the point is free ground, so this cannot put a worker inside anything.
+    fn settle_workers(&mut self, settles: Vec<(EntityId, (Fixed, Fixed))>) {
+        for (id, to) in settles {
+            if let Some(entity) = self.find_mut(id) {
+                entity.position = to;
+                entity.velocity = (Fixed::ZERO, Fixed::ZERO);
+            }
+        }
+    }
+
     fn move_bodies(
         &mut self,
         deltas: Vec<(usize, EntityId, Fixed, Fixed)>,
@@ -1489,6 +1505,22 @@ impl World {
                         || (beside
                             && here.0.abs_diff(there.0) <= 1
                             && here.1.abs_diff(there.1) <= 1);
+                    // **Stand where the bodies touch** (D169). `reach` is the sum of the two radii - the dat's 0.2 for a
+                    // villager and content's 0.5 for a tree - and it is what "at the node" already means. The *walk* ends at the
+                    // neighbouring tile's centre, a whole tile out, so a woodcutter swung at a tree from half a tile away: the
+                    // owner compared two screenshots of the original and said *"villagers are standing around 1/2 tile away"*.
+                    // The last third is closed here, once, on arrival.
+                    if at_node
+                        && squared > reach * reach
+                        && matches!(
+                            self.find(node).map(|n| n.kind),
+                            Some(EntityKind::Resource(_))
+                        )
+                        && let Some(stand) =
+                            self.standoff_point(entity.position, target, node, entity.id)
+                    {
+                        work.settles.push((entity.id, stand));
+                    }
 
                     // A herdable animal is walked to the drop site by the villager working it (D70). The
                     // node was already read above, so this costs one family lookup and no second scan of the
@@ -1699,4 +1731,5 @@ struct TickWork {
     engaging: Vec<(EntityId, EntityId)>,
     turning: Vec<EntityId>,
     homing: Vec<EntityId>,
+    settles: Vec<(EntityId, (Fixed, Fixed))>,
 }

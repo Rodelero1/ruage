@@ -353,6 +353,9 @@ impl World {
                 None => self.plan_path(from, to, 0),
             }
         } else {
+            // The walk still ends at the neighbouring tile's centre - a route that ends anywhere else is a route the movement
+            // rules may never call *arrived*, and a worker that never arrives never works. The last third of a tile is closed by
+            // `settle` in the gather arm instead (D169).
             self.plan_path(from, to, 0)
         };
         let route = match planned {

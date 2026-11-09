@@ -15,6 +15,10 @@ schema = 1
 slot = 0
 name = "wood"
 dat_id = 1
+# `radius` is the node's **half-extent in tiles**, the dat's `radius_x` for the unit the node stands for: a forest tree
+# (FOAK/FPIN/FPAL) is 0.5, so it fills its tile. A worker's disc and a node's disc touch at the sum of the two radii, which is
+# where a villager stands to work it (D169) - 0.2 + 0.5 = 0.7 of a tile instead of a whole tile away.
+radius = 0.5
 # Where a map may place a node of this resource (the map loader enforces it): wood grows in
 # forests, everything else stands on open ground. This is content, not a match arm on an enum.
 site = "forest"
@@ -23,13 +27,19 @@ site = "forest"
 slot = 1
 name = "food"
 dat_id = 0
+# A forage bush is 0.5 in the dat (FORAG), the same as a tree.
+radius = 0.5
 
 [[resource]]
 slot = 2
 name = "gold"
 dat_id = 3
+# A gold mine is one tile wide in the art this pack's maps use, so its half-extent is 0.5.
+radius = 0.5
 
 [[resource]]
 slot = 3
 name = "stone"
 dat_id = 2
+# STONM is 0.5 in the dat.
+radius = 0.5

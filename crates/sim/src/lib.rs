@@ -1135,6 +1135,8 @@ pub struct World {
     /// nodes carry columns; `slot_for_dat_id` and `name` are the only places the two are related, so
     /// this is the field every cost and every gather order reads (D17).
     resources: Option<Resources>,
+    /// Each resource's node half-extent in raw units, resolved at load from the pack's `radius` (D169).
+    node_radii: Vec<i64>,
     sim_rng: Pcg32,
     map_rng: Pcg32,
 }
@@ -1319,6 +1321,7 @@ impl World {
             repath_failures: 0,
             made_room_count: 0,
             resources: None,
+            node_radii: Vec::new(),
             sim_rng: Pcg32::new(seed, SIM_STREAM),
             map_rng: Pcg32::new(seed, MAP_STREAM),
         })
@@ -2993,6 +2996,68 @@ impl World {
         })
     }
 
+    /// The **node's own half-extent**, in raw units, from the resource pack's `radius` for its kind (D169).
+    pub(crate) fn node_radius_raw(&self, entity: &Entity) -> i64 {
+        let EntityKind::Resource(slot) = entity.kind else {
+            return self.body_radius(entity.unit);
+        };
+        self.node_radii.get(slot).copied().unwrap_or(0)
+    }
+
+    /// **Where a worker stands to work a node** (D169): as close as the two bodies allow, on the axis it came from.
+    ///
+    /// A node's tile is blocked, so the walk used to end at the neighbouring tile's **centre** - a whole tile from the node,
+    /// which is the *"villagers are standing around 1/2 tile away"* the owner photographed. The dat says how close the bodies
+    /// may come: `radius[0]` is **0.2** for a villager and **0.5** for a forest tree, so the two discs touch at **0.7**. That
+    /// point is outside the node's tile along an axis, so it is walkable and a route can end there.
+    ///
+    /// The axis is the one the worker came from, not the diagonal: `0.7` of a tile diagonally is `(0.49, 0.49)`, which is
+    /// *inside* the node's own blocked tile and cannot be stood on - it would put the worker back in the "stuck in the forest"
+    /// hole the ground rule exists to prevent. A diagonal approach therefore keeps the tile centre, which is honest.
+    pub(crate) fn standoff_point(
+        &self,
+        from: (Fixed, Fixed),
+        target: (Fixed, Fixed),
+        node: EntityId,
+        worker: EntityId,
+    ) -> Option<(Fixed, Fixed)> {
+        let scale = self.scale;
+        // The worker's own radius, plus the **node's** - which is content's number for the node's kind, because a map node
+        // carries no unit of its own to read a radius from.
+        let worker_radius = match self.find(worker).and_then(|entity| entity.unit) {
+            Some(unit) => self.body_radius(Some(unit)),
+            None => 0,
+        };
+        let node_radius = match self.find(node) {
+            Some(entity) => self.node_radius_raw(entity),
+            None => 0,
+        };
+        let reach = worker_radius + node_radius;
+        // Nothing to gain: a sum of radii that is a whole tile or more is already satisfied by the tile centre.
+        if reach <= 0 || reach >= scale {
+            return None;
+        }
+        let (dx, dy) = (from.0.raw() - target.0.raw(), from.1.raw() - target.1.raw());
+        if dx == 0 && dy == 0 {
+            return None;
+        }
+        let (px, py) = if dx.abs() >= dy.abs() {
+            (target.0.raw() + dx.signum() * reach, target.1.raw())
+        } else {
+            (target.0.raw(), target.1.raw() + dy.signum() * reach)
+        };
+        let (Ok(x), Ok(y)) = (
+            u16::try_from(px.div_euclid(scale)),
+            u16::try_from(py.div_euclid(scale)),
+        ) else {
+            return None;
+        };
+        if !self.tile_walkable(x, y) || !self.is_free_ground(x, y) {
+            return None;
+        }
+        Some((Fixed::from_raw(px), Fixed::from_raw(py)))
+    }
+
     /// Is this tile on the map at all? Free ground is the stricter question, and a rally point may
     /// legitimately be somewhere with a tree on it.
     fn on_map(&self, x: u16, y: u16) -> bool {
@@ -3651,6 +3716,14 @@ impl World {
                 max: MAX_RESOURCES,
             });
         }
+        // **The node's half-extent, in raw units, resolved once** (D169). `radius` is the pack's own f64 - the dat's
+        // `radius_x` - and this is the one place it is turned into engine units, so nothing in a tick ever touches a float.
+        let scale = self.scale;
+        self.node_radii = resources
+            .entries
+            .iter()
+            .map(|entry| (entry.radius * scale as f64).round() as i64)
+            .collect();
         self.resources = Some(resources.clone());
         // The pack is what turns a name in `[start] stock` into a column, so this is the earliest
         // point the opening stockpile can be applied when the pack is loaded after seeding.

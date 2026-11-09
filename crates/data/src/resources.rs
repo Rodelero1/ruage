@@ -23,7 +23,8 @@ pub enum ResourceSite {
     Forest,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+// Not `Eq`: a node's radius is an `f64` from the pack, and equality of resources is a test convenience, not an invariant.
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResourceDef {
     /// The stockpile column. Dense from 0, in file order.
     pub slot: u16,
@@ -32,6 +33,10 @@ pub struct ResourceDef {
     pub dat_id: Option<u16>,
     /// The terrain a map node of this resource must stand on.
     pub site: ResourceSite,
+    /// **How wide the node's body is**, as a half-extent in tiles - the dat's `radius_x` for the unit the node stands for.
+    /// A forest tree, a forage bush and a stone mine are all `0.5` there, so a node fills its tile. It is content because
+    /// the number comes from the pack's own data, and the engine only asks "how close may a worker stand" (D169).
+    pub radius: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -93,6 +98,9 @@ struct RawResource {
     name: String,
     #[serde(default)]
     dat_id: Option<u16>,
+    /// The node's half-extent in tiles, from the dat's `radius_x`. Omitted means a whole tile, the old behaviour.
+    #[serde(default)]
+    radius: Option<f64>,
     /// Omitted means open ground; `site = "forest"` says this resource lives in forests.
     #[serde(default)]
     site: ResourceSite,
@@ -165,6 +173,7 @@ pub fn load_resources_str(text: &str, path: &str) -> Result<Resources, ConfigErr
             name: name.to_owned(),
             dat_id: resource.dat_id,
             site: resource.site,
+            radius: resource.radius.unwrap_or(0.5),
         });
     }
 

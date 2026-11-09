@@ -4197,3 +4197,25 @@ and its marker painted a quarter of itself into each of the four neighbours.*
 4. **The lesson belongs in the tests**: three earlier tests used *integer* positions - a tile corner in the simulation's frame and a diamond centre
    in the view's - so they agreed with the bug. **Fixtures must place units where units stand: at tile centres.** Six test files were corrected.
 5. **Marker back to `0.30 * rx`**: its corner then sits at `0.90` of the diamond, so the D166 clip no longer cuts a settled marker's corners.
+
+
+## D169 - A gatherer stands where the two bodies touch: 0.7 of a tile, not 1.0
+
+*2026-11-08. The owner, with two screenshots of the original: *"villagers are standing around 1/2 tile away from what they are doing. In the game they
+are much closer. Can you research from the game?"*
+
+1. **The numbers are in the pack.** `radius[0]` is a half-extent: **0.2** for a villager (`VMBAS`), **0.5** for a forest tree (`FOAK`/`FPIN`/`FPAL`),
+   a forage bush (`FORAG`) and a stone mine (`STONM`). Two discs touch at **0.7** of a tile, and that is the standoff the original draws. The engine
+   already used the sum for "is this worker at the node" (`reach_raw`); it used a **whole tile** for where the walk ends, and the difference is the
+   half tile the owner sees.
+2. **The walk still ends at a tile centre.** Two attempts to make the route end at 0.7 failed the same way - a route the movement rules never call
+   *arrived* is a worker that never works, and both deadlocked the economy (a tree untouched for ten seconds; a lumberjack standing at a spent tree).
+   **A settle, not a step**: on the tick a finished walk leaves the worker at the node, `settle_workers` places it on the standoff point, once, on
+   free ground.
+3. **The node's radius is content**: `resources.toml` gives each resource `radius = 0.5`, and `load_resources` resolves it into engine units once, so
+   no tick touches a float - `load_resources` is named in `no_float`'s `LOAD_TIME` list with that reason.
+4. **Buildings and farms are untouched**: their `reach` is at or above a tile, so 0.7 would move nothing, and the settle is gated on a resource node.
+5. **Recorded trade-off, not fixed here**: workers now crowd at the side they approached from - the acceptance run drops from 150 to **137 entities**
+   and repaths rise from 88 to **144**. Spreading workers round the node (approach axis, then the opposite, then across, skipping a taken point) is
+   the next step, with its own test.
+6. **Acceptance has moved, and it had to**: `a120ed0721c8768c` -> **`5703f537f92c0bf2`**, 137 entities, 2 players, 144 repaths, 132 made-room.
