@@ -1,4 +1,4 @@
-"""The decision index: what `tools/decisions.py` must be able to say about the corpus (D165).
+"""The decision index: what `tools/decisions.py` must be able to say about the corpus (D166).
 
 The index exists because 160-odd decisions live in 4,000 lines of prose and nothing says which of them rest on the
 dat, which on the owner's word, which on a guess, and which are referenced but were never written down. Every test
@@ -160,7 +160,7 @@ class Basis(unittest.TestCase):
         self.assertTrue(decision.uncited)
 
     def test_categories_named_inside_a_quote_from_the_owner_are_his_words_not_our_method(self):
-        """D165 quotes the owner listing "reverse engineered" as a category; that must not tag the decision `binary`."""
+        """D166 quotes the owner listing "reverse engineered" as a category; that must not tag the decision `binary`."""
         text = ('## D99 - X\n\n*2026-11-01. The owner: "research, reverse engineered, assumed - all of it."*\n\n'
                 "It was implemented.\n")
         origins = parse(text).decisions["D99"].origins
@@ -168,7 +168,7 @@ class Basis(unittest.TestCase):
         self.assertNotIn("binary", origins)
 
     def test_a_sentence_that_lists_the_origin_vocabulary_is_not_evidence(self):
-        """D165 explains what the tags mean; the explanation must not become the decision's own basis."""
+        """D166 explains what the tags mean; the explanation must not become the decision's own basis."""
         text = ("## D99 - How the index works\n\nA basis is one of owner, dat, binary, measured, published, "
                 "prior-art, decision, review.\n")
         self.assertEqual({}, parse(text).decisions["D99"].origins)
@@ -380,35 +380,65 @@ class ReviewQueue(unittest.TestCase):
         self.assertIn('ruage-decisions-review', html)
 
 
-class Groups(unittest.TestCase):
-    """168 cards in one column is a list nobody scrolls; the register is cut into collapsible bands."""
+class Areas(unittest.TestCase):
+    """Areas are authored, because a derived topic filed the file-oracle decision under pathfinding."""
 
-    def corpus(self, count=30):
-        body = "\n\n".join(f"## D{i} - Rule {i}\n\n**Decided 2026-11-01.** The owner asked." for i in range(1, count + 1))
-        return parse(body)
+    ORDER = ["Combat", "Economy"]
 
-    def test_the_register_is_cut_into_bands_of_a_fixed_size(self):
-        bands = decisions.groups(self.corpus(30), size=10)
-        self.assertEqual(3, len(bands))
-        self.assertEqual(("D1", "D10", 10), bands[0])
+    def corpus(self):
+        return parse("## D1 - A\n\n**Decided.**\n\n## D2 - B\n\n**Decided.**\n")
 
-    def test_a_band_is_named_by_the_ids_actually_in_it(self):
-        corpus = parse("## D1 - A\n\n**Decided.**\n\n## D44a - B\n\n**Decided.**\n\n## D45 - C\n\n**Decided.**\n")
-        self.assertEqual([("D1", "D45", 3)], decisions.groups(corpus, size=10))
+    def test_a_decision_with_no_area_fails_the_build(self):
+        problems = decisions.check_areas(self.corpus(), self.ORDER, {"D1": "Combat"})
+        self.assertEqual(1, len(problems))
+        self.assertIn("D2", problems[0])
+        self.assertIn("no area", problems[0])
 
-    def test_each_band_is_a_details_element_so_it_can_collapse(self):
-        html = decisions.render(self.corpus(30), unknowns={}, refs=[], generated="2026-11-09")
-        self.assertEqual(2, html.count('<details class="group"'))  # 30 cards, 25 per band
-        self.assertIn('data-group="0"', html)
+    def test_an_area_for_an_id_nobody_defined_fails_the_build(self):
+        problems = decisions.check_areas(self.corpus(), self.ORDER, {"D1": "Combat", "D2": "Economy", "D77": "Combat"})
+        self.assertTrue(any("D77" in problem and "no decision defines" in problem for problem in problems))
 
-    def test_the_band_header_says_how_much_is_in_it(self):
-        html = decisions.render(self.corpus(30), unknowns={}, refs=[], generated="2026-11-09")
-        self.assertIn("D1 - D25", html)
+    def test_an_area_name_outside_the_order_fails_the_build(self):
+        problems = decisions.check_areas(self.corpus(), self.ORDER, {"D1": "Combat", "D2": "Naval"})
+        self.assertTrue(any("Naval" in problem and "not in" in problem for problem in problems))
 
-    def test_the_page_can_open_and_close_every_band_at_once(self):
-        html = decisions.render(self.corpus(30), unknowns={}, refs=[], generated="2026-11-09")
+    def test_a_complete_table_has_no_problems(self):
+        self.assertEqual([], decisions.check_areas(self.corpus(), self.ORDER, {"D1": "Combat", "D2": "Economy"}))
+
+    def test_the_register_is_grouped_in_the_authored_order(self):
+        corpus = parse("## D1 - A\n\n**Decided.**\n\n## D2 - B\n\n**Decided.**\n")
+        areas = decisions.by_area(corpus, self.ORDER, {"D1": "Economy", "D2": "Combat"})
+        self.assertEqual(["Combat", "Economy"], [name for name, _ in areas])
+
+    def test_each_area_is_a_collapsible_group_that_says_what_is_in_it(self):
+        corpus = parse("## D1 - Reach\n\n**Decided.** The owner asked.\n\n**Not modelled:** x.\n")
+        areas = decisions.by_area(corpus, ["Combat"], {"D1": "Combat"})
+        html = decisions.render(corpus, unknowns={}, refs=[], generated="2026-11-09", areas=areas)
+        self.assertIn('<details class="group" id="area-combat"', html)
+        self.assertIn("1 decision", html)
+        self.assertIn('data-area="Combat"', html)
+
+    def test_the_page_can_open_and_close_every_area_at_once(self):
+        html = decisions.render(self.corpus(), unknowns={}, refs=[], generated="2026-11-09")
         self.assertIn('id="expand-all"', html)
         self.assertIn('id="collapse-all"', html)
+
+    def test_the_build_wires_the_authored_areas_into_the_page(self):
+        """`main` has to pass the table through: the first version built the page with an empty one (all "Unfiled")."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            out = f"{folder}/index.html"
+            self.assertEqual(0, decisions.main(["--out", out]))
+            html = (Path(out)).read_text()
+        self.assertIn('data-area="Combat"', html)
+        self.assertNotIn('data-area="Unfiled"', html)
+
+    def test_every_decision_in_the_repository_has_an_authored_area(self):
+        corpus = decisions.parse_decisions((ROOT / "docs/decisions.md").read_text())
+        order, mapping = decisions.load_areas((ROOT / "docs/decision-areas.toml").read_text())
+        self.assertEqual([], decisions.check_areas(corpus, order, mapping))
+        self.assertGreater(len(order), 5)
 
 
 class TheScan(unittest.TestCase):

@@ -1,4 +1,4 @@
-"""The decision index: what was decided, how, and what is still open (D165).
+"""The decision index: what was decided, how, and what is still open (D166).
 
 `docs/decisions.md` is 4,000 lines of prose with two different shapes (a table for D1-D16, `## D<n>` sections after
 that), and nothing in it says which rules rest on the dat, which on the owner's word, which on a guess, or which
@@ -24,6 +24,7 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,6 +32,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 DECISIONS = ROOT / "docs" / "decisions.md"
 UNKNOWNS = ROOT / "docs" / "mechanics" / "README.md"
+AREAS_FILE = ROOT / "docs" / "decision-areas.toml"
 OUTPUT = ROOT / "docs" / "site" / "index.html"
 
 # Where a rule came from. Each entry is a list of patterns; the matched sentence becomes the evidence shown next to the
@@ -254,7 +256,7 @@ def classify_basis(text: str) -> tuple[dict[str, list[str]], list[str]]:
             origins[origin] = found[:3]
 
     # A sentence that names three or more origins is *about* provenance - a taxonomy, a summary, this tool's own
-    # explanation - and counting it makes a decision cite everything. Found on D165, which lists the tag vocabulary
+    # explanation - and counting it makes a decision cite everything. Found on D166, which lists the tag vocabulary
     # and was consequently tagged with eight of them.
     counts: dict[str, set[str]] = {}
     for origin, snippets in origins.items():
@@ -264,7 +266,7 @@ def classify_basis(text: str) -> tuple[dict[str, list[str]], list[str]]:
         origin: [snippet for snippet in snippets if len(counts[snippet]) < 3]
         for origin, snippets in origins.items()
     }
-    # Inside a sentence that quotes the owner, the *categories* are his vocabulary, not our method: D165 quotes him
+    # Inside a sentence that quotes the owner, the *categories* are his vocabulary, not our method: D166 quotes him
     # listing "research, reverse engineered, assumed" and was tagged `binary` by his own word.
     for origin, snippets in list(origins.items()):
         if origin == "owner":
@@ -466,21 +468,41 @@ def dangling_refs(defined, texts: dict[str, str]) -> list[Ref]:
     return refs
 
 
-GROUP_SIZE = 25
+def load_areas(text: str) -> tuple[list[str], dict[str, str]]:
+    """(the area order, decision id -> area) from the authored table."""
+    parsed = tomllib.loads(text)
+    return list(parsed.get("order", {}).get("areas", [])), dict(parsed.get("area", {}))
 
 
-def groups(corpus: Corpus, size: int = GROUP_SIZE) -> list[tuple[str, str, int]]:
-    """The register cut into bands, in id order: `(first id, last id, count)` per band.
+def check_areas(corpus: Corpus, order: list[str], mapping: dict[str, str]) -> list[str]:
+    """Every problem with the authored table, as sentences. Empty means it may be built from.
 
-    Bands are by **position**, not by number range, because the numbering has holes and letter suffixes (D44a) - a band
-    of numbers would claim ids that do not exist. The label therefore names what is actually in the band.
+    Three failures, all of them the kind this project refuses rather than absorbs: a decision with no area, an id in the
+    table that no decision defines, and an area name that is not in the order (which would render as a silent extra
+    heading or, worse, vanish).
     """
-    ordered = sorted(corpus.decisions.values(), key=lambda decision: decision.number)
-    return [
-        (band[0].id, band[-1].id, len(band))
-        for band in (ordered[start : start + size] for start in range(0, len(ordered), size))
-        if band
-    ]
+    problems: list[str] = []
+    if not order:
+        problems.append("docs/decision-areas.toml has no [order].areas")
+    for identifier in sorted(corpus.decisions, key=lambda item: corpus.decisions[item].number):
+        if identifier not in mapping:
+            problems.append(f"{identifier} has no area in docs/decision-areas.toml")
+    for identifier, area in sorted(mapping.items()):
+        if identifier not in corpus.decisions:
+            problems.append(f"docs/decision-areas.toml names {identifier}, which no decision defines")
+        elif area not in order:
+            problems.append(f"{identifier} is filed under {area!r}, which is not in [order].areas")
+    return problems
+
+
+def by_area(corpus: Corpus, order: list[str], mapping: dict[str, str]) -> list[tuple[str, list[Decision]]]:
+    """Decisions grouped by their authored area, in the authored order; unsorted ones last."""
+    grouped: dict[str, list[Decision]] = {name: [] for name in order}
+    for decision in sorted(corpus.decisions.values(), key=lambda item: item.number):
+        grouped.setdefault(mapping.get(decision.id, "Unfiled"), []).append(decision)
+    names = [name for name in order if grouped.get(name)]
+    names += [name for name in grouped if name not in order and grouped[name]]
+    return [(name, grouped[name]) for name in names]
 
 
 def status(decision: Decision, corpus: Corpus) -> str:
@@ -498,7 +520,18 @@ def _esc(text: str) -> str:
     return html.escape(text, quote=True)
 
 
-def render(corpus: Corpus, unknowns: dict[str, Unknown], refs: list[Ref], generated: str) -> str:
+def slug(text: str) -> str:
+    """An id string for an anchor: `Pathfinding & movement` -> `pathfinding-movement`."""
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def render(
+    corpus: Corpus,
+    unknowns: dict[str, Unknown],
+    refs: list[Ref],
+    generated: str,
+    areas: list[tuple[str, list[Decision]]] | None = None,
+) -> str:
     """One self-contained page: no fonts, no scripts from anywhere, works from `file://` and from a static host."""
     decisions = sorted(corpus.decisions.values(), key=lambda decision: decision.number)
     open_unknowns = [unknown for unknown in unknowns.values() if not unknown.closed]
@@ -621,98 +654,95 @@ def render(corpus: Corpus, unknowns: dict[str, Unknown], refs: list[Ref], genera
         add(f"<button class=\"chip\" data-status=\"{name}\">{name}</button>")
     add("</span><span id=\"shown\" class=\"count\"></span></div>")
 
-    for index, decision in enumerate(decisions):
-        # Bands are collapsible because the register is longer than anyone scrolls; the header carries what is inside
-        # so a collapsed band still says whether it is worth opening.
-        if index % GROUP_SIZE == 0:
-            if index:
-                add("</details>")
-            band = decisions[index : index + GROUP_SIZE]
-            corrected = sum(1 for item in band if item.corrected_by)
-            superseded = sum(1 for item in band if item.superseded_by)
-            uncited = sum(1 for item in band if item.uncited)
-            facts = [f"{len(band)} decisions"]
-            if corrected:
-                facts.append(f"{corrected} corrected")
-            if superseded:
-                facts.append(f"{superseded} superseded")
-            if uncited:
-                facts.append(f"{uncited} with no stated basis")
-            add(
-                f"<details class=\"group\" id=\"g-{index // GROUP_SIZE}\" "
-                f"data-group=\"{index // GROUP_SIZE}\" open>"
-            )
-            add(
-                f"<summary><span class=\"range\">{_esc(band[0].id)} - {_esc(band[-1].id)}</span> "
-                f"<span class=\"gcount\">{' \u00b7 '.join(facts)}</span></summary>"
-            )
-        state = status(decision, corpus)
-        origin_keys = " ".join(decision.origins) if decision.origins else "none"
+    for area, band in areas or by_area(corpus, [], {}):
+        # Areas are the grouping, and they are authored (docs/decision-areas.toml, D166): a derived one filed the
+        # file-oracle decision under pathfinding because "step 2b" contains "step".
+        corrected = sum(1 for item in band if item.corrected_by)
+        superseded = sum(1 for item in band if item.superseded_by)
+        uncited = sum(1 for item in band if item.uncited)
+        facts = [f"{len(band)} decisions"]
+        if corrected:
+            facts.append(f"{corrected} corrected")
+        if superseded:
+            facts.append(f"{superseded} superseded")
+        if uncited:
+            facts.append(f"{uncited} with no stated basis")
         add(
-            f"<article class=\"decision s-{state}\" id=\"d-{_esc(decision.id)}\" "
-            f"data-id=\"{_esc(decision.id)}\" data-origins=\"{origin_keys}\" "
-            f"data-unresolved=\"{1 if decision.unresolved else 0}\" data-status=\"{state}\""
+            f"<details class=\"group\" id=\"area-{_esc(slug(area))}\" "
+            f"data-area=\"{_esc(area)}\" open>"
         )
-        add("<div class=\"head\">")
-        add(f"<span class=\"id\">{_esc(decision.id)}</span>")
-        add(f"<span class=\"status {state}\">{state}</span>")
-        if decision.date:
-            add(f"<span class=\"date\">{_esc(decision.date)}</span>")
-        add(f"<h3>{_esc(decision.title)}</h3></div>")
+        add(
+            f"<summary><span class=\"range\">{_esc(area)}</span> "
+            f"<span class=\"gcount\">{' \u00b7 '.join(facts)}</span></summary>"
+        )
+        for decision in band:
+            state = status(decision, corpus)
+            origin_keys = " ".join(decision.origins) if decision.origins else "none"
+            add(
+                f"<article class=\"decision s-{state}\" id=\"d-{_esc(decision.id)}\" "
+                f"data-id=\"{_esc(decision.id)}\" data-origins=\"{origin_keys}\" "
+                f"data-unresolved=\"{1 if decision.unresolved else 0}\" data-status=\"{state}\""
+            )
+            add("<div class=\"head\">")
+            add(f"<span class=\"id\">{_esc(decision.id)}</span>")
+            add(f"<span class=\"status {state}\">{state}</span>")
+            if decision.date:
+                add(f"<span class=\"date\">{_esc(decision.date)}</span>")
+            add(f"<h3>{_esc(decision.title)}</h3></div>")
 
-        if decision.origins:
-            add("<div class=\"basis\">")
-            for origin, snippets in decision.origins.items():
-                # Prefixed on purpose: an origin called `decision` must not collide with the card's own `.decision`
-                # class, which the filter script counts (found in the browser: 180 cards where there are 164).
-                # The tag *is* the disclosure, so the row reads as labels rather than labels plus stray arrows.
-                add(f"<details class=\"tagbox\"><summary><span class=\"tag tag-{origin}\">{origin}</span></summary><ul>")
-                for snippet in snippets:
-                    add(f"<li>{_esc(snippet)}</li>")
+            if decision.origins:
+                add("<div class=\"basis\">")
+                for origin, snippets in decision.origins.items():
+                    # Prefixed on purpose: an origin called `decision` must not collide with the card's own `.decision`
+                    # class, which the filter script counts (found in the browser: 180 cards where there are 164).
+                    # The tag *is* the disclosure, so the row reads as labels rather than labels plus stray arrows.
+                    add(f"<details class=\"tagbox\"><summary><span class=\"tag tag-{origin}\">{origin}</span></summary><ul>")
+                    for snippet in snippets:
+                        add(f"<li>{_esc(snippet)}</li>")
+                    add("</ul></details>")
+                add("</div>")
+            else:
+                add("<div class=\"basis\"><span class=\"tag tag-none\">no stated basis</span></div>")
+
+            if decision.unresolved:
+                add("<details class=\"unresolved\"><summary>unresolved language</summary><ul>")
+                for phrase in decision.unresolved:
+                    add(f"<li>{_esc(phrase)}</li>")
                 add("</ul></details>")
-            add("</div>")
-        else:
-            add("<div class=\"basis\"><span class=\"tag tag-none\">no stated basis</span></div>")
 
-        if decision.unresolved:
-            add("<details class=\"unresolved\"><summary>unresolved language</summary><ul>")
-            for phrase in decision.unresolved:
-                add(f"<li>{_esc(phrase)}</li>")
-            add("</ul></details>")
+            if decision.gaps:
+                add("<details class=\"own-gaps\"><summary>"
+                    f"{len(decision.gaps)} named gap{'s' if len(decision.gaps) != 1 else ''}</summary><ul>")
+                for gap in decision.gaps:
+                    add(f"<li>{_esc(gap)}</li>")
+                add("</ul></details>")
 
-        if decision.gaps:
-            add("<details class=\"own-gaps\"><summary>"
-                f"{len(decision.gaps)} named gap{'s' if len(decision.gaps) != 1 else ''}</summary><ul>")
-            for gap in decision.gaps:
-                add(f"<li>{_esc(gap)}</li>")
-            add("</ul></details>")
+            links = []
+            if decision.corrected_by:
+                links.append("corrected by " + ", ".join(_esc(other) for other in decision.corrected_by))
+            if decision.superseded_by:
+                links.append("superseded by " + ", ".join(_esc(other) for other in decision.superseded_by))
+            if corpus.amendments.get(decision.id):
+                links.append(f"amended {len(corpus.amendments[decision.id])}x")
+            if links:
+                add(f"<p class=\"links\">{' - '.join(links)}</p>")
 
-        links = []
-        if decision.corrected_by:
-            links.append("corrected by " + ", ".join(_esc(other) for other in decision.corrected_by))
-        if decision.superseded_by:
-            links.append("superseded by " + ", ".join(_esc(other) for other in decision.superseded_by))
-        if corpus.amendments.get(decision.id):
-            links.append(f"amended {len(corpus.amendments[decision.id])}x")
-        if links:
-            add(f"<p class=\"links\">{' - '.join(links)}</p>")
-
-        # The reviewer's own reading. A verdict and a note, per decision, kept in the browser and exported as a file -
-        # see `docs/reviews/2026-11-09-decision-index.md` for why a static page cannot store them in the repository.
-        add(f"<div class=\"verdicts\" data-for=\"{_esc(decision.id)}\">")
-        for verdict in ("agree", "question", "wrong"):
+            # The reviewer's own reading. A verdict and a note, per decision, kept in the browser and exported as a file -
+            # see `docs/reviews/2026-11-09-decision-index.md` for why a static page cannot store them in the repository.
+            add(f"<div class=\"verdicts\" data-for=\"{_esc(decision.id)}\">")
+            for verdict in ("agree", "question", "wrong"):
+                add(
+                    f"<button class=\"verdict\" data-verdict=\"{verdict}\" data-id=\"{_esc(decision.id)}\">"
+                    f"{verdict}</button>"
+                )
             add(
-                f"<button class=\"verdict\" data-verdict=\"{verdict}\" data-id=\"{_esc(decision.id)}\">"
-                f"{verdict}</button>"
+                f"<input class=\"note\" data-note=\"{_esc(decision.id)}\" "
+                f"placeholder=\"note (saved with the verdict)\">"
             )
-        add(
-            f"<input class=\"note\" data-note=\"{_esc(decision.id)}\" "
-            f"placeholder=\"note (saved with the verdict)\">"
-        )
-        add("</div>")
-        add("</article>")
+            add("</div>")
+            add("</article>")
 
-    add("</details>")
+        add("</details>")
     add("</section>")
 
     # ---- dangling -------------------------------------------------------------------------------------------------
@@ -1073,6 +1103,14 @@ def build(decisions_path: Path = DECISIONS) -> tuple[Corpus, dict[str, Unknown],
     return corpus, unknowns, refs
 
 
+def build_areas(corpus: Corpus) -> tuple[list[str], dict[str, str], list[str]]:
+    """The authored area table, its problems, and the order to render in."""
+    if not AREAS_FILE.exists():
+        return [], {}, [f"{AREAS_FILE.name} is missing: every decision needs an area"]
+    order, mapping = load_areas(AREAS_FILE.read_text())
+    return order, mapping, check_areas(corpus, order, mapping)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Index the decision corpus into one browsable page.")
     parser.add_argument("--check", action="store_true", help="parse and report coverage; write nothing")
@@ -1082,6 +1120,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         corpus, unknowns, refs = build(Path(args.decisions))
+        order, mapping, area_problems = build_areas(corpus)
     except FileNotFoundError as error:
         print(f"cannot read the corpus: {error.filename} is not there", file=sys.stderr)
         return 2
@@ -1096,10 +1135,14 @@ def main(argv: list[str] | None = None) -> int:
         f"{sum(len(d.gaps) for d in decisions)} named gaps, {len(open_unknowns)} open questions, "
         f"{len(dangling)} dangling ids, {len(corpus.unclassified)} unclassified headings"
     )
+    for problem in area_problems:
+        print(f"AREA: {problem}", file=sys.stderr)
     if dangling:
         print("dangling: " + ", ".join(dangling))
     if uncited:
         print("no stated basis: " + ", ".join(decision.id for decision in uncited))
+    if area_problems:
+        return 1
     if corpus.unclassified:
         for heading in corpus.unclassified:
             print(f"UNPLACED: {heading}", file=sys.stderr)
@@ -1113,9 +1156,13 @@ def main(argv: list[str] | None = None) -> int:
     # Write beside the target and rename: a browser reloading while `make decisions` runs would otherwise be served a
     # half-written page, and the commit would be a truncated file if the box rebooted mid-write.
     temporary = target.with_name(target.name + ".tmp")
-    temporary.write_text(render(corpus, unknowns, refs, newest))
+    temporary.write_text(render(corpus, unknowns, refs, newest, by_area(corpus, order, mapping)))
     os.replace(temporary, target)
-    print(f"wrote {target.relative_to(ROOT)} ({target.stat().st_size} bytes)")
+    counts = ", ".join(f"{name} {len(band)}" for name, band in by_area(corpus, order, mapping))
+    print(f"areas: {counts}")
+    # `--out` may point outside the repository (a test's temporary directory), and relative_to would raise there.
+    shown = target.relative_to(ROOT) if target.is_relative_to(ROOT) else target
+    print(f"wrote {shown} ({target.stat().st_size} bytes)")
     return 0
 
 

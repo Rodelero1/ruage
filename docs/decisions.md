@@ -3985,7 +3985,7 @@ the game?"* Research: `docs/building-collision.md`.*
 
 ---
 
-## D165 - The decision index is derived from the corpus, and it quotes its evidence
+## D166 - The decision index is derived from the corpus, and it quotes its evidence
 
 *2026-11-09. The owner: "I want to have a page I can browse with a web browser where I could see all the decisions that
 have been made or are yet to be made and how they were made (research, decided by me, reverse engineered, assumed...)
@@ -4107,3 +4107,35 @@ side. Therefore it seems that there is a shift between graphics representation a
    `..._is_still_painted`) and the depth-order test, whose expected order is now computed from the depths instead of typed as a literal.
 6. **Traded explicitly**: a unit behind a tall building is hidden where it overlaps it - which is what "no unit passes through the building"
    means in a flat-shape renderer.
+
+---
+
+## D167 - A decision's area is written down, and the build refuses an unfiled one
+
+*2026-11-09. The owner: "I would like the grouping to be done in more natural way like 'UI, Pathfinding, Economy,
+Combat...'". The page had been grouped by position - bands of twenty-five ids - because a derived topic had failed. This
+is the authored version of the same request.*
+
+1. **The table is authored, and checked.** `docs/decision-areas.toml` carries one line per decision - 170 of them across
+   fifteen areas - plus the order the areas are shown in. `make decisions` **refuses to build** when a decision has no
+   area, when the table names an id the corpus does not define, or when an area is not in `[order]`. Same rule as D6 and
+   D45: a surface that silently ignores is worse than one that refuses.
+2. **The derived version stays refused.** Counting the words and paths a decision names filed the file-oracle decision
+   under *Pathfinding & movement* ("step 2b" contains "step") and put 45 decisions in one area whose first four were
+   licensing, fixed-point and scope; chapters by week need a date 88 of 169 decisions do not carry. An area is a claim
+   about what a decision is *about*, so somebody who read it writes it down.
+3. **The cost is one line per decision, and that is the point.** Adding a decision now costs an entry in the table or the
+   build fails naming it - the reminder that would have been useful the four times today a decision was added without
+   anyone asking where it belongs.
+4. **Fifteen areas, in the owner's order**: Combat, Pathfinding & movement, Economy, Buildings & construction, Production &
+   queues, Techs & civs, Vision & fog, Victory & defeat, UI, Graphics, AI, Simulation core, Data & tooling, Licensing &
+   publication, Project process. The largest are Pathfinding & movement and Project process; the smallest are Vision & fog,
+   Victory & defeat and Licensing & publication.
+5. **The page renders them as collapsible groups**, each header carrying its own counts ("Combat - 15 decisions - 1
+   corrected - 5 with no stated basis"), `expand all` / `collapse all` with the filters, and a filter opening the areas
+   that hold matches rather than leaving fifteen collapsed headers.
+
+**Limits, named.** One area per decision: a decision that is half pathing and half rendering gets the one it is mostly
+about, and D113 (a route bending at the body's clearance) is filed under movement although its measurement is geometric.
+The page cannot edit the table - a correction is an edit to `docs/decision-areas.toml` - and the review queue's export
+does not carry areas, so a reviewer's disagreement with a filing has to be said in a note.
