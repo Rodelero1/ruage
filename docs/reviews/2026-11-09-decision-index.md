@@ -160,6 +160,12 @@ a decision without filing it breaks `make check`. Two defects came out of wiring
 - `--out` pointing outside the repository crashed on `Path.relative_to` **after** writing the file. Found by that new
   test using a temporary directory.
 
+**The kinds, and the ordering defect the screenshot showed.** Undecided questions and unfinished paragraphs now live
+inside their area group, above the cards, behind `decisions` / `undecided` / `unfinished` chips. The first build put
+them *below* the fifteen Economy cards - correct in the DOM, invisible in practice, and found by looking at a screenshot
+rather than by any assertion. Reordering was one block move; the lesson is the same one as the caret: a page is not
+verified until it is looked at.
+
 **Still not covered, and the same gap as before**: none of that is a Python test. The export button's *payload* is
 reachable as `window.__exportReview()` and was checked; the download itself was not (a blob URL and a synthetic click
 cannot be asserted without a browser harness). The queue's JavaScript is verified by driving it, not by `make check`.

@@ -4135,6 +4135,14 @@ is the authored version of the same request.*
    corrected - 5 with no stated basis"), `expand all` / `collapse all` with the filters, and a filter opening the areas
    that hold matches rather than leaving fifteen collapsed headers.
 
+6. **The two "not done" kinds moved into the groups, and each got a filter.** *Not decided yet* (the twelve open
+   questions) and *Not finished* (the twenty-four paragraphs where a decision names its limit) used to be sections of
+   their own at the top of the page; they are now the first two blocks inside the area they belong to, above that area's
+   decisions, with `decisions` / `undecided` / `unfinished` chips that show and hide each kind. The questions needed an
+   area too, so `[unknown]` in the same file files them - twelve lines - and the same build check refuses an unfiled
+   open question. They come **before** the decisions because an area with fifteen cards put its two gaps fifteen cards
+   down, which is the same as not having them.
+
 **Limits, named.** One area per decision: a decision that is half pathing and half rendering gets the one it is mostly
 about, and D113 (a route bending at the body's clearance) is filed under movement although its measurement is geometric.
 The page cannot edit the table - a correction is an edit to `docs/decision-areas.toml` - and the review queue's export

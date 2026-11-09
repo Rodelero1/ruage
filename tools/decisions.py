@@ -468,13 +468,23 @@ def dangling_refs(defined, texts: dict[str, str]) -> list[Ref]:
     return refs
 
 
-def load_areas(text: str) -> tuple[list[str], dict[str, str]]:
-    """(the area order, decision id -> area) from the authored table."""
+def load_areas(text: str) -> tuple[list[str], dict[str, str], dict[str, str]]:
+    """(the area order, decision id -> area, question id -> area) from the authored table."""
     parsed = tomllib.loads(text)
-    return list(parsed.get("order", {}).get("areas", [])), dict(parsed.get("area", {}))
+    return (
+        list(parsed.get("order", {}).get("areas", [])),
+        dict(parsed.get("area", {})),
+        dict(parsed.get("unknown", {})),
+    )
 
 
-def check_areas(corpus: Corpus, order: list[str], mapping: dict[str, str]) -> list[str]:
+def check_areas(
+    corpus: Corpus,
+    order: list[str],
+    mapping: dict[str, str],
+    unknowns: dict[str, Unknown] | None = None,
+    questions: dict[str, str] | None = None,
+) -> list[str]:
     """Every problem with the authored table, as sentences. Empty means it may be built from.
 
     Three failures, all of them the kind this project refuses rather than absorbs: a decision with no area, an id in the
@@ -492,6 +502,17 @@ def check_areas(corpus: Corpus, order: list[str], mapping: dict[str, str]) -> li
             problems.append(f"docs/decision-areas.toml names {identifier}, which no decision defines")
         elif area not in order:
             problems.append(f"{identifier} is filed under {area!r}, which is not in [order].areas")
+
+    # An undecided question is shown inside an area group too, so it needs an area - but only while it is open.
+    open_questions = {name: item for name, item in (unknowns or {}).items() if not item.closed}
+    for identifier in sorted(open_questions, key=lambda item: int(item[1:])):
+        if identifier not in (questions or {}):
+            problems.append(f"{identifier} has no area in docs/decision-areas.toml's [unknown] table")
+    for identifier, area in sorted((questions or {}).items()):
+        if unknowns is not None and identifier not in unknowns:
+            problems.append(f"docs/decision-areas.toml names {identifier}, which no question in the U-register defines")
+        elif area not in order:
+            problems.append(f"question {identifier} is filed under {area!r}, which is not in [order].areas")
     return problems
 
 
@@ -525,12 +546,82 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
+def _card(add, decision: Decision, corpus: Corpus) -> None:
+    """One decision card, as the register renders it."""
+    state = status(decision, corpus)
+    origin_keys = " ".join(decision.origins) if decision.origins else "none"
+    add(
+        f"<article class=\"decision s-{state}\" id=\"d-{_esc(decision.id)}\" "
+        f"data-id=\"{_esc(decision.id)}\" data-origins=\"{origin_keys}\" "
+        f"data-unresolved=\"{1 if decision.unresolved else 0}\" data-status=\"{state}\">"
+    )
+    add("<div class=\"head\">")
+    add(f"<span class=\"id\">{_esc(decision.id)}</span>")
+    add(f"<span class=\"status {state}\">{state}</span>")
+    if decision.date:
+        add(f"<span class=\"date\">{_esc(decision.date)}</span>")
+    add(f"<h3>{_esc(decision.title)}</h3></div>")
+
+    if decision.origins:
+        add("<div class=\"basis\">")
+        for origin, snippets in decision.origins.items():
+            # Prefixed on purpose: an origin called `decision` must not collide with the card's own `.decision`
+            # class, which the filter script counts (found in the browser: 180 cards where there are 164).
+            # The tag *is* the disclosure, so the row reads as labels rather than labels plus stray arrows.
+            add(f"<details class=\"tagbox\"><summary><span class=\"tag tag-{origin}\">{origin}</span></summary><ul>")
+            for snippet in snippets:
+                add(f"<li>{_esc(snippet)}</li>")
+            add("</ul></details>")
+        add("</div>")
+    else:
+        add("<div class=\"basis\"><span class=\"tag tag-none\">no stated basis</span></div>")
+
+    if decision.unresolved:
+        add("<details class=\"unresolved\"><summary>unresolved language</summary><ul>")
+        for phrase in decision.unresolved:
+            add(f"<li>{_esc(phrase)}</li>")
+        add("</ul></details>")
+
+    if decision.gaps:
+        add("<details class=\"own-gaps\"><summary>"
+            f"{len(decision.gaps)} named gap{'s' if len(decision.gaps) != 1 else ''}</summary><ul>")
+        for gap in decision.gaps:
+            add(f"<li>{_esc(gap)}</li>")
+        add("</ul></details>")
+
+    links = []
+    if decision.corrected_by:
+        links.append("corrected by " + ", ".join(_esc(other) for other in decision.corrected_by))
+    if decision.superseded_by:
+        links.append("superseded by " + ", ".join(_esc(other) for other in decision.superseded_by))
+    if corpus.amendments.get(decision.id):
+        links.append(f"amended {len(corpus.amendments[decision.id])}x")
+    if links:
+        add(f"<p class=\"links\">{' - '.join(links)}</p>")
+
+    # The reviewer's own reading. A verdict and a note, per decision, kept in the browser and exported as a file -
+    # see `docs/reviews/2026-11-09-decision-index.md` for why a static page cannot store them in the repository.
+    add(f"<div class=\"verdicts\" data-for=\"{_esc(decision.id)}\">")
+    for verdict in ("agree", "question", "wrong"):
+        add(
+            f"<button class=\"verdict\" data-verdict=\"{verdict}\" data-id=\"{_esc(decision.id)}\">"
+            f"{verdict}</button>"
+        )
+    add(
+        f"<input class=\"note\" data-note=\"{_esc(decision.id)}\" "
+        f"placeholder=\"note (saved with the verdict)\">"
+    )
+    add("</div>")
+    add("</article>")
+
+
 def render(
     corpus: Corpus,
     unknowns: dict[str, Unknown],
     refs: list[Ref],
     generated: str,
     areas: list[tuple[str, list[Decision]]] | None = None,
+    questions: dict[str, str] | None = None,
 ) -> str:
     """One self-contained page: no fonts, no scripts from anywhere, works from `file://` and from a static host."""
     decisions = sorted(corpus.decisions.values(), key=lambda decision: decision.number)
@@ -580,38 +671,12 @@ def render(
         add(f"<li data-k=\"{key}\"><b>{counts[key]}</b> {label}</li>")
     add("</ul>")
     add(
-        "<nav><a href=\"#undecided\">Not decided yet</a> <a href=\"#incomplete\">Decided, but not finished</a> "
-        "<a href=\"#review\">Review queue</a> <a href=\"#decisions\">The register</a> "
+        "<nav><a href=\"#review\">Review queue</a> <a href=\"#decisions\">The register</a> "
         "<a href=\"#dangling\">Broken references</a> <a href=\"#health\">How this page knows</a></nav></header><main>"
     )
 
-    # ---- the two registers of "not done", kept apart because they need different actions -------------------------
-    add("<section id=\"undecided\"><h2>Not decided yet</h2>")
-    add(
-        "<p class=\"note\">Questions with no rule behind them. Each one is a place where the engine is either "
-        "guessing or absent. From the U-register in <code>docs/mechanics/README.md</code>.</p>"
-    )
-    if open_unknowns:
-        add("<ul class=\"unknowns\">")
-        for unknown in sorted(open_unknowns, key=lambda item: int(item.number[1:])):
-            add(f"<li><span class=\"id\">{_esc(unknown.number)}</span> {_esc(unknown.question)}</li>")
-        add("</ul>")
-    else:
-        add("<p class=\"empty\">Nothing open, which would be surprising.</p>")
-    add("</section>")
-
-    add("<section id=\"incomplete\"><h2>Decided, but not finished</h2>")
-    add(
-        "<p class=\"note\">Rules that are settled and say themselves what they do not cover. These are not "
-        "mistakes; they are the named limits of a decision, and the list is the honest answer to \"what is missing\".</p>"
-    )
-    add("<ul class=\"gaps\">")
-    for decision in decisions:
-        for gap in decision.gaps:
-            add(
-                f"<li><a class=\"id\" href=\"#d-{_esc(decision.id)}\">{_esc(decision.id)}</a> {_esc(gap)}</li>"
-            )
-    add("</ul></section>")
+    # The two kinds of "not done" are no longer sections of their own: they live inside the area group they belong to,
+    # and the register's kind filters show and hide them. A question about pathing belongs next to the pathing rules.
 
     # ---- the review queue -----------------------------------------------------------------------------------------
     # Batches and a resume point, not a filter: 166 cards in one scroll is not something anybody finishes. The
@@ -647,6 +712,10 @@ def render(
     add("<button class=\"chip\" data-origin=\"none\">no basis</button>")
     add("<button class=\"chip\" data-origin=\"unresolved\">unresolved</button>")
     add("</span>")
+    add("<span class=\"chips\" id=\"kinds\">")
+    for kind, label in (("decisions", "decisions"), ("undecided", "undecided"), ("unfinished", "unfinished")):
+        add(f"<button class=\"chip on\" data-kind-filter=\"{kind}\">{label}</button>")
+    add("</span>")
     add("<button id=\"expand-all\" class=\"chip\">expand all</button>")
     add("<button id=\"collapse-all\" class=\"chip\">collapse all</button>")
     add("<span class=\"chips\" id=\"statuses\">")
@@ -655,12 +724,25 @@ def render(
     add("</span><span id=\"shown\" class=\"count\"></span></div>")
 
     for area, band in areas or by_area(corpus, [], {}):
-        # Areas are the grouping, and they are authored (docs/decision-areas.toml, D166): a derived one filed the
-        # file-oracle decision under pathfinding because "step 2b" contains "step".
+        # Areas are the grouping, and they are authored (docs/decision-areas.toml): a derived one filed the file-oracle
+        # decision under pathfinding because "step 2b" contains "step". Each group also holds the questions nobody has
+        # answered and the paragraphs where a decision names what it does not do - the two "not done" kinds, in the
+        # place they belong rather than in lists of their own.
+        open_here = [
+            unknown
+            for name, unknown in sorted(unknowns.items(), key=lambda item: int(item[0][1:]))
+            if not unknown.closed and (questions or {}).get(name) == area
+        ]
+        gaps_here = [(decision.id, gap) for decision in band for gap in decision.gaps]
+
         corrected = sum(1 for item in band if item.corrected_by)
         superseded = sum(1 for item in band if item.superseded_by)
         uncited = sum(1 for item in band if item.uncited)
-        facts = [f"{len(band)} decisions"]
+        facts = [f"{len(band)} decision{'s' if len(band) != 1 else ''}"]
+        if open_here:
+            facts.append(f"{len(open_here)} undecided")
+        if gaps_here:
+            facts.append(f"{len(gaps_here)} unfinished")
         if corrected:
             facts.append(f"{corrected} corrected")
         if superseded:
@@ -669,79 +751,32 @@ def render(
             facts.append(f"{uncited} with no stated basis")
         add(
             f"<details class=\"group\" id=\"area-{_esc(slug(area))}\" "
-            f"data-area=\"{_esc(area)}\" open>"
+            f"data-area=\"{_esc(area)}\" data-unfinished=\"{len(gaps_here)}\" "
+            f"data-undecided=\"{len(open_here)}\" open>"
         )
         add(
             f"<summary><span class=\"range\">{_esc(area)}</span> "
             f"<span class=\"gcount\">{' \u00b7 '.join(facts)}</span></summary>"
         )
-        for decision in band:
-            state = status(decision, corpus)
-            origin_keys = " ".join(decision.origins) if decision.origins else "none"
-            add(
-                f"<article class=\"decision s-{state}\" id=\"d-{_esc(decision.id)}\" "
-                f"data-id=\"{_esc(decision.id)}\" data-origins=\"{origin_keys}\" "
-                f"data-unresolved=\"{1 if decision.unresolved else 0}\" data-status=\"{state}\""
-            )
-            add("<div class=\"head\">")
-            add(f"<span class=\"id\">{_esc(decision.id)}</span>")
-            add(f"<span class=\"status {state}\">{state}</span>")
-            if decision.date:
-                add(f"<span class=\"date\">{_esc(decision.date)}</span>")
-            add(f"<h3>{_esc(decision.title)}</h3></div>")
-
-            if decision.origins:
-                add("<div class=\"basis\">")
-                for origin, snippets in decision.origins.items():
-                    # Prefixed on purpose: an origin called `decision` must not collide with the card's own `.decision`
-                    # class, which the filter script counts (found in the browser: 180 cards where there are 164).
-                    # The tag *is* the disclosure, so the row reads as labels rather than labels plus stray arrows.
-                    add(f"<details class=\"tagbox\"><summary><span class=\"tag tag-{origin}\">{origin}</span></summary><ul>")
-                    for snippet in snippets:
-                        add(f"<li>{_esc(snippet)}</li>")
-                    add("</ul></details>")
-                add("</div>")
-            else:
-                add("<div class=\"basis\"><span class=\"tag tag-none\">no stated basis</span></div>")
-
-            if decision.unresolved:
-                add("<details class=\"unresolved\"><summary>unresolved language</summary><ul>")
-                for phrase in decision.unresolved:
-                    add(f"<li>{_esc(phrase)}</li>")
-                add("</ul></details>")
-
-            if decision.gaps:
-                add("<details class=\"own-gaps\"><summary>"
-                    f"{len(decision.gaps)} named gap{'s' if len(decision.gaps) != 1 else ''}</summary><ul>")
-                for gap in decision.gaps:
-                    add(f"<li>{_esc(gap)}</li>")
-                add("</ul></details>")
-
-            links = []
-            if decision.corrected_by:
-                links.append("corrected by " + ", ".join(_esc(other) for other in decision.corrected_by))
-            if decision.superseded_by:
-                links.append("superseded by " + ", ".join(_esc(other) for other in decision.superseded_by))
-            if corpus.amendments.get(decision.id):
-                links.append(f"amended {len(corpus.amendments[decision.id])}x")
-            if links:
-                add(f"<p class=\"links\">{' - '.join(links)}</p>")
-
-            # The reviewer's own reading. A verdict and a note, per decision, kept in the browser and exported as a file -
-            # see `docs/reviews/2026-11-09-decision-index.md` for why a static page cannot store them in the repository.
-            add(f"<div class=\"verdicts\" data-for=\"{_esc(decision.id)}\">")
-            for verdict in ("agree", "question", "wrong"):
+        # The two short lists come first: in an area with fifteen decisions the gaps were fifteen cards down, which is
+        # the same as not being there. They are one to eight items each, so they cost nothing above the cards.
+        if open_here:
+            add("<div class=\"kind\" data-kind=\"undecided\"><h4>Not decided yet</h4><ul class=\"unknowns\">")
+            for unknown in open_here:
+                add(f"<li><span class=\"id\">{_esc(unknown.number)}</span> {_esc(unknown.question)}</li>")
+            add("</ul></div>")
+        if gaps_here:
+            add("<div class=\"kind\" data-kind=\"unfinished\"><h4>Not finished</h4><ul class=\"gaps\">")
+            for identifier, gap in gaps_here:
                 add(
-                    f"<button class=\"verdict\" data-verdict=\"{verdict}\" data-id=\"{_esc(decision.id)}\">"
-                    f"{verdict}</button>"
+                    f"<li data-decision=\"{_esc(identifier)}\">"
+                    f"<a class=\"id\" href=\"#d-{_esc(identifier)}\">{_esc(identifier)}</a> {_esc(gap)}</li>"
                 )
-            add(
-                f"<input class=\"note\" data-note=\"{_esc(decision.id)}\" "
-                f"placeholder=\"note (saved with the verdict)\">"
-            )
-            add("</div>")
-            add("</article>")
-
+            add("</ul></div>")
+        add("<div class=\"kind\" data-kind=\"decisions\">")
+        for decision in band:
+            _card(add, decision, corpus)
+        add("</div>")
         add("</details>")
     add("</section>")
 
@@ -862,6 +897,11 @@ details.group .gcount{color:var(--dim);font-size:12px;margin-left:auto;text-alig
 .reviewbar select,.reviewbar button{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer}
 .reviewbar button.on{background:#24303f;border-color:var(--acc)}
 .reviewbar label{color:var(--dim);font-size:13px}
+.kind[data-kind=undecided],.kind[data-kind=unfinished]{margin:6px 0 10px;padding:8px 10px;border:1px dashed var(--line);border-radius:6px}
+.kind h4{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);font-weight:600}
+.kind[data-kind=undecided] h4{color:var(--measured)}
+.kind[data-kind=unfinished] h4{color:var(--review)}
+.kind .unknowns,.kind .gaps{margin:0;padding-left:18px;font-size:13px}
 .verdicts{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
 .verdict{background:transparent;border:1px solid var(--line);color:var(--dim);border-radius:999px;padding:2px 10px;font-size:12px;cursor:pointer}
 .verdict:hover{color:var(--ink)}
@@ -894,6 +934,7 @@ SCRIPT = r"""(function(){
       batchSel=document.getElementById('batch-size'),
       groups=[].slice.call(document.querySelectorAll('details.group')),
       flaggedOnly=false,reviewing=false,cursor=0,
+      kinds=new Set(['decisions','undecided','unfinished']),
       store=load();
 
   function load(){
@@ -941,9 +982,22 @@ SCRIPT = r"""(function(){
     slice.forEach(function(c){c.classList.remove('hidden');});
     shown.textContent=slice.length+' of '+cards.length+' shown';
     groups.forEach(function(g){
+      // A kind block is shown or hidden as a whole; a gap whose decision is filtered out goes with it.
+      g.querySelectorAll('.kind').forEach(function(block){
+        var kind=block.dataset.kind;
+        var off=!kinds.has(kind);
+        block.classList.toggle('hidden',off);
+        if(!off&&kind==='unfinished'){
+          block.querySelectorAll('li[data-decision]').forEach(function(item){
+            var card=document.getElementById('d-'+item.dataset.decision);
+            item.classList.toggle('hidden',!!(card&&card.classList.contains('hidden')));
+          });
+        }
+      });
       var visible=g.querySelectorAll('article.decision:not(.hidden)').length;
-      g.classList.toggle('hidden',visible===0);
-      // Open whatever holds a match: a narrowed list behind seven collapsed headers looks empty.
+      var inKinds=g.querySelectorAll('.kind:not(.hidden) li:not(.hidden), .kind:not(.hidden) article:not(.hidden)').length;
+      g.classList.toggle('hidden',visible===0&&inKinds===0);
+      // Open whatever holds a match: a narrowed list behind collapsed headers looks empty.
       if((reviewing||list.length<cards.length)&&visible)g.open=true;
     });
     var reviewed=cards.filter(function(c){return verdictOf(c.dataset.id);}).length;
@@ -956,6 +1010,12 @@ SCRIPT = r"""(function(){
     chip.addEventListener('click',function(){
       // `expand all` / `collapse all` are styled as chips but are not filters: without this guard they land in the
       // statuses set as `undefined` and hide every card (found by clicking collapse-all and watching the list empty).
+          if(chip.dataset.kindFilter){
+        var kind=chip.dataset.kindFilter;
+        if(kinds.has(kind))kinds.delete(kind);else kinds.add(kind);
+        chip.classList.toggle('on',kinds.has(kind));
+        apply();return;
+      }
       if(!chip.dataset.origin&&!chip.dataset.status)return;
       var set=chip.dataset.origin?origins:statuses,key=chip.dataset.origin||chip.dataset.status;
       if(set.has(key))set.delete(key);else set.add(key);
@@ -1103,12 +1163,12 @@ def build(decisions_path: Path = DECISIONS) -> tuple[Corpus, dict[str, Unknown],
     return corpus, unknowns, refs
 
 
-def build_areas(corpus: Corpus) -> tuple[list[str], dict[str, str], list[str]]:
+def build_areas(corpus: Corpus, unknowns: dict[str, Unknown]) -> tuple[list[str], dict[str, str], dict[str, str], list[str]]:
     """The authored area table, its problems, and the order to render in."""
     if not AREAS_FILE.exists():
-        return [], {}, [f"{AREAS_FILE.name} is missing: every decision needs an area"]
-    order, mapping = load_areas(AREAS_FILE.read_text())
-    return order, mapping, check_areas(corpus, order, mapping)
+        return [], {}, {}, [f"{AREAS_FILE.name} is missing: every decision needs an area"]
+    order, mapping, questions = load_areas(AREAS_FILE.read_text())
+    return order, mapping, questions, check_areas(corpus, order, mapping, unknowns, questions)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1120,7 +1180,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         corpus, unknowns, refs = build(Path(args.decisions))
-        order, mapping, area_problems = build_areas(corpus)
+        order, mapping, questions, area_problems = build_areas(corpus, unknowns)
     except FileNotFoundError as error:
         print(f"cannot read the corpus: {error.filename} is not there", file=sys.stderr)
         return 2
@@ -1156,7 +1216,9 @@ def main(argv: list[str] | None = None) -> int:
     # Write beside the target and rename: a browser reloading while `make decisions` runs would otherwise be served a
     # half-written page, and the commit would be a truncated file if the box rebooted mid-write.
     temporary = target.with_name(target.name + ".tmp")
-    temporary.write_text(render(corpus, unknowns, refs, newest, by_area(corpus, order, mapping)))
+    temporary.write_text(
+        render(corpus, unknowns, refs, newest, by_area(corpus, order, mapping), questions)
+    )
     os.replace(temporary, target)
     counts = ", ".join(f"{name} {len(band)}" for name, band in by_area(corpus, order, mapping))
     print(f"areas: {counts}")

@@ -27,6 +27,22 @@ areas = [
   "Project process",
 ]
 
+# An undecided question is shown inside the area group it belongs to, so it is filed the same way.
+# Only open questions need a line here; a closed one has stopped being a question.
+[unknown]
+U5 = "Pathfinding & movement"
+U7 = "Pathfinding & movement"
+U10 = "Techs & civs"
+U12 = "Simulation core"
+U13 = "Techs & civs"
+U14 = "Economy"
+U17 = "Combat"
+U18 = "Simulation core"
+U20 = "Economy"
+U21 = "Data & tooling"
+U22 = "Economy"
+U23 = "Data & tooling"
+
 [area]
 D1 = "Project process"
 D2 = "Project process"

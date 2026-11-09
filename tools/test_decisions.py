@@ -338,11 +338,12 @@ class Page(unittest.TestCase):
         html = decisions.render(corpus, unknowns={}, refs=[], generated="2026-11-09")
         self.assertIn("A heading nobody could place", html)
 
-    def test_the_two_registers_are_separate(self):
-        """'not decided yet' and 'decided but incomplete' are different actions."""
+    def test_undecided_and_unfinished_live_inside_the_area_groups(self):
+        """They used to be sections of their own; they now sit in the area they belong to, behind the kind filters."""
         html = decisions.render(self.corpus(), unknowns={}, refs=[], generated="2026-11-09")
-        self.assertIn("id=\"undecided\"", html)
-        self.assertIn("id=\"incomplete\"", html)
+        self.assertIn('id="kinds"', html)
+        self.assertNotIn('id="undecided"', html)
+        self.assertNotIn('id="incomplete"', html)
 
 
 class Cost(unittest.TestCase):
@@ -434,10 +435,65 @@ class Areas(unittest.TestCase):
         self.assertIn('data-area="Combat"', html)
         self.assertNotIn('data-area="Unfiled"', html)
 
+    def test_a_question_with_no_area_fails_the_build(self):
+        unknowns = {"U5": decisions.Unknown(number="U5", question="speed?", closed=False)}
+        problems = decisions.check_areas(self.corpus(), self.ORDER, {"D1": "Combat", "D2": "Economy"},
+                                         unknowns, {"D1": "Combat"})
+        self.assertTrue(any("U5" in problem and "no area" in problem for problem in problems))
+
+    def test_an_area_for_a_question_nobody_asked_fails_the_build(self):
+        unknowns = {"U5": decisions.Unknown(number="U5", question="speed?", closed=False)}
+        problems = decisions.check_areas(self.corpus(), self.ORDER, {"D1": "Combat", "D2": "Economy"},
+                                         unknowns, {"U5": "Combat", "U99": "Combat"})
+        self.assertTrue(any("U99" in problem for problem in problems))
+
+    def test_a_closed_question_needs_no_area(self):
+        unknowns = {"U1": decisions.Unknown(number="U1", question="done", closed=True)}
+        self.assertEqual([], decisions.check_areas(self.corpus(), self.ORDER,
+                                                   {"D1": "Combat", "D2": "Economy"}, unknowns, {}))
+
+    def test_every_question_in_the_repository_has_an_authored_area(self):
+        corpus = decisions.parse_decisions((ROOT / "docs/decisions.md").read_text())
+        unknowns = decisions.parse_unknowns((ROOT / "docs/mechanics/README.md").read_text())
+        order, mapping, questions = decisions.load_areas((ROOT / "docs/decision-areas.toml").read_text())
+        self.assertEqual([], decisions.check_areas(corpus, order, mapping, unknowns, questions))
+
+
+class Kinds(unittest.TestCase):
+    """One group per area now holds the decisions, the questions nobody answered, and the named gaps."""
+
+    def corpus(self):
+        return parse("## D1 - Reach\n\n**Decided.** The owner asked.\n\n**Not modelled:** the door.\n")
+
+    def page(self):
+        unknowns = {"U5": decisions.Unknown(number="U5", question="Are speeds tiles/second?", closed=False)}
+        areas = decisions.by_area(self.corpus(), ["Combat"], {"D1": "Combat"})
+        return decisions.render(self.corpus(), unknowns, [], "2026-11-09", areas, {"U5": "Combat"})
+
+    def test_an_area_group_holds_its_decisions_its_questions_and_its_gaps(self):
+        html = self.page()
+        self.assertIn('data-kind="decisions"', html)
+        self.assertIn('data-kind="undecided"', html)
+        self.assertIn('data-kind="unfinished"', html)
+        self.assertIn("Are speeds tiles/second?", html)
+        self.assertIn("the door", html)
+
+    def test_the_page_can_hide_and_show_the_three_kinds(self):
+        html = self.page()
+        for kind in ("decisions", "undecided", "unfinished"):
+            self.assertIn(f'data-kind-filter="{kind}"', html)
+
+    def test_the_group_header_counts_all_three(self):
+        html = self.page()
+        self.assertIn("1 decision", html)
+        self.assertIn("1 undecided", html)
+        self.assertIn("1 unfinished", html)
+
     def test_every_decision_in_the_repository_has_an_authored_area(self):
         corpus = decisions.parse_decisions((ROOT / "docs/decisions.md").read_text())
-        order, mapping = decisions.load_areas((ROOT / "docs/decision-areas.toml").read_text())
-        self.assertEqual([], decisions.check_areas(corpus, order, mapping))
+        order, mapping, questions = decisions.load_areas((ROOT / "docs/decision-areas.toml").read_text())
+        unknown_rows = decisions.parse_unknowns((ROOT / "docs/mechanics/README.md").read_text())
+        self.assertEqual([], decisions.check_areas(corpus, order, mapping, unknown_rows, questions))
         self.assertGreater(len(order), 5)
 
 
