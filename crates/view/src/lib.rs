@@ -1337,24 +1337,40 @@ pub fn render_with_solids(snapshot: &Snapshot, camera: &Camera, solids: &Solids)
                 let centre = camera.project(entity.position);
                 let colour = player_colour(entity.player);
                 let half = (rx * 0.35).max(2.0) as i32;
-                match entity.shape {
-                    // **A worker is a square, a soldier a triangle** (item 6): one glance tells the two apart, which is
-                    // what the owner asked for - the shapes come from content's roles, never from this crate's guess.
-                    Silhouette::Square => {
-                        frame.fill_rect(
-                            centre.0 - half,
-                            centre.1 - half,
-                            half * 2,
-                            half * 2,
-                            colour,
-                        );
-                    }
-                    Silhouette::Triangle => {
-                        frame.fill_triangle(centre, half, half, colour);
-                    }
-                    Silhouette::Dot => {
-                        let dot = half.max(1);
-                        frame.fill_rect(centre.0 - dot, centre.1 - dot, dot * 2, dot * 2, colour);
+                // **A unit's marker is clipped to the tile it stands on** (D166). Tiles share edges, so a marker wider than its own
+                // diamond paints into the *next* tile - and when that neighbour is a building, the unit appears to stand inside it,
+                // whatever the depth order says. Shrinking the marker only moves the threshold; clipping ends the class: no unit pixel
+                // can land on a tile the unit is not standing on.
+                // The clip is measured from the **unit's own point**, which is inside its tile: a marker drawn at its centre can only
+                // leave that tile through an edge, and a diamond is the shape of the edge.
+                let clip = |px: i32, py: i32| -> bool {
+                    let dx = (px - centre.0) as f32;
+                    let dy = (py - centre.1) as f32;
+                    dx.abs() / rx + dy.abs() / ry <= 1.0
+                };
+                // **A worker is a square, a soldier a triangle** (item 6): one glance tells the two apart, and the shapes come from
+                // content's roles, never from this crate's guess. Both are painted pixel by pixel so the tile clip applies to every
+                // shape alike - a `fill_rect` cannot be clipped to a diamond.
+                let reach = half.max(1);
+                for py in -reach..=reach {
+                    for px in -reach..=reach {
+                        let inside_shape = match entity.shape {
+                            Silhouette::Square => true,
+                            Silhouette::Dot => px * px + py * py <= reach * reach,
+                            Silhouette::Triangle => {
+                                // Apex up, base down: half-width shrinks linearly from the base to the tip.
+                                let across = (py + reach) as f32 / (2.0 * reach as f32);
+                                (px as f32).abs() <= across * reach as f32
+                            }
+                        };
+                        if !inside_shape {
+                            continue;
+                        }
+                        let (at, y) = (centre.0 + px, centre.1 + py);
+                        if !clip(at, y) {
+                            continue;
+                        }
+                        frame.put(at, y, colour);
                     }
                 }
             }

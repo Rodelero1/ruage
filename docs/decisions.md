@@ -4139,3 +4139,19 @@ is the authored version of the same request.*
 about, and D113 (a route bending at the body's clearance) is filed under movement although its measurement is geometric.
 The page cannot edit the table - a correction is an edit to `docs/decision-areas.toml` - and the review queue's export
 does not carry areas, so a reviewer's disagreement with a filing has to be said in a note.
+
+
+## D166 - A unit's marker is clipped to its own tile
+
+*2026-11-08. Fifth round on the same report. The marker is now drawn pixel by pixel and clipped to the diamond of the tile its centre is in, for
+all three silhouettes - so no marker pixel can land on a neighbouring tile, and a unit standing beside a building can no longer paint inside it.*
+
+1. **Why**: neighbouring tiles **share edges**, so a `fill_rect` of `0.35 * rx` half-width could reach past its own diamond into the next tile.
+   Shrinking it only moves the threshold; clipping ends the class.
+2. **What is NOT established**: the overlap is still not reproduced in a test. `marker_fits_tile` passes, and **neither mutation made it
+   fail** (back to `0.35`, and removing the clip) - so my geometric model does not match what the renderer actually puts on screen, and that is
+   an open question. Two earlier versions of that test were blind by construction (sampling only a tile's lower half, then only a rectangle).
+3. **The remaining overlap is inherent to continuous positions**: a unit between tiles straddles four of them; the original hides it with art
+   (feet and a shadow), which is an asset-pack question (D18).
+4. **Two options if the owner wants zero overlap**, both real behaviour changes and both needing his word: **snap the marker to its tile's
+   centre** while the body stays continuous, or shrink the marker to `0.25` of a tile.
