@@ -20,7 +20,9 @@ use ruage_data::{Economy, Map, Units};
 use ruage_sim::{Runner, World, load_scenario_file};
 use ruage_view::placement::Placement;
 use ruage_view::ui;
-use ruage_view::{Camera, Highlights, Pace, Snapshot, Speed, draw_placement, render_with};
+use ruage_view::{
+    Camera, Highlights, Pace, Snapshot, Speed, draw_placement, render_with_solids_and,
+};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -633,13 +635,17 @@ impl App {
         // Selection rings, health bars and the last order's marker are `ruage_view`'s work, not the binary's: a marker
         // nobody can test is a marker that is wrong for a month without anyone noticing.
         let selected: Vec<u32> = self.selection.ids.clone();
-        let mut frame = render_with(
+        // **What each building actually blocks** (D161): the town centre's yard is walkable, and painting the whole footprint as
+        // wall is what made a villager standing in it look like a villager inside the building.
+        let solids = ruage_view::solids_of(world, &snapshot);
+        let mut frame = render_with_solids_and(
             &snapshot,
             &self.camera,
             &Highlights {
                 selected: &selected,
                 order: self.order,
             },
+            &solids,
         );
         // **The placement ghost, over the ground and under the interface** (D156): green where the wall can stand, red where it
         // cannot. Drawn from the same `segments` the second click sends, so what the player sees is what is ordered.

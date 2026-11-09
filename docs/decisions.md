@@ -3959,3 +3959,26 @@ a **shape**, not a second simulation.*
 4. **`footprint.rs` needed the same sampling change**, having inherited the tile-centre convention.
 5. **A pixel test that passes for a visibly wrong picture is worse than none**, and this one did for exactly one commit. That is the
    lesson recorded, not the line of arithmetic.
+
+
+## D161 - The yard is not wall, and the outline goes outside
+
+*2026-11-08. The owner, with a screenshot of a villager standing on a town centre: *"villager still goes through the town centre … maybe
+the white diamond laying around the building is too small … I do remember that being so in the game. How is building collision handled by
+the game?"* Research: `docs/building-collision.md`.*
+
+1. **The game separates three things**: collision = the dat's `radius[0]`/`radius[1]` as **half-extents in tiles** (town centre 4x4,
+   house 2x2, wall 1x1); the footprint is **not all solid** - the town centre keeps a walkable **yard** (D115, and aoe2mc's *"let units
+   walk under the town center"* names the same cells); and the **sprite is bigger than the footprint**, so art overhangs and units are
+   drawn behind it.
+2. **So a unit on a town centre's footprint is the game working**: it is in the yard. Our bug was that the picture painted the yard the
+   same grey as the walls - *that* is what read as "inside the building".
+3. **`ruage_view::solids_of(world, &snapshot)`** asks the **walk grid** for every footprint tile, and `render_with_solids` paints solid
+   tiles `BUILDING` and walkable ones `BUILDING_YARD`. The mask travels beside the snapshot, so `Snapshot` did not grow a field and no
+   caller changed.
+4. **The selection outline moves outside the footprint** (`+ 2 px`); at `0.9` it sat inside the grey, drawing a boundary that is not the
+   boundary - the owner's "white diamond is too small", and he is right.
+5. **Both new tests were proved by mutation**: forcing `solid = true` fails *"the yard was painted as wall"*; restoring `0.9` fails
+   *"the selection outline is nowhere near the front edge"*.
+6. **Not settled**: how far the original's sprites overhang (art-side, and we have no sprites yet), and whether every big building's yard
+   is a ring or a rect (ours is a rect, from the engine's rule).

@@ -859,6 +859,9 @@ pub mod palette {
     /// A tree that has been worked out: the entity stays, the canopy does not.
     pub const STUMP: [u8; 4] = [92, 72, 44, 255];
     pub const BUILDING: [u8; 4] = [200, 200, 200, 255];
+    /// **A building's walkable part** (D161): the town centre's yard. Lighter than the solid part, so the picture says where a unit
+    /// may stand instead of painting the whole footprint as wall.
+    pub const BUILDING_YARD: [u8; 4] = [170, 178, 170, 255];
     /// **A placement ghost** (D156): the ground will take it, and the ground will not. Green and red rather than the
     /// player's own colour, because these are the two answers to one question - can this be built here - and the answer is the
     /// same whoever is asking.
@@ -1126,7 +1129,48 @@ pub fn label_for(job: Option<String>, role: Option<String>, fallback: String) ->
     job.or(role).unwrap_or(fallback)
 }
 
+/// **Which footprint tiles a building actually blocks**, by entity id, row-major over its footprint (D161).
+///
+/// The renderer needs it because a building is not always solid all over: the town centre keeps a **yard** (D115), whose tiles a
+/// unit may stand on. Painting the whole footprint as wall is what made a villager in the yard look like a villager inside the
+/// town centre. Kept beside the `Snapshot` rather than in it so a `Snapshot` stays a picture of what is there, not a query against
+/// the simulation - and so every existing caller of `Snapshot::of` is unchanged.
+pub type Solids = std::collections::BTreeMap<u32, Vec<bool>>;
+
+/// **The solid mask of every building in a snapshot.** One `tile_walkable` per footprint tile, which is the same question the
+/// path search asks, so the picture cannot disagree with the collision (D159's rule, applied to the inside of a footprint).
+#[must_use]
+pub fn solids_of(world: &ruage_sim::World, snapshot: &Snapshot) -> Solids {
+    let mut solids = Solids::new();
+    for entity in &snapshot.entities {
+        if entity.kind != EntityKind::Building {
+            continue;
+        }
+        let (across, down) = entity.footprint;
+        let anchor = (
+            entity.position.0.floor() as i32,
+            entity.position.1.floor() as i32,
+        );
+        let (min_x, min_y, _, _) = footprint_tiles(anchor, (across, down));
+        let mut mask = Vec::with_capacity((across * down) as usize);
+        for dy in 0..down as i32 {
+            for dx in 0..across as i32 {
+                let (x, y) = (min_x + dx, min_y + dy);
+                mask.push(x < 0 || y < 0 || !world.tile_walkable(x as u16, y as u16));
+            }
+        }
+        solids.insert(entity.id, mask);
+    }
+    solids
+}
+
 pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
+    render_with_solids(snapshot, camera, &Solids::new())
+}
+
+/// The renderer proper: `solids` names the footprint tiles a building blocks, so the walkable part of a footprint (the town
+/// centre's yard) is painted as the ground it is.
+pub fn render_with_solids(snapshot: &Snapshot, camera: &Camera, solids: &Solids) -> Frame {
     let mut frame = Frame::new(camera.viewport.0, camera.viewport.1);
     let (rx, ry) = camera.radii();
     let (w, h) = (frame.width as i32, frame.height as i32);
@@ -1218,11 +1262,27 @@ pub fn render(snapshot: &Snapshot, camera: &Camera) -> Frame {
                 };
                 for ty in min_y..=max_y {
                     for tx in min_x..=max_x {
+                        // **Solid part or yard** (D161): the block is painted with the colour of the tiles the engine blocks, and a
+                        // walkable tile of the footprint (the town centre's yard) gets the lighter tone - so a unit standing there
+                        // is standing on ground the picture admits exists.
+                        let index = ((ty - min_y) * across as i32 + (tx - min_x)) as usize;
+                        let solid = solids
+                            .get(&entity.id)
+                            .and_then(|mask| mask.get(index))
+                            .copied()
+                            .unwrap_or(true);
+                        let tone = if solid {
+                            colour
+                        } else if entity.remembered {
+                            as_memory(palette::BUILDING_YARD)
+                        } else {
+                            palette::BUILDING_YARD
+                        };
                         // **The same pixel the ground puts that tile on**: a tile's diamond is centred at the integer point
                         // `(x, y)` (see the terrain pass above), so a building drawn at `(x + 0.5, y + 0.5)` sat half a tile
                         // down-and-right of the ground it owns (D160).
                         let at = camera.project((tx as f32, ty as f32));
-                        frame.fill_diamond(at, (rx, ry), colour);
+                        frame.fill_diamond(at, (rx, ry), tone);
                     }
                 }
                 let _ = (across, down);
@@ -1280,7 +1340,17 @@ pub struct Highlights<'a> {
 /// Draw a snapshot and the player's marks over it: a ring around every selected thing (its footprint for a building),
 /// its health bar, and where the last order went.
 pub fn render_with(snapshot: &Snapshot, camera: &Camera, highlights: &Highlights) -> Frame {
-    let mut frame = render(snapshot, camera);
+    render_with_solids_and(snapshot, camera, highlights, &Solids::new())
+}
+
+/// **Everything the window draws**: the ground, the buildings with their solid and walkable parts, then the highlights.
+pub fn render_with_solids_and(
+    snapshot: &Snapshot,
+    camera: &Camera,
+    highlights: &Highlights,
+    solids: &Solids,
+) -> Frame {
+    let mut frame = render_with_solids(snapshot, camera, solids);
     draw_highlights(&mut frame, snapshot, camera, highlights);
     frame
 }
@@ -1319,10 +1389,12 @@ pub fn draw_highlights(
             let (min_x, min_y, max_x, max_y) = footprint_tiles(anchor, entity.footprint);
             let centre =
                 camera.project(((min_x + max_x) as f32 / 2.0, (min_y + max_y) as f32 / 2.0));
-            // A **building** is its footprint, and a footprint is a tile: a diamond is the honest outline there.
+            // A **building** is its footprint, and a footprint is a tile: a diamond is the honest outline there - drawn **just
+            // outside** it (D161). At 0.9 it sat inside the grey block, which the owner read as "the white diamond is too small"
+            // and, worse, left the block's outer edge looking like ground a unit could stand on.
             (
                 centre,
-                (rx * across as f32 * 0.9, ry * down as f32 * 0.9),
+                (rx * across as f32 + 2.0, ry * down as f32 + 2.0),
                 false,
             )
         };
