@@ -1061,13 +1061,16 @@ pub fn draw_order(snapshot: &Snapshot) -> Vec<&EntityView> {
 /// says so - but a berry bush is a short thing drawn without a height, so at greater depth it used to paint over the
 /// villager working it, which is the owner's "they disappeared as if entering a building".
 fn layer_of(entity: &EntityView) -> u8 {
-    // **Units above buildings.** Depth alone hid a villager standing behind a farm or a house, and the owner asked for the
-    // opposite in as many words (2026-11-04): "villagers and units should be always visible over the buildings/farms". In the
-    // original the art's height does this work; here the layer does, because this renderer draws flat shapes with no height.
+    // **Depth decides between units and buildings** (D165). This used to put every unit *above* every building, on the owner's own
+    // 2026-11-04 request - *"villagers and units should be always visible over the buildings/farms"* - which was right at the time: the
+    // only alternative then was a villager vanishing behind a farm's floor. Two things have changed since: a farm's floor is now painted
+    // as **ground** (D163, it is walkable), so no floor can hide anybody, and a unit drawn over a **wall** reads as walking through the
+    // building, which is the report this answers. So the wall wins where it is in front, and the unit wins where it is in front.
+    //
+    // Resource nodes stay below everything: a bush is a short thing and a villager standing behind it must still be seen.
     match entity.kind {
         EntityKind::Resource(_) => 0,
-        EntityKind::Building => 1,
-        EntityKind::Unit | EntityKind::Projectile => 2,
+        EntityKind::Building | EntityKind::Unit | EntityKind::Projectile => 1,
     }
 }
 

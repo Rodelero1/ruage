@@ -124,13 +124,42 @@ fn things_are_painted_from_the_back_of_the_diamond_to_the_front() {
         .iter()
         .map(|entity| entity.id)
         .collect();
-    // **Layers, then depth.** Ground cover first, then buildings, then units - the owner's "units should be always visible
-    // over the buildings" (2026-11-04) - and inside each layer, back to front by depth and then by id. Here: resources,
-    // then the building (20) and its neighbour at the same depth, then the units (9, 21) and the front one (22).
+    // **Layers, then depth** (D165): ground cover first, then everything else **by depth** - buildings and units share a layer now,
+    // because "units are always visible over the buildings" (2026-11-04) is what made a unit painted over a wall read as walking
+    // through the building. Expected here from the depths themselves, computed independently of `draw_order`: resources first, then
+    // ascending `x + y` (a building by its front corner), ties by id.
+    let mut expected: Vec<u32> = snapshot.entities.iter().map(|entity| entity.id).collect();
+    expected.sort_by(|a, b| {
+        let key = |id: u32| {
+            snapshot
+                .entities
+                .iter()
+                .find(|entity| entity.id == id)
+                .map(|entity| match entity.kind {
+                    EntityKind::Resource(_) => (0u8, 0.0f32),
+                    EntityKind::Building => {
+                        let anchor = (entity.position.0.floor(), entity.position.1.floor());
+                        (
+                            1,
+                            anchor.0 + entity.footprint.0 as f32 - 1.0
+                                + anchor.1
+                                + entity.footprint.1 as f32
+                                - 1.0,
+                        )
+                    }
+                    _ => (1, entity.position.0 + entity.position.1),
+                })
+                .unwrap_or((9, 0.0))
+        };
+        key(*a)
+            .0
+            .cmp(&key(*b).0)
+            .then(key(*a).1.total_cmp(&key(*b).1))
+            .then(a.cmp(b))
+    });
     assert_eq!(
-        order,
-        vec![10, 20, 9, 21, 22],
-        "expected buildings back to front, then units by depth: resources first, units never covered - got {order:?}"
+        order, expected,
+        "not painted back to front by depth: {order:?}"
     );
 }
 
@@ -138,7 +167,7 @@ fn things_are_painted_from_the_back_of_the_diamond_to_the_front() {
 /// building**, even standing in the back half of its footprint. The original gets this from the art's height; a flat-shape
 /// renderer gets it from the layer.
 #[test]
-fn a_unit_behind_a_building_is_still_painted() {
+fn a_unit_behind_a_wall_is_covered_by_it() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let scale = world.scale();
@@ -186,16 +215,17 @@ fn a_unit_behind_a_building_is_still_painted() {
     let camera = Camera::new((640, 480)).centred_on(building.position);
     let frame = render(&snapshot, &camera);
 
-    // The villager is inside the diamond the building covers, so **the building's paint** is what a player sees there -
-    // its block or its mark, never the unit. (The strict "exactly the building colour" version broke when buildings got
-    // marks: a mark is part of the building's paint, and a pixel on a mark is still not a villager.)
+    // **The wall wins where it is in front** (D165): a villager standing behind a building is *covered* by it. This test used to
+    // assert the opposite, on the owner's 2026-11-04 request that units always be visible over buildings - which is what made a unit
+    // painted over a wall read as walking through it. The farm half of that request no longer needs the layer, because a farm's floor
+    // is painted as ground (D163).
     let (px, py) = camera.project((behind.0 as f32, behind.1 as f32));
     let seen = frame.pixel(px as u32, py as u32);
     // The unit's own colour is not the building's and not the building's mark: **something other than the building is
     // painted at the villager's own pixel**, which is the claim "units are always visible over buildings" (2026-11-04).
     assert!(
-        seen != palette::BUILDING && seen != palette::MARK,
-        "a villager standing behind a {0}x{1} building was hidden by it: {seen:?}",
+        seen == palette::BUILDING || seen == palette::MARK,
+        "a villager behind a {0}x{1} building is painted over its wall: {seen:?}",
         footprint.0,
         footprint.1
     );

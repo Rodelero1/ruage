@@ -4088,3 +4088,22 @@ Buildings cannot overlap another building or functioning farm … the drop would
    diagnostic binary still needs `--bin frame`.
 2. **Why it was not left alone**: a second binary in a package silently re-opens this, and the first command anyone types to start the game
    should not be a puzzle. No code changed.
+
+
+## D165 - Depth decides between units and walls
+
+*2026-11-08. The owner: *"Units are able to walk over the buildings at the top side but cannot get close to the buildings from the bottom
+side. Therefore it seems that there is a shift between graphics representation and path of units."*
+
+1. **The shift is not in the simulation, measured twice**: a **constructed** house's drawn tiles are exactly its blocked tiles
+   (`built_house_alignment`), and two villagers approaching a house from north and south both arrive **exactly** on their goals
+   (`approach_symmetry`: (30,29) and (30,33)).
+2. **It is the paint**: `layer_of` put **every unit above every building** - the owner's own 2026-11-04 rule, *"villagers and units should be
+   always visible over the buildings/farms"*, made when farms were drawn as floors and a villager behind one vanished. That rule paints a unit
+   **north** of a house over its wall (reads as walking through) and paints a unit **south** of it correctly, one tile out (reads as a shift).
+3. **The rule's reason expired**: a farm's floor is painted as **ground** since D163 (it is walkable), so no floor can hide anybody.
+4. **`layer_of` now gives buildings, units and projectiles one layer**, so depth decides; resource nodes stay below everything.
+5. **Two tests were reversed rather than deleted**, and their comments say why: `a_unit_behind_a_wall_is_covered_by_it` (was
+   `..._is_still_painted`) and the depth-order test, whose expected order is now computed from the depths instead of typed as a literal.
+6. **Traded explicitly**: a unit behind a tall building is hidden where it overlaps it - which is what "no unit passes through the building"
+   means in a flat-shape renderer.
