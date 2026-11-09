@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Read-only presentation layer: a snapshot of a match, a camera, and a software rasteriser"
+# **`cargo run -p ruage-view` starts the window** (D164): the crate also ships a `frame` diagnostic binary, so without this every run
+# needs `--bin window`, and the first person to type `cargo run` met "could not determine which binary to run" instead of the game.
+default-run = "window"
 
 [dependencies]
 ruage-fixed = { path = "../fixed" }

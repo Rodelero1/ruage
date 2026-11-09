@@ -531,8 +531,8 @@ def render(corpus: Corpus, unknowns: dict[str, Unknown], refs: list[Ref], genera
     add("</ul>")
     add(
         "<nav><a href=\"#undecided\">Not decided yet</a> <a href=\"#incomplete\">Decided, but not finished</a> "
-        "<a href=\"#decisions\">The register</a> <a href=\"#dangling\">Broken references</a> "
-        "<a href=\"#health\">How this page knows</a></nav></header><main>"
+        "<a href=\"#review\">Review queue</a> <a href=\"#decisions\">The register</a> "
+        "<a href=\"#dangling\">Broken references</a> <a href=\"#health\">How this page knows</a></nav></header><main>"
     )
 
     # ---- the two registers of "not done", kept apart because they need different actions -------------------------
@@ -563,6 +563,30 @@ def render(corpus: Corpus, unknowns: dict[str, Unknown], refs: list[Ref], genera
             )
     add("</ul></section>")
 
+    # ---- the review queue -----------------------------------------------------------------------------------------
+    # Batches and a resume point, not a filter: 166 cards in one scroll is not something anybody finishes. The
+    # verdicts live in this browser and leave it only by the export button - a static page cannot write the repository.
+    add("<section id=\"review\"><h2>Review queue</h2>")
+    add(
+        "<p class=\"note\">Work through the register in batches; where you stopped is remembered in this browser. "
+        "The chips in the register decide <em>what</em> is in the queue - <b>no stated basis</b>, <b>unresolved</b> "
+        "and <b>corrected</b> are the three shortest passes worth making. A verdict and a note are stored in this "
+        "browser and leave it only through <b>export</b>.</p>"
+    )
+    add("<div class=\"reviewbar\">")
+    add("<label>batch <select id=\"batch-size\">"
+        "<option>10</option><option selected>20</option><option>50</option></select></label>")
+    add("<button id=\"review-start\">start</button>")
+    add("<button id=\"review-prev\">back</button>")
+    add("<button id=\"review-next\">next</button>")
+    add("<button id=\"review-flagged\">only my flags</button>")
+    add("<span id=\"review-progress\" class=\"count\"></span>")
+    add("</div><div class=\"reviewbar\">")
+    add("<button id=\"export\">export review</button>")
+    add("<label class=\"import\">import <input type=\"file\" id=\"import\" accept=\"application/json\"></label>")
+    add("<button id=\"reset\">clear verdicts</button>")
+    add("</div></section>")
+
     # ---- the register ---------------------------------------------------------------------------------------------
     add("<section id=\"decisions\"><h2>The register</h2>")
     add("<div class=\"controls\">")
@@ -584,7 +608,7 @@ def render(corpus: Corpus, unknowns: dict[str, Unknown], refs: list[Ref], genera
         add(
             f"<article class=\"decision s-{state}\" id=\"d-{_esc(decision.id)}\" "
             f"data-id=\"{_esc(decision.id)}\" data-origins=\"{origin_keys}\" "
-            f"data-unresolved=\"{1 if decision.unresolved else 0}\" data-status=\"{state}\">"
+            f"data-unresolved=\"{1 if decision.unresolved else 0}\" data-status=\"{state}\""
         )
         add("<div class=\"head\">")
         add(f"<span class=\"id\">{_esc(decision.id)}</span>")
@@ -629,6 +653,20 @@ def render(corpus: Corpus, unknowns: dict[str, Unknown], refs: list[Ref], genera
             links.append(f"amended {len(corpus.amendments[decision.id])}x")
         if links:
             add(f"<p class=\"links\">{' - '.join(links)}</p>")
+
+        # The reviewer's own reading. A verdict and a note, per decision, kept in the browser and exported as a file -
+        # see `docs/reviews/2026-11-09-decision-index.md` for why a static page cannot store them in the repository.
+        add(f"<div class=\"verdicts\" data-for=\"{_esc(decision.id)}\">")
+        for verdict in ("agree", "question", "wrong"):
+            add(
+                f"<button class=\"verdict\" data-verdict=\"{verdict}\" data-id=\"{_esc(decision.id)}\">"
+                f"{verdict}</button>"
+            )
+        add(
+            f"<input class=\"note\" data-note=\"{_esc(decision.id)}\" "
+            f"placeholder=\"note (saved with the verdict)\">"
+        )
+        add("</div>")
         add("</article>")
 
     add("</section>")

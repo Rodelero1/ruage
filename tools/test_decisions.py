@@ -358,6 +358,28 @@ class Cost(unittest.TestCase):
         self.assertLess(elapsed, 2.0, f"a 300 KB section took {elapsed:.1f} s")
 
 
+class ReviewQueue(unittest.TestCase):
+    """Reviewing 166 decisions needs a resume point, not a scrollbar."""
+
+    def corpus(self):
+        return parse("## D1 - A\n\n`crates/sim/src/combat.rs`\n\n## D2 - B\n\nA villager gathers wood.\n")
+
+    def test_the_page_has_a_review_queue_with_a_batch_size(self):
+        html = decisions.render(self.corpus(), unknowns={}, refs=[], generated="2026-11-09")
+        self.assertIn('id="review"', html)
+        self.assertIn('id="batch-size"', html)
+
+    def test_every_card_can_carry_a_verdict(self):
+        html = decisions.render(self.corpus(), unknowns={}, refs=[], generated="2026-11-09")
+        for verdict in ("agree", "question", "wrong"):
+            self.assertIn(f'data-verdict="{verdict}"', html)
+
+    def test_the_page_can_export_the_review_so_it_leaves_the_browser(self):
+        html = decisions.render(self.corpus(), unknowns={}, refs=[], generated="2026-11-09")
+        self.assertIn('id="export"', html)
+        self.assertIn('ruage-decisions-review', html)
+
+
 class TheScan(unittest.TestCase):
     """A committed page must quote the repository, not whatever is lying in the working tree."""
 

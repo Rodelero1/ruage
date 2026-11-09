@@ -4059,3 +4059,13 @@ Buildings cannot overlap another building or functioning farm … the drop would
    tested across D158-D163; two were real (the half-tile offset, the yard painted as wall), and the third picture is still not reproduced.
 4. **The three answers the debug output distinguishes**: `walkable=false` on the unit's tile = collision bug, and the mask names the building;
    `walkable=true` inside a footprint = a wrong mask; `walkable=true` outside = the fault is drawing, i.e. sprite size, not collision.
+
+
+## D164 - `cargo run` starts the window
+
+*2026-11-08. The owner typed `cargo run --release` to get the debug output and got *"could not determine which binary to run"*.*
+
+1. `crates/view/Cargo.toml` gains **`default-run = "window"`**, so `cargo run --release -p ruage-view` starts the game; the `frame`
+   diagnostic binary still needs `--bin frame`.
+2. **Why it was not left alone**: a second binary in a package silently re-opens this, and the first command anyone types to start the game
+   should not be a puzzle. No code changed.
