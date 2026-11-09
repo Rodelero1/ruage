@@ -7,7 +7,7 @@
 use ruage_data::Resources;
 use ruage_sim::{Command, EntityKind};
 
-use crate::{Camera, Frame, Snapshot, covers, palette};
+use crate::{Camera, Frame, Snapshot, covers, drawn_at, palette};
 
 /// The first **unit** in a list of candidates under the pointer, or `None`: a click means the body it landed on before the
 /// ground that body is standing on (a farm is a floor, a node's tile can be walked).
@@ -89,7 +89,8 @@ impl Selection {
             if entity.player != snapshot.player || entity.kind != EntityKind::Unit {
                 continue;
             }
-            let (px, py) = camera.project(entity.position);
+            // The band follows the **drawn** marker (D168), or a unit is swept up half a tile from where it looks.
+            let (px, py) = camera.project(drawn_at(entity.position));
             if px >= x0 && px <= x1 && py >= y0 && py <= y1 {
                 self.ids.push(entity.id);
             }
@@ -118,7 +119,7 @@ impl Selection {
                     && entity.unit == Some(wanted)
             })
             .filter(|entity| {
-                let (x, y) = camera.project(entity.position);
+                let (x, y) = camera.project(drawn_at(entity.position));
                 x >= 0 && y >= 0 && (x as u32) < wide && (y as u32) < tall
             })
             .map(|entity| entity.id)

@@ -61,9 +61,10 @@ fn a_unit_standing_in_the_yard_is_painted_over_the_yard() {
             player: 1,
             kind: EntityKind::Unit,
             unit: Some(villager),
+            // **The tile's centre**, where a settled unit really stands - and where the marker is now drawn (D168).
             position: (
-                Fixed::from_raw(i64::from(yard.0) * scale),
-                Fixed::from_raw(i64::from(yard.1) * scale),
+                Fixed::from_raw(i64::from(yard.0) * scale + scale / 2),
+                Fixed::from_raw(i64::from(yard.1) * scale + scale / 2),
             ),
             speed: Fixed::ZERO,
             hp: 25,

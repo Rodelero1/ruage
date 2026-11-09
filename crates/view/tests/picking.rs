@@ -81,6 +81,11 @@ fn camera() -> Camera {
 }
 
 /// The pixel for a tile, through the same projection the renderer uses, so a fixture cannot disagree with the picture.
+/// A unit's **drawn** centre in screen space: the same conversion the renderer uses (D168).
+fn drawn(camera: &Camera, position: (f32, f32)) -> (i32, i32) {
+    camera.project(ruage_view::drawn_at(position))
+}
+
 fn pixel(camera: &Camera, tile: (f32, f32)) -> (i32, i32) {
     camera.project(tile)
 }
@@ -100,7 +105,13 @@ fn a_band_takes_units_and_not_buildings() {
     let mut selection = ui::Selection::new();
     // A box in **screen** space, and a real rectangle: two tiles on one isometric diagonal project to the same x, so
     // (6,6)..(18,18) is a vertical line - the first version of this test boxed nothing and looked like a bug in `band`.
-    let (from, to) = (pixel(&camera, (10.0, 10.0)), pixel(&camera, (14.0, 10.0)));
+    // It is drawn around the units' **drawn** centres (D168: a marker sits at its position minus half a tile), with a couple of
+    // pixels of slack, because a box that lands exactly on a marker's centre pixel is a boundary case and not the thing under test.
+    let (a, b) = (drawn(&camera, (10.0, 10.0)), drawn(&camera, (14.0, 10.0)));
+    let (from, to) = (
+        (a.0.min(b.0) - 4, a.1.min(b.1) - 4),
+        (a.0.max(b.0) + 4, a.1.max(b.1) + 4),
+    );
     assert!(from.0 < to.0 && from.1 < to.1, "the box has to be a box");
     selection.band(&snapshot, &camera, from, to);
 

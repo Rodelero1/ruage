@@ -34,15 +34,16 @@ fn every_pixel_of_a_marker_is_inside_its_own_tile() {
 
     let scale = world.scale();
     let villager = world.role_unit("villager").expect("villager");
-    // One villager on open ground, away from the base.
+    // One villager on open ground, away from the base - **at its tile's centre**, where a settled unit really stands.
     let (tx, ty) = (40i64, 40i64);
+    let (px, py) = (tx * scale + scale / 2, ty * scale + scale / 2);
     world
         .submit_checked(Command::Spawn {
             id: EntityId(9_970),
             player: 1,
             kind: EntityKind::Unit,
             unit: Some(villager),
-            position: (Fixed::from_raw(tx * scale), Fixed::from_raw(ty * scale)),
+            position: (Fixed::from_raw(px), Fixed::from_raw(py)),
             speed: Fixed::ZERO,
             hp: 25,
             amount: 0,

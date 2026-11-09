@@ -145,7 +145,8 @@ fn the_ring_is_a_curve_and_not_four_straight_edges() {
     let radius = 0.5f32;
     let snapshot = snapshot(vec![unit(1, (10.0, 10.0), radius)]);
     let camera = camera();
-    let centre = camera.project((10.0, 10.0));
+    // The unit's *drawn* centre: a marker is drawn from its position minus half a tile (D168), and its ring follows the marker.
+    let centre = camera.project((10.0 - 0.5, 10.0 - 0.5));
     let (rx, ry) = camera.radii();
     let semi_w = radius * snapshot.ring_scale * rx;
     let semi_h = radius * snapshot.ring_scale * ry;
@@ -190,7 +191,7 @@ fn an_unselected_unit_wears_none() {
             order: None,
         },
     );
-    let centre = camera.project((10.0, 10.0));
+    let centre = camera.project((10.0 - 0.5, 10.0 - 0.5));
     let mut lit = 0;
     for dy in -20..=20 {
         for dx in -60..=60 {

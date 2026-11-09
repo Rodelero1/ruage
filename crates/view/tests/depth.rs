@@ -186,11 +186,10 @@ fn a_unit_behind_a_building_is_still_painted() {
     let camera = Camera::new((640, 480)).centred_on(building.position);
     let frame = render(&snapshot, &camera);
 
-    // **The wall wins where it is in front** (D165): a villager standing behind a building is *covered* by it. This test used to
-    // assert the opposite, on the owner's 2026-11-04 request that units always be visible over buildings - which is what made a unit
-    // painted over a wall read as walking through it. The farm half of that request no longer needs the layer, because a farm's floor
-    // is painted as ground (D163).
-    let (px, py) = camera.project((behind.0 as f32, behind.1 as f32));
+    // **Units stay visible over buildings** (2026-11-04, D167). The overlap that once made this look wrong was a **frame** mistake, not
+    // an ordering one: markers were drawn from the simulation's position without the half-tile conversion (D168), so they landed on the
+    // corner of four diamonds. The sample below is the unit's *drawn* centre, which is that position minus half a tile.
+    let (px, py) = camera.project((behind.0 as f32 - 0.5, behind.1 as f32 - 0.5));
     let seen = frame.pixel(px as u32, py as u32);
     // The unit's own colour is not the building's and not the building's mark: **something other than the building is
     // painted at the villager's own pixel**, which is the claim "units are always visible over buildings" (2026-11-04).

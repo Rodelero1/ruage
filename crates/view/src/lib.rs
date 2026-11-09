@@ -335,6 +335,19 @@ pub struct Camera {
     pub viewport: (u32, u32),
 }
 
+/// **The point a body at `position` is drawn at** (D168): the one conversion between the two frames.
+///
+/// A tile's diamond is centred on the tile's **point** - `project((x, y))` is the middle of the diamond labelled `(x, y)`, so that tile
+/// covers `x - 0.5 .. x + 0.5` on screen. The simulation's tile `(x, y)` covers `x .. x + 1`, and a settled unit stands at its **centre**,
+/// `x + 0.5`. Drawn raw, such a position lands on the **corner of four diamonds** - half a tile below and right of the tile the unit is
+/// standing in, which is the owner's screenshot of blue squares whose centres sat well inside a building's dark grey. Subtracting half a
+/// tile is the whole of the conversion, and it lives here so that a marker, a selection ring, a rubber band and a double-click all agree
+/// about where a unit is.
+#[must_use]
+pub fn drawn_at(position: (f32, f32)) -> (f32, f32) {
+    (position.0 - 0.5, position.1 - 0.5)
+}
+
 impl Camera {
     /// A camera on the game's own projection: **2:1 isometric**, because that is what the original looks like. A tile is
     /// `tile_pixels` wide and half that high, and tile (1, 0) is down-right from tile (0, 0) while tile (0, 1) is
@@ -1334,15 +1347,22 @@ pub fn render_with_solids(snapshot: &Snapshot, camera: &Camera, solids: &Solids)
                 );
             }
             EntityKind::Unit => {
-                let centre = camera.project(entity.position);
+                // **Two frames, one conversion** (D168). A tile's diamond is centred on the tile's **point** (`project((x, y))`),
+                // so the tile named `(x, y)` covers `x - 0.5 .. x + 0.5` on screen. The simulation's tile `(x, y)` covers
+                // `x .. x + 1` and a settled unit stands at its **centre**, `x + 0.5`. Drawn raw, that landed on a corner of four
+                // diamonds - half a tile below and right of the tile it was standing in, which is the owner's screenshot: a blue
+                // square whose centre sat well inside a building's dark grey. `- 0.5` is the whole conversion.
+                let centre = camera.project(drawn_at(entity.position));
                 let colour = player_colour(entity.player);
-                let half = (rx * 0.35).max(2.0) as i32;
+                // 0.30 of a tile: the square's corner then sits at `0.30 + 0.60 = 0.90` of the diamond, inside it with room to spare.
+                let half = (rx * 0.30).max(2.0) as i32;
                 // **A unit's marker is clipped to the tile it stands on** (D166). Tiles share edges, so a marker wider than its own
                 // diamond paints into the *next* tile - and when that neighbour is a building, the unit appears to stand inside it,
                 // whatever the depth order says. Shrinking the marker only moves the threshold; clipping ends the class: no unit pixel
                 // can land on a tile the unit is not standing on.
-                // The clip is measured from the **unit's own point**, which is inside its tile: a marker drawn at its centre can only
-                // leave that tile through an edge, and a diamond is the shape of the edge.
+                // The clip is a diamond centred on the **marker's own centre**. For a settled unit that centre *is* its tile's diamond
+                // centre (that is what D168 fixed), so the clip is the tile and the marker cannot reach a neighbour. For a unit in
+                // motion it follows the body, which is what makes the clip invisible instead of making the marker slide.
                 let clip = |px: i32, py: i32| -> bool {
                     let dx = (px - centre.0) as f32;
                     let dy = (py - centre.1) as f32;
@@ -1429,7 +1449,8 @@ pub fn draw_highlights(
         // A **building** keeps the footprint ring it had: its body *is* its footprint, and a farm's 1.5 radius would draw a
         // ring inside its own walls.
         let (centre, half, curved) = if entity.kind == EntityKind::Unit {
-            let centre = camera.project(entity.position);
+            // The same tile-centre conversion as the marker (D168), or the white ellipse is half a tile below the body it rings.
+            let centre = camera.project(drawn_at(entity.position));
             let scale = entity.radius.max(0.0) * snapshot.ring_scale;
             // **A body is a circle**, so its ring is an ellipse: the owner saw the diamond and said so.
             (centre, (rx * scale, ry * scale), true)

@@ -4180,3 +4180,20 @@ engine stops a unit at the tile boundary on every side.*
    none. That is the asset pack's job (D18).
 4. **Two one-line options if the owner wants them now**: a **dark outline** around a unit's marker so it reads as in front over grey, or **snapping the
    marker to its tile's centre** so it can never straddle a neighbour. Both change how the game looks, so both are his call.
+
+
+## D168 - Two frames, one conversion: `drawn_at` subtracts half a tile
+
+*2026-11-08. The defect under six rounds of "the unit is inside the building". `Camera::project` puts a tile's diamond **centre on the tile's
+point**, so tile `(x, y)` covers `x - 0.5 .. x + 0.5` on screen; the simulation's tile `(x, y)` covers `x .. x + 1` and a settled unit stands at
+`x + 0.5`. Drawn with the raw position, every settled unit landed on the **corner of four diamonds** - half a tile down-right of its own tile -
+and its marker painted a quarter of itself into each of the four neighbours.*
+
+1. **The conversion is one public function**: `ruage_view::drawn_at(position) = (x - 0.5, y - 0.5)`, used by the marker, the selection ring, the
+   rubber band's hit test and the double-click's on-screen test. Four sites, one subtraction, or they drift apart again.
+2. **Proven failing first**: `unit_centring` measured the marker's painted centroid at the centre of tile `(42,42)` as `(450.0, 398.0)` against a
+   diamond centre of `(450.0, 374.0)` - **24 px, exactly half a tile**. Reverting `drawn_at` to the identity reproduces it.
+3. **Buildings were already right**: their ring is the tile midpoint of the footprint, which is in the view's frame. Only bodies were wrong.
+4. **The lesson belongs in the tests**: three earlier tests used *integer* positions - a tile corner in the simulation's frame and a diamond centre
+   in the view's - so they agreed with the bug. **Fixtures must place units where units stand: at tile centres.** Six test files were corrected.
+5. **Marker back to `0.30 * rx`**: its corner then sits at `0.90` of the diamond, so the D166 clip no longer cuts a settled marker's corners.
