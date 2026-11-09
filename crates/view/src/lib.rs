@@ -118,6 +118,9 @@ pub struct EntityView {
     pub resource: Option<usize>,
     /// Units a building is making, the one in progress included; zero for everything else.
     pub pending: usize,
+    /// **What this building is making** (D157): the running job with its progress in ticks, and the jobs waiting behind it. The
+    /// interface draws a bar from it; the simulation owns the numbers.
+    pub production: ruage_sim::Production,
     /// **The numbers the card prints** (owner, 2026-11-04): attack, both armours, range, speed, sight, work rate and carry
     /// capacity, as the owner's own upgrades leave them. `None` for a resource node, which has no unit behind it.
     pub stats: Option<ruage_sim::UnitStats>,
@@ -244,6 +247,7 @@ impl Snapshot {
                 resource: world.held_slot(entity.id),
                 hp: entity.hp.max(0) as u32,
                 pending: world.pending_orders(entity.id),
+                production: world.production(entity.id),
                 // **The owner's own numbers**, resolved by the simulation: a pack's unit table is not the view's to read,
                 // and an enemy's card must show what *their* research produced, not the viewer's (D112).
                 stats: entity.unit.and_then(|unit| {
@@ -859,6 +863,9 @@ pub mod palette {
     /// player's own colour, because these are the two answers to one question - can this be built here - and the answer is the
     /// same whoever is asking.
     pub const PLACEMENT: [u8; 4] = [120, 220, 140, 255];
+    /// **Progress**: what a building is making (D157), and the same colour the hold bar uses - a bar that is filling, not a
+    /// status.
+    pub const PROGRESS: [u8; 4] = [230, 180, 70, 255];
     pub const PLACEMENT_REFUSED: [u8; 4] = [230, 80, 70, 255];
     /// The HUD: a dark bar, light text, and one swatch per stockpile column in the pack's own order.
     pub const HUD_BAR: [u8; 4] = [16, 16, 20, 255];

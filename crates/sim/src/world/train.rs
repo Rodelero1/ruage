@@ -5,7 +5,7 @@
 use ruage_fixed::Fixed;
 
 use crate::{
-    Command, Entity, EntityId, EntityKind, RallyPoint, SimError, Task, TrainPlan, Training,
+    Command, Entity, EntityId, EntityKind, Job, RallyPoint, SimError, Task, TrainPlan, Training,
     TrainingPause, World,
 };
 
@@ -144,13 +144,67 @@ impl World {
             speed: plan.speed,
             fresh: true,
         };
-        let Some(entity) = self.find_mut(building) else {
-            return Err(SimError::MissingEntity(building));
-        };
-        if entity.training.is_none() {
+        let idle = self
+            .find(building)
+            .is_some_and(|entity| entity.training.is_none() && entity.researching.is_none());
+        if idle && !self.queued.contains_key(&building) {
+            let Some(entity) = self.find_mut(building) else {
+                return Err(SimError::MissingEntity(building));
+            };
             entity.training = Some(job);
         } else {
-            self.queued.entry(building).or_default().push(job);
+            self.queued
+                .entry(building)
+                .or_default()
+                .push(Job::Train(job));
+        }
+        Ok(())
+    }
+
+    /// **Start the head of each building's queue** (D157) where nothing is running.
+    ///
+    /// The queue holds units and techs in one order, so this is the only place that decides what runs next: a tech behind two
+    /// units runs third, and a unit behind a tech waits for the tech. A job that can no longer be paid for is **dropped with a
+    /// refusal** rather than silently skipped - the player paid for the queue's order, not for the engine's convenience.
+    pub(crate) fn start_next_jobs(&mut self) -> Result<(), SimError> {
+        if self.queued.is_empty() {
+            return Ok(());
+        }
+        let idle: Vec<EntityId> = self
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::Building
+                    && entity.hp > 0
+                    && entity.construction.is_none()
+                    && entity.training.is_none()
+                    && entity.researching.is_none()
+            })
+            .map(|entity| entity.id)
+            .filter(|id| self.queued.contains_key(id))
+            .collect();
+        for id in idle {
+            let Some(job) = self
+                .queued
+                .get_mut(&id)
+                .and_then(|queue| (!queue.is_empty()).then(|| queue.remove(0)))
+            else {
+                continue;
+            };
+            if self.queued.get(&id).is_some_and(Vec::is_empty) {
+                self.queued.remove(&id);
+            }
+            match job {
+                Job::Train(training) => {
+                    if let Some(entity) = self.find_mut(id) {
+                        entity.training = Some(training);
+                    }
+                }
+                Job::Research { tech } => match self.check_research(id, tech) {
+                    Ok(plan) => self.begin_research(id, tech, plan)?,
+                    Err(why) => self.refusal = Some((id, why, self.tick)),
+                },
+            }
         }
         Ok(())
     }
@@ -275,21 +329,14 @@ impl World {
             }
         }
 
-        // The next unit in the queue starts where the finished one left off: its own create time was
-        // priced when it was ordered, and it begins counting from that total.
-        let next = self.queued.get_mut(&building).and_then(|waiting| {
-            if waiting.is_empty() {
-                None
-            } else {
-                Some(waiting.remove(0))
-            }
-        });
+        // **The job is done: clear the slot** (D157). This used to happen as a side effect of setting `training` to the next
+        // queued unit; once the queue moved to `start_next_jobs` the slot stayed occupied, and the building spawned a villager
+        // **every tick** - twenty of them in twenty ticks, which is how the queue test found it.
         if let Some(source) = self.find_mut(building) {
-            source.training = next;
+            source.training = None;
         }
-        if self.queued.get(&building).is_some_and(Vec::is_empty) {
-            self.queued.remove(&building);
-        }
+        // The queue's head is taken by `start_next_jobs`, not here: the head may be a tech, and a unit that took a tech's place
+        // would skip it.
         true
     }
 

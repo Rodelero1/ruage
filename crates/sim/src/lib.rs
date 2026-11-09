@@ -405,6 +405,35 @@ pub struct Training {
     pub fresh: bool,
 }
 
+/// **One job in a building's queue** (D157): a unit to train, or a tech to research. Exactly one runs at a time and the rest
+/// wait in the order they were ordered - the owner's rule: *"Units and tech can be queued in the building, but they are
+/// performed one after another not in parallel."*
+#[derive(Debug, Clone)]
+pub(crate) enum Job {
+    Train(Training),
+    Research { tech: u32 },
+}
+
+/// What a building is making, as the interface asks for it (D157): the job in progress with its progress in ticks, and the
+/// ones waiting behind it, in order.
+///
+/// One call rather than three, because a HUD that asked `training`, `researching` and the queue separately would draw three
+/// pictures that can disagree.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Production {
+    /// The running job, how many of its ticks are done, and how many there are in total.
+    pub running: Option<(QueuedItem, u32, u32)>,
+    /// The jobs behind it, in the order they will run.
+    pub waiting: Vec<QueuedItem>,
+}
+
+/// A unit or a tech, named the way the queue holds it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueuedItem {
+    Unit(u32),
+    Tech(u32),
+}
+
 /// A research order that passed every check: what it costs, how long it takes, and whose it is.
 #[derive(Debug, Clone)]
 struct ResearchPlan {
@@ -1091,7 +1120,10 @@ pub struct World {
     /// Units waiting behind the one a building is making, by building. A side table rather than a
     /// second field on `Entity`: the entity array is walked every tick, and a `Vec` in it costs every
     /// entity for the sake of a few buildings (docs/performance.md, pass seven).
-    queued: BTreeMap<EntityId, Vec<Training>>,
+    /// **One queue per building, jobs in order** (D157): units and techs together, so a tech ordered after two units runs
+    /// third. The running job is not in here - it lives on the entity as `training` or `researching`, because those are the
+    /// timers the tick loop reads.
+    queued: BTreeMap<EntityId, Vec<Job>>,
     /// Why a building's production is stopped, by building (D85). A side table for the same reason as `queued`: it is
     /// a fact about a handful of buildings, not a field every entity pays for. Cleared on the tick production can
     /// continue, so a stale reason can never outlive its cause.
@@ -2573,6 +2605,67 @@ impl World {
                 .is_some_and(|entity| entity.training.is_some()),
         );
         head + self.queued.get(&building).map_or(0, Vec::len)
+    }
+
+    /// **What this building is making** (D157), for the interface: the running job with its progress in ticks, and the jobs
+    /// waiting behind it **in order**. One call, so a HUD cannot draw three pictures that disagree.
+    #[must_use]
+    pub fn production(&self, building: EntityId) -> Production {
+        let entity = self.find(building);
+        let running = entity.and_then(|entity| {
+            if let Some(job) = entity.training {
+                // `remaining_ticks` counts down from the total resolved when the order landed, so the total is what the pack
+                // priced and the done is the difference. A `fresh` job has spent no work yet.
+                let total = self
+                    .train_total_ticks(job.unit)
+                    .unwrap_or(job.remaining_ticks);
+                Some((
+                    QueuedItem::Unit(job.unit),
+                    total.saturating_sub(job.remaining_ticks),
+                    total,
+                ))
+            } else {
+                entity.researching.map(|job| {
+                    let total = self
+                        .research_total_ticks(job.tech)
+                        .unwrap_or(job.remaining_ticks);
+                    (
+                        QueuedItem::Tech(job.tech),
+                        total.saturating_sub(job.remaining_ticks),
+                        total,
+                    )
+                })
+            }
+        });
+        let waiting = self
+            .queued
+            .get(&building)
+            .map(|jobs| {
+                jobs.iter()
+                    .map(|job| match job {
+                        Job::Train(training) => QueuedItem::Unit(training.unit),
+                        Job::Research { tech } => QueuedItem::Tech(*tech),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Production { running, waiting }
+    }
+
+    /// A unit's create time in ticks, as the pack prices it.
+    fn train_total_ticks(&self, unit: u32) -> Option<u32> {
+        let stats = self.units.as_ref()?.unit(unit)?;
+        u32::try_from(stats.train_time)
+            .ok()
+            .and_then(|seconds| seconds.checked_mul(self.tick_rate_hz))
+    }
+
+    /// A tech's research time in ticks, as the pack prices it.
+    fn research_total_ticks(&self, tech: u32) -> Option<u32> {
+        let stats = self.techs.as_ref()?.get(tech)?;
+        u32::try_from(stats.research_time)
+            .ok()
+            .and_then(|seconds| seconds.checked_mul(self.tick_rate_hz))
     }
 
     /// Why this building's production is stopped, if it is (D85). The view draws the reason it is given; the

@@ -688,6 +688,9 @@ impl World {
                 self.finish_research(player, tech)?;
             }
         }
+        // **The next job in the queue** (D157): a building with nothing running takes the head of its queue - a unit or a tech,
+        // whichever was ordered first. Last, so a job that finished this tick has already advanced the queue.
+        self.start_next_jobs()?;
         Ok(())
     }
 

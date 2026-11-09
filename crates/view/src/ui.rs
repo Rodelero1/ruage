@@ -230,6 +230,9 @@ pub struct SelectedRow {
     pub garrison: u32,
     /// Units this building is making, the one in progress included.
     pub pending: usize,
+    /// **What this building is making** (D157): drawn as a second bar under the health bar, because research and training share
+    /// one queue and a player watching a barracks wants to see both.
+    pub production: ruage_sim::Production,
     pub pose: crate::Pose,
     /// **The numbers the card prints**: attack, both armours, range, speed, sight, work rate and carry capacity, effective
     /// for the owner. `None` for a resource node, which has no unit behind it.
@@ -308,6 +311,7 @@ impl Hud {
                     construction: entity.construction,
                     garrison: entity.garrison,
                     pending: entity.pending,
+                    production: entity.production.clone(),
                     pose: entity.pose,
                     stats: entity.stats,
                     is_husk: entity.is_husk,
@@ -665,6 +669,39 @@ pub fn draw_widget(frame: &mut Frame, rect: Rect, state: WidgetState) {
     frame.fill_rect(x + w as i32 - 1, y, 1, h as i32, dark);
 }
 
+/// **The production bar** (D157): what the selected building is making, as a bar that fills, with the number waiting beside it.
+///
+/// Drawn from [`ruage_sim::Production`] and nothing else, so the picture cannot disagree with the queue: an empty building draws
+/// an empty track (and no text), a job in progress fills `done / total`, and the count behind it says how long the wait is.
+pub fn production_bar(
+    frame: &mut crate::Frame,
+    at: (i32, i32),
+    width: u32,
+    production: &ruage_sim::Production,
+) {
+    let (x, y) = at;
+    frame.fill_rect(x, y, width as i32, 4, palette::HP_TRACK);
+    if let Some((_, done, total)) = production.running {
+        let fraction = if total == 0 {
+            0.0
+        } else {
+            (done as f32 / total as f32).clamp(0.0, 1.0)
+        };
+        let lit = (width as f32 * fraction) as i32;
+        frame.fill_rect(x, y, lit, 4, palette::PROGRESS);
+    }
+    if !production.waiting.is_empty() {
+        let label = format!("+{}", production.waiting.len());
+        frame.draw_text(
+            x + width as i32 - crate::font::text_width(&label, 1) - 1,
+            y + 5,
+            &label,
+            1,
+            palette::HUD_TEXT,
+        );
+    }
+}
+
 /// The bottom panel's height: a selection list on the left, and room above the minimap on the right.
 #[must_use]
 pub fn hud_panel_height() -> u32 {
@@ -751,6 +788,11 @@ fn draw_selection_card(
         palette::HP_RED
     };
     frame.fill_rect(bx, by, lit, 4, colour);
+    // **What the building is making** (D157), under the health bar it is not: a second bar, in its own colour, with the count
+    // waiting beside it. Nothing is drawn for a unit or an empty building, so the card keeps its shape.
+    if row.production.running.is_some() || !row.production.waiting.is_empty() {
+        production_bar(frame, (px, by + 17), PORTRAIT as u32, &row.production);
+    }
     let max = row.stats.map(|stats| stats.max_hp).unwrap_or(0);
     let hp = if max > 0 {
         format!("{}/{}", row.hp, max)

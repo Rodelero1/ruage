@@ -238,6 +238,8 @@ fn row(hp_fraction: f32) -> ui::SelectedRow {
         construction: None,
         garrison: 0,
         pending: 0,
+        production: Default::default(),
+
         pose: ruage_view::Pose::Idle,
         stats: Some(ruage_sim::UnitStats {
             max_hp: 25,
@@ -694,6 +696,8 @@ fn node_row() -> ui::SelectedRow {
         construction: None,
         garrison: 0,
         pending: 0,
+        production: Default::default(),
+
         stats: None,
         is_husk: false,
         pose: ruage_view::Pose::Idle,
@@ -791,6 +795,8 @@ fn the_hud_reads_a_nodes_column_and_holdings() {
         garrison: 0,
         amount: 87,
         pending: 0,
+        production: Default::default(),
+
         stats: None,
         is_husk: false,
         radius: 0.2,

@@ -23,6 +23,8 @@ fn unit(id: u32, at: (f32, f32), hp_fraction: f32) -> EntityView {
         hp: 25,
         resource: None,
         pending: 0,
+        production: Default::default(),
+
         stats: None,
         is_husk: false,
         radius: 0.2,

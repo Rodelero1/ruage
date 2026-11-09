@@ -124,8 +124,19 @@ impl World {
                     .to_le_bytes(),
             );
             for job in waiting {
-                fnv_bytes(&mut hash, &job.unit.to_le_bytes());
-                fnv_bytes(&mut hash, &job.remaining_ticks.to_le_bytes());
+                // **A job is either a unit or a tech** (D157), and the tag goes into the hash: a queue holding unit 83 must not
+                // hash the same as one holding tech 83.
+                match job {
+                    crate::Job::Train(training) => {
+                        fnv_bytes(&mut hash, b"unit");
+                        fnv_bytes(&mut hash, &training.unit.to_le_bytes());
+                        fnv_bytes(&mut hash, &training.remaining_ticks.to_le_bytes());
+                    }
+                    crate::Job::Research { tech } => {
+                        fnv_bytes(&mut hash, b"tech");
+                        fnv_bytes(&mut hash, &tech.to_le_bytes());
+                    }
+                }
             }
         }
         // A stopped queue is state, not an event: two runs that disagree about *why* production is halted have

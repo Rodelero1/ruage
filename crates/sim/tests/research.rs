@@ -878,6 +878,16 @@ fn a_barracks_trains_the_spear_line_only_as_far_as_it_is_unlocked() {
         })
         .expect("the Feudal Age makes spearmen available");
 
+    // **One queue now** (D157): the spearman ordered above is still in the barracks, so a research ordered next would wait
+    // behind it - and `research` below steps only the tech's own time. Let the spear come out first, which is what a player
+    // would do (or what would happen anyway).
+    // The order lands on the **next tick** (`command_apply = next_tick`), so one step is needed before the building knows
+    // about it - asking first found "nothing running" and let the spear start later, in the middle of `bank`.
+    world.step().expect("step");
+    while world.pending_orders(barracks) > 0 {
+        world.step().expect("step");
+    }
+
     // The pikeman is an *upgrade*, not an availability: the barracks may train it only once the
     // Pikeman tech has been researched, even though it is the same line.
     feudal(&mut world);

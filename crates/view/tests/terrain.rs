@@ -51,6 +51,7 @@ fn node(id: u32, at: (f32, f32), amount: u32) -> EntityView {
         amount,
         resource: None,
         pending: 0,
+        production: Default::default(),
         stats: None,
         is_husk: false,
         radius: 0.2,

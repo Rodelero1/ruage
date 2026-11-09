@@ -6,7 +6,7 @@ use ruage_data::Unit;
 use ruage_fixed::Fixed;
 
 use crate::{
-    EntityId, EntityKind, MAX_PLAYERS, Research, ResearchPlan, SimError, World, add_to_class,
+    EntityId, EntityKind, Job, MAX_PLAYERS, Research, ResearchPlan, SimError, World, add_to_class,
     collect_modifiers, multiply_class, scale_fixed, scaled_health,
 };
 
@@ -25,8 +25,15 @@ impl World {
         if entity.construction.is_some() {
             return Err(SimError::BuildingNotReady { id: building });
         }
-        if entity.researching.is_some() {
-            return Err(SimError::AlreadyResearching { id: building });
+        // **A busy building is not a refusal any more** (D157): the tech waits its turn behind whatever is queued there. What
+        // is still refused is ordering the *same* tech twice, which would charge twice for one upgrade.
+        let already_here = entity.researching.is_some_and(|job| job.tech == tech)
+            || self.queued.get(&building).is_some_and(|jobs| {
+                jobs.iter()
+                    .any(|job| matches!(job, Job::Research { tech: queued } if *queued == tech))
+            });
+        if already_here {
+            return Err(SimError::TechInProgress { tech });
         }
         let techs = self.techs.as_ref().ok_or(SimError::NoTables)?;
         let stats = techs.get(tech).ok_or(SimError::MissingTech { id: tech })?;
@@ -37,6 +44,18 @@ impl World {
         // second would apply an upgrade with nothing left to upgrade.
         if self.entities.iter().any(|other| {
             other.player == entity.player && other.researching.is_some_and(|job| job.tech == tech)
+        }) {
+            return Err(SimError::TechInProgress { tech });
+        }
+        // And the same tech waiting in **another** building's queue is the same double charge.
+        if self.queued.iter().any(|(id, jobs)| {
+            *id != building
+                && jobs
+                    .iter()
+                    .any(|job| matches!(job, Job::Research { tech: queued } if *queued == tech))
+                && self
+                    .find(*id)
+                    .is_some_and(|other| other.player == entity.player)
         }) {
             return Err(SimError::TechInProgress { tech });
         }
@@ -131,8 +150,33 @@ impl World {
 
     /// Pay for a tech and start its timer. Paid only after every check passed, so a refused order
     /// spends nothing.
+    /// **Order a tech** (D157): it runs now if the building is free, and otherwise waits its turn **behind whatever is already
+    /// queued there** - units and techs in one order. That is the owner's rule, and it replaces the older "one research per
+    /// building, refused while another runs".
     pub(crate) fn start_research(&mut self, building: EntityId, tech: u32) -> Result<(), SimError> {
+        // Validation now, payment when it starts: a queued job must not spend money the player has not got yet (D66's rule
+        // for units, applied to techs).
         let plan = self.check_research(building, tech)?;
+        let idle = self
+            .find(building)
+            .is_some_and(|entity| entity.training.is_none() && entity.researching.is_none());
+        if !idle || self.queued.contains_key(&building) {
+            self.queued
+                .entry(building)
+                .or_default()
+                .push(Job::Research { tech });
+            return Ok(());
+        }
+        self.begin_research(building, tech, plan)
+    }
+
+    /// Start a tech **now**, paying for it: the caller has already decided it is this job's turn.
+    pub(crate) fn begin_research(
+        &mut self,
+        building: EntityId,
+        tech: u32,
+        plan: ResearchPlan,
+    ) -> Result<(), SimError> {
         for cost in &plan.costs {
             let slot = self.cost_slot(cost)?;
             let index = usize::from(plan.player).wrapping_sub(1);

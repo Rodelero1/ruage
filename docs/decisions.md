@@ -3876,3 +3876,30 @@ skipped, the rest stands, and the preview shows it red), **A** (the engine picks
 6. **The drawing test was proved by mutation**, because it passed on arrival: ignoring `valid` and always drawing green makes it
    fail. A drawing test that cannot fail is decoration.
 7. **Not done**: the villager build card (placement is key-only), a single-building ghost, and any cost readout while placing.
+
+
+## D157 - One queue per building: units and techs, one after another
+
+*2026-11-08. The owner: *"When units are trained in a building, there should be a training queue with visible progress. Same for
+tech research. Units and tech can be queued in the building, but they are performed one after another not in parallel."*
+
+1. **Training and research were already timed** (`train_time`/`research_time` x tick rate, proven by two existing tests), so
+   nothing was made slower. What was wrong was the **queue**: units had one, techs did not (a second research was refused
+   `AlreadyResearching`), and a building could **train and research at the same time** - the parallel behaviour this decision
+   removes.
+2. **`queued` is now `Vec<Job>`** where `Job::Train(Training) | Job::Research { tech }`, so the order is the player's order.
+   `start_next_jobs` runs at the end of `step_production` and starts the head of any idle building's queue.
+3. **Validation at order time, payment at start time** - the rule D66 set for units, now for techs: a queue cannot spend money a
+   player has not got yet.
+4. **The same tech twice is still refused** (`TechInProgress`): in the running slot, in this queue, or in another of the player's
+   buildings. A busy building is no longer a refusal.
+5. **`World::production(building) -> Production`** is the one call the interface makes: the running job with `(done, total)` ticks
+   and the waiting items in order. `ui::production_bar` draws it as a 4-pixel bar under the health bar, in `palette::PROGRESS`,
+   with `+N` waiting.
+6. **The queue's kind is in the state hash**, so unit 83 and tech 83 cannot collide.
+7. **The acceptance match changed materially and is recorded, not celebrated**: hash `45596da62c9e3668` -> **`a120ed0721c8768c`**,
+   entities 135 -> **150**, repaths 125 -> **88**, made-room 116 -> **100**, and **both players alive at 30 minutes** instead of
+   one - because a tech ordered behind units now waits its turn, so research lands later.
+8. **An agent bug, found by the test**: removing the old queue advance left the training slot never cleared, so a town centre
+   spawned a villager **every tick** (23 villagers where 4 were expected, ids 9904-9923). Fixed by clearing the slot explicitly.
+9. **Not done**: cancelling a queued job, a building card for villagers, and tech *names* on the bar (the card says `+1`).

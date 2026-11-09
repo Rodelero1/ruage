@@ -72,6 +72,8 @@ fn entity(id: u32, kind: EntityKind, at: (f32, f32), footprint: (u32, u32)) -> E
         hp: 25,
         resource: None,
         pending: 0,
+        production: Default::default(),
+
         stats: None,
         is_husk: false,
         radius: 0.2,
