@@ -26,7 +26,7 @@ PACK = --config $(CONFIG)/sim.toml \
        --effects $(CONFIG)/gamedata/effects.toml \
        --civs $(CONFIG)/gamedata/civs.toml
 
-.PHONY: help build window run headless batch test check review fmt clippy clean
+.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check
 
 help:
 	@echo "make build      - build everything, release"
@@ -36,6 +36,7 @@ help:
 	@echo "make test       - every test"
 	@echo "make check      - fmt + clippy + tests: the pre-commit gate"
 	@echo "make review     - the review gate: does the staged change carry its review?"
+	@echo "make decisions  - rebuild the browsable decision index (docs/site/index.html)"
 	@echo "make clean      - remove target/"
 
 build:
@@ -64,6 +65,14 @@ require-data:
 
 test: require-data
 	$(CARGO) test --workspace
+
+# The decision index (D163): one browsable page over docs/decisions.md and the U-register. Committed, because the
+# corpus it renders is committed. `make decisions-check` parses and reports without writing.
+decisions:
+	python3 tools/decisions.py
+
+decisions-check:
+	python3 tools/decisions.py --check
 
 # The tools' own tests, including the gate above. Cheap, and they are what keeps a tool honest.
 tools-test:

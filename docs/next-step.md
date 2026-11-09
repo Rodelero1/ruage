@@ -1,5 +1,24 @@
 # The step walks the line, and the route bends where the ground does
 
+> # Session 50, 2026-11-09 - D163: the decisions are browsable
+>
+> **The owner's ask:** one page that shows every decision, **how it was made**, and what is still missing - "help me to
+> spot gaps and bad decisions". Built: `tools/decisions.py`, 37 tests, output committed at `docs/site/index.html`,
+> rebuilt by `make decisions` (760 ms).
+>
+> **What it says about the corpus today:** 165 decisions, 5 ids carrying an amendment section, 4 corrected by a later
+> decision, 5 superseded, **33 with no stated basis**, 24 paragraphs where a decision names its own limits, 12 open
+> questions in the U-register.
+>
+> **The finding to act on:** ten ids are cited in the docs or the code and never written - **D78, D79, D81, D82** (a gap
+> in the numbering four documents still reference), **D115, D124, D126, D136**, and the lettered **D122b, D125b**.
+> `docs/site/index.html#dangling` gives the file and line of every mention. Each is either a lost decision or a
+> citation that was never true.
+>
+> **Next:** triage the ten (write the rule or fix the citation), then look at the 33 uncited decisions the page names.
+> **Not next:** linking a decision to the test that pins it - no such map exists and inferring one from comments would
+> be a guess.
+
 > # Session 6, 2026-11-04 - straight-line walking, the pass the owner has asked for three times
 >
 > **Where session 5 ended:** `docs/pathfinding-from-the-talk.md` (pushed as `3cfd783`) - the short-range algorithm from

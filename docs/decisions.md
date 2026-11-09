@@ -3982,3 +3982,46 @@ the game?"* Research: `docs/building-collision.md`.*
    *"the selection outline is nowhere near the front edge"*.
 6. **Not settled**: how far the original's sprites overhang (art-side, and we have no sprites yet), and whether every big building's yard
    is a ring or a rect (ours is a rect, from the engine's rule).
+
+---
+
+## D163 - The decision index is derived from the corpus, and it quotes its evidence
+
+*2026-11-09. The owner: "I want to have a page I can browse with a web browser where I could see all the decisions that
+have been made or are yet to be made and how they were made (research, decided by me, reverse engineered, assumed...)
+and that would help me to spot gaps and bad decisions." Answers to the three shapes offered: **generated rather than
+authored**, **the open register, the evidence ladder and broken references**, committed at **`docs/site/`**.*
+
+1. **Derived, never authored.** `tools/decisions.py` reads `docs/decisions.md` and the U-register in
+   `docs/mechanics/README.md` and writes one self-contained HTML file. Nothing on the page is typed by hand, so the page
+   cannot drift from the corpus - and when a label is wrong, the classifier is wrong in a way a reader can see.
+2. **Every label carries the phrase it was read from.** A basis is recorded only when the decision's own text says where
+   it came from (`owner`, `dat`, `binary`, `measured`, `published`, `prior-art`, `decision`, `review`), and the sentence
+   is shown beside the tag. This is the answer to "it needs to represent decisions correctly": correctness is not a
+   promise the tool makes, it is a quotation the reader can check.
+3. **An absence is a category, not a failure.** 33 of the 165 decisions name no source at all. That category needs no
+   pattern to be right, which is why it is reported rather than papered over - and it is not a verdict: it says the
+   reasoning is argument rather than a citation, and the reader decides what that is worth.
+4. **Two registers, because they need different actions.** *Not decided yet* is the U-register (12 open questions);
+   *decided, but not finished* is the 24 paragraphs where a decision names its own limits. Mixing them would turn
+   "decide this" and "implement this" into one list.
+5. **It does not sort by strength of evidence, and that is a change from what was approved.** A single ladder position
+   per decision was the plan, but most decisions here cite three sources at once, and a sort key over that would be
+   precision the prose does not contain - the same mistake as inventing a number. The filters are the honest version:
+   *owner*, *dat*, *binary*, *measured*, *published*, *prior-art*, *decision*, *review*, *no basis*, *unresolved*.
+6. **`unresolved` is a reading list, not a verdict.** Language that admits doubt ("stays a hypothesis", "not
+   established") is quoted, unless the same sentence says the doubt was settled ("tested and is falsified") - because
+   22 decisions flagging themselves is useful and 120 would be noise.
+7. **Where it lives.** `docs/site/index.html`, committed, because `docs/decisions.md` is committed. Rebuild with
+   `make decisions`; `make decisions-check` parses and reports without writing and fails on a heading it cannot place.
+   It is deliberately **not** in `make check`: a docs tool cannot regress the engine, and adding it would make every
+   commit pay for the corpus.
+8. **What its first run found, which is the point of the exercise.** Ten ids are referenced in the docs or the code and
+   never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`
+   under their parent (D24a, D94a, D98a) and were invisible to a reader looking only for `##`. 4 decisions are
+   corrected by a later one, 5 are superseded, 5 ids carry an amendment section.
+
+**Limits, named.** The basis patterns are a heuristic over English prose: a decision can be tagged from an incidental
+mention, which is why the sentence is on the page. The U-register is read from one table, so a question written
+anywhere else is not in the open register. Nothing links a decision to the *test* that pins it - the code cites ids
+(155 of 178 `.rs` files do) but there is no check that the cited test still exists.
