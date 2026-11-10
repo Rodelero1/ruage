@@ -4278,3 +4278,23 @@ north and west and not from the south and east, and the settle placed one inside
 4. **Not reproduced here**, and therefore still open with the owner: piling up on one bush, foraging from a distance in a **berry patch** (most sides of
    a bush are blocked by other bushes - the fixture is a lone bush on open ground), and the flicker (a lone worker is drawn on all 120 ticks).
 5. **Own error, recorded**: I read design (b)'s 155 entities as a success before looking at its repaths. Both numbers are in the review.
+
+
+## D175 - The search radius is the dat's own number, per unit
+
+*2026-11-08. The owner: *"If the worker cannot reach the place it will search for another nearest source. ... Can you check in the file?"* - and,
+offered three shapes, chose **B**: the dat's `search_radius` per unit.*
+
+1. **The number is in the file**: `task_info.search_radius` - villager **4.0** tiles, scout 4.0, cog 6.0, fishing ship 12.0, trebuchet 17-18, widest
+   21.0; 750 slots carry it, median 6.0. It bounds the *search for another source*; it is not a placement rule.
+2. **The standoff is not in this file**: `work_range`, `auto_search_targets` and `search_wait_time` are **DE** (v7.x) fields. The AoK HD file is
+   v5.7.2, so the touching distance there *is* the unit radii - 0.2 + 0.5 = **0.70** - which D169 already implements. The owner's model is the file's
+   model.
+3. **What changed**: `Unit.search_radius`, and `gather_reach` uses it when the pack carries it. Packs generated before the field existed keep sight
+   plus five (villager: **9**), which is the number the game does not use. **Mutation-proved**: disabling the branch makes the test report *"looked 9
+   instead"*.
+4. **The fallback rule already existed**: a refused node is remembered (`share_failed`, D138) and the picker - distance order, reachability asked of
+   the nearest eight - moves on; `a_walled_off_wood_is_tried_once_and_then_left_alone` proves it. The radius was the wrong part, and it is fixed.
+5. **The pack changes the day `genconfig` emits the field**, and that generator lives in another repository (D12), so this checkout cannot
+   regenerate `config/gamedata/`. Until then the acceptance hash is unchanged (`6d23d672eb18ef40`) and the behaviour is exactly as it was.
+6. **Recorded, not changed**: `share_retry_ticks` is **600** (30 s), where DE's `search_wait_time` is about a second.

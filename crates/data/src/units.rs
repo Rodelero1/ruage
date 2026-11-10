@@ -22,6 +22,11 @@ pub struct Unit {
     pub class: i16,
     pub hp: i32,
     pub los: MaybeFixed,
+    /// **How far this unit looks for a target of its current task**, in tiles - the dat's `task_info.search_radius`.
+    /// Zero when the pack does not carry it, which is every pack generated before D175: a villager's own value is **4.0**
+    /// (a scout's 4.0, a fishing ship's 12.0, a trebuchet's 17-18), and the engine falls back to sight plus a look-around
+    /// only because the field is missing.
+    pub search_radius: MaybeFixed,
     pub speed: MaybeFixed,
     pub carry: u16,
     pub work_rate: MaybeFixed,
@@ -155,6 +160,10 @@ struct RawUnit {
     class: i16,
     hp: i32,
     los: f64,
+    /// `task_info.search_radius`. Absent in older generated packs; `0.0` means absent, since no unit in the dat searches
+    /// zero tiles.
+    #[serde(default)]
+    search_radius: f64,
     speed: f64,
     carry: u16,
     work_rate: f64,
@@ -277,6 +286,7 @@ pub fn load_units_str(text: &str, path: &str) -> Result<Units, ConfigError> {
             class: r.class,
             hp: r.hp,
             los: MaybeFixed::from_f64(r.los),
+            search_radius: MaybeFixed::from_f64(r.search_radius),
             speed: MaybeFixed::from_f64(r.speed),
             carry: r.carry,
             work_rate: MaybeFixed::from_f64(r.work_rate),

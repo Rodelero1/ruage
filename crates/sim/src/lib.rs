@@ -1434,7 +1434,29 @@ impl World {
     /// and a patch it scouted twenty tiles ago is not that. D141 tried a bound without the fog filter and starved a match;
     /// this one only ever removes candidates the player already knows, so the failure mode is a villager standing idle, not
     /// an empty base.
-    pub(crate) fn gather_reach(&self, worker: EntityId) -> i64 {
+    /// **How far this worker looks for the next source**, in raw units (D175). Content's `search_radius` when the pack carries
+    /// it, otherwise its sight plus a look-around - and public because a test has to be able to ask what the rule is.
+    #[must_use]
+    pub fn gather_reach(&self, worker: EntityId) -> i64 {
+        // **The unit's own `search_radius` when content carries it** (D175). The dat gives every unit one - a villager **4** tiles, a
+        // scout 4, a cog 6, a fishing ship 12, a trebuchet 17-18, and 21 at the widest - and that is the number the original looks
+        // for its next source within. Packs generated before this field existed carry none, and fall back to sight plus a look-around.
+        let unit_search = self
+            .find(worker)
+            .and_then(|entity| entity.unit)
+            .and_then(|unit| {
+                self.units
+                    .as_ref()
+                    .and_then(|units| units.unit(units.root(unit)))
+            })
+            .and_then(|unit| unit.search_radius.value());
+        if let Some(tiles) = unit_search
+            && tiles > 0.0
+        {
+            #[allow(clippy::cast_possible_truncation)]
+            let tiles = tiles.round() as i64;
+            return tiles * self.scale;
+        }
         const LOOK_AROUND_TILES: i64 = 5;
         // `sight_of` answers in **whole tiles**, so the sum is tiles and the scale is applied once here. Mixing the two -
         // tiles plus a raw offset - gives a reach of five tiles and looks like a rule that refuses everything.
