@@ -106,3 +106,31 @@ nothing in the movement rules may end a walk there.** Every version of this eith
 that ends it is not another patch on the gather arm: it is **walks that may end at a contact point**, plus a rule for a walkable node that keeps a
 second worker off the first's spot. Both are movement work, and both deserve their own tests. `main` is left as it was - `cdb8ee4`, the placement,
 the jump, and a gather that otherwise does what the owner asked.
+
+## Addendum 3: the walk-to-the-spot design, measured - and it is not shippable
+
+*After the owner said "proceed", the design the previous addendum called promising was built: eight spots round the tile, a claim per worker,
+a one-waypoint route to the spot, a two-second deadline, a fallback that works from where the worker stands. It is correct by the tests and
+**unusable by the counters**.*
+
+**What it got right**: the jump is gone (`a_gatherer_never_moves_further_in_a_tick_than_its_speed` passes), three villagers on one bush stand at
+0.70 / 0.91 - touching, as the owner defines it - and nobody is stranded. Every targeted test green, 780 passing.
+
+**What it did to the acceptance run**, in three measured steps:
+
+| variant | repaths | entities |
+|---|---|---|
+| shipped (`cdb8ee4`) | **24** | 153 |
+| spot chosen in the arm, order walks to the tile centre | **6,118** | 155 |
+| spot claimed at order time, order plans to the spot | **10,115** | 146 |
+| order back to the tile centre, claim at order time | **19,096** | 134 |
+
+Roughly **three orders of magnitude** of re-planning for a third of a tile. The cause is structural rather than a bug: a worker that must reach a
+point it can only sometimes touch **enters and leaves "touching" as its neighbours press on it**, and every cycle is a fresh route, a fresh claim
+and a fresh set of collision re-plans. The placement never had that problem because it was atomic - one write, no route.
+
+**So the conclusion is now firmer than a guess**: the last third of a tile must **not** be bought with extra routes. It has to be a property of
+the movement and arrival layers - a walk whose *destination may be a contact point*, and a body that understands it is standing at its work
+without being re-tasked. Anything that answers it with another order will keep costing thousands of re-plans.
+
+`main` stays at `cdb8ee4`: the placement, the jump, and a gather that is otherwise what the owner asked for.
