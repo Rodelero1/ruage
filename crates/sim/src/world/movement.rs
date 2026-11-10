@@ -96,8 +96,23 @@ impl World {
         here: (Fixed, Fixed),
         step: (Fixed, Fixed),
         goal: Option<(u16, u16)>,
+        radius: i64,
+        entering: bool,
     ) -> bool {
         let (x, y) = (here.0.raw() + step.0.raw(), here.1.raw() + step.1.raw());
+        // **The body, not the centre** (D176). The owner, twice: a villager stood a hand's width from the town centre with its 0.2 disc inside the
+        // wall, because this test only asked whether the *centre* landed on a blocked tile. A disc against a square is the square grown by the
+        // radius - the Forgotten Empires talk's *"shrink the unit to a point, expand every other obstruction"* - so the step is refused when its
+        // landing would put the body inside, and allowed when it is already inside and moving *out* (a unit pushed into a wall, or a spawn that
+        // arrives touching one, must still be able to leave).
+        // **A unit walking into its own building is not a body looking for room**: `entering` means it is on its way through the door, so the
+        // ground rule is the old one (the centre may step where a route to the door leads). Everything else obeys the disc.
+        let radius = if entering { 0 } else { radius };
+        let now = self.clearance_at(here, radius);
+        let next = self.clearance_at((Fixed::from_raw(x), Fixed::from_raw(y)), radius);
+        if next < 0 && (now >= 0 || next < now) {
+            return false;
+        }
         // A world with no map knows no blocked ground: a bare `World::new` (a unit test of the mover, a fixture that only
         // wants collision) must still be able to walk.
         if self.walk.is_none() {
@@ -185,12 +200,13 @@ impl World {
         let goal_tile = goal.map(|(tile, _)| tile);
         // **Ground first.** A step that lands on blocked ground, or cuts the corner of one, is not a step - the mover
         // slides along the axis that is clear, which is how it gets round a building instead of through it.
-        if !self.step_is_walkable(here, (dx, dy), goal_tile) {
+        let entering = self.entering.contains_key(&id);
+        if !self.step_is_walkable(here, (dx, dy), goal_tile, radius, entering) {
             for (sx, sy) in [(dx, Fixed::ZERO), (Fixed::ZERO, dy)] {
                 if sx == Fixed::ZERO && sy == Fixed::ZERO {
                     continue;
                 }
-                if self.step_is_walkable(here, (sx, sy), goal_tile) {
+                if self.step_is_walkable(here, (sx, sy), goal_tile, radius, entering) {
                     return (sx, sy);
                 }
             }

@@ -4316,3 +4316,21 @@ offered three shapes, chose **B**: the dat's `search_radius` per unit.*
 4. **Mutation-proved**: restoring `scale = 1.5` fails `ring_is_the_body` with *"the pack draws the ring at 1.5 times the body"*.
 5. **Not changed**: collision itself. The gather standoff (D173) is untouched - the jump is about *where a walk may end*, not about clearance.
 6. Acceptance byte-identical: **`6d23d672eb18ef40`**, 153 entities, 24 repaths.
+
+
+## D177 - The ground test is the body's, not the centre's
+
+*2026-11-08, the second half of the owner's collision report: after D176 shrank the ring to the body he sent a screenshot of a villager on the town
+centre's yard with its ellipse across the dark core's edge - **"I see clear overlap."***
+
+1. **Reproduced on every tick**, not at the end of a walk: a villager ordered to the tile touching the core had its body **0.18 of a tile inside**
+   the blocked tile at some point (`body_clearance` = distance to the nearest blocked tile minus the 0.2 radius).
+2. **The rule is a distance**: refuse a step whose landing has `clearance < 0`, unless the body is **already inside** and the step does not dig
+   deeper. That second clause is what keeps a pushed or spawned-overlapping body mobile; without it, a unit that arrives overlapping can never move
+   again.
+3. **One named exception**: a unit in `entering` (walking into its own building) uses the old rule - a unit on its way through a door is not a body
+   looking for room. Without it, `a_unit_rallied_to_its_own_building_stays_inside` goes red.
+4. **The cost, measured**: acceptance repaths **24 -> 529** (one every 68 ticks), entities 153 -> 138, hash `661e970e58bc0c57`. The rise is because
+   the *planner* still smooths corners without knowing the radius; the fix is to give `short.rs`'s line test the same clearance, which is a planner
+   step of its own and is recorded as next.
+5. **What it fixes for the owner**: a villager can no longer stand with its ellipse inside a building, which is what he asked for twice.
