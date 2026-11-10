@@ -9,10 +9,14 @@ schema = 1
 # of the circles should be parameters of units (in config only, not shown in unit details)"*), with the answers: selected units
 # only, the pack's `radius` times a factor, drawn as an ellipse on the ground plane.
 #
-# The ring is `radius * scale` in tiles, so 1.5 draws a villager's ring 0.3 tiles across - around the feet rather than through
-# them, while the collision number (0.2) stays the one that decides standoff (D117). Set 1.0 to make the ring *be* the collision
-# circle exactly.
-scale = 1.5
+# The ring is `radius * scale` in tiles, so 1.5 drew a villager's ring 0.3 tiles across - around the feet rather than through
+# them, while the collision number (0.2) stays the one that decides standoff (D117).
+#
+# **1.0 since D176**, on the owner's rule: *"the ellipse cannot overlap with [the building's diamond] at all, not just center of
+# it"*. At 1.5 the body was clear of a wall while the *ring* was drawn 0.1 of a tile into it - the picture said "overlapping" about a
+# body that was not. The reason 1.5 existed was to keep the ring from cutting through a sprite's feet, and there are no sprites yet
+# (D18), so the ring is now exactly the collision circle and the picture tells the truth.
+scale = 1.0
 
 [farm]
 # Which building is a farm, and what working it yields: both are content, because the engine has no

@@ -4298,3 +4298,21 @@ offered three shapes, chose **B**: the dat's `search_radius` per unit.*
 5. **The pack changes the day `genconfig` emits the field**, and that generator lives in another repository (D12), so this checkout cannot
    regenerate `config/gamedata/`. Until then the acceptance hash is unchanged (`6d23d672eb18ef40`) and the behaviour is exactly as it was.
 6. **Recorded, not changed**: `share_retry_ticks` is **600** (30 s), where DE's `search_wait_time` is about a second.
+
+
+## D176 - The selection ellipse is the collision circle, and the body's clearance is a query
+
+*2026-11-08. Owner: *"units still collide with the impassable building diamonds (the ellipse cannot overlap with it at all, not just center of it)."*
+
+1. **Measured first, and it changed the answer**: a new test runs the village map under the skirmish script for **2,000 ticks** and asserts every
+   unit's `clearance >= 0` - distance from its centre to the nearest blocked tile, minus its radius. It **passes on the shipped engine**, so no body
+   was ever inside a wall; our ground test asks about the centre's tile, and the paths it produces keep the centre half a tile clear.
+2. **What overlapped was the drawing**: `[ring] scale = 1.5` put a **0.3** ellipse on a **0.2** body. Set to **1.0** - the file's own comment
+   already named that alternative - so the ring *is* the collision circle. The 1.5 existed to keep the ring out of a sprite's feet, and there are
+   no sprites yet (D18); when there are, that becomes an art decision again.
+3. **The rule is now expressible and testable**: `World::clearance_at(position, radius)` (distance to the nearest blocked tile minus the radius;
+   zero = touching, negative = inside) and `World::body_clearance(id)`. That is the Forgotten Empires talk's *"shrink the unit to a point, expand
+   every other obstruction"* as one integer expression.
+4. **Mutation-proved**: restoring `scale = 1.5` fails `ring_is_the_body` with *"the pack draws the ring at 1.5 times the body"*.
+5. **Not changed**: collision itself. The gather standoff (D173) is untouched - the jump is about *where a walk may end*, not about clearance.
+6. Acceptance byte-identical: **`6d23d672eb18ef40`**, 153 entities, 24 repaths.

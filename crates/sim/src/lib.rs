@@ -3095,6 +3095,63 @@ impl World {
         })
     }
 
+    /// **How much room a body has**, in raw units: the distance from `position` to the nearest **blocked tile**, minus `radius`.
+    /// Zero is "touching the wall", negative is "inside it" - and the movement rule of D176 is that it never goes negative.
+    ///
+    /// This is the original's *"shrink the unit to a point, expand every other obstruction"* statement of the same thing: a disc of radius
+    /// `r` against a square is the square grown by `r`, so the test is one distance, not a tile lookup.
+    #[must_use]
+    pub fn clearance_at(&self, position: (Fixed, Fixed), radius: i64) -> i64 {
+        let scale = self.scale;
+        let Some(walk) = self.walk.as_ref() else {
+            return i64::MAX;
+        };
+        let (x, y) = (position.0.raw(), position.1.raw());
+        let (tx, ty) = (x.div_euclid(scale), y.div_euclid(scale));
+        let mut nearest = i64::MAX;
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                let (cx, cy) = (tx + dx, ty + dy);
+                let (Ok(cx16), Ok(cy16)) = (u16::try_from(cx), u16::try_from(cy)) else {
+                    continue;
+                };
+                if walk.contains(cx16, cy16) && self.tile_walkable(cx16, cy16) {
+                    continue;
+                }
+                // Distance from the point to this tile's square, axis by axis, then the hypotenuse.
+                let left = cx * scale;
+                let top = cy * scale;
+                let gx = if x < left {
+                    left - x
+                } else if x > left + scale {
+                    x - (left + scale)
+                } else {
+                    0
+                };
+                let gy = if y < top {
+                    top - y
+                } else if y > top + scale {
+                    y - (top + scale)
+                } else {
+                    0
+                };
+                let distance = (gx * gx + gy * gy).isqrt();
+                nearest = nearest.min(distance);
+            }
+        }
+        nearest.saturating_sub(radius)
+    }
+
+    /// **A unit's clearance**, using its own body radius (D176).
+    #[must_use]
+    pub fn body_clearance(&self, id: EntityId) -> i64 {
+        let Some(entity) = self.find(id) else {
+            return i64::MAX;
+        };
+        let radius = self.body_radius(entity.unit);
+        self.clearance_at(entity.position, radius)
+    }
+
     /// Is this tile on the map at all? Free ground is the stricter question, and a rally point may
     /// legitimately be somewhere with a tree on it.
     fn on_map(&self, x: u16, y: u16) -> bool {
