@@ -130,7 +130,17 @@ fn a_villager_and_a_soldier_at_one_pixel_differ() {
             let id = place(&mut world, 1, unit, (30, 30));
             let snapshot = Snapshot::of(&world, &fx.map, 1);
             let camera = Camera::new((320, 240)).centred_on((30.0, 30.0));
-            let centre = camera.project((30.0, 30.0));
+            // **The body's own centre, not the tile point** (D168/D178): a unit placed at an integer position stands at the corner
+            // of four diamonds, and since D178 its body rises from that point rather than straddling it, so a window centred on the
+            // tile point missed it entirely and read forty zero rows.
+            let centre = camera.project(ruage_view::drawn_at(
+                snapshot
+                    .entities
+                    .iter()
+                    .find(|entity| entity.id == id.0)
+                    .expect("the placed unit")
+                    .position,
+            ));
             let frame = render(&snapshot, &camera);
             // **The unit this test placed**, not the first unit in the snapshot: the opening seeds villagers, and asking
             // for "a unit" found one of those - both shapes came back Square and the test "passed" the wrong question.
@@ -180,9 +190,13 @@ fn a_villager_and_a_soldier_at_one_pixel_differ() {
         square.windows(2).all(|pair| pair[0] == pair[1]),
         "a square's rows are constant: {square:?}"
     );
+    // **A triangle's rows narrow towards its apex**, which now sits at the top of a body anchored by its base (D178); before the
+    // anchor change the scan window was wider than the body, so the rows only ever grew towards the base and the assertion was written
+    // the other way round. Both directions are "not a square"; the strict one is the shape's own.
     assert!(
-        triangle.windows(2).any(|pair| pair[1] > pair[0]),
-        "a triangle's rows grow: {triangle:?}"
+        triangle.windows(2).all(|pair| pair[1] <= pair[0])
+            && triangle.windows(2).any(|pair| pair[1] < pair[0]),
+        "a triangle's rows narrow towards its apex: {triangle:?}"
     );
 }
 

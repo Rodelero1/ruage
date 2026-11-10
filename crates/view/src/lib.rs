@@ -1356,8 +1356,14 @@ pub fn render_with_solids(snapshot: &Snapshot, camera: &Camera, solids: &Solids)
                 // square whose centre sat well inside a building's dark grey. `- 0.5` is the whole conversion.
                 let centre = camera.project(drawn_at(entity.position));
                 let colour = player_colour(entity.player);
-                // 0.30 of a tile: the square's corner then sits at `0.30 + 0.60 = 0.90` of the diamond, inside it with room to spare.
-                let half = (rx * 0.30).max(2.0) as i32;
+                // **A quarter of a tile, and the body stands on its point** (D178). The owner, with a screenshot: *"the circle moves a bit elsewhere
+                // than it should... the unit above it stops a bit further"* - the simulation had it right (a move lands on the tile it named), but the
+                // silhouette was drawn **centred** on the point, so its visible mass hung half a shape below the place it stood and the selection
+                // ellipse, which is centred on the point, looked high. A body is drawn with its **base on the point**, the way a sprite's feet are.
+                // A fifth rather than the old 0.30 because the body now rises a full `2 * half` above the point, and the tile's diamond narrows as it
+                // rises: at height `2 * half` it is only `rx * (1 - 2 * half / ry) = rx - 4 * half` wide, so a body of half-width `half` fits whole
+                // exactly when `5 * half <= rx`. A fifth is that, and the head is no longer cut off by the tile's own corner.
+                let half = (rx * 0.20).max(2.0) as i32;
                 // **A unit's marker is clipped to the tile it stands on** (D166). Tiles share edges, so a marker wider than its own
                 // diamond paints into the *next* tile - and when that neighbour is a building, the unit appears to stand inside it,
                 // whatever the depth order says. Shrinking the marker only moves the threshold; clipping ends the class: no unit pixel
@@ -1374,14 +1380,18 @@ pub fn render_with_solids(snapshot: &Snapshot, camera: &Camera, solids: &Solids)
                 // content's roles, never from this crate's guess. Both are painted pixel by pixel so the tile clip applies to every
                 // shape alike - a `fill_rect` cannot be clipped to a diamond.
                 let reach = half.max(1);
-                for py in -reach..=reach {
+                // Rows run from `-2 * reach` (the top) to `0` (the **base**, on the point): the body stands on the ground it stands on.
+                for py in -(2 * reach)..=0 {
                     for px in -reach..=reach {
                         let inside_shape = match entity.shape {
                             Silhouette::Square => true,
-                            Silhouette::Dot => px * px + py * py <= reach * reach,
+                            Silhouette::Dot => {
+                                let dy = py + reach;
+                                px * px + dy * dy <= reach * reach
+                            }
                             Silhouette::Triangle => {
-                                // Apex up, base down: half-width shrinks linearly from the base to the tip.
-                                let across = (py + reach) as f32 / (2.0 * reach as f32);
+                                // Apex up, base down: half-width grows linearly from the tip to the base.
+                                let across = (-py) as f32 / (2.0 * reach as f32);
                                 (px as f32).abs() <= across * reach as f32
                             }
                         };
@@ -1482,7 +1492,13 @@ pub fn draw_highlights(
         // A health bar above the top vertex, green for what is left and red for what is gone.
         let bar_width = (rx * 0.6).max(8.0) as i32;
         let bar_x = centre.0 - bar_width / 2;
-        let bar_y = centre.1 - half.1 as i32 - 9;
+        // **Above the head, not above the feet** (D178): a unit's body now rises its full height from the point it stands on, so the
+        // bar clears the body's own top row rather than the ring's radius.
+        let bar_y = if entity.kind == EntityKind::Unit {
+            centre.1 - 2 * (rx * 0.20).max(2.0) as i32 - 9
+        } else {
+            centre.1 - half.1 as i32 - 9
+        };
         // A dark border first: a three-pixel bar in green over grass is invisible, which the rendered picture showed and
         // no pixel-count test could.
         frame.fill_rect(bar_x - 1, bar_y - 1, bar_width + 2, 5, palette::HUD_BAR);

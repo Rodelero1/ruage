@@ -63,18 +63,21 @@ fn a_unit_at_a_tile_centre_is_drawn_at_that_tiles_centre() {
     let frame = render(&snapshot, &camera);
     let colour = palette::PLAYER_ONE;
 
-    let (mut sum_x, mut sum_y, mut n) = (0i64, 0i64, 0i64);
+    let (mut sum_x, mut n) = (0i64, 0i64);
+    let mut lowest = i32::MIN;
     for py in 0..700i32 {
         for px in 0..900i32 {
             if frame.pixel(px as u32, py as u32) == colour {
                 sum_x += i64::from(px);
-                sum_y += i64::from(py);
+                lowest = lowest.max(py);
                 n += 1;
             }
         }
     }
     assert!(n > 40, "the marker was found: {n} pixels");
-    let (cx, cy) = ((sum_x / n) as f32, (sum_y / n) as f32);
+    // **The body stands on the point since D178**: its base is the position, so the row to compare is the lowest painted one,
+    // not the centroid - the centroid now sits half a body above, by design.
+    let (cx, cy) = ((sum_x / n) as f32, lowest as f32);
     // The centre of the diamond the **tile** is drawn in - the same projection the terrain and buildings use.
     let (wx, wy) = camera.project((tx as f32, ty as f32));
     let (want_x, want_y) = (wx as f32, wy as f32);

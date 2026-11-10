@@ -4334,3 +4334,21 @@ centre's yard with its ellipse across the dark core's edge - **"I see clear over
    the *planner* still smooths corners without knowing the radius; the fix is to give `short.rs`'s line test the same clearance, which is a planner
    step of its own and is recorded as next.
 5. **What it fixes for the owner**: a villager can no longer stand with its ellipse inside a building, which is what he asked for twice.
+
+
+## D178 - A body stands on its point; its base is the position
+
+*2026-11-08. Owner, after D177: "the circle moves a bit elsewhere than it should... the unit above it stops a bit further" - with a screenshot of a
+villager short of the yellow destination cross.*
+
+1. **The walk was right and is now measured**: `move_arrival` sends a villager across empty grass and finds it within **0.1 tile** of the tile it named.
+2. **The drawing was wrong**: the silhouette was painted `-reach ..= +reach` around the position, so a body's mass hung **half a shape below** where it
+   stood (measured: lowest row 388, unit at 374 - 14 px) and the selection ellipse, centred on the point, crossed its waist.
+3. **The anchor is the base**: rows `-2 * reach ..= 0`. The ellipse now rings the feet, which is what the owner asked for ("align the center of the
+   ellipse with the bottom side of the square/triangle").
+4. **half = 0.20 of a tile** (was 0.30), because the body rises `2 * half` into a diamond that narrows: it fits whole exactly when `5 * half <= rx`. A
+   quarter clipped the head into the tile's corner and the shape test caught it.
+5. **The health bar moves above the head**, not above the ring.
+6. **Three tests learned the new anchor** (scan from `drawn_at`, lowest row instead of centroid, triangle rows narrow towards the apex) - each rewritten
+   with its reason rather than deleted.
+7. Acceptance **byte-identical** `661e970e58bc0c57`; the view now paints *fewer* pixels than before.
