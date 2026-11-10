@@ -1533,8 +1533,13 @@ impl World {
                             self.find(node).map(|n| n.kind),
                             Some(EntityKind::Resource(_))
                         )
-                        && let Some(stand) =
-                            self.standoff_point(entity.position, target, node, entity.id)
+                        && let Some(stand) = self.standoff_point(
+                            entity.position,
+                            target,
+                            node,
+                            entity.id,
+                            &work.settles,
+                        )
                     {
                         work.settles.push((entity.id, stand));
                     }

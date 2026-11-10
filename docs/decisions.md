@@ -4385,3 +4385,22 @@ stacking and distance pass (D171, D169); the **jump** was still open - the test 
 5. **Acceptance**: entities 138 -> **154**, repaths 529 -> **297** (-44%, because a teleport invalidated routes planned around where the body was),
    made-room 110, hash **`834efe7c5efd3c62`**.
 6. **Un-ignored**: `a_gatherer_never_moves_further_in_a_tick_than_its_speed` now runs with the suite.
+
+
+## D181 - A standoff is taken when it is too close, not only when somebody stands on it
+
+*2026-11-08. Owner, after D180: "Jumping and flicker is gone. However there is visible overlap of villagers. And occasionally they appear to be foraging
+while the circle is not touching the square with bush."*
+
+1. **Overlap, cause**: `standoff_point` treated a side as held only when another body was **exactly** on it, so two workers walking in from different
+   sides both claimed the same spot and arrived at it (measured: two villagers at **0.00** tiles apart).
+2. **Overlap, fix**: "held" is now *closer than two bodies are wide*, and the sides chosen earlier in the same decision pass count as taken - the list
+   is `work.settles`, which the pass already builds, so no new state.
+3. **Distance, measured**: a worker took food at **0.92** tiles where the bodies touch at **0.70**, because the take is gated on `at_node`, which also
+   means "beside the node's tile" (up to 1.41 tiles).
+4. **Distance, cause**: `reach_raw` answers the unit-to-unit question and returns the worker's radius alone (**0.2**) for a map node that has no unit,
+   while `standoff_point` adds the node's content radius (**0.7**). Two answers to one question in one arm of one match.
+5. **Distance, OPEN**: gating on `touching` with the right sum passes that test and turns **six** red, including `the_villager_walks_to_the_node_and_then_takes_from_it`
+   (tree stays at 20 hp, never yields) - unexplained, so not shipped. The test is ignored with its measurement and the next step named: one
+   `contact_raw(worker, node)` for both questions, then the gate.
+6. Acceptance: entities 154 -> **160**, repaths 297 -> **254**, hash **`009e5cfe81b182ae`**.

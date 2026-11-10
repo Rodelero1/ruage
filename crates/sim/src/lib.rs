@@ -3042,6 +3042,7 @@ impl World {
         target: (Fixed, Fixed),
         node: EntityId,
         worker: EntityId,
+        taken: &[(EntityId, (Fixed, Fixed))],
     ) -> Option<(Fixed, Fixed)> {
         let scale = self.scale;
         // The worker's own radius, plus the **node's** - which is content's number for the node's kind, because a map node
@@ -3080,9 +3081,22 @@ impl World {
             if !self.tile_walkable(x, y) || !self.is_free_ground(x, y) {
                 return None;
             }
-            let held = self.entities.iter().any(|other| {
-                other.id != worker && other.position.0.raw() == px && other.position.1.raw() == py
-            });
+            // **Held means "too close", not "exactly on it"** (D181). Exact equality let two workers walking in from different sides
+            // claim the same spot, because neither was *at* it yet: the owner then saw villagers overlapping, and the measurement was
+            // two of them at **0.00** tiles apart. The test is the width of two bodies, and it also counts the spots chosen earlier in
+            // this same decision pass - the only way the second worker learns about the first before either has arrived.
+            let too_close = (2 * worker_radius).max(1);
+            let near = |point: (Fixed, Fixed)| -> bool {
+                let (ax, ay) = (point.0.raw() - px, point.1.raw() - py);
+                ax * ax + ay * ay < too_close * too_close
+            };
+            let held = self
+                .entities
+                .iter()
+                .any(|other| other.id != worker && near(other.position))
+                || taken
+                    .iter()
+                    .any(|(other, point)| *other != worker && near(*point));
             if held {
                 return None;
             }
