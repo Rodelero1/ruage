@@ -4352,3 +4352,17 @@ villager short of the yellow destination cross.*
 6. **Three tests learned the new anchor** (scan from `drawn_at`, lowest row instead of centroid, triangle rows narrow towards the apex) - each rewritten
    with its reason rather than deleted.
 7. Acceptance **byte-identical** `661e970e58bc0c57`; the view now paints *fewer* pixels than before.
+
+
+## D179 - The selection ring sits round the feet, not under them
+
+*2026-11-08. Owner, after D178: "the circle is supposed to be at the bottom, not waist. The unit is above the circle."*
+
+1. **D178 put the body's feet on the point and left the ring centred on the same point**, so half the ellipse lay on the **grass below** the unit and
+   read as a circle the unit stood behind. Measured first: *"the ring's lowest row is 379 and the unit's feet are at 374: the ellipse is 5 px below the
+   feet."*
+2. **The ring's centre is the point raised by its own half-height**: its lowest row is the base, the ellipse embraces the lowest 19 px of the body, and
+   body and ring agree about where "the bottom" is.
+3. **The ring's size is unchanged**, so it still cannot reach a neighbouring tile (D176) - this moves the ellipse, it does not enlarge it.
+4. **`ring.rs`'s curve-versus-diamond test moved with it**, raising its sampling centre by the same half-height, reason recorded in the test.
+5. Acceptance **byte-identical** `661e970e58bc0c57`.

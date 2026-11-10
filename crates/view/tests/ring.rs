@@ -145,11 +145,13 @@ fn the_ring_is_a_curve_and_not_four_straight_edges() {
     let radius = 0.5f32;
     let snapshot = snapshot(vec![unit(1, (10.0, 10.0), radius)]);
     let camera = camera();
-    // The unit's *drawn* centre: a marker is drawn from its position minus half a tile (D168), and its ring follows the marker.
-    let centre = camera.project((10.0 - 0.5, 10.0 - 0.5));
+    // The unit's *drawn* base: a marker is drawn from its position minus half a tile (D168), and its body stands on that point.
     let (rx, ry) = camera.radii();
     let semi_w = radius * snapshot.ring_scale * rx;
     let semi_h = radius * snapshot.ring_scale * ry;
+    // ... and the ring is raised by its own half-height so it rings the feet instead of lying half on the grass (D179).
+    let base = camera.project((10.0 - 0.5, 10.0 - 0.5));
+    let centre = (base.0, base.1 - semi_h as i32);
 
     let frame = render_with(
         &snapshot,

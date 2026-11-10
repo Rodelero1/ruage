@@ -1462,10 +1462,16 @@ pub fn draw_highlights(
         // ring inside its own walls.
         let (centre, half, curved) = if entity.kind == EntityKind::Unit {
             // The same tile-centre conversion as the marker (D168), or the white ellipse is half a tile below the body it rings.
-            let centre = camera.project(drawn_at(entity.position));
+            let point = camera.project(drawn_at(entity.position));
             let scale = entity.radius.max(0.0) * snapshot.ring_scale;
+            let half = (rx * scale, ry * scale);
+            // **The ring sits round the feet** (D179). The owner, twice: *"align the center of the ellipse with the bottom side of the
+            // square/triangle"*, then *"the circle is supposed to be at the bottom, not waist. The unit is above the circle."* With the body
+            // anchored by its base (D178) and the ring centred on the same point, half the ellipse lay on the **grass below** the body - a circle
+            // the unit stood behind. Raised by its own half-height, the ellipse's lowest row is the base and the ring embraces the ankles.
+            let centre = (point.0, point.1 - half.1 as i32);
             // **A body is a circle**, so its ring is an ellipse: the owner saw the diamond and said so.
-            (centre, (rx * scale, ry * scale), true)
+            (centre, half, true)
         } else {
             let (across, down) = entity.footprint;
             let anchor = (
