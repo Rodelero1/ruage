@@ -752,15 +752,32 @@ impl World {
     }
 
     /// **The movement pass**: collide, move, repath around bodies, spend reached waypoints.
-    /// **Place an arrived worker at its working standoff** (D169). A placement rather than a walk, deliberately: the movement
-    /// rules finish a route on a tile centre, and the point where two bodies touch is not one. The caller has already checked
-    /// that the point is free ground, so this cannot put a worker inside anything.
+    /// **Walk an arrived worker onto its working standoff** (D169, D180). The caller has already checked that the point is free
+    /// ground, so this cannot put a worker inside anything.
+    ///
+    /// It used to *place* the worker there, in one tick, which is the owner's *"villagers jump towards the bush"*: a worker that
+    /// arrives on the tile beside a node is 1.0 tile from its centre and the standoff is 0.70, so the placement threw it 0.3 of a
+    /// tile - measured at **15,600 raw units in one tick** where its speed allows 1,000. It now takes the step the body could take:
+    /// as far as its speed allows, straight at the standoff, and exactly onto it when the remainder fits in one step. The worker is
+    /// at its tree one or two ticks later and never moves faster than it can walk.
     fn settle_workers(&mut self, settles: Vec<(EntityId, (Fixed, Fixed))>) {
+        // **Speed is per second**, and a step is exact: `step_towards` is the movement pass's own arithmetic, so this cannot be a
+        // fraction of a scale unit and cannot overshoot. Reading the stored speed raw was the first attempt's `15,600`.
+        let tick_rate = i64::from(self.tick_rate_hz).max(1);
         for (id, to) in settles {
-            if let Some(entity) = self.find_mut(id) {
-                entity.position = to;
-                entity.velocity = (Fixed::ZERO, Fixed::ZERO);
+            let Some(entity) = self.find_mut(id) else {
+                continue;
+            };
+            let (dx, dy) = step_towards(entity.position, to, entity.speed.raw() / tick_rate);
+            if dx != 0 || dy != 0 {
+                entity.position = (
+                    Fixed::from_raw(entity.position.0.raw() + dx),
+                    Fixed::from_raw(entity.position.1.raw() + dy),
+                );
             }
+            // **`velocity` is state, not a report** (found here): writing it from the settle made a villager 15 tiles away walk to a patch
+            // the reach filter had refused (`a_worker_does_not_look_beyond_its_reach`) - the sim reads it back. The step is the position
+            // change and nothing else.
         }
     }
 

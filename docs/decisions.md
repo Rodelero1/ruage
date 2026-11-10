@@ -4366,3 +4366,22 @@ villager short of the yellow destination cross.*
 3. **The ring's size is unchanged**, so it still cannot reach a neighbouring tile (D176) - this moves the ellipse, it does not enlarge it.
 4. **`ring.rs`'s curve-versus-diamond test moved with it**, raising its sampling centre by the same half-height, reason recorded in the test.
 5. Acceptance **byte-identical** `661e970e58bc0c57`.
+
+
+## D180 - The settle walks: a step per tick, capped by speed, and nothing else
+
+*2026-11-08. Owner: "how about villagers jumping and stacking up at the same place or foraging from greater than allowed distance?" Measured again:
+stacking and distance pass (D171, D169); the **jump** was still open - the test that had been `#[ignore]`d since D173 failed with the same number,
+15,600 raw units in one tick.*
+
+1. **Cause, confirmed by instrumenting**: `settle_workers` placed the worker on its standoff. The first fix (step toward it, capped by speed) still
+   jumped 15,600, because `entity.speed` is **per second** (16,000) while a step is per tick (÷ 20 = 800): reading it raw allowed 1.56 tiles.
+2. **The fix is one `step_towards`**: the movement pass's own arithmetic, so no step is a fraction of a scale unit and none overshoots. A worker
+   arrives at its tree one or two ticks later, at its own speed.
+3. **`velocity` is state, not a report**: writing it from the settle made a villager fifteen tiles away walk to a patch the D149 reach filter had
+   refused. The settle now changes the position and nothing else.
+4. **No new order layer**: D173's four rejected designs all changed where the *route* ends, and cost 6,118-19,096 acceptance repaths against 24. This
+   adds no route - the existing one ends on the neighbouring tile, and the last third of a tile is walked by the movement rule that already exists.
+5. **Acceptance**: entities 138 -> **154**, repaths 529 -> **297** (-44%, because a teleport invalidated routes planned around where the body was),
+   made-room 110, hash **`834efe7c5efd3c62`**.
+6. **Un-ignored**: `a_gatherer_never_moves_further_in_a_tick_than_its_speed` now runs with the suite.
