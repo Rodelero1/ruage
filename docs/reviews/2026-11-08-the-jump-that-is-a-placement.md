@@ -80,3 +80,29 @@ clock is recorded with this commit. The rejected design (b) is the one performan
 workaround trades one of the owner's four complaints for another. The real fix is the one design that has not been tried: **a node as a body of
 its content radius (0.5) rather than a blocked tile**, with the *planner* still avoiding its tile - so a walk can end at 0.7 because 0.7 is real
 geometry, not an exception. That is a step of its own, not a patch.
+
+## Addendum 2: the owner's rule, measured, and where the tile-blocked model stops
+
+*The owner then specified the model exactly: a tile holding gold, wood, stone or berries **fills the tile**, a villager **approaches it by
+touching it with its circle**, and scattered round trees come later. That is the model we already have - and measured against his words it shows
+where the wall is.*
+
+**The geometry, written down**: a worker's circle (radius 0.2) touches a **tile** (half-extent 0.5) at `0.5 + 0.2 = 0.70` on an axis, and at
+`0.5 + 0.2 / sqrt(2) = 0.641` in each coordinate on a **diagonal**, which is `0.907` of a tile from the node's centre. Those are **eight places**
+round a blocked tile - four axes, four corners - and every one of them is *outside* the blocked tile, so every one is ground a worker may stand on.
+Four sides was a shortage (three villagers on one bush fought over four spots). A diagonal spot is *not* at `0.5 + reach`: using the sum of the
+radii there puts the worker **1.41 tiles** out, a full tile away, which is the complaint this step is about.
+
+**What the eight spots fixed**: three villagers on one bush, all three touching the tile (0.70 axis, 0.91 diagonal), no stranding, and the jump
+gone - the walk ends at the spot because the spot is real ground. `gather_motion` proves it: the per-tick movement test passes, so there is no
+placement left to see.
+
+**What it broke, and why that is the real answer**: a **walkable** node - a carcass, a felled stump - is a node a worker stands *on*, and with the
+placement gone nothing keeps two workers from standing on the same point: measured, `both_workers_on_one_body_take_from_it` ends with the two
+**0 raw units apart**. The placement was doing that job too, and the collision will not do it for a body at rest.
+
+So the honest conclusion stands, and it is now specific: **with a node's tile fully blocked, the spot that touches it is not a tile centre, and
+nothing in the movement rules may end a walk there.** Every version of this either places the worker (the jump) or leaves it a tile out. The step
+that ends it is not another patch on the gather arm: it is **walks that may end at a contact point**, plus a rule for a walkable node that keeps a
+second worker off the first's spot. Both are movement work, and both deserve their own tests. `main` is left as it was - `cdb8ee4`, the placement,
+the jump, and a gather that otherwise does what the owner asked.
