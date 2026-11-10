@@ -311,11 +311,14 @@ impl World {
                     // A rally point on a resource is a gathering order: the villager goes there and works
                     // *that* node. Rallied onto gold with wood all round it, it gathers the gold or
                     // nothing - never the nearest tree (D40).
+                    // **By tile, not by corner** (D172): a node stands at its tile's centre, so comparing the rally point's corner
+                    // position to a node's position matched nothing and every rally onto a resource became a plain walk.
                     let node = self
                         .entities
                         .iter()
                         .find(|entity| {
-                            matches!(entity.kind, EntityKind::Resource(_)) && entity.position == to
+                            matches!(entity.kind, EntityKind::Resource(_))
+                                && self.tile_of_position(entity.position) == (x, y)
                         })
                         .map(|entity| entity.id);
                     let gathering = node.is_some_and(|node| self.start_gather(id, node).is_ok());

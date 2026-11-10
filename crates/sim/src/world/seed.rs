@@ -387,7 +387,12 @@ impl World {
                 player: 0,
                 kind: EntityKind::Resource(node.slot),
                 unit: None,
-                position: self.tile((node.x, node.y)),
+                // **A node stands in the middle of its tile, not on its corner** (D172). `tile` is a tile's corner - the anchor a
+                // building's footprint is placed from - and a body centred on a corner spills a quarter into each of four tiles. That
+                // made the four working sides of a node asymmetric: 0.7 north of a corner is in a free tile, 0.7 south of it is in the
+                // node's own blocked tile, so a woodcutter could approach from one side and not the other. `tile_centre` is the same
+                // convention D114/D168 gave every other body.
+                position: self.tile_centre((node.x, node.y)),
                 speed: Fixed::ZERO,
                 velocity: (Fixed::ZERO, Fixed::ZERO),
                 // A tree has to be **felled** before it yields (the owner's rule, 2026-10-30): the dat gives it 20 hit

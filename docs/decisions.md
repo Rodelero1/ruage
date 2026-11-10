@@ -4234,3 +4234,30 @@ are much closer. Can you research from the game?"*
    that pile's (0.5). Only a *building* is worked from beside its footprint, as before.
 3. **What is left open, and is not a rules question**: several workers on the same node settle on the same side; spreading them round the node is
    the recorded next step in D169's review.
+
+
+## D171 - Workers fan out round a node instead of sharing its approach side
+
+*2026-11-08. The owner chose **A** ("spread workers round the node"). `standoff_point` tries the **four axis sides** at the touching distance,
+ordered by how well each faces the worker's approach, and takes the first that is free ground, **not held by another body**, and **reachable from
+where the worker stands**. The approach side still wins when free, so a lone worker is unchanged (D169's 0.70).*
+
+1. **Proven failing first**: two villagers sent at one tree from the same side settled on the **identical raw coordinate** - 0.00 tiles apart.
+2. **Reachability is part of the check**, not just free ground: a settle point inside a forest pocket is free, walkable and a trap. `can_reach` from
+   the worker's own position is the proof.
+3. **Four sides is the ceiling** for a one-tile node with a blocked tile; a fifth worker keeps the tile centre it walked to.
+
+## D172 - A map node stands at its tile's **centre**, not on its corner
+
+*2026-11-08, found by D171. `seed` placed every map node at `self.tile((x, y))` - the tile's **corner**, the anchor a building's footprint is placed
+from. A body of half a tile's radius centred on a corner spills a quarter into each of four tiles, so a node's four working sides were **not**
+symmetric: 0.7 north of a corner is in a free tile, 0.7 south of it is in the node's own blocked tile. Woodcutters could approach a tree from the
+north and west and not from the south and east, and the settle placed one inside a blocked tile.*
+
+1. **The fix is `tile_centre`**, the convention D114 gave walk goals and D168 gave every body - the same half-tile mistake in a third place.
+2. **Two engine sites compared a raw position to a tile corner** and had to learn the rule: the rally resolution in `train.rs` (a rally onto a
+   resource silently became a plain walk) and the view's resource pass (a node is a body, so it is drawn with `drawn_at`).
+3. **Seven test fixtures located a node by its corner**; they now locate it by its **tile**, or place it at `x + 0.5`, each with the reason in its
+   comment. A fixture at a corner is a node no map can produce.
+4. **Measured**: entities 137 -> **153** against a 150 baseline, repaths 144 -> **24** (baseline 88), made-room 132 -> **16** (baseline 100). The
+   crowding was never a gather rule - it was bodies standing on the wrong half of a tile. Acceptance **`6d23d672eb18ef40`**, players=2.

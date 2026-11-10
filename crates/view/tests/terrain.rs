@@ -35,6 +35,8 @@ fn snapshot(forest: &[(u16, u16)], entities: Vec<EntityView>) -> Snapshot {
     }
 }
 
+/// **A node stands at the centre of its tile** (D172), so every fixture here is placed at `x + 0.5` and the pixel under test is
+/// the tile's own point - the middle of its diamond. A fixture at a corner is a node no map can produce.
 fn node(id: u32, at: (f32, f32), amount: u32) -> EntityView {
     EntityView {
         id,
@@ -79,7 +81,7 @@ fn a_node_in_the_forest_is_a_tree_and_one_on_grass_is_a_pile() {
     let forest = [(10, 8), (11, 8), (10, 9), (11, 9)];
     let snapshot = snapshot(
         &forest,
-        vec![node(1, (4.0, 4.0), 100), node(2, (10.0, 8.0), 100)],
+        vec![node(1, (4.5, 4.5), 100), node(2, (10.5, 8.5), 100)],
     );
     let camera = camera();
     let frame = render(&snapshot, &camera);
@@ -101,7 +103,7 @@ fn a_node_in_the_forest_is_a_tree_and_one_on_grass_is_a_pile() {
 #[test]
 fn a_spent_tree_is_a_stump() {
     let forest = [(10, 8)];
-    let snapshot = snapshot(&forest, vec![node(2, (10.0, 8.0), 0)]);
+    let snapshot = snapshot(&forest, vec![node(2, (10.5, 8.5), 0)]);
     let camera = camera();
     let frame = render(&snapshot, &camera);
     assert_eq!(

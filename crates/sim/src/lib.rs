@@ -3041,21 +3041,36 @@ impl World {
         if dx == 0 && dy == 0 {
             return None;
         }
-        let (px, py) = if dx.abs() >= dy.abs() {
-            (target.0.raw() + dx.signum() * reach, target.1.raw())
-        } else {
-            (target.0.raw(), target.1.raw() + dy.signum() * reach)
-        };
-        let (Ok(x), Ok(y)) = (
-            u16::try_from(px.div_euclid(scale)),
-            u16::try_from(py.div_euclid(scale)),
-        ) else {
-            return None;
-        };
-        if !self.tile_walkable(x, y) || !self.is_free_ground(x, y) {
-            return None;
-        }
-        Some((Fixed::from_raw(px), Fixed::from_raw(py)))
+        // **Spread the workers round the node** (D171). The first three of these sides used to be the only one tried - the side
+        // the worker came from - so two villagers sent at the same tree settled on the *same point* and pushed each other for the
+        // rest of the match (measured: 150 -> 137 entities, repaths 88 -> 144). The original fans them out, so the sides are sorted
+        // by how well they face the approach and the first **free** one wins; a side another worker already holds is passed over.
+        let mut sides: [(i64, i64); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+        sides.sort_by_key(|(ax, ay)| std::cmp::Reverse(ax * dx + ay * dy));
+        sides.iter().find_map(|(ax, ay)| {
+            let (px, py) = (target.0.raw() + ax * reach, target.1.raw() + ay * reach);
+            let (Ok(x), Ok(y)) = (
+                u16::try_from(px.div_euclid(scale)),
+                u16::try_from(py.div_euclid(scale)),
+            ) else {
+                return None;
+            };
+            if !self.tile_walkable(x, y) || !self.is_free_ground(x, y) {
+                return None;
+            }
+            let held = self.entities.iter().any(|other| {
+                other.id != worker && other.position.0.raw() == px && other.position.1.raw() == py
+            });
+            if held {
+                return None;
+            }
+            // **A spot the worker cannot walk out of is not a spot to stand on.** The test above proves the point is *free ground*,
+            // which is not the same as *reachable*: a one-tile gap inside a forest is both, and a worker placed there is trapped for
+            // the rest of the match. The ten-minute scenario's 330 s gather step was refused with *"no walkable route from (22,13) to
+            // (13,19): the target is walled off"* exactly that way. A path from where the worker stands is the proof.
+            let point = (Fixed::from_raw(px), Fixed::from_raw(py));
+            self.can_reach(from, point).then_some(point)
+        })
     }
 
     /// Is this tile on the map at all? Free ground is the stricter question, and a rally point may

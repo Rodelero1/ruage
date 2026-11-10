@@ -1265,6 +1265,8 @@ pub fn render_with_solids(snapshot: &Snapshot, camera: &Camera, solids: &Solids)
         match entity.kind {
             EntityKind::Projectile => {}
             EntityKind::Resource(_) => {
+                // A node is a **body**, so it is drawn with the body conversion (D168/D172): a map node stands at the centre of its
+                // tile, and the tile's diamond is centred on the tile's point, so the raw position would paint it a quarter of a tile out.
                 let tint = |colour: [u8; 4]| {
                     if entity.remembered {
                         as_memory(colour)
@@ -1272,7 +1274,7 @@ pub fn render_with_solids(snapshot: &Snapshot, camera: &Camera, solids: &Solids)
                         colour
                     }
                 };
-                let centre = camera.project(entity.position);
+                let centre = camera.project(drawn_at(entity.position));
                 if on_forest_ground(snapshot, entity.position) {
                     // A tree: a canopy, with a darker clump for shape, or a stump where the wood is gone. The canopy
                     // is smaller than a tile, so a wood shows the forest floor between its trunks.

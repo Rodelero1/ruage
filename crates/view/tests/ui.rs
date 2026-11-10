@@ -172,7 +172,8 @@ fn a_right_click_on_a_tree_issues_a_gather_order_the_engine_accepts() {
         .iter()
         .find(|entity| matches!(entity.kind, EntityKind::Resource(_)))
         .expect("a resource node");
-    let pixel = camera.project(tree.position);
+    // The tree is a body at the centre of its tile, so the pixel that shows it is `drawn_at`'s conversion (D168/D172).
+    let pixel = camera.project(ruage_view::drawn_at(tree.position));
 
     let mut selection = Selection::new();
     selection.ids = vec![villager.id];

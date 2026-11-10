@@ -107,8 +107,8 @@ fn world_of(map_text: &str) -> Option<World> {
 fn food_at(world: &World, x: u16, y: u16) -> EntityId {
     let scale = world.scale();
     let at = (
-        Fixed::from_raw(i64::from(x) * scale),
-        Fixed::from_raw(i64::from(y) * scale),
+        Fixed::from_raw(i64::from(x) * scale + scale / 2),
+        Fixed::from_raw(i64::from(y) * scale + scale / 2),
     );
     world
         .entities()

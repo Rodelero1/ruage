@@ -272,9 +272,11 @@ fn a_node_stands_on_the_tile_the_map_put_it_on() {
     let scale = fx.settings.fixed_point_scale;
 
     for node in &fx.map.resources {
+        // **The tile's centre, not its corner** (D172): a node is a body in the middle of its tile, and the map names the
+        // tile. The corner is the anchor a *building's footprint* is placed from, which is why this used to read `x * scale`.
         let expected = (
-            ruage_fixed::Fixed::from_raw(i64::from(node.x) * scale),
-            ruage_fixed::Fixed::from_raw(i64::from(node.y) * scale),
+            ruage_fixed::Fixed::from_raw(i64::from(node.x) * scale + scale / 2),
+            ruage_fixed::Fixed::from_raw(i64::from(node.y) * scale + scale / 2),
         );
         let entity = world
             .entities()
