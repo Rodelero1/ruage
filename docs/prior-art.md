@@ -1578,3 +1578,40 @@ Two projects moved, neither on an engine axis.
 **Divy1211/AoE2DE_UGC_Guide, 3 commits (`55a8bfcf` → `0e9cd0d7`).** A generator refactor of the XS function reference: `docs/general/xs/functions/functions.py` now emits per-function `###` sections with a parameter table, collapses deprecated functions into `<details>`, and prints the deprecation *reason* where the old code printed `True` (a real defect, fixed). `functions.json` is untouched and both revisions render **289** functions, so the change is presentation, not new facts. XS is DE's scenario scripting language; our target is HD 5.7 and scenario scripts are out of the slice (D15), so even a semantic change would sit on a later step.
 
 **Nothing actionable.** No U-number is touched; D13, D14, D17 and D18 are unaffected.
+
+## 2026-11-10 — a licence notice, and two descriptions that had been mis-copied
+
+One project moved, on no engine axis. **Divy1211/AoE2DE_UGC_Guide, 6 commits
+(`0e9cd0d7` → `5d8cdd0e`), three of them content** (the other three are `dev` merges carrying them).
+
+**`4286c734` "Add AI notice and Contributing guidelines" — the one thing worth remembering.**
+`AI_NOTICE.md` (three lines) says the repo's docs and code "may not be used, in whole or in part, for
+training, fine-tuning, evaluating, or improving _generative_ machine learning or artificial
+intelligence models without explicit written permission", and states the content is human-made and
+will stay so. `CONTRIBUTING.md` follows it: human-made code only, contributors must be active in the
+UGC/ASP communities, issue and maintainer contact before work. This is **not** a licence change —
+the repo is still GPL-3.0 — but it is a declared stance about model ingestion of a source we do
+cite, and it names **Alian713** as the rights-holder while the repository is Divy1211's and
+maintained by KSneijders, so its authority over the whole tree is unclear.
+
+What it changes here: nothing in the rule, and the practice it forces is the one already written
+down. A specific page read for a specific fact and cited (U3's damage-class names from
+`docs/general/damage_calculation.md`, U8's resource table from `docs/general/resources/resources.md`,
+U19's resource 195) is exactly what GPL-3.0 permits and what the notice does not reach; bulk-feeding
+the guide into a model context is what it names. So: one page, one fact, cite it — never "ingest the
+guide so the agent knows it".
+
+**`9366b3ec` "Fixes function descriptions" — `functions.json`, two `desc` strings corrected.**
+`xsChatData`'s description had been a copy of a timer function's ("Gets the time remaining for this
+timer in the specified unit…"), and `strToLower`'s claimed it converts to **uppercase**. Both were
+prose errors sitting beside correct `name`/`return_type`/parameter ids; the count is still **289**
+functions. The guide's prose errs where its ids do not, which is the standing reason U3 asks for its
+per-unit "Base Armour of 1000" claim to be oracle-tested before it enters `combat.md`.
+
+**`d11a27b7` "Fixes broken links to the functions page" (closes #44)** — `beginner.md` and
+`programmer.md` repoint `../functions/` at `../functions/functions/`, the mkdocs output path. A link
+fix, nothing more.
+
+**Nothing actionable.** XS is DE's scenario-scripting language; our target is HD 5.7 and scenario
+scripts are out of the slice (D15). No U-number is touched, and D13, D14, D17 and D18 are unchanged —
+D14's narrow-borrow rule already anticipated the licence by citing facts rather than copying prose.
