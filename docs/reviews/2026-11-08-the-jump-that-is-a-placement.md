@@ -58,3 +58,25 @@ clock is recorded with this commit. The rejected design (b) is the one performan
 - **Three guards now run on every gate**: a settled worker does not jitter, three workers on one bush keep their own places, and a working villager is
   drawn on all 120 ticks of a render loop.
 - Suite: **777 passed / 0 failed / 20 ignored** (the extra ignore is the reproducer), clippy `-D warnings` clean, fmt clean, `review_check` 0.
+
+## Addendum: four designs tried for the walk, all measured, none shipped
+
+*The same day, after the owner chose "teach it to walk" (option A). Each was built far enough to be measured, then reverted.*
+
+1. **Make the gather order's route end at the standoff.** With nodes on tile centres this works for one worker. With three, a worker whose
+   chosen side is taken by the time it arrives **stops 1.57 tiles out and never returns**: at that distance it is no longer "beside the node",
+   and every step toward the node's blocked tile is refused.
+2. **Step toward the standoff every tick while working.** No jump at all - and the acceptance run's **repaths go from 24 to 225**, because the
+   standoff *and* a `can_reach` path search are recomputed per working gatherer per tick.
+3. **A one-waypoint approach route, earned on arrival.** This is the design that looked right, and it deadlocked in a way worth recording: the
+   gather order's **own route still ended on the node's blocked tile**, so `next_waypoint` returned a point no step could ever reach, the route
+   never finished, and the approach was never earned. Measured on three villagers: `at_node=true routing=true ways=1 next=(10.50,6.50)
+   walkable=false`, stationary for the rest of the run. Dropping a route whose last waypoint sits on the node's own blocked tile fixed that and
+   got all three to **0.86** of the bush - and then two of them settled **0.42** apart.
+4. **Rotation per worker (`id % 4`) plus claims on spots other workers are walking to.** The rotation removed the jam, and the claims took the
+   crowding the wrong way: the third worker was pushed out to **1.16 tiles**, because its own side was spoken for and every other side was too.
+
+**What that says**: the placement is load-bearing. With a node's tile **fully blocked**, the walk cannot end where the bodies touch, and every
+workaround trades one of the owner's four complaints for another. The real fix is the one design that has not been tried: **a node as a body of
+its content radius (0.5) rather than a blocked tile**, with the *planner* still avoiding its tile - so a walk can end at 0.7 because 0.7 is real
+geometry, not an exception. That is a step of its own, not a patch.
