@@ -4219,3 +4219,18 @@ are much closer. Can you research from the game?"*
    and repaths rise from 88 to **144**. Spreading workers round the node (approach axis, then the opposite, then across, skipping a taken point) is
    the next step, with its own test.
 6. **Acceptance has moved, and it had to**: `a120ed0721c8768c` -> **`5703f537f92c0bf2`**, 137 entities, 2 players, 144 repaths, 132 made-room.
+
+
+## D170 - A mine is a *pile per tile*, not one object: so the standoff is measured per tile
+
+*2026-11-08, after the owner's answer to "should a mine be one object or four tiles?".*
+
+**The owner**: *"Each tile has one pile of stone and gold."*
+
+1. **Our map model is the game's**: a stone or gold field is a set of **one-tile piles**, each with its own amount, each mined on its own. The dat's
+   `radius = 1.0` on `STONM`/`MINE2/3/4` describes the *drawing* of the rock, not a single minable object, so it is **not** evidence for one 2x2 node.
+   Our four independent tiles stay (option B of the question, answered A/B/C by the owner rather than guessed).
+2. **Therefore D169's 0.7 standoff is right for a mining tile too**: the worker works the pile on one tile, and stands where its body (0.2) touches
+   that pile's (0.5). Only a *building* is worked from beside its footprint, as before.
+3. **What is left open, and is not a rules question**: several workers on the same node settle on the same side; spreading them round the node is
+   the recorded next step in D169's review.
