@@ -4261,3 +4261,20 @@ north and west and not from the south and east, and the settle placed one inside
    comment. A fixture at a corner is a node no map can produce.
 4. **Measured**: entities 137 -> **153** against a 150 baseline, repaths 144 -> **24** (baseline 88), made-room 132 -> **16** (baseline 100). The
    crowding was never a gather rule - it was bodies standing on the wrong half of a tile. Acceptance **`6d23d672eb18ef40`**, players=2.
+
+
+## D173 - OPEN: the gatherer's last third of a tile is a **placement**, and that is the jump the owner sees
+
+*2026-11-08. Owner, with three screenshots: jump towards the bush, pile up, forage from a distance, appear and disappear - "regression of previous step".
+**No engine change was shipped**; the reproduceable part is the jump, and it is `settle_workers` (D169) placing an arrived worker on its standoff.*
+
+1. **Reproduced**: a gatherer moved **0.6 of a tile in one tick** where its speed allows 0.04 (`gather_motion`, test **ignored** and labelled). A
+   placement is not a walk, and the eye sees it.
+2. **Two walks were tried and rejected, with numbers**: (a) ending the *route* at the standoff strands a worker 1.57 tiles out when its chosen side is
+   taken by the time it arrives, and at that distance "beside the node" no longer holds so it never returns; (b) stepping toward the standoff every
+   tick costs **225 repaths against 24** in the acceptance run, because the standoff and a reachability search are recomputed per worker per tick.
+3. **A third shape is the promising one**: a **one-waypoint approach route** earned on arrival and re-checked each tick. It needs "beside the node" to
+   cover a worker pushed a tile and a half out by its neighbours - that widening is the missing piece.
+4. **Not reproduced here**, and therefore still open with the owner: piling up on one bush, foraging from a distance in a **berry patch** (most sides of
+   a bush are blocked by other bushes - the fixture is a lone bush on open ground), and the flicker (a lone worker is drawn on all 120 ticks).
+5. **Own error, recorded**: I read design (b)'s 155 entities as a success before looking at its repaths. Both numbers are in the review.
