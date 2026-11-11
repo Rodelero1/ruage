@@ -88,10 +88,12 @@ fn gap(a: (Fixed, Fixed), b: (Fixed, Fixed), scale: i64) -> f64 {
     (dx * dx + dy * dy).sqrt()
 }
 
-/// **The villager ends up where the bodies touch**: 0.2 + 0.5 = 0.7 of a tile from the tree's centre, not the 1.0 the walk's last waypoint
-/// leaves it at.
+/// **The villager ends up on the measured ring** (D186): **1.156** of a tile from the tree's square, which is where six
+/// woodcutters in the owner's own save stand (1.105, 1.142, 1.160, 1.170, 1.170, 1.189 - mean 1.156, spread 0.084). D169's
+/// 0.70 - the point where the two bodies' radii add up - is nearly half a tile inside it, and the engine stands there no
+/// more.
 #[test]
-fn a_woodcutter_stands_where_its_body_touches_the_tree() {
+fn a_woodcutter_stands_on_the_measured_ring() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
@@ -137,13 +139,16 @@ fn a_woodcutter_stands_where_its_body_touches_the_tree() {
     }
 
     let here = world.position(EntityId(9_600)).expect("the villager");
-    let there = world.position(node).expect("the tree");
-    let apart = gap(here, there, scale);
-    // The dat's radii: villager `radius[0] = 0.2`, forest tree `radius[0] = 0.5`.
+    // **Measured from the square's centre**, not the entity's anchor: a node may sit on a tile corner, and the owner's own
+    // words are *"each source was a square covering the whole tile"*.
+    let square = (
+        Fixed::from_raw(10 * scale + scale / 2),
+        Fixed::from_raw(6 * scale + scale / 2),
+    );
+    let apart = gap(here, square, scale);
     assert!(
-        apart <= 0.75,
-        "the woodcutter stopped {apart:.2} tiles from the tree's centre; the two bodies touch at 0.70 - it is standing at the \
-         neighbouring tile's centre instead of at its work"
+        (1.05..=1.27).contains(&apart),
+        "MEASURED the woodcutter at {apart:.3} tiles from the tree's square; the ring is 1.156 and D169's standoff was 0.70"
     );
     // And it is really working: the tree lost hit points, so this is not a villager that stopped early for another reason.
     let hp = world

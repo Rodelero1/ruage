@@ -293,16 +293,23 @@ impl World {
                 }
             }
         }
-        // **One worker a square** (D182, the owner's rule): *"if there is no space at half diameter from another villager and the resource, try
-        // another nearest resource of the same kind"*. The ring round a resource tile has one place for a worker - the side it approaches from -
-        // so a second order for a square somebody is already working is not crowding, it is a worker with nowhere to stand. He is sent to the
-        // nearest free source of the same kind instead, and stands idle when there is none, exactly as a farmer with no plot does.
-        if spread
-            && self.find(node).is_some_and(|entity| matches!(entity.kind, EntityKind::Resource(_)))
-            && self.entities.iter().any(|other| {
+        // **The ring holds nine men** (D186, the owner's *"max 9 per each"*). The rule used to be *one worker a square*
+        // (D182), which on a single tree meant **one** lumberjack and eighteen idle villagers - measured, 1 of 19. Nine slots
+        // are the cap now, and a tenth man is answered the way a second one used to be: the nearest free source of the same
+        // kind, or standing still when the map has none.
+        let on_node = self
+            .entities
+            .iter()
+            .filter(|other| {
                 other.id != villager
                     && matches!(other.task, Task::Gather { node: taken, .. } | Task::Return { node: taken, .. } if taken == node)
             })
+            .count();
+        if spread
+            && self
+                .find(node)
+                .is_some_and(|entity| matches!(entity.kind, EntityKind::Resource(_)))
+            && on_node >= usize::from(crate::GATHER_RING_SLOTS)
         {
             let here = self
                 .find(villager)

@@ -1,12 +1,27 @@
-# OPEN - the gather ring: measured, built, on a branch
+# OPEN - D186 landed: nine men a square on a 1.156 ring
 
-The owner's save gave the number the engine was guessing at: a working man stands **1.156 tiles** from a source square's centre
-(six woodcutters at 1.105-1.189, spread 0.084), packed **0.404** apart - two villager bodies - so **eighteen** fit one ring.
-D186 is written and the ring is built on branch **`d186-gather-ring`** (commit `0dbf462`, review in
-`docs/reviews/2026-11-11-the-gather-ring.md`), and **it is not on `main`**: `crates/sim/tests/skirmish.rs` is red there -
-*"player 1 never fielded infantry"*, with 270 wood and 499 food in his bank, so the cause is script timing or a forest node whose
-ring is unreachable. `main` is green at this commit. The branch also carries two `#[ignore]`d tests, both real defects: two men
-converging on one slot (0.001 tiles apart) and a buried-ring fixture packing three men 0.20 apart.
+**Landed on `main`.** The owner's save gave the number the engine was guessing at: a working man stands **1.156 tiles** from a
+source square's centre (six woodcutters at 1.105-1.189, spread 0.084), and **nine** men work one square - *"max 9 per each. 4 on
+corners and 4 on sides"*, which his own file agrees with (sixteen orders over two adjacent trees came out **9 and 7**; a cap of
+eighteen would have sent all sixteen to one tree). The ring is nine slots at forty-degree steps, a work band of 1.056..1.256, and
+a neighbouring-tile fallback for a ring buried in a forest. Tests in `crates/sim/tests/gather_ring.rs`, decision **D186**, review
+`docs/reviews/2026-11-11-the-gather-ring.md`.
+
+**Two defects the work found, both fixed:** a ring slot could land on a **building site** (a foundation is walkable since D183), so
+a gatherer stood on it and the empty-site gate waited for him - a barracks frozen at **871 of its build ticks**; and
+`config/skirmish.toml` pulled that barracks' only builder off at 380 s where the ring makes it finish at **~395 s** - the step is
+460 s now, with both numbers beside it.
+
+**Still owed, in order:**
+
+1. **Two `#[ignore]`d tests, both real:** two men can converge on one slot (**0.001** tiles apart) because nothing makes a
+   standing body give way, and a fixture whose ring is buried packs three men **0.20** apart.
+2. **The builder's ring is unmeasured.** The owner expects *"the same pattern"*; no save with a site under construction has been
+   read.
+3. **Mines and bushes were not separated** from the trees in his save, so the engine uses 1.156 for every node kind.
+4. **`start_gather` routes to the neighbouring tile, not to the slot**, so a worker walks in and then out again - up to two seconds
+   per trip, which is why the felling window had to widen from 15 s to 16 s.
+
 
 # DONE - D183, built (D185): a foundation is walkable until somebody works on it
 
@@ -50,19 +65,90 @@ not an "arrives" test - arriving can be true of a unit that teleported).
 **Evidence that would settle it in one read:** the owner's save with the stuck scout in place (positions, task and route at the tick it
 stopped) - see the save-game item below. Do not "fix" it by relaxing the clearance rule: that rule is the owner's collision complaint.
 
-# OPEN - the save-game object walk (owner will send a save)
+# NEXT - the save-game object walk: the owner's file is here, sections 1-3 are located, section 4 is not
 
-The owner will send **one** save with villagers settled on berries, trees and a mine at once, with a **huge crowd** to test crowding, plus
-optionally scattered (round, non-blocking) trees, and a screenshot of the same moment.
+**The file**: `test.aoe2spgame`, sha256 `af5282fb1ddd9caa96e0d3e4bf1b69e3c0739334a94de2bad5ac5e60d95be872`, 289,740 bytes on
+disk, **3,290,468 undeﬂated**, `VER 9.4`, save version **12.5**, word at 12 = 1006.0 - the same family as `brit1`-`brit13`.
+Kept at `/opt/data/cache/saves/owner-test.aoe2spgame` (outside the repo; nothing derived is committed, D8/D22). It carries three
+groups the owner named: **gold top right, one tree left, berries bottom right - and the berries are TWO bushes**, not one
+(corrected by the owner 2026-11-11), with a screenshot of the same moment
+(`docs/`-less, held in the session).
 
-Our reader (`tools/savegame.py`) walks the header, the scenario, the map and the clock and **stops before the object loop** - section 4 of
-`docs/save-format.md`, the object loop inside `FUN_00730600` (1,418 lines of pseudocode in `/opt/data/tools/rea/pseudo-aokhd`). 18 saves
-in the install are the corpus to develop against.
+**What is established with evidence, and what is not.**
 
-**Proof the walk is right, in this order:** object count equals units + buildings the scenario declares; every position inside the map and
-never inside a blocked tile; the two town centres land on the tiles the map section names; the same save's terrain reproduces what the map
-reader already yields. Then the payoff: villager -> node -> exact distance for every gatherer at once, which is the oracle D169/D182
-approximated from `radius[0]`.
+- **The map is 144×144.** Two 16.16 fixed-point words `0x00900000` (144.0) sit at **0x100a3c** and **0x100a40**, and the tile
+  layers follow: the longest run of low-valued bytes in the file is **82,967 bytes at 0x115861** = four 20,736-byte layers
+  (144×144) plus 23, and a second 41,523-byte run (two layers) at **0x10b5c9**. This matches `FUN_00836830`'s field order
+  (`& map_width`, `& map_height`, `& world_width`, then the per-tile arrays).
+- **The tail of the file is a stream of per-object records** (from ~0x3228A0 to EOF 0x323564): a repeating 28-byte header
+  whose fields include a small increasing id (26, 27, 31, 35, 43, 44, 48, ... 355) and a waypoint count, followed by that
+  many triples `(x, 0.0, y)` in **tile coordinates** (57.5, 93.5), (57.5, 90.5), ... - a moving object's path. That is the
+  object list or its tail, and it is why this is a bounded job rather than a research question.
+- **Not done, and deliberately not guessed at**: no record layout is verified against the game's loaders, so **no object,
+  unit, villager or distance has been read out of this file**. Two structural probes were tried and both failed to chain to
+  EOF (a 24/28/32-byte header with 8- or 12-byte points), and scanning for a per-tile object layer as a plain `u16[144×144]`
+  array found only zero-filled layers. A parse that "looks plausible" is exactly what `docs/save-format.md` records as the
+  way a fixed offset misled it before.
+
+**The walk that is owed, in order:**
+
+1. `FUN_00758030` reads `"& type"` (a 4-byte word) and dispatches to a creator (`FUN_007570e0`), which then calls the
+   class's own `load`. The per-player section (`FUN_00730600` around line 530) loops `numPlayers` times and calls it, so the
+   object list lives **inside each player's loader**, not in one flat list at the end.
+2. Class loaders read their base first (`TribeCombatObject` -> `RgeCombatObject` -> `RgeActionObject` -> `RgeMovingObject` ->
+   `RgeAnimatedObject` -> `RgeStaticObject`), and `RgeStaticObject` is where `id`, `x` and `y` live. Reading that chain is
+   the actual work: the same shape `librematch/genie`'s `genie-save` models for **DE** (66.x) - its `generated/world.rs`
+   is a good map of the classes, but **not** of this format's field widths, and must not be used as one.
+3. Then the four checks the register already names: object count equals what the scenario declares; every position inside
+   the map; the towns land on the tiles the map section gives them; the same save's terrain reproduces what the map reader
+   yields.
+4. Then the payoff: villager -> node -> exact distance for every gatherer at once, which is the oracle D169/D182
+   approximated from `radius[0]`, and what the owner's three groups were sent for.
+
+**The order section at the tail, read (2026-11-11).** From `0x322783` to `0x3234cf` (149 bytes short of EOF) the file
+holds **53 records of `[u32 type][u32 1][u32 0][u32 id][u32 n]` + `n` triples of `(f32 x, f32 0, f32 y)`**, `type` being 4 or
+6, size `28 + 12n`, ids ascending (7, 9, 13, ... 355). The points are in **tile coordinates**. They are **orders, not
+positions**: ids 169, 170 and 171 carry the identical from/to pair, which three separate men standing in one spot cannot do.
+Their destinations cluster exactly where the owner's screenshot has his patches:
+
+- tree: **(57.5, 90.5) x9** and **(56.5, 90.5) x7** - two adjacent squares, sixteen orders;
+- berries: **(54.5, 74.5) x6**, plus **(54.10, 73.38)** and **(54.10, 75.62)** - **two bushes about 1.2 tiles apart**, which
+  agrees with the owner's correction that the berries are two bushes and not one;
+- gold: **(66.5, 81.5) x4**, plus (65.38, 81.10), (66.10, 80.38), (67.68, 81.10).
+
+The 9-and-7 split over two adjacent squares is the first quantitative support for the owner's *"max 9 per each"*: sixteen men,
+nine to one square and seven to the other. The from-points of those same records sit two to four tiles away, so the men were
+**not** standing round the tree when the order was given - which is why this section cannot answer "how far does a working man
+stand": the standing positions are in the object records, and those are not yet located.
+
+**The standoff, measured (2026-11-11, second save `owner-test2.aoe2spgame`).** The owner re-saved with the men standing
+at the tree and one more click given, so the tail section's *from*-points are standing positions. Reading them
+(`[type][1][0][stamp][n]` + `n` triples, 39 records, `0x32ceb4`..149 bytes short of EOF):
+
+- **The working men sit on a circle around the source's tile centre at radius 1.156 tiles** - six of them, at 1.105, 1.142,
+  1.160, 1.170, 1.170, 1.189 (spread 0.084). Not 0.70, which is what `radius[0]` gives us and what D182 implemented.
+- **They pack along that circle as close as their bodies allow**: the three closest pairs are 0.404, 0.455 and 0.710 apart,
+  and 0.404 is exactly two villager radii (2 x 0.2) - body touching body.
+- Behind the ring: 1.357, 1.555, 1.598, then the men who are not working at 2.236, 3.000, 3.000, 3.162.
+- Arithmetic worth keeping: the ring's circumference at 1.156 is `2*pi*1.156 = 7.26` tiles, and `7.26 / 0.404 = 17.97` - so
+  **eighteen men fit on one ring at body spacing**, which is the owner's count of his group and the "max 9 per source" over
+  the two adjacent source squares the tail names (9 + 7 destinations). Treat this as an observation, not a rule, until the
+  object records confirm the assignment.
+- **The two adjacent squares** (57.5, 90.5) and (56.5, 90.5) again appear as the destinations, so the left patch is two
+  source squares, the same shape as the berries.
+
+What this changes in the engine: the gather standoff should be a **ring at ~1.16 tiles from the source's tile centre, packed
+at body spacing**, not one man per square at 0.70. That is a D-level change (it supersedes D182's standoff) and it needs a
+test written first.
+
+**What the owner says the picture is for** (2026-11-11): *"I'd focus instead on how close men can stand to the bush, tree
+or mine. The ones behind them don't work. Only first row ever works."* So the question the save answers is the **standoff**,
+not the crowd: how far from a node's tile the men who are actually working stand. And the crowd question is answered the
+other way - **only the front row works**, so D182's one-worker-a-square stands unchanged and the men behind are idle.
+
+**A cheaper intermediate the owner would accept, if the chain takes too long:** the *scenario* section (section 2,
+`FUN_00545460`) and the *map* (section 3) read first - the map alone can be drawn and checked against the owner's own
+screenshot, which is a real result even before an object is read.
 
 # The step walks the line, and the route bends where the ground does
 

@@ -1246,6 +1246,37 @@ pub(crate) enum Standoff {
     NoRoom,
 }
 
+/// **The gather ring's radius**, in thousandths of a tile (D186) - measured, not derived.
+///
+/// The owner's second save (`owner-test2.aoe2spgame`) carries the standing positions of six woodcutters round one tree:
+/// **1.105, 1.142, 1.160, 1.170, 1.170, 1.189** tiles from the source square's centre, mean **1.156**, spread **0.084**.
+/// The old standoff was `radius[0] + node radius` = 0.2 + 0.5 = **0.70** (D169), which is nearly half a tile inside the
+/// game's front row - the difference the owner could see between his screenshot and our render.
+pub(crate) const GATHER_RING_MILLI: i64 = 1156;
+
+/// **Nine men a source square** - the owner's own number, *"max 9 per each. 4 on corners and 4 on sides"*, and the one his
+/// save shows: sixteen orders over two adjacent trees came out as **nine and seven**. The first reading of this file took the
+/// eighteen slots the ring's circumference allows (`2 * pi * 1.156 / 0.40 = 17.97`) for the game's capacity, which the 9 + 7
+/// split refutes - if eighteen had been allowed, all sixteen would have gone to one tree. Nine at forty-degree steps sit
+/// **0.79** of a tile apart on the ring, which is the room the owner's photograph shows them using.
+pub const GATHER_RING_SLOTS: u8 = 9;
+
+/// **The band a man must stand in to be working**, in thousandths of a tile: the ring plus a tenth either side. It is why
+/// only the front row works - a man on the neighbouring tile's centre is at 1.000, outside the band, and the second row in
+/// the save sits at 1.357 and beyond.
+pub(crate) const GATHER_BAND_MILLI: (i64, i64) = (1056, 1256);
+
+/// The **cosine and sine of the ring's nine slots**, in millionths, at 40-degree steps (D186).
+///
+/// Integer tables rather than `f64`: the simulation is deterministic and hashed, and a platform's `sin` is not the same
+/// number twice. `(ring * cos) / 1_000_000` is a slot's offset along x.
+const RING_COS: [i64; 9] = [
+    1_000_000, 766_044, 173_648, -500_000, -939_693, -939_693, -500_000, 173_648, 766_044,
+];
+const RING_SIN: [i64; 9] = [
+    0, 642_788, 984_808, 866_025, 342_020, -342_020, -866_025, -984_808, -642_788,
+];
+
 impl World {
     pub fn new(settings: &Settings, seed: u64) -> Result<Self, SimError> {
         Ok(World {
@@ -3049,16 +3080,36 @@ impl World {
         self.node_radii.get(slot).copied().unwrap_or(0)
     }
 
-    /// **Where a worker stands to work a node** (D169): as close as the two bodies allow, on the axis it came from.
+    /// **Is there any ring at all?** True when at least one of the nine slots round a source square is walkable, free
+    /// ground (D186). It decides *where* a man works: on the ring when there is one, but from the tile beside the source when
+    /// the ring is buried - a tree deep in a forest has its whole ring on blocked tiles, and the men who cut it stand on the
+    /// open edge beside it, which is the one case the ring cannot describe. Nine walkability lookups, no path search.
+    pub(crate) fn ring_open(&self, centre: (Fixed, Fixed)) -> bool {
+        let ring = self.scale * GATHER_RING_MILLI / 1000;
+        (0..GATHER_RING_SLOTS as usize).any(|k| {
+            let px = centre.0.raw() + ring * RING_COS[k] / 1_000_000;
+            let py = centre.1.raw() + ring * RING_SIN[k] / 1_000_000;
+            let (Ok(x), Ok(y)) = (
+                u16::try_from(px.div_euclid(self.scale)),
+                u16::try_from(py.div_euclid(self.scale)),
+            ) else {
+                return false;
+            };
+            self.tile_walkable(x, y) && self.is_free_ground(x, y)
+        })
+    }
+
+    /// **Where a worker stands to work a node** (D186, superseding D169's 0.70 and D182's one-side-per-worker): on a ring
+    /// of **1.156 tiles** round the source square's centre, in the first of eighteen slots that is free.
     ///
-    /// A node's tile is blocked, so the walk used to end at the neighbouring tile's **centre** - a whole tile from the node,
-    /// which is the *"villagers are standing around 1/2 tile away"* the owner photographed. The dat says how close the bodies
-    /// may come: `radius[0]` is **0.2** for a villager and **0.5** for a forest tree, so the two discs touch at **0.7**. That
-    /// point is outside the node's tile along an axis, so it is walkable and a route can end there.
+    /// The number is measured, not derived. The owner's save carries six woodcutters at 1.105, 1.142, 1.160, 1.170, 1.170,
+    /// 1.189 tiles from one tree - mean 1.156, spread 0.084 - with the closest pair **0.404** apart, which is exactly two
+    /// villager bodies touching. Eighteen slots at 20-degree steps give that spacing (`2*pi*1.156/18 = 0.4036`), and
+    /// eighteen is the count of the owner's group and his *"max 9 per each"* over the two squares his save names.
     ///
-    /// The axis is the one the worker came from, not the diagonal: `0.7` of a tile diagonally is `(0.49, 0.49)`, which is
-    /// *inside* the node's own blocked tile and cannot be stood on - it would put the worker back in the "stuck in the forest"
-    /// hole the ground rule exists to prevent. A diagonal approach therefore keeps the tile centre, which is honest.
+    /// The old rule put a man where the two discs touched - `radius[0]` 0.2 plus a tree's 0.5 = **0.70** - which is nearly
+    /// half a tile inside the game's front row. A node's own tile is blocked, so the slot is checked the same way the side
+    /// was: walkable ground, free of bodies, and reachable by a path.
     pub(crate) fn standoff_point(
         &self,
         from: (Fixed, Fixed),
@@ -3066,41 +3117,48 @@ impl World {
         node: EntityId,
         worker: EntityId,
         taken: &[(EntityId, (Fixed, Fixed))],
+        // **Whether to prove the slot is walkable to** with a path search. `start_gather` says yes, once per order. The tick
+        // that walks an arrived man out to its slot says no: it runs every tick, and a slot 1.156 tiles away whose tile is
+        // walkable and free is reachable unless it is an island, in which case the man simply never arrives and tries again.
+        check_path: bool,
     ) -> Option<Standoff> {
         let scale = self.scale;
-        // The worker's own radius, plus the **node's** - which is content's number for the node's kind, because a map node
-        // carries no unit of its own to read a radius from.
+        // The worker's own radius, which is the spacing between two men on the ring. The node's radius no longer decides the
+        // standoff - that was D169.
         let worker_radius = match self.find(worker).and_then(|entity| entity.unit) {
             Some(unit) => self.body_radius(Some(unit)),
             None => 0,
         };
-        let node_radius = match self.find(node) {
-            Some(entity) => self.node_radius_raw(entity),
-            None => 0,
-        };
-        let reach = worker_radius + node_radius;
-        // Nothing to gain: a sum of radii that is a whole tile or more is already satisfied by the tile centre.
-        if reach <= 0 || reach >= scale {
-            return None;
-        }
         let (dx, dy) = (from.0.raw() - target.0.raw(), from.1.raw() - target.1.raw());
         if dx == 0 && dy == 0 {
             return None;
         }
-        // **Spread the workers round the node** (D171). The first three of these sides used to be the only one tried - the side
-        // the worker came from - so two villagers sent at the same tree settled on the *same point* and pushed each other for the
-        // rest of the match (measured: 150 -> 137 entities, repaths 88 -> 144). The original fans them out, so the sides are sorted
-        // by how well they face the approach and the first **free** one wins; a side another worker already holds is passed over.
-        let mut sides: [(i64, i64); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
-        sides.sort_by_key(|(ax, ay)| std::cmp::Reverse(ax * dx + ay * dy));
-        // **One worker per square, on the side it came from** (D182). The owner's rule is *"if there is no space at half diameter from another
-        // villager and the resource, try another nearest resource of the same kind"* - which presumes the ring has **one** place for a worker,
-        // the one facing its approach. Trying all four sides (D171) fanned five villagers round one bush instead: measured, all five worked the
-        // same square, which is the crowding the owner photographed. A second worker from another direction still gets its own side, because the
-        // side is chosen by where it comes from; a second worker from the *same* direction gets no room and is sent to the next square.
-        let sides = &sides[..1];
-        let found = sides.iter().find_map(|(ax, ay)| {
-            let (px, py) = (target.0.raw() + ax * reach, target.1.raw() + ay * reach);
+        // **Nine places on a ring of 1.156 tiles** (D186), not one side at the two bodies' standoff (D169/D182). The men
+        // the owner's save shows stand *outside* the neighbouring tile's centre - 1.156 of a tile from the source square's
+        // centre - and no more than nine work one square: his *"max 9 per each"*, and the 9 + 7 split his file names.
+        let ring = self.scale * GATHER_RING_MILLI / 1000;
+        // **Held means "too close", not "exactly on it"** (D181, kept). The test is the width of two bodies - the 0.404 of
+        // the save's closest pair - and it counts the slots chosen earlier in this same decision pass, which is the only way
+        // the second worker learns about the first before either has arrived.
+        let too_close = (2 * worker_radius).max(1);
+        // **The ring is round the source's SQUARE, not its anchor** (D186). A map may place a node at a tile's corner - the
+        // drop-off test's bush sits at exactly (20.0, 13.0) - and a ring drawn round that corner straddles four tiles, which
+        // put every one of the eighteen slots on a blocked or occupied tile and left the worker standing at 0.00 progress
+        // for 1,200 ticks. The owner's own words are *"each source was a square covering the whole tile"*, so the centre is
+        // the tile's.
+        let centre = self.tile_centre(self.tile_of(target));
+        // **A man's slot is his own, and it does not move.** The first version chose the slot nearest the worker's *current*
+        // position on every tick, and the choice was not stable: as two men walked toward the same side of a bush their
+        // nearest slot kept swapping, they ended up on the same one, and the collision pass queued them **0.167** tiles
+        // apart - measured. The start of the probe is therefore the worker itself, `(worker + node) mod 18`, which no other
+        // worker has, and the probe walks the ring from there. A slot that is blocked or held is passed over; a man who
+        // finds none has no room, which is D182's answer, unchanged.
+        let slots = GATHER_RING_SLOTS as usize;
+        let first = ((worker.0 as usize).wrapping_add(node.0 as usize)) % slots;
+        let order: Vec<usize> = (0..slots).map(|step| (first + step) % slots).collect();
+        let found = order.iter().find_map(|k| {
+            let px = centre.0.raw() + ring * RING_COS[*k] / 1_000_000;
+            let py = centre.1.raw() + ring * RING_SIN[*k] / 1_000_000;
             let (Ok(x), Ok(y)) = (
                 u16::try_from(px.div_euclid(scale)),
                 u16::try_from(py.div_euclid(scale)),
@@ -3110,11 +3168,24 @@ impl World {
             if !self.tile_walkable(x, y) || !self.is_free_ground(x, y) {
                 return None;
             }
-            // **Held means "too close", not "exactly on it"** (D181). Exact equality let two workers walking in from different sides
-            // claim the same spot, because neither was *at* it yet: the owner then saw villagers overlapping, and the measurement was
-            // two of them at **0.00** tiles apart. The test is the width of two bodies, and it also counts the spots chosen earlier in
-            // this same decision pass - the only way the second worker learns about the first before either has arrived.
-            let too_close = (2 * worker_radius).max(1);
+            // **Not on somebody's building site** (D186, found by the skirmish). A foundation is walkable ground (D183), so a
+            // slot can land on one - and a gatherer who stands there and works is exactly the unit the empty-site gate waits
+            // for, so the site stalls for ever: measured, a barracks frozen at 871 of its build with the man beside a bush.
+            // A site is not a place to stand until it is finished.
+            let on_site = self.entities.iter().any(|other| {
+                other.construction.is_some()
+                    && self
+                        .footprint_rect(other.id)
+                        .is_some_and(|(ax, ay, wide, tall)| {
+                            x >= ax
+                                && x < ax.saturating_add(wide)
+                                && y >= ay
+                                && y < ay.saturating_add(tall)
+                        })
+            });
+            if on_site {
+                return None;
+            }
             let near = |point: (Fixed, Fixed)| -> bool {
                 let (ax, ay) = (point.0.raw() - px, point.1.raw() - py);
                 ax * ax + ay * ay < too_close * too_close
@@ -3129,12 +3200,13 @@ impl World {
             if held {
                 return None;
             }
+
             // **A spot the worker cannot walk out of is not a spot to stand on.** The test above proves the point is *free ground*,
             // which is not the same as *reachable*: a one-tile gap inside a forest is both, and a worker placed there is trapped for
             // the rest of the match. The ten-minute scenario's 330 s gather step was refused with *"no walkable route from (22,13) to
             // (13,19): the target is walled off"* exactly that way. A path from where the worker stands is the proof.
             let point = (Fixed::from_raw(px), Fixed::from_raw(py));
-            self.can_reach(from, point).then_some(point)
+            (!check_path || self.can_reach(from, point)).then_some(point)
         });
         // **No room is an answer, not a failure** (D182): the worker has somewhere it *could* touch the node and every one of those places is
         // taken or unreachable, so the caller sends it to the nearest other node of the same kind instead of leaving it to work from wherever it

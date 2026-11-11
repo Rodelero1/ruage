@@ -145,15 +145,17 @@ fn two_woodcutters_on_one_tree_do_not_share_its_side() {
         split >= 0.36,
         "the two villagers stand {split:.2} tiles apart - their 0.4-wide bodies overlap on screen"
     );
-    // ... and only one of them has the square: the other was sent elsewhere, or is standing without work.
+    // ... and **both** have the square (D186): the ring round one source square holds eighteen men, so a second woodcutter
+    // is no longer answered with another tree. What D171 was really about - two men on one point, pushing each other for the
+    // rest of the match - is the 0.36 above.
     let working = world
         .entities()
         .iter()
         .filter(|entity| [9_610u32, 9_611].contains(&entity.id.0))
         .filter(|entity| matches!(entity.task, Task::Gather { node: at, .. } if at == node))
         .count();
-    assert!(
-        working <= 1,
-        "{working} villagers are gathering the one tree - a resource square holds one gatherer"
+    assert_eq!(
+        working, 2,
+        "{working} villagers are gathering the one tree; the ring takes eighteen"
     );
 }
