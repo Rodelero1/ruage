@@ -4522,5 +4522,10 @@ came back to life on the next tick and its ground stayed claimed. Fixed with a g
 - **A hunt that interrupted a unit blocks its step-aside**: `step_aside` treats "already in `resuming`" as "already leaving", so a
   unit fighting when a foundation lands on it waits for the fight to end. Rare, and the site stalls rather than misbehaving.
 - **A unit that cannot leave stalls its site for ever**, on one message. That is D183 §4's accepted answer; a player sees why.
+- **A farm is seeded from beside it, not from on it.** D183 §7 describes the owner's seeding animation - *"villagers walk a while,
+  does the animation, walks again while farm is being seeded"* - and this engine has no seeding animation and no per-art pose, so
+  the builder takes the same stand on the footprint's ring as every other builder. The behaviour the animation stands for is
+  there: the plot is walkable throughout, several villagers may seed it, and only one stays to farm it. What is missing is the
+  picture of a man walking over his own field, which belongs with the asset pack.
 - **The invisible-ghost rule is engine-wide**, so the ordering system and the panel also cannot see an enemy's untouched foundation.
   That is the rule, not a side effect: D183 §2 says the ghost is invisible as a fact, not as a rendering.

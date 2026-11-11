@@ -138,7 +138,9 @@ Attacked, in the order the model can break:
    is a forager again at its tree, taking food. A gather whose node died meanwhile is refused by `start_gather_internal` and
    the worker stands down - the same answer a gather to a dead node gives.
 
-**Accepted and named, not fixed** (D185.2): a step-aside does not resume a `Return`, `Build` or `Attack`; a unit already
+**Accepted and named, not fixed** (D185.2): a farm's builder stands on the footprint's ring rather than walking over the plot
+(the owner's *"walks a while, does the animation"* is a seeding animation this engine does not have); a step-aside does not
+resume a `Return`, `Build` or `Attack`; a unit already
 interrupted by a hunt is not told to step aside (the site waits for the fight, since `resuming` is also the "already
 leaving" marker); a unit with nowhere to go stalls its site for ever, on one message.
 
