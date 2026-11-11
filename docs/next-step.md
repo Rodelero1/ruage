@@ -1,3 +1,34 @@
+# OPEN - a scout that stops, and cannot be nudged (owner, 2026-11-08)
+
+The owner, with a screenshot of a scout cavalry standing at the forest's edge over an order marker: *"I noticed scout cavalry got
+stuck in the forest. It can be unstuck by ordering to move somewhere."*
+
+**Not reproduced yet**, and not guessed at either. The hypothesis to test first is that D177's clearance rule opened a new door onto
+D127's old "stuck scout": a route whose *last leg* (or whose step off a corner) lands where `clearance_at(landing, radius) < 0` is refused,
+the mover burns `MAX_GROUND_REPLANS` (2) trying the same geometry again, and then stands still for ever - while a **new order** resets
+`stalls`, which is exactly why the owner can unstick it by clicking.
+
+**The fixture to write first:** a scout ordered across a forest belt, with the goal such that the route's final leg passes within a body's
+radius of a blocked corner, and an assertion that the unit's distance to the goal falls at least once every N ticks (a "never stalls" test,
+not an "arrives" test - arriving can be true of a unit that teleported).
+
+**Evidence that would settle it in one read:** the owner's save with the stuck scout in place (positions, task and route at the tick it
+stopped) - see the save-game item below. Do not "fix" it by relaxing the clearance rule: that rule is the owner's collision complaint.
+
+# OPEN - the save-game object walk (owner will send a save)
+
+The owner will send **one** save with villagers settled on berries, trees and a mine at once, with a **huge crowd** to test crowding, plus
+optionally scattered (round, non-blocking) trees, and a screenshot of the same moment.
+
+Our reader (`tools/savegame.py`) walks the header, the scenario, the map and the clock and **stops before the object loop** - section 4 of
+`docs/save-format.md`, the object loop inside `FUN_00730600` (1,418 lines of pseudocode in `/opt/data/tools/rea/pseudo-aokhd`). 18 saves
+in the install are the corpus to develop against.
+
+**Proof the walk is right, in this order:** object count equals units + buildings the scenario declares; every position inside the map and
+never inside a blocked tile; the two town centres land on the tiles the map section names; the same save's terrain reproduces what the map
+reader already yields. Then the payoff: villager -> node -> exact distance for every gatherer at once, which is the oracle D169/D182
+approximated from `radius[0]`.
+
 # The step walks the line, and the route bends where the ground does
 
 > # Session 50, 2026-11-09 - D168: the decisions are browsable, and reviewable in batches
