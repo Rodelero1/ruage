@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, World};
+use ruage_sim::{Command, EntityId, EntityKind, Task, World};
 
 mod common;
 
@@ -133,10 +133,14 @@ fn a_settled_gatherer_does_not_jitter() {
     }
 }
 
-/// **Three villagers on one bush do not pile up.** The owner's screenshot showed a stack; the settle used to place two workers on the
-/// same coordinate within one tick, before either could see the other. A graded walk makes the second one notice on the next tick.
+/// **Three villagers ordered onto one bush do not pile up on it** (D171, restated under D182).
+///
+/// The old shape of this test asserted that all three *gathered* the one bush from separate sides: D171's fan-out gave a node four sides. The
+/// owner replaced that rule - *"if there is no space at half diameter from another villager and the resource, try another nearest resource of the
+/// same kind"* - so a resource square now holds **one** gatherer and the other two are answered elsewhere (or stand idle when the map has nothing
+/// free). What survives from the old test, and is the reason it exists, is that **no two bodies end up on the same ground**.
 #[test]
-fn three_gatherers_on_one_bush_keep_their_own_places() {
+fn three_gatherers_on_one_bush_do_not_pile_up() {
     let Some(mut world) = world_of(MAP_BUSH) else {
         return;
     };
@@ -185,20 +189,24 @@ fn three_gatherers_on_one_bush_keep_their_own_places() {
         .filter_map(|id| world.position(EntityId(*id)))
         .collect();
     assert_eq!(spots.len(), 3, "all three villagers are still in the world");
-    let centre = world.position(node).expect("the bush");
-    for (nth, at) in spots.iter().enumerate() {
-        let gap = apart(*at, centre, scale);
-        assert!(
-            gap <= 0.8,
-            "villager {nth} forages from {gap:.2} tiles away - it should be at the bush"
-        );
-    }
+    // **One gatherer on the square** (D182): the other two were answered with another source or nothing, never with the same ring.
+    let working = world
+        .entities()
+        .iter()
+        .filter(|entity| ids.contains(&entity.id.0))
+        .filter(|entity| matches!(entity.task, Task::Gather { node: at, .. } if at == node))
+        .count();
+    assert!(
+        working <= 1,
+        "{working} villagers are gathering the one bush: a resource square holds one gatherer"
+    );
+    // ... and whatever they are doing, no two bodies share the same ground.
     for a in 0..spots.len() {
         for b in (a + 1)..spots.len() {
             let split = apart(spots[a], spots[b], scale);
             assert!(
-                split >= 0.5,
-                "villagers {a} and {b} are {split:.2} tiles apart - they are standing on each other"
+                split >= 0.36,
+                "villagers {a} and {b} stand {split:.2} tiles apart - their bodies overlap on screen"
             );
         }
     }

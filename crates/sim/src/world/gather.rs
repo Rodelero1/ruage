@@ -20,6 +20,36 @@ impl World {
         old: EntityId,
         worker: EntityId,
     ) -> Option<EntityId> {
+        self.nearest_like_in(from, old, worker, false)
+    }
+
+    /// **The nearest other node of the same kind that nobody else is working** (D182). The owner's rule: when the ring round a square is full,
+    /// the extra worker takes the next source rather than crowding in - so a node another villager is already gathering from does not count.
+    pub(crate) fn nearest_like_free(
+        &self,
+        from: (Fixed, Fixed),
+        old: EntityId,
+        worker: EntityId,
+    ) -> Option<EntityId> {
+        self.nearest_like_in(from, old, worker, true)
+    }
+
+    /// Is some other living worker already gathering from this node?
+    fn claimed_by_other(&self, node: EntityId, worker: EntityId) -> bool {
+        self.entities.iter().any(|other| {
+            other.id != worker
+                && other.hp > 0
+                && matches!(other.task, Task::Gather { node: target, .. } if target == node)
+        })
+    }
+
+    fn nearest_like_in(
+        &self,
+        from: (Fixed, Fixed),
+        old: EntityId,
+        worker: EntityId,
+        skip_claimed: bool,
+    ) -> Option<EntityId> {
         let source = self.find(old)?;
         let kind = source.kind;
         // **The worker only chooses among what its player has scouted** (D148). Without this a node that runs dry sends the
@@ -48,6 +78,9 @@ impl World {
                 continue;
             }
             if matches!(entity.kind, EntityKind::Resource(_)) && !self.node_workable(entity.id) {
+                continue;
+            }
+            if skip_claimed && self.claimed_by_other(entity.id, worker) {
                 continue;
             }
             if !self.knows(who, entity) {
@@ -194,10 +227,31 @@ impl World {
         Ok((resource, rate))
     }
 
+    /// A **player's** gather order: the one place where the owner's *"if there is no space at half diameter ... try another nearest resource of
+    /// the same kind"* is applied (D182).
     pub(crate) fn start_gather(
         &mut self,
         villager: EntityId,
         node: EntityId,
+    ) -> Result<(), SimError> {
+        self.start_gather_with(villager, node, true)
+    }
+
+    /// An **internal** re-task (a deposit completing, a node running dry, a share being reassigned). It does not spread workers: those paths run
+    /// many times a tick, and spreading there took the acceptance run from 16 s to over 180 s - each attempt plans a route per candidate.
+    pub(crate) fn start_gather_internal(
+        &mut self,
+        villager: EntityId,
+        node: EntityId,
+    ) -> Result<(), SimError> {
+        self.start_gather_with(villager, node, false)
+    }
+
+    fn start_gather_with(
+        &mut self,
+        villager: EntityId,
+        node: EntityId,
+        spread: bool,
     ) -> Result<(), SimError> {
         // A deliberate order supersedes a share reassignment that was waiting on a deposit: without this, a villager told
         // to do something else would still be yanked to the column it was pulled towards, once its load went in.
@@ -238,6 +292,32 @@ impl World {
                     return Ok(());
                 }
             }
+        }
+        // **One worker a square** (D182, the owner's rule): *"if there is no space at half diameter from another villager and the resource, try
+        // another nearest resource of the same kind"*. The ring round a resource tile has one place for a worker - the side it approaches from -
+        // so a second order for a square somebody is already working is not crowding, it is a worker with nowhere to stand. He is sent to the
+        // nearest free source of the same kind instead, and stands idle when there is none, exactly as a farmer with no plot does.
+        if spread
+            && self.find(node).is_some_and(|entity| matches!(entity.kind, EntityKind::Resource(_)))
+            && self.entities.iter().any(|other| {
+                other.id != villager
+                    && matches!(other.task, Task::Gather { node: taken, .. } | Task::Return { node: taken, .. } if taken == node)
+            })
+        {
+            let here = self
+                .find(villager)
+                .map(|entity| entity.position)
+                .ok_or(SimError::MissingEntity(villager))?;
+            if let Some(next) = self.nearest_like_free(here, node, villager) {
+                return self.start_gather(villager, next);
+            }
+            let worker = self
+                .find_mut(villager)
+                .ok_or(SimError::MissingEntity(villager))?;
+            worker.task = Task::Idle;
+            worker.variant = None;
+            self.paths.remove(&villager);
+            return Ok(());
         }
         let (variant_id, rate_per_tick, carry_cap) = {
             let units = self.units.as_ref().ok_or(SimError::NoTables)?;

@@ -4404,3 +4404,22 @@ while the circle is not touching the square with bush."*
    (tree stays at 20 hp, never yields) - unexplained, so not shipped. The test is ignored with its measurement and the next step named: one
    `contact_raw(worker, node)` for both questions, then the gate.
 6. Acceptance: entities 154 -> **160**, repaths 297 -> **254**, hash **`009e5cfe81b182ae`**.
+
+
+## D182 - One gatherer a square, standing a body's radius off its edge
+
+*2026-11-08. Owner: "Can you make the villagers to stand at the distance of half of diameter of the circle from the square they are gathering any resource
+from? If there is no space at half diameter from another villager and the the resource try another nearest resource of the same kind."*
+
+1. **The distance is `0.5 + radius = 0.70` from the tile's centre**, i.e. half the ring's diameter from the square's **edge** - D169's number, now
+   measured as a gap to the edge and tested (`a_gatherer_stands_a_body_radius_from_the_square`).
+2. **One place a worker, the side it approaches from**: `standoff_point` offers the approach side only. D171's four sides fanned five villagers onto
+   one bush (measured: all five worked it), which is the crowding the owner photographed.
+3. **A taken square is answered elsewhere**: `start_gather` sends the second worker to the nearest source of the same kind that nobody is working
+   (`nearest_like_free`), or idles him when there is none - the same shape as the existing "one farmer a farm" rule.
+4. **The rule is applied to player orders only.** Applied to every internal re-task it planned a route per candidate per tick: the acceptance run went
+   from **16.3 s to over 180 s**. Split into `start_gather` (spreads) and `start_gather_internal` (does not).
+5. **Acceptance, with its costs**: entities 160 -> **137**, repaths 254 -> **618**, hash **`dc9cf9905f65b61c`**, wall time **10.9 s**. Fewer units and
+   more walking is the price of one worker per square; it is the owner's trade, recorded rather than argued.
+6. **Two tests rewritten with their reasons** (D171's fan-out assertions): `two_woodcutters_on_one_tree_do_not_share_its_side`,
+   `three_gatherers_on_one_bush_do_not_pile_up`.

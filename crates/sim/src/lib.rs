@@ -1231,6 +1231,16 @@ pub(crate) fn collect_modifiers<'a>(
     }
 }
 
+/// What `standoff_point` found: a place to stand, or **no room on the ring** (D182) - the owner's *"if there is no space at half diameter from
+/// another villager and the resource try another nearest resource of the same kind"*.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Standoff {
+    /// A point on the ring: the two bodies touch there and no other body holds it.
+    Point((Fixed, Fixed)),
+    /// Touching is possible, but every side is held by another body or cannot be walked to.
+    NoRoom,
+}
+
 impl World {
     pub fn new(settings: &Settings, seed: u64) -> Result<Self, SimError> {
         Ok(World {
@@ -3043,7 +3053,7 @@ impl World {
         node: EntityId,
         worker: EntityId,
         taken: &[(EntityId, (Fixed, Fixed))],
-    ) -> Option<(Fixed, Fixed)> {
+    ) -> Option<Standoff> {
         let scale = self.scale;
         // The worker's own radius, plus the **node's** - which is content's number for the node's kind, because a map node
         // carries no unit of its own to read a radius from.
@@ -3070,7 +3080,13 @@ impl World {
         // by how well they face the approach and the first **free** one wins; a side another worker already holds is passed over.
         let mut sides: [(i64, i64); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
         sides.sort_by_key(|(ax, ay)| std::cmp::Reverse(ax * dx + ay * dy));
-        sides.iter().find_map(|(ax, ay)| {
+        // **One worker per square, on the side it came from** (D182). The owner's rule is *"if there is no space at half diameter from another
+        // villager and the resource, try another nearest resource of the same kind"* - which presumes the ring has **one** place for a worker,
+        // the one facing its approach. Trying all four sides (D171) fanned five villagers round one bush instead: measured, all five worked the
+        // same square, which is the crowding the owner photographed. A second worker from another direction still gets its own side, because the
+        // side is chosen by where it comes from; a second worker from the *same* direction gets no room and is sent to the next square.
+        let sides = &sides[..1];
+        let found = sides.iter().find_map(|(ax, ay)| {
             let (px, py) = (target.0.raw() + ax * reach, target.1.raw() + ay * reach);
             let (Ok(x), Ok(y)) = (
                 u16::try_from(px.div_euclid(scale)),
@@ -3106,7 +3122,11 @@ impl World {
             // (13,19): the target is walled off"* exactly that way. A path from where the worker stands is the proof.
             let point = (Fixed::from_raw(px), Fixed::from_raw(py));
             self.can_reach(from, point).then_some(point)
-        })
+        });
+        // **No room is an answer, not a failure** (D182): the worker has somewhere it *could* touch the node and every one of those places is
+        // taken or unreachable, so the caller sends it to the nearest other node of the same kind instead of leaving it to work from wherever it
+        // happens to stand.
+        Some(found.map_or(Standoff::NoRoom, Standoff::Point))
     }
 
     /// **How much room a body has**, in raw units: the distance from `position` to the nearest **blocked tile**, minus `radius`.

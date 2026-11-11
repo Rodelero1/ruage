@@ -321,7 +321,8 @@ impl World {
                                 && self.tile_of_position(entity.position) == (x, y)
                         })
                         .map(|entity| entity.id);
-                    let gathering = node.is_some_and(|node| self.start_gather(id, node).is_ok());
+                    let gathering =
+                        node.is_some_and(|node| self.start_gather_internal(id, node).is_ok());
                     if !gathering {
                         // Nothing to work there, or this unit cannot work it (a spearman rallied onto a
                         // tree), or there is no way to reach it: go as close as the map allows.

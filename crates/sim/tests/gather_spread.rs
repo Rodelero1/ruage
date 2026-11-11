@@ -1,4 +1,9 @@
-//! **Two workers on one node stand on different sides of it** (D171).
+//! **A square holds one gatherer, and the second is answered elsewhere** (D182, restating D171).
+//!
+//! D171 fanned two workers round one node onto different sides. The owner replaced that rule: *"if there is no space at half diameter from another
+//! villager and the resource, try another nearest resource of the same kind"* - so a resource square now holds **one** gatherer and the second order
+//! is answered with the nearest free source of the same kind, or with standing idle when the map has nothing free. What this file keeps from D171 is
+//! the reason it existed: two villagers must never end up on the same ground.
 //!
 //! D169 put a gatherer where its body touches the node - 0.7 of a tile - but it picked the side the worker **came from**, so two villagers sent at the
 //! same tree settled on the *same point* and then pushed each other around for the rest of the match. The acceptance run showed it: 150 -> 137
@@ -10,7 +15,7 @@ use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, World};
+use ruage_sim::{Command, EntityId, EntityKind, Task, World};
 
 mod common;
 
@@ -86,9 +91,9 @@ fn apart(a: (Fixed, Fixed), b: (Fixed, Fixed), scale: i64) -> f64 {
     (dx * dx + dy * dy).sqrt()
 }
 
-/// **Both villager come from the west** - the side that exposes the bug. Without a spread both settle on the same point.
+/// **Both villagers come from the west, so the one side they can both reach is the west side** - and only one of them may have it.
 #[test]
-fn two_woodcutters_on_one_tree_take_different_sides() {
+fn two_woodcutters_on_one_tree_do_not_share_its_side() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
@@ -127,28 +132,28 @@ fn two_woodcutters_on_one_tree_take_different_sides() {
             })
             .expect("a gather order");
     }
-    for _ in 0..600 {
+    for _ in 0..400 {
         world.step().expect("a tick");
     }
 
-    let a = world.position(EntityId(9_610)).expect("the first villager");
-    let b = world
+    let first = world.position(EntityId(9_610)).expect("the first villager");
+    let second = world
         .position(EntityId(9_611))
         .expect("the second villager");
-    let tree = world.position(node).expect("the tree");
-    // Both are at the tree: each within the touching distance, so neither is still walking when this is measured.
-    for (label, at) in [("the first", a), ("the second", b)] {
-        let gap = apart(at, tree, scale);
-        assert!(
-            gap <= 0.75,
-            "{label} woodcutter is {gap:.2} tiles from the tree; both should be standing at its edge"
-        );
-    }
-    // ... and they are on **different sides**, because one spot per side is the whole point of the spread.
-    let split = apart(a, b, scale);
+    let split = apart(first, second, scale);
     assert!(
-        split >= 0.6,
-        "both woodcutters settled on the same spot: they are {split:.2} tiles apart, and one of them should have taken \\
-         another side of the tree"
+        split >= 0.36,
+        "the two villagers stand {split:.2} tiles apart - their 0.4-wide bodies overlap on screen"
+    );
+    // ... and only one of them has the square: the other was sent elsewhere, or is standing without work.
+    let working = world
+        .entities()
+        .iter()
+        .filter(|entity| [9_610u32, 9_611].contains(&entity.id.0))
+        .filter(|entity| matches!(entity.task, Task::Gather { node: at, .. } if at == node))
+        .count();
+    assert!(
+        working <= 1,
+        "{working} villagers are gathering the one tree - a resource square holds one gatherer"
     );
 }

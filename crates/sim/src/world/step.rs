@@ -253,7 +253,7 @@ impl World {
         // The next node of the same kind, for a worker whose own ran out. An ordinary gather order: the load in hand is
         // kept, and the walk is planned by the same code a player's click uses.
         for (worker, node) in retasks {
-            if let Err(error) = self.start_gather(worker, node) {
+            if let Err(error) = self.start_gather_internal(worker, node) {
                 self.refusal = Some((worker, error, self.tick));
             }
         }
@@ -475,7 +475,7 @@ impl World {
             }
             // The shares moved this worker while it was carrying: the bank has it now, so it takes up the new column.
             if let Some(next) = self.pending_gather.remove(&id) {
-                if let Err(error) = self.start_gather(id, next) {
+                if let Err(error) = self.start_gather_internal(id, next) {
                     self.refusal = Some((id, error, self.tick));
                 }
                 continue;
@@ -500,7 +500,7 @@ impl World {
                 // rule). This is where a lumberjack used to stop for the rest of the match after one tree.
                 let here = self.find(id).map(|entity| entity.position);
                 if let Some(next) = here.and_then(|here| self.nearest_like(here, node, id))
-                    && let Err(error) = self.start_gather(id, next)
+                    && let Err(error) = self.start_gather_internal(id, next)
                 {
                     self.refusal = Some((id, error, self.tick));
                 }
@@ -579,7 +579,7 @@ impl World {
                 match self.find(animal).map(|entity| entity.hp) {
                     // Dead: the body is waiting to be worked.
                     Some(hp) if hp <= 0 => {
-                        if let Err(error) = self.start_gather(villager, animal) {
+                        if let Err(error) = self.start_gather_internal(villager, animal) {
                             self.refusal = Some((villager, error, self.tick));
                         }
                         self.slaughter.remove(&villager);
@@ -1533,7 +1533,7 @@ impl World {
                             self.find(node).map(|n| n.kind),
                             Some(EntityKind::Resource(_))
                         )
-                        && let Some(stand) = self.standoff_point(
+                        && let Some(found) = self.standoff_point(
                             entity.position,
                             target,
                             node,
@@ -1541,7 +1541,17 @@ impl World {
                             &work.settles,
                         )
                     {
-                        work.settles.push((entity.id, stand));
+                        match found {
+                            crate::Standoff::Point(stand) => {
+                                work.settles.push((entity.id, stand));
+                            }
+                            // **No room on the ring** (D182): the worker keeps trying from where it stands rather than being re-tasked here.
+                            // Re-tasking from this arm fires **every tick** a worker cannot reach its side, and each attempt re-plans a route:
+                            // the acceptance run went from 35 s to over 400 s with that loop in place. The owner's rule is applied where it is
+                            // cheap and deterministic - when the order is given (`start_gather`), which is once per order rather than once per
+                            // tick - and the ring is only the fallback.
+                            crate::Standoff::NoRoom => {}
+                        }
                     }
 
                     // A herdable animal is walked to the drop site by the villager working it (D70). The

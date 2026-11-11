@@ -230,7 +230,7 @@ impl World {
                 let _ = need;
                 continue;
             }
-            if let Err(error) = self.start_gather(worker, node) {
+            if let Err(error) = self.start_gather_internal(worker, node) {
                 self.share_failed.insert(node, self.tick);
                 self.refusal = Some((worker, error, self.tick));
             } else {
