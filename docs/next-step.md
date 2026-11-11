@@ -47,12 +47,15 @@ history and in `docs/decisions.md` under D186 addendum 2's neighbour.
   more and save immediately - the same trick that made the tree readable. For the house, a site that is **half built with its
   builders already standing round it** is the one that answers whether construction rings at the same distance.
 
-**OPEN - the nine-man cap is contradicted by the owner's own game.** `owner-bush2.aoe2spgame` (2026-11-12) carries **eleven**
-orders to one bush - `(64.50, 78.50)` eleven times - and the owner's words with it: *"Bush has 11 villagers on it all foraging."*
-D186's cap is **nine**, taken from his earlier *"max 9 per each"* and from the 9 + 7 split over two trees in `owner-test2`. Eleven
-on one bush refutes it: either the cap is the geometry (eighteen at body spacing on the 1.156 ring), or it is a number above
-eleven, or the 9 + 7 split was the click's own distribution and not a cap at all. **The engine has nine; the game shows eleven.**
-It is one constant (`GATHER_RING_SLOTS`) and needs the owner's call, not a guess.
+**OPEN - our packing cannot yet hold the number the ground gives.** The cap is **nine**; the owner's own game forages **eleven** on
+one bush (`owner-bush2.aoe2spgame`, eleven orders at `(64.50, 78.50)`), and the ring geometry fits **eighteen** at two bodies
+(0.404) apart. Eighteen was tried and **pulled back the same hour**: with slots one body apart, the settle and the collision pass
+fight, and three men ended **0.243** tiles apart - bodies overlapping on screen - where nine slots (0.79 apart) resolve cleanly.
+
+The fix is **not the constant**: it is the settle. A place must be *reserved for a man* rather than re-decided every tick, so a man
+nudged onto his place is not pushed off it by the next tick's collision and does not fight for it with a neighbour. Then
+`GATHER_RING_SLOTS` can go to eighteen and the engine will place a crowd the way the game does. Pinned meanwhile by
+`the_ring_holds_nine_woodcutters_and_the_tenth_takes_nothing`, which says nine and says why.
 
 **The two later saves still do not give standing positions.** In `owner-bush2` the freshest orders (stamps 1024-1028) come from men
 at **1.21 to 2.57** tiles of the bush, and in `owner-house2` the four build orders (stamps 494-500) come from **2.06 to 3.73**

@@ -4644,3 +4644,29 @@ measurements above (`Task::Idle`).
 **D173's ignored test is un-ignored in the same change.** It asserted that a gatherer never moves further in a tick than its speed
 allows, and was parked while the settle *placed* a worker on its standoff. The settle walks now, the test passes, and an
 `#[ignore]` that no longer describes anything is a lie in the suite.
+
+### D186 addendum 4 - the capacity is the ground, but our packing cannot yet hold the ground's number
+
+**The nine is wrong, and the evidence is the owner's own game.** It came from his *"max 9 per each. 4 on corners and 4 on sides"*
+and from the **9 + 7** split over two adjacent trees. `owner-bush2.aoe2spgame` carries **eleven** orders to one bush and he watched
+*"11 villagers on it all foraging"*. Community sources repeat *"only 8 villagers can gather from the same sheep"* - a **carcass**,
+where the men stand on the body itself - and nothing documents a cap for trees, bushes or mines; the AoE2 wiki's villager page
+documents multiple *builders* (a diminishing formula) and no gathering limit at all.
+
+**So the capacity is the geometry**: eighteen places on the 1.156 ring at two bodies (0.404) apart,
+`2 * pi * 1.156 / 0.404 = 17.97`. That is also why it *feels* random to him - a crowd standing further apart fits fewer men on
+the same ring, so the limit is the ground under them rather than a number in a table.
+
+**Tried, and pulled back the same hour.** `GATHER_RING_SLOTS` went to eighteen with its slots at twenty-degree steps, and
+`three_gatherers_all_work_the_same_square_on_its_ring` failed: **two settlers 0.243 tiles apart** on one bush, where two bodies are
+0.40 wide. With slots one body apart, the settle and the collision pass fight - a man is nudged onto his place, the pass pushes him
+off another man, he is nudged back - and the ring ends up packed more tightly than the bodies allow. At nine slots (0.79 apart)
+there is room for that argument to resolve; at eighteen there is not.
+
+**So nine stands, and not because it is right.** It is the largest cap this engine can currently place without visible overlap, and
+that is a **defect in the packing, not a rule** - the game does eleven. The work to close it is in `docs/next-step.md`: a settle that
+does not fight collision (a reserved place per man, not a re-decision every tick), after which the constant can go to the eighteen
+the geometry gives.
+
+**What is not claimed**: that the game's number is eighteen. Eleven is observed; eighteen is what the ring fits; the game may cap
+somewhere between, and only a bigger crowd in his own save would say.
