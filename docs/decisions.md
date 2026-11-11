@@ -4624,3 +4624,23 @@ the reason D181 exists at all.
 
 Both previously `#[ignore]`d tests pass without a tolerance: `three_gatherers_on_one_bush_do_not_pile_up` and
 `three_gatherers_all_work_the_same_square_on_its_ring`.
+
+### D186 addendum 2 - the picker thought one man filled a square
+
+`claimed_by_other` answers the picker's question *"is this source taken?"* - and it answered **yes if anybody at all was gathering
+the node**, which is D182's one-worker-a-square living on in a second place after the ring replaced it in the first. Under a
+nine-man ring a node with two men has seven places free, and the picker was treating it as full.
+
+**Measured, twice.** A woodcutter whose patch ran dry, four tiles from a large patch holding **two men of nine**, ended with
+`Task::Idle`. And the eleventh man ordered onto a square already holding **nine** - the case the cap exists for - found nothing at
+all and stood still, where the right answer was the neighbouring square with one man of it.
+
+**The rule now:** `on_node >= GATHER_RING_SLOTS`, counting both `Gather` and `Return` - a man carrying a load home still holds his
+place, which is how `start_gather`'s own cap counts them.
+
+**Pinned by `crates/sim/tests/gather_room.rs`**, and mutation-checked: putting `>= 1` back turns both tests red with the exact
+measurements above (`Task::Idle`).
+
+**D173's ignored test is un-ignored in the same change.** It asserted that a gatherer never moves further in a tick than its speed
+allows, and was parked while the settle *placed* a worker on its standoff. The settle walks now, the test passes, and an
+`#[ignore]` that no longer describes anything is a lie in the suite.

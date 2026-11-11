@@ -302,10 +302,10 @@ fn apart(a: (Fixed, Fixed), b: (Fixed, Fixed), scale: i64) -> f64 {
 
 /// **No tick may move a gatherer further than its own speed.** A teleport is exactly that, and the owner sees it as a jump towards the bush.
 ///
-/// **OPEN (D173).** This is the reproducer, not a passing guard: the shipped engine still *places* an arrived worker on its standoff
+/// **D173 is closed**: the settle walks a worker to its standoff, one step at a time, so this is a passing guard. It was ignored
+/// while the settle still *placed* the worker
 /// (`settle_workers`, D169) instead of walking it there, and the placement is the jump. Two attempts to walk it are recorded in
 /// `docs/reviews/2026-11-08-the-jump-that-is-a-placement.md` with their measurements; neither shipped. Un-ignore this test when one does.
-#[ignore = "D173 open: the settle places the worker on its standoff instead of walking it there"]
 #[test]
 fn a_gatherer_never_moves_further_in_a_tick_than_its_speed() {
     let Some(mut world) = world_of(MAP) else {

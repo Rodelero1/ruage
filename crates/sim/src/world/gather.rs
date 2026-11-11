@@ -35,12 +35,25 @@ impl World {
     }
 
     /// Is some other living worker already gathering from this node?
+    /// **Is this source taken?** - nine men a square (D186), not one (D182).
+    ///
+    /// D182's *"one worker a square"* is written here a second time, as the picker's question, and it is what made a villager
+    /// whose patch ran dry **stand still beside a forest with places free**: every node with a single man on it looked full.
+    /// Measured - a woodcutter with a large patch two tiles away, holding two men of nine, ended with `Task::Idle`.
     fn claimed_by_other(&self, node: EntityId, worker: EntityId) -> bool {
-        self.entities.iter().any(|other| {
-            other.id != worker
-                && other.hp > 0
-                && matches!(other.task, Task::Gather { node: target, .. } if target == node)
-        })
+        let on_node = self
+            .entities
+            .iter()
+            .filter(|other| {
+                other.id != worker
+                    && other.hp > 0
+                    && matches!(
+                        other.task,
+                        Task::Gather { node: target, .. } | Task::Return { node: target, .. } if target == node
+                    )
+            })
+            .count();
+        on_node >= usize::from(crate::GATHER_RING_SLOTS)
     }
 
     fn nearest_like_in(

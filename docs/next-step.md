@@ -7,6 +7,10 @@ eighteen would have sent all sixteen to one tree). The ring is nine slots at for
 a neighbouring-tile fallback for a ring buried in a forest. Tests in `crates/sim/tests/gather_ring.rs`, decision **D186**, review
 `docs/reviews/2026-11-11-the-gather-ring.md`.
 
+**The picker's own cap: fixed** (D186 addendum 2). `claimed_by_other` still said *"any man on the node means taken"*, so a
+woodcutter whose patch ran dry stood idle four tiles from a patch with two men of nine on it, and the eleventh man ordered onto a
+full square stood still instead of joining the square next door. Both are measured in `crates/sim/tests/gather_room.rs`.
+
 **Two men overlapping: fixed** (D186 addendum). The place now belongs to its *nearest claimant* (ties by id), the walk ends on
 the ring rather than at the band's outer edge, and both tests that were `#[ignore]`d pass with no tolerance.
 
