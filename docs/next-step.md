@@ -30,6 +30,23 @@ share pass's own preconditions (anchor, reach and the retry window) are not unde
 fails for the right reason. That fixture is the next session's starting point; it is three paragraphs up in this file's own
 history and in `docs/decisions.md` under D186 addendum 2's neighbour.
 
+**The three saves read (2026-11-12).** `mine.aoe2spgame`, `bush.aoe2spgame`, `house.aoe2spgame`, kept at
+`/opt/data/cache/saves/owner-{mine,bush,house}.aoe2spgame`.
+
+- **The mine measures, and it agrees with the tree.** Four men round the gold at (66, 81): from the mine's tile centre they
+  stand at **1.020, 1.041, 1.061 and 1.190** tiles (mean **1.078**, spread 0.17), and the closest pair is **0.400** apart -
+  two villager bodies, the same signature as the tree's 0.404. A free circle fit puts them at **1.125** round a centre 0.11
+  from the tile centre (residual 0.004), which is what a ring does when its centre is not exactly the tile's. **1.156 is not
+  refuted**: the mine's own spread (0.17) is wider than the difference between the two means (0.08), and with four men a free
+  centre and a free radius are one measurement short of separable.
+- **The bush and the house do not measure.** Their orders were given while the men were still **walking**: the bush's
+  from-points sit 0.3-1.9 tiles from the bush (and its later destinations are sub-tile, at (64.60, 79.60) and (64.60, 80.00),
+  two bushes 0.4 apart), and the house's four build orders point at (76, 78) from **2.1, 2.4, 3.1 and 3.7** tiles away. A
+  from-point is where a man stood when the order was given, so these record the approach, not the post.
+- **To re-take them**: let the men reach the bush/site and *work for a few seconds*, then click the bush (or the house) once
+  more and save immediately - the same trick that made the tree readable. For the house, a site that is **half built with its
+  builders already standing round it** is the one that answers whether construction rings at the same distance.
+
 **Still owed, in order:**
 
 1. **The builder's ring is unmeasured.** The owner expects *"the same pattern"*; no save with a site under construction has been
