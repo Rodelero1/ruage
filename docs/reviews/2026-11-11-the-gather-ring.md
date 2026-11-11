@@ -3,7 +3,8 @@
 *A gatherer stood where the two bodies' discs touched: `radius[0]` 0.2 for a villager plus 0.5 for a forest tree, **0.70** of a
 tile from the node's centre (D169), one worker a square (D182). The owner's own save says otherwise: six woodcutters round one
 tree at **1.105, 1.142, 1.160, 1.170, 1.170, 1.189** tiles from the source square's centre — mean **1.156**, spread **0.084** —
-packed **0.404** apart, which is exactly two villager radii. D186 makes the engine stand where the game stands.*
+packed **0.404** apart, which is exactly two villager radii - and **nine** of them a square, the owner's *"max 9 per each"* and
+what his own 9 + 7 split over two trees shows. D186 makes the engine stand where the game stands.*
 
 ## What the evidence actually is, and what it is not
 
@@ -17,9 +18,13 @@ That is an inference chain, and it is worth stating where it is thin:
 - The six positions are read as **standing** positions because the owner says he clicked without moving them. The first save,
   taken while they were walking, gives *from* points two to four tiles out — which is what "walking" looks like in the same
   field, so the field does behave the way the reading needs.
-- The **radius is measured, the angle is not**. Six men spread over 0.084 of a tile in radius but their angles are not on any
-  lattice the file can prove, so the twenty-degree slots are a *choice*: eighteen is derived from the spacing
-  (`2 * pi * 1.156 / 0.404 = 17.97`), not read.
+- The **radius is measured, the angle is not**. Six men spread over 0.084 of a tile in radius, but their angles are not on any
+  lattice the file can prove, so the **forty-degree** slots are a choice: nine comes from the owner (*"max 9 per each. 4 on corners
+  and 4 on sides"*) and from his file's 9 + 7 split, not from the geometry.
+- **Eighteen was my misreading, corrected by the owner.** The ring's circumference at body spacing is 17.97, and I took that for the
+  game's capacity. *"How about not 18 but 9 around single tile ... 18 for one tile of resource of way too much."* The 9 + 7 split
+  refutes eighteen outright: a cap of eighteen would have sent all sixteen men to one tree. The capacity is nine, 0.79 of a tile
+  apart on the 1.156 ring.
 - **One node kind is measured.** Trees. The owner's mines and bushes are in the same save but their front rows were not separated
   out, so a bush smaller than a tree may well ring differently, and the engine now uses one radius for all of them.
 
@@ -110,13 +115,21 @@ which is what a ring should do - men spread round a node instead of shoving each
 - **One test window was widened and is called out**: the felling window went from 15 s to 16 s because the woodcutter now walks
   1.156 tiles out instead of 0.70. The chop *rate* is pinned separately by `the_chop_is_a_rate_per_second`.
 
-## The test that argues with it
+## The skirmish, which argued with it and was right
 
-`crates/sim/tests/skirmish.rs` is **red** on this branch: `both_sides_field_an_army` reports *"player 1 never fielded infantry:
-the skirmish is one-sided"* and `the_skirmish_only_refuses_what_the_fight_has_taken` reports *"player 1 has no unit militia"*.
-Player 1 is **not** starving - the probe run ends with 270 wood, 499 food, 50 gold, 200 stone - so this is either the script's
-timing (a round trip is 0.456 of a tile longer each way) or a forest node whose ring is unreachable but walkable, which would
-leave its villager idle. Until that is answered the change stays on a branch: `main` is green at `3aa598d`.
+`crates/sim/tests/skirmish.rs` went **red**: *"player 1 never fielded infantry"*, and behind it *"player 1 has no unit militia"*.
+Player 1 was not starving - 270 wood, 499 food, 50 gold, 200 stone at the end - so the probe went looking at its buildings and
+found the barracks **frozen at 871 of its build ticks**. Two causes, both real, both fixed:
+
+1. **A ring slot on a building site.** A foundation is walkable ground (D183), so a gatherer could be sent to stand on one, and a
+   gatherer standing there and working is exactly the unit the empty-site gate waits for. Ring slots on an unfinished footprint
+   are refused now.
+2. **The script's timing, measured.** With the ring, that barracks finishes at **~395 s** where it used to finish before 380;
+   `config/skirmish.toml` pulled its only builder off the site at 380 s, and nothing resumes a foundation whose builder has gone.
+   The step is **460 s**, with both numbers written beside it. This is the *cost* of the ring, not a bug: every round trip is
+   0.456 of a tile longer each way.
+
+`main` was left green at `848e5c8` while this was being found; the branch goes in once the workspace gate is green.
 
 ## What is not built, said plainly
 

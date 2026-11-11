@@ -102,8 +102,12 @@ resource = "food"
 
 # The third villager joins the forager after the barracks is paid for: one villager banks about
 # 0.25 food per second and the spearman needs 60.
+# **460 s, not 380** (D186): the gather ring stands a villager 1.156 tiles from a node instead of 0.70, which lengthens every
+# round trip, and this barracks now finishes at **~395 s** where it used to finish before 380. The old step pulled its only builder
+# away at 380 s, the site froze at **871 of its build ticks** with nobody to resume it, and no militia ever appeared - measured on
+# the D186 branch. The builder is released once the site is finished, and 460 s is that plus a margin.
 [[step]]
-at_seconds = 380.0
+at_seconds = 460.0
 player = 1
 kind = "gather"
 villager = 0

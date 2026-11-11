@@ -293,10 +293,10 @@ impl World {
                 }
             }
         }
-        // **The ring holds eighteen men** (D186). The rule used to be *one worker a square* (D182), which on a single tree
-        // meant **one** lumberjack and eighteen idle villagers - measured, 1 of 19. The ring's eighteen slots are the cap now,
-        // and a nineteenth man is answered the way a second one used to be: the nearest free source of the same kind, or
-        // standing still when the map has none.
+        // **The ring holds nine men** (D186, the owner's *"max 9 per each"*). The rule used to be *one worker a square*
+        // (D182), which on a single tree meant **one** lumberjack and eighteen idle villagers - measured, 1 of 19. Nine slots
+        // are the cap now, and a tenth man is answered the way a second one used to be: the nearest free source of the same
+        // kind, or standing still when the map has none.
         let on_node = self
             .entities
             .iter()
@@ -306,7 +306,9 @@ impl World {
             })
             .count();
         if spread
-            && self.find(node).is_some_and(|entity| matches!(entity.kind, EntityKind::Resource(_)))
+            && self
+                .find(node)
+                .is_some_and(|entity| matches!(entity.kind, EntityKind::Resource(_)))
             && on_node >= usize::from(crate::GATHER_RING_SLOTS)
         {
             let here = self

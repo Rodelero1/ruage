@@ -200,7 +200,8 @@ fn three_gatherers_all_work_the_same_square_on_its_ring() {
     for _ in 0..780 {
         world.step().expect("a tick");
     }
-    let mut earlier: std::collections::BTreeMap<u32, (Fixed, Fixed)> = std::collections::BTreeMap::new();
+    let mut earlier: std::collections::BTreeMap<u32, (Fixed, Fixed)> =
+        std::collections::BTreeMap::new();
     for id in &ids {
         if let Some(at) = world.position(*id) {
             earlier.insert(id.0, at);
@@ -245,9 +246,9 @@ fn three_gatherers_all_work_the_same_square_on_its_ring() {
         let now = world.position(*id).expect("a position");
         let before = earlier.get(&id.0).copied().expect("an earlier position");
         let standing = now.0.raw() == before.0.raw() && now.1.raw() == before.1.raw();
-        let working = world
-            .entity(*id)
-            .is_some_and(|entity| matches!(entity.task, Task::Gather { node: n, .. } if n == first));
+        let working = world.entity(*id).is_some_and(
+            |entity| matches!(entity.task, Task::Gather { node: n, .. } if n == first),
+        );
         if standing && working && (1.05..=1.30).contains(&gap(&world, now, at_bush)) {
             still.push(now);
         }

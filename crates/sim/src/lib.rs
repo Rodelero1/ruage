@@ -1254,26 +1254,27 @@ pub(crate) enum Standoff {
 /// game's front row - the difference the owner could see between his screenshot and our render.
 pub(crate) const GATHER_RING_MILLI: i64 = 1156;
 
-/// **How many men fit on the ring**: `2 * pi * 1.156 / 0.40 = 17.97`, and the spacing that gives - **0.404** - is exactly
-/// the closest pair in the save, which is two villager bodies (2 x 0.2) touching.
-pub const GATHER_RING_SLOTS: u8 = 18;
+/// **Nine men a source square** - the owner's own number, *"max 9 per each. 4 on corners and 4 on sides"*, and the one his
+/// save shows: sixteen orders over two adjacent trees came out as **nine and seven**. The first reading of this file took the
+/// eighteen slots the ring's circumference allows (`2 * pi * 1.156 / 0.40 = 17.97`) for the game's capacity, which the 9 + 7
+/// split refutes - if eighteen had been allowed, all sixteen would have gone to one tree. Nine at forty-degree steps sit
+/// **0.79** of a tile apart on the ring, which is the room the owner's photograph shows them using.
+pub const GATHER_RING_SLOTS: u8 = 9;
 
 /// **The band a man must stand in to be working**, in thousandths of a tile: the ring plus a tenth either side. It is why
 /// only the front row works - a man on the neighbouring tile's centre is at 1.000, outside the band, and the second row in
 /// the save sits at 1.357 and beyond.
 pub(crate) const GATHER_BAND_MILLI: (i64, i64) = (1056, 1256);
 
-/// The **cosine and sine of the ring's eighteen slots**, in millionths, at 20-degree steps (D186).
+/// The **cosine and sine of the ring's nine slots**, in millionths, at 40-degree steps (D186).
 ///
 /// Integer tables rather than `f64`: the simulation is deterministic and hashed, and a platform's `sin` is not the same
 /// number twice. `(ring * cos) / 1_000_000` is a slot's offset along x.
-const RING_COS: [i64; 18] = [
-    1_000_000, 939_693, 766_044, 500_000, 173_648, -173_648, -500_000, -766_044, -939_693, -1_000_000, -939_693,
-    -766_044, -500_000, -173_648, 173_648, 500_000, 766_044, 939_693,
+const RING_COS: [i64; 9] = [
+    1_000_000, 766_044, 173_648, -500_000, -939_693, -939_693, -500_000, 173_648, 766_044,
 ];
-const RING_SIN: [i64; 18] = [
-    0, 342_020, 642_788, 866_025, 984_808, 984_808, 866_025, 642_788, 342_020, 0, -342_020, -642_788, -866_025,
-    -984_808, -984_808, -866_025, -642_788, -342_020,
+const RING_SIN: [i64; 9] = [
+    0, 642_788, 984_808, 866_025, 342_020, -342_020, -866_025, -984_808, -642_788,
 ];
 
 impl World {
@@ -3079,10 +3080,10 @@ impl World {
         self.node_radii.get(slot).copied().unwrap_or(0)
     }
 
-    /// **Is there any ring at all?** True when at least one of the eighteen slots round a source square is walkable, free
+    /// **Is there any ring at all?** True when at least one of the nine slots round a source square is walkable, free
     /// ground (D186). It decides *where* a man works: on the ring when there is one, but from the tile beside the source when
     /// the ring is buried - a tree deep in a forest has its whole ring on blocked tiles, and the men who cut it stand on the
-    /// open edge beside it, which is the one case the ring cannot describe. Eighteen walkability lookups, no path search.
+    /// open edge beside it, which is the one case the ring cannot describe. Nine walkability lookups, no path search.
     pub(crate) fn ring_open(&self, centre: (Fixed, Fixed)) -> bool {
         let ring = self.scale * GATHER_RING_MILLI / 1000;
         (0..GATHER_RING_SLOTS as usize).any(|k| {
@@ -3132,9 +3133,9 @@ impl World {
         if dx == 0 && dy == 0 {
             return None;
         }
-        // **Eighteen slots on a ring of 1.156 tiles** (D186), not one side at the two bodies' standoff (D169/D182). The men
+        // **Nine places on a ring of 1.156 tiles** (D186), not one side at the two bodies' standoff (D169/D182). The men
         // the owner's save shows stand *outside* the neighbouring tile's centre - 1.156 of a tile from the source square's
-        // centre - packed two body-widths apart, and eighteen of them fit: `2 * pi * 1.156 / 0.40 = 17.97`.
+        // centre - and no more than nine work one square: his *"max 9 per each"*, and the 9 + 7 split his file names.
         let ring = self.scale * GATHER_RING_MILLI / 1000;
         // **Held means "too close", not "exactly on it"** (D181, kept). The test is the width of two bodies - the 0.404 of
         // the save's closest pair - and it counts the slots chosen earlier in this same decision pass, which is the only way
@@ -3165,6 +3166,24 @@ impl World {
                 return None;
             };
             if !self.tile_walkable(x, y) || !self.is_free_ground(x, y) {
+                return None;
+            }
+            // **Not on somebody's building site** (D186, found by the skirmish). A foundation is walkable ground (D183), so a
+            // slot can land on one - and a gatherer who stands there and works is exactly the unit the empty-site gate waits
+            // for, so the site stalls for ever: measured, a barracks frozen at 871 of its build with the man beside a bush.
+            // A site is not a place to stand until it is finished.
+            let on_site = self.entities.iter().any(|other| {
+                other.construction.is_some()
+                    && self
+                        .footprint_rect(other.id)
+                        .is_some_and(|(ax, ay, wide, tall)| {
+                            x >= ax
+                                && x < ax.saturating_add(wide)
+                                && y >= ay
+                                && y < ay.saturating_add(tall)
+                        })
+            });
+            if on_site {
                 return None;
             }
             let near = |point: (Fixed, Fixed)| -> bool {

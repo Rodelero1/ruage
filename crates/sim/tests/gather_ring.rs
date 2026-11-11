@@ -4,8 +4,9 @@
 //! `0x32ceb4` whose *from* points are standing positions. Six woodcutters round one tree sit at **1.105, 1.142, 1.160,
 //! 1.170, 1.170, 1.189** tiles from the source square's centre - mean **1.156**, spread **0.084** - and the three closest
 //! pairs are **0.404, 0.455, 0.710** apart, the first of which is exactly two villager radii (2 x 0.2): body touching body.
-//! `2 * pi * 1.156 / 0.404 = 17.97`, so eighteen men fit on one ring at body spacing, which is the owner's count of his
-//! group and his *"max 9 per each"* over the two adjacent source squares the file names.
+//! **Nine men a square** is the owner's number - *"max 9 per each. 4 on corners and 4 on sides"* - and the file agrees: the
+//! sixteen orders over his two adjacent trees came out as **nine and seven**. Eighteen was this reviewer's misreading of the
+//! ring's circumference (`2 * pi * 1.156 / 0.404 = 17.97`) as the game's capacity, which the 9 + 7 split refutes.
 //!
 //! The engine's standoff was `radius[0] + node radius` - 0.2 + 0.5 = **0.70** (D169) - one man per side of the square
 //! (D182). That is nearly half a tile inside where the game puts its front row, which is why the owner's photograph and
@@ -206,17 +207,17 @@ fn two_woodcutters_on_one_tree_stand_a_body_apart_on_the_ring() {
     );
 }
 
-/// **The ring holds eighteen men**, and the nineteenth is left standing - which is the owner's *"only the first row ever
-/// works"* and his *"max 9 per each"* over the two squares his save names.
+/// **The ring holds nine men**, and the tenth is left standing - the owner's *"max 9 per each"*, and the 9 + 7 split his
+/// save names over two adjacent trees.
 #[test]
-fn the_ring_holds_eighteen_woodcutters_and_the_nineteenth_takes_nothing() {
+fn the_ring_holds_nine_woodcutters_and_the_tenth_takes_nothing() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
     let scale = world.scale();
     let node = the_tree(&world);
     let tree = world.position(node).expect("the tree's position");
-    let ids = woodcutters(&mut world, 19);
+    let ids = woodcutters(&mut world, 10);
     let mut ever_carried = vec![false; ids.len()];
     for _ in 0..2_000 {
         world.step().expect("a tick");
@@ -234,20 +235,16 @@ fn the_ring_holds_eighteen_woodcutters_and_the_nineteenth_takes_nothing() {
         .iter()
         .enumerate()
         .filter(|(index, _)| !ever_carried[*index])
-        .filter_map(|(index, id)| {
-            world
-                .position(*id)
-                .map(|at| (index, at.0, at.1))
-        })
+        .filter_map(|(index, id)| world.position(*id).map(|at| (index, at.0, at.1)))
         .collect();
     assert_eq!(
-        working, 18,
-        "MEASURED {working} of 19 woodcutters took wood from one tree; the ring is 1.156 tiles round with 0.404 between \
-         men, which is eighteen, and the save's own group is 9 + 7 over two squares"
+        working, 9,
+        "MEASURED {working} of 10 woodcutters took wood from one tree; the owner's cap is nine a square, and his save's own \
+         group is 9 + 7 over two squares"
     );
     assert!(
         !standing.is_empty(),
-        "19 woodcutters and a ring of 18: at least one must be left out, but all 19 carried"
+        "10 woodcutters and a ring of 9: at least one must be left out, but all 10 carried"
     );
     for (index, _, _) in &standing {
         let at = world.position(ids[*index]).expect("a position");

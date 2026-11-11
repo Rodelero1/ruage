@@ -191,9 +191,9 @@ fn three_gatherers_on_one_bush_do_not_pile_up() {
     let spots: Vec<(Fixed, Fixed)> = ids
         .iter()
         .filter(|id| {
-            world.entity(EntityId(**id)).is_some_and(|entity| {
-                matches!(entity.task, Task::Gather { node: n, .. } if n == node)
-            })
+            world.entity(EntityId(**id)).is_some_and(
+                |entity| matches!(entity.task, Task::Gather { node: n, .. } if n == node),
+            )
         })
         .filter_map(|id| world.position(EntityId(*id)))
         .filter(|spot| {

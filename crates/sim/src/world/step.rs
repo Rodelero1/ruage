@@ -1601,8 +1601,10 @@ impl World {
                     );
                     let squared = gap_x * gap_x + gap_y * gap_y;
                     let reach = self.reach_raw(entity.unit, node_unit);
-                    let is_resource =
-                        matches!(self.find(node).map(|n| n.kind), Some(EntityKind::Resource(_)));
+                    let is_resource = matches!(
+                        self.find(node).map(|n| n.kind),
+                        Some(EntityKind::Resource(_))
+                    );
                     // **The band, not the touch** (D186). A working man stands on a ring **1.156** tiles out - measured from
                     // the owner's save, six woodcutters within 0.084 of that radius - so for a resource "at the node" is that
                     // distance band and nothing else. A man on the neighbouring tile's centre is at 1.000, outside it: that is
@@ -1619,8 +1621,9 @@ impl World {
                     let low = (self.scale * crate::GATHER_BAND_MILLI.0 / 1000).max(
                         // A node wider than half a tile pushes the band out: the two bodies still cannot overlap, so the
                         // inner edge is never inside the sum of the radii (a forest tree's 0.5 + a villager's 0.2 = 0.7).
-                        self.find(node)
-                            .map_or(0, |n| self.node_radius_raw(n) + self.body_radius(entity.unit)),
+                        self.find(node).map_or(0, |n| {
+                            self.node_radius_raw(n) + self.body_radius(entity.unit)
+                        }),
                     );
                     let high = self.scale * crate::GATHER_BAND_MILLI.1 / 1000;
                     let on_ring = ring_squared >= low * low && ring_squared <= high * high;
@@ -1630,9 +1633,8 @@ impl World {
                     let ring_open = self.ring_open(centre);
                     // Arrived the old way - on the node's ground, inside the bodies' reach, or beside a node it cannot stand
                     // on - which for a resource is no longer enough to work from.
-                    let beside_adjacent = beside
-                        && here.0.abs_diff(there.0) <= 1
-                        && here.1.abs_diff(there.1) <= 1;
+                    let beside_adjacent =
+                        beside && here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
                     let arrived = here == there || squared <= reach * reach || beside_adjacent;
                     let at_node = if is_resource {
                         on_ring || (beside_adjacent && !ring_open)
@@ -1661,7 +1663,8 @@ impl World {
                     // man may work; the ring says where he stands.
                     let ring_raw = self.scale * crate::GATHER_RING_MILLI / 1000;
                     let short_of_ring = ring_raw - self.scale / 50;
-                    let settling = ring_open && near_node && ring_squared < short_of_ring * short_of_ring;
+                    let settling =
+                        ring_open && near_node && ring_squared < short_of_ring * short_of_ring;
                     // **The walk to the ring and the walk to the node must not both be taken.** The `else` branch below steps
                     // toward the node's own tile; the settle steps *away* from it, so a worker with both ran on the spot -
                     // measured, a woodcutter frozen at 0.984 tiles with the tree's 20 hit points untouched for 15 s.
