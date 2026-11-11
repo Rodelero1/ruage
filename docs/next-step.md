@@ -1,3 +1,13 @@
+# OPEN - the gather ring: measured, built, on a branch
+
+The owner's save gave the number the engine was guessing at: a working man stands **1.156 tiles** from a source square's centre
+(six woodcutters at 1.105-1.189, spread 0.084), packed **0.404** apart - two villager bodies - so **eighteen** fit one ring.
+D186 is written and the ring is built on branch **`d186-gather-ring`** (commit `0dbf462`, review in
+`docs/reviews/2026-11-11-the-gather-ring.md`), and **it is not on `main`**: `crates/sim/tests/skirmish.rs` is red there -
+*"player 1 never fielded infantry"*, with 270 wood and 499 food in his bank, so the cause is script timing or a forest node whose
+ring is unreachable. `main` is green at this commit. The branch also carries two `#[ignore]`d tests, both real defects: two men
+converging on one slot (0.001 tiles apart) and a buried-ring fixture packing three men 0.20 apart.
+
 # DONE - D183, built (D185): a foundation is walkable until somebody works on it
 
 Session 51. `crates/sim/tests/foundation_model.rs`, 11 tests, each watched failing first (three of them - the first
