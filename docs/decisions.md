@@ -4447,3 +4447,18 @@ building, it will turn dark grey (except farm) and start blocking the tiles"**. 
 6. **Cancel**: everything disappears as if it had never been placed, at any stage of construction, refunded in full.
 7. **Farm is the exception**: constructed by walking **over** it, always walkable (D163), never blocks, multiple villagers may seed it and only one
    stays to farm it (the existing one-farmer-a-farm rule). Its site-clear gate therefore does not apply.
+
+### D183 addendum - where a foundation may go, and what happens when the ground has changed
+
+*Same conversation, one message later: **"building can be placed only on the scouted area (can be in fog but never in black). It may happen that in
+meanwhile buildings are built there. Once villager sees that by his los, building construction is cancelled and refunded. You also cannot place any
+building over tile with neutral/enemy in"**.*
+
+- **Placement is allowed on explored ground, including fog, and refused on black.** The engine already keeps a per-player `explored` bitset
+  (`World::explored`, `memory.rs`), so this is a gate on the order, not new state.
+- **A blind placement that turns out to be occupied cancels itself when your sight reaches it, and refunds in full** - which is already the engine's
+  behaviour: `settle_blind_sites` (D61) cancels a foundation placed in fog once the player can see that something is already standing there, with the
+  resources back (D58a). Only something **started or finished** does that; two bare foundations are decided by whoever puts a builder to work first.
+  So the owner's rule and the engine agree, and the reporting must be one message, not one per tick.
+- **No foundation may be placed on a tile holding a neutral or enemy unit.** Own and allied units do not block placement - they are the ones evicted by
+  route (D183 §1). An enemy who **walks onto** a site afterwards still stalls it, because he has no reason to leave: that stays as accepted.
