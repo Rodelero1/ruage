@@ -202,6 +202,11 @@ pub enum SimError {
         have: u32,
     },
     /// Something already stands on the chosen tile.
+    /// **Not somebody's unfinished site** (D186 addendum 3): a join order naming a building that is finished, or is another
+    /// player's, or is not a building at all.
+    NotAFoundation {
+        site: EntityId,
+    },
     SiteOccupied {
         tile: (u16, u16),
     },
@@ -424,6 +429,9 @@ impl std::fmt::Display for SimError {
                 f,
                 "not enough {resource}: {need} needed, {have} in the bank"
             ),
+            SimError::NotAFoundation { site } => {
+                write!(f, "{site:?} is not an unfinished site of yours to join")
+            }
             SimError::SiteOccupied { tile } => {
                 write!(f, "something already stands at {:?}", tile)
             }

@@ -614,6 +614,13 @@ pub enum Command {
         unit: u32,
         at: (u16, u16),
     },
+    /// **Walk a villager onto a foundation that already stands** (D186 addendum 3): the gesture the original makes when a
+    /// crowd is clicked onto a half-built site, kept as its own command because `Build` also means *place*, and a placement
+    /// over an existing site must stay refused.
+    JoinBuild {
+        villager: EntityId,
+        site: EntityId,
+    },
     /// Research a tech at a building. Price, duration, where it may happen and what it applies all
     /// come from the tech and effect tables - a replay carries the id, never the numbers.
     Research {
@@ -2380,6 +2387,64 @@ impl World {
         Ok(())
     }
 
+    /// The checks a **join** order has to survive: the villager is a unit, and the site is that player's own unfinished
+    /// foundation. Nothing is paid - the man who placed it paid.
+    pub(crate) fn check_join(&self, villager: EntityId, site: EntityId) -> Result<(), SimError> {
+        let worker = self
+            .find(villager)
+            .ok_or(SimError::MissingEntity(villager))?;
+        if worker.kind != EntityKind::Unit {
+            return Err(SimError::NotAUnit { id: villager });
+        }
+        let building = self.find(site).ok_or(SimError::MissingEntity(site))?;
+        let own = building.player == worker.player;
+        let building_kind = matches!(building.kind, EntityKind::Building);
+        if !own || !building_kind || building.construction.is_none() {
+            return Err(SimError::NotAFoundation { site });
+        }
+        Ok(())
+    }
+
+    /// **Take a join order**: validated, then the walk and the task.
+    pub(crate) fn start_join(
+        &mut self,
+        villager: EntityId,
+        site: EntityId,
+    ) -> Result<(), SimError> {
+        self.check_join(villager, site)?;
+        self.join_foundation(villager, site)
+    }
+
+    /// **Walk a villager out to a foundation that already stands and put him on it** (D186 addendum 3): the same route the
+    /// first builder took - outside the whole footprint, never onto it - and the same task, so the site's own gate and the
+    /// builder's adjacency apply to him exactly as they apply to the man who placed it.
+    fn join_foundation(&mut self, villager: EntityId, site: EntityId) -> Result<(), SimError> {
+        let from = self
+            .find(villager)
+            .map(|entity| entity.position)
+            .ok_or(SimError::MissingEntity(villager))?;
+        let position = self
+            .find(site)
+            .map(|entity| entity.position)
+            .ok_or(SimError::MissingEntity(site))?;
+        let footprint = self.footprint_area_of(site);
+        let route = match self.approach_footprint(from, &footprint) {
+            Some(stand) => self.plan_path_for(villager, from, stand)?,
+            None => self.plan_path_for(villager, from, position)?,
+        };
+        self.paths.insert(
+            villager,
+            Route {
+                points: route,
+                ..Route::default()
+            },
+        );
+        if let Some(worker) = self.find_mut(villager) {
+            worker.task = Task::Build { site };
+        }
+        Ok(())
+    }
+
     /// A unit's pierce damage per second, with its owner's upgrades applied: the pierce (class 3)
     /// attack over the reload, both from the data.
     ///
@@ -3434,6 +3499,7 @@ impl World {
         match command {
             Command::Gather { villager, .. }
             | Command::Build { villager, .. }
+            | Command::JoinBuild { villager, .. }
             | Command::BuildLine { villager, .. } => *villager,
             Command::Stop { unit }
             | Command::WalkTo { unit, .. }

@@ -54,6 +54,9 @@ impl World {
             Command::Build { villager, unit, at } => {
                 self.check_build(*villager, *unit, *at)?;
             }
+            Command::JoinBuild { villager, site } => {
+                self.check_join(*villager, *site)?;
+            }
             // A line is judged by its **first** tile only, and the rest are skipped as they are tried (the owner's answer B:
             // an ineligible segment is not fatal). `start_build` already refuses a tile that cannot be built on, so the whole
             // drag fails only when its first tile does.
@@ -264,6 +267,7 @@ impl World {
             }
             Command::Gather { villager, node } => self.start_gather(villager, node),
             Command::Build { villager, unit, at } => self.start_build(villager, unit, at),
+            Command::JoinBuild { villager, site } => self.start_join(villager, site),
             Command::BuildLine {
                 villager,
                 unit,
