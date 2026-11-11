@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ruage_fixed::Fixed;
 
-use crate::{Entity, EntityId, EntityKind, Route, SimError, Task, TileVision, World};
+use crate::{Entity, EntityId, EntityKind, Route, SimError, Task, Walk, World};
 impl World {
     /// The tile a world position sits on.
     /// What stops a site of `unit` at `at` being raised for `player`, if anything.
@@ -28,9 +28,10 @@ impl World {
             if entity.kind != EntityKind::Building || self.is_expired_farm(entity.id) {
                 continue;
             }
-            let seen = entity.player == player
-                || entity.player == 0
-                || self.vision(player, self.tile_of(entity.position)) == TileVision::Visible;
+            // **Seen** is `visible_to`, not the fog alone: an enemy foundation nobody has worked on is invisible even in
+            // plain sight (D183 §2), so it does not hold its ground and the other side may place over it. Two bare
+            // foundations on one tile are then decided by whoever puts a builder to work first (D58, `cancel_overbuilt`).
+            let seen = entity.player == 0 || self.visible_to(player, entity.id);
             if seen {
                 for tile in self.footprint_area(entity) {
                     held.entry(tile).or_insert(entity.id);
@@ -39,9 +40,18 @@ impl World {
                 hidden.extend(self.footprint_area(entity));
             }
         }
-        for tile in self.build_site_tiles(unit, at) {
+        let site = self.build_site_tiles(unit, at);
+        for tile in &site {
+            let tile = *tile;
             if !walk.contains(tile.0, tile.1) {
                 return Some(SimError::SiteBlocked { tile });
+            }
+            // **A foundation may go in the fog, never in the black** (D183 addendum, the owner's rule: *"building can be
+            // placed only on the scouted area (can be in fog but never in black)"*). The bitset has existed since the fog
+            // landed, so this is a question on the order rather than new state - and it is asked before the ground checks
+            // because "you have never been there" outranks "something is in the way there".
+            if !self.explored_bit(player, tile) {
+                return Some(SimError::SiteUnscouted { tile });
             }
             if held.contains_key(&tile) {
                 return Some(SimError::SiteOccupied { tile });
@@ -51,6 +61,23 @@ impl World {
             // they are the one kind of blocked ground a blind site may cover.
             if walk.blocked(tile.0, tile.1) && !hidden.contains(&tile) {
                 return Some(SimError::SiteBlocked { tile });
+            }
+        }
+        // **Nobody else's unit may be built over** (D183 addendum: *"you also cannot place any building over tile with
+        // neutral/enemy in"*). Our own and allied units are the ones the site tells to step aside, so they do not refuse
+        // it. A unit this player cannot see does not refuse either: a refusal would tell the player something they cannot
+        // know, so that placement is allowed and the site-clear gate keeps construction from starting until he moves.
+        for entity in &self.entities {
+            if entity.kind != EntityKind::Unit
+                || entity.hp <= 0
+                || entity.player == 0
+                || self.same_side(entity.player, player)
+            {
+                continue;
+            }
+            let tile = self.tile_of(entity.position);
+            if site.contains(&tile) && self.visible_to(player, entity.id) {
+                return Some(SimError::SiteOccupied { tile });
             }
         }
         None
@@ -100,9 +127,9 @@ impl World {
             {
                 return false;
             }
-            let seen = entity.player == player
-                || entity.player == 0
-                || self.vision(player, self.tile_of(entity.position)) == TileVision::Visible;
+            // A foundation nobody has started is invisible (D183 §2), so it cannot be part of a wall either - the
+            // placement search would otherwise refuse a plot for a lane that is not there yet.
+            let seen = entity.player == 0 || self.visible_to(player, entity.id);
             seen && self
                 .footprint_area(entity)
                 .iter()
@@ -116,6 +143,194 @@ impl World {
     #[must_use]
     pub fn site_fits(&self, player: u8, unit: u32, at: (u16, u16)) -> bool {
         self.site_refusal(player, unit, at).is_none()
+    }
+
+    /// Every tile a building's **footprint** covers, by id: the ground it is drawn on and the ground its site-clear gate
+    /// asks about (D183 §4).
+    pub(crate) fn footprint_area_of(&self, id: EntityId) -> Vec<(u16, u16)> {
+        self.find(id)
+            .map(|entity| self.footprint_area(entity))
+            .unwrap_or_default()
+    }
+
+    /// **A unit standing on a site steps aside** (D183 §1): it is given a walk to the nearest free tile outside the
+    /// footprint, and what it was doing is remembered so it can go back to it when it arrives.
+    ///
+    /// This replaces the teleport `push_units_off` performed. Two things make it a walk rather than a placement: the route
+    /// is planned, so distance is covered at the unit's own speed, and the ground is checked the way a walk checks it - the
+    /// accident behind D184 (a body thrown into an unreachable spot) cannot happen, because a route to a place that cannot
+    /// be reached is not a route.
+    pub(crate) fn step_aside(&mut self, id: EntityId, tiles: &[(u16, u16)]) {
+        // **Already stepping aside.** The task is the walk and the interrupted order is in `resuming`; re-planning it every
+        // tick would be a path search a tick, which is the shape that took an acceptance run from 16 s to 180 s.
+        if self.resuming.contains_key(&id) {
+            return;
+        }
+        let Some(entity) = self.find(id) else { return };
+        let (from, task) = (entity.position, entity.task);
+        let here = self.tile_of(from);
+        let resumable = match task {
+            // The two orders a step-aside can honestly put back; `resume_idle` reads this.
+            task @ (Task::Gather { .. } | Task::Hunt { .. }) => task,
+            _ => Task::Idle,
+        };
+        let Some(to) = self.exit_tile(tiles, here, from) else {
+            // **Nowhere to go**: the site stalls, which D183 §4 accepts. The attempt is remembered anyway, so the search
+            // is not repeated every tick - a unit that cannot leave would otherwise cost a ring of path searches a tick
+            // (the shape D135 exists for). It is `Idle` for everything but a gather or a hunt, so arriving anywhere later
+            // simply stands it down.
+            self.resuming.insert(id, resumable);
+            return;
+        };
+        let goal = self.tile_centre(to);
+        let Ok(route) = self.plan_path(from, goal, 0) else {
+            self.resuming.insert(id, resumable);
+            return;
+        };
+        // The marker is also how this unit is known to be **already stepping aside**: `step_aside` returns early when it
+        // is there, so a step-aside is one order and one route rather than a path search a tick.
+        self.resuming.insert(id, resumable);
+        self.paths.insert(
+            id,
+            Route {
+                points: route,
+                ..Route::default()
+            },
+        );
+        if let Some(entity) = self.find_mut(id) {
+            entity.task = Task::Move { to: goal };
+        }
+    }
+
+    /// **The nearest tile outside `tiles` this unit can actually walk to**, in ring order, with the tile as the tie-break.
+    /// Nearest free is not enough: a free tile behind a wall is no place to send a body - that is D184's lesson, and the
+    /// route is what makes this function more than a placement.
+    fn exit_tile(
+        &self,
+        tiles: &[(u16, u16)],
+        from: (u16, u16),
+        position: (Fixed, Fixed),
+    ) -> Option<(u16, u16)> {
+        let (wide, tall) = self.walk.as_ref().map_or((0, 0), Walk::size);
+        for radius in 1..=wide.max(tall).max(1) {
+            for at @ (x, y) in Self::ring(from, radius) {
+                if tiles.contains(&at) || !self.is_free_ground(x, y) {
+                    continue;
+                }
+                if self.plan_path(position, self.tile_centre(at), 0).is_ok() {
+                    return Some(at);
+                }
+            }
+        }
+        None
+    }
+
+    /// **Tell our own and allied units standing on a new site to leave it** (D183 §1). The enemy is never told: he has no
+    /// reason to go, and that is accepted. A farm is exempt, because it is a floor and traps nobody (D183 §7).
+    pub(crate) fn evict_units_off(&mut self, site: EntityId, except: EntityId) {
+        let Some((player, farm)) = self
+            .find(site)
+            .map(|entity| (entity.player, self.is_farm_role(entity)))
+        else {
+            return;
+        };
+        if farm {
+            return;
+        }
+        let tiles = self.footprint_area_of(site);
+        let movers: Vec<EntityId> = self
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::Unit
+                    && entity.id != except
+                    && entity.hp > 0
+                    && entity.player != 0
+                    && !matches!(entity.task, Task::Garrisoned { .. })
+                    && self.same_side(entity.player, player)
+                    && tiles.contains(&self.tile_of(entity.position))
+            })
+            .map(|entity| entity.id)
+            .collect();
+        for id in movers {
+            self.step_aside(id, &tiles);
+        }
+    }
+
+    /// **A building's footprint as a rectangle**: anchor tile and size, which is what a builder's "am I on it?" question
+    /// needs. `footprint_area` answers with the tiles themselves, which allocates; a builder asks this every tick.
+    pub(crate) fn footprint_rect(&self, id: EntityId) -> Option<(u16, u16, u16, u16)> {
+        let entity = self.find(id)?;
+        let anchor = self.tile_of(entity.position);
+        let unit = entity.unit?;
+        let (width, height) = self
+            .units
+            .as_ref()
+            .and_then(|units| units.footprint(unit))?;
+        Some((
+            anchor.0,
+            anchor.1,
+            u16::try_from(width).unwrap_or(1),
+            u16::try_from(height).unwrap_or(1),
+        ))
+    }
+
+    /// **Where a builder stands to work a site**: a free, reachable tile on the **outer ring of the footprint**, nearest
+    /// to where the builder is now - never a tile of the footprint itself (D183 §3).
+    ///
+    /// `work_position` was enough while a site was solid from insertion, because its own tiles were blocked and the scan
+    /// skipped them by accident. A walkable ghost makes `work_position` answer with a tile *inside* the site: the builder
+    /// then stands on it, the empty-site gate waits for him, and the build never starts - measured as a house taking one
+    /// builder-tick in five hundred (`a_house_is_paid_for_and_finishes_in_its_create_time`).
+    pub(crate) fn approach_footprint(
+        &self,
+        from: (Fixed, Fixed),
+        tiles: &[(u16, u16)],
+    ) -> Option<(Fixed, Fixed)> {
+        const RING: [(i32, i32); 8] = [
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (-1, 0),
+            (1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+        ];
+        let mut candidates: Vec<(u16, u16)> = Vec::new();
+        for (x, y) in tiles {
+            for (dx, dy) in RING {
+                let (Ok(cx), Ok(cy)) = (
+                    u16::try_from(i32::from(*x) + dx),
+                    u16::try_from(i32::from(*y) + dy),
+                ) else {
+                    continue;
+                };
+                let tile = (cx, cy);
+                if tiles.contains(&tile) || candidates.contains(&tile) {
+                    continue;
+                }
+                candidates.push(tile);
+            }
+        }
+        // Nearest to the builder first, then tile order: two builders sent to one site stand on the same tile otherwise.
+        let (fx, fy) = (from.0.raw(), from.1.raw());
+        candidates.sort_by_key(|(x, y)| {
+            let dx = i64::from(*x) * self.scale - fx;
+            let dy = i64::from(*y) * self.scale - fy;
+            (dx * dx + dy * dy, *x, *y)
+        });
+        candidates.into_iter().find_map(|tile| {
+            if !self.is_free_ground(tile.0, tile.1) {
+                return None;
+            }
+            // **The middle of the tile**, not its origin: an origin is a corner shared with three other tiles, and a
+            // body standing on it touches whichever of them is blocked - the clearance rule then refuses the last step
+            // and the builder stalls one step short (measured: a farm that never started, 600 ticks of jitter at 4.78).
+            let position = self.tile_centre(tile);
+            // Free is not the same as reachable: a free tile inside a wall is no place to stand.
+            self.plan_path(from, position, 0).ok().map(|_| position)
+        })
     }
 
     /// The tiles a site of `unit` at `at` would cover: the footprint its `radius` gives it, which is what placement

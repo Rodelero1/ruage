@@ -123,6 +123,9 @@ fn a_spent_farm_is_replaced_on_its_own_tile() {
         .expect("a builder");
     let role = world.role_unit("farm").expect("a farm role");
     let before = world.stock(1, world.slot_of("wood").expect("wood"));
+    // **Remembered ground** (D183): the plot is on the far side of the map, and a foundation may be placed blind in fog
+    // but never in the black.
+    common::look_away(&mut world, 1, (40, 40));
 
     world
         .submit_checked(Command::Build {

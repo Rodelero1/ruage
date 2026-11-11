@@ -209,6 +209,17 @@ pub enum SimError {
     SiteBlocked {
         tile: (u16, u16),
     },
+    /// **The ground has never been looked at** (D183 addendum): a foundation may be placed blind in fog, but not in the
+    /// black - an area the player has never seen is not a place they can have chosen.
+    SiteUnscouted {
+        tile: (u16, u16),
+    },
+    /// **Construction cannot start while somebody stands on the site** (D183 §4): every unit of every player, and the
+    /// animals, must be off the footprint first. A refusal rather than a silent wait, because a site that never starts
+    /// with no reason given is undiagnosable.
+    SiteNotClear {
+        tile: (u16, u16),
+    },
     /// This building does not make this unit.
     NotTrainableHere {
         building: u32,
@@ -421,6 +432,18 @@ impl std::fmt::Display for SimError {
                     f,
                     "{:?} is not open ground: a building cannot go there",
                     tile
+                )
+            }
+            SimError::SiteUnscouted { tile } => {
+                write!(
+                    f,
+                    "{tile:?} is ground this player has never looked at: a foundation may go in the fog, never in the black"
+                )
+            }
+            SimError::SiteNotClear { tile } => {
+                write!(
+                    f,
+                    "the site at {tile:?} cannot be started while a unit stands on it - every unit must leave first"
                 )
             }
             SimError::NotTrainableHere { building, unit } => write!(

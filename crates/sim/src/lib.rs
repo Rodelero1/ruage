@@ -1040,6 +1040,11 @@ pub struct World {
     /// Buildings with a construction in progress, by id. A maintained set rather than a scan: `settle_blind_sites`
     /// needs to know whether any site exists and used to walk the world to ask (item 6).
     foundations: BTreeSet<EntityId>,
+    /// **Sites that could not start because somebody was standing on them** (D183 §4). Bookkeeping, not simulation state:
+    /// it exists so the refusal goes out **once per state change** rather than once a tick, and like `foundations` and
+    /// `open_gates` it is derived from the world every tick, so it is not hashed. A site leaves the set the moment its
+    /// ground is clear - which is what makes a second stall a second message.
+    stalled_sites: BTreeSet<EntityId>,
     /// Which families require which family to have been built once, resolved from `[build] requires`,
     /// with the requirement's role name kept for the message.
     requires_built: BTreeMap<u32, (u32, String)>,
@@ -1314,6 +1319,7 @@ impl World {
             share_retry_ticks: 600,
             share_move_ticks: 40,
             foundations: BTreeSet::new(),
+            stalled_sites: BTreeSet::new(),
             requires_built: BTreeMap::new(),
             age_needs: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
@@ -2312,7 +2318,9 @@ impl World {
             .collect();
         self.entities
             .retain(|entity| !replaced.contains(&entity.id));
-        self.push_units_off(at);
+        // **Our own and allied units step aside by walking** (D183 §1), never by being placed somewhere. The builder is
+        // excluded: its task is about to become the build order, with a route to a standoff outside the footprint.
+        self.evict_units_off(id, villager);
 
         let from = self
             .find(villager)
@@ -2320,7 +2328,11 @@ impl World {
             .ok_or(SimError::MissingEntity(villager))?;
         // Beside the site, not on it: a builder standing inside the footprint has no free tile to
         // plan a route home from, and once finished the building would be under the villager.
-        let route = match self.work_position(from, position) {
+        //
+        // **Outside the whole footprint** (D183 §3): a ghost is walkable, so the anchor's own neighbours are no longer
+        // reliably outside it, and a builder standing on his own site would be waiting for himself to leave.
+        let footprint = self.footprint_area_of(id);
+        let route = match self.approach_footprint(from, &footprint) {
             Some(stand) => self.plan_path_for(villager, from, stand)?,
             None => self.plan_path_for(villager, from, position)?,
         };
@@ -2630,6 +2642,7 @@ impl World {
             || self.slaughter.contains_key(&id)
             || self.slaughter.values().any(|animal| *animal == id)
             || self.rots.contains_key(&id)
+            || self.stalled_sites.contains(&id)
     }
 
     /// How many units this building is making: the one in progress plus everything queued behind it.
@@ -3499,32 +3512,6 @@ impl World {
             }
         }
         out
-    }
-
-    fn push_units_off(&mut self, at: (u16, u16)) {
-        let position = self.tile(at);
-        // **By tile, not by exact position.** A unit stopped by collision stands *inside* a tile and rarely on its
-        // origin, and the old equality test left exactly those units in a ground the building now owns - a villager
-        // inside a blocked footprint can never plan a route again.
-        let movers: Vec<EntityId> = self
-            .entities
-            .iter()
-            .filter(|entity| {
-                entity.kind == EntityKind::Unit
-                    && entity.player != 0
-                    && self.tile_of(entity.position) == at
-            })
-            .map(|entity| entity.id)
-            .collect();
-        for id in movers {
-            let Some(spot) = self.work_position(position, position) else {
-                continue;
-            };
-            if let Some(entity) = self.find_mut(id) {
-                entity.position = spot;
-            }
-            self.paths.remove(&id);
-        }
     }
 
     /// **A body's own footprint, in engine units**, as the movement rules read it (`radius[0]` of its variant, or zero

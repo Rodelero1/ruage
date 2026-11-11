@@ -458,11 +458,20 @@ impl World {
             .position(|existing| existing.id > entity.id)
             .unwrap_or(self.entities.len());
         let id = entity.id;
-        // A wall closes its tile from the moment it stands there - the tile is claimed by the insertion,
-        // not by the completion, because a half-built wall is not walk-through either. The check reads the
-        // entity being inserted rather than looking it up, which is the bug this line had first: an entity
-        // cannot be found before it is in the list.
-        if entity.kind == EntityKind::Building {
+        // A building that stands there blocks from the moment it stands there: a finished building inserted by the opening,
+        // a scenario or a saved game, or a site already under way. The check reads the entity being inserted rather than
+        // looking it up, which is the bug this line had first: an entity cannot be found before it is in the list.
+        //
+        // **A foundation is walkable ground until a villager touches it** (D183, superseding D152): the ghost is a drawing
+        // and its tiles are only claimed by the **first stroke**, not by the placement. `insert` therefore blocks a
+        // building's solid tiles only when there is no construction left to do - a building that arrives finished, or a
+        // site somebody has already worked on - and `work_one_tick` takes the ground on the tick construction starts.
+        // The counter in `Walk` is what keeps this balanced: whatever blocks once unblocks once when the entity dies.
+        if entity.kind == EntityKind::Building
+            && entity
+                .construction
+                .is_none_or(|construction| construction.progress_ticks > 0)
+        {
             for tile in self.solid_tiles(&entity) {
                 if let Some(walk) = self.walk.as_mut() {
                     walk.block(tile.0, tile.1);

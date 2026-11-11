@@ -16,6 +16,8 @@ use ruage_data::{Economy, Map, Units};
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, SimError, World};
 
+mod common;
+
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -239,6 +241,16 @@ fn a_villager_walks_round_a_half_built_house() {
     };
     let house = world.role_unit("house").expect("house");
     let builder = villager(&mut world, (at.0 - 3, at.1));
+    // **Remembered ground** (D183): the fixture's patch is well away from the base, and a foundation may be placed blind
+    // in fog but never in the black.
+    common::look_away(
+        &mut world,
+        1,
+        (
+            u16::try_from(at.0).expect("in range"),
+            u16::try_from(at.1).expect("in range"),
+        ),
+    );
     world
         .submit_checked(Command::Build {
             villager: builder,
@@ -330,6 +342,14 @@ fn a_foundation_blocks_while_it_is_still_being_built() {
     };
     let builder = villager(&mut world, (at.0 - 3, at.1));
     let house = world.role_unit("house").expect("house");
+    common::look_away(
+        &mut world,
+        1,
+        (
+            u16::try_from(at.0).expect("in range"),
+            u16::try_from(at.1).expect("in range"),
+        ),
+    );
     world
         .submit_checked(Command::Build {
             villager: builder,
@@ -365,14 +385,45 @@ fn a_foundation_blocks_while_it_is_still_being_built() {
             .is_some_and(|entity| entity.construction.is_some()),
         "it is still being built, which is the point of the test"
     );
-    let walkable: Vec<(i64, i64)> = footprint_tiles(&world, "house", at)
+    // **A foundation nobody has touched is walkable** (D183 §1, superseding D152): the ghost is a drawing, and the tiles
+    // are claimed by the first stroke rather than by the placement.
+    let untouched: Vec<(i64, i64)> = footprint_tiles(&world, "house", at)
         .into_iter()
         .filter(|tile| free_ground(&world, *tile))
         .collect();
-    assert!(
-        walkable.is_empty(),
-        "a foundation is walkable on {} tiles: {walkable:?}",
-        walkable.len()
+    assert_eq!(
+        untouched.len(),
+        4,
+        "a fresh foundation blocks {} of its four tiles: {untouched:?}",
+        4 - untouched.len()
+    );
+    // ... and from the first stroke it blocks: a half-built house is not a gate.
+    let mut started = false;
+    for _ in 0..600 {
+        world.step().expect("step");
+        if world
+            .entity(site)
+            .and_then(|entity| entity.construction)
+            .is_some_and(|construction| construction.progress_ticks > 0)
+        {
+            started = true;
+            break;
+        }
+    }
+    assert!(started, "construction never started on an empty site");
+    let solid: Vec<(i64, i64)> = footprint_tiles(&world, "house", at)
+        .into_iter()
+        .filter(|tile| !free_ground(&world, *tile))
+        .collect();
+    assert_eq!(
+        solid.len(),
+        4,
+        "a house under construction blocks {} of its four tiles: it walks through {:?}",
+        4 - solid.len(),
+        footprint_tiles(&world, "house", at)
+            .into_iter()
+            .filter(|tile| free_ground(&world, *tile))
+            .collect::<Vec<_>>()
     );
 }
 
@@ -499,6 +550,14 @@ fn a_live_farm_is_not_buildable_over_but_an_expired_one_is() {
     building(&mut world, 1, "farm", at, 600);
     let builder = villager(&mut world, (at.0 - 3, at.1 + 3));
     let corner = (at.0 + 2, at.1 + 2);
+    common::look_away(
+        &mut world,
+        1,
+        (
+            u16::try_from(corner.0).expect("in range"),
+            u16::try_from(corner.1).expect("in range"),
+        ),
+    );
     let refused = world.submit_checked(Command::Build {
         villager: builder,
         unit: house,
@@ -541,13 +600,15 @@ fn a_live_farm_is_not_buildable_over_but_an_expired_one_is() {
             .is_some_and(|entity| entity.construction.is_none()),
         "the plot is finished and spent, which is what makes it replaceable"
     );
+    let spent_site = (
+        u16::try_from(dead.0 + 1).expect("in range"),
+        u16::try_from(dead.1 + 1).expect("in range"),
+    );
+    common::look_away(&mut world, 1, spent_site);
     let replaced = world.submit_checked(Command::Build {
         villager: builder,
         unit: house,
-        at: (
-            u16::try_from(dead.0 + 1).expect("in range"),
-            u16::try_from(dead.1 + 1).expect("in range"),
-        ),
+        at: spent_site,
     });
     assert!(
         replaced.is_ok(),

@@ -381,7 +381,7 @@ impl World {
         // `create_time x tick_rate` even where HP per second is not a whole number (a mill is
         // 600 HP over 35 s).
         for (builder, site) in builders {
-            if self.work_one_tick(site) {
+            if self.work_one_tick(site, builder) {
                 let finished = self
                     .find(site)
                     .map(|building| (building.player, building.unit));
@@ -722,32 +722,72 @@ impl World {
             }
         }
         for id in resumed {
-            let Some(task @ Task::Hunt { to }) = self.resuming.remove(&id) else {
+            let Some(task) = self.resuming.remove(&id) else {
                 continue;
             };
-            let route = self
-                .find(id)
-                .map(|entity| entity.position)
-                .and_then(|from| self.plan_path(from, to, 0).ok());
-            match route {
-                Some(route) => {
-                    self.paths.insert(
-                        id,
-                        Route {
-                            points: route,
-                            ..Route::default()
-                        },
-                    );
-                    if let Some(entity) = self.find_mut(id) {
-                        entity.task = task;
+            match task {
+                // The fight ended and the unit still has a place to be: attack-move's whole point.
+                Task::Hunt { to } => {
+                    let route = self
+                        .find(id)
+                        .map(|entity| entity.position)
+                        .and_then(|from| self.plan_path(from, to, 0).ok());
+                    match route {
+                        Some(route) => {
+                            self.paths.insert(
+                                id,
+                                Route {
+                                    points: route,
+                                    ..Route::default()
+                                },
+                            );
+                            if let Some(entity) = self.find_mut(id) {
+                                entity.task = task;
+                            }
+                        }
+                        None => {
+                            if let Some(entity) = self.find_mut(id) {
+                                entity.task = Task::Idle;
+                            }
+                        }
                     }
                 }
-                None => {
-                    if let Some(entity) = self.find_mut(id) {
-                        entity.task = Task::Idle;
+                // **A gather a step-aside interrupted** (D183): the same order, re-resolved against the tables, which is
+                // what makes the worker go back to its node instead of standing idle beside it. If the node is gone the
+                // order is refused, and the worker stands - the answer a gather to a dead node gives anyway.
+                Task::Gather { node, .. } => {
+                    if self.start_gather_internal(id, node).is_err() {
+                        self.stand_down(id);
                     }
                 }
+                _ => self.stand_down(id),
             }
+        }
+    }
+
+    /// **One tile past the nearest edge of a footprint**, from a tile inside it: the shortest way a builder standing on
+    /// his own site can step off it. Plain arithmetic rather than a path search, because this runs on a tick.
+    fn edge_out(&self, rect: (u16, u16, u16, u16), here: (u16, u16)) -> (u16, u16) {
+        let (ax, ay, wide, tall) = rect;
+        let left = here.0.saturating_sub(ax);
+        let right = ax
+            .saturating_add(wide)
+            .saturating_sub(1)
+            .saturating_sub(here.0);
+        let top = here.1.saturating_sub(ay);
+        let bottom = ay
+            .saturating_add(tall)
+            .saturating_sub(1)
+            .saturating_sub(here.1);
+        let least = left.min(right).min(top).min(bottom);
+        if least == left {
+            (ax.saturating_sub(1), here.1)
+        } else if least == right {
+            (ax.saturating_add(wide), here.1)
+        } else if least == top {
+            (here.0, ay.saturating_sub(1))
+        } else {
+            (here.0, ay.saturating_add(tall))
         }
     }
 
@@ -1222,6 +1262,7 @@ impl World {
             self.leash.remove(&id);
             self.slaughter.remove(&id);
             self.foundations.remove(&id);
+            self.stalled_sites.remove(&id);
             self.slaughter.retain(|_, animal| *animal != id);
             self.herdable_ids.remove(&id);
         }
@@ -1415,18 +1456,49 @@ impl World {
                         work.finished.push(entity.id);
                         continue;
                     };
-                    // Adjacent counts: the site's own tile is where the building will be, so a builder works from the
-                    // tile beside it - or close enough for the two footprints to touch (C2), which is where a footprint
-                    // collision leaves a builder with a friend already on the good tile.
+                    // **A builder works from outside the site, and never from on it** (D183 §3). A footprint's own tiles
+                    // are walkable while it is a ghost, so "beside the building" is measured against the whole footprint
+                    // rather than its anchor tile - a builder standing on his own site would hold it up waiting for
+                    // himself, which is exactly what a house that took one builder-tick in five hundred looked like.
                     let here = self.tile_of(entity.position);
-                    let there = self.tile_of(target);
-                    let adjacent = here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
-                    let (gap_x, gap_y) = (
-                        target.0.raw() - entity.position.0.raw(),
-                        target.1.raw() - entity.position.1.raw(),
-                    );
+                    let rect = self.footprint_rect(site);
+                    let (inside, gap) = match rect {
+                        Some((ax, ay, wide, tall)) => (
+                            here.0 >= ax
+                                && here.0 < ax.saturating_add(wide)
+                                && here.1 >= ay
+                                && here.1 < ay.saturating_add(tall),
+                            // Chebyshev distance from this tile to the nearest tile of the rectangle.
+                            (
+                                if here.0 < ax {
+                                    ax - here.0
+                                } else if here.0 >= ax.saturating_add(wide) {
+                                    here.0 - (ax.saturating_add(wide) - 1)
+                                } else {
+                                    0
+                                },
+                                if here.1 < ay {
+                                    ay - here.1
+                                } else if here.1 >= ay.saturating_add(tall) {
+                                    here.1 - (ay.saturating_add(tall) - 1)
+                                } else {
+                                    0
+                                },
+                            ),
+                        ),
+                        None => {
+                            let there = self.tile_of(target);
+                            (false, (here.0.abs_diff(there.0), here.1.abs_diff(there.1)))
+                        }
+                    };
                     let reach = self.reach_raw(entity.unit, site_unit);
-                    let adjacent = adjacent || gap_x * gap_x + gap_y * gap_y <= reach * reach;
+                    let (gap_x, gap_y) =
+                        (i64::from(gap.0) * self.scale, i64::from(gap.1) * self.scale);
+                    // **Never from inside the footprint**, however close it is: the reach term is measured from the
+                    // nearest footprint tile, which is zero for a builder standing on the site.
+                    let adjacent = !inside
+                        && ((gap.0 <= 1 && gap.1 <= 1)
+                            || gap_x * gap_x + gap_y * gap_y <= reach * reach);
                     if adjacent {
                         work.builders.push((entity.id, site));
                         (Fixed::ZERO, Fixed::ZERO)
@@ -1437,7 +1509,19 @@ impl World {
                                 detail: err.to_string(),
                             }
                         })?;
-                        let next = self.next_waypoint(entity.id).unwrap_or(target);
+                        let next = if inside {
+                            // **The shortest way out**, one tile past the nearest edge. A builder left standing on the
+                            // site would never start it, and the route it walked is spent, so this has to be a place
+                            // rather than a waypoint.
+                            match rect {
+                                Some((ax, ay, wide, tall)) => {
+                                    self.tile_centre(self.edge_out((ax, ay, wide, tall), here))
+                                }
+                                None => target,
+                            }
+                        } else {
+                            self.next_waypoint(entity.id).unwrap_or(target)
+                        };
                         let (dx, dy) = step_towards(entity.position, next, delta.raw());
                         (Fixed::from_raw(dx), Fixed::from_raw(dy))
                     }

@@ -101,6 +101,24 @@ class ProseForm(unittest.TestCase):
         self.assertIn("openage", " ".join(corpus.amendments["D14"]))
         self.assertEqual(1, len(corpus.decisions))
 
+    def test_an_addendum_heading_belongs_to_its_decision(self):
+        """`### D183 addendum - ...` is what the corpus writes when a decision is extended, and the parser reported it as
+        an **unplaced heading** - the coverage test went red with a heading the corpus had already decided."""
+        text = (
+            "## D183 - A foundation is walkable\n"
+            "\n"
+            "**Decided.**\n"
+            "\n"
+            "### D183 addendum - where a foundation may go\n"
+            "\n"
+            "The ground must have been seen.\n"
+        )
+        corpus = parse(text)
+        self.assertEqual([], corpus.unclassified)
+        self.assertEqual(2, corpus.versions["D183"])
+        self.assertIn("seen", " ".join(corpus.amendments["D183"]))
+        self.assertEqual(1, len(corpus.decisions))
+
     def test_a_decision_written_one_level_down_is_still_a_decision(self):
         """D24a, D94a and D98a live at `###` under their parent. Missing them makes their ids look dangling."""
         text = "## D24 - X\n\n**Decided.**\n\n### D24a - The zero flag\n\n**Decided.**\n"

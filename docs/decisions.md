@@ -4462,3 +4462,65 @@ building over tile with neutral/enemy in"**.*
   So the owner's rule and the engine agree, and the reporting must be one message, not one per tick.
 - **No foundation may be placed on a tile holding a neutral or enemy unit.** Own and allied units do not block placement - they are the ones evicted by
   route (D183 §1). An enemy who **walks onto** a site afterwards still stalls it, because he has no reason to leave: that stays as accepted.
+
+## D184 - The reproducer does not reproduce here, and the tree model is why
+
+*2026-11-08. The owner: **"I noticed that scout stopped near the forest, then villager placed there a lumber camp colliding with
+his position, that pushed scout to the forrest. So reproducer: put scout as near to forest as possible, place lumber camp where
+the scout is, he should immediately jump to the forrest."***
+
+Written as a test **before any code moved**, in two shapes - the scout on the building's anchor tile, and on the far tile of a 2x2
+footprint (a different eviction ring) - and it **passes on the shipped engine**: `work_position` already refuses ground that is not
+free and already asks the pathfinder whether the tile is reachable, and our forests are **terrain** (`is_free_ground` answers no for
+every tree tile), so the eviction physically cannot choose a tree.
+
+In the original a tree is an **object standing on grass** - the ground under a trunk is walkable and the trunk is what blocks - and
+we have the opposite model until scattered trees arrive. So the accident needs the model we have not built, not a patch in the
+eviction. The test stays as a **guard** (`crates/sim/tests/eviction.rs`): a placed building never evicts a body onto a resource,
+onto a building, or into its own footprint - true then, and it has to stay true now that D183 replaces the teleport with a walk.
+
+
+## D185 - D183, built: the ghost is a drawing, the first stroke is the wall
+
+*2026-11-11. D183's model, implemented in the order it was written down, each part with the test that pins it. The work is
+`crates/sim/tests/foundation_model.rs` (11 tests), plus the D185.1 defect and the fixtures D183.1 broke.*
+
+1. **`insert` no longer claims a building's ground** - it blocks a building's solid tiles only when there is nothing left to build
+   (`construction.is_none_or(|c| c.progress_ticks > 0)`), so a building that arrives finished (the opening, a scenario, a save) still
+   owns its tiles and a fresh foundation does not. `work_one_tick` takes the ground on the first stroke (`take_the_ground`), and the
+   counter in `Walk` keeps the pair balanced: whatever blocks once is unblocked once by the death sweep.
+2. **The empty-site gate** (`site_is_clear`): construction cannot start while any unit of any player, or an animal, stands on the
+   footprint. Own and allied units and the animals are told to leave; an enemy is not, so he stalls the site until he moves or dies -
+   accepted as a tactic in D183 §4. The refusal (`SimError::SiteNotClear`) goes out **once per state change**, kept by
+   `stalled_sites`, a bookkeeping set like `foundations` and `open_gates` rather than hashed state.
+3. **Eviction is a walk** (`evict_units_off` -> `step_aside` -> `exit_tile`): the nearest tile outside the footprint **that a route
+   exists to**, never a placement. What the step-aside interrupted is kept in `resuming` and re-issued on arrival (`resume_idle` now
+   resumes a `Gather` as well as a `Hunt`) - the owner's *"I think that villager resumes"*. A unit that cannot find a way out is
+   remembered too, so the search is not repeated every tick; its site simply stalls.
+4. **A builder works from outside the footprint** (`approach_footprint`, and the `Task::Build` arm's adjacency measured against the
+   footprint rectangle rather than the anchor tile). A builder caught on his own site steps out by the shortest edge (`edge_out`) and
+   keeps his order - the gate never takes the builder's task away from him.
+5. **Placement gates**: `SiteUnscouted` refuses the black and allows the fog (the owner's *"can be in fog but never in black"*), and
+   `SiteOccupied` refuses a **visible** enemy or neutral unit. A unit the player cannot see does not refuse the order - a refusal would
+   leak it - so the site-clear gate is what answers that case.
+6. **It is drawn**: `palette::FOUNDATION`, a light grey over every tile of the footprint (the owner asked for *"light grey
+   colour like finished farm"*). Without an explicit branch the ghost would be **invisible**, including to its owner: the renderer
+   paints a footprint tile only when `solids_of` says the engine blocks it, and an untouched site blocks nothing.
+7. **An untouched foundation is invisible to other players** (`visible_to`), even in line of sight, and `site_refusal`/`site_has_lane`
+   ask `visible_to` so an enemy ghost neither holds ground nor counts as a wall. The first stroke makes it visible to everybody in sight.
+
+**D185.1 - a defect the review found: a cancelled site was resurrected by its builder.**
+
+`work_one_tick` wrote `hp = max_hp * progress / total` on every builder-tick, so a site the owner had just cancelled (`hp = 0`)
+came back to life on the next tick and its ground stayed claimed. Fixed with a guard: **a dead site is not worked**. Pinned by
+`a_cancelled_site_gives_its_ground_back`, which also proves the block is given back exactly once.
+
+**D185.2 - what is *not* built, said plainly.**
+
+- **Resume covers a gather and a hunt.** A `Return`, `Build` or `Attack` interrupted by a step-aside stands down when the walk ends;
+  the owner asked for resume generally and the gather is the case he named, so the rest is recorded here rather than guessed at.
+- **A hunt that interrupted a unit blocks its step-aside**: `step_aside` treats "already in `resuming`" as "already leaving", so a
+  unit fighting when a foundation lands on it waits for the fight to end. Rare, and the site stalls rather than misbehaving.
+- **A unit that cannot leave stalls its site for ever**, on one message. That is D183 §4's accepted answer; a player sees why.
+- **The invisible-ghost rule is engine-wide**, so the ordering system and the panel also cannot see an enemy's untouched foundation.
+  That is the rule, not a side effect: D183 §2 says the ghost is invisible as a fact, not as a rendering.

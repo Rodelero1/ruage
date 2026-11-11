@@ -176,13 +176,24 @@ impl World {
     }
 
     /// Whether this player can see that entity: their own always, anybody else's only while it stands
-    /// on ground an entity of theirs is watching.
+    /// on ground an entity of theirs is watching - **and never an untouched foundation** (D183 §2).
+    ///
+    /// The owner's rule: *"Enemy units don't see the foundation until villager started working on it"*. That is a fact about
+    /// the world, not about a drawing: the ghost is walkable and unseen, so the enemy's eyes and his pathing agree that the
+    /// ground is free, and the first stroke puts it on his map like any other building.
     pub fn visible_to(&self, player: u8, entity: EntityId) -> bool {
         let Some(entity) = self.find(entity) else {
             return false;
         };
         if entity.player == player {
             return true;
+        }
+        if entity.kind == EntityKind::Building
+            && entity
+                .construction
+                .is_some_and(|construction| construction.progress_ticks == 0)
+        {
+            return false;
         }
         let tile = self.tile_of(entity.position);
         self.vision(player, tile) == TileVision::Visible

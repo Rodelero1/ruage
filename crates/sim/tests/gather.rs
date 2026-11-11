@@ -9,6 +9,8 @@ use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, SimError, World};
 
+mod common;
+
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -672,6 +674,8 @@ fn a_farm_still_going_up_cannot_be_worked() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
+    // **Remembered ground** (D183): a foundation may be placed blind in fog and never in the black.
+    common::look_away(&mut world, 1, (4, 4));
     world
         .submit_checked(Command::Build {
             villager,

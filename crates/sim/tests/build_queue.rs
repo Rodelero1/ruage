@@ -14,6 +14,8 @@ use std::path::PathBuf;
 use ruage_data::{Economy, Map, Units};
 use ruage_sim::{Command, EntityKind, World};
 
+mod common;
+
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -236,6 +238,11 @@ fn a_second_site_that_overlaps_the_first_names_its_builder() {
     let mut world = seeded(&fx);
     let house = world.role_unit("house").expect("house");
     let builder = a_villager(&world);
+    // **Remembered ground** (D183): these sites are chosen by hand, well away from the base, and a foundation may be
+    // placed blind in fog but never in the black.
+    for at in [(4u16, 4u16), (5, 5)] {
+        common::look_away(&mut world, 1, at);
+    }
     for at in [(4u16, 4u16), (5, 5)] {
         world
             .submit_checked(Command::Build {

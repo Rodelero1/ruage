@@ -1,16 +1,27 @@
-# NEXT - implement D183 (foundation is walkable, invisible, cheap to start)
+# DONE - D183, built (D185): a foundation is walkable until somebody works on it
 
-**Seams located, change not started.** `seed.rs` `insert()` blocks every building's solid tiles on insertion - it becomes
-`construction.is_none_or(|c| c.progress_ticks > 0)`, so a site that has not been touched stays walkable. `build.rs`
-`work_one_tick()` already computes `first_tick` (`progress_ticks == 0`) - that is where the empty-site gate goes (return `false`,
-report once, do not advance) and where the tiles get blocked once the gate passes. `push_units_off()` / `work_position()` are the
-teleport to replace with a `Task::Move` off the footprint. The full suite is ~8 minutes a run, so this needs a session with room for
-two or three cycles.
+Session 51. `crates/sim/tests/foundation_model.rs`, 11 tests, each watched failing first (three of them - the first
+stroke taking the ground, the eviction walking, and the farm exemption - were written after their code and proved by
+mutation instead; the review says which). Acceptance: entities 137 -> **143**, repaths 618 -> **517**, hash
+`dc9cf9905f65b61c` -> **`3aaf6037ff27d283`**, 10.14 s -> 10.73 s on a *different* match; the tick itself 6.8 us on both
+sides, the snapshot +6.5% because the view now asks `visible_to` per entity. The ghost is
+painted in `palette::FOUNDATION` (light grey, every tile) - without that branch the renderer drew **nothing**, because its
+rule is "paint the tiles the engine blocks" and an untouched site blocks none. Review:
+`docs/reviews/2026-11-11-a-ghost-is-a-drawing.md`; the rule is D183, the implementation D185, the defect it found D185.1.
 
-The model is written down as **D183**; the ordering of work is: ghost walkable and invisible -> eviction **by route** (never a teleport) -> site-clear gate
--> first stroke turns it solid -> refund on cancel. Test-first, and the first test is the owner's own reproducer: *place a lumber camp on a scout's tile
-and the scout must end up somewhere it can stand, by walking*. D152 is superseded; the `push_units_off` teleport goes away with the blocking-at-insertion
-rule that required it.
+**Two defects fixed on the way, both reported in the review:** a builder used to be sent *inside* the walkable ghost by
+`work_position` (a house took 1 builder-tick in 500), and a **cancelled site was resurrected by its own builder** - a
+pre-existing bug, `work_one_tick` overwrote the zero health `Delete` had written.
+
+# NEXT - the D183 tail, in the order it matters
+
+1. **A step-aside resumes a gather and a hunt, and nothing else** (D185.2). A `Return`, `Build` or `Attack` interrupted by a
+   foundation stands down when the walk ends. Extending it is a slice of its own: `Return` needs its drop site re-resolved,
+   `Build` a fresh sight of the site, and `Attack` a target that may be dead.
+2. **A hunt blocks a step-aside.** `resuming` is both "the order to put back" and "this unit is already leaving", so a unit
+   fighting when a foundation lands on it is never told to leave. One more field, or a second set, would separate them.
+3. **The enemies' invisible ghosts and the AI.** The AI's placement search now cannot see an enemy's untouched foundation,
+   which is the rule - but the first-stroke contest has never been exercised in a match where both sides want one tile.
 
 # OPEN - a scout that stops, and cannot be nudged (owner, 2026-11-08)
 

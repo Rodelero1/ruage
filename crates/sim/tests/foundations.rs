@@ -135,6 +135,20 @@ fn wait_for_site(
     None
 }
 
+/// **Remember a piece of ground and then look away** (D183 addendum): a foundation may be placed blind in fog, never in
+/// black, so a fixture that wants a blind placement has to have looked there first. A temporary villager of the placing
+/// player does the looking; deleting it ends the watching.
+fn scout(world: &mut World, player: u8, tile: (i64, i64)) {
+    let watcher = villager(world, player, (tile.0 + 1, tile.1));
+    world
+        .submit_checked(Command::Delete {
+            player,
+            entity: watcher,
+        })
+        .expect("the watcher is deleted");
+    world.step().expect("step");
+}
+
 /// Every resource this player has, by slot. Resource names are content's; the slots are enough here.
 fn stockpile(world: &World, player: u8) -> Vec<u32> {
     (0..4).map(|slot| world.stock(player, slot)).collect()
@@ -221,6 +235,7 @@ fn a_foundation_i_cannot_see_does_not_block_me() {
     // Player 2 raises a foundation well outside player 1's sight.
     let theirs = villager(&mut world, 2, (31, 30));
     let house = house(&world);
+    scout(&mut world, 2, (30, 30));
     world
         .submit_checked(Command::Build {
             villager: theirs,
@@ -230,7 +245,9 @@ fn a_foundation_i_cannot_see_does_not_block_me() {
         .expect("their foundation");
     wait_for_site(&mut world, 2, (30, 30), 200).expect("their foundation");
 
-    // Player 1 cannot see that tile, so the order is taken: the player chose blind.
+    // Player 1 cannot see that tile, so the order is taken: the player chose blind - and the ground itself has to have
+    // been looked at once, which is what `scout` leaves behind (D183).
+    scout(&mut world, 1, (30, 30));
     let mine = villager(&mut world, 1, (30, 38));
     assert_ne!(
         world.vision(1, (30, 30)),
@@ -258,6 +275,7 @@ fn a_cancelled_foundation_refunds_its_owner() {
     // which is what makes mine the first builder - and the one that keeps the tile (D61).
     let theirs = villager(&mut world, 2, (30, 38));
     let house = house(&world);
+    scout(&mut world, 2, (30, 30));
     let before = stockpile(&world, 2);
 
     world
@@ -271,6 +289,7 @@ fn a_cancelled_foundation_refunds_its_owner() {
     let paid = stockpile(&world, 2);
     assert_ne!(paid, before, "the foundation cost its owner nothing");
 
+    scout(&mut world, 1, (30, 30));
     let mine = villager(&mut world, 1, (30, 35));
     let my_before = stockpile(&world, 1);
     world
@@ -312,6 +331,7 @@ fn a_building_i_cannot_see_does_not_block_my_placement() {
     let mut world = seeded(&fx);
     let theirs = building(&mut world, 2, "house", (30, 30));
     let tile = tile_of(&world, theirs);
+    scout(&mut world, 1, tile);
     let mine = villager(&mut world, 1, (30, 38));
     assert_ne!(
         world.vision(1, (tile.0 as u16, tile.1 as u16)),
@@ -338,6 +358,7 @@ fn a_placement_over_a_hidden_building_is_cancelled_when_it_is_seen() {
     let mut world = seeded(&fx);
     let theirs = building(&mut world, 2, "house", (30, 30));
     let tile = tile_of(&world, theirs);
+    scout(&mut world, 1, tile);
     let mine = villager(&mut world, 1, (30, 38));
     let house = house(&world);
     let before: u32 = stockpile(&world, 1).iter().sum();
@@ -369,11 +390,15 @@ fn a_placement_over_a_hidden_building_is_cancelled_when_it_is_seen() {
 }
 
 #[test]
-fn a_foundation_i_can_see_blocks_me() {
+fn an_enemy_foundation_in_plain_sight_does_not_block_me() {
+    // **D183 §2 supersedes D152**, and this test is where the two rules disagree. An untouched foundation is invisible to
+    // the other side *even where the ground is watched*, so it does not hold its tile: two bare foundations may share one
+    // patch of ground, and whoever puts a builder to work first keeps it (D58, `cancel_overbuilt`).
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let theirs = villager(&mut world, 2, (16, 16));
     let house = house(&world);
+    scout(&mut world, 2, (20, 19));
     world
         .submit_checked(Command::Build {
             villager: theirs,
@@ -381,7 +406,15 @@ fn a_foundation_i_can_see_blocks_me() {
             at: (20, 19),
         })
         .expect("their foundation");
-    wait_for_site(&mut world, 2, (20, 19), 200).expect("their foundation");
+    let their_site = wait_for_site(&mut world, 2, (20, 19), 200).expect("their foundation");
+    assert_eq!(
+        world
+            .entity(their_site)
+            .and_then(|entity| entity.construction)
+            .map(|construction| construction.progress_ticks),
+        Some(0),
+        "the test's own premise is wrong: their foundation has already been worked"
+    );
 
     let mine = villager(&mut world, 1, (22, 19));
     assert_eq!(
@@ -389,14 +422,34 @@ fn a_foundation_i_can_see_blocks_me() {
         TileVision::Visible,
         "the test's own premise is wrong: player 1 cannot see the tile"
     );
-    let refused = world.submit_checked(Command::Build {
+    assert!(
+        !world.visible_to(1, their_site),
+        "the enemy's untouched foundation is visible to player 1"
+    );
+    let placed = world.submit_checked(Command::Build {
         villager: mine,
         unit: house,
         at: (20, 19),
     });
     assert!(
-        matches!(refused, Err(SimError::SiteOccupied { tile }) if tile == (20, 19)),
-        "a foundation player 1 can see did not block the order: {refused:?}"
+        placed.is_ok(),
+        "an invisible enemy foundation blocked the order: {placed:?}"
+    );
+    world.step().expect("the order lands");
+    let my_site = site_at(&world, 1, (20, 19)).expect("my foundation");
+
+    // One tile, one building: whichever builder gets to work first takes it, and the other is cancelled.
+    for _ in 0..900 {
+        world.step().expect("step");
+        if world.entity(their_site).is_none() || world.entity(my_site).is_none() {
+            break;
+        }
+    }
+    let alive = usize::from(world.entity(their_site).is_some())
+        + usize::from(world.entity(my_site).is_some());
+    assert_eq!(
+        alive, 1,
+        "two foundations on one tile: both survived, or both were cancelled"
     );
 }
 
@@ -408,6 +461,7 @@ fn the_first_builder_keeps_the_tile() {
     let mut world = seeded(&fx);
     let theirs = villager(&mut world, 2, (31, 30));
     let house = world.role_unit("house").expect("house");
+    scout(&mut world, 2, (30, 30));
     world
         .submit_checked(Command::Build {
             villager: theirs,
@@ -416,15 +470,26 @@ fn the_first_builder_keeps_the_tile() {
         })
         .expect("their foundation");
     let their_site = wait_for_site(&mut world, 2, (30, 30), 200).expect("their foundation");
-    world.step().expect("step");
-    assert!(
-        world
+    // **The builder steps outside the footprint before the first stroke** (D183 §3, §4): their villager stood on a tile of
+    // the site, so the start waits for him to walk off it.
+    let mut started = false;
+    for _ in 0..120 {
+        world.step().expect("step");
+        if world
             .entity(their_site)
             .and_then(|entity| entity.construction)
-            .is_some_and(|construction| construction.progress_ticks > 0),
+            .is_some_and(|construction| construction.progress_ticks > 0)
+        {
+            started = true;
+            break;
+        }
+    }
+    assert!(
+        started,
         "the test's premise is wrong: their foundation has not been started"
     );
 
+    scout(&mut world, 1, (30, 30));
     let mine = villager(&mut world, 1, (30, 38));
     let before: u32 = stockpile(&world, 1).iter().sum();
     world
@@ -466,6 +531,7 @@ fn an_untouched_foundation_loses_to_the_first_builder() {
     // Theirs, placed from eight tiles away, so their builder is still walking and the site untouched.
     let theirs = villager(&mut world, 2, (30, 38));
     let house = world.role_unit("house").expect("house");
+    scout(&mut world, 2, (30, 30));
     world
         .submit_checked(Command::Build {
             villager: theirs,
@@ -484,6 +550,7 @@ fn an_untouched_foundation_loses_to_the_first_builder() {
     );
 
     // Mine: placed from three tiles closer, so my builder arrives first - and far enough to be blind.
+    scout(&mut world, 1, (30, 30));
     let mine = villager(&mut world, 1, (30, 35));
     let before: u32 = stockpile(&world, 2).iter().sum();
     world
@@ -523,6 +590,7 @@ fn a_cancelled_foundation_leaves_nothing_behind() {
     let mut world = seeded(&fx);
     let theirs = villager(&mut world, 2, (30, 38));
     let house = house(&world);
+    scout(&mut world, 2, (30, 30));
     world
         .submit_checked(Command::Build {
             villager: theirs,
@@ -532,6 +600,7 @@ fn a_cancelled_foundation_leaves_nothing_behind() {
         .expect("their foundation");
     let their_site = wait_for_site(&mut world, 2, (30, 30), 200).expect("their foundation");
 
+    scout(&mut world, 1, (30, 30));
     let mine = villager(&mut world, 1, (30, 35));
     world
         .submit_checked(Command::Build {

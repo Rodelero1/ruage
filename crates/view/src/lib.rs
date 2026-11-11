@@ -874,6 +874,10 @@ pub mod palette {
     /// **The impassable part of a building** (D162): dark, so it reads as structure rather than as a floor. It was light grey and a
     /// light grey block on light grey ground is exactly what made a yard indistinguishable from a wall.
     pub const BUILDING: [u8; 4] = [96, 100, 108, 255];
+    /// **A foundation nobody has worked on** (D183 §1): the owner asked for *"light grey colour like finished farm"*, so the
+    /// ghost says the ground is claimed without saying it is solid - and it stays visible, which is the half the `solids_of`
+    /// rule could not give it: a site with nothing blocked in it is drawn as nothing at all.
+    pub const FOUNDATION: [u8; 4] = [176, 180, 184, 255];
     /// **A building's walkable part** (D161): the town centre's yard - light, because a unit standing there must read as standing on
     /// ground, and because the gap between this and `BUILDING` *is* the virtual fence the owner asked to see.
     pub const BUILDING_YARD: [u8; 4] = [188, 196, 184, 255];
@@ -1308,11 +1312,28 @@ pub fn render_with_solids(snapshot: &Snapshot, camera: &Camera, solids: &Solids)
                 let (min_x, min_y, max_x, max_y) = footprint_tiles(anchor, entity.footprint);
                 let centre =
                     camera.project(((min_x + max_x) as f32 / 2.0, (min_y + max_y) as f32 / 2.0));
-                let colour = if entity.remembered {
+                // **An untouched foundation is a ghost, not a wall** (D183 §1): light grey, every tile of the footprint, so
+                // the owner and their allies see what they have claimed. Its tiles are walkable, so `solids_of` marks them all
+                // as not-solid and the loop below would paint none of them - the ghost would be invisible to its own owner.
+                let ghost = entity.construction.is_some_and(|progress| progress == 0.0);
+                let colour = if ghost {
+                    palette::FOUNDATION
+                } else if entity.remembered {
                     as_memory(palette::BUILDING)
                 } else {
                     palette::BUILDING
                 };
+                if ghost {
+                    // **The same point the ground puts the tile on** (D160): a tile's diamond is centred at its integer
+                    // point, so a footprint drawn half a tile off sits around the ground it does not own.
+                    for ty in min_y..=max_y {
+                        for tx in min_x..=max_x {
+                            let at = camera.project((tx as f32, ty as f32));
+                            frame.fill_diamond(at, (rx, ry), colour);
+                        }
+                    }
+                    continue;
+                }
                 for ty in min_y..=max_y {
                     for tx in min_x..=max_x {
                         // **Solid part or yard** (D161): the block is painted with the colour of the tiles the engine blocks, and a

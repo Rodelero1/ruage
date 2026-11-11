@@ -12,6 +12,8 @@ use ruage_data::{Economy, Effects, Map, Sim as Settings, Techs, Units};
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, SimError, World};
 
+mod common;
+
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -137,11 +139,34 @@ fn seeded_with(fx: &Fixture, economy: &ruage_data::Economy) -> World {
 /// The first tile beside a villager that is free of entities: enough for a build order in a test.
 /// A tile near this villager where `unit`'s **whole footprint** fits. Asking "is any entity's anchor here" handed back
 /// the town centre's own tile once buildings owned their ground, which is why the castle test was red at HEAD.
-fn free_tile(world: &World, from: EntityId, unit: u32) -> (u16, u16) {
+fn free_tile(world: &mut World, from: EntityId, unit: u32) -> (u16, u16) {
     let position = world.position(from).expect("position");
     let scale = world.scale();
     let x = u16::try_from(position.0.raw() / scale).expect("in range");
     let y = u16::try_from(position.1.raw() / scale).expect("in range");
+    // **Remember the ground first** (D183): a foundation may go in fog and never in the black, and a test's villager has
+    // only ever looked a few tiles around itself. Eight witnesses reveal the area the search ranges over.
+    let player = world
+        .entity(from)
+        .map(|entity| entity.player)
+        .expect("a player");
+    for (dx, dy) in [
+        (4i32, 4i32),
+        (-4, 4),
+        (4, -4),
+        (-4, -4),
+        (8, 0),
+        (-8, 0),
+        (0, 8),
+        (0, -8),
+    ] {
+        if let (Ok(cx), Ok(cy)) = (
+            u16::try_from(i32::from(x) + dx),
+            u16::try_from(i32::from(y) + dy),
+        ) {
+            common::look_away(world, player, (cx, cy));
+        }
+    }
     for radius in 1..12u16 {
         for dy in 0..=radius {
             for dx in 0..=radius {
@@ -151,7 +176,10 @@ fn free_tile(world: &World, from: EntityId, unit: u32) -> (u16, u16) {
                     (x + dx, y.wrapping_sub(dy)),
                     (x.wrapping_sub(dx), y.wrapping_sub(dy)),
                 ] {
-                    if world.site_fits(1, unit, candidate) {
+                    // **The villager's own player**, not player 1: since D183 a site also asks whether *this* player has
+                    // looked at the ground, and asking for player 1 about a Hunnic villager's neighbourhood refuses every
+                    // tile on the map.
+                    if world.site_fits(player, unit, candidate) {
                         return candidate;
                     }
                 }
@@ -368,7 +396,7 @@ fn research_needs_the_building_the_tech_names_and_a_finished_one() {
     // no longer is once the town centre owns its own four tiles.
     bank(&mut world, slot("wood"), 175);
     let builder = first_villager(&world);
-    let at = free_tile(&world, builder, BARRACKS);
+    let at = free_tile(&mut world, builder, BARRACKS);
     world
         .submit_checked(Command::Build {
             villager: builder,
@@ -757,7 +785,7 @@ fn a_castle_cannot_be_built_before_the_age_that_enables_it() {
     // Enough for a castle (650 stone), so the refusal under test is availability and not the price.
     bank(&mut world, slot("food"), 400);
     bank(&mut world, slot("stone"), 700);
-    let site = free_tile(&world, villager, CASTLE);
+    let site = free_tile(&mut world, villager, CASTLE);
 
     let err = world
         .submit_checked(Command::Build {
@@ -796,7 +824,7 @@ fn a_unit_that_no_tech_gates_is_unaffected() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let villager = first_villager(&world);
-    let site = free_tile(&world, villager, 70);
+    let site = free_tile(&mut world, villager, 70);
     bank(&mut world, slot("wood"), 100);
     world
         .submit_checked(Command::Build {
@@ -962,7 +990,7 @@ fn the_huns_cannot_build_a_house() {
     world.load_civs(&fx.civs).expect("the civ table");
     let villager = first_villager(&world);
     bank(&mut world, slot("wood"), 100);
-    let site = free_tile(&world, villager, 70);
+    let site = free_tile(&mut world, villager, 70);
 
     let err = world
         .submit_checked(Command::Build {
@@ -976,7 +1004,7 @@ fn the_huns_cannot_build_a_house() {
 
     // And the bar is that one unit, not the Huns' whole build menu - a barracks needs its own 3x3 site, which the
     // house's tile is not.
-    let barracks_site = free_tile(&world, villager, BARRACKS);
+    let barracks_site = free_tile(&mut world, villager, BARRACKS);
     world
         .submit_checked(Command::Build {
             villager,
@@ -1035,7 +1063,7 @@ fn two_players_can_be_different_civilisations() {
 
     // Building: the reverse pair on the house.
     let briton_villager = first_villager(&world);
-    let site = free_tile(&world, briton_villager, 70);
+    let site = free_tile(&mut world, briton_villager, 70);
     world
         .submit_checked(Command::Build {
             villager: briton_villager,
@@ -1051,7 +1079,7 @@ fn two_players_can_be_different_civilisations() {
         .map(|entity| entity.id)
         .expect("a Hunnic villager");
     bank(&mut world, slot("wood"), 100);
-    let hun_site = free_tile(&world, hun_villager, 70);
+    let hun_site = free_tile(&mut world, hun_villager, 70);
     let err = world
         .submit_checked(Command::Build {
             villager: hun_villager,

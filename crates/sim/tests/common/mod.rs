@@ -161,6 +161,48 @@ pub fn load_from(root: &Path, pack: Pack) -> Option<(World, Resources)> {
     Some((world, resources))
 }
 
+/// **Remember a piece of ground and then look away** (D183 addendum).
+///
+/// A foundation may be placed blind in **fog** and never in the **black**, so a fixture that builds somewhere off its own
+/// base has to have looked there first. A temporary villager of `player` does the looking and is deleted, which leaves the
+/// tiles around it `Explored` rather than `Visible`.
+pub fn look_away(world: &mut World, player: u8, at: (u16, u16)) {
+    use ruage_sim::{Command, EntityId, EntityKind};
+    let scale = world.scale();
+    let unit = world
+        .role_unit("villager")
+        .expect("the pack has a villager");
+    let id = EntityId(
+        world
+            .entities()
+            .iter()
+            .map(|entity| entity.id.0)
+            .max()
+            .unwrap_or(0)
+            + 1,
+    );
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                ruage_fixed::Fixed::from_raw(i64::from(at.0) * scale + scale / 2),
+                ruage_fixed::Fixed::from_raw(i64::from(at.1) * scale + scale / 2),
+            ),
+            speed: ruage_fixed::Fixed::parse("1.0", scale).expect("a speed"),
+            hp: 25,
+            amount: 0,
+        })
+        .expect("a witness");
+    world.step().expect("step");
+    world
+        .submit_checked(Command::Delete { player, entity: id })
+        .expect("the witness is deleted");
+    world.step().expect("step");
+}
+
 /// Load one table, or fail the fixture with the file's path and the loader's own words.
 ///
 /// This is the rule D130 rests on: a test that cannot read its content has not run, and reporting

@@ -192,6 +192,12 @@ fn a_drag_lays_every_segment_of_the_line() {
         })
         .collect();
 
+    // **Remembered ground** (D183): the line is laid by hand away from the base, and a foundation may be placed blind in
+    // fog but never in the black - a segment whose tile nobody has looked at would be refused and the drag would come
+    // up one wall short.
+    for tile in &tiles {
+        common::look_away(&mut world, 1, *tile);
+    }
     world
         .submit_checked(Command::BuildLine {
             villager: worker,
@@ -261,6 +267,12 @@ fn an_ineligible_tile_is_skipped_and_the_rest_stand() {
             )
         })
         .collect();
+    // **Remembered ground** (D183): the line is laid by hand away from the base, and a foundation may be placed blind in
+    // fog but never in the black - a segment whose tile nobody has looked at would be refused and the drag would come
+    // up one wall short.
+    for tile in &tiles {
+        common::look_away(&mut world, 1, *tile);
+    }
     world
         .submit_checked(Command::BuildLine {
             villager: worker,

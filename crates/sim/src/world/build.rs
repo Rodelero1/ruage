@@ -4,7 +4,7 @@
 
 use ruage_fixed::Fixed;
 
-use crate::{BuildPlan, EntityId, EntityKind, SimError, World};
+use crate::{BuildPlan, EntityId, EntityKind, SimError, Task, World};
 
 impl World {
     /// Cancel a foundation of mine whose tile turns out to hold an enemy building that is already
@@ -174,18 +174,112 @@ impl World {
         }
     }
 
+    /// **Can construction start on this site?** (D183 §4, the empty-site rule.)
+    ///
+    /// A foundation is walkable ground, so anybody at all may be standing on it when the builder arrives: every player's
+    /// units, and the animals. The first stroke waits until the ground is empty. Own and allied units and the animals are
+    /// **told** to leave - an enemy is not, because he has no reason to move and a reasonable player cannot make him, so
+    /// an enemy squatter stalls the site until he walks off or is killed. That is accepted as a tactic (D183 §4).
+    ///
+    /// A **farm** is the one exception (D183 §7): it is seeded by walking over it, so it has no empty site to wait for.
+    ///
+    /// Returns `false` when the site is not clear; the refusal is raised **once per state change** and not once a tick,
+    /// because the caller asks every tick and a message a tick would bury the log it is meant to explain.
+    fn site_is_clear(&mut self, site: EntityId, builder: EntityId) -> bool {
+        let Some((player, position, farm)) = self
+            .find(site)
+            .map(|entity| (entity.player, entity.position, self.is_farm_role(entity)))
+        else {
+            return false;
+        };
+        if farm {
+            return true;
+        }
+        let tiles = self.footprint_area_of(site);
+        let standing: Vec<(EntityId, u8)> = self
+            .entities
+            .iter()
+            .filter(|other| {
+                other.kind == EntityKind::Unit
+                    && other.hp > 0
+                    && !matches!(other.task, Task::Garrisoned { .. })
+            })
+            .filter(|other| tiles.contains(&self.tile_of(other.position)))
+            .map(|other| (other.id, other.player))
+            .collect();
+        if standing.is_empty() {
+            // The state changed: the next stall is worth a second message.
+            self.stalled_sites.remove(&site);
+            return true;
+        }
+        // Our side leaves, and so do the animals, which belong to nobody and cannot be asked by a player. **The builder
+        // is not told to leave**: its own order is the walk to a standoff outside the footprint (D183 §3), and replacing
+        // that task with a move would make the builder forget the site it came to build.
+        for (id, theirs) in &standing {
+            if *id == builder {
+                continue;
+            }
+            if *theirs == 0 || self.same_side(*theirs, player) {
+                self.step_aside(*id, &tiles);
+            }
+        }
+        if self.stalled_sites.insert(site) {
+            self.refusal = Some((
+                builder,
+                SimError::SiteNotClear {
+                    tile: self.tile_of(position),
+                },
+                self.tick,
+            ));
+        }
+        false
+    }
+
+    /// **The first stroke takes the ground** (D183 §5): from this tick the site's solid tiles block, where a moment ago
+    /// they were walkable. Safe by construction - the site was empty on the tick the gate passed, so nobody can be caught
+    /// inside the new wall - and balanced for the counter in `Walk`, because the death sweep frees every solid tile of a
+    /// dead building whether or not this ran.
+    fn take_the_ground(&mut self, site: EntityId) {
+        let Some(entity) = self.find(site) else {
+            return;
+        };
+        let tiles = self.solid_tiles(entity);
+        if let Some(walk) = self.walk.as_mut() {
+            for tile in tiles {
+                walk.block(tile.0, tile.1);
+            }
+        }
+    }
+
     /// One tick of work on a site. Returns true when this tick finished the building. HP is
     /// derived from progress rather than accumulated, so a mill's 17.14 HP/s cannot drift.
-    pub(crate) fn work_one_tick(&mut self, site: EntityId) -> bool {
-        // The first tick of work takes the tile (D58). A site that stands on an enemy's foundation can
-        // only be there because it was placed blind, and the builder who starts working cancels the one
-        // who did not get there first. Cancelled before the borrow below, which needs `self` whole.
+    pub(crate) fn work_one_tick(&mut self, site: EntityId, builder: EntityId) -> bool {
+        // **A dead site is not worked.** Cancelling a foundation that is under construction used to be undone by its own
+        // builder: `Delete` set its health to zero, and the next builder-tick wrote `hp = max_hp * progress / total`
+        // straight over it, so the site the player had just cancelled went on existing (found by
+        // `a_cancelled_site_gives_its_ground_back`).
+        if self.find(site).is_none_or(|entity| entity.hp <= 0) {
+            return false;
+        }
         let first_tick = self
             .find(site)
             .and_then(|entity| entity.construction)
             .is_some_and(|construction| construction.progress_ticks == 0);
         if first_tick {
+            // **Nobody on the site** (D183 §4): the ghost is walkable, so this is the one place the trap is prevented.
+            if !self.site_is_clear(site, builder) {
+                return false;
+            }
+            // The first tick of work takes the tile (D58). A site that stands on an enemy's foundation can
+            // only be there because it was placed blind, and the builder who starts working cancels the one
+            // who did not get there first. Cancelled before the borrow below, which needs `self` whole.
             self.cancel_overbuilt(site);
+            // Cancelling the overbuild can take *this* site with it, when the other side got there first.
+            if self.find(site).is_none_or(|entity| entity.hp <= 0) {
+                return false;
+            }
+            // **And the ground turns solid on the same tick the first stroke lands** (D183 §5).
+            self.take_the_ground(site);
         }
         let Some(building) = self.find_mut(site) else {
             return false;

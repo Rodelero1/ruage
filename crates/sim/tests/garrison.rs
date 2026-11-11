@@ -10,6 +10,8 @@ use ruage_data::{Economy, Map, Units};
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, SimError, Task, World};
 
+mod common;
+
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -288,11 +290,15 @@ fn a_building_without_attacks_is_unarmed() {
         (home.0.raw() / scale + 2, home.1.raw() / scale),
         25,
     );
+    let at = (u16::try_from(home.0.raw() / scale).unwrap() + 3, 2);
+    // **Remembered ground** (D183): the barracks goes up away from the base, and a foundation may be placed blind in fog
+    // but never in the black.
+    common::look_away(&mut world, 1, at);
     world
         .submit_checked(Command::Build {
             villager: builder,
             unit: BARRACKS,
-            at: (u16::try_from(home.0.raw() / scale).unwrap() + 3, 2),
+            at,
         })
         .expect("a barracks");
     world.step().expect("step");
@@ -587,6 +593,7 @@ fn a_production_building_does_not_take_units_in_from_outside() {
         0.8,
     );
     let at = (u16::try_from(home.0.raw() / scale).unwrap() + 3, 2);
+    common::look_away(&mut world, 1, at);
     world
         .submit_checked(Command::Build {
             villager: builder,

@@ -657,6 +657,41 @@ fn an_unreachable_site_is_refused_before_the_wood_is_spent() {
         .filter(|e| e.kind == EntityKind::Building)
         .count();
 
+    // **The ground has to be remembered first** (D183): a foundation may be placed blind in fog and never in the black,
+    // so a tile nobody has looked at is refused for that reason before reachability is ever asked. One of our own walks
+    // the far side for a tick and is deleted, which leaves the ground scouted and unwatched.
+    let scale_now = world.scale();
+    let looker = EntityId(world.entities().iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
+    let villager_unit = world.role_unit("villager").expect("villager");
+    world
+        .submit_checked(Command::Spawn {
+            id: looker,
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: Some(villager_unit),
+            position: (
+                ruage_fixed::Fixed::from_raw(9 * scale_now + scale_now / 2),
+                ruage_fixed::Fixed::from_raw(10 * scale_now + scale_now / 2),
+            ),
+            speed: ruage_fixed::Fixed::parse("1.0", scale_now).expect("a speed"),
+            hp: 25,
+            amount: 0,
+        })
+        .expect("a witness");
+    world.step().expect("step");
+    world
+        .submit_checked(Command::Delete {
+            player: 1,
+            entity: looker,
+        })
+        .expect("the witness is deleted");
+    world.step().expect("step");
+    assert_ne!(
+        world.vision(1, (9, 9)),
+        ruage_sim::TileVision::Unseen,
+        "the fixture's own premise is wrong: the far side is still black"
+    );
+
     // (9, 9) is legal ground - the whole 2x2 footprint is grass - on the far side of the wall, and the villager cannot
     // get there. It used to be (11, 9), which the house's footprint now shares with the enemy town centre's.
     match world.submit_checked(Command::Build {

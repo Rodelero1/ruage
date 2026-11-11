@@ -105,7 +105,7 @@ impl World {
     }
 
     /// Whether two players are on the same side: itself, or the same team when the match names teams.
-    fn same_side(&self, a: u8, b: u8) -> bool {
+    pub(crate) fn same_side(&self, a: u8, b: u8) -> bool {
         if a == b {
             return true;
         }

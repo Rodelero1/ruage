@@ -255,6 +255,16 @@ fn the_builder_is_not_inside_the_house_it_finishes() {
     };
     let site = (at.0 + 3, at.1);
     let builder = villager(&mut world, 9_410, (at.0, at.1));
+    // **Remembered ground** (D183): the fixture's patch is away from the base, and a foundation may be placed blind in
+    // fog but never in the black.
+    common::look_away(
+        &mut world,
+        1,
+        (
+            u16::try_from(site.0).expect("in range"),
+            u16::try_from(site.1).expect("in range"),
+        ),
+    );
     world
         .submit_checked(Command::Build {
             villager: builder,

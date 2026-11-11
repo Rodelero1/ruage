@@ -359,7 +359,13 @@ def _heading_kind(rest: str) -> str:
     """What the text after the id makes this heading: a decision, an amendment, an essay, or nothing legible."""
     if re.match(r"^\s*[-–—]\s*\S", rest):
         return "decision"
-    if re.match(r"^\s*\((?:amended|resolved)\b", rest) or re.match(r"^\s*amendment\b", rest):
+    if (
+        re.match(r"^\s*\((?:amended|resolved)\b", rest)
+        or re.match(r"^\s*amendment\b", rest)
+        # **`### Dnnn addendum`** is how the corpus extends a decision the same day (D183's placement rules are the first).
+        # Without this the heading is reported as unplaced, which failed the coverage test over a decision that was made.
+        or re.match(r"^\s*addendum\b", rest)
+    ):
         return "amendment"
     if re.match(r"^\s*(?:applied|applies)\b", rest):
         return "note"
