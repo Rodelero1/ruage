@@ -1,5 +1,12 @@
 # NEXT - implement D183 (foundation is walkable, invisible, cheap to start)
 
+**Seams located, change not started.** `seed.rs` `insert()` blocks every building's solid tiles on insertion - it becomes
+`construction.is_none_or(|c| c.progress_ticks > 0)`, so a site that has not been touched stays walkable. `build.rs`
+`work_one_tick()` already computes `first_tick` (`progress_ticks == 0`) - that is where the empty-site gate goes (return `false`,
+report once, do not advance) and where the tiles get blocked once the gate passes. `push_units_off()` / `work_position()` are the
+teleport to replace with a `Task::Move` off the footprint. The full suite is ~8 minutes a run, so this needs a session with room for
+two or three cycles.
+
 The model is written down as **D183**; the ordering of work is: ghost walkable and invisible -> eviction **by route** (never a teleport) -> site-clear gate
 -> first stroke turns it solid -> refund on cancel. Test-first, and the first test is the owner's own reproducer: *place a lumber camp on a scout's tile
 and the scout must end up somewhere it can stand, by walking*. D152 is superseded; the `push_units_off` teleport goes away with the blocking-at-insertion
