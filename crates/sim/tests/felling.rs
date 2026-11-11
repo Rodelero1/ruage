@@ -91,21 +91,23 @@ fn a_tree_is_still_standing_ten_seconds_in() {
     );
 }
 
-/// **Fifteen seconds in, it is down.** 20 hit points at 1.5 a second is 13.3 seconds - the seventh chop.
+/// **Sixteen seconds in, it is down.** 20 hit points at 1.5 a second is 13.3 seconds - the seventh chop - and the woodcutter
+/// spends up to two seconds walking out to his ring before the first one (D186: he settles 1.156 tiles out, not 0.70), so the
+/// window is the chop plus the approach. The *rate* is `the_chop_is_a_rate_per_second`'s business, not this window's.
 #[test]
-fn a_tree_is_down_within_fifteen_seconds() {
+fn a_tree_is_down_within_sixteen_seconds() {
     let Some(mut world) = fresh() else {
         return;
     };
     let (tree, _) = a_tree_and_a_chopper(&mut world);
     let hz = world.tick_rate_hz();
-    for _ in 0..(15 * hz) {
+    for _ in 0..(16 * hz) {
         world.step().expect("stepping");
     }
     let hp = world.entity(tree).map_or(0, |entity| entity.hp);
     assert_eq!(
         hp, 0,
-        "a 20 hp tree must be down after 13.3 s at 1.5 hp/s, but {hp} hit points are left after 15 s"
+        "a 20 hp tree must be down after 13.3 s of chopping plus a walk to the ring, but {hp} hit points are left after 16 s"
     );
 }
 

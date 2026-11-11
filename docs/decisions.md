@@ -4529,3 +4529,55 @@ came back to life on the next tick and its ground stayed claimed. Fixed with a g
   picture of a man walking over his own field, which belongs with the asset pack.
 - **The invisible-ghost rule is engine-wide**, so the ordering system and the panel also cannot see an enemy's untouched foundation.
   That is the rule, not a side effect: D183 §2 says the ghost is invisible as a fact, not as a rendering.
+
+## D186 - the gather ring: 1.156 tiles, eighteen men, measured from the owner's save
+
+**The owner's rule, from his own game.** With a close-up of eighteen woodcutters round one tree he said: *"I'd focus instead on how
+close men can stand to the bush, tree or mine. The ones behind them don't work. Only first row ever works."* Asked whether the men
+crowd onto one node or stand idle, he corrected the reading of his screenshot himself - *"I am not so sure. Some are standing around
+idle"* - so the crowd is a front row at work with idle men behind it, not eighteen men sharing one node.
+
+**The number comes from the save, not from the dat.** `test.aoe2spgame` (VER 9.4, save 12.5) carries a per-unit order queue at the
+end of the file - `[u32 type][u32 1][u32 0][u32 stamp][u32 n]` and `n` triples of `(x, 0, y)` in tile coordinates, 28 + 12n bytes a
+record. A save taken **after the owner clicked the tree again while his men stood at it** (`owner-test2.aoe2spgame`) has their
+standing positions in its *from* points, because an order records where the man was when it was given. Six men round one tree:
+
+| man | tiles from the source square's centre |
+| --- | --- |
+| 1 | 1.105 |
+| 2 | 1.142 |
+| 3 | 1.160 |
+| 4 | 1.170 |
+| 5 | 1.170 |
+| 6 | 1.189 |
+
+**mean 1.156, spread 0.084.** That is a ring, not a scatter: six men within a twelfth of a tile of the same radius. The three
+closest pairs are **0.404, 0.455 and 0.710** apart, and 0.404 is exactly two villager bodies (`radius[0]` = 0.2 each) touching.
+`2 * pi * 1.156 / 0.404 = 17.97`, which is **eighteen men on the ring** - the owner's count of his group, and his *"max 9 per each"*
+over the two adjacent source squares the same file names (nine and seven destinations).
+
+**D186 replaces the standoff, not the picture.** The engine stood a worker where the two discs touched: `radius[0]` 0.2 + a forest
+tree's 0.5 = **0.70** (D169), one worker a square (D182), so a single tree fed **one** man - measured, 1 of 19 ordered villagers.
+Now:
+
+1. **The ring is 1.156 tiles** (`GATHER_RING_MILLI`), round the **source square's centre** - the tile's, not the entity's anchor,
+   because a map may place a node on a tile corner and a ring round a corner straddles four tiles (measured: a bush at (20.0, 13.0)
+   left every slot blocked and its woodcutter at zero progress for 1,200 ticks).
+2. **Eighteen slots at 20-degree steps** (`GATHER_RING_SLOTS`), taken in order of distance from the worker, each checked for walkable
+   free ground, no body within two radii, and - when the order is given - a path. Integer cosine and sine tables, because the tick
+   is hashed and a platform's `sin` is not the same number twice.
+3. **A man works when he is in the band 1.056..1.256 tiles** (`GATHER_BAND_MILLI`) from the square's centre. A man on the
+   neighbouring tile's centre is at 1.000 - outside it - which is *"only the first row ever works"* falling out of the geometry.
+4. **Eighteen is the cap**, and the nineteenth order is answered the way a second one used to be: the nearest free source of the
+   same kind, or standing still when the map has none.
+5. **A buried ring falls back to the neighbouring tiles.** A tree deep in a forest has all eighteen slots on blocked tiles; the men
+   who cut it stand on the open edge beside it, and `ring_open` is what tells the two cases apart. That fallback is the owner's
+   *"4 on corners and 4 on sides"*, so both of his descriptions - the eight neighbours and the eighteen-man ring - are true, in
+   different ground.
+6. **Walking out to the ring is a walk, not a placement** (D169 kept). The arrival that used to close the last third of a tile now
+   closes seven tenths of one, one step at a time.
+
+**What is not claimed.** The radius is measured from six men and one source kind; the owner's mines and bushes are in the same file
+but their front rows were not separated out, and a bush smaller than a tree might ring differently. The 0.084 spread is taken to be
+men not yet settled rather than three different radii. And the *builder's* ring is not measured at all: no save with a site under
+construction has been read, so D185's approach ring stands unchanged.

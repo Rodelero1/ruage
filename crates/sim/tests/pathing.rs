@@ -330,8 +330,10 @@ fn a_villager_walks_straight_over_dirt() {
     for _ in 0..4_000 {
         world.step().expect("step");
         let position = world.position(villager).expect("position");
-        let beside = (position.0.raw() - target.0.raw()).abs() <= scale
-            && (position.1.raw() - target.1.raw()).abs() <= scale;
+        // **Within the ring, not within one tile** (D186): a gatherer stands 1.156 tiles out, so "arrived" is the ring's
+        // reach and not the neighbouring tile's edge.
+        let beside = (position.0.raw() - target.0.raw()).abs() <= scale * 13 / 10
+            && (position.1.raw() - target.1.raw()).abs() <= scale * 13 / 10;
         if beside {
             arrived = true;
             break;

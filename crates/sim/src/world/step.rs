@@ -1601,33 +1601,87 @@ impl World {
                     );
                     let squared = gap_x * gap_x + gap_y * gap_y;
                     let reach = self.reach_raw(entity.unit, node_unit);
-                    let at_node = here == there
-                        || squared <= reach * reach
-                        || (beside
-                            && here.0.abs_diff(there.0) <= 1
-                            && here.1.abs_diff(there.1) <= 1);
+                    let is_resource =
+                        matches!(self.find(node).map(|n| n.kind), Some(EntityKind::Resource(_)));
+                    // **The band, not the touch** (D186). A working man stands on a ring **1.156** tiles out - measured from
+                    // the owner's save, six woodcutters within 0.084 of that radius - so for a resource "at the node" is that
+                    // distance band and nothing else. A man on the neighbouring tile's centre is at 1.000, outside it: that is
+                    // the owner's *"only the first row ever works"*, and it falls out of the geometry instead of being a rule
+                    // about positions on the square.
+                    // The band is measured from the **source's square**, not its anchor (D186): a node placed at a tile
+                    // corner - the drop-off test's bush is exactly that - would otherwise band a circle across four tiles.
+                    let centre = self.tile_centre(there);
+                    let (ring_x, ring_y) = (
+                        centre.0.raw() - entity.position.0.raw(),
+                        centre.1.raw() - entity.position.1.raw(),
+                    );
+                    let ring_squared = ring_x * ring_x + ring_y * ring_y;
+                    let low = (self.scale * crate::GATHER_BAND_MILLI.0 / 1000).max(
+                        // A node wider than half a tile pushes the band out: the two bodies still cannot overlap, so the
+                        // inner edge is never inside the sum of the radii (a forest tree's 0.5 + a villager's 0.2 = 0.7).
+                        self.find(node)
+                            .map_or(0, |n| self.node_radius_raw(n) + self.body_radius(entity.unit)),
+                    );
+                    let high = self.scale * crate::GATHER_BAND_MILLI.1 / 1000;
+                    let on_ring = ring_squared >= low * low && ring_squared <= high * high;
+                    // **A ring, unless it is buried** (D186): a tree deep in a forest has every slot on a blocked tile, and the
+                    // men who cut it stand on the open edge beside it - the eight neighbouring tiles are his *"4 on corners
+                    // and 4 on sides"*. Where a ring exists, it is the only place a man works from.
+                    let ring_open = self.ring_open(centre);
+                    // Arrived the old way - on the node's ground, inside the bodies' reach, or beside a node it cannot stand
+                    // on - which for a resource is no longer enough to work from.
+                    let beside_adjacent = beside
+                        && here.0.abs_diff(there.0) <= 1
+                        && here.1.abs_diff(there.1) <= 1;
+                    let arrived = here == there || squared <= reach * reach || beside_adjacent;
+                    let at_node = if is_resource {
+                        on_ring || (beside_adjacent && !ring_open)
+                    } else {
+                        arrived
+                    };
                     // **Stand where the bodies touch** (D169). `reach` is the sum of the two radii - the dat's 0.2 for a
-                    // villager and content's 0.5 for a tree - and it is what "at the node" already means. The *walk* ends at the
+                    // villager and content's 0.5 for a tree - and it is what "at the node" used to mean. The *walk* ends at the
                     // neighbouring tile's centre, a whole tile out, so a woodcutter swung at a tree from half a tile away: the
                     // owner compared two screenshots of the original and said *"villagers are standing around 1/2 tile away"*.
-                    // The last third is closed here, once, on arrival.
-                    if at_node
-                        && squared > reach * reach
-                        && matches!(
-                            self.find(node).map(|n| n.kind),
-                            Some(EntityKind::Resource(_))
-                        )
+                    // D186 moved the place it walks to out to the measured ring; this is the step that takes it there.
+                    // **Walk the last half tile out to the ring** (D186). The step below only fires while the worker has
+                    // *arrived*, and the old standoff (0.70) was close enough to the neighbouring tile that one step kept the
+                    // worker inside that test. The ring is 1.156, so a worker that leaves the adjacent tile falls out of
+                    // "arrived" half way and stops short - measured: a villager beside a bush took nothing for 1,200 ticks.
+                    // The trigger is therefore "near the node and not on the ring, with no route left", which is stable for
+                    // the whole walk out and costs one decision per arrival rather than one per tick.
+                    let settle_reach = 2 * self.scale;
+                    let near_node = ring_squared <= settle_reach * settle_reach;
+                    // **Two triggers, both bounded**: a worker standing *beside* the node (the walk's last waypoint is the
+                    // blocked tile, so it sits there with a waypoint it can never spend), and a worker near the node whose
+                    // route is spent. Both stop firing the moment it is on the ring.
+                    // **Keep walking until he is ON the ring, not merely inside the band.** Gating this on `!on_ring` stopped
+                    // every man the moment he crossed 1.056, so the walk ended wherever he happened to cross - measured, two
+                    // woodcutters working one bush **0.28** tiles apart, closer than their own bodies. The band says where a
+                    // man may work; the ring says where he stands.
+                    let ring_raw = self.scale * crate::GATHER_RING_MILLI / 1000;
+                    let short_of_ring = ring_raw - self.scale / 50;
+                    let settling = ring_open && near_node && ring_squared < short_of_ring * short_of_ring;
+                    // **The walk to the ring and the walk to the node must not both be taken.** The `else` branch below steps
+                    // toward the node's own tile; the settle steps *away* from it, so a worker with both ran on the spot -
+                    // measured, a woodcutter frozen at 0.984 tiles with the tree's 20 hit points untouched for 15 s.
+                    let mut settling_now = false;
+                    if is_resource
+                        && !on_ring
+                        && settling
                         && let Some(found) = self.standoff_point(
                             entity.position,
                             target,
                             node,
                             entity.id,
                             &work.settles,
+                            false,
                         )
                     {
                         match found {
                             crate::Standoff::Point(stand) => {
                                 work.settles.push((entity.id, stand));
+                                settling_now = true;
                             }
                             // **No room on the ring** (D182): the worker keeps trying from where it stands rather than being re-tasked here.
                             // Re-tasking from this arm fires **every tick** a worker cannot reach its side, and each attempt re-plans a route:
@@ -1711,6 +1765,9 @@ impl World {
                             }
                             (Fixed::ZERO, Fixed::ZERO)
                         }
+                    } else if settling_now {
+                        // The settle owns this tick's step (see above).
+                        (Fixed::ZERO, Fixed::ZERO)
                     } else {
                         let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
                             SimError::Displacement {

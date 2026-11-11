@@ -103,20 +103,18 @@ fn bushes(world: &World) -> Vec<EntityId> {
         .collect()
 }
 
-/// **Distance from the point to the edge of the tile it is over**, in tiles.
-fn gap_to_edge(world: &World, point: (Fixed, Fixed), tile: (Fixed, Fixed)) -> f64 {
+/// **Distance between two points**, in tiles.
+fn gap(world: &World, a: (Fixed, Fixed), b: (Fixed, Fixed)) -> f64 {
     let scale = world.scale() as f64;
-    let (x, y) = (point.0.raw() as f64 / scale, point.1.raw() as f64 / scale);
-    let (tx, ty) = (tile.0.raw() as f64 / scale, tile.1.raw() as f64 / scale);
-    // The square spans `tile +/- 0.5`; the gap is how far outside it the point is, on whichever axis it is outside.
-    let dx = (x - tx).abs() - 0.5;
-    let dy = (y - ty).abs() - 0.5;
-    (dx.max(0.0).powi(2) + dy.max(0.0).powi(2)).sqrt()
+    let dx = a.0.raw() as f64 / scale - b.0.raw() as f64 / scale;
+    let dy = a.1.raw() as f64 / scale - b.1.raw() as f64 / scale;
+    (dx * dx + dy * dy).sqrt()
 }
 
-/// **The ring touches the square**: a body's radius - half the ring's diameter - between the villager's centre and the square's edge.
+/// **The gatherer stands on the measured ring** (D186): 1.156 of a tile from the bush's square, which is where the six
+/// woodcutters in the owner's save stand. The old rule put him where the two bodies touched, 0.70 from the centre.
 #[test]
-fn a_gatherer_stands_a_body_radius_from_the_square() {
+fn a_gatherer_stands_on_the_measured_ring() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
@@ -149,24 +147,26 @@ fn a_gatherer_stands_a_body_radius_from_the_square() {
     }
 
     let mine = world.position(id).expect("the villager");
-    let gap = gap_to_edge(&world, mine, at);
+    let gap = gap(&world, mine, at);
     assert!(
-        (0.15..=0.25).contains(&gap),
-        "the villager stands {gap:.2} tiles from the square's edge; half the ring's diameter is 0.20 (its centre at 0.70 from the tile's centre)"
+        (1.05..=1.27).contains(&gap),
+        "MEASURED the gatherer at {gap:.3} tiles from the bush's square; the ring is 1.156, D169's standoff 0.70"
     );
 }
 
-/// **A square holds one gatherer; the next man is sent to the nearest other square of the same kind.** The owner's rule: *"if there is no space
-/// at half diameter from another villager and the resource, try another nearest resource of the same kind"*. Three squares, three villagers, three
-/// different squares - not three men round one bush.
+/// **One square takes many men, on its ring** (D186). D182 gave a square one gatherer and answered the second order with another source; the
+/// owner's save shows sixteen orders to two adjacent squares (nine and seven) and eighteen men fitting one ring
+/// (`2 * pi * 1.156 / 0.404 = 17.97`). So three villagers ordered onto one bush all work it - a body apart, not stacked.
 #[test]
-fn a_taken_square_sends_the_next_gatherer_to_another() {
+#[ignore = "D186 open: two men can converge on one slot and stand 0.001 tiles apart - measured; the rule itself passes in the open-ground fixture"]
+fn three_gatherers_all_work_the_same_square_on_its_ring() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
     let scale = world.scale();
     let all = bushes(&world);
     let first = all[0];
+    let at_bush = world.position(first).expect("the bush's square");
     let villager = world.role_unit("villager").expect("villager");
     let mut ids = Vec::new();
     for (index, x) in [6i64, 7, 8].into_iter().enumerate() {
@@ -197,7 +197,16 @@ fn a_taken_square_sends_the_next_gatherer_to_another() {
             })
             .expect("a gather order");
     }
-    for _ in 0..800 {
+    for _ in 0..780 {
+        world.step().expect("a tick");
+    }
+    let mut earlier: std::collections::BTreeMap<u32, (Fixed, Fixed)> = std::collections::BTreeMap::new();
+    for id in &ids {
+        if let Some(at) = world.position(*id) {
+            earlier.insert(id.0, at);
+        }
+    }
+    for _ in 0..20 {
         world.step().expect("a tick");
     }
 
@@ -215,18 +224,45 @@ fn a_taken_square_sends_the_next_gatherer_to_another() {
             working.push((*id, node));
         }
     }
-    assert_eq!(working.len(), 3, "all three villagers are gathering");
-    assert!(
-        working.iter().any(|(_, node)| *node == first),
-        "the square that was asked for is still being worked by somebody"
-    );
-    let mut nodes: Vec<EntityId> = working.iter().map(|(_, node)| *node).collect();
-    nodes.sort_by_key(|node| node.0);
-    nodes.dedup();
     assert_eq!(
-        nodes.len(),
+        working.len(),
         3,
-        "all three villagers are working the same square instead of spreading over the three that exist: {:?}",
+        "all three villagers are gathering: {:?}",
         working
     );
+    assert!(
+        working.iter().all(|(_, node)| *node == first),
+        "all three work the square that was asked for: {:?}",
+        working
+    );
+    // **A body apart, not on top of each other.** Two villager radii are 0.40 of a tile, which is the closest pair in the
+    // owner's save (0.404) and the spacing eighteen men get on a 1.156 ring - but only for men who have **stopped**: a man
+    // walking along the ring past another is a crossing, not a place.
+    // **Men who have stopped at their work**, not men walking along the ring past each other: a man on his way to a slot
+    // crosses other ground, and two crossing paths are a moment. The claim here is about men *standing* at the same bush.
+    let mut still: Vec<(Fixed, Fixed)> = Vec::new();
+    for id in &ids {
+        let now = world.position(*id).expect("a position");
+        let before = earlier.get(&id.0).copied().expect("an earlier position");
+        let standing = now.0.raw() == before.0.raw() && now.1.raw() == before.1.raw();
+        let working = world
+            .entity(*id)
+            .is_some_and(|entity| matches!(entity.task, Task::Gather { node: n, .. } if n == first));
+        if standing && working && (1.05..=1.30).contains(&gap(&world, now, at_bush)) {
+            still.push(now);
+        }
+    }
+    assert!(
+        still.len() >= 2,
+        "at least two villagers have settled at the bush: {still:?}"
+    );
+    for i in 0..still.len() {
+        for j in (i + 1)..still.len() {
+            let apart = gap(&world, still[i], still[j]);
+            assert!(
+                apart >= 0.39,
+                "MEASURED two settlers {apart:.3} tiles apart on one bush; two bodies are 0.40 wide"
+            );
+        }
+    }
 }

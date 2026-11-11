@@ -198,6 +198,7 @@ fn a_touching_tile_is_enough_to_bank() {
     for _ in 0..1_200 {
         world.step().expect("stepping");
     }
+
     let gained = world.stock(1, food) - before;
     assert!(
         gained > 0,
