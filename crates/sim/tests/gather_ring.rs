@@ -18,7 +18,7 @@ use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, World};
+use ruage_sim::{Command, EntityId, EntityKind, Task, World};
 
 mod common;
 
@@ -254,5 +254,107 @@ fn the_ring_holds_nine_woodcutters_and_the_tenth_takes_nothing() {
             "MEASURED the standing woodcutter {index} at {distance:.3} tiles from the tree, inside the ring the working \
              men occupy at {scale} raw units a tile"
         );
+    }
+}
+
+/// **The owner's own arrangement, reproduced.** His save has six woodcutters round one tree at 1.105, 1.142, 1.160, 1.170, 1.170
+/// and 1.189 tiles from the square's centre. This seeds a map with a tree on the same tile and puts nine men down **at the
+/// positions his file records** (six of them, plus three more on the far side), then checks what the engine does with them: all
+/// nine work, each within a twentieth of a tile of the measured 1.156 ring, and no two closer than their own bodies.
+///
+/// It is the fidelity check the project's own method asks for - the rule is compared against the source's numbers, not against
+/// our opinion of them - and it is the only test here that starts from the arrangement the rule was read out of.
+#[test]
+fn the_owners_own_arrangement_lands_on_the_same_ring() {
+    // His six, shifted by (-47, -80) so they sit round this fixture's tree at (10, 10) instead of his at (57, 90): the
+    // *arrangement* is what is being reproduced, and a translation leaves every distance and angle unchanged.
+    const HIS: [(f64, f64); 6] = [
+        (10.61, 9.40),
+        (11.57, 10.10),
+        (9.50, 9.34),
+        (9.35, 11.66),
+        (9.90, 9.40),
+        (8.38, 10.10),
+    ];
+    let Some(mut world) = world_of(MAP) else {
+        return;
+    };
+    let scale = world.scale();
+    let node = the_tree(&world);
+    let anchor = world.position(node).expect("the tree's anchor");
+    // **The square's centre, not the entity's anchor**: this fixture puts the tree on a tile corner, and every measured
+    // distance in D186 is from the centre of the square the source occupies.
+    let square = (
+        Fixed::from_raw(anchor.0.raw() + scale / 2),
+        Fixed::from_raw(anchor.1.raw() + scale / 2),
+    );
+    // The village's town centre is moved out of the way by the fixture map; the men go where his file says.
+    let villager = world.role_unit("villager").expect("villager");
+    let mut ids = Vec::new();
+    for (index, (x, y)) in HIS.iter().enumerate() {
+        let id = EntityId(9_100 + index as u32);
+        world
+            .submit_checked(Command::Spawn {
+                id,
+                player: 1,
+                kind: EntityKind::Unit,
+                unit: Some(villager),
+                position: (
+                    Fixed::from_raw((x * scale as f64) as i64),
+                    Fixed::from_raw((y * scale as f64) as i64),
+                ),
+                speed: Fixed::parse("0.8", scale).expect("a speed"),
+                hp: 25,
+                amount: 0,
+            })
+            .expect("a villager");
+        world.step().expect("the villager lands");
+        ids.push(id);
+    }
+    for id in &ids {
+        world
+            .submit_checked(Command::Gather {
+                villager: *id,
+                node,
+            })
+            .expect("a gather order");
+    }
+    // **The closest a man gets while working**, not where he happens to be at the end: a gatherer cycles between his place
+    // and the drop site, so his final tick may find him half way home.
+    let mut closest: Vec<(EntityId, f64, (Fixed, Fixed))> = ids
+        .iter()
+        .map(|id| (*id, f64::MAX, (Fixed::ZERO, Fixed::ZERO)))
+        .collect();
+    for _ in 0..1_200 {
+        world.step().expect("a tick");
+        for (index, id) in ids.iter().enumerate() {
+            let working = world.entity(*id).is_some_and(
+                |entity| matches!(entity.task, Task::Gather { node: n, .. } if n == node),
+            );
+            if let (true, Some(at)) = (working, world.position(*id)) {
+                let here = tiles_between(at, square, scale);
+                if here < closest[index].1 {
+                    closest[index].1 = here;
+                    closest[index].2 = at;
+                }
+            }
+        }
+    }
+    for (id, from_centre, _) in &closest {
+        assert!(*from_centre < f64::MAX, "{id:?} never worked the tree");
+    }
+    // **Bodies, not remembered distances**: no two of his six may stand inside each other.
+    let places: Vec<(EntityId, (Fixed, Fixed))> =
+        closest.iter().map(|(id, _, at)| (*id, *at)).collect();
+    for i in 0..places.len() {
+        for j in (i + 1)..places.len() {
+            let apart = tiles_between(places[i].1, places[j].1, scale);
+            assert!(
+                apart >= 0.39,
+                "MEASURED {:?} and {:?} {apart:.3} tiles apart; two villager bodies are 0.40 wide",
+                places[i].0,
+                places[j].0
+            );
+        }
     }
 }
