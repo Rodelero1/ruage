@@ -64,9 +64,11 @@ Every one of these was found by a test or a measurement, not by reading the code
 - **The `no_float` test caught the same edit**, which is the second time this file has caught floating point sneaking into the
   tick. The tables in `lib.rs` are integer cosines and sines for exactly that reason: the tick is hashed, and a platform's `sin`
   is not the same number twice.
-- **Two tests are `#[ignore]`d rather than passed**, and both are real: `three_gatherers_on_one_bush_do_not_pile_up` (0.20 apart
-  in a fixture whose ring is buried) and `three_gatherers_all_work_the_same_square_on_its_ring` (**0.001** apart — two men
-  converged on one slot and neither moved, because a body with nothing to do cannot give way).
+- **Two tests were `#[ignore]`d, then fixed rather than tolerated** (D186 addendum): two men converged on one place - **0.001**
+  apart in one fixture, **0.20** in another. Three causes: the place was chosen by distance every tick with no owner; owning it
+  by rank sent men the long way round the tree; and the walk stopped at the band's *outer* edge (1.256) instead of the ring
+  (1.156). Now the ring is ordered by distance and each place belongs to its **nearest claimant** (ties by id), the settle runs
+  from either side of the radius, and both tests pass with no tolerance.
 - **A test window was widened, not a behaviour fixed**: `a_tree_is_down_within_fifteen_seconds` became *sixteen* seconds,
   because the woodcutter now walks 1.156 tiles out instead of 0.70 and spends up to two seconds doing it. The chop *rate* is
   still pinned by `the_chop_is_a_rate_per_second`; the window is about the approach.
@@ -133,8 +135,6 @@ found the barracks **frozen at 871 of its build ticks**. Two causes, both real, 
 
 ## What is not built, said plainly
 
-- **The convergence defect above.** Two men can end up on one slot when they set out from the same side. It is a collision
-  problem (nothing makes a standing body give way) and it is the next thing to fix, not something this change hides.
 - **The builder's ring is unmeasured.** D185's approach ring stands unchanged; no save with a site under construction has been
   read, and the owner said *"building construction? It should be the same pattern"* — probably true, not verified.
 - **Mines and bushes are unmeasured** (see above): one radius for every node kind.

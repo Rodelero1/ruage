@@ -1661,16 +1661,23 @@ impl World {
                     // every man the moment he crossed 1.056, so the walk ended wherever he happened to cross - measured, two
                     // woodcutters working one bush **0.28** tiles apart, closer than their own bodies. The band says where a
                     // man may work; the ring says where he stands.
+                    // **The walk goes to the ring itself, from whichever side it is approached** (D186). A man is `at_node`
+                    // the moment he is anywhere in the band, and the band's outer half reaches 1.256 - so the walk used to stop
+                    // where he entered it, which is how two men on the same side ended up **0.20** tiles apart, both working
+                    // and both technically on the ring. Settling is therefore "not yet within a fiftieth of a tile of the
+                    // radius", inside or outside, and the arm gives the settle the tick rather than standing him still.
                     let ring_raw = self.scale * crate::GATHER_RING_MILLI / 1000;
-                    let short_of_ring = ring_raw - self.scale / 50;
-                    let settling =
-                        ring_open && near_node && ring_squared < short_of_ring * short_of_ring;
+                    let tolerance = self.scale / 50;
+                    let near_ring = (ring_raw - tolerance) * (ring_raw - tolerance);
+                    let far_ring = (ring_raw + tolerance) * (ring_raw + tolerance);
+                    let settling = ring_open
+                        && near_node
+                        && (ring_squared < near_ring || ring_squared > far_ring);
                     // **The walk to the ring and the walk to the node must not both be taken.** The `else` branch below steps
                     // toward the node's own tile; the settle steps *away* from it, so a worker with both ran on the spot -
                     // measured, a woodcutter frozen at 0.984 tiles with the tree's 20 hit points untouched for 15 s.
                     let mut settling_now = false;
                     if is_resource
-                        && !on_ring
                         && settling
                         && let Some(found) = self.standoff_point(
                             entity.position,

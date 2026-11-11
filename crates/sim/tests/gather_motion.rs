@@ -140,7 +140,6 @@ fn a_settled_gatherer_does_not_jitter() {
 /// same kind"* - so a resource square now holds **one** gatherer and the other two are answered elsewhere (or stand idle when the map has nothing
 /// free). What survives from the old test, and is the reason it exists, is that **no two bodies end up on the same ground**.
 #[test]
-#[ignore = "D186 open: this fixture's ring is buried, so the neighbouring-tile fallback packs three men 0.20 tiles apart - measured"]
 fn three_gatherers_on_one_bush_do_not_pile_up() {
     let Some(mut world) = world_of(MAP_BUSH) else {
         return;
@@ -205,6 +204,36 @@ fn three_gatherers_on_one_bush_do_not_pile_up() {
         })
         .collect();
     assert_eq!(spots.len(), 3, "all three villagers are still in the world");
+    {
+        let scale = world.scale() as f64;
+        let tree = world.position(node).expect("tree");
+        let (tx, ty) = (
+            tree.0.raw() as f64 / scale + 0.5,
+            tree.1.raw() as f64 / scale + 0.5,
+        );
+        for id in &ids {
+            let at = world.position(EntityId(*id)).expect("pos");
+            let (x, y) = (at.0.raw() as f64 / scale, at.1.raw() as f64 / scale);
+            let d = ((x - tx) * (x - tx) + (y - ty) * (y - ty)).sqrt();
+            eprintln!(
+                "PROBE id={id} pos=({x:.3},{y:.3}) r={d:.3} task={:?}",
+                world.entity(EntityId(*id)).map(|e| e.task)
+            );
+            if *id == ids[0] {
+                for k in 0..9 {
+                    let ang = (k as f64) * 40.0 * std::f64::consts::PI / 180.0;
+                    let px = tx + 1.156 * ang.cos();
+                    let py = ty + 1.156 * ang.sin();
+                    let (sx, sy) = (px as u16, py as u16);
+                    eprintln!(
+                        "  SLOT {k} -> tile ({sx},{sy}) walkable={} free={}",
+                        world.tile_walkable(sx, sy),
+                        world.is_free_ground(sx, sy)
+                    );
+                }
+            }
+        }
+    }
     // **All three gather the one bush** (D186): the ring round a source square holds eighteen men, so three is a small crowd.
     let working = world
         .entities()

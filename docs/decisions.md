@@ -4593,3 +4593,34 @@ used to finish before 380, and `config/skirmish.toml` pulled its only builder aw
 but their front rows were not separated out, and a bush smaller than a tree might ring differently. The 0.084 spread is taken to be
 men not yet settled rather than three different radii. And the *builder's* ring is not measured at all: no save with a site under
 construction has been read, so D185's approach ring stands unchanged.
+
+### D186 addendum - a place belongs to the nearest man, and the walk ends on the ring
+
+**The defect.** Two men could end up on the same place. Measured twice: **0.001** tiles apart in the three-bush fixture and
+**0.20** in the bush-and-tree one - the exact failure the owner had photographed in the original (two villagers at 0.00) and
+the reason D181 exists at all.
+
+**Three causes, found one at a time.**
+
+1. **The place was chosen by distance, every tick, with no owner.** Two men walking at the same side of a bush kept swapping
+   places and often chose the same one; nothing recorded who had claimed what.
+2. **Owning it by rank made men walk the long way.** Giving each worker the slot at his rank among the men on the node
+   (`(rank) mod 9`) did stop two men sharing, but the rank has nothing to do with where a man stands: measured, a woodcutter
+   walking two tiles round the tree to the far side while a nearer place stood empty - and crossing the others on the way,
+   which is its own collision.
+3. **The walk stopped where the man entered the band, not on the ring.** `at_node` is true anywhere in 1.056..1.256, so the
+   settle's "not there yet" test was satisfied at 1.256 - the band's *outer* edge. Two men on the same side stopped there,
+   0.20 apart, both working, both technically on the ring.
+
+**The fix, and what it is made of.**
+
+- **Order by distance, own by nearest.** The ring is ordered by distance from the worker, and a place belongs to the *nearest*
+  claimant: `(distance squared, worker id)` compared with every other gatherer of that node, so a man yields to anyone closer
+  and two men exactly equidistant cannot both own it. No reservations, no new state, no per-tick growth.
+- **Settle from either side of the radius.** "Not there yet" is "more than a fiftieth of a tile from the ring", inside or
+  outside, and the arm gives that tick's step to the settle - so a man who entered the band at 1.256 keeps walking to 1.156.
+- **A site is not a place to stand** (D186 proper, above): a ring slot on an unfinished footprint is refused, because a gatherer
+  standing there is the unit the empty-site gate waits for.
+
+Both previously `#[ignore]`d tests pass without a tolerance: `three_gatherers_on_one_bush_do_not_pile_up` and
+`three_gatherers_all_work_the_same_square_on_its_ring`.

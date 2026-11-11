@@ -7,19 +7,20 @@ eighteen would have sent all sixteen to one tree). The ring is nine slots at for
 a neighbouring-tile fallback for a ring buried in a forest. Tests in `crates/sim/tests/gather_ring.rs`, decision **D186**, review
 `docs/reviews/2026-11-11-the-gather-ring.md`.
 
-**Two defects the work found, both fixed:** a ring slot could land on a **building site** (a foundation is walkable since D183), so
+**Two men overlapping: fixed** (D186 addendum). The place now belongs to its *nearest claimant* (ties by id), the walk ends on
+the ring rather than at the band's outer edge, and both tests that were `#[ignore]`d pass with no tolerance.
+
+**Two other defects the work found, both fixed:** a ring slot could land on a **building site** (a foundation is walkable since D183), so
 a gatherer stood on it and the empty-site gate waited for him - a barracks frozen at **871 of its build ticks**; and
 `config/skirmish.toml` pulled that barracks' only builder off at 380 s where the ring makes it finish at **~395 s** - the step is
 460 s now, with both numbers beside it.
 
 **Still owed, in order:**
 
-1. **Two `#[ignore]`d tests, both real:** two men can converge on one slot (**0.001** tiles apart) because nothing makes a
-   standing body give way, and a fixture whose ring is buried packs three men **0.20** apart.
-2. **The builder's ring is unmeasured.** The owner expects *"the same pattern"*; no save with a site under construction has been
+1. **The builder's ring is unmeasured.** The owner expects *"the same pattern"*; no save with a site under construction has been
    read.
-3. **Mines and bushes were not separated** from the trees in his save, so the engine uses 1.156 for every node kind.
-4. **`start_gather` routes to the neighbouring tile, not to the slot**, so a worker walks in and then out again - up to two seconds
+2. **Mines and bushes were not separated** from the trees in his save, so the engine uses 1.156 for every node kind.
+3. **`start_gather` routes to the neighbouring tile, not to the slot**, so a worker walks in and then out again - up to two seconds
    per trip, which is why the felling window had to widen from 15 s to 16 s.
 
 

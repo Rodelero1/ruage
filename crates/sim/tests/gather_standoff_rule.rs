@@ -158,7 +158,6 @@ fn a_gatherer_stands_on_the_measured_ring() {
 /// owner's save shows sixteen orders to two adjacent squares (nine and seven) and eighteen men fitting one ring
 /// (`2 * pi * 1.156 / 0.404 = 17.97`). So three villagers ordered onto one bush all work it - a body apart, not stacked.
 #[test]
-#[ignore = "D186 open: two men can converge on one slot and stand 0.001 tiles apart - measured; the rule itself passes in the open-ground fixture"]
 fn three_gatherers_all_work_the_same_square_on_its_ring() {
     let Some(mut world) = world_of(MAP) else {
         return;

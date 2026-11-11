@@ -3147,15 +3147,21 @@ impl World {
         // for 1,200 ticks. The owner's own words are *"each source was a square covering the whole tile"*, so the centre is
         // the tile's.
         let centre = self.tile_centre(self.tile_of(target));
-        // **A man's slot is his own, and it does not move.** The first version chose the slot nearest the worker's *current*
-        // position on every tick, and the choice was not stable: as two men walked toward the same side of a bush their
-        // nearest slot kept swapping, they ended up on the same one, and the collision pass queued them **0.167** tiles
-        // apart - measured. The start of the probe is therefore the worker itself, `(worker + node) mod 18`, which no other
-        // worker has, and the probe walks the ring from there. A slot that is blocked or held is passed over; a man who
-        // finds none has no room, which is D182's answer, unchanged.
+        // **The nearest place, unless a nearer man wants it** (D186). The slot was first chosen by distance from wherever the
+        // worker stood, every tick, with no ownership: two men walking at the same side of a bush kept swapping places and
+        // arrived on top of each other - measured, **0.001** tiles apart in one fixture and **0.20** in another. Rank by id
+        // fixed the ownership but sent men round the tree the long way, crossing each other (measured: a woodcutter walking
+        // two tiles to the far side while a nearer place stood empty). This is the pair of ideas that works: order the ring by
+        // distance from the worker, and let a slot belong to the nearest claimant - ties broken by id, so two men
+        // equidistant from a place cannot both own it.
         let slots = GATHER_RING_SLOTS as usize;
-        let first = ((worker.0 as usize).wrapping_add(node.0 as usize)) % slots;
-        let order: Vec<usize> = (0..slots).map(|step| (first + step) % slots).collect();
+        let mut order: Vec<usize> = (0..slots).collect();
+        order.sort_by_key(|k| {
+            let px = centre.0.raw() + ring * RING_COS[*k] / 1_000_000;
+            let py = centre.1.raw() + ring * RING_SIN[*k] / 1_000_000;
+            let (dx, dy) = (px - from.0.raw(), py - from.1.raw());
+            (dx * dx + dy * dy, *k)
+        });
         let found = order.iter().find_map(|k| {
             let px = centre.0.raw() + ring * RING_COS[*k] / 1_000_000;
             let py = centre.1.raw() + ring * RING_SIN[*k] / 1_000_000;
@@ -3198,6 +3204,22 @@ impl World {
                     .iter()
                     .any(|(other, point)| *other != worker && near(*point));
             if held {
+                return None;
+            }
+            // **A nearer claimant owns this place** (D186): no reservations, no state, and no two men can both be nearest.
+            let mine = (
+                (px - from.0.raw()).pow(2) + (py - from.1.raw()).pow(2),
+                worker.0,
+            );
+            let contested = self.entities.iter().any(|other| {
+                other.id != worker
+                    && matches!(other.task, Task::Gather { node: taken, .. } if taken == node)
+                    && (
+                        (other.position.0.raw() - px).pow(2) + (other.position.1.raw() - py).pow(2),
+                        other.id.0,
+                    ) < mine
+            });
+            if contested {
                 return None;
             }
 
