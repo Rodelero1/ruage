@@ -47,6 +47,18 @@ history and in `docs/decisions.md` under D186 addendum 2's neighbour.
   more and save immediately - the same trick that made the tree readable. For the house, a site that is **half built with its
   builders already standing round it** is the one that answers whether construction rings at the same distance.
 
+**OPEN - the nine-man cap is contradicted by the owner's own game.** `owner-bush2.aoe2spgame` (2026-11-12) carries **eleven**
+orders to one bush - `(64.50, 78.50)` eleven times - and the owner's words with it: *"Bush has 11 villagers on it all foraging."*
+D186's cap is **nine**, taken from his earlier *"max 9 per each"* and from the 9 + 7 split over two trees in `owner-test2`. Eleven
+on one bush refutes it: either the cap is the geometry (eighteen at body spacing on the 1.156 ring), or it is a number above
+eleven, or the 9 + 7 split was the click's own distribution and not a cap at all. **The engine has nine; the game shows eleven.**
+It is one constant (`GATHER_RING_SLOTS`) and needs the owner's call, not a guess.
+
+**The two later saves still do not give standing positions.** In `owner-bush2` the freshest orders (stamps 1024-1028) come from men
+at **1.21 to 2.57** tiles of the bush, and in `owner-house2` the four build orders (stamps 494-500) come from **2.06 to 3.73**
+tiles of the site: both groups were still walking when the click was made, so the from-points are the approach again. What worked
+for the tree was a click made while the men were *already standing at it* - the six radii there were 1.105-1.189.
+
 **Still owed, in order:**
 
 1. **The builder's ring is unmeasured.** The owner expects *"the same pattern"*; no save with a site under construction has been
