@@ -19,6 +19,17 @@ a gatherer stood on it and the empty-site gate waited for him - a barracks froze
 `config/skirmish.toml` pulled that barracks' only builder off at 380 s where the ring makes it finish at **~395 s** - the step is
 460 s now, with both numbers beside it.
 
+**OPEN - the cap is not asked where villagers are *moved*.** `start_gather_internal` skips the nine-man gate (`if spread &&
+on_node >= GATHER_RING_SLOTS`), and `nodes_of_slot` - the picker the villager-share pass uses - returns the nearest source of a
+column without asking whether it has room. Under D182 that was harmless (a square held one man); under the ring the tenth man
+moved to a full square keeps a `Task::Gather` he cannot work, so the share pass counts the column as manned and nobody looks
+again. Two callers are exposed: `world/shares.rs` (`step_shares`) and `pending_gather` (a moved villager resuming after a
+deposit). **Not fixed, and not guessed at**: a fixture with two patches (nine men on the first, the second empty) and
+`set_villager_shares(&[(1, vec![(wood, 100)])])` left the idle tenth villager untouched - `Task::Idle` after two seconds - so the
+share pass's own preconditions (anchor, reach and the retry window) are not understood well enough here to write a test that
+fails for the right reason. That fixture is the next session's starting point; it is three paragraphs up in this file's own
+history and in `docs/decisions.md` under D186 addendum 2's neighbour.
+
 **Still owed, in order:**
 
 1. **The builder's ring is unmeasured.** The owner expects *"the same pattern"*; no save with a site under construction has been
