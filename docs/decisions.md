@@ -4423,3 +4423,27 @@ from? If there is no space at half diameter from another villager and the the re
    more walking is the price of one worker per square; it is the owner's trade, recorded rather than argued.
 6. **Two tests rewritten with their reasons** (D171's fan-out assertions): `two_woodcutters_on_one_tree_do_not_share_its_side`,
    `three_gatherers_on_one_bush_do_not_pile_up`.
+
+
+## D183 - A foundation is walkable, invisible and free of cost until a villager touches it
+
+*2026-11-08. The owner's model, given in two messages after his scout was pushed into the forest by a lumber-camp placement: **"When you place a
+building on the ground, it is still walkable over ... and you and your allies see it. If any of your or allied units stand over it, they will leave
+the area by the shortest route ... Enemy units don't see the foundation until villager started working on it ... As soon as the villager starts
+building, it will turn dark grey (except farm) and start blocking the tiles"**. Supersedes D152 (a foundation blocked from insertion).*
+
+1. **Place**: the cost is paid **at placement** and a **cancelled foundation is refunded in full**; the ground it covers stays **walkable** and is drawn
+   light grey to its owner and allies, under normal fog. Own and allied foundations may not overlap each other; an **enemy** foundation is invisible, so
+   overlapping one is possible and the first to start construction wins, with the loser told once.
+2. **Invisible to enemies** while unstarted - not merely unrendered: their pathing and their eyes both treat the ground as free. It becomes **visible to
+   everyone in line of sight** the moment construction starts.
+3. **Builders approach like gatherers**: a contact point **outside** the footprint (the same standoff geometry D169 uses for a node), never inside it,
+   so a builder can never block his own site.
+4. **Construction cannot start while any unit is on the site** - every player's, allies and enemies alike, and animals, which are given a "leave the
+   site" order like allies and **do** hold the start up until they are off. Allies and animals are told to leave; an enemy has no reason to and can stall
+   a site indefinitely, which is accepted as a tactic. **The message is reported once per state change**, not per tick.
+5. **The first stroke** turns it dark grey and makes its tiles **block**. That is safe **by construction**, because the site was empty the tick before -
+   so "no unit is ever inside a solid footprint" is a guarantee, not a hope, and is to be pinned by a test.
+6. **Cancel**: everything disappears as if it had never been placed, at any stage of construction, refunded in full.
+7. **Farm is the exception**: constructed by walking **over** it, always walkable (D163), never blocks, multiple villagers may seed it and only one
+   stays to farm it (the existing one-farmer-a-farm rule). Its site-clear gate therefore does not apply.

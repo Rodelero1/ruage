@@ -1,3 +1,10 @@
+# NEXT - implement D183 (foundation is walkable, invisible, cheap to start)
+
+The model is written down as **D183**; the ordering of work is: ghost walkable and invisible -> eviction **by route** (never a teleport) -> site-clear gate
+-> first stroke turns it solid -> refund on cancel. Test-first, and the first test is the owner's own reproducer: *place a lumber camp on a scout's tile
+and the scout must end up somewhere it can stand, by walking*. D152 is superseded; the `push_units_off` teleport goes away with the blocking-at-insertion
+rule that required it.
+
 # OPEN - a scout that stops, and cannot be nudged (owner, 2026-11-08)
 
 The owner, with a screenshot of a scout cavalry standing at the forest's edge over an order marker: *"I noticed scout cavalry got
