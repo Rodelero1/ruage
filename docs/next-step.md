@@ -97,11 +97,13 @@ the centre), places come from `tiles::touching_places` (**eleven** on one tile),
 instead of a radius band. Every gather suite asserts it and the acceptance run improves: **made_room 96 -> 0**, repaths 435 -> 434,
 step 7.2 -> 6.9 us, entities 142 -> 143, hash `ef7cdba9` -> `ac7cfd18`.
 
-**What parks it:** `build::a_content_pack_with_our_own_resources_loads_and_spends` - a villager told to step **off** a ghost oscillates
-on its edge at `x = 4.95` for 2,000 ticks while the builder walks at the same approach tile, so the house stays at hp 1. Two of the
-player's own units fighting for one tile is a **movement** deadlock the standoff exposed; a friendly pass-through that ignores bodies
-entirely was tried and does not clear it. Next: reproduce it with two units in one test, decide whether step-aside should be a stable
-*placement* rather than a walk that can deadlock, then land.
+**What parks it:** `build::a_content_pack_with_our_own_resources_loads_and_spends`. **Traced**: the builder and the man stepping off
+the ghost both walk for **95 ticks**, then stop **0.30 tiles apart** - builder `(5.04, 4.39)`, squatter `(4.95, 4.68)`, idle villager
+behind them at `(5.00, 4.00)` - beside the pack's timber node at `(5,5)`, and never move again; the house stays at hp 1. Each is inside
+the other's diameter *and* inside the blocked tile's cushion, and the movement pass's give-way resolution needs a refusal to fire - but
+neither takes a step for the other to refuse. A friendly pass-through that ignores bodies entirely was tried and does **not** clear it. Next: a movement-pass fix for two own units
+both inside one another and against a wall (a mutual give-way that does not depend on a refusal), with its own three-unit test, then
+land D192.
 
 **Still owed, in order:**
 
