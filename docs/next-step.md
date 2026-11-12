@@ -68,6 +68,29 @@ at **1.21 to 2.57** tiles of the bush, and in `owner-house2` the four build orde
 tiles of the site: both groups were still walking when the click was made, so the from-points are the approach again. What worked
 for the tree was a click made while the men were *already standing at it* - the six radii there were 1.105-1.189.
 
+**OPEN - the standoff moves from the ring to the tile's border (owner's ruling, 2026-11-12).** He settled the geometry and the
+answers are the spec for the next slice:
+
+- **The working distance is the circle touching the tile**, not the 1.156 ring: `0.5 + r` for a side, and the rounded corner where
+  two sides meet. Measured in his saves: ten men at **0.70-0.79** (three at exactly 0.70) *and* ten at 1.10-1.19; the outer band is
+  the row behind, which **gains nothing**. D186's 1.156 was that second row - an error now on the record.
+- **Places**: anywhere along the square's outline, **one diameter apart**, as many as fit - no cap, no slots.
+- **Resource shape**: the tile itself (a diamond on screen), and a block of forest is its tiles, **not** its outer border: his saves
+  show **24 of 49** men in the tree area standing in the notch between two diagonally adjacent tiles. Per tile, always.
+- **No outer band**: a man without a place tries another place on the same tile, then another resource within **4 tiles**, then
+  idles.
+- **A resource tile is never enterable**: not by pathing, not by a settle, not by any placement, and **not even by a circle that
+  would only clip its corner** - *"Block of forest is never walkable through. Ever."* Exhausted tiles vanish and are walkable at once.
+- **Corner coordinates do not exist yet** and must: `tile_corners`, `tile_edge_distance`, `touching_places(tile, radius, spacing)`,
+  used by both the sim and the renderer. His words: *"the fixation on the tile center might be a problem ... Villagers building or
+  gathering resources (except meat from animal) must be aligned with borders of the tiles, not center of it."*
+- **Animals are the exception**: meat is taken from the body, not from a tile.
+
+**Unreproduced, and it needs a save:** a villager standing **on** a resource tile in his screenshot. `crates/sim/tests/corner_gap.rs`
+guards the rule (a diagonal gap between two trees is not a door) and passes on the current engine, so the pathfinder's corner rule
+already covers the plan; the overlap came from somewhere else - a placement, a settle, or a map whose resource tiles are not blocked.
+Ask for the save, or reproduce from the seed, before changing anything.
+
 **Still owed, in order:**
 
 1. **The builder's ring is unmeasured.** The owner expects *"the same pattern"*; no save with a site under construction has been
