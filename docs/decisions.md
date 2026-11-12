@@ -22,3 +22,31 @@ clear of every other place, and the settle walks a man exactly onto his place (`
 
 **Measured on landing:** ten men work one bush (nine was the ceiling), closest pair of places **0.408**; eighteen work one tree at a
 body each, which is `ring_capacity()`; the acceptance hash and counters are in the review.
+
+### D191 - tile geometry: the border is what a villager stands against
+
+**The owner:** *"Do we know coordinates of the tiles and their corners? If not, it should be added. Because all work of villagers
+depends on that (maybe except taking meat from animals) ... Villagers building or gathering resources (except meat from animal)
+must be aligned with borders of the tiles, not center of it."* And on size: *"center stays at least half the diameter of the circle
+(however big that circle is)."*
+
+**Why the centre was wrong.** Every standoff so far measured from the tile's **centre** - 0.70 (D169), then 1.156 (D186/D188). His
+saves show men at **0.70** from a resource tile's centre, which is `0.5 + 0.2`: a villager's circle **touching the tile's border**.
+Two edges meeting put the same circle at `0.707 + 0.2 = 0.91`, and his saves carry men there too (0.76-0.99). The border is the
+thing the circle touches; the centre was a proxy that happened to be right only for one particular row.
+
+**The new module** (`crates/sim/src/tiles.rs`, public):
+
+- `tile_corners(tile, scale)` - the four corners in raw map units;
+- `distance_to_tile(point, tile, scale)` - zero inside, the distance to the nearest border point outside. "The circle may never
+  overlap the tile" is then one comparison: `distance >= radius`;
+- `touching_places(tile, radius, spacing, scale)` - the points where a circle of `radius` touches the tile without overlapping, at
+  least `spacing` apart, in a **fixed order** (the simulation is hashed; a geometry that reorders itself is a desync waiting).
+
+**The capacity falls out of it, for the first time without a number in a table.** Measured with the module: a villager (radius 0.2,
+spacing 0.4) gets **eleven places** on one tile - the outline is `4 + 2 * pi * 0.2 = 5.26` tiles and a body takes 0.4 - a unit with
+radius 0.4 gets **six**, and one with 0.05 gets forty-one. The owner's *"max 9 per each"* and the ten men his save shows on one bush
+both sit inside eleven.
+
+**Not yet switched.** The gather and build standoffs still measure from the ring and the centre; this commit adds the geometry and
+its tests only, because moving the standoff changes every gather test's band and is its own slice (`docs/next-step.md`).

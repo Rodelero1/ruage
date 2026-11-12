@@ -24,6 +24,7 @@ use ruage_data::{
 
 mod metrics;
 mod path;
+pub mod tiles;
 mod script;
 mod short;
 mod world;
