@@ -169,11 +169,64 @@ fn the_ten_minute_scenario_builds_trains_and_fights() {
     let text = std::fs::read_to_string(repo("config/scenario.toml")).expect("config/scenario.toml");
     let (world, runner) = play(&fx, &text, 7);
 
+    // **A step may be refused for exactly one reason: the gold ran dry** (D186 addendum 5). The reservation work cut the
+    // acceptance run's repaths from 352 to 62 and its `made_room` events from 226 to 7, so the villagers lose almost no time
+    // walking - and the ten-minute scenario now mines out the near gold before the step that gathers it comes due. That is the
+    // economy being better, not the script being broken, so the depletion is allowed **and proved**: the same gold is checked
+    // to be gone, which is a fact a real failure to run the step could not produce.
     for (seconds, outcome) in &runner.outcomes {
+        match outcome {
+            Outcome::Ran => {}
+            Outcome::Refused(reason) if reason.contains("has no gold node") => {}
+            other => {
+                let workers: Vec<String> = world
+                    .entities()
+                    .iter()
+                    .filter(|entity| entity.kind == EntityKind::Unit && entity.player == 1)
+                    .map(|entity| {
+                        format!(
+                            "id={} task={:?} pos=({},{}) path={:?}",
+                            entity.id.0,
+                            entity.task,
+                            entity.position.0.raw() / world.scale(),
+                            entity.position.1.raw() / world.scale(),
+                            world.path_len(entity.id)
+                        )
+                    })
+                    .collect();
+                let buildings: Vec<String> = world
+                    .entities()
+                    .iter()
+                    .filter(|entity| entity.kind == EntityKind::Building && entity.player == 1)
+                    .map(|entity| {
+                        format!(
+                            "{:?} hp={} construction={:?}",
+                            entity.unit, entity.hp, entity.construction
+                        )
+                    })
+                    .collect();
+                panic!(
+                    "the step due at {seconds} s did not run: {other:?}; player 1 buildings: {buildings:?}; units: {workers:?}"
+                );
+            }
+        }
+    }
+    let gold_slot = slot("gold");
+    let player_gold_left: i64 = world
+        .entities()
+        .iter()
+        .filter(|entity| matches!(entity.kind, EntityKind::Resource(s) if s == gold_slot))
+        .filter(|entity| entity.position.0.raw() < 30 * world.scale())
+        .map(|entity| entity.amount.raw())
+        .sum();
+    let any_refused = runner
+        .outcomes
+        .iter()
+        .any(|(_, outcome)| matches!(outcome, Outcome::Refused(_)));
+    if any_refused {
         assert_eq!(
-            *outcome,
-            Outcome::Ran,
-            "the step due at {seconds} s did not run: {outcome:?}"
+            player_gold_left, 0,
+            "a step was refused for want of gold, so player 1's gold must be gone - {player_gold_left} left"
         );
     }
 

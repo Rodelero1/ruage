@@ -487,6 +487,21 @@ impl World {
             carry_cap,
             progress: Fixed::ZERO,
         };
+        // **His place on the ring, taken now, kept until he is re-tasked** (D186 addendum 5). The owner's words for what went
+        // wrong: *"it feels rather random"* - and it was, because the settle re-chose a place every tick, so a man's
+        // destination moved as his neighbour moved. A place is a property of the order: chosen when the order lands (here),
+        // released when the order changes (`place_is_live` asks the task, so nothing needs sweeping).
+        if matches!(
+            self.find(node).map(|entity| entity.kind),
+            Some(EntityKind::Resource(_))
+        ) {
+            let (centre, there) = (
+                self.tile_centre(self.tile_of(to)),
+                self.find(node).map_or(to, |entity| entity.position),
+            );
+            let _ = there;
+            self.reserve_gather_place(villager, node, centre, from);
+        }
         // The load is the villager's, not the node's: re-tasking onto the next tree (or the next sheep) must not spill
         // what is already in its hands. It used to be zeroed here, which was invisible until a worker could move on by
         // itself.

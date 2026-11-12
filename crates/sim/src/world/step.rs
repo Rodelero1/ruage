@@ -21,6 +21,8 @@ impl World {
 
         let mut work = self.decide()?;
 
+        self.reserve_places(std::mem::take(&mut work.places));
+
         self.resume_fights(work.engaging, work.turning, work.homing);
 
         self.grant_takes(work.chops, work.takes);
@@ -800,6 +802,21 @@ impl World {
     /// tile - measured at **15,600 raw units in one tick** where its speed allows 1,000. It now takes the step the body could take:
     /// as far as its speed allows, straight at the standoff, and exactly onto it when the remainder fits in one step. The worker is
     /// at its tree one or two ticks later and never moves faster than it can walk.
+    /// **Keep the places the settle chose this tick** (D186 addendum 5). One place per man, taken when he first walks onto a
+    /// ring, held until his order changes - which is what makes two men unable to fight over the same spot.
+    fn reserve_places(&mut self, places: Vec<(EntityId, EntityId)>) {
+        for (worker, node) in places {
+            let (Some(centre), Some(from)) = (
+                self.find(node)
+                    .map(|entity| self.tile_centre(self.tile_of(entity.position))),
+                self.find(worker).map(|entity| entity.position),
+            ) else {
+                continue;
+            };
+            self.reserve_gather_place(worker, node, centre, from);
+        }
+    }
+
     fn settle_workers(&mut self, settles: Vec<(EntityId, (Fixed, Fixed))>) {
         // **Speed is per second**, and a step is exact: `step_towards` is the movement pass's own arithmetic, so this cannot be a
         // fraction of a scale unit and cannot overshoot. Reading the stored speed raw was the first attempt's `15,600`.
@@ -1677,28 +1694,40 @@ impl World {
                     // toward the node's own tile; the settle steps *away* from it, so a worker with both ran on the spot -
                     // measured, a woodcutter frozen at 0.984 tiles with the tree's 20 hit points untouched for 15 s.
                     let mut settling_now = false;
-                    if is_resource
-                        && settling
-                        && let Some(found) = self.standoff_point(
-                            entity.position,
-                            target,
-                            node,
-                            entity.id,
-                            &work.settles,
-                            false,
-                        )
-                    {
+                    if is_resource && settling {
+                        // **A place already owned is walked to, not re-chosen** (D186 addendum 5). This is the fix for the whole
+                        // family of two-men-one-spot failures: the settle used to ask `standoff_point` afresh every tick, so a
+                        // man's destination moved as his neighbour moved and the two of them swapped places - measured 0.001,
+                        // 0.20 and 0.243 tiles apart in three fixtures. A place taken once is taken for as long as the order
+                        // stands, and `place_is_live` releases it the moment the man is re-tasked.
+                        let owned = self.gather_place_of(entity.id, node);
+                        let found = match owned {
+                            Some(slot) => {
+                                Some(crate::Standoff::Point(self.ring_point(centre, slot)))
+                            }
+                            None => self.standoff_point(
+                                entity.position,
+                                target,
+                                node,
+                                entity.id,
+                                &work.settles,
+                                false,
+                            ),
+                        };
                         match found {
-                            crate::Standoff::Point(stand) => {
+                            Some(crate::Standoff::Point(stand)) => {
                                 work.settles.push((entity.id, stand));
                                 settling_now = true;
+                                if owned.is_none() {
+                                    work.places.push((entity.id, node));
+                                }
                             }
                             // **No room on the ring** (D182): the worker keeps trying from where it stands rather than being re-tasked here.
                             // Re-tasking from this arm fires **every tick** a worker cannot reach its side, and each attempt re-plans a route:
                             // the acceptance run went from 35 s to over 400 s with that loop in place. The owner's rule is applied where it is
                             // cheap and deterministic - when the order is given (`start_gather`), which is once per order rather than once per
                             // tick - and the ring is only the fallback.
-                            crate::Standoff::NoRoom => {}
+                            _ => {}
                         }
                     }
 
@@ -1915,4 +1944,6 @@ struct TickWork {
     turning: Vec<EntityId>,
     homing: Vec<EntityId>,
     settles: Vec<(EntityId, (Fixed, Fixed))>,
+    /// Men who chose a place on a node's ring this tick and must now keep it (D186 addendum 5).
+    places: Vec<(EntityId, EntityId)>,
 }

@@ -266,3 +266,147 @@ fn three_gatherers_all_work_the_same_square_on_its_ring() {
         }
     }
 }
+
+/// **A man at his place keeps it when a nearer man arrives** (D186 addendum 5). Without a place that belongs to the order, the
+/// settle asks `standoff_point` afresh every tick and the slot belongs to the *nearest claimant* - so a man who walks up and
+/// stands closer to somebody else's place takes it, and the first man is sent round the bush. The owner's description of the
+/// result was *"it feels rather random"*.
+#[test]
+fn a_settled_man_is_not_displaced_by_a_later_arrival() {
+    let Some(mut world) = world_of(MAP) else {
+        return;
+    };
+    let scale = world.scale();
+    let node = bushes(&world)[0];
+    let villager = world.role_unit("villager").expect("villager");
+
+    let spawn = |world: &mut World, id: EntityId, x: i64, y: i64| {
+        world
+            .submit_checked(Command::Spawn {
+                id,
+                player: 1,
+                kind: EntityKind::Unit,
+                unit: Some(villager),
+                position: (
+                    Fixed::from_raw(x * scale + scale / 2),
+                    Fixed::from_raw(y * scale + scale / 2),
+                ),
+                speed: Fixed::parse("0.8", scale).expect("a speed"),
+                hp: 25,
+                amount: 0,
+            })
+            .expect("a villager");
+    };
+
+    let first = EntityId(9_500);
+    spawn(&mut world, first, 6, 6);
+    world.step().expect("the villager lands");
+    world
+        .submit_checked(Command::Gather {
+            villager: first,
+            node,
+        })
+        .expect("a gather order");
+    for _ in 0..500 {
+        world.step().expect("a tick");
+    }
+    let settled = world.position(first).expect("the first man");
+    let bush = world.position(node).expect("the bush");
+    let radius = gap(&world, settled, bush);
+    assert!(
+        (1.05..=1.27).contains(&radius),
+        "PRECONDITION: the first man settled at {radius:.3} tiles, not on the ring"
+    );
+
+    // The second man is put **right beside the first man's place**, on the same side of the bush.
+    let (sx, sy) = (settled.0.raw() / scale + 1, settled.1.raw() / scale);
+    let second = EntityId(9_501);
+    spawn(&mut world, second, sx, sy);
+    world.step().expect("the villager lands");
+    world
+        .submit_checked(Command::Gather {
+            villager: second,
+            node,
+        })
+        .expect("a gather order");
+    for _ in 0..500 {
+        world.step().expect("a tick");
+    }
+
+    let after = world.position(first).expect("the first man");
+    let moved = gap(&world, settled, after);
+    let their = world.position(second).expect("the second man");
+    let between = gap(&world, after, their);
+    assert!(
+        moved < 0.15,
+        "MEASURED the first man {moved:.3} tiles from the place he had settled on: the later arrival took it, which is the \
+         nearest-claimant rule without reservations"
+    );
+    assert!(
+        between >= 0.39,
+        "MEASURED the two men {between:.3} tiles apart, and two bodies are 0.40 wide"
+    );
+}
+
+/// **Six men keep the places they took**: over ten seconds nobody drifts onto his neighbour. The measured failures of the
+/// reservation were **0.19** and **0.345** tiles apart between men who had all settled - each kept working, and kept sliding.
+#[test]
+fn six_settled_men_hold_their_places() {
+    let Some(mut world) = world_of(MAP) else {
+        return;
+    };
+    let scale = world.scale();
+    let node = bushes(&world)[0];
+    let villager = world.role_unit("villager").expect("villager");
+    let mut ids = Vec::new();
+    for index in 0..6u32 {
+        let id = EntityId(9_600 + index);
+        let (x, y) = (5 + i64::from(index), 6);
+        world
+            .submit_checked(Command::Spawn {
+                id,
+                player: 1,
+                kind: EntityKind::Unit,
+                unit: Some(villager),
+                position: (
+                    Fixed::from_raw(x * scale + scale / 2),
+                    Fixed::from_raw(y * scale + scale / 2),
+                ),
+                speed: Fixed::parse("0.8", scale).expect("a speed"),
+                hp: 25,
+                amount: 0,
+            })
+            .expect("a villager");
+        world.step().expect("the villager lands");
+        world
+            .submit_checked(Command::Gather { villager: id, node })
+            .expect("a gather order");
+        ids.push(id);
+    }
+    for _ in 0..900 {
+        world.step().expect("a tick");
+    }
+    let before: Vec<(Fixed, Fixed)> = ids.iter().filter_map(|id| world.position(*id)).collect();
+    let hz = world.tick_rate_hz();
+    for _ in 0..(10 * hz) {
+        world.step().expect("a tick");
+    }
+    let after: Vec<(Fixed, Fixed)> = ids.iter().filter_map(|id| world.position(*id)).collect();
+    for (index, (was, now)) in before.iter().zip(after.iter()).enumerate() {
+        let drift = gap(&world, *was, *now);
+        assert!(
+            drift < 0.10,
+            "MEASURED man {index} drifted {drift:.3} tiles in ten seconds on a place he had taken"
+        );
+    }
+    let mut closest = f64::MAX;
+    for a in 0..after.len() {
+        for b in (a + 1)..after.len() {
+            closest = closest.min(gap(&world, after[a], after[b]));
+        }
+    }
+    assert!(
+        closest >= 0.39,
+        "MEASURED the closest pair {closest:.3} tiles apart after ten seconds; two bodies are 0.40 wide"
+    );
+}

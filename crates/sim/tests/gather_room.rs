@@ -167,8 +167,16 @@ fn a_woodcutter_whose_tree_runs_out_joins_a_patch_that_already_has_men_on_it() {
         })
         .expect("a gather order");
 
-    for _ in 0..2_400 {
+    // **He may bank his load first** (D186 addendum 5): the tree running dry mid-load sends him home to drop it, and only then
+    // to the next patch - so the test waits for the join rather than for a tick count. Pinning the tick made this test a
+    // measurement of the ring's arrival time, which is not what it is about.
+    let mut task = world.entity(third).expect("the third villager").task;
+    for _ in 0..6_000 {
         world.step().expect("a tick");
+        task = world.entity(third).expect("the third villager").task;
+        if matches!(task, Task::Gather { node, .. } if node == large) {
+            break;
+        }
     }
 
     let task = world.entity(third).expect("the third villager").task;

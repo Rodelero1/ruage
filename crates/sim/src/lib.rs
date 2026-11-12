@@ -1047,6 +1047,14 @@ pub struct World {
     /// Buildings with a construction in progress, by id. A maintained set rather than a scan: `settle_blind_sites`
     /// needs to know whether any site exists and used to walk the world to ask (item 6).
     foundations: BTreeSet<EntityId>,
+    /// **A man's place on his node's ring** (D186 addendum 5): worker -> (node, slot). The settle used to *choose* a place
+    /// every tick, so two men walking to the same side of a bush swapped places and ended up on top of each other - measured
+    /// **0.001**, **0.20** and **0.243** tiles apart in three different fixtures. A place chosen once and kept is a place
+    /// nobody else can take, and a man walks to it rather than to whatever is nearest this tick.
+    ///
+    /// Bookkeeping, and not hashed: it is re-derived from the tasks every time it is read (`place_is_live`), so a re-tasked
+    /// man's place dies with the order rather than needing a sweep.
+    gather_place: BTreeMap<EntityId, (EntityId, u8)>,
     /// **Sites that could not start because somebody was standing on them** (D183 §4). Bookkeeping, not simulation state:
     /// it exists so the refusal goes out **once per state change** rather than once a tick, and like `foundations` and
     /// `open_gates` it is derived from the world every tick, so it is not hashed. A site leaves the set the moment its
@@ -1358,6 +1366,7 @@ impl World {
             share_move_ticks: 40,
             foundations: BTreeSet::new(),
             stalled_sites: BTreeSet::new(),
+            gather_place: BTreeMap::new(),
             requires_built: BTreeMap::new(),
             age_needs: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
@@ -3175,6 +3184,67 @@ impl World {
     /// The old rule put a man where the two discs touched - `radius[0]` 0.2 plus a tree's 0.5 = **0.70** - which is nearly
     /// half a tile inside the game's front row. A node's own tile is blocked, so the slot is checked the same way the side
     /// was: walkable ground, free of bodies, and reachable by a path.
+    /// **The point a slot stands on**: the ring round the source's *square*, at a slot's angle (D186).
+    pub(crate) fn ring_point(&self, centre: (Fixed, Fixed), slot: u8) -> (Fixed, Fixed) {
+        let ring = self.scale * GATHER_RING_MILLI / 1000;
+        let k = usize::from(slot) % RING_COS.len();
+        (
+            Fixed::from_raw(centre.0.raw() + ring * RING_COS[k] / 1_000_000),
+            Fixed::from_raw(centre.1.raw() + ring * RING_SIN[k] / 1_000_000),
+        )
+    }
+
+    /// **Is this man still gathering that node?** A place belongs to an order, so the moment the order changes the place is
+    /// gone - asked when the place is read rather than swept every tick, which keeps the tick free of a map-shaped cost.
+    fn place_is_live(&self, worker: EntityId, node: EntityId) -> bool {
+        self.find(worker).is_some_and(|entity| {
+            matches!(
+                entity.task,
+                Task::Gather { node: at, .. } | Task::Return { node: at, .. } if at == node
+            )
+        })
+    }
+
+    /// **The place this man already owns**, if it is still free of other men.
+    pub(crate) fn gather_place_of(&self, worker: EntityId, node: EntityId) -> Option<u8> {
+        // **No liveness check here**: this is the hot path - one call per gatherer per tick - and the caller only uses the
+        // place when the man's task already names this node. The map's stale entries are pruned by the two rare paths that do
+        // ask (`reserve_gather_place`, `standoff_point`), so a re-tasked man's place is released the next time anyone looks.
+        let (at, slot) = *self.gather_place.get(&worker)?;
+        (at == node).then_some(slot)
+    }
+
+    /// **Take the place nearest `from`, and keep it** (D186 addendum 5). Reserved slots are skipped exactly as bodies are, so
+    /// a place owned by another man cannot be taken from him by a nearer claimant arriving later.
+    pub(crate) fn reserve_gather_place(
+        &mut self,
+        worker: EntityId,
+        node: EntityId,
+        centre: (Fixed, Fixed),
+        from: (Fixed, Fixed),
+    ) -> Option<u8> {
+        let mut best: Option<(i64, u8)> = None;
+        for slot in 0..GATHER_RING_SLOTS {
+            if self.gather_place.iter().any(|(other, (at, taken))| {
+                *other != worker
+                    && *at == node
+                    && *taken == slot
+                    && self.place_is_live(*other, node)
+            }) {
+                continue;
+            }
+            let point = self.ring_point(centre, slot);
+            let (dx, dy) = (point.0.raw() - from.0.raw(), point.1.raw() - from.1.raw());
+            let squared = dx * dx + dy * dy;
+            if best.is_none_or(|(best, _)| squared < best) {
+                best = Some((squared, slot));
+            }
+        }
+        let (_, slot) = best?;
+        self.gather_place.insert(worker, (node, slot));
+        Some(slot)
+    }
+
     pub(crate) fn standoff_point(
         &self,
         from: (Fixed, Fixed),
@@ -3200,7 +3270,8 @@ impl World {
         }
         // **Nine places on a ring of 1.156 tiles** (D186), not one side at the two bodies' standoff (D169/D182). The men
         // the owner's save shows stand *outside* the neighbouring tile's centre - 1.156 of a tile from the source square's
-        // centre - and no more than nine work one square: his *"max 9 per each"*, and the 9 + 7 split his file names.
+        // centre - and nine places is what this engine can hold without two bodies touching; his game forages eleven, and the
+        // geometries agree, which is why the constant is under review in D186 addendum 4 rather than settled.
         let ring = self.scale * GATHER_RING_MILLI / 1000;
         // **Held means "too close", not "exactly on it"** (D181, kept). The test is the width of two bodies - the 0.404 of
         // the save's closest pair - and it counts the slots chosen earlier in this same decision pass, which is the only way
@@ -3261,6 +3332,17 @@ impl World {
                 let (ax, ay) = (point.0.raw() - px, point.1.raw() - py);
                 ax * ax + ay * ay < too_close * too_close
             };
+            // **A place another man has taken is taken** (D186 addendum 5): his reservation outranks any nearer claimant, which
+            // is what stops two men from swapping a slot between them tick after tick.
+            let reserved = self.gather_place.iter().any(|(other, (at, taken))| {
+                *other != worker
+                    && *at == node
+                    && usize::from(*taken) == *k
+                    && self.place_is_live(*other, node)
+            });
+            if reserved {
+                return None;
+            }
             let held = self
                 .entities
                 .iter()
