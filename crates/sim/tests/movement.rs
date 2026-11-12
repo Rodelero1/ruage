@@ -194,3 +194,69 @@ fn a_very_slow_unit_walks_to_where_it_was_sent() {
         "a slow walker ended up at {x},{y} instead of next to 22,20"
     );
 }
+
+/// **A walker whose goal tile holds an idle friend still arrives** (D192). The owner's rule since D189 is that his own units are not
+/// walls: they pass each other on the way and separate where they stand. The movement pass disagreed in one place - `collide` refuses
+/// a step onto the tile the order asked for when *any* body stands there, friendly or not - and a villager told to step off a fresh
+/// foundation froze 1.4 tiles from his goal for 2,000 ticks while an idle neighbour stood on the exit tile (measured: builder at
+/// `(5.04, 4.39)`, walker at `(4.95, 4.68)`, idle villager at `(5.00, 4.00)`, house at hp 1).
+#[test]
+fn a_walker_whose_goal_tile_holds_a_friend_still_arrives() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    // **The friend, standing on the ground the order asks for** - at the tile's centre, which is where the walk ends.
+    let friend = walker(&mut world, 1, (20, 20), "0.8");
+    {
+        let scale = world.scale();
+        world
+            .submit_checked(Command::Move {
+                unit: friend,
+                to: (20, 20),
+            })
+            .expect("the friend settles");
+        for _ in 0..200 {
+            world.step().expect("step");
+        }
+        let at = world.position(friend).expect("the friend");
+        assert!(
+            (at.0.raw() - (20 * scale + scale / 2)).abs() < scale / 2,
+            "PRECONDITION: the friend is on the tile the walker is sent to"
+        );
+    }
+    let walker_id = walker(&mut world, 1, (23, 20), "0.8");
+    world
+        .submit_checked(Command::Move {
+            unit: walker_id,
+            to: (20, 20),
+        })
+        .expect("move");
+
+    let mut arrived = false;
+    for _ in 0..600 {
+        world.step().expect("step");
+        if world
+            .entity(walker_id)
+            .is_some_and(|entity| entity.task == Task::Idle)
+        {
+            arrived = true;
+            break;
+        }
+    }
+    let at = world.position(walker_id).expect("alive");
+    let scale = world.scale();
+    let goal = (20 * scale, 20 * scale);
+    let gap = (((at.0.raw() - goal.0) as f64).powi(2) + ((at.1.raw() - goal.1) as f64).powi(2))
+        .sqrt()
+        / scale as f64;
+    let _ = &gap;
+    assert!(
+        arrived && gap < 0.75,
+        "MEASURED the walker {gap:.3} tiles from the tile it was sent to after 600 ticks (task {:?}); a friend standing there \
+         must not stop him - his own units are not walls (D189)",
+        world.entity(walker_id).map(|e| e.task)
+    );
+    assert!(
+        world.entity(friend).is_some(),
+        "the friend is still in the world"
+    );
+}

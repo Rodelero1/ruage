@@ -239,11 +239,20 @@ impl World {
             return (dx, dy);
         };
         let stop = (Fixed::ZERO, Fixed::ZERO);
+        // **Whose body is it** (D131 A, D189): the reach and the goal-tile refusal below are about **two players'** units. Two of
+        // your own villagers are not walls - they pass while walking (D189) and separate where they stand - and treating them as
+        // one froze a man told to step off a fresh foundation for 2,000 ticks, 1.011 tiles from the tile he was sent to, because an
+        // idle neighbour stood on it (measured; the house stayed at hp 1).
+        let hostile = entity.player >= 1
+            && self
+                .find(other)
+                .is_some_and(|other| other.player >= 1 && other.player != entity.player);
         // 2. The order's own business: the body it was sent at, or the ground it was sent to.
         if Self::order_target(entity) == Some(other) {
             return stop;
         }
-        if let Some((goal_tile, true)) = goal
+        if hostile
+            && let Some((goal_tile, true)) = goal
             && self.tile_of(other_at) == goal_tile
         {
             return stop;
@@ -269,29 +278,18 @@ impl World {
         // villagers brushing past each other is how AoE2 moves a crowd - the deck's own page 9 says *"formations allow for
         // some friendly overlap"* - and bounding those as well measured a match that no longer resolved: 164 entities
         // against 141, both players alive at 1,800 s where the baseline had eliminated one, refusals 574 -> 1,021.
-        let hostile = entity.player >= 1
-            && self
-                .find(other)
-                .is_some_and(|other| other.player >= 1 && other.player != entity.player);
-        // **Your own units pass through each other while walking** (D189, the owner's choice of the two ways out of the crowd
-        // problem). `blocker_at` stopped a step before it entered a friendly body, which is what left men stranded outside the
-        // gather band when ten of them were sent at one bush: the men behind could not pass the men in front, and the settle -
-        // which moves a body directly - then either waited for ever or stepped inside a neighbour (measured 1.962 and 0.144).
-        // The original lets its own villagers walk through one another and separates them at rest, and the owner's own screenshot
-        // shows them overlapping where they stand. Enemy bodies are unchanged: `bound_to_reach` still holds the two players apart.
-        // **On the way, not on the last step.** Passing through is for a man in transit; the final step still respects a body, so
-        // builders queue at a site and arrivals stay ordered. Without the bound a builder stacked on an idle villager and never
-        // reached its footprint (measured: a house at hp 1 after 2,000 ticks).
-        let transit = self
-            .paths
-            .get(&id)
-            .is_some_and(|route| route.points.len() > 1);
-        // **A friend at rest is not a wall either** (D192). On the last step the mover used to stop for any friendly body, and a
-        // builder whose goal tile held an idle villager waited there for ever: the content pack's house sat at **hp 1** after 2,000
-        // ticks with its builder one waypoint from the site. Two of the owner's own villagers stand on each other in his screenshot;
-        // the original lets them, and separates them where they stand.
-        let at_rest = !pass.moving.contains(&other);
-        let _ = (transit, at_rest);
+        // **Your own units are not walls** (D189, D192). The owner chose this between the two ways out of the crowd problem
+        // (*"1"*): his bodies may overlap while walking, and they are separated where they stand. Without it, ten men sent at one
+        // bush cannot be delivered - the men behind cannot pass the men in front, and the settle, which moves a body directly,
+        // either steps inside a neighbour (measured 1.962 and 0.144 tiles out) or strands a man outside the band.
+        //
+        // **The last step used to be the exception, and that exception was the bug.** A walker was held for any friendly body on
+        // the tile his order asked for, so a villager told to step off a fresh foundation stood **1.011 tiles** from his goal for
+        // 2,000 ticks while an idle neighbour stood there, and the house stayed at hp 1. A friend is not a wall on the last step
+        // either; the settle and the work places are what keep men apart where it matters.
+        //
+        // **Enemy bodies are unchanged**: the reach above and `bound_to_reach` still hold two players' units apart, which is the
+        // pass D131 was about.
         if !hostile {
             return (dx, dy);
         }

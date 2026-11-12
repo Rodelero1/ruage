@@ -1276,11 +1276,6 @@ pub(crate) const GATHER_RING_MILLI: i64 = 1156;
 /// a place that exists, and how many fit falls out of the circumference instead of a constant.
 pub const GATHER_PLACES: u16 = 180;
 
-/// **The band a man must stand in to be working**, in thousandths of a tile: the ring plus a tenth either side. It is why
-/// only the front row works - a man on the neighbouring tile's centre is at 1.000, outside the band, and the second row in
-/// the save sits at 1.357 and beyond.
-pub(crate) const GATHER_BAND_MILLI: (i64, i64) = (1056, 1256);
-
 /// **How far round the ring a man will walk** before taking another source instead, in thousandths of a tile (D188). The owner:
 /// *"take next tree instead"* - a place on the far side costs two tiles of walking round the tree, and a man who does that is a
 /// man not gathering. The test is the *extra* walk over walking straight at the source.
@@ -3178,14 +3173,6 @@ impl World {
             // Free is not the same as reachable: a free tile inside a wall is no place to stand.
             self.plan_path(from, position, 0).ok().map(|_| position)
         })
-    }
-
-    /// The **node's own half-extent**, in raw units, from the resource pack's `radius` for its kind (D169).
-    pub(crate) fn node_radius_raw(&self, entity: &Entity) -> i64 {
-        let EntityKind::Resource(slot) = entity.kind else {
-            return self.body_radius(entity.unit);
-        };
-        self.node_radii.get(slot).copied().unwrap_or(0)
     }
 
     /// **Is there any ring at all?** True when at least one of the nine slots round a source square is walkable, free

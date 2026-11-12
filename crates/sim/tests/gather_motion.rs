@@ -186,7 +186,6 @@ fn three_gatherers_on_one_bush_do_not_pile_up() {
     }
     // **Only the men at work**: a villager walking in or out crosses other ground, and a crossing is a moment rather than a
     // place. What must never happen is two men *working the same bush* inside each other.
-    let at = world.position(node).expect("the bush's square");
     let spots: Vec<(Fixed, Fixed)> = ids
         .iter()
         .filter(|id| {

@@ -6,7 +6,11 @@
 //! oscillated on its edge at `x = 4.95` for 2,000 ticks while the builder walked at the same approach tile, and the house sat at
 //! **hp 1**. Two of the player's own units contesting one tile, neither passing the other.
 //!
-//! Written before the fix (D7, SPEC §11).
+//! **This file is a guard, not the RED of the rule it describes.** It was written as the step-aside deadlock's failing test and it
+//! passed on the branch: its squatter's exit tile happened to be free, so it never reproduced the freeze. The RED that bit is
+//! `crates/sim/tests/movement.rs::a_walker_whose_goal_tile_holds_a_friend_still_arrives`, which measured a walker held 1.011 tiles
+//! from his goal by a friend standing on it. This stays because the rule is worth pinning end to end - a man on a ghost leaves and the
+//! house gets built - and because the next regression may well be here.
 
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, World};

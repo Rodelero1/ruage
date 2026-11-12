@@ -944,8 +944,7 @@ fn a_content_pack_with_our_own_resources_loads_and_spends() {
     assert_eq!(world.stock(1, grain), 0, "and not out of grain");
 
     let mut finished = None;
-    let mut was_clear = true;
-    for tick in 0..2_000 {
+    for _ in 0..2_000 {
         world.step().expect("step");
         if let Some(house) = world
             .entities()

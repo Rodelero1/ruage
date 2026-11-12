@@ -81,13 +81,6 @@ fn world_of(map_text: &str) -> Option<World> {
     Some(world)
 }
 
-/// The distance between two positions, in tiles.
-fn gap(a: (Fixed, Fixed), b: (Fixed, Fixed), scale: i64) -> f64 {
-    let dx = (a.0.raw() - b.0.raw()) as f64 / scale as f64;
-    let dy = (a.1.raw() - b.1.raw()) as f64 / scale as f64;
-    (dx * dx + dy * dy).sqrt()
-}
-
 /// **The villager ends up on the measured ring** (D186): **1.156** of a tile from the tree's square, which is where six
 /// woodcutters in the owner's own save stand (1.105, 1.142, 1.160, 1.170, 1.170, 1.189 - mean 1.156, spread 0.084). D169's
 /// 0.70 - the point where the two bodies' radii add up - is nearly half a tile inside it, and the engine stands there no

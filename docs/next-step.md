@@ -1,20 +1,16 @@
-# OPEN - D192: the step-aside deadlock (this step)
+# OPEN - D192 landed; next is the repath regression and the review's backlog
 
-**State, 2026-11-12 18:53 UTC.** `main` is `b7d92f2`, green (176 binaries, clippy 0, fmt 0), decision log restored and guarded.
-Branch `d192-touching-standoff` at `98adf27` carries the **touching standoff** (a worker's circle on the node's tile, eleven places,
-`made_room` 96 -> 0) and one red test: `build::a_content_pack_with_our_own_resources_loads_and_spends`, house at hp 1.
+**State, 2026-11-13.** D192 (the touching standoff) is **landed**: a worker stands with his circle on the node's tile, eleven places on
+one tile, and `made_room` fell **96 -> 0**. The deadlock that parked it was a movement rule - *"the blocker stands on the tile the order
+asked for"* fired on a **friendly** body - and it is fixed (hostile-only), with `movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives`
+as its RED (1.011 tiles before, green after). Measured: step 7.2 -> 6.7 us, snapshot 103.4 -> 89.3 us, entities 139 -> 142, hash
+`8999f1ba` -> `91572e72`.
 
-**What is measured.** The frozen man asks the same step every tick and the movement pass *allows* it: `walkable=true`, clearance
-0.120 -> 0.129, route one waypoint, task still `Move`. So the refusal is in `collide`'s early returns or in the apply path, not in the
-terrain.
+**The one open number:** **repaths 240 -> 409 (+70%)**, unexplained. Either men whose place is on the far side now re-plan more, or
+there are simply more men at work. The instrument it needs does not exist: repaths per working villager-second.
 
-**Hypothesis for this step.** `collide`'s rule 2 second clause - *"the blocker stands on the tile the order asked for"* - fires on a
-**friendly** body: the man's step-aside goal is `(5,4)` and an idle villager stands exactly there, so he waits for ever, on his own
-side. If so, the clause should be hostile-only (D189: own bodies are not walls) and the step-aside should not depend on an idle
-neighbour moving.
-
-**Plan.** (1) RED test: a walker whose goal tile holds an idle friend still arrives. (2) Make the goal-tile refusal hostile-only.
-(3) `site_clear`, `build`, the gather suites, then the full sim suite. (4) Re-measure acceptance and land D192 with its review.
+**After that**, the architecture review's ranked backlog: `Step` enum + `step_trace`, the `next-step.md` cap, the test-invariant rule,
+`ErrorClass`, `crates/script`, `crates/save`.
 
 # OPEN - D186 landed: nine men a square on a 1.156 ring
 

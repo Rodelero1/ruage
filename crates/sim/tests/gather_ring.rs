@@ -183,9 +183,7 @@ fn a_woodcutter_stands_with_his_circle_on_the_tree() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
-    let scale = world.scale();
     let node = the_tree(&world);
-    let tree = world.position(node).expect("the tree's position");
     let ids = woodcutters(&mut world, 1);
     for _ in 0..600 {
         world.step().expect("a tick");
@@ -206,7 +204,6 @@ fn two_woodcutters_on_one_tree_both_touch_it_and_stand_a_body_apart() {
     };
     let scale = world.scale();
     let node = the_tree(&world);
-    let tree = world.position(node).expect("the tree's position");
     let ids = woodcutters(&mut world, 2);
     for _ in 0..600 {
         world.step().expect("a tick");
@@ -362,7 +359,6 @@ fn the_owners_own_arrangement_lands_on_the_same_ring() {
         .into_iter()
         .map(|(id, (x, y))| (id, (Fixed::from_raw(x), Fixed::from_raw(y))))
         .collect();
-    let at = world.position(node).expect("the bush");
     let mut closest = f64::MAX;
     for (index, (id, place)) in places.iter().enumerate() {
         let radius = clearance(&world, node, *place);
