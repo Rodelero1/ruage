@@ -31,6 +31,98 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-12 — plumbing on both sides; one lesson, and three numbers that are not ours to adopt
+
+**`librematch/genie`, 15 commits (`2cac47b3` → `f2d321e6`), 10-11 Nov, all `genie-core` porting.** The
+week's subject is a **treaty monitor**: `WorldStep::Treaty` joins `world/schedule.rs` between
+`LastRandoms` and `Vision` (the last two steps of `World::update`), and diplomacy's relation-1 and
+relation-4 tests ask it (`task_finder/mod.rs`'s `allied`, `FUN_141663dc0`, with a new
+`allied_player` for the null case). Beside it: placement's slot 0x50 now measures by the call's
+*size* radii (+0x5d8/+0x5dc) or its *clearance* radii (+0x5fc/+0x600), gated by a new
+`Footprint::has_radii` (`!(rx <= 0.0 && ry <= 0.0)`, so a NaN counts as having radii) and passing over
+units that are in motion; and the attribute store (`FUN_1416674b0`) is whole — a computer player's
+resource set above 0 puts aside `share x value` as **escrow**, attribute 262 names the player's
+civilisation-name override string, and attribute 11's population peak has **no simulation reader at
+all**: its only readers are the platform's statistics routines, so genie does not hold it (`75126697`).
+
+**U18 is unchanged again.** The only order that moved is *world* level — one step appended between
+`LastRandoms` and `Vision`. `world/step.rs`'s diff is plumbing a `treaty` reference through `Step`, and
+nothing in the per-object sequence, nor in `file_step`'s swap-remove rule, changed. The finding — a unit
+killed earlier in the tick does not swing later in it — still stands, and still rests on DE 158041.
+
+**`yanfengliu/aoe2`, 32 commits (28 non-merge, `2502de9e` → `7b400d0b`), ~12,200 lines added**, on
+three subjects, none of them ours to adopt:
+
+- **the render projection's cost** (work 150). Their render state is one list with **one entity per map
+  cell — 14,400 on a DE Tiny map** — sorted in full on every tick and walked whole on every drawn frame.
+  Rank 1 keeps the terrain cells' sorted block until one of them changes and hands the list out as two
+  halves through a `WeakMap` side table (`src/game/simulation/projectedEntityLists.ts`), so every
+  existing reader still reads one array in one order. Measured on retained DE Tiny saves:
+  `getRenderState` **4.8-5.9 ms a tick → 1.6-2.0**, and the rows it touches **2.8-3.0 → 0.4-0.6 ms** on
+  a frame between ticks. Their plan also carries the standing numbers: DE Tiny's late live tick
+  **48.3 → 11.4 ms** after the earlier cut, and DE Tiny still draws **22-26 fps** where today's map
+  draws 51-60.
+- **DE's HUD and menu** (work 148): captions, help text, layout. Text.
+- **the computer's builder** (work 152, shipped as v0.3.281): the crew is chosen **after** the site, by
+  shortest walk (`src/game/simulation/bridge/siteBuilderWalk.ts`), because the old rule took the first
+  villager in entity order; over three matches it passed over a nearer villager on **225 of 259**
+  orders, and one House went to a woodcutter 56 cells away on foot while six villagers stood on the
+  site's own approach cell. Their spec also fixes the other half of the same class: **which** cell
+  beside a footprint a builder walks to must be ordered by distance (`approachOrdering.ts`, Chebyshev
+  from the builder, ties by straight-line then x/y), because enumeration order sent a villager round to
+  the far edge — **22 s** before the first hammer blow.
+
+**Divergence, and where we are already level.** On the builder's approach cell we are level with them
+and a little ahead: `approach_footprint` (`crates/sim/src/world/sites.rs`) already sorts the
+footprint's outer-ring candidates by squared distance from the builder with `(x, y)` as the tie-break,
+landed in `3e3e8f1` (D183/D185) — same idea, one dimension stronger than Chebyshev, and written for our
+own reason (two builders sent to one site otherwise stand on one tile). Their measured cost of *not*
+having it (22 s) is now a priced reason to keep ours. On the crew choice there is nothing to adopt at
+all: our opponent is a fixed command list that names its villager (D15), so "which villager does the AI
+send" is a question our engine never asks.
+
+**Do not cite their farm census.** `playerHitCensus`'s new eaten-farm rule counts a farm as eaten when
+removing it takes no more food than its farmers could carry away in one swing, and one commit justifies
+the bound with "17 farmers, 2 food" on one farm. That is their AI on their replica, which has no worker
+cap; it is **not** evidence about the game, and must not be read against our farm-worker question
+(U22's caution about `ClosestObject`'s cap). Exactly the trap that "their prose errs where their ids do
+not" exists for.
+
+**Study list.** `crates/engine/genie-core/src/construction/build/more_work.rs` (~30 lines, 2026-11-11):
+once a site completes, the builder searches for more work within the **building's** line of sight
+clamped into DE's tuning — `GatherSearchTuning::reach_floor` 4.0 and `reach_cap` 20 (build 158041's
+`DAT_142eb0f48` and `DAT_142e7f38c`), a NaN line of sight passing both compares. Our villager simply
+goes idle when a site is up; the game asks a 4-to-20-tile question centred on the *building*. An hour
+when idle-builder behaviour is next touched, not before. Second, `siteBuilderWalk.ts`'s lazy flood — one
+breadth-first search kept and resumed per site, invalidated by a structural revision counter, a few
+dozen cell reads when somebody stands near — is the shape our share pass and `nearest_drop_site` will
+want for U22.
+
+**Licence.** Nothing moved: genie is AGPL-3.0, `more_work.rs` is a port of a DE routine, and nothing
+crosses. A clamp of a line of sight into a 4..20 band is a **fact about the game's data**, not code —
+that is the distinction to hold, and "it is only a clamp" is still a sentence about their file, not
+ours.
+
+**Open questions.**
+- **U18**: no change, above.
+- **U22**: a caution, not an answer. Their search reach is a **tuned** quantity with a floor and a cap
+  (4 and 20), which is why three LOS-derived reaches coexist in one codebase — unit LOS + 5, drop-site
+  LOS + 10, building LOS clamped 4..20. Before the LOS + 5 contract is written as a literal `+ 5`,
+  check whether 5 is the floor of a tuned reach rather than an addition. The contract read from
+  `gather_search.rs` is not contradicted; the arithmetic's *shape* is in doubt.
+- **U23**: DE Tiny is **120 x 120 = 14,400 cells**, stated twice independently (their plan and the test
+  helper `tests/helpers/deTinySizedWorld.ts`). It corroborates DE's 120 floor (`I/scaling.inc`) on the
+  DE side only; 5.7's own sides are still unread, and nothing changes here.
+- **Builder counts**: they re-read DE's `up-assign-builders` (init.per 935-1116 by difficulty, the
+  House's at 2065-2085; buildings.per 346, 860, 1569, 8673-8870) and DE's one ordering rule (init.per
+  3029-3068: with two or more Town Centres pending, each pending foundation under 4 builders takes the
+  villagers not already building, within 16 tiles and in its map zone, nearest first, until it has 4).
+  We already hold `up-assign-builders` from HD's `General Rules.per` (market 3, blacksmith 2, house 2,
+  monastery 3, university 3, town-centre foundation 6) — `docs/next-step.md`'s 2026-10-30 compact.
+  DE's "until it has 4" on a *pending* foundation sits beside our recorded 6 and is neither the same
+  rule nor necessarily the same version: recorded, not reconciled.
+- D13, D14, D17, D18 unchanged.
+
 ## 2026-10-30 — the watch now discovers, not only diffs
 
 Owner decision: `yanfengliu/aoe2` joins the list, and the gate gains a monthly **discovery sweep**.
