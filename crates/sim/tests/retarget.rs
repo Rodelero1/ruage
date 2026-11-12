@@ -95,18 +95,7 @@ fn a_forager_whose_bush_is_finished_goes_to_a_farm() {
         .expect("the bush can be worked");
 
     let mut on_farm = false;
-    for tick in 0..3_000 {
-        if tick % 400 == 0 {
-            println!(
-                "PROBE t={tick} bush={:?} task={:?} carry={} stock={}",
-                world.entity(bush).map(|e| e.amount.raw()),
-                world
-                    .entity(villager)
-                    .map(|e| format!("{:?}", e.task).chars().take(30).collect::<String>()),
-                world.carry(villager).raw(),
-                world.stock(1, food)
-            );
-        }
+    for _ in 0..3_000 {
         world.step().expect("stepping");
         if world
             .entity(villager)

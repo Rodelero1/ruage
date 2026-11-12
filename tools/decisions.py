@@ -484,6 +484,45 @@ def load_areas(text: str) -> tuple[list[str], dict[str, str], dict[str, str]]:
     )
 
 
+def check_shrink(corpus: Corpus, baseline: str) -> list[str]:
+    """Decisions the last commit had and this corpus does not.
+
+    Every other check here is **relational**: a decision needs an area, an area needs a decision. Truncate both files
+    together and the relation still holds while 186 decisions are gone - which is what happened on 2026-11-12, when the
+    corpus fell from 385,025 bytes and 187 decisions to 1,937 bytes and one, and `--check` stayed green.
+
+    So this one is **temporal**: what is committed is the floor. An empty baseline (no git, a shallow clone) is not a
+    finding - an unavailable fact is not evidence of loss (D45).
+    """
+    if not baseline.strip():
+        return []
+    before = parse_decisions(baseline)
+    lost = [item for item in before.decisions if item not in corpus.decisions]
+    if not lost:
+        return []
+    lost.sort(key=lambda item: before.decisions[item].number)
+    shown = ", ".join(lost[:12]) + (", ..." if len(lost) > 12 else "")
+    return [
+        f"docs/decisions.md lost {len(lost)} decisions since the last commit: {shown}. "
+        "A corpus never shrinks - restore it from history."
+    ]
+
+
+def committed_corpus() -> str:
+    """The corpus as the last commit has it, or '' when there is no history to ask for it."""
+    try:
+        finished = subprocess.run(
+            ["git", "show", "HEAD:docs/decisions.md"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return finished.stdout
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+
+
 def check_areas(
     corpus: Corpus,
     order: list[str],
@@ -1201,13 +1240,16 @@ def main(argv: list[str] | None = None) -> int:
         f"{sum(len(d.gaps) for d in decisions)} named gaps, {len(open_unknowns)} open questions, "
         f"{len(dangling)} dangling ids, {len(corpus.unclassified)} unclassified headings"
     )
+    shrink_problems = check_shrink(corpus, committed_corpus())
     for problem in area_problems:
         print(f"AREA: {problem}", file=sys.stderr)
+    for problem in shrink_problems:
+        print(f"SHRUNK: {problem}", file=sys.stderr)
     if dangling:
         print("dangling: " + ", ".join(dangling))
     if uncited:
         print("no stated basis: " + ", ".join(decision.id for decision in uncited))
-    if area_problems:
+    if area_problems or shrink_problems:
         return 1
     if corpus.unclassified:
         for heading in corpus.unclassified:

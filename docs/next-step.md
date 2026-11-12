@@ -1,3 +1,21 @@
+# OPEN - D192: the step-aside deadlock (this step)
+
+**State, 2026-11-12 18:53 UTC.** `main` is `b7d92f2`, green (176 binaries, clippy 0, fmt 0), decision log restored and guarded.
+Branch `d192-touching-standoff` at `98adf27` carries the **touching standoff** (a worker's circle on the node's tile, eleven places,
+`made_room` 96 -> 0) and one red test: `build::a_content_pack_with_our_own_resources_loads_and_spends`, house at hp 1.
+
+**What is measured.** The frozen man asks the same step every tick and the movement pass *allows* it: `walkable=true`, clearance
+0.120 -> 0.129, route one waypoint, task still `Move`. So the refusal is in `collide`'s early returns or in the apply path, not in the
+terrain.
+
+**Hypothesis for this step.** `collide`'s rule 2 second clause - *"the blocker stands on the tile the order asked for"* - fires on a
+**friendly** body: the man's step-aside goal is `(5,4)` and an idle villager stands exactly there, so he waits for ever, on his own
+side. If so, the clause should be hostile-only (D189: own bodies are not walls) and the step-aside should not depend on an idle
+neighbour moving.
+
+**Plan.** (1) RED test: a walker whose goal tile holds an idle friend still arrives. (2) Make the goal-tile refusal hostile-only.
+(3) `site_clear`, `build`, the gather suites, then the full sim suite. (4) Re-measure acceptance and land D192 with its review.
+
 # OPEN - D186 landed: nine men a square on a 1.156 ring
 
 **Landed on `main`.** The owner's save gave the number the engine was guessing at: a working man stands **1.156 tiles** from a
@@ -90,6 +108,23 @@ answers are the spec for the next slice:
 guards the rule (a diagonal gap between two trees is not a door) and passes on the current engine, so the pathfinder's corner rule
 already covers the plan; the overlap came from somewhere else - a placement, a settle, or a map whose resource tiles are not blocked.
 Ask for the save, or reproduce from the seed, before changing anything.
+
+**The touching standoff is built and parked** - branch `d192-touching-standoff`, commit `f591894`, review
+`docs/reviews/2026-11-13-touching-standoff.md`. A worker stands with his **circle on the tile** (`0.20` from the border, `0.70` from
+the centre), places come from `tiles::touching_places` (**eleven** on one tile), and the working test is `distance_to_tile <= radius`
+instead of a radius band. Every gather suite asserts it and the acceptance run improves: **made_room 96 -> 0**, repaths 435 -> 434,
+step 7.2 -> 6.9 us, entities 142 -> 143, hash `ef7cdba9` -> `ac7cfd18`.
+
+**What parks it:** `build::a_content_pack_with_our_own_resources_loads_and_spends`. **Traced**: the builder and the man stepping off
+the ghost both walk for **95 ticks**, then stop **0.30 tiles apart** - builder `(5.04, 4.39)`, squatter `(4.95, 4.68)`, idle villager
+behind them at `(5.00, 4.00)` - beside the pack's timber node at `(5,5)`, and never move again; the house stays at hp 1. Each is inside
+the other's diameter *and* inside the blocked tile's cushion, and the movement pass's give-way resolution needs a refusal to fire - but
+neither takes a step for the other to refuse. A friendly pass-through that ignores bodies entirely was tried and does **not** clear it.
+
+**Where it is not blocked, measured:** the frozen man asks the same step every tick and the movement pass *allows* it - `walkable=true`,
+clearance **0.120 -> 0.129** tiles. His task is still `Move`, his route has one waypoint, and `collide` has no friendly body to stop for.
+So the refusal is **downstream of `collide`**: the apply-stamp path in `move_bodies`, or a second consumer of the same route. Look there
+first, not in the collision rules.
 
 **Still owed, in order:**
 

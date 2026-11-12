@@ -23,6 +23,32 @@ def parse(text: str) -> decisions.Corpus:
     return decisions.parse_decisions(text)
 
 
+class TheCorpusNeverShrinks(unittest.TestCase):
+    """A lost prefix is the one failure the area table cannot see: when the corpus and the areas table are truncated
+    **together**, every other check passes and the page simply shows fewer decisions. That is what happened on
+    2026-11-12 - `docs/decisions.md` went from 385,025 bytes and 187 decisions to 1,937 bytes and one, and
+    `--check` was green because `docs/decision-areas.toml` had been cut back to match.
+    """
+
+    def test_a_corpus_that_lost_decisions_since_the_last_commit_is_refused(self):
+        before = "## D1 - A\n\n**Decided.**\n\n## D2 - B\n\n**Decided.**\n\n## D3 - C\n\n**Decided.**\n"
+        after = "## D3 - C\n\n**Decided.**\n"
+        problems = decisions.check_shrink(parse(after), before)
+        self.assertEqual(1, len(problems))
+        self.assertIn("2 decisions", problems[0])
+        self.assertIn("D1", problems[0])
+
+    def test_a_corpus_that_gained_decisions_is_fine(self):
+        before = "## D1 - A\n\n**Decided.**\n"
+        after = before + "\n## D2 - B\n\n**Decided.**\n"
+        self.assertEqual([], decisions.check_shrink(parse(after), before))
+
+    def test_an_empty_baseline_is_not_a_finding(self):
+        """No history (a fresh clone with `--depth 1`, or no git at all) must not look like a loss."""
+        after = "## D1 - A\n\n**Decided.**\n"
+        self.assertEqual([], decisions.check_shrink(parse(after), ""))
+
+
 class TableForm(unittest.TestCase):
     """D1-D16 are one row each, with the date in its own column."""
 
