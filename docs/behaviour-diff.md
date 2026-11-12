@@ -68,6 +68,12 @@ countable — "N of M ruled" — without pretending to have surveyed 15,766 func
 **The count: 1 of 12 ruled.** That is the honest state, and it is a better answer than "we compared them" — the eleven open
 rows are a to-do list with a definition of done each.
 
+**Row 2, first half ruled (2026-11-13, craft-anything).** `native-function-callers-list 0x744d60` in **2 s** gives **5 call
+sites**: `0x6bb100`, `0x741a30` **twice** (`0x741c3c`, `0x741db0`), `0x744ff0` and `0x745060`. Both candidates this file had
+guessed at - `FUN_006bb100` (30 KB) and `FUN_00741a30` (6.7 KB) - are real callers, so the per-entry-drop arithmetic is
+reachable from the two functions that could be the damage path. What is still unruled is *which* of them combat uses, and
+that is reading, not locating.
+
 ## How the oracle feeds it
 
 Static reading cannot close rows 3, 4 and 5, and cannot certify any row as *same*. The owner's plan — two AIs, a recorded
