@@ -7,7 +7,8 @@
 //!
 //! Written before the implementation (D7, SPEC §11).
 
-use ruage_sim::{EntityKind, Runner, Scenario, World};
+use ruage_script::{Runner, Scenario};
+use ruage_sim::{EntityKind, World};
 
 mod common;
 

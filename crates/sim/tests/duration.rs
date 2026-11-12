@@ -5,7 +5,7 @@
 //! `i64::MAX` ticks, a match that never ends. Neither is a length. The cast was also the only thing standing between a
 //! hand-written scenario file and a run that says nothing about why it did nothing.
 
-use ruage_sim::{Runner, load_scenario_str};
+use ruage_script::{Runner, load_scenario_str};
 
 fn scenario(duration: &str) -> String {
     format!("schema = 2\nduration_seconds = {duration}\n")

@@ -5,7 +5,8 @@
 //! tests first produced only proved the type names. Each test was then shown to bite by mutating the code it covers.
 
 use ruage_fixed::Fixed;
-use ruage_sim::{EntityId, EntityKind, Runner, Scenario, Task, World};
+use ruage_script::{Runner, Scenario};
+use ruage_sim::{EntityId, EntityKind, Task, World};
 
 mod common;
 
@@ -502,7 +503,7 @@ target = "enemy_unit"
         .outcomes
         .iter()
         .find_map(|(_, outcome)| match outcome {
-            ruage_sim::Outcome::Refused(reason) => Some(reason.clone()),
+            ruage_script::Outcome::Refused(reason) => Some(reason.clone()),
             _ => None,
         });
     assert!(

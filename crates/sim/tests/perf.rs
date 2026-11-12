@@ -10,7 +10,8 @@ use std::time::Instant;
 
 use ruage_data::{ContentPack, Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, World, load_personality_file};
+use ruage_script::load_personality_file;
+use ruage_sim::{Command, EntityId, EntityKind, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

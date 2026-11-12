@@ -50,11 +50,11 @@ fn no_unit_ever_stands_with_its_body_inside_a_wall() {
     common::must("load_resources", world.load_resources(&resources));
     let scenario = common::must(
         "load_skirmish",
-        ruage_sim::load_scenario_file(&repo("config/skirmish.toml")),
+        ruage_script::load_scenario_file(&repo("config/skirmish.toml")),
     );
     let mut runner = common::must(
         "Runner::new",
-        ruage_sim::Runner::new(&scenario, world.tick_rate_hz()),
+        ruage_script::Runner::new(&scenario, world.tick_rate_hz()),
     );
 
     for _ in 0..2_000 {

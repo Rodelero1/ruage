@@ -60,7 +60,7 @@ uses it as its first step: Loom costs 50 of the 100 gold the match opens with, a
 
 ## The ten-minute run
 
-`cargo run -p ruage-sim --bin ruage-headless -- --config config/sim.toml --map config/map.toml \
+`cargo run -p ruage-harness --bin ruage-headless -- --config config/sim.toml --map config/map.toml \
   --economy config/economy.toml --units config/gamedata/units.toml --combat config/combat.toml \
   --script config/scenario.toml --seed 7 --report 60`
 

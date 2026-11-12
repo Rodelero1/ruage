@@ -109,7 +109,7 @@ fn main() -> ExitCode {
         eprintln!("civs: {err}");
         return ExitCode::FAILURE;
     }
-    if let Ok(personality) = ruage_sim::load_personality_file(&config.join("ai/base.toml")) {
+    if let Ok(personality) = ruage_script::load_personality_file(&config.join("ai/base.toml")) {
         world.apply_policy(&personality.policy);
     }
 

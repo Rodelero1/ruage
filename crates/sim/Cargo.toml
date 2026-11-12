@@ -12,9 +12,9 @@ ruage-data = { path = "../data" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 
-[[bin]]
-name = "ruage-headless"
-path = "src/bin/headless.rs"
+[dev-dependencies]
+# The scenario language and the rule runner moved to their own crate (D198); the tests still write scenarios.
+ruage-script = { path = "../script" }
 
 [lints]
 workspace = true

@@ -1,0 +1,25 @@
+[package]
+name = "ruage-harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The runners: a headless match and a seed batch. They drive the engine and the scenario language, and are neither (D198)."
+
+[[bin]]
+name = "ruage-headless"
+path = "src/bin/ruage-headless.rs"
+
+[[bin]]
+name = "ruage-batch"
+path = "src/bin/ruage-batch.rs"
+
+[dependencies]
+ruage-data = { path = "../data" }
+ruage-fixed = { path = "../fixed" }
+ruage-sim = { path = "../sim" }
+ruage-script = { path = "../script" }
+
+[dev-dependencies]
+# The binary's own tests moved with the binary (D198): `CARGO_BIN_EXE_*` only exists in the package that defines the bin.
+serde_json = "1"

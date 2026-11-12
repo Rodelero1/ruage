@@ -26,7 +26,8 @@ use ruage_data::{
     load_civs_file, load_combat_file, load_economy_file, load_effects_file, load_map_file,
     load_overrides_file, load_resources_file, load_sim_file, load_techs_file, load_units_file,
 };
-use ruage_sim::{Outcome, Runner, World, describe, load_scenario_file};
+use ruage_script::{Outcome, Runner, describe, load_scenario_file};
+use ruage_sim::World;
 
 const USAGE: &str = "usage: ruage-headless --config <sim.toml> --map <map.toml> \
                      --economy <economy.toml> --units <units.toml> \

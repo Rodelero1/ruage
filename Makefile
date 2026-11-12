@@ -50,12 +50,12 @@ run: window
 	./target/release/window $(CONFIG) --seed $(SEED)
 
 headless:
-	$(CARGO) build --release -p ruage-sim --bin ruage-headless
+	$(CARGO) build --release -p ruage-harness --bin ruage-headless
 	./target/release/ruage-headless $(PACK) --script $(CONFIG)/acceptance.toml \
 		--seed $(SEED) --ticks $(TICKS) --report $(REPORT)
 
 batch:
-	$(CARGO) build --release -p ruage-sim --bin batch
+	$(CARGO) build --release -p ruage-harness --bin ruage-batch
 	./target/release/batch $(PACK) --script $(CONFIG)/acceptance.toml --seeds $(SEEDS)
 
 # **A test run without the generated data proves nothing**: every data-driven suite skips itself, so `cargo test` reports

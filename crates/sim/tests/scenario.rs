@@ -5,9 +5,8 @@
 use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Sim as Settings, Units};
-use ruage_sim::{
-    Command, EntityKind, Outcome, Runner, Task, World, load_scenario_file, load_scenario_str,
-};
+use ruage_script::{Outcome, Runner, load_scenario_file, load_scenario_str};
+use ruage_sim::{Command, EntityKind, Task, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1072,7 +1071,7 @@ fn a_scenario_takes_its_rules_from_its_personality() {
     let trains_villagers = scenario
         .rule
         .iter()
-        .any(|rule| matches!(rule.action, ruage_sim::RuleAction::Train { ref role, .. } if role == "villager"));
+        .any(|rule| matches!(rule.action, ruage_script::RuleAction::Train { ref role, .. } if role == "villager"));
     assert!(
         trains_villagers,
         "the opening trains villagers, and that rule lives in the personality"

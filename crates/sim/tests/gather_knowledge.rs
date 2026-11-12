@@ -14,7 +14,8 @@ use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
-use ruage_sim::{EntityId, EntityKind, Runner, Task, World, load_scenario_str};
+use ruage_script::{Runner, load_scenario_str};
+use ruage_sim::{EntityId, EntityKind, Task, World};
 
 mod common;
 

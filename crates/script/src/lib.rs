@@ -15,7 +15,7 @@ use ruage_data::Policy;
 
 use ruage_fixed::Fixed;
 
-use crate::{Command, EntityId, EntityKind, Task, World};
+use ruage_sim::{Command, EntityId, EntityKind, Task, World};
 
 /// The scenario format's own version. It is not a config file: it describes a match, so it moves
 /// at its own pace and does not share `config/`'s schema constant.
@@ -1114,49 +1114,6 @@ pub fn describe(outcome: &Outcome) -> String {
     }
 }
 
-impl World {
-    /// The unit id a player's villagers use: the `start.villager` role, resolved through the
-    /// economy's role table.
-    pub fn start_villager_unit(&self) -> Option<u32> {
-        let economy = self.economy.as_ref()?;
-        economy.role.get(&economy.start.villager).copied()
-    }
-
-    /// The unit id of the town centre a match starts from: the `start.town_center` role. Scripted
-    /// steps place buildings beside it, and they must do that by role rather than by the word.
-    pub fn start_town_center_unit(&self) -> Option<u32> {
-        let economy = self.economy.as_ref()?;
-        economy.role.get(&economy.start.town_center).copied()
-    }
-
-    /// Is this tile inside the map, walkable, and empty?
-    pub fn is_free_ground(&self, x: u16, y: u16) -> bool {
-        let Some(walk) = self.walk.as_ref() else {
-            return false;
-        };
-        if !walk.contains(x, y) || walk.blocked(x, y) {
-            return false;
-        }
-        let position = (
-            ruage_fixed::Fixed::from_raw(i64::from(x) * self.scale),
-            ruage_fixed::Fixed::from_raw(i64::from(y) * self.scale),
-        );
-        // **A unit does not make ground occupied.** Terrain and what stands on it permanently do; a villager is a person
-        // who is somewhere for a moment, and treating people as obstacles left a player unable to place a market beside
-        // their own town centre - 177 refusals in a row - once villagers started standing there to deposit.
-        //
-        // **And a spent farm is not ground that stands on itself** (D77): its husk is a floor, and the next farm is built
-        // on it. This predicate used to say otherwise while `site_refusal` said the opposite, so the placement search
-        // never offered a husk's tile and the farm rule refused with *"no free tile for a farm"* 105 times in one
-        // acceptance run, with nine husks in its own base.
-        !self.entities().iter().any(|entity| {
-            entity.position == position
-                && entity.kind != EntityKind::Unit
-                && !self.is_expired_farm(entity.id)
-        })
-    }
-}
-
 /// Does a rule's condition hold? Every field that is present must hold; an empty condition always does.
 fn when_holds(world: &World, rule: &Rule) -> bool {
     let when = &rule.when;
@@ -1331,13 +1288,13 @@ fn idle_villager(world: &World, player: u8) -> Option<EntityId> {
         .find(|id| {
             world
                 .entity(*id)
-                .is_some_and(|entity| matches!(entity.task, crate::Task::Idle))
+                .is_some_and(|entity| matches!(entity.task, Task::Idle))
         })
         .or_else(|| {
             all.iter().copied().find(|id| {
                 world
                     .entity(*id)
-                    .is_some_and(|entity| !matches!(entity.task, crate::Task::Build { .. }))
+                    .is_some_and(|entity| !matches!(entity.task, Task::Build { .. }))
             })
         })
 }
@@ -1580,7 +1537,7 @@ fn choose_target(
     target: &str,
 ) -> Result<EntityId, String> {
     let here = world.position(unit);
-    let reachable = |entity: &crate::Entity| match here {
+    let reachable = |entity: &ruage_sim::Entity| match here {
         Some(from) => world.can_reach(from, entity.position),
         None => true,
     };

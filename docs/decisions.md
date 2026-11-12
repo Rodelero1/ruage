@@ -4862,3 +4862,24 @@ already carried; printed by the headless as `repaths_body=`/`repaths_ground=`.
 **Why, measured.** D192 landed with repaths **240 -> 409** and no explanation. The split answered it: bodies stopped forcing re-plans
 altogether (**31 -> 0**) and every added re-plan is **ground** (122 -> 166) - men standing on a tile's border instead of a ring graze the
 node's blocked ground and re-plan, one every 217 ticks of 36,000.
+
+### D198 - the scenario language and the runners are not the engine
+
+**What it says.** `crates/script` (`ruage-script`) holds the scenario language, the scripted AI, the rule runner and the personality
+loader; `crates/harness` (`ruage-harness`) holds the two binaries that drive them (`ruage-headless`, `ruage-batch`). `ruage-sim`
+depends on `ruage-data` and `ruage-fixed` and on **nothing else**; `ruage-script` depends on `ruage-sim`; `ruage-harness` depends on
+both. The dependency arrow never points back into the engine, which is what D17/D18 asked for in words (*"engine knows kinds, not
+particulars"*) and what 1,656 lines inside `sim` contradicted.
+
+**What the move found**, which is the reason to do it rather than describe it:
+
+- Three `World` queries - `start_villager_unit`, `start_town_center_unit`, `is_free_ground` - lived in `script.rs` while **the engine
+  itself** called all three (`metrics`, `movement`, `sites`, `shares`). They moved to `crates/sim/src/roles.rs`, where they belong.
+- Two private methods (`nodes_of_slot`, `tile`) are needed by the scenario language and are now public, documented as *"public for the
+  scenario language"* - a real API widening, which is what a layering break looks like when it is made visible.
+- `crates/sim/tests/headless.rs` could not stay: `env!("CARGO_BIN_EXE_ruage-headless")` only exists in the package that defines the bin.
+  It moved with the binary.
+
+**Behaviour is unchanged, measured**: the acceptance run from the new crate prints `tick=36000 entities=142 players=1
+hash=91572e72c33cee93 repaths=409 made_room=0` - the same hash as before the move - and the workspace gate is green at **183 test
+binaries** with clippy and fmt clean.

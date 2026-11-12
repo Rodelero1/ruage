@@ -1,0 +1,14 @@
+[package]
+name = "ruage-script"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The scenario language, the scripted AI and the rule runner - content, not engine (D17/D18, D198)."
+
+[dependencies]
+ruage-data = { path = "../data" }
+ruage-fixed = { path = "../fixed" }
+ruage-sim = { path = "../sim" }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"

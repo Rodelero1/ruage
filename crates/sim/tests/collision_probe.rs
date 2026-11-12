@@ -8,7 +8,8 @@
 
 use std::path::PathBuf;
 
-use ruage_sim::{EntityKind, Runner, Task, World, load_scenario_file};
+use ruage_script::{Runner, load_scenario_file};
+use ruage_sim::{EntityKind, Task, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

@@ -24,7 +24,8 @@ use ruage_data::{
     load_civs_file, load_combat_file, load_economy_file, load_effects_file, load_map_file,
     load_overrides_file, load_resources_file, load_sim_file, load_techs_file, load_units_file,
 };
-use ruage_sim::{Metrics, Runner, World, load_scenario_file};
+use ruage_script::{Runner, load_scenario_file};
+use ruage_sim::{Metrics, World};
 
 const USAGE: &str = "usage: ruage-batch --config <sim.toml> --map <map.toml> \
                      --economy <economy.toml> --units <units.toml> \
@@ -201,7 +202,7 @@ fn run() -> Result<(), String> {
                 metrics.observe(&world);
             }
             for (_, outcome) in &runner.outcomes {
-                if *outcome != ruage_sim::Outcome::Ran {
+                if *outcome != ruage_script::Outcome::Ran {
                     refused += 1;
                 }
             }

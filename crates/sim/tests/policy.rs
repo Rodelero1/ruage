@@ -6,7 +6,8 @@
 use std::path::PathBuf;
 
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, World, load_scenario_file};
+use ruage_script::load_scenario_file;
+use ruage_sim::{Command, EntityId, EntityKind, World};
 
 mod common;
 

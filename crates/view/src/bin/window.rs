@@ -17,7 +17,8 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use ruage_data::{Economy, Map, Units};
-use ruage_sim::{Runner, World, load_scenario_file};
+use ruage_script::{Runner, load_scenario_file};
+use ruage_sim::World;
 use ruage_view::placement::Placement;
 use ruage_view::ui;
 use ruage_view::{
@@ -44,7 +45,7 @@ struct Config {
     techs: ruage_data::Techs,
     effects: ruage_data::Effects,
     civs: ruage_data::Civs,
-    scenario: ruage_sim::Scenario,
+    scenario: ruage_script::Scenario,
 }
 
 fn load(config: &Path) -> Result<Config, String> {

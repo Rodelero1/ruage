@@ -13,6 +13,8 @@ default-run = "window"
 ruage-fixed = { path = "../fixed" }
 ruage-data = { path = "../data" }
 ruage-sim = { path = "../sim" }
+# The window runs a scenario, and the scenario language is its own crate now (D198).
+ruage-script = { path = "../script" }
 # The window (D74: native, software presentation). `softbuffer` is the blit: the rasteriser already produces a pixel
 # buffer, so the window's whole job is to put it on a surface and drive a fixed-step loop.
 winit = "0.30"

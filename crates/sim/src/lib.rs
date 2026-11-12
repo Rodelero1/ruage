@@ -24,7 +24,7 @@ use ruage_data::{
 
 mod metrics;
 mod path;
-mod script;
+mod roles;
 mod short;
 pub mod tiles;
 mod world;
@@ -33,10 +33,6 @@ pub use path::{
     Walk, find_path, find_path_avoiding, line_clear, line_clear_avoiding, nearest_reachable,
 };
 use ruage_fixed::Fixed;
-pub use script::{
-    Outcome, Personality, Rule, RuleAction, Runner, SCENARIO_SCHEMA, Scenario, Step, StepKind,
-    describe, load_personality_file, load_scenario_file, load_scenario_str,
-};
 pub use short::short_range;
 
 /// The largest number of players a match can have: eight, so four-versus-four (D20). It is a
@@ -1652,7 +1648,9 @@ impl World {
 
     /// **`reach` is the worker's own look-around, or `None` for an order** (D149): "nearby" governs what a worker
     /// chooses for itself; a player or a script pointing at a resource is not guessing what the villager can notice.
-    pub(crate) fn nodes_of_slot(
+    /// **Public for the scenario language** (D198): a rule that names a resource slot asks the engine which nodes are in it, and the
+    /// runner lives outside this crate now. Nothing in the tick calls it from here.
+    pub fn nodes_of_slot(
         &self,
         worker: EntityId,
         slot: usize,
@@ -1889,7 +1887,9 @@ impl World {
 
     /// A tile's origin as a world position. Tiles are the unit of the map; the scale is the unit
     /// of state, and this is the only place the two meet.
-    fn tile(&self, (x, y): (u16, u16)) -> (Fixed, Fixed) {
+    /// **Public for the scenario language** (D198): a rule's "can he reach this tile?" needs a tile's centre in engine units, and the
+    /// runner lives outside this crate now.
+    pub fn tile(&self, (x, y): (u16, u16)) -> (Fixed, Fixed) {
         (
             Fixed::from_raw(i64::from(x) * self.scale),
             Fixed::from_raw(i64::from(y) * self.scale),

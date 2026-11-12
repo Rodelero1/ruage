@@ -7,7 +7,8 @@
 
 use std::path::PathBuf;
 
-use ruage_sim::{EntityKind, Runner, Task, World, find_path, line_clear, load_scenario_file};
+use ruage_script::{Runner, load_scenario_file};
+use ruage_sim::{EntityKind, Task, World, find_path, line_clear};
 
 mod common;
 

@@ -6,7 +6,8 @@
 use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Units};
-use ruage_sim::{EntityKind, Outcome, Runner, World, load_scenario_file};
+use ruage_script::{Outcome, Runner, load_scenario_file};
+use ruage_sim::{EntityKind, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
