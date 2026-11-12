@@ -1054,7 +1054,7 @@ pub struct World {
     ///
     /// Bookkeeping, and not hashed: it is re-derived from the tasks every time it is read (`place_is_live`), so a re-tasked
     /// man's place dies with the order rather than needing a sweep.
-    gather_place: BTreeMap<EntityId, (EntityId, u8)>,
+    gather_place: BTreeMap<EntityId, (EntityId, (i64, i64))>,
     /// **Sites that could not start because somebody was standing on them** (D183 §4). Bookkeeping, not simulation state:
     /// it exists so the refusal goes out **once per state change** rather than once a tick, and like `foundations` and
     /// `open_gates` it is derived from the world every tick, so it is not hashed. A site leaves the set the moment its
@@ -1269,27 +1269,43 @@ pub(crate) enum Standoff {
 /// game's front row - the difference the owner could see between his screenshot and our render.
 pub(crate) const GATHER_RING_MILLI: i64 = 1156;
 
-/// **Nine men a source square** - the owner's own number, *"max 9 per each. 4 on corners and 4 on sides"*, and the one his
-/// save shows: sixteen orders over two adjacent trees came out as **nine and seven**. The first reading of this file took the
-/// eighteen slots the ring's circumference allows (`2 * pi * 1.156 / 0.40 = 17.97`) for the game's capacity, which the 9 + 7
-/// split refutes - if eighteen had been allowed, all sixteen would have gone to one tree. Nine at forty-degree steps sit
-/// **0.79** of a tile apart on the ring, which is the room the owner's photograph shows them using.
-pub const GATHER_RING_SLOTS: u8 = 9;
+/// **Places on the ring: one every two degrees** (D188). There is no cap and no table of places any more: the owner's rule is that
+/// a man works wherever **his circle fits**, so the ring is sampled finely and each sample is tested against every other man. 180
+/// samples sit **0.020** tiles apart on the 1.156 ring - twenty times finer than the 0.40 a body needs - so a man is never refused
+/// a place that exists, and how many fit falls out of the circumference instead of a constant.
+pub const GATHER_PLACES: u16 = 180;
 
 /// **The band a man must stand in to be working**, in thousandths of a tile: the ring plus a tenth either side. It is why
 /// only the front row works - a man on the neighbouring tile's centre is at 1.000, outside the band, and the second row in
 /// the save sits at 1.357 and beyond.
 pub(crate) const GATHER_BAND_MILLI: (i64, i64) = (1056, 1256);
 
-/// The **cosine and sine of the ring's nine slots**, in millionths, at 40-degree steps (D186).
+/// **How far round the ring a man will walk** before taking another source instead, in thousandths of a tile (D188). The owner:
+/// *"take next tree instead"* - a place on the far side costs two tiles of walking round the tree, and a man who does that is a
+/// man not gathering. The test is the *extra* walk over walking straight at the source.
+pub(crate) const GATHER_WALK_SLACK_MILLI: i64 = 1500;
+
+/// **How many men one ring holds**, derived rather than typed: `2 * pi * 1.156 / 0.40 = 18.2`, so eighteen. The picker uses it as
+/// a cheap upper bound ("might there be room?"); the settle decides exactly, sample by sample.
+#[must_use]
+pub fn ring_capacity() -> usize {
+    let circumference = 2 * 3_141_593 * i64::from(GATHER_RING_MILLI) / 1_000_000; // thousandths of a tile
+    (circumference / 400) as usize
+}
+
+/// The **sine of 0, 2, 4 ... 90 degrees**, in millionths: the quarter table the ring is drawn from.
 ///
-/// Integer tables rather than `f64`: the simulation is deterministic and hashed, and a platform's `sin` is not the same
-/// number twice. `(ring * cos) / 1_000_000` is a slot's offset along x.
-const RING_COS: [i64; 9] = [
-    1_000_000, 766_044, 173_648, -500_000, -939_693, -939_693, -500_000, 173_648, 766_044,
-];
-const RING_SIN: [i64; 9] = [
-    0, 642_788, 984_808, 866_025, 342_020, -342_020, -866_025, -984_808, -642_788,
+/// Integer tables rather than `f64`: the simulation is deterministic and hashed, and a platform's `sin` is not the same number
+/// twice. Every other angle on the ring is this table read backwards or negated.
+const SIN: [i64; 46] = [
+    0, 34899, 69756, 104528, 139173, 173648,
+    207912, 241922, 275637, 309017, 342020, 374607,
+    406737, 438371, 469472, 500000, 529919, 559193,
+    587785, 615661, 642788, 669131, 694658, 719340,
+    743145, 766044, 788011, 809017, 829038, 848048,
+    866025, 882948, 898794, 913545, 927184, 939693,
+    951057, 961262, 970296, 978148, 984808, 990268,
+    994522, 997564, 999391, 1000000,
 ];
 
 impl World {
@@ -3159,13 +3175,13 @@ impl World {
     /// the ring is buried - a tree deep in a forest has its whole ring on blocked tiles, and the men who cut it stand on the
     /// open edge beside it, which is the one case the ring cannot describe. Nine walkability lookups, no path search.
     pub(crate) fn ring_open(&self, centre: (Fixed, Fixed)) -> bool {
-        let ring = self.scale * GATHER_RING_MILLI / 1000;
-        (0..GATHER_RING_SLOTS as usize).any(|k| {
-            let px = centre.0.raw() + ring * RING_COS[k] / 1_000_000;
-            let py = centre.1.raw() + ring * RING_SIN[k] / 1_000_000;
+        // Every tenth degree: enough to tell a buried ring from an open one, and 36 lookups rather than 180 on the path where a
+        // gatherer decides every tick.
+        (0..GATHER_PLACES).step_by(5).any(|place| {
+            let point = self.ring_point(centre, place);
             let (Ok(x), Ok(y)) = (
-                u16::try_from(px.div_euclid(self.scale)),
-                u16::try_from(py.div_euclid(self.scale)),
+                u16::try_from(point.0.raw().div_euclid(self.scale)),
+                u16::try_from(point.1.raw().div_euclid(self.scale)),
             ) else {
                 return false;
             };
@@ -3173,29 +3189,129 @@ impl World {
         })
     }
 
-    /// **Where a worker stands to work a node** (D186, superseding D169's 0.70 and D182's one-side-per-worker): on a ring
-    /// of **1.156 tiles** round the source square's centre, in the first of eighteen slots that is free.
+    /// **Where a worker stands to work a node** (D186 for the radius, D188 for the rule): on the ring of **1.156 tiles** round
+    /// the source square's centre, at the **nearest point where his circle fits** - one body's width (0.40) clear of every other
+    /// man. There is no cap and no list of places: the ring is sampled every two degrees and every sample is a candidate, so how
+    /// many men work one square is a consequence of the circumference (`2 * pi * 1.156 / 0.40 = 18`) rather than a number in a
+    /// table. The owner, after the engine stopped a tenth man at nine: *"I think that capping is pointless."*
     ///
-    /// The number is measured, not derived. The owner's save carries six woodcutters at 1.105, 1.142, 1.160, 1.170, 1.170,
-    /// 1.189 tiles from one tree - mean 1.156, spread 0.084 - with the closest pair **0.404** apart, which is exactly two
-    /// villager bodies touching. Eighteen slots at 20-degree steps give that spacing (`2*pi*1.156/18 = 0.4036`), and
-    /// eighteen is the count of the owner's group and his *"max 9 per each"* over the two squares his save names.
+    /// Three tests a candidate must pass:
+    /// 1. **The ground** - walkable, and not on a foundation's footprint.
+    /// 2. **The room** - nothing within `too_close`, which is two body radii, the **0.400** the saves show centre to centre.
+    /// 3. **The walk** - no more than `GATHER_WALK_SLACK_MILLI` beyond walking straight at the source, because his answer to a
+    ///    place on the far side was *"take next tree instead"*.
     ///
-    /// The old rule put a man where the two discs touched - `radius[0]` 0.2 plus a tree's 0.5 = **0.70** - which is nearly
-    /// half a tile inside the game's front row. A node's own tile is blocked, so the slot is checked the same way the side
-    /// was: walkable ground, free of bodies, and reachable by a path.
-    /// **The point a slot stands on**: the ring round the source's *square*, at a slot's angle (D186).
-    pub(crate) fn ring_point(&self, centre: (Fixed, Fixed), slot: u8) -> (Fixed, Fixed) {
+    /// `NoRoom` is an answer, not a failure: the caller sends the man to the nearest other node of the same kind.
+    pub(crate) fn standoff_point(
+        &self,
+        from: (Fixed, Fixed),
+        target: (Fixed, Fixed),
+        node: EntityId,
+        worker: EntityId,
+        taken: &[(EntityId, (Fixed, Fixed))],
+        check_path: bool,
+    ) -> Option<Standoff> {
+        let scale = self.scale;
+        let worker_radius = match self.find(worker).and_then(|entity| entity.unit) {
+            Some(unit) => self.body_radius(Some(unit)),
+            None => 0,
+        };
+        let (dx, dy) = (from.0.raw() - target.0.raw(), from.1.raw() - target.1.raw());
+        if dx == 0 && dy == 0 {
+            return None;
+        }
+        // **Two bodies, touching** - the 0.400 of the owner's saves.
+        let too_close = (2 * worker_radius).max(1);
+        // **The ring is round the source's SQUARE, not its anchor** (D186): a map may place a node at a tile's corner, and a ring
+        // drawn round that corner straddles four tiles.
+        let centre = self.tile_centre(self.tile_of(target));
+        let slack = scale * GATHER_WALK_SLACK_MILLI / 1000;
+        let straight = integer_sqrt((centre.0.raw() - from.0.raw()).pow(2) + (centre.1.raw() - from.1.raw()).pow(2));
+        let mut best: Option<(i64, (Fixed, Fixed))> = None;
+        for place in 0..GATHER_PLACES {
+            let point = self.ring_point(centre, place);
+            let (px, py) = (point.0.raw(), point.1.raw());
+            let away = integer_sqrt((px - from.0.raw()).pow(2) + (py - from.1.raw()).pow(2));
+            if best.as_ref().is_some_and(|(closest, _)| away >= *closest) {
+                continue;
+            }
+            if away > straight + slack {
+                continue;
+            }
+            let (Ok(x), Ok(y)) = (
+                u16::try_from(px.div_euclid(scale)),
+                u16::try_from(py.div_euclid(scale)),
+            ) else {
+                continue;
+            };
+            if !self.tile_walkable(x, y) {
+                continue;
+            }
+            // **Not on somebody's building site** (D186, found by the skirmish): a foundation is walkable ground, and a gatherer
+            // standing on one is exactly the unit the empty-site gate waits for, so the site stalls for ever.
+            let on_site = self.foundations.iter().any(|site| {
+                self.footprint_rect(*site).is_some_and(|(ax, ay, wide, tall)| {
+                    x >= ax && x < ax.saturating_add(wide) && y >= ay && y < ay.saturating_add(tall)
+                })
+            });
+            if on_site {
+                continue;
+            }
+            let near = |point: (Fixed, Fixed)| -> bool {
+                let (bx, by) = (point.0.raw() - px, point.1.raw() - py);
+                bx * bx + by * by < too_close * too_close
+            };
+            if self
+                .entities
+                .iter()
+                .any(|other| other.id != worker && near(other.position))
+            {
+                continue;
+            }
+            if taken
+                .iter()
+                .any(|(other, point)| *other != worker && near(*point))
+            {
+                continue;
+            }
+            // **A place another man reserved is his** (D186 addendum 5, D188): the reservation outranks a nearer claimant, or two
+            // men ordered in the same tick both take the same spot.
+            if self.gather_place.iter().any(|(other, (at, held))| {
+                *other != worker
+                    && *at == node
+                    && near((Fixed::from_raw(held.0), Fixed::from_raw(held.1)))
+                    && self.place_is_live(*other, node)
+            }) {
+                continue;
+            }
+            if check_path && !self.can_reach(from, point) {
+                continue;
+            }
+            best = Some((away, point));
+        }
+        Some(best.map_or(Standoff::NoRoom, |(_, point)| Standoff::Point(point)))
+    }
+
+    /// **A point on the ring**, two degrees per place: `place` 0 is due east and the index grows anticlockwise. The quarter table
+    /// `SIN` holds 0..90 degrees, so each quadrant reads it forwards or backwards with one or both signs flipped.
+    pub(crate) fn ring_point(&self, centre: (Fixed, Fixed), place: u16) -> (Fixed, Fixed) {
         let ring = self.scale * GATHER_RING_MILLI / 1000;
-        let k = usize::from(slot) % RING_COS.len();
+        let index = usize::from(place % GATHER_PLACES);
+        let within = index % 45;
+        let (sin, cos) = match index / 45 {
+            0 => (SIN[within], SIN[45 - within]),
+            1 => (SIN[45 - within], -SIN[within]),
+            2 => (-SIN[within], -SIN[45 - within]),
+            _ => (-SIN[45 - within], SIN[within]),
+        };
         (
-            Fixed::from_raw(centre.0.raw() + ring * RING_COS[k] / 1_000_000),
-            Fixed::from_raw(centre.1.raw() + ring * RING_SIN[k] / 1_000_000),
+            Fixed::from_raw(centre.0.raw() + ring * cos / 1_000_000),
+            Fixed::from_raw(centre.1.raw() + ring * sin / 1_000_000),
         )
     }
 
-    /// **Is this man still gathering that node?** A place belongs to an order, so the moment the order changes the place is
-    /// gone - asked when the place is read rather than swept every tick, which keeps the tick free of a map-shaped cost.
+    /// **Is this man still gathering that node?** A place belongs to an order, so the moment the order changes the place is gone -
+    /// asked when the place is read rather than swept every tick, which keeps the tick free of a map-shaped cost.
     fn place_is_live(&self, worker: EntityId, node: EntityId) -> bool {
         self.find(worker).is_some_and(|entity| {
             matches!(
@@ -3205,216 +3321,76 @@ impl World {
         })
     }
 
-    /// **The place this man already owns**, if it is still free of other men.
-    /// **Is this place still a place?** (D186 addendum 5.) A slot chosen before a foundation was laid is on a **building site**
-    /// now, and a man who keeps settling onto one stalls it for ever: the empty-site gate (D183 §4) waits for the footprint to
-    /// clear and he will not leave. The ten-minute scenario's barracks stood at `progress_ticks: 0` of 1000 exactly that way.
-    ///
-    /// `is_free_ground` is deliberately **not** asked: it answers "may a body stand here", and the body asking is the man
-    /// himself. Ownership of a place is the reservation's job; this is only about whether the ground is still ground.
-    fn place_stands_clear(&self, node: EntityId, slot: u8) -> bool {
-        let Some(entity) = self.find(node) else {
-            return false;
-        };
-        let centre = self.tile_centre(self.tile_of(entity.position));
-        let point = self.ring_point(centre, slot);
-        let (Ok(x), Ok(y)) = (
-            u16::try_from(point.0.raw().div_euclid(self.scale)),
-            u16::try_from(point.1.raw().div_euclid(self.scale)),
-        ) else {
-            return false;
-        };
-        if !self.tile_walkable(x, y) {
-            return false;
-        }
-        !self.foundations.iter().any(|site| {
-            self.footprint_rect(*site)
-                .is_some_and(|(ax, ay, wide, tall)| {
-                    x >= ax && x < ax.saturating_add(wide) && y >= ay && y < ay.saturating_add(tall)
-                })
-        })
-    }
-
-    /// **The place this man already owns**, if he is still on this node and it is still a place.
-    pub(crate) fn gather_place_of(&self, worker: EntityId, node: EntityId) -> Option<u8> {
-        let (at, slot) = *self.gather_place.get(&worker)?;
-        (at == node && self.place_is_live(worker, node) && self.place_stands_clear(node, slot))
-            .then_some(slot)
+    /// **Every place held on a node**, for a probe or a test: `(worker, place)`. Reading it from outside is what tells a
+    /// reservation defect apart from a movement one.
+    #[must_use]
+    pub fn gather_places(&self) -> Vec<(EntityId, (f32, f32))> {
+        let scale = self.scale as f32;
+        self.gather_place
+            .iter()
+            .map(|(worker, (_, (x, y)))| {
+                (
+                    *worker,
+                    (*x as f32 / scale, *y as f32 / scale),
+                )
+            })
+            .collect()
     }
 
     /// **Let a place go**: the man is being moved by something other than his order - a foundation under his feet, a site
-    /// clearing - so the place he had must not pull him back. The settle then chooses a fresh one.
+    /// clearing - so the place he had must not pull him back.
     pub(crate) fn release_gather_place(&mut self, worker: EntityId) {
         self.gather_place.remove(&worker);
     }
 
-    /// **Take the place nearest `from`, and keep it** (D186 addendum 5). Reserved slots are skipped exactly as bodies are, so
-    /// a place owned by another man cannot be taken from him by a nearer claimant arriving later.
-    pub(crate) fn reserve_gather_place(
-        &mut self,
-        worker: EntityId,
-        node: EntityId,
-        centre: (Fixed, Fixed),
-        from: (Fixed, Fixed),
-    ) -> Option<u8> {
-        let mut best: Option<(i64, u8)> = None;
-        for slot in 0..GATHER_RING_SLOTS {
-            if self.gather_place.iter().any(|(other, (at, taken))| {
-                *other != worker
-                    && *at == node
-                    && *taken == slot
-                    && self.place_is_live(*other, node)
-            }) {
-                continue;
-            }
-            let point = self.ring_point(centre, slot);
-            let (dx, dy) = (point.0.raw() - from.0.raw(), point.1.raw() - from.1.raw());
-            let squared = dx * dx + dy * dy;
-            if best.is_none_or(|(best, _)| squared < best) {
-                best = Some((squared, slot));
-            }
-        }
-        let (_, slot) = best?;
-        self.gather_place.insert(worker, (node, slot));
-        Some(slot)
+    /// **Is somebody standing on this place?** A reserved place is meant to stay clear, but a body in transit can be sitting on
+    /// it, and the settle walks a man *directly* (it does not go through the collision pass), so a man who stepped onto a
+    /// neighbour would overlap him - measured **0.144** tiles apart when ten men converged on one arc. A blocked place is not a
+    /// place until it clears.
+    pub(crate) fn place_blocked(&self, worker: EntityId, place: (Fixed, Fixed)) -> bool {
+        let radius = self
+            .find(worker)
+            .and_then(|entity| entity.unit)
+            .map_or(1, |unit| (2 * self.body_radius(Some(unit))).max(1));
+        self.entities.iter().any(|other| {
+            other.id != worker
+                && other.kind == EntityKind::Unit
+                && (other.position.0.raw() - place.0.raw()).pow(2)
+                    + (other.position.1.raw() - place.1.raw()).pow(2)
+                    < radius * radius
+        })
     }
 
-    pub(crate) fn standoff_point(
-        &self,
-        from: (Fixed, Fixed),
-        target: (Fixed, Fixed),
-        node: EntityId,
-        worker: EntityId,
-        taken: &[(EntityId, (Fixed, Fixed))],
-        // **Whether to prove the slot is walkable to** with a path search. `start_gather` says yes, once per order. The tick
-        // that walks an arrived man out to its slot says no: it runs every tick, and a slot 1.156 tiles away whose tile is
-        // walkable and free is reachable unless it is an island, in which case the man simply never arrives and tries again.
-        check_path: bool,
-    ) -> Option<Standoff> {
-        let scale = self.scale;
-        // The worker's own radius, which is the spacing between two men on the ring. The node's radius no longer decides the
-        // standoff - that was D169.
-        let worker_radius = match self.find(worker).and_then(|entity| entity.unit) {
-            Some(unit) => self.body_radius(Some(unit)),
-            None => 0,
-        };
-        let (dx, dy) = (from.0.raw() - target.0.raw(), from.1.raw() - target.1.raw());
-        if dx == 0 && dy == 0 {
+    /// **Take the place a man has walked to, and keep it** (D186 addendum 5). Stored as the point itself rather than an index into
+    /// a table that no longer exists: a place is a position, and `place_stands_clear` re-checks the ground it stands on.
+    pub(crate) fn reserve_gather_place(&mut self, worker: EntityId, node: EntityId, point: (Fixed, Fixed)) {
+        self.gather_place
+            .insert(worker, (node, (point.0.raw(), point.1.raw())));
+    }
+
+    /// **The place this man already owns**, if its ground is still ground. `is_free_ground` is deliberately not asked: it answers
+    /// "may a body stand here", and the body asking is the man himself.
+    pub(crate) fn gather_place_of(&self, worker: EntityId, node: EntityId) -> Option<(Fixed, Fixed)> {
+        let (at, (x, y)) = *self.gather_place.get(&worker)?;
+        if at != node || !self.place_is_live(worker, node) {
             return None;
         }
-        // **Nine places on a ring of 1.156 tiles** (D186), not one side at the two bodies' standoff (D169/D182). The men
-        // the owner's save shows stand *outside* the neighbouring tile's centre - 1.156 of a tile from the source square's
-        // centre - and nine places is what this engine can hold without two bodies touching; his game forages eleven, and the
-        // geometries agree, which is why the constant is under review in D186 addendum 4 rather than settled.
-        let ring = self.scale * GATHER_RING_MILLI / 1000;
-        // **Held means "too close", not "exactly on it"** (D181, kept). The test is the width of two bodies - the 0.404 of
-        // the save's closest pair - and it counts the slots chosen earlier in this same decision pass, which is the only way
-        // the second worker learns about the first before either has arrived.
-        let too_close = (2 * worker_radius).max(1);
-        // **The ring is round the source's SQUARE, not its anchor** (D186). A map may place a node at a tile's corner - the
-        // drop-off test's bush sits at exactly (20.0, 13.0) - and a ring drawn round that corner straddles four tiles, which
-        // put every one of the eighteen slots on a blocked or occupied tile and left the worker standing at 0.00 progress
-        // for 1,200 ticks. The owner's own words are *"each source was a square covering the whole tile"*, so the centre is
-        // the tile's.
-        let centre = self.tile_centre(self.tile_of(target));
-        // **The nearest place, unless a nearer man wants it** (D186). The slot was first chosen by distance from wherever the
-        // worker stood, every tick, with no ownership: two men walking at the same side of a bush kept swapping places and
-        // arrived on top of each other - measured, **0.001** tiles apart in one fixture and **0.20** in another. Rank by id
-        // fixed the ownership but sent men round the tree the long way, crossing each other (measured: a woodcutter walking
-        // two tiles to the far side while a nearer place stood empty). This is the pair of ideas that works: order the ring by
-        // distance from the worker, and let a slot belong to the nearest claimant - ties broken by id, so two men
-        // equidistant from a place cannot both own it.
-        let slots = GATHER_RING_SLOTS as usize;
-        let mut order: Vec<usize> = (0..slots).collect();
-        order.sort_by_key(|k| {
-            let px = centre.0.raw() + ring * RING_COS[*k] / 1_000_000;
-            let py = centre.1.raw() + ring * RING_SIN[*k] / 1_000_000;
-            let (dx, dy) = (px - from.0.raw(), py - from.1.raw());
-            (dx * dx + dy * dy, *k)
+        let point = (Fixed::from_raw(x), Fixed::from_raw(y));
+        let (Ok(tx), Ok(ty)) = (
+            u16::try_from(x.div_euclid(self.scale)),
+            u16::try_from(y.div_euclid(self.scale)),
+        ) else {
+            return None;
+        };
+        if !self.tile_walkable(tx, ty) {
+            return None;
+        }
+        let on_site = self.foundations.iter().any(|site| {
+            self.footprint_rect(*site).is_some_and(|(ax, ay, wide, tall)| {
+                tx >= ax && tx < ax.saturating_add(wide) && ty >= ay && ty < ay.saturating_add(tall)
+            })
         });
-        let found = order.iter().find_map(|k| {
-            let px = centre.0.raw() + ring * RING_COS[*k] / 1_000_000;
-            let py = centre.1.raw() + ring * RING_SIN[*k] / 1_000_000;
-            let (Ok(x), Ok(y)) = (
-                u16::try_from(px.div_euclid(scale)),
-                u16::try_from(py.div_euclid(scale)),
-            ) else {
-                return None;
-            };
-            if !self.tile_walkable(x, y) || !self.is_free_ground(x, y) {
-                return None;
-            }
-            // **Not on somebody's building site** (D186, found by the skirmish). A foundation is walkable ground (D183), so a
-            // slot can land on one - and a gatherer who stands there and works is exactly the unit the empty-site gate waits
-            // for, so the site stalls for ever: measured, a barracks frozen at 871 of its build with the man beside a bush.
-            // A site is not a place to stand until it is finished.
-            let on_site = self.entities.iter().any(|other| {
-                other.construction.is_some()
-                    && self
-                        .footprint_rect(other.id)
-                        .is_some_and(|(ax, ay, wide, tall)| {
-                            x >= ax
-                                && x < ax.saturating_add(wide)
-                                && y >= ay
-                                && y < ay.saturating_add(tall)
-                        })
-            });
-            if on_site {
-                return None;
-            }
-            let near = |point: (Fixed, Fixed)| -> bool {
-                let (ax, ay) = (point.0.raw() - px, point.1.raw() - py);
-                ax * ax + ay * ay < too_close * too_close
-            };
-            // **A place another man has taken is taken** (D186 addendum 5): his reservation outranks any nearer claimant, which
-            // is what stops two men from swapping a slot between them tick after tick.
-            let reserved = self.gather_place.iter().any(|(other, (at, taken))| {
-                *other != worker
-                    && *at == node
-                    && usize::from(*taken) == *k
-                    && self.place_is_live(*other, node)
-            });
-            if reserved {
-                return None;
-            }
-            let held = self
-                .entities
-                .iter()
-                .any(|other| other.id != worker && near(other.position))
-                || taken
-                    .iter()
-                    .any(|(other, point)| *other != worker && near(*point));
-            if held {
-                return None;
-            }
-            // **A nearer claimant owns this place** (D186): no reservations, no state, and no two men can both be nearest.
-            let mine = (
-                (px - from.0.raw()).pow(2) + (py - from.1.raw()).pow(2),
-                worker.0,
-            );
-            let contested = self.entities.iter().any(|other| {
-                other.id != worker
-                    && matches!(other.task, Task::Gather { node: taken, .. } if taken == node)
-                    && (
-                        (other.position.0.raw() - px).pow(2) + (other.position.1.raw() - py).pow(2),
-                        other.id.0,
-                    ) < mine
-            });
-            if contested {
-                return None;
-            }
-
-            // **A spot the worker cannot walk out of is not a spot to stand on.** The test above proves the point is *free ground*,
-            // which is not the same as *reachable*: a one-tile gap inside a forest is both, and a worker placed there is trapped for
-            // the rest of the match. The ten-minute scenario's 330 s gather step was refused with *"no walkable route from (22,13) to
-            // (13,19): the target is walled off"* exactly that way. A path from where the worker stands is the proof.
-            let point = (Fixed::from_raw(px), Fixed::from_raw(py));
-            (!check_path || self.can_reach(from, point)).then_some(point)
-        });
-        // **No room is an answer, not a failure** (D182): the worker has somewhere it *could* touch the node and every one of those places is
-        // taken or unreachable, so the caller sends it to the nearest other node of the same kind instead of leaving it to work from wherever it
-        // happens to stand.
-        Some(found.map_or(Standoff::NoRoom, Standoff::Point))
+        (!on_site).then_some(point)
     }
 
     /// **How much room a body has**, in raw units: the distance from `position` to the nearest **blocked tile**, minus `radius`.

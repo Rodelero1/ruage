@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use ruage_fixed::Fixed;
 
 use crate::{
-    EntityId, EntityKind, Landing, MAX_PLAYERS, Passing, Repath, Rot, Route, Shot, SimError,
+    integer_sqrt, EntityId, EntityKind, Landing, MAX_PLAYERS, Passing, Repath, Rot, Route, Shot, SimError,
     Stance, Task, World, find_path_avoiding, reaches, short_range, step_towards,
 };
 impl World {
@@ -804,32 +804,107 @@ impl World {
     /// at its tree one or two ticks later and never moves faster than it can walk.
     /// **Keep the places the settle chose this tick** (D186 addendum 5). One place per man, taken when he first walks onto a
     /// ring, held until his order changes - which is what makes two men unable to fight over the same spot.
-    fn reserve_places(&mut self, places: Vec<(EntityId, EntityId)>) {
-        for (worker, node) in places {
-            let (Some(centre), Some(from)) = (
-                self.find(node)
-                    .map(|entity| self.tile_centre(self.tile_of(entity.position))),
-                self.find(worker).map(|entity| entity.position),
-            ) else {
-                continue;
-            };
-            self.reserve_gather_place(worker, node, centre, from);
+    fn reserve_places(&mut self, places: Vec<(EntityId, EntityId, (Fixed, Fixed))>) {
+        for (worker, node, point) in places {
+            self.reserve_gather_place(worker, node, point);
         }
     }
 
-    fn settle_workers(&mut self, settles: Vec<(EntityId, (Fixed, Fixed))>) {
+    fn settle_workers(&mut self, settles: Vec<(EntityId, (Fixed, Fixed), Option<(Fixed, Fixed)>)>) {
         // **Speed is per second**, and a step is exact: `step_towards` is the movement pass's own arithmetic, so this cannot be a
         // fraction of a scale unit and cannot overshoot. Reading the stored speed raw was the first attempt's `15,600`.
         let tick_rate = i64::from(self.tick_rate_hz).max(1);
-        for (id, to) in settles {
-            let Some(entity) = self.find_mut(id) else {
+        // **A blocked man steps round the ring, not into the neighbour** (D188). The settle moves a body *directly* - it does not
+        // go through the collision pass - so stepping straight at an occupied place puts two men inside each other: measured
+        // **0.144**, then **0.103**, tiles apart when ten men converged on one arc. Standing still instead strands them outside the
+        // band (measured **1.962** tiles from the bush, never working). The step is therefore taken **along the ring**, in the
+        // shorter direction, which is what a villager walking round a tree to its place does.
+        // **Who is standing where**, once, so a blocked goal can be recognised before anybody moves.
+        let bodies: Vec<(EntityId, (Fixed, Fixed))> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::Unit)
+            .map(|entity| (entity.id, entity.position))
+            .collect();
+        for (id, to, ring) in settles {
+            // Read everything the decision needs **before** the mutable borrow: the body radius is the world's, not the entity's.
+            let Some((speed, unit, position)) = self
+                .find(id)
+                .map(|entity| (entity.speed, entity.unit, entity.position))
+            else {
                 continue;
             };
-            let (dx, dy) = step_towards(entity.position, to, entity.speed.raw() / tick_rate);
-            if dx != 0 || dy != 0 {
+            let step = speed.raw() / tick_rate;
+            let reach = (2 * self.body_radius(unit)).max(1);
+            let blocked = bodies.iter().any(|(other, at)| {
+                *other != id
+                    && (at.0.raw() - to.0.raw()).pow(2) + (at.1.raw() - to.1.raw()).pow(2)
+                        < reach * reach
+            });
+            let (dx, dy) = if blocked {
+                // **Slide, do not stand still** (D188): the step is the goal's direction turned about forty-five degrees, round the
+                // ring, so a man both closes on his place and passes the neighbour standing in the straight line. A purely tangential
+                // step kept his radius and he circled for ever (measured: still 1.98 tiles out after 1,600 ticks), and a purely
+                // straight one put him inside the neighbour.
+                let (gx, gy) = (
+                    to.0.raw() - position.0.raw(),
+                    to.1.raw() - position.1.raw(),
+                );
+                let goal = integer_sqrt(gx * gx + gy * gy).max(1);
+                let (ux, uy) = (gx * 1_000 / goal, gy * 1_000 / goal);
+                // Which way round: the side that shortens the arc to the goal, and - when the man is already on the goal's own
+                // radius and the crossing is zero - a **fixed** side by id, so the decision cannot flip tick to tick.
+                let sign = match ring {
+                    Some(centre) => {
+                        let (ox, oy) = (
+                            position.0.raw() - centre.0.raw(),
+                            position.1.raw() - centre.1.raw(),
+                        );
+                        let (rx, ry) = (to.0.raw() - centre.0.raw(), to.1.raw() - centre.1.raw());
+                        match (ox * ry - oy * rx).signum() {
+                            0 => {
+                                if id.0 % 2 == 0 {
+                                    1
+                                } else {
+                                    -1
+                                }
+                            }
+                            other => other,
+                        }
+                    }
+                    None => -1,
+                };
+                // (`ux, uy)` is a unit vector in thousandths; the tangent is the same turned a quarter turn.)
+                let (tx, ty) = (-sign * uy, sign * ux);
+                let (mx, my) = (ux + tx, uy + ty);
+                let length = integer_sqrt(mx * mx + my * my).max(1);
+                (
+                    Fixed::from_raw(mx * step / length),
+                    Fixed::from_raw(my * step / length),
+                )
+            } else {
+                let (raw_x, raw_y) = step_towards(position, to, step);
+                (Fixed::from_raw(raw_x), Fixed::from_raw(raw_y))
+            };
+            // **A step that lands inside a neighbour is not taken** (D188): two bodies may never share a spot, however the settle
+            // decided to move. The man waits a tick and the slide resumes - which is what keeps the closest pair a body apart
+            // instead of the 0.345 a pure slide produced.
+            let candidate = (
+                position.0.raw() + dx.raw(),
+                position.1.raw() + dy.raw(),
+            );
+            let lands_on_somebody = bodies.iter().any(|(other, at)| {
+                *other != id
+                    && (at.0.raw() - candidate.0).pow(2) + (at.1.raw() - candidate.1).pow(2)
+                        < reach * reach
+            });
+            if lands_on_somebody {
+                continue;
+            }
+            if (dx.raw() != 0 || dy.raw() != 0) && let Some(entity) = self.find_mut(id) {
                 entity.position = (
-                    Fixed::from_raw(entity.position.0.raw() + dx),
-                    Fixed::from_raw(entity.position.1.raw() + dy),
+                    Fixed::from_raw(position.0.raw() + dx.raw()),
+                    Fixed::from_raw(position.1.raw() + dy.raw()),
                 );
             }
             // **`velocity` is state, not a report** (found here): writing it from the settle made a villager 15 tiles away walk to a patch
@@ -1687,9 +1762,18 @@ impl World {
                     let tolerance = self.scale / 50;
                     let near_ring = (ring_raw - tolerance) * (ring_raw - tolerance);
                     let far_ring = (ring_raw + tolerance) * (ring_raw + tolerance);
+                    // **A place already owned is walked to, not re-chosen** (D186 addendum 5, D188): the settle must run until
+                    // the man is *on his place*, not merely on the ring's radius. Gating it on the radius alone let a man stop
+                    // wherever he crossed 1.156 - measured, ten men packed **0.144** apart at the same angle with their places
+                    // 0.408 apart and unclaimed.
+                    let owned_place = self.gather_place_of(entity.id, node);
+                    let off_place = owned_place.is_some_and(|place| {
+                        let (px, py) = (place.0.raw() - entity.position.0.raw(), place.1.raw() - entity.position.1.raw());
+                        px * px + py * py > (self.scale / 8).pow(2)
+                    });
                     let settling = ring_open
                         && near_node
-                        && (ring_squared < near_ring || ring_squared > far_ring);
+                        && (ring_squared < near_ring || ring_squared > far_ring || off_place);
                     // **The walk to the ring and the walk to the node must not both be taken.** The `else` branch below steps
                     // toward the node's own tile; the settle steps *away* from it, so a worker with both ran on the spot -
                     // measured, a woodcutter frozen at 0.984 tiles with the tree's 20 hit points untouched for 15 s.
@@ -1700,19 +1784,24 @@ impl World {
                         // man's destination moved as his neighbour moved and the two of them swapped places - measured 0.001,
                         // 0.20 and 0.243 tiles apart in three fixtures. A place taken once is taken for as long as the order
                         // stands, and `place_is_live` releases it the moment the man is re-tasked.
-                        let owned = self.gather_place_of(entity.id, node);
+                        let owned = owned_place;
                         let found = match owned {
-                            Some(slot) => {
-                                Some(crate::Standoff::Point(self.ring_point(centre, slot)))
+                            Some(place) => Some(crate::Standoff::Point(place)),
+                            None => {
+                                let taken: Vec<(EntityId, (Fixed, Fixed))> = work
+                                    .settles
+                                    .iter()
+                                    .map(|(id, at, _)| (*id, *at))
+                                    .collect();
+                                self.standoff_point(
+                                    entity.position,
+                                    target,
+                                    node,
+                                    entity.id,
+                                    &taken,
+                                    false,
+                                )
                             }
-                            None => self.standoff_point(
-                                entity.position,
-                                target,
-                                node,
-                                entity.id,
-                                &work.settles,
-                                false,
-                            ),
                         };
                         // **A `Standoff::NoRoom` is not an error here** (D182): the worker keeps trying from where it stands rather
                         // than being re-tasked in this arm. Re-tasking here fires **every tick** a worker cannot reach its side, and
@@ -1720,10 +1809,13 @@ impl World {
                         // owner's rule is applied where it is cheap and deterministic - when the order is given (`start_gather`) -
                         // and the ring is only the fallback.
                         if let Some(crate::Standoff::Point(stand)) = found {
-                            work.settles.push((entity.id, stand));
+                            // The ring's centre travels with the place: a man whose straight line to it is blocked steps **round
+                            // the ring** instead of standing still (D188). Without it a crowd arriving from one side leaves men
+                            // stranded outside the band - measured 1.962 tiles from the bush, never working.
+                            work.settles.push((entity.id, stand, Some(centre)));
                             settling_now = true;
                             if owned.is_none() {
-                                work.places.push((entity.id, node));
+                                work.places.push((entity.id, node, stand));
                             }
                         }
                     }
@@ -1940,7 +2032,7 @@ struct TickWork {
     engaging: Vec<(EntityId, EntityId)>,
     turning: Vec<EntityId>,
     homing: Vec<EntityId>,
-    settles: Vec<(EntityId, (Fixed, Fixed))>,
+    settles: Vec<(EntityId, (Fixed, Fixed), Option<(Fixed, Fixed)>)>,
     /// Men who chose a place on a node's ring this tick and must now keep it (D186 addendum 5).
-    places: Vec<(EntityId, EntityId)>,
+    places: Vec<(EntityId, EntityId, (Fixed, Fixed))>,
 }

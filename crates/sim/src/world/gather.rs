@@ -53,7 +53,7 @@ impl World {
                     )
             })
             .count();
-        on_node >= usize::from(crate::GATHER_RING_SLOTS)
+        on_node >= crate::ring_capacity()
     }
 
     fn nearest_like_in(
@@ -322,7 +322,7 @@ impl World {
             && self
                 .find(node)
                 .is_some_and(|entity| matches!(entity.kind, EntityKind::Resource(_)))
-            && on_node >= usize::from(crate::GATHER_RING_SLOTS)
+            && on_node >= crate::ring_capacity()
         {
             let here = self
                 .find(villager)
@@ -495,12 +495,13 @@ impl World {
             self.find(node).map(|entity| entity.kind),
             Some(EntityKind::Resource(_))
         ) {
-            let (centre, there) = (
-                self.tile_centre(self.tile_of(to)),
-                self.find(node).map_or(to, |entity| entity.position),
-            );
-            let _ = there;
-            self.reserve_gather_place(villager, node, centre, from);
+            // **A place, taken when the order lands** (D188): the geometry decides it, exactly as the settle would, so two men
+            // ordered in the same tick cannot both be given the same spot.
+            if let Some(crate::Standoff::Point(place)) =
+                self.standoff_point(from, to, node, villager, &[], false)
+            {
+                self.reserve_gather_place(villager, node, place);
+            }
         }
         // The load is the villager's, not the node's: re-tasking onto the next tree (or the next sheep) must not spill
         // what is already in its hands. It used to be zeroed here, which was invisible until a worker could move on by
