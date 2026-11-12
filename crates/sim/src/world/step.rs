@@ -1714,20 +1714,17 @@ impl World {
                                 false,
                             ),
                         };
-                        match found {
-                            Some(crate::Standoff::Point(stand)) => {
-                                work.settles.push((entity.id, stand));
-                                settling_now = true;
-                                if owned.is_none() {
-                                    work.places.push((entity.id, node));
-                                }
+                        // **A `Standoff::NoRoom` is not an error here** (D182): the worker keeps trying from where it stands rather
+                        // than being re-tasked in this arm. Re-tasking here fires **every tick** a worker cannot reach its side, and
+                        // each attempt re-plans a route: the acceptance run went from 35 s to over 400 s with that loop in place. The
+                        // owner's rule is applied where it is cheap and deterministic - when the order is given (`start_gather`) -
+                        // and the ring is only the fallback.
+                        if let Some(crate::Standoff::Point(stand)) = found {
+                            work.settles.push((entity.id, stand));
+                            settling_now = true;
+                            if owned.is_none() {
+                                work.places.push((entity.id, node));
                             }
-                            // **No room on the ring** (D182): the worker keeps trying from where it stands rather than being re-tasked here.
-                            // Re-tasking from this arm fires **every tick** a worker cannot reach its side, and each attempt re-plans a route:
-                            // the acceptance run went from 35 s to over 400 s with that loop in place. The owner's rule is applied where it is
-                            // cheap and deterministic - when the order is given (`start_gather`), which is once per order rather than once per
-                            // tick - and the ring is only the fallback.
-                            _ => {}
                         }
                     }
 

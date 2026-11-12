@@ -174,6 +174,10 @@ impl World {
             task @ (Task::Gather { .. } | Task::Hunt { .. }) => task,
             _ => Task::Idle,
         };
+        // **His place goes with him** (D186 addendum 5): a man moved off a foundation must not walk back onto it because the
+        // ring's place he owned is still there. Without this the site's clear gate and the man's place fight each other, and the
+        // site never starts - the ten-minute scenario's barracks stood at 0 of 1000 ticks with its builder at a gather task.
+        self.release_gather_place(id);
         let Some(to) = self.exit_tile(tiles, here, from) else {
             // **Nowhere to go**: the site stalls, which D183 §4 accepts. The attempt is remembered anyway, so the search
             // is not repeated every tick - a unit that cannot leave would otherwise cost a ring of path searches a tick

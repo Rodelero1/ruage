@@ -3206,12 +3206,46 @@ impl World {
     }
 
     /// **The place this man already owns**, if it is still free of other men.
+    /// **Is this place still a place?** (D186 addendum 5.) A slot chosen before a foundation was laid is on a **building site**
+    /// now, and a man who keeps settling onto one stalls it for ever: the empty-site gate (D183 §4) waits for the footprint to
+    /// clear and he will not leave. The ten-minute scenario's barracks stood at `progress_ticks: 0` of 1000 exactly that way.
+    ///
+    /// `is_free_ground` is deliberately **not** asked: it answers "may a body stand here", and the body asking is the man
+    /// himself. Ownership of a place is the reservation's job; this is only about whether the ground is still ground.
+    fn place_stands_clear(&self, node: EntityId, slot: u8) -> bool {
+        let Some(entity) = self.find(node) else {
+            return false;
+        };
+        let centre = self.tile_centre(self.tile_of(entity.position));
+        let point = self.ring_point(centre, slot);
+        let (Ok(x), Ok(y)) = (
+            u16::try_from(point.0.raw().div_euclid(self.scale)),
+            u16::try_from(point.1.raw().div_euclid(self.scale)),
+        ) else {
+            return false;
+        };
+        if !self.tile_walkable(x, y) {
+            return false;
+        }
+        !self.foundations.iter().any(|site| {
+            self.footprint_rect(*site)
+                .is_some_and(|(ax, ay, wide, tall)| {
+                    x >= ax && x < ax.saturating_add(wide) && y >= ay && y < ay.saturating_add(tall)
+                })
+        })
+    }
+
+    /// **The place this man already owns**, if he is still on this node and it is still a place.
     pub(crate) fn gather_place_of(&self, worker: EntityId, node: EntityId) -> Option<u8> {
-        // **No liveness check here**: this is the hot path - one call per gatherer per tick - and the caller only uses the
-        // place when the man's task already names this node. The map's stale entries are pruned by the two rare paths that do
-        // ask (`reserve_gather_place`, `standoff_point`), so a re-tasked man's place is released the next time anyone looks.
         let (at, slot) = *self.gather_place.get(&worker)?;
-        (at == node).then_some(slot)
+        (at == node && self.place_is_live(worker, node) && self.place_stands_clear(node, slot))
+            .then_some(slot)
+    }
+
+    /// **Let a place go**: the man is being moved by something other than his order - a foundation under his feet, a site
+    /// clearing - so the place he had must not pull him back. The settle then chooses a fresh one.
+    pub(crate) fn release_gather_place(&mut self, worker: EntityId) {
+        self.gather_place.remove(&worker);
     }
 
     /// **Take the place nearest `from`, and keep it** (D186 addendum 5). Reserved slots are skipped exactly as bodies are, so

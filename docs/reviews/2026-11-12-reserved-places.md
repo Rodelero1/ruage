@@ -1,66 +1,72 @@
-# A place on the ring belongs to the man — work in progress, not landed
+# A place on the ring belongs to the man
 
-**Status: parked on branch `d186-reserved-places`, not merged.** It fixes the gathering defect it was written for and breaks
-building in the ten-minute scenario. Main is green without it.
+**Branch `d186-reserved-places`.** Gathering: fixes the overlap the owner photographed. Building: the regression it caused is
+fixed and the ten-minute scenario is green again. It still costs repaths, stated below with the A/B that shows it.
 
-## What it does
+## The defect
 
-`GATHER_RING_SLOTS` places on the ring used to be re-chosen **every tick** by `standoff_point`: the place belonged to whoever
-was nearest it at that instant. Three separate failures came from that one design — **0.001**, **0.20** and **0.243** tiles
-between men who were all supposed to be working — and the owner's description of the result was *"it feels rather random"*.
+A place on the ring was re-chosen **every tick** by `standoff_point`, and it belonged to whoever stood nearest at that instant.
+Three failures came from that one design - **0.001**, **0.20** and **0.243** tiles between men who were all supposed to be
+working - and the owner's words for the result were *"it feels rather random"*, then, looking at the renderer, *"several
+standing over the other"*.
 
-The change gives a man a **place**, not a claim: `gather_place: BTreeMap<worker, (node, slot)>`, chosen when the order lands
-(`start_gather_with`), read by the settle instead of re-deciding, and released by `place_is_live` when his task stops naming that
-node. A reserved slot is treated exactly as a body is: `standoff_point` will not choose it for anyone else.
+## The change
 
-## Performance
+A man gets a **place**, not a claim: `gather_place: BTreeMap<worker, (node, slot)>`, chosen when the order lands
+(`start_gather_with`), read by the settle instead of re-deciding, released when his task stops naming that node
+(`place_is_live`) or when something else moves him (`release_gather_place`, called by `step_aside`). A reserved slot is treated
+exactly as a body: `standoff_point` will not give it to anyone else.
 
-Measured on `main` at `9b30e9c` against this branch, 36,000 ticks, seed 7, release build:
+**A place that is no longer a place is given up** (`place_stands_clear`): walkable ground, and not on any foundation's
+footprint, tested against the maintained `foundations` set rather than a scan of every entity, because it runs once per settled
+gatherer per tick. `is_free_ground` is deliberately not asked - it answers "may a body stand here" and the body asking is the
+man himself; ownership is the reservation's job.
 
-| | before | after |
+## Performance - measured, with the A/B that makes it honest
+
+36,000 ticks, seed 7, release build, same code both sides, the only difference being whether `gather_place_of` returns the
+stored place or `None`:
+
+| | reservations off | reservations on |
 |---|---|---|
-| acceptance hash | `08a111f13b7c43ec` | `16fe573fcd55440f` |
-| entities at 1,800 s | 150 | 146 |
-| **repaths** | **352** | **62** (−82%) |
-| **made_room** | **226** | **7** (−97%) |
-| `World::step` | 6.9 µs | 7.7 µs (first cut) |
-| `Snapshot::of` | 101.6 µs | 103.6 µs |
+| acceptance hash | `ea822b6b31a006d8` | `ef7cdba92a83f173` |
+| entities at 1,800 s | 137 | 142 |
+| players standing | 2 | **1** |
+| **repaths** | **226** | **435** |
+| **made_room** | **125** | **151** |
+| `World::step` | 7.2 us (main: 6.9) | 7.2 us |
+| `Snapshot::of` | 98.0 us (main: 101.6) | 98.0 us |
 
-The two big falls are the point: a man who keeps his place does not re-plan a route to a place that moved, and does not shuffle
-bodies out of his way. The step cost rose 12% because `gather_place_of` was doing a linear `find` per gatherer per tick to prove
-the place was live; that was removed from the hot path (the caller already knows the task names the node) before the parked state,
-which is the number above.
+**The repaths go up, not down - 226 -> 435.** A first cut of this branch appeared to show **352 -> 62**, and that number was
+wrong: it compared two different code states, one of which also changed the match's course (the same mistake as quoting a hash
+from a binary that was not rebuilt). What the reservation actually buys is **correctness and military outcome**: player 2 is
+eliminated, and men stop standing on each other. It costs roughly twice the repaths, because a man who holds a place walks back
+to it after being shoved off, where the old rule simply drifted to wherever he ended up.
+
+Step cost is unchanged against main (7.2 vs 6.9 us, inside the example's own spread); the first cut's 7.7 us came from a linear
+`find` per gatherer per tick in `gather_place_of`, which is gone.
 
 ## Stability
 
-**The regression.** `the_ten_minute_scenario_builds_trains_and_fights` fails on this branch and passes on `main` at `9b30e9c`:
+**The regression and its fix.** The first cut put the ten-minute scenario's barracks at **`progress_ticks: 0` of 1000**, the
+500 s step refused with *"player 1 has no finished barracks"*, and its builder back at a gather task - while `main` at
+`9b30e9c` passed. Two causes, both fixed:
 
-    the step due at 500 s did not run: Refused("player 1 has no finished barracks")
-    barracks: construction = Some(Construction { progress_ticks: 0, total_ticks: 1000, .. })
-    units: 2 gather (node 105), 3 gather (node 105), 4 gather (node 17), 5 Idle
+1. A place chosen **before a foundation was laid** is on a building site now, so the man kept settling onto the footprint and
+   `site_is_clear` could never answer. `place_stands_clear` re-validates the ground each time the place is read.
+2. A man **moved off** a footprint kept his place and walked back onto it. `step_aside` now releases it.
 
-The barracks is **placed and never struck once**: `progress_ticks: 0`. The builder is not building — he is back at a gather
-task with a nine-point route.
+Scenario green after both, gather binaries green.
 
-**The likely cause, not yet proved.** A place chosen *before* a foundation was placed is never re-validated. `standoff_point`
-refuses slots that land on a site (`on_site`), which is why newly chosen places are safe — but a place already owned stays owned,
-so the man keeps settling **onto the footprint** that is now a building site. `site_is_clear` cannot answer while he stands
-there, so the site stalls at zero, and the builder — pushed aside by the site's own clear pass — is restored to his old gather
-task by `resume_idle`.
+**Retracted**: the earlier note that the scenario's gold step was refused because the economy mined it out. That was a symptom
+of the same stalled barracks - a match that never builds a barracks never spends its gold - not a fixture problem, and the
+tolerance added for it was removed.
 
-**What it would take.** Re-validate an owned place against the same three tests a new one passes (walkable, free, not on a site)
-before walking to it, with a reserved slot dropped and re-chosen once when it fails. That is one tile lookup per settled
-gatherer per tick in the worst case, which the step budget (7.7 µs, ~1,300 entities) can afford, but it has to be measured
-rather than assumed.
+## Tests
 
-## Tests written for it
-
-- `a_settled_man_is_not_displaced_by_a_later_arrival` — a second man placed beside a settled man's place does not take it.
-- `six_settled_men_hold_their_places` — six men round one bush drift less than 0.10 tiles over ten seconds and no pair is
-  closer than 0.39. **Mutation-checked**: removing the reservation (making `gather_place_of` return `None`) makes two of them
-  **0.000** apart, so the test bites.
-- `gather_room.rs::a_woodcutter_whose_tree_runs_out_joins_a_patch_that_already_has_men_on_it` was made timing-independent: it
-  now waits for the join rather than for tick 2,400, because a tree running dry mid-load sends the man home first and the old
-  fixed tick made the test a measurement of arrival time.
-
-Both new tests pass on the branch. The suite is otherwise green (**171 of 172 binaries**; the one red is the scenario above).
+- `a_settled_man_is_not_displaced_by_a_later_arrival` - a second man placed beside a settled man's place does not take it.
+- `six_settled_men_hold_their_places` - six men round one bush drift under 0.10 tiles in ten seconds, closest pair >= 0.39.
+  **Mutation-checked**: with the reservation removed, two of them stand **0.000** apart.
+- `a_woodcutter_whose_tree_runs_out_joins_a_patch_that_already_has_men_on_it` no longer counts ticks: a tree that runs dry
+  mid-load sends the man home first, so the test waits for the join instead of for tick 2,400.
+- `the_ten_minute_scenario_builds_trains_and_fights` - the guard for the regression above.
