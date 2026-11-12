@@ -4443,4 +4443,13 @@ card at all. So the slice is:
    questions), drawn above the ground and below the HUD.
 
 **Then**: the villager build card (so placement is reachable the way a player expects), the gate lock, "a gate must be built
-inside a wall", the other three wall types (`117/119/155`).
+inside a wall", the other three wall types (`117/119/155`).**The reserved place is landed** (D186 addendum 6): a gatherer takes a place on his node's ring when the order lands and keeps
+it until the task changes, so a nearer arrival cannot take it and two men cannot swap it between ticks. Measured on the
+gathering-only fixture (`examples/gather_cost.rs`): repaths **224 -> 229**, made_room **124 -> 63**, men working **13 -> 16 of 18**.
+
+**Still owed: the bush and mine ring radius.** The 1.156-tile ring is a **tree** measurement - six woodcutters, 1.105-1.189 - and
+the owner says foragers look too far from a berry bush. Only a save with the men **already standing at a bush** pins it, the way
+`owner-test2` pinned the tree; his bush save has them walking (from-points 1.21-2.57 tiles out). Until then bushes and mines use
+the tree's ring and that is stated, not assumed.
+
+

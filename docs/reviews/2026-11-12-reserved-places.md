@@ -70,3 +70,18 @@ tolerance added for it was removed.
 - `a_woodcutter_whose_tree_runs_out_joins_a_patch_that_already_has_men_on_it` no longer counts ticks: a tree that runs dry
   mid-load sends the man home first, so the test waits for the join instead of for tick 2,400.
 - `the_ten_minute_scenario_builds_trains_and_fights` - the guard for the regression above.
+
+## The repath cost, isolated
+
+The acceptance run's repaths double (226 -> 435), but that run also changes course: player 2 is eliminated with the change and
+survives without it, so its counters mix gathering with a different war. `crates/sim/examples/gather_cost.rs` takes the war out:
+eighteen villagers, six bushes, an open map, ten game-minutes, nothing built and nothing fighting.
+
+| | reservations off | reservations on |
+|---|---|---|
+| repaths | 224 | **229** (+2%) |
+| made_room | 124 | **63** (-49%) |
+| men working at the end | 13 of 18 | **16 of 18** |
+
+So the gathering cost of a place that belongs to its man is **2%**, not 92%, and it halves the body-shuffling while putting three
+more men to work. The acceptance run's repaths are a property of the match it ends up playing, not of this rule.

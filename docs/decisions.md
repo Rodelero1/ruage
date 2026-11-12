@@ -4670,3 +4670,25 @@ the geometry gives.
 
 **What is not claimed**: that the game's number is eighteen. Eleven is observed; eighteen is what the ring fits; the game may cap
 somewhere between, and only a bigger crowd in his own save would say.
+
+### D186 addendum 6 - a place on the ring belongs to the man (landed)
+
+**The rule.** A gatherer takes a **place** on his node's ring when the order lands and keeps it until the task changes. The place
+is `gather_place: BTreeMap<worker, (node, slot)>`; `standoff_point` will not give a reserved slot to anyone else, so a man who
+walks up later cannot take a settled man's place however near he stands.
+
+**Why it is a rule and not a heuristic.** The place used to be re-chosen **every tick** by nearest-claimant, and three separate
+failures came out of that: two men **0.001**, **0.20** and **0.243** tiles apart, all of them supposed to be working. The owner
+saw it in the renderer - *"several standing over the other"* - and had already described the behaviour as *"it feels rather
+random"*. A place that belongs to an order cannot be stolen by a nearer arrival, and two men cannot swap it between ticks.
+
+**A place that stops being a place is given up.** Two things invalidate one: a foundation laid on the ground it stands on, and
+being moved off that ground. `place_stands_clear` re-validates walkable ground and the `foundations` footprints when the place is
+read; `release_gather_place` drops it when `step_aside` moves the man. Without both, the ten-minute scenario's barracks stood at
+`progress_ticks: 0` of 1000 for ever: the man kept walking back onto the footprint and the clear gate (D183 §4) could never
+answer.
+
+**The cost, measured where it can be measured.** In the acceptance run repaths go **226 -> 435** - but that run also ends
+differently (player 2 is eliminated with the change, survives without), so its counters are not a measure of gathering. The
+gathering-only fixture (`examples/gather_cost.rs`, eighteen men, six bushes, no war) prices it: **repaths 224 -> 229 (+2%)**,
+**made_room 124 -> 63 (-49%)**, **men working 13 -> 16 of 18**. The rule costs almost nothing and puts three more men to work.
