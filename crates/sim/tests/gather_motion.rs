@@ -196,44 +196,17 @@ fn three_gatherers_on_one_bush_do_not_pile_up() {
         })
         .filter_map(|id| world.position(EntityId(*id)))
         .filter(|spot| {
-            let scale = world.scale() as f64;
-            let dx = (spot.0.raw() - at.0.raw()) as f64 / scale;
-            let dy = (spot.1.raw() - at.1.raw()) as f64 / scale;
-            let from_square = (dx * dx + dy * dy).sqrt();
-            (1.05..=1.30).contains(&from_square)
+            // **Touching the tile** (D192): 0.20 of a tile from its border, whatever part of the border he is against.
+            let tile = world.resource_tiles(node)[0];
+            let clearance = ruage_sim::tiles::distance_to_tile(
+                *spot,
+                (i64::from(tile.0), i64::from(tile.1)),
+                world.scale(),
+            );
+            (world.scale() / 8..=world.scale() / 3).contains(&clearance)
         })
         .collect();
     assert_eq!(spots.len(), 3, "all three villagers are still in the world");
-    {
-        let scale = world.scale() as f64;
-        let tree = world.position(node).expect("tree");
-        let (tx, ty) = (
-            tree.0.raw() as f64 / scale + 0.5,
-            tree.1.raw() as f64 / scale + 0.5,
-        );
-        for id in &ids {
-            let at = world.position(EntityId(*id)).expect("pos");
-            let (x, y) = (at.0.raw() as f64 / scale, at.1.raw() as f64 / scale);
-            let d = ((x - tx) * (x - tx) + (y - ty) * (y - ty)).sqrt();
-            eprintln!(
-                "PROBE id={id} pos=({x:.3},{y:.3}) r={d:.3} task={:?}",
-                world.entity(EntityId(*id)).map(|e| e.task)
-            );
-            if *id == ids[0] {
-                for k in 0..9 {
-                    let ang = (k as f64) * 40.0 * std::f64::consts::PI / 180.0;
-                    let px = tx + 1.156 * ang.cos();
-                    let py = ty + 1.156 * ang.sin();
-                    let (sx, sy) = (px as u16, py as u16);
-                    eprintln!(
-                        "  SLOT {k} -> tile ({sx},{sy}) walkable={} free={}",
-                        world.tile_walkable(sx, sy),
-                        world.is_free_ground(sx, sy)
-                    );
-                }
-            }
-        }
-    }
     // **All three gather the one bush** (D186): the ring round a source square holds eighteen men, so three is a small crowd.
     let working = world
         .entities()
@@ -243,7 +216,7 @@ fn three_gatherers_on_one_bush_do_not_pile_up() {
         .count();
     assert_eq!(
         working, 3,
-        "{working} villagers are gathering the one bush; the ring takes eighteen"
+        "{working} villagers are gathering the one bush; the geometry takes eleven"
     );
     // ... and whatever they are doing, no two bodies share the same ground.
     for a in 0..spots.len() {

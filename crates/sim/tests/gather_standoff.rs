@@ -145,10 +145,14 @@ fn a_woodcutter_stands_on_the_measured_ring() {
         Fixed::from_raw(10 * scale + scale / 2),
         Fixed::from_raw(6 * scale + scale / 2),
     );
-    let apart = gap(here, square, scale);
+    let _ = square;
+    let tile = world.resource_tiles(node)[0];
+    let clearance =
+        ruage_sim::tiles::distance_to_tile(here, (i64::from(tile.0), i64::from(tile.1)), scale);
     assert!(
-        (1.05..=1.27).contains(&apart),
-        "MEASURED the woodcutter at {apart:.3} tiles from the tree's square; the ring is 1.156 and D169's standoff was 0.70"
+        (scale / 8..=scale / 3).contains(&clearance),
+        "MEASURED the woodcutter {:.3} tiles from the tree's border; his circle is 0.20 and must touch it (D192)",
+        clearance as f64 / scale as f64
     );
     // And it is really working: the tree lost hit points, so this is not a villager that stopped early for another reason.
     let hp = world

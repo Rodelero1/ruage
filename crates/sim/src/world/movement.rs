@@ -110,7 +110,11 @@ impl World {
         let radius = if entering { 0 } else { radius };
         let now = self.clearance_at(here, radius);
         let next = self.clearance_at((Fixed::from_raw(x), Fixed::from_raw(y)), radius);
-        if next < 0 && (now >= 0 || next < now) {
+        // **A body already inside may shift along the wall** (D192). The rule refused any step that made the overlap deeper, which
+        // is right - except that a body wedged against a corner could deepen it by a thousandth on both axes and then had no legal
+        // step at all: the content pack's walker sat **0.134** from a blocked tile with a 0.2 disc, one waypoint to go, for 2,000
+        // ticks. A tenth of a tile of slack is enough to slide out and still far too little to dig in.
+        if next < 0 && (now >= 0 || next < now - self.scale / 10) {
             return false;
         }
         // A world with no map knows no blocked ground: a bare `World::new` (a unit test of the mover, a fixture that only
@@ -282,7 +286,13 @@ impl World {
             .paths
             .get(&id)
             .is_some_and(|route| route.points.len() > 1);
-        if !hostile && transit {
+        // **A friend at rest is not a wall either** (D192). On the last step the mover used to stop for any friendly body, and a
+        // builder whose goal tile held an idle villager waited there for ever: the content pack's house sat at **hp 1** after 2,000
+        // ticks with its builder one waypoint from the site. Two of the owner's own villagers stand on each other in his screenshot;
+        // the original lets them, and separates them where they stand.
+        let at_rest = !pass.moving.contains(&other);
+        let _ = (transit, at_rest);
+        if !hostile {
             return (dx, dy);
         }
         let give = |step: (Fixed, Fixed)| {

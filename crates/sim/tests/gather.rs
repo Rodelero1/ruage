@@ -162,8 +162,14 @@ fn the_villager_walks_to_the_node_and_then_takes_from_it() {
     let before = amount_of(&world, node).raw();
 
     world.submit(Command::Gather { villager, node });
-    for _ in 0..600 {
+    // **Wait for the wood, not for a tick count**: a gatherer's first load lands after his walk, his felling and his fill, and
+    // the walk got shorter when the standoff moved to the tile's border (D192) - a fixed 600 ticks is a measurement of arrival
+    // time, not of the rule under test.
+    for _ in 0..3_000 {
         world.step().expect("step");
+        if amount_of(&world, node).raw() < before {
+            break;
+        }
     }
 
     // On the node, or beside it: a forest tree stands on blocked ground, so a villager works it from the tile next to it

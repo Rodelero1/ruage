@@ -53,7 +53,12 @@ impl World {
                     )
             })
             .count();
-        on_node >= crate::ring_capacity()
+        on_node
+            >= crate::touching_place_count(
+                &self.resource_tiles(node),
+                self.body_radius(self.find(worker).and_then(|entity| entity.unit)),
+                self.scale,
+            )
     }
 
     fn nearest_like_in(
@@ -322,7 +327,12 @@ impl World {
             && self
                 .find(node)
                 .is_some_and(|entity| matches!(entity.kind, EntityKind::Resource(_)))
-            && on_node >= crate::ring_capacity()
+            && on_node
+                >= crate::touching_place_count(
+                    &self.resource_tiles(node),
+                    self.body_radius(self.find(villager).and_then(|entity| entity.unit)),
+                    self.scale,
+                )
         {
             let here = self
                 .find(villager)

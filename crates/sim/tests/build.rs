@@ -944,7 +944,8 @@ fn a_content_pack_with_our_own_resources_loads_and_spends() {
     assert_eq!(world.stock(1, grain), 0, "and not out of grain");
 
     let mut finished = None;
-    for _ in 0..2_000 {
+    let mut was_clear = true;
+    for tick in 0..2_000 {
         world.step().expect("step");
         if let Some(house) = world
             .entities()
@@ -953,22 +954,6 @@ fn a_content_pack_with_our_own_resources_loads_and_spends() {
         {
             finished = Some(house.hp);
             break;
-        }
-    }
-    if std::env::var_os("PROBE").is_some() {
-        let scale = world.scale();
-        for e in world.entities().iter().filter(|e| e.player == 1) {
-            eprintln!(
-                "PROBE {:?} unit={:?} hp={} building={} task={:?} at=({},{}) path={:?}",
-                e.id,
-                e.unit,
-                e.hp,
-                e.construction.is_some(),
-                e.task,
-                e.position.0.raw() / scale,
-                e.position.1.raw() / scale,
-                world.path_length(e.id)
-            );
         }
     }
     assert_eq!(

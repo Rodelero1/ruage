@@ -50,3 +50,15 @@ both sit inside eleven.
 
 **Not yet switched.** The gather and build standoffs still measure from the ring and the centre; this commit adds the geometry and
 its tests only, because moving the standoff changes every gather test's band and is its own slice (`docs/next-step.md`).
+
+### D192 (parked) - the standoff is the tile's border, not a ring round its centre
+
+**What it says.** A worker stands with **his circle touching the node's tile**: `distance_to_tile <= radius`, places `spacing` apart
+along the outline, chosen nearest-first. His saves measure it - men at **0.70** from a resource tile's centre (`0.5 + 0.2`) and
+**0.99** where two edges meet - against the 1.156 ring D186 read from the row *behind* them. The capacity follows from the geometry
+(**eleven** places for a villager) and the outer band disappears: no place on the tile, then another resource within four tiles.
+
+**Why it is parked rather than merged.** Every gather test asserts it and the acceptance run improves (`made_room` **96 -> 0**), but a
+build test fails: a villager told to step off a ghost oscillates on its edge for 2,000 ticks while the builder walks at the same tile.
+That is a movement deadlock the standoff exposed, and it must be understood before the rule ships. See
+`docs/reviews/2026-11-13-touching-standoff.md`.

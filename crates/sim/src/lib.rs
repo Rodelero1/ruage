@@ -1286,12 +1286,22 @@ pub(crate) const GATHER_BAND_MILLI: (i64, i64) = (1056, 1256);
 /// man not gathering. The test is the *extra* walk over walking straight at the source.
 pub(crate) const GATHER_WALK_SLACK_MILLI: i64 = 1500;
 
-/// **How many men one ring holds**, derived rather than typed: `2 * pi * 1.156 / 0.40 = 18.2`, so eighteen. The picker uses it as
-/// a cheap upper bound ("might there be room?"); the settle decides exactly, sample by sample.
+/// **How many men a node's tiles hold**: the touching places of every tile it occupies, for a body of `radius`. Derived from the
+/// geometry (D191/D192) - eleven for a villager on one tile - so there is no cap in a table and none to keep in step.
 #[must_use]
-pub fn ring_capacity() -> usize {
-    let circumference = 2 * 3_141_593 * GATHER_RING_MILLI / 1_000_000; // thousandths of a tile
-    (circumference / 400) as usize
+pub fn touching_place_count(points: &[(u16, u16)], radius: i64, scale: i64) -> usize {
+    points
+        .iter()
+        .map(|(x, y)| {
+            crate::tiles::touching_places(
+                (i64::from(*x), i64::from(*y)),
+                radius,
+                (2 * radius).max(1),
+                scale,
+            )
+            .len()
+        })
+        .sum()
 }
 
 /// The **sine of 0, 2, 4 ... 90 degrees**, in millionths: the quarter table the ring is drawn from.
@@ -1781,6 +1791,17 @@ impl World {
 
     /// The tile a position falls in. Truncating division, because every position the engine stores is positive - a
     /// position outside the map is clamped to tile 0 rather than panicking, which is what a test fixture needs.
+    /// **The tile a resource occupies.** Every node in this engine is **one tile** - a map that writes `tiles = [[x,y], ...]` for a
+    /// wood becomes one node per tile at load - which is also the game's own model: his saves show **24 of 49** men standing in the
+    /// notch between two adjacent tiles, so a cluster is a honeycomb of single tiles and never a block with an outline.
+    #[must_use]
+    pub fn resource_tiles(&self, node: EntityId) -> Vec<(u16, u16)> {
+        self.find(node)
+            .filter(|entity| matches!(entity.kind, EntityKind::Resource(_)))
+            .map(|entity| vec![self.tile_of(entity.position)])
+            .unwrap_or_default()
+    }
+
     pub(crate) fn tile_of(&self, position: (Fixed, Fixed)) -> (u16, u16) {
         (
             u16::try_from(position.0.raw() / self.scale).unwrap_or(0),
@@ -3186,19 +3207,18 @@ impl World {
         })
     }
 
-    /// **Where a worker stands to work a node** (D186 for the radius, D188 for the rule): on the ring of **1.156 tiles** round
-    /// the source square's centre, at the **nearest point where his circle fits** - one body's width (0.40) clear of every other
-    /// man. There is no cap and no list of places: the ring is sampled every two degrees and every sample is a candidate, so how
-    /// many men work one square is a consequence of the circumference (`2 * pi * 1.156 / 0.40 = 18`) rather than a number in a
-    /// table. The owner, after the engine stopped a tenth man at nine: *"I think that capping is pointless."*
+    /// **Where a worker stands to work a node** (D192, superseding D186/D188's ring): **with his circle touching the node's tile**.
+    /// The owner: *"their circles are touching the square ... center stays at least half the diameter of the circle"*. His saves
+    /// measure it: men at **0.70** from a resource tile's centre (`0.5 + 0.2`) and **0.99** at a corner, not the 1.156 ring this
+    /// engine used - which was the row *behind* the working one, and the reason the front row never worked.
     ///
-    /// Three tests a candidate must pass:
-    /// 1. **The ground** - walkable, and not on a foundation's footprint.
-    /// 2. **The room** - nothing within `too_close`, which is two body radii, the **0.400** the saves show centre to centre.
-    /// 3. **The walk** - no more than `GATHER_WALK_SLACK_MILLI` beyond walking straight at the source, because his answer to a
-    ///    place on the far side was *"take next tree instead"*.
+    /// The places come from `tiles::touching_places`, one tile at a time: every node in this engine is a single tile, and a cluster
+    /// is a honeycomb of them, so the notch between two adjacent tiles is walkable ground - 24 of the owner's 49 men stand in one.
+    /// How many fit falls out of the geometry (eleven for a villager), and there is no cap and no table.
     ///
-    /// `NoRoom` is an answer, not a failure: the caller sends the man to the nearest other node of the same kind.
+    /// A candidate must pass: **walkable ground**; **not on a foundation**; **one diameter clear** of every body and every reserved
+    /// place; and **no further than `GATHER_WALK_SLACK_MILLI` beyond walking straight at the node**, because the owner's answer to a
+    /// place on the far side was *"take next tree instead"*. `NoRoom` is an answer, not a failure: the caller sends the man on.
     pub(crate) fn standoff_point(
         &self,
         from: (Fixed, Fixed),
@@ -3209,26 +3229,32 @@ impl World {
         check_path: bool,
     ) -> Option<Standoff> {
         let scale = self.scale;
-        let worker_radius = match self.find(worker).and_then(|entity| entity.unit) {
-            Some(unit) => self.body_radius(Some(unit)),
-            None => 0,
-        };
+        let worker_radius = self
+            .find(worker)
+            .and_then(|entity| entity.unit)
+            .map_or(0, |unit| self.body_radius(Some(unit)));
         let (dx, dy) = (from.0.raw() - target.0.raw(), from.1.raw() - target.1.raw());
         if dx == 0 && dy == 0 {
             return None;
         }
         // **Two bodies, touching** - the 0.400 of the owner's saves.
         let too_close = (2 * worker_radius).max(1);
-        // **The ring is round the source's SQUARE, not its anchor** (D186): a map may place a node at a tile's corner, and a ring
-        // drawn round that corner straddles four tiles.
         let centre = self.tile_centre(self.tile_of(target));
         let slack = scale * GATHER_WALK_SLACK_MILLI / 1000;
         let straight = integer_sqrt(
             (centre.0.raw() - from.0.raw()).pow(2) + (centre.1.raw() - from.1.raw()).pow(2),
         );
+        let mut candidates: Vec<(Fixed, Fixed)> = Vec::new();
+        for tile in self.resource_tiles(node) {
+            candidates.extend(crate::tiles::touching_places(
+                (i64::from(tile.0), i64::from(tile.1)),
+                worker_radius,
+                too_close,
+                scale,
+            ));
+        }
         let mut best: Option<(i64, (Fixed, Fixed))> = None;
-        for place in 0..GATHER_PLACES {
-            let point = self.ring_point(centre, place);
+        for point in candidates {
             let (px, py) = (point.0.raw(), point.1.raw());
             let away = integer_sqrt((px - from.0.raw()).pow(2) + (py - from.1.raw()).pow(2));
             if best.as_ref().is_some_and(|(closest, _)| away >= *closest) {
@@ -3246,8 +3272,6 @@ impl World {
             if !self.tile_walkable(x, y) {
                 continue;
             }
-            // **Not on somebody's building site** (D186, found by the skirmish): a foundation is walkable ground, and a gatherer
-            // standing on one is exactly the unit the empty-site gate waits for, so the site stalls for ever.
             let on_site = self.foundations.iter().any(|site| {
                 self.footprint_rect(*site)
                     .is_some_and(|(ax, ay, wide, tall)| {
@@ -3277,8 +3301,6 @@ impl World {
             {
                 continue;
             }
-            // **A place another man reserved is his** (D186 addendum 5, D188): the reservation outranks a nearer claimant, or two
-            // men ordered in the same tick both take the same spot.
             if self.gather_place.iter().any(|(other, (at, held))| {
                 *other != worker
                     && *at == node

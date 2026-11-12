@@ -18,9 +18,22 @@ use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, World};
+use ruage_sim::{Command, EntityId, EntityKind, Task, World};
 
 mod common;
+
+/// **How far a body is from the node's tile**, in tiles: his radius (0.20) when he is touching it, which is D192's rule.
+fn clearance(world: &World, node: EntityId, position: (Fixed, Fixed)) -> f64 {
+    let scale = world.scale();
+    world
+        .resource_tiles(node)
+        .into_iter()
+        .map(|(x, y)| {
+            ruage_sim::tiles::distance_to_tile(position, (i64::from(x), i64::from(y)), scale) as f64
+                / scale as f64
+        })
+        .fold(f64::MAX, f64::min)
+}
 
 /// Distance between two points, in tiles.
 fn gap(world: &World, a: (Fixed, Fixed), b: (Fixed, Fixed)) -> f64 {
@@ -163,10 +176,10 @@ fn tiles_between(a: (Fixed, Fixed), b: (Fixed, Fixed), scale: i64) -> f64 {
     (dx * dx + dy * dy).sqrt()
 }
 
-/// **The single worker stands on the measured ring**, 1.156 of a tile from the source square's centre - not the 0.70
-/// the two bodies' radii add up to.
+/// **The single worker stands with his circle touching the tree** (D192), 0.20 of a tile from its border - which is 0.70 from the
+/// tile's centre for a villager. The engine used to put him 1.156 out, on the row behind.
 #[test]
-fn a_woodcutter_stands_on_the_measured_ring() {
+fn a_woodcutter_stands_with_his_circle_on_the_tree() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
@@ -178,16 +191,16 @@ fn a_woodcutter_stands_on_the_measured_ring() {
         world.step().expect("a tick");
     }
     let worker = world.position(ids[0]).expect("the woodcutter");
-    let distance = tiles_between(worker, tree, scale);
+    let distance = clearance(&world, node, worker);
     assert!(
-        (1.05..=1.27).contains(&distance),
-        "MEASURED the woodcutter at {distance:.3} tiles from the tree; the ring is 1.156 and D169's standoff was 0.70"
+        (0.15..=0.30).contains(&distance),
+        "MEASURED the woodcutter {distance:.3} tiles from the tree's border; his circle is 0.20 and must touch it"
     );
 }
 
-/// **Two workers on one tree stand a body apart on the same ring** - 0.404 in the save, which is exactly two radii.
+/// **Two workers on one tree both touch it and stand a body apart** - 0.404 apart in the save, which is exactly two radii.
 #[test]
-fn two_woodcutters_on_one_tree_stand_a_body_apart_on_the_ring() {
+fn two_woodcutters_on_one_tree_both_touch_it_and_stand_a_body_apart() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
@@ -201,12 +214,12 @@ fn two_woodcutters_on_one_tree_stand_a_body_apart_on_the_ring() {
     let first = world.position(ids[0]).expect("the first");
     let second = world.position(ids[1]).expect("the second");
     let (a, b) = (
-        tiles_between(first, tree, scale),
-        tiles_between(second, tree, scale),
+        clearance(&world, node, first),
+        clearance(&world, node, second),
     );
     let apart = tiles_between(first, second, scale);
     assert!(
-        (1.05..=1.27).contains(&a) && (1.05..=1.27).contains(&b),
+        (0.15..=0.30).contains(&a) && (0.15..=0.30).contains(&b),
         "MEASURED radii {a:.3} and {b:.3}; both belong on the 1.156 ring"
     );
     assert!(
@@ -220,46 +233,58 @@ fn two_woodcutters_on_one_tree_stand_a_body_apart_on_the_ring() {
 /// fits in it, so how many work one square is `2 * pi * 1.156 / 0.40 = 18.2` and nothing else. Nine was a number in a table for a
 /// day, and the owner's own save forages ten on one bush.
 #[test]
-fn the_ring_holds_eighteen_woodcutters_at_a_body_each() {
+fn the_tile_holds_as_many_woodcutters_as_touch_it() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
-    let scale = world.scale();
     let node = the_tree(&world);
-    let tree = world.position(node).expect("the tree's position");
+    let tile = world.resource_tiles(node)[0];
+    let places = ruage_sim::tiles::touching_places(
+        (i64::from(tile.0), i64::from(tile.1)),
+        world.scale() / 5,
+        world.scale() * 2 / 5,
+        world.scale(),
+    )
+    .len();
     let ids = woodcutters(&mut world, 18);
-    let mut ever_carried = vec![false; ids.len()];
-    for _ in 0..3_000 {
+    for _ in 0..2_000 {
         world.step().expect("a tick");
-        for (index, id) in ids.iter().enumerate() {
-            if world
-                .entity(*id)
-                .is_some_and(|entity| entity.carry.raw() > 0)
-            {
-                ever_carried[index] = true;
-            }
-        }
     }
-    let working = ever_carried.iter().filter(|carried| **carried).count();
+
+    // **How many men name this tree**, not how many carry wood: the picker sends the ones who cannot fit to the neighbouring
+    // trees, so "carried wood" counts the whole patch. This is the number the geometry allows - eleven for a villager.
+    let on_node = ids
+        .iter()
+        .filter(|id| {
+            matches!(
+                world.entity(**id).map(|e| e.task),
+                Some(Task::Gather { node: at, .. } | Task::Return { node: at, .. }) if at == node
+            )
+        })
+        .count();
     assert_eq!(
-        working,
-        ruage_sim::ring_capacity(),
-        "MEASURED {working} of 18 woodcutters took wood from one tree; the ring's capacity is `2 * pi * 1.156 / 0.40`"
+        on_node, places,
+        "MEASURED {on_node} men on the tree; the touching places round one tile are {places}"
     );
 
-    // **And where they stand is the ring, a body apart**: the places, not a lucky tick's positions, because a man may be walking
-    // home with a load or passing through a neighbour on his way back (D189).
-    let places: Vec<(Fixed, Fixed)> = world
+    // **And each of them touches it**: the places, not a lucky tick's positions.
+    let places_held: Vec<(Fixed, Fixed)> = world
         .gather_places()
         .into_iter()
         .map(|(_, (x, y))| (Fixed::from_raw(x), Fixed::from_raw(y)))
-        .filter(|place| tiles_between(*place, tree, scale) <= 1.27)
+        .filter(|place| clearance(&world, node, *place) <= 0.30)
         .collect();
+    for place in &places_held {
+        assert!(
+            clearance(&world, node, *place) >= 0.15,
+            "MEASURED a place {:.3} tiles from the tree's border; a villager's circle may not be inside it",
+            clearance(&world, node, *place)
+        );
+    }
     let mut closest = f64::MAX;
-    for a in 0..places.len() {
-        for b in (a + 1)..places.len() {
-            let apart = tiles_between(places[a], places[b], scale);
-            closest = closest.min(apart);
+    for a in 0..places_held.len() {
+        for b in (a + 1)..places_held.len() {
+            closest = closest.min(tiles_between(places_held[a], places_held[b], world.scale()));
         }
     }
     assert!(
@@ -340,10 +365,10 @@ fn the_owners_own_arrangement_lands_on_the_same_ring() {
     let at = world.position(node).expect("the bush");
     let mut closest = f64::MAX;
     for (index, (id, place)) in places.iter().enumerate() {
-        let radius = gap(&world, *place, at);
+        let radius = clearance(&world, node, *place);
         assert!(
-            (1.05..=1.27).contains(&radius),
-            "MEASURED man {index} ({id:?}) working at {radius:.3} tiles from the bush; the ring is 1.156"
+            (0.15..=0.30).contains(&radius),
+            "MEASURED man {index} ({id:?}) working {radius:.3} tiles from the bush's border; his circle is 0.20"
         );
         for (other, other_place) in places.iter().skip(index + 1) {
             let apart = gap(&world, *place, *other_place);

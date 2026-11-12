@@ -216,13 +216,25 @@ impl World {
         position: (Fixed, Fixed),
     ) -> Option<(u16, u16)> {
         let (wide, tall) = self.walk.as_ref().map_or((0, 0), Walk::size);
-        for radius in 1..=wide.max(tall).max(1) {
-            for at @ (x, y) in Self::ring(from, radius) {
-                if tiles.contains(&at) || !self.is_free_ground(x, y) {
-                    continue;
-                }
-                if self.plan_path(position, self.tile_centre(at), 0).is_ok() {
-                    return Some(at);
+        // **Empty first, then merely walkable** (D192). A crowd standing against a resource next to the site used to leave every
+        // ring tile occupied, `exit_tile` answered `None`, and the man on the ghost was never moved - so `site_is_clear` refused
+        // for ever and the content pack's house sat at hp 1 after 2,000 ticks. Bodies are not walls for their own side (D189), so a
+        // walkable tile is somewhere to stand even if a friend is on it.
+        for empty in [true, false] {
+            for radius in 1..=wide.max(tall).max(1) {
+                for at @ (x, y) in Self::ring(from, radius) {
+                    if tiles.contains(&at) {
+                        continue;
+                    }
+                    if empty && !self.is_free_ground(x, y) {
+                        continue;
+                    }
+                    if !empty && !self.tile_walkable(x, y) {
+                        continue;
+                    }
+                    if self.plan_path(position, self.tile_centre(at), 0).is_ok() {
+                        return Some(at);
+                    }
                 }
             }
         }

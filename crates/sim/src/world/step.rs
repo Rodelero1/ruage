@@ -926,6 +926,7 @@ impl World {
             refused: Vec::new(),
         };
         for (index, id, dx, dy) in deltas {
+            let asked = (dx, dy);
             let (dx, dy) = self.collide(&mut pass, index, id, dx, dy);
             if dx != Fixed::ZERO || dy != Fixed::ZERO {
                 movers.push(id);
@@ -1685,31 +1686,27 @@ impl World {
                         self.find(node).map(|n| n.kind),
                         Some(EntityKind::Resource(_))
                     );
-                    // **The band, not the touch** (D186). A working man stands on a ring **1.156** tiles out - measured from
-                    // the owner's save, six woodcutters within 0.084 of that radius - so for a resource "at the node" is that
-                    // distance band and nothing else. A man on the neighbouring tile's centre is at 1.000, outside it: that is
-                    // the owner's *"only the first row ever works"*, and it falls out of the geometry instead of being a rule
-                    // about positions on the square.
-                    // The band is measured from the **source's square**, not its anchor (D186): a node placed at a tile
-                    // corner - the drop-off test's bush is exactly that - would otherwise band a circle across four tiles.
+                    // **Touching, not a ring** (D192). A working man stands with his **circle against the node's tile** - his radius
+                    // from the border - which is 0.70 from a tile's centre for a villager of 0.2, not the 1.156 ring D186 measured.
+                    // That ring was the row *behind* the working one; using it is why the front row never worked. The test is one
+                    // number per tile: `distance_to_tile <= radius + a fiftieth of a tile`.
                     let centre = self.tile_centre(there);
                     let (ring_x, ring_y) = (
                         centre.0.raw() - entity.position.0.raw(),
                         centre.1.raw() - entity.position.1.raw(),
                     );
                     let ring_squared = ring_x * ring_x + ring_y * ring_y;
-                    let low = (self.scale * crate::GATHER_BAND_MILLI.0 / 1000).max(
-                        // A node wider than half a tile pushes the band out: the two bodies still cannot overlap, so the
-                        // inner edge is never inside the sum of the radii (a forest tree's 0.5 + a villager's 0.2 = 0.7).
-                        self.find(node).map_or(0, |n| {
-                            self.node_radius_raw(n) + self.body_radius(entity.unit)
-                        }),
-                    );
-                    let high = self.scale * crate::GATHER_BAND_MILLI.1 / 1000;
-                    let on_ring = ring_squared >= low * low && ring_squared <= high * high;
-                    // **A ring, unless it is buried** (D186): a tree deep in a forest has every slot on a blocked tile, and the
-                    // men who cut it stand on the open edge beside it - the eight neighbouring tiles are his *"4 on corners
-                    // and 4 on sides"*. Where a ring exists, it is the only place a man works from.
+                    let body = self.body_radius(entity.unit);
+                    let touch_tolerance = self.scale / 50;
+                    let touching = self.resource_tiles(node).iter().any(|tile| {
+                        crate::tiles::distance_to_tile(
+                            entity.position,
+                            (i64::from(tile.0), i64::from(tile.1)),
+                            self.scale,
+                        ) <= body + touch_tolerance
+                    });
+                    // **A ring, unless it is buried** (D192): a node whose every touching place is blocked ground - a tree deep in a
+                    // forest - is worked from the open tile beside it, which is the one case the border cannot describe.
                     let ring_open = self.ring_open(centre);
                     // Arrived the old way - on the node's ground, inside the bodies' reach, or beside a node it cannot stand
                     // on - which for a resource is no longer enough to work from.
@@ -1717,7 +1714,7 @@ impl World {
                         beside && here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
                     let arrived = here == there || squared <= reach * reach || beside_adjacent;
                     let at_node = if is_resource {
-                        on_ring || (beside_adjacent && !ring_open)
+                        touching || (beside_adjacent && !ring_open)
                     } else {
                         arrived
                     };

@@ -147,10 +147,17 @@ fn a_gatherer_stands_on_the_measured_ring() {
     }
 
     let mine = world.position(id).expect("the villager");
-    let gap = gap(&world, mine, at);
+    let _ = at;
+    let tile = world.resource_tiles(node)[0];
+    let clearance = ruage_sim::tiles::distance_to_tile(
+        mine,
+        (i64::from(tile.0), i64::from(tile.1)),
+        world.scale(),
+    );
     assert!(
-        (1.05..=1.27).contains(&gap),
-        "MEASURED the gatherer at {gap:.3} tiles from the bush's square; the ring is 1.156, D169's standoff 0.70"
+        (world.scale() / 8..=world.scale() / 3).contains(&clearance),
+        "MEASURED the gatherer {:.3} tiles from the bush's border; his circle is 0.20 and must touch it (D192)",
+        clearance as f64 / world.scale() as f64
     );
 }
 
@@ -248,7 +255,14 @@ fn three_gatherers_all_work_the_same_square_on_its_ring() {
         let working = world.entity(*id).is_some_and(
             |entity| matches!(entity.task, Task::Gather { node: n, .. } if n == first),
         );
-        if standing && working && (1.05..=1.30).contains(&gap(&world, now, at_bush)) {
+        let tile = world.resource_tiles(first)[0];
+        let clearance = ruage_sim::tiles::distance_to_tile(
+            now,
+            (i64::from(tile.0), i64::from(tile.1)),
+            world.scale(),
+        );
+        let _ = at_bush;
+        if standing && working && (world.scale() / 8..=world.scale() / 3).contains(&clearance) {
             still.push(now);
         }
     }
@@ -311,11 +325,16 @@ fn a_settled_man_is_not_displaced_by_a_later_arrival() {
         world.step().expect("a tick");
     }
     let settled = world.position(first).expect("the first man");
-    let bush = world.position(node).expect("the bush");
-    let radius = gap(&world, settled, bush);
+    let tile = world.resource_tiles(node)[0];
+    let clearance = ruage_sim::tiles::distance_to_tile(
+        settled,
+        (i64::from(tile.0), i64::from(tile.1)),
+        world.scale(),
+    );
     assert!(
-        (1.05..=1.27).contains(&radius),
-        "PRECONDITION: the first man settled at {radius:.3} tiles, not on the ring"
+        (world.scale() / 8..=world.scale() / 3).contains(&clearance),
+        "PRECONDITION: the first man settled {:.3} tiles from the bush's border, not touching it",
+        clearance as f64 / world.scale() as f64
     );
 
     // The second man is put **right beside the first man's place**, on the same side of the bush.

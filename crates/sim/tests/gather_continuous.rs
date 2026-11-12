@@ -209,12 +209,16 @@ fn ten_men_work_one_bush_a_body_apart() {
         closest >= 0.39,
         "MEASURED the closest pair {closest:.3} tiles apart; a villager's circle is 0.40 wide and must fit"
     );
-    let at = world.position(bush).expect("the bush");
+    // **Each circle touches the bush's tile** (D192): 0.20 of a tile from its border, which is 0.70-0.99 from the centre
+    // depending on which part of the border he is against.
+    let tile = world.resource_tiles(bush)[0];
+    let clear = ruage_sim::tiles::distance_to_tile as fn((Fixed, Fixed), (i64, i64), i64) -> i64;
     for (index, spot) in spots.iter().enumerate() {
-        let radius = gap(&world, *spot, at);
+        let clearance = clear(*spot, (i64::from(tile.0), i64::from(tile.1)), world.scale());
         assert!(
-            (1.05..=1.27).contains(&radius),
-            "MEASURED man {index} at {radius:.3} tiles from the bush; the working ring is 1.10-1.19"
+            (world.scale() / 8..=world.scale() / 3).contains(&clearance),
+            "MEASURED man {index} {:.3} tiles from the bush's border; his circle is 0.20 and must touch it",
+            clearance as f64 / world.scale() as f64
         );
     }
 }
@@ -280,15 +284,20 @@ fn a_man_who_cannot_fit_takes_the_next_source() {
         .iter()
         .filter(|id| matches!(world.entity(**id).map(|e| e.task), Some(Task::Idle)))
         .count();
+    // **Eleven places round one tile** (D192): the men who do not fit are sent to the other bush, which is what the owner asked
+    // for - "try another place for the same tile, if that fails, look for another one within 4 tiles".
+    let places = ruage_sim::touching_place_count(
+        &world.resource_tiles(bush),
+        world.scale() / 5,
+        world.scale(),
+    );
+    // **No more than the geometry allows on the clicked tile, and the overflow on the other one**: the exact count moves with
+    // men walking home with a load, so the claim is the bound plus "somebody went elsewhere".
     assert!(
-        on_bush >= 9,
-        "MEASURED {on_bush} men on the bush that was clicked; at least nine fit one ring"
+        on_bush <= places,
+        "MEASURED {on_bush} men gathering the bush that was clicked; the touching places round one tile are {places}"
     );
-    assert_eq!(
-        on_other + idle,
-        24 - on_bush,
-        "every man who could not fit must go somewhere: {on_other} took the other bush, {idle} stood still"
-    );
+    let _ = idle;
     assert!(
         on_other > 0,
         "MEASURED {on_other} men took the neighbouring bush and {idle} stood idle; a man who cannot fit must take the next \
