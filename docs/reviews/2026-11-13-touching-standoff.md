@@ -66,3 +66,26 @@ step for the other to refuse.
 That is the shape to fix: two of the player's own units, both inside one blocked tile's cushion and inside each other's radius, each
 waiting for the other. It is not a gather rule and not a building rule; it belongs in the movement pass, and it wants its own test with
 exactly these three units.
+
+## Where it is *not* blocked
+
+One more measurement, because it changes where the next session should look. For the frozen man, every tick asks the same step and the
+movement pass says yes to it:
+
+```
+STEPDBG EntityId(4) here=(Fixed(98975), Fixed(93675)) step=(Fixed(759), Fixed(-253))
+        walkable=true clearance_now=2407 clearance_next=2583
+```
+
+The step is walkable, the ground's clearance **improves** (0.120 -> 0.129 tiles), and `collide` has no friendly body to stop for after
+D189/D192 (a friendly body returns the step unconditionally). His task is still `Move`, his route has one waypoint. So the refusal is
+**downstream of `collide`** - in the apply-stamp path or a second movement consumer - not in the collision rules. The terrain round him:
+
+```
+y=2 ....##      y=5 ...###      (walkable = '.')
+y=3 ....##      y=6 ######
+y=4 ....##      y=7 ######
+```
+
+He stands at `(4.95, 4.68)`, one tile from the timber node at `(5,5)`, with the pack's other two villagers at `(5.04, 4.39)` and
+`(5.00, 4.00)`.
