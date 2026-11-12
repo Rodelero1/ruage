@@ -1012,6 +1012,30 @@ pub fn footprint_covers(anchor: (i32, i32), footprint: (u32, u32), tile: (i32, i
     tile.0 >= min_x && tile.0 <= max_x && tile.1 >= min_y && tile.1 <= max_y
 }
 
+/// **How wide a drawn body is, in pixels**: half a marker's width. The renderer's own number (D178) is the one a click has to
+/// use, or the picker and the picture disagree about where a unit is - which is the defect D187 fixes.
+#[must_use]
+pub fn body_half(camera: &Camera) -> i32 {
+    let (rx, _) = camera.radii();
+    (rx * 0.20).max(2.0) as i32
+}
+
+/// **Does this pixel land on the body that is drawn for this unit?** The one definition of "where a unit is" for input: a
+/// rectangle the width of the marker, standing on its point and rising two marker-heights above it - exactly the rows and columns
+/// the renderer paints (`-(2 * reach)..=0` and `-reach..=reach`).
+///
+/// A building is not a body: it is its footprint, which `covers` answers, because a town centre is drawn four tiles wide.
+#[must_use]
+pub fn body_contains(entity: &EntityView, camera: &Camera, pixel: (i32, i32)) -> bool {
+    if entity.kind != EntityKind::Unit {
+        return false;
+    }
+    let reach = body_half(camera);
+    let centre = camera.project(drawn_at(entity.position));
+    let (dx, dy) = (pixel.0 - centre.0, pixel.1 - centre.1);
+    dx.abs() <= reach && (-2 * reach..=0).contains(&dy)
+}
+
 /// The same rule, for a snapshot's own view of an entity.
 #[must_use]
 pub fn covers(entity: &EntityView, tile: (i32, i32)) -> bool {
@@ -1384,7 +1408,7 @@ pub fn render_with_solids(snapshot: &Snapshot, camera: &Camera, solids: &Solids)
                 // A fifth rather than the old 0.30 because the body now rises a full `2 * half` above the point, and the tile's diamond narrows as it
                 // rises: at height `2 * half` it is only `rx * (1 - 2 * half / ry) = rx - 4 * half` wide, so a body of half-width `half` fits whole
                 // exactly when `5 * half <= rx`. A fifth is that, and the head is no longer cut off by the tile's own corner.
-                let half = (rx * 0.20).max(2.0) as i32;
+                let half = body_half(camera);
                 // **A unit's marker is clipped to the tile it stands on** (D166). Tiles share edges, so a marker wider than its own
                 // diamond paints into the *next* tile - and when that neighbour is a building, the unit appears to stand inside it,
                 // whatever the depth order says. Shrinking the marker only moves the threshold; clipping ends the class: no unit pixel

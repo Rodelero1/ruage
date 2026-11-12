@@ -4692,3 +4692,27 @@ answer.
 differently (player 2 is eliminated with the change, survives without), so its counters are not a measure of gathering. The
 gathering-only fixture (`examples/gather_cost.rs`, eighteen men, six bushes, no war) prices it: **repaths 224 -> 229 (+2%)**,
 **made_room 124 -> 63 (-49%)**, **men working 13 -> 16 of 18**. The rule costs almost nothing and puts three more men to work.
+
+### D187 - a click selects the body that is drawn, not the tile under it
+
+**The owner's rule, verbatim:** *"whenever I click on image representing a unit, it and only it gets selected. If units are
+overlapping, the closes one to me gets selected. That also applies when unit is over the building (farm, passable part of town
+center...) or in front of the building. If the unit is represented by sprite in the future, clicking on the transparent part
+doesn't select unit."* And the report that found it: *"some villagers cannot be even chosen by clicking on the square
+representing them."*
+
+**What was wrong.** The click was decided **by tile**: `floor(position)` plus the footprint, while the body is drawn at
+`position - 0.5` with its **base on the point** (D178). A villager at a tile corner is therefore drawn half over each of four
+tiles and the picker recognised exactly one of them - and the half a player naturally clicks was a neighbour's, so the click
+selected nothing. Measured: a click **8 px** left of the body's centre (over tile `(9,9)` while the villager stands at
+`(10.0, 10.0)`) selected **nothing**; two villagers a fifth of a tile apart selected **nothing** where their bodies overlap.
+
+**The rule now.** `body_contains(entity, camera, pixel)` is the one definition of where a unit is for input: a rectangle
+`body_half` wide, rising `2 * body_half` above its point - exactly the rows and columns the renderer paints - and
+`body_half(camera)` is now the renderer's own number, so a click and a pixel cannot disagree. `Selection::click` asks it first and
+takes the **front-most** body by `depth_of`, the renderer's own "what is in front"; at equal depth the player's own wins, then the
+id, so the answer never depends on snapshot order. A building is still its footprint (`covers`) - a town centre is drawn four tiles
+wide - so a click on the farm where nobody stands still selects the farm, and a click on the villager on it selects the villager.
+
+**Not covered.** `pick_at(world, tile)` (the window's right-click target) is still tile-based: an order is a place, not a body, and
+whether *that* should follow the body is a separate question with its own evidence to gather.

@@ -37,10 +37,36 @@ impl Selection {
         snapshot.entities.iter().find(|entity| entity.id == id)
     }
 
-    /// A click selects what is under the cursor: units before buildings, your own before somebody else's, and a resource
-    /// node last - clicking the ground clears the selection.
+    /// A click selects what is under the cursor: **the body that is drawn there**, then a building's ground, then a resource
+    /// node - clicking the ground clears the selection.
+    ///
+    /// **A body, not a tile** (D187). The owner: *"whenever I click on image representing a unit, it and only it gets
+    /// selected. If units are overlapping, the closest one to me gets selected"* - and *"some villagers cannot be even chosen by
+    /// clicking on the square representing them"*. The click was decided by the anchor's **tile** while the marker is drawn at
+    /// `position - 0.5` and stands on its point, so a villager on a tile corner was drawn half over each of four tiles and only
+    /// one of them could select it: the half a player clicks selected nothing. The picker now asks the renderer's own geometry
+    /// (`body_contains`) and takes the **front-most** body, which is the one drawn last and the one a player is pointing at.
     pub fn click(&mut self, snapshot: &Snapshot, camera: &Camera, pixel: (i32, i32)) {
         let tile = camera.pick(pixel);
+        // **Bodies first, nearest the viewer first.** `depth_of` is the renderer's own answer to "what is in front", so a click
+        // and the picture cannot disagree; among bodies at the same depth the player's own wins, and the id settles the rest so
+        // the answer never depends on the order the snapshot happens to be in.
+        let mut bodies: Vec<&crate::EntityView> = snapshot
+            .entities
+            .iter()
+            .filter(|entity| crate::body_contains(entity, camera, pixel))
+            .collect();
+        bodies.sort_by(|a, b| {
+            crate::depth_of(b)
+                .total_cmp(&crate::depth_of(a))
+                .then_with(|| (a.player != snapshot.player).cmp(&(b.player != snapshot.player)))
+                .then_with(|| b.id.cmp(&a.id))
+        });
+        if let Some(body) = bodies.first() {
+            self.ids.clear();
+            self.ids.push(body.id);
+            return;
+        }
         let own: Vec<&crate::EntityView> = snapshot
             .entities
             .iter()
