@@ -31,7 +31,11 @@ fn raw(point: (Fixed, Fixed)) -> (i64, i64) {
 #[test]
 fn the_distance_to_a_tile_is_zero_inside_and_half_at_the_edge() {
     let tile = (10i64, 10i64);
-    assert_eq!(distance_to_tile(at(tile), tile, SCALE), 0, "the centre is inside");
+    assert_eq!(
+        distance_to_tile(at(tile), tile, SCALE),
+        0,
+        "the centre is inside"
+    );
     for (dx, dy) in [(1i64, 0i64), (-1, 0), (0, 1), (0, -1)] {
         let point = (
             Fixed::from_raw((tile.0 + dx) * SCALE + SCALE / 2),

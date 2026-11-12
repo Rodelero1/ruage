@@ -39,3 +39,6 @@ the ring this replaces is about to be read inside a tick.
 **What is deliberately not done.** The gather ring (1.156) and the builder's standoff still measure from the tile centre. Switching
 them changes the band every gather test asserts, rewrites the places the owner's saves measure (0.70-0.99), and needs its own
 before/after numbers; doing it in the same commit as the geometry would make both unmeasurable.
+
+**Formatting.** `cargo fmt --check` was red on the first push (the module and its test needed rustfmt's line breaks); `cargo fmt --all`
+applied and re-checked clean, in this commit rather than the last so the history says what happened.

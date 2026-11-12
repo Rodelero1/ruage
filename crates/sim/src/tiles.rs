@@ -61,9 +61,10 @@ fn integer_sqrt(value: i64) -> i64 {
 
 /// Sin of 0, 2, 4 ... 90 degrees in millionths, the same quarter table the gather ring uses.
 const SIN: [i64; 46] = [
-    0, 34899, 69756, 104528, 139173, 173648, 207912, 241922, 275637, 309017, 342020, 374607, 406737, 438371, 469472, 500000,
-    529919, 559193, 587785, 615661, 642788, 669131, 694658, 719340, 743145, 766044, 788011, 809017, 829038, 848048, 866025,
-    882948, 898794, 913545, 927184, 939693, 951057, 961262, 970296, 978148, 984808, 990268, 994522, 997564, 999391, 1000000,
+    0, 34899, 69756, 104528, 139173, 173648, 207912, 241922, 275637, 309017, 342020, 374607,
+    406737, 438371, 469472, 500000, 529919, 559193, 587785, 615661, 642788, 669131, 694658, 719340,
+    743145, 766044, 788011, 809017, 829038, 848048, 866025, 882948, 898794, 913545, 927184, 939693,
+    951057, 961262, 970296, 978148, 984808, 990268, 994522, 997564, 999391, 1000000,
 ];
 
 /// **The places where a circle of `radius` touches the tile without overlapping it**, at least `spacing` apart: the outline of the
@@ -76,7 +77,12 @@ const SIN: [i64; 46] = [
 /// The points are found by building candidates along the outline and keeping those at least `spacing` from every point kept
 /// before, in a fixed order - so the list is **deterministic**, which the hashed simulation requires.
 #[must_use]
-pub fn touching_places(tile: (i64, i64), radius: i64, spacing: i64, scale: i64) -> Vec<(Fixed, Fixed)> {
+pub fn touching_places(
+    tile: (i64, i64),
+    radius: i64,
+    spacing: i64,
+    scale: i64,
+) -> Vec<(Fixed, Fixed)> {
     if spacing <= 0 || radius < 0 || scale <= 0 {
         return Vec::new();
     }
@@ -108,12 +114,7 @@ pub fn touching_places(tile: (i64, i64), radius: i64, spacing: i64, scale: i64) 
     // **Keep only what fits**: a place is a place while it is `spacing` from every place already taken.
     let mut kept: Vec<(i64, i64)> = Vec::new();
     for (x, y) in candidates {
-        if distance_to_tile(
-            (Fixed::from_raw(x), Fixed::from_raw(y)),
-            tile,
-            scale,
-        ) < radius
-        {
+        if distance_to_tile((Fixed::from_raw(x), Fixed::from_raw(y)), tile, scale) < radius {
             continue;
         }
         if kept
