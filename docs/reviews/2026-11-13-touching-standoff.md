@@ -45,3 +45,24 @@ friendly body never blocks) was tried and does **not** clear it.
 **What the next session should do:** reproduce the oscillation in a two-unit test (a walker on a ghost, a builder beside it), decide
 whether step-aside should be a *stable placement* rather than a walk that can deadlock, and only then land the standoff. Everything
 else here is measured and ready.
+
+## The deadlock, traced
+
+The failing test's units, tick by tick (printed from the test, not inferred):
+
+```
+t=0    2:Build(site 11) @(4.11,4.17)   3:Idle @(5.00,4.00)   4:Move @(4.08,4.97)
+t=95   2:Build(site 11) @(5.04,4.39)   3:Idle @(5.00,4.00)   4:Move @(4.95,4.68)
+t=405  2:Build(site 11) @(5.04,4.39)   3:Idle @(5.00,4.00)   4:Move @(4.95,4.68)
+```
+
+Both walk normally for ~95 ticks, then stop **0.30 tiles apart** and never move again: the builder at `(5.04, 4.39)` and the man
+stepping off the ghost at `(4.95, 4.68)`, with an idle villager parked at `(5.00, 4.00)` behind them. `(5,5)` is blocked ground - the
+pack's timber node - so both are pressed against a wall *and* inside one another's diameter, and neither can take a step: the mover's
+own body rule allows a step when already overlapped, and the ground rule allows one that is not deeper, but the combination the two of
+them need is a **mutual give-way**, and the resolution that exists (`pass.refused` on rule 9) never fires because neither is making a
+step for the other to refuse.
+
+That is the shape to fix: two of the player's own units, both inside one blocked tile's cushion and inside each other's radius, each
+waiting for the other. It is not a gather rule and not a building rule; it belongs in the movement pass, and it wants its own test with
+exactly these three units.
