@@ -47,15 +47,21 @@ history and in `docs/decisions.md` under D186 addendum 2's neighbour.
   more and save immediately - the same trick that made the tree readable. For the house, a site that is **half built with its
   builders already standing round it** is the one that answers whether construction rings at the same distance.
 
-**OPEN - our packing cannot yet hold the number the ground gives.** The cap is **nine**; the owner's own game forages **eleven** on
-one bush (`owner-bush2.aoe2spgame`, eleven orders at `(64.50, 78.50)`), and the ring geometry fits **eighteen** at two bodies
-(0.404) apart. Eighteen was tried and **pulled back the same hour**: with slots one body apart, the settle and the collision pass
-fight, and three men ended **0.243** tiles apart - bodies overlapping on screen - where nine slots (0.79 apart) resolve cleanly.
+**The reserved place is built, measured, and parked** - branch `d186-reserved-places`, commit `67eb088`, review in
+`docs/reviews/2026-11-12-reserved-places.md`. It gives every gatherer a **place** on his node's ring, chosen when the order lands
+and released when the task changes, instead of the settle re-choosing one every tick. On gathering it works and it is large:
+acceptance **repaths 352 -> 62** and **made_room 226 -> 7**, `World::step` 6.9 -> 7.7 µs.
 
-The fix is **not the constant**: it is the settle. A place must be *reserved for a man* rather than re-decided every tick, so a man
-nudged onto his place is not pushed off it by the next tick's collision and does not fight for it with a neighbour. Then
-`GATHER_RING_SLOTS` can go to eighteen and the engine will place a crowd the way the game does. Pinned meanwhile by
-`the_ring_holds_nine_woodcutters_and_the_tenth_takes_nothing`, which says nine and says why.
+**It is not merged because it breaks building.** In the ten-minute scenario the barracks is placed and **never struck once**
+(`progress_ticks: 0`), the 500 s step is refused with *"player 1 has no finished barracks"*, and the builder is back at a gather
+task; `main` at `9b30e9c` passes that test. Likely cause: a place chosen **before a foundation was placed** is never re-validated,
+so the man keeps settling onto a footprint that is now a building site, and the clear gate can never answer.
+
+**Next, in order:**
+1. Re-validate an owned place against the same three tests a new one passes (walkable, free, not on a site), dropping and
+   re-choosing it once when it fails; measure the step cost (budget: 7.7 µs against ~1,300 entities).
+2. Then `GATHER_RING_SLOTS` can follow the geometry (18 at two bodies apart) instead of the 9 this engine can place.
+3. Re-measure the acceptance run and the ten-minute scenario, and only then merge.
 
 **The two later saves still do not give standing positions.** In `owner-bush2` the freshest orders (stamps 1024-1028) come from men
 at **1.21 to 2.57** tiles of the bush, and in `owner-house2` the four build orders (stamps 494-500) come from **2.06 to 3.73**
