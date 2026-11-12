@@ -955,22 +955,6 @@ fn a_content_pack_with_our_own_resources_loads_and_spends() {
             break;
         }
     }
-    if std::env::var_os("PROBE").is_some() {
-        let scale = world.scale();
-        for e in world.entities().iter().filter(|e| e.player == 1) {
-            eprintln!(
-                "PROBE {:?} unit={:?} hp={} building={} task={:?} at=({},{}) path={:?}",
-                e.id,
-                e.unit,
-                e.hp,
-                e.construction.is_some(),
-                e.task,
-                e.position.0.raw() / scale,
-                e.position.1.raw() / scale,
-                world.path_length(e.id)
-            );
-        }
-    }
     assert_eq!(
         finished,
         Some(550),

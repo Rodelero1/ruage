@@ -170,35 +170,6 @@ fn ten_men_work_one_bush_a_body_apart() {
         .iter()
         .filter_map(|id| world.position(*id))
         .collect();
-    if std::env::var_os("PROBE").is_some() {
-        let scale = world.scale() as f64;
-        let at = world.position(bush).expect("the bush");
-        for id in &working {
-            if let Some(pos) = world.position(*id) {
-                eprintln!(
-                    "PROBE {:?} at ({:.3},{:.3}) r={:.3} task={:?}",
-                    id,
-                    pos.0.raw() as f64 / scale,
-                    pos.1.raw() as f64 / scale,
-                    gap(&world, pos, at),
-                    world.entity(*id).map(|e| e.task)
-                );
-            }
-        }
-    }
-    if std::env::var_os("PROBE").is_some() {
-        let mut places: Vec<_> = world.gather_places();
-        places.sort_by_key(|(id, _)| id.0);
-        let scale = world.scale() as f64;
-        for (id, at) in &places {
-            eprintln!(
-                "PLACE {:?} at ({:.3},{:.3})",
-                id,
-                at.0 as f64 / scale,
-                at.1 as f64 / scale
-            );
-        }
-    }
     let mut closest = f64::MAX;
     for a in 0..spots.len() {
         for b in (a + 1)..spots.len() {
