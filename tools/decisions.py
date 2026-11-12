@@ -33,6 +33,7 @@ ROOT = HERE.parent
 DECISIONS = ROOT / "docs" / "decisions.md"
 UNKNOWNS = ROOT / "docs" / "mechanics" / "README.md"
 AREAS_FILE = ROOT / "docs" / "decision-areas.toml"
+DANGLING_FILE = ROOT / "docs" / "dangling.toml"
 OUTPUT = ROOT / "docs" / "site" / "index.html"
 
 # Where a rule came from. Each entry is a list of patterns; the matched sentence becomes the evidence shown next to the
@@ -415,7 +416,32 @@ def parse_decisions(text: str) -> Corpus:
             corpus.versions[identifier] = corpus.versions.get(identifier, 0) + 1
         else:
             title = re.sub(r"^\s*[-–—]\s*", "", rest).strip()
-            date_match = re.search(r"\b(20\d\d-\d\d-\d\d)\b", body)
+            # **The date may be in the heading** - `## D77-D79 - The owner's five answers (2026-10-30)` - and an inline decision
+            # inherits it, because the five answers were one evening.
+            date_match = re.search(r"\b(20\d\d-\d\d-\d\d)\b", f"{rest}\n{body}")
+            # **A combined heading can hold several decisions.** The owner answered five questions in one evening and they were
+            # written under one heading as `**D78 - Victory is conquest.** ...`, which the parser read as D77's prose - so D78, D79,
+            # D81 and D82 were reported as *dangling* (referenced by the rest of the corpus, defined nowhere) when they were defined
+            # all along. An inline decision is a bold line that starts with an id and a dash, and its text runs to the next one.
+            inline = list(
+                re.finditer(r"(?m)^\*\*(D\d{1,4}[a-z]?) - ([^*]+?)\.?\*\*", body)
+            )
+            if len(inline) > 1:
+                for position, found in enumerate(inline):
+                    stop = inline[position + 1].start() if position + 1 < len(inline) else len(body)
+                    piece = body[found.end() : stop].strip()
+                    inline_id = found.group(1)
+                    if inline_id not in corpus.decisions:
+                        corpus.decisions[inline_id] = _decision(
+                            inline_id,
+                            found.group(2).strip(),
+                            date_match.group(1) if date_match else None,
+                            piece,
+                        )
+                    corpus.versions[inline_id] = corpus.versions.get(inline_id, 0) + 1
+                # The heading's own id keeps only what precedes the first inline decision - when it is one of them, its text is the
+                # first piece, which the loop above already stored.
+                body = body[: inline[0].start()].strip()
             existing = corpus.decisions.get(identifier)
             if existing is None:
                 corpus.decisions[identifier] = _decision(
@@ -483,6 +509,33 @@ def load_areas(text: str) -> tuple[list[str], dict[str, str], dict[str, str]]:
         dict(parsed.get("unknown", {})),
     )
 
+
+
+def check_dangling(dangling: list[str], recorded: dict[str, str]) -> list[str]:
+    """Ids the corpus references and never defines, that nobody has recorded.
+
+    An absence is a finding (D6, D45), so the seven the corpus already knows about - four of them listed by the corpus itself as
+    *"never written down"* - live in `docs/dangling.toml` with the sentence that mentions them. The list may not **grow**: a new
+    dangling id is a decision someone cited and did not write, which is exactly the failure the index exists to surface.
+    """
+    problems = []
+    for identifier in dangling:
+        if identifier not in recorded:
+            problems.append(
+                f"{identifier} is referenced by the corpus and defined nowhere - write it, or record it in docs/dangling.toml "
+                "with the sentence that mentions it"
+            )
+    return problems
+
+
+def load_dangling() -> dict[str, str]:
+    """The recorded gaps: `[dangling]` in `docs/dangling.toml`, id to a one-line note."""
+    try:
+        with DANGLING_FILE.open("rb") as source:
+            parsed = tomllib.load(source)
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+    return {key: str(value) for key, value in parsed.get("dangling", {}).items()}
 
 def check_shrink(corpus: Corpus, baseline: str) -> list[str]:
     """Decisions the last commit had and this corpus does not.
@@ -1241,15 +1294,18 @@ def main(argv: list[str] | None = None) -> int:
         f"{len(dangling)} dangling ids, {len(corpus.unclassified)} unclassified headings"
     )
     shrink_problems = check_shrink(corpus, committed_corpus())
+    dangling_problems = check_dangling(dangling, load_dangling())
     for problem in area_problems:
         print(f"AREA: {problem}", file=sys.stderr)
     for problem in shrink_problems:
         print(f"SHRUNK: {problem}", file=sys.stderr)
+    for problem in dangling_problems:
+        print(f"DANGLING: {problem}", file=sys.stderr)
     if dangling:
         print("dangling: " + ", ".join(dangling))
     if uncited:
         print("no stated basis: " + ", ".join(decision.id for decision in uncited))
-    if area_problems or shrink_problems:
+    if area_problems or shrink_problems or dangling_problems:
         return 1
     if corpus.unclassified:
         for heading in corpus.unclassified:

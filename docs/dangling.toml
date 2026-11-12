@@ -1,0 +1,15 @@
+# Ids the decision corpus **references** and **never defines**. An absence is a finding (D6, D45), so each of these is recorded with
+# what it is cited for rather than quietly disappearing from the index. The list may not grow: `tools/decisions.py --check` refuses a
+# dangling id that is not here, because a new one is a decision someone cited and did not write.
+#
+# Four of them (D122b, D124, D125b, D126) are named by the corpus's own note as "never written down" - the D121-D126 sequence answered
+# in conversation and recorded only in prose.
+
+[dangling]
+D115 = "cited for the town centre's walkable **yard** inside its footprint: the footprint is not all solid"
+D122b = "part of the D121-D126 sequence the corpus lists as never written down"
+D124 = "part of the D121-D126 sequence the corpus lists as never written down"
+D125b = "part of the D121-D126 sequence the corpus lists as never written down"
+D126 = "part of the D121-D126 sequence the corpus lists as never written down"
+D136 = "cited as the `lib.rs` split ('stage 1 of D136 continues'); the work is recorded in docs/reviews, not as a decision"
+D190 = "reserved while numbering the standoff work (D191/D192 followed it) and never used"

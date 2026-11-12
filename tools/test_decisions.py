@@ -583,3 +583,47 @@ class TheRealCorpus(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class InlineDecisions(unittest.TestCase):
+    """D77-D82 are written **inside** a combined heading as bold one-liners - `**D78 - Victory is conquest.**` - because the owner
+    asked five questions in one evening and they belong to one heading. The parser counted only the heading's own id, so D78, D79,
+    D81 and D82 were reported as *dangling*: referenced by the rest of the corpus, defined nowhere. They are defined; the index was
+    reading the file's shape instead of its decisions.
+    """
+
+    def test_a_bold_inline_decision_under_a_combined_heading_is_a_decision(self):
+        text = (
+            "## D77-D79 - The owner's five answers (2026-10-30)\n"
+            "\n"
+            "**D77 - Farms are proportional.** A plot gains in proportion.\n"
+            "\n"
+            "**D78 - Victory is conquest.** The match ends when a side has nothing left.\n"
+        )
+        corpus = parse(text)
+        self.assertIn("D77", corpus.decisions)
+        self.assertIn("D78", corpus.decisions)
+        self.assertIn("nothing left", corpus.decisions["D78"].text)
+        self.assertEqual("2026-10-30", corpus.decisions["D78"].date)
+        self.assertEqual([], corpus.unclassified)
+
+    def test_a_bold_phrase_that_is_not_an_id_is_left_alone(self):
+        text = "## D77 - One (2026-10-30)\n\n**A note.** Not a decision id.\n"
+        corpus = parse(text)
+        self.assertEqual(["D77"], list(corpus.decisions))
+        self.assertEqual([], corpus.unclassified)
+
+
+class DanglingIdsAreARatchet(unittest.TestCase):
+    """An id the corpus references and never defines is a finding, and the corpus has seven of them (D115, D122b, D124, D125b, D126,
+    D136, D190 - ids quoted from earlier prose or reserved and never written). They are recorded in `docs/dangling.toml` with the
+    sentence that mentions them, and the list may not **grow**: a new dangling id is a decision someone cited and did not write.
+    """
+
+    def test_a_new_dangling_id_is_refused(self):
+        problems = decisions.check_dangling(["D1", "D999"], {"D1": "known"})
+        self.assertEqual(1, len(problems))
+        self.assertIn("D999", problems[0])
+
+    def test_a_recorded_dangling_id_is_not_a_problem(self):
+        self.assertEqual([], decisions.check_dangling(["D1"], {"D1": "known"}))

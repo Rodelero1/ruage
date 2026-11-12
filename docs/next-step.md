@@ -9,8 +9,11 @@
 stale docstrings (D193), `StepDecision` + `step_trace` (D196, which found enemy units being overlapped at rest: 0.237 against 0.4), and
 repaths by reason (D197).
 
+**Also done:** the inline-decision parser (four decisions the index could not see: 198 -> 202 parsed, dangling 12 -> 7) and
+`docs/dangling.toml`, a ratchet that refuses a *new* dangling id.
+
 **The queue, in order, no decisions needed:** (1) `crates/script` extraction (1,656 lines of AI and scenario language inside the sim
-crate, against D17/D18); (2) resolve the 11 dangling decision ids and the D190 gap; (3) `Vision` sub-struct.
+crate, against D17/D18); (2) `Vision` sub-struct.
 
 **Needs the owner:** `crates/save` + `--load` (licensing, `docs/licensing.md`), and anything that changes a rule the owner set.
 
