@@ -53,7 +53,11 @@ workspace/Age2HD/
 ├── Cargo.toml               Rust workspace (D9)
 ├── crates/
 │   ├── fixed/               ruage-fixed — exact decimal → i64 fixed point, checked ops
-│   └── data/                ruage-data — strict config loading, -1.0 sentinel
+│   ├── data/                ruage-data — strict config loading, -1.0 sentinel
+│   ├── sim/                 ruage-sim — the engine: the tick, the state hash, no content (D198)
+│   ├── script/              ruage-script — the scenario language, the scripted AI, the rule runner
+│   ├── harness/             ruage-harness — `ruage-headless` and `ruage-batch`, the two runners
+│   └── view/                ruage-view — the window, the HUD, drawing and clicking
 ├── build/                   derived artifacts: inflated dats, converted JSON, probe
 │                            scripts (exempt from D7), Ghidra projects. Never committed.
 └── Age2HD/                  the Steam install — READ ONLY, do not modify
