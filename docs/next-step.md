@@ -4447,9 +4447,16 @@ inside a wall", the other three wall types (`117/119/155`).**The reserved place 
 it until the task changes, so a nearer arrival cannot take it and two men cannot swap it between ticks. Measured on the
 gathering-only fixture (`examples/gather_cost.rs`): repaths **224 -> 229**, made_room **124 -> 63**, men working **13 -> 16 of 18**.
 
-**Still owed: the bush and mine ring radius.** The 1.156-tile ring is a **tree** measurement - six woodcutters, 1.105-1.189 - and
-the owner says foragers look too far from a berry bush. Only a save with the men **already standing at a bush** pins it, the way
-`owner-test2` pinned the tree; his bush save has them walking (from-points 1.21-2.57 tiles out). Until then bushes and mines use
-the tree's ring and that is stated, not assumed.
+**The bush ring is measured, and it is the tree's** (2026-11-12). Unit positions are readable from the save at a **229-byte
+stride, x and y as float32** (`docs/save-format.md`, `tools/savegame_positions.py`). Around the bush square at `(64, 78)`:
+**ten men at 1.100-1.174, mean 1.143, closest pair 0.400** - the same ring as the tree (1.105-1.189) and the same spacing (0.404).
+So `GATHER_RING_MILLI = 1.156` stands for bushes too, and the owner's *"quite far from the berry bush"* is the game's own distance,
+not our error. Outstanding: a **mine** (gold/stone) has no measurement yet, but nothing suggests it differs.
+
+**The capacity question, with positions this time.** Ten men worked that bush on the ring, 0.400 apart. `2 * pi * 1.143 / 0.400 =
+17.9`, so the ring fits eighteen - and the game used ten of them. Our engine's cap is **nine** because at eighteen slots the settle
+and the collision pass fight (measured: two men **0.345** apart against bodies 0.40 wide). The gap is therefore **ours, in the
+packing**, not the game's rule: the next attempt should keep eighteen slots and make the *settle* place a man at 0.400 without
+the collision pass shoving him off - a reserved place already exists to hang that on.
 
 

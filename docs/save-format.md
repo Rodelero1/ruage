@@ -230,3 +230,33 @@ a body past `DEFAULT_MAX_BODY` (64 MiB) because 200 MB from a 204 KB stream is a
 requires the **save line** (`VER 9.3`/`VER 9.4`) because a `.dat` is raw DEFLATE too. Its tests are
 `tools/test_savegame.py`: synthetic fixtures for the framing and the header (so a checkout without an install still
 tests the reader), plus two real-fixture classes keyed on committed SHA-256 values, skipped when the install is absent.
+
+## Where the objects stand: 229-byte records, x and y as float32
+
+**Found 2026-11-12** while measuring a berry bush, and it answers the question the order queue could not: the queue records a
+**destination** and the issuer's position when the order was given, so a click made while men are walking yields approaches, not
+standing places. The objects themselves are elsewhere in the world section: a run of records of **229 bytes** whose first eight
+bytes are **`float32 x, float32 y` in tiles**, and `world_x = column + 0.5` (a tile centre reads as `64.500`).
+
+The way it was found, because the same scan works on any save: take the window around the thing being measured, read every
+offset as a float pair, keep those inside the window, and look for the **longest chain at a constant stride**. The bush save gives
+21 records at stride 229 from `0x19fee8`; the same save's order queue gives 33 records of destinations.
+
+**What a measured ring looks like**, from `bush.aoe2spgame` around the bush square at `(64, 78)`:
+
+```
+radii from (64.50, 78.50): 0.699 0.699 0.699 0.759 | 0.995 0.995 0.995 0.995 | 1.100 1.103 1.103 1.140 1.145 1.159 1.161 1.166 1.174 1.174 | 1.627 1.798 1.975
+```
+
+- **`1.10-1.17`, ten men**, closest pair **0.400**, mean nearest **0.401** - the working ring, and the same radius the tree save
+  shows (1.105-1.189) and the same spacing (0.404). **A bush and a tree share the ring.**
+- `0.995` four times - the neighbouring tiles' centres, exactly one tile out: men walking through, whose positions happen to be
+  waypoints.
+- `0.699` three times - the tile's corner distance `0.5 * sqrt(2) = 0.707`, i.e. bodies just off the corners, walking past.
+- anything past 1.2 is somebody else's business.
+
+`tools/savegame_positions.py` does the scan and the radii for a given square:
+
+```sh
+python3 tools/savegame_positions.py <save> --window 62 76 68 82 --centre 64.5 78.5
+```
