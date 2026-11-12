@@ -269,6 +269,22 @@ impl World {
             && self
                 .find(other)
                 .is_some_and(|other| other.player >= 1 && other.player != entity.player);
+        // **Your own units pass through each other while walking** (D189, the owner's choice of the two ways out of the crowd
+        // problem). `blocker_at` stopped a step before it entered a friendly body, which is what left men stranded outside the
+        // gather band when ten of them were sent at one bush: the men behind could not pass the men in front, and the settle -
+        // which moves a body directly - then either waited for ever or stepped inside a neighbour (measured 1.962 and 0.144).
+        // The original lets its own villagers walk through one another and separates them at rest, and the owner's own screenshot
+        // shows them overlapping where they stand. Enemy bodies are unchanged: `bound_to_reach` still holds the two players apart.
+        // **On the way, not on the last step.** Passing through is for a man in transit; the final step still respects a body, so
+        // builders queue at a site and arrivals stay ordered. Without the bound a builder stacked on an idle villager and never
+        // reached its footprint (measured: a house at hp 1 after 2,000 ticks).
+        let transit = self
+            .paths
+            .get(&id)
+            .is_some_and(|route| route.points.len() > 1);
+        if !hostile && transit {
+            return (dx, dy);
+        }
         let give = |step: (Fixed, Fixed)| {
             if hostile {
                 self.bound_to_reach(here, other_at, step, reach)

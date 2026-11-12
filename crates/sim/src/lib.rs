@@ -1289,7 +1289,7 @@ pub(crate) const GATHER_WALK_SLACK_MILLI: i64 = 1500;
 /// a cheap upper bound ("might there be room?"); the settle decides exactly, sample by sample.
 #[must_use]
 pub fn ring_capacity() -> usize {
-    let circumference = 2 * 3_141_593 * i64::from(GATHER_RING_MILLI) / 1_000_000; // thousandths of a tile
+    let circumference = 2 * 3_141_593 * GATHER_RING_MILLI / 1_000_000; // thousandths of a tile
     (circumference / 400) as usize
 }
 
@@ -1298,14 +1298,10 @@ pub fn ring_capacity() -> usize {
 /// Integer tables rather than `f64`: the simulation is deterministic and hashed, and a platform's `sin` is not the same number
 /// twice. Every other angle on the ring is this table read backwards or negated.
 const SIN: [i64; 46] = [
-    0, 34899, 69756, 104528, 139173, 173648,
-    207912, 241922, 275637, 309017, 342020, 374607,
-    406737, 438371, 469472, 500000, 529919, 559193,
-    587785, 615661, 642788, 669131, 694658, 719340,
-    743145, 766044, 788011, 809017, 829038, 848048,
-    866025, 882948, 898794, 913545, 927184, 939693,
-    951057, 961262, 970296, 978148, 984808, 990268,
-    994522, 997564, 999391, 1000000,
+    0, 34899, 69756, 104528, 139173, 173648, 207912, 241922, 275637, 309017, 342020, 374607,
+    406737, 438371, 469472, 500000, 529919, 559193, 587785, 615661, 642788, 669131, 694658, 719340,
+    743145, 766044, 788011, 809017, 829038, 848048, 866025, 882948, 898794, 913545, 927184, 939693,
+    951057, 961262, 970296, 978148, 984808, 990268, 994522, 997564, 999391, 1000000,
 ];
 
 impl World {
@@ -3226,7 +3222,9 @@ impl World {
         // drawn round that corner straddles four tiles.
         let centre = self.tile_centre(self.tile_of(target));
         let slack = scale * GATHER_WALK_SLACK_MILLI / 1000;
-        let straight = integer_sqrt((centre.0.raw() - from.0.raw()).pow(2) + (centre.1.raw() - from.1.raw()).pow(2));
+        let straight = integer_sqrt(
+            (centre.0.raw() - from.0.raw()).pow(2) + (centre.1.raw() - from.1.raw()).pow(2),
+        );
         let mut best: Option<(i64, (Fixed, Fixed))> = None;
         for place in 0..GATHER_PLACES {
             let point = self.ring_point(centre, place);
@@ -3250,9 +3248,13 @@ impl World {
             // **Not on somebody's building site** (D186, found by the skirmish): a foundation is walkable ground, and a gatherer
             // standing on one is exactly the unit the empty-site gate waits for, so the site stalls for ever.
             let on_site = self.foundations.iter().any(|site| {
-                self.footprint_rect(*site).is_some_and(|(ax, ay, wide, tall)| {
-                    x >= ax && x < ax.saturating_add(wide) && y >= ay && y < ay.saturating_add(tall)
-                })
+                self.footprint_rect(*site)
+                    .is_some_and(|(ax, ay, wide, tall)| {
+                        x >= ax
+                            && x < ax.saturating_add(wide)
+                            && y >= ay
+                            && y < ay.saturating_add(tall)
+                    })
             });
             if on_site {
                 continue;
@@ -3324,16 +3326,10 @@ impl World {
     /// **Every place held on a node**, for a probe or a test: `(worker, place)`. Reading it from outside is what tells a
     /// reservation defect apart from a movement one.
     #[must_use]
-    pub fn gather_places(&self) -> Vec<(EntityId, (f32, f32))> {
-        let scale = self.scale as f32;
+    pub fn gather_places(&self) -> Vec<(EntityId, (i64, i64))> {
         self.gather_place
             .iter()
-            .map(|(worker, (_, (x, y)))| {
-                (
-                    *worker,
-                    (*x as f32 / scale, *y as f32 / scale),
-                )
-            })
+            .map(|(worker, (_, (x, y)))| (*worker, (*x, *y)))
             .collect()
     }
 
@@ -3343,34 +3339,25 @@ impl World {
         self.gather_place.remove(&worker);
     }
 
-    /// **Is somebody standing on this place?** A reserved place is meant to stay clear, but a body in transit can be sitting on
-    /// it, and the settle walks a man *directly* (it does not go through the collision pass), so a man who stepped onto a
-    /// neighbour would overlap him - measured **0.144** tiles apart when ten men converged on one arc. A blocked place is not a
-    /// place until it clears.
-    pub(crate) fn place_blocked(&self, worker: EntityId, place: (Fixed, Fixed)) -> bool {
-        let radius = self
-            .find(worker)
-            .and_then(|entity| entity.unit)
-            .map_or(1, |unit| (2 * self.body_radius(Some(unit))).max(1));
-        self.entities.iter().any(|other| {
-            other.id != worker
-                && other.kind == EntityKind::Unit
-                && (other.position.0.raw() - place.0.raw()).pow(2)
-                    + (other.position.1.raw() - place.1.raw()).pow(2)
-                    < radius * radius
-        })
-    }
-
     /// **Take the place a man has walked to, and keep it** (D186 addendum 5). Stored as the point itself rather than an index into
     /// a table that no longer exists: a place is a position, and `place_stands_clear` re-checks the ground it stands on.
-    pub(crate) fn reserve_gather_place(&mut self, worker: EntityId, node: EntityId, point: (Fixed, Fixed)) {
+    pub(crate) fn reserve_gather_place(
+        &mut self,
+        worker: EntityId,
+        node: EntityId,
+        point: (Fixed, Fixed),
+    ) {
         self.gather_place
             .insert(worker, (node, (point.0.raw(), point.1.raw())));
     }
 
     /// **The place this man already owns**, if its ground is still ground. `is_free_ground` is deliberately not asked: it answers
     /// "may a body stand here", and the body asking is the man himself.
-    pub(crate) fn gather_place_of(&self, worker: EntityId, node: EntityId) -> Option<(Fixed, Fixed)> {
+    pub(crate) fn gather_place_of(
+        &self,
+        worker: EntityId,
+        node: EntityId,
+    ) -> Option<(Fixed, Fixed)> {
         let (at, (x, y)) = *self.gather_place.get(&worker)?;
         if at != node || !self.place_is_live(worker, node) {
             return None;
@@ -3386,9 +3373,13 @@ impl World {
             return None;
         }
         let on_site = self.foundations.iter().any(|site| {
-            self.footprint_rect(*site).is_some_and(|(ax, ay, wide, tall)| {
-                tx >= ax && tx < ax.saturating_add(wide) && ty >= ay && ty < ay.saturating_add(tall)
-            })
+            self.footprint_rect(*site)
+                .is_some_and(|(ax, ay, wide, tall)| {
+                    tx >= ax
+                        && tx < ax.saturating_add(wide)
+                        && ty >= ay
+                        && ty < ay.saturating_add(tall)
+                })
         });
         (!on_site).then_some(point)
     }

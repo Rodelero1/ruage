@@ -163,8 +163,8 @@ fn ten_men_work_one_bush_a_body_apart() {
     assert_eq!(
         working.len(),
         10,
-        "MEASURED {} of 10 men working the bush; ten fit at a body each on the ring, and the owner's save shows ten"
-        , working.len()
+        "MEASURED {} of 10 men working the bush; ten fit at a body each on the ring, and the owner's save shows ten",
+        working.len()
     );
     let spots: Vec<(Fixed, Fixed)> = working
         .iter()
@@ -188,9 +188,15 @@ fn ten_men_work_one_bush_a_body_apart() {
     }
     if std::env::var_os("PROBE").is_some() {
         let mut places: Vec<_> = world.gather_places();
-        places.sort_by(|a, b| a.0 .0.cmp(&b.0 .0));
+        places.sort_by_key(|(id, _)| id.0);
+        let scale = world.scale() as f64;
         for (id, at) in &places {
-            eprintln!("PLACE {:?} at ({:.3},{:.3})", id, at.0, at.1);
+            eprintln!(
+                "PLACE {:?} at ({:.3},{:.3})",
+                id,
+                at.0 as f64 / scale,
+                at.1 as f64 / scale
+            );
         }
     }
     let mut closest = f64::MAX;

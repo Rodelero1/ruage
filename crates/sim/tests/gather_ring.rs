@@ -18,9 +18,17 @@ use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, Task, World};
+use ruage_sim::{Command, EntityId, EntityKind, World};
 
 mod common;
+
+/// Distance between two points, in tiles.
+fn gap(world: &World, a: (Fixed, Fixed), b: (Fixed, Fixed)) -> f64 {
+    let scale = world.scale() as f64;
+    let dx = a.0.raw() as f64 / scale - b.0.raw() as f64 / scale;
+    let dy = a.1.raw() as f64 / scale - b.1.raw() as f64 / scale;
+    (dx * dx + dy * dy).sqrt()
+}
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -208,18 +216,20 @@ fn two_woodcutters_on_one_tree_stand_a_body_apart_on_the_ring() {
 }
 
 /// **The ring holds nine men**, and the tenth is left standing - the owner's *"max 9 per each"*, and the 9 + 7 split his
-/// save names over two adjacent trees.
+/// **The ring holds whatever fits - eighteen at a body each** (D188). There is no cap: a place is a place while a villager's circle
+/// fits in it, so how many work one square is `2 * pi * 1.156 / 0.40 = 18.2` and nothing else. Nine was a number in a table for a
+/// day, and the owner's own save forages ten on one bush.
 #[test]
-fn the_ring_holds_nine_woodcutters_and_the_tenth_takes_nothing() {
+fn the_ring_holds_eighteen_woodcutters_at_a_body_each() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
     let scale = world.scale();
     let node = the_tree(&world);
     let tree = world.position(node).expect("the tree's position");
-    let ids = woodcutters(&mut world, 10);
+    let ids = woodcutters(&mut world, 18);
     let mut ever_carried = vec![false; ids.len()];
-    for _ in 0..2_000 {
+    for _ in 0..3_000 {
         world.step().expect("a tick");
         for (index, id) in ids.iter().enumerate() {
             if world
@@ -231,30 +241,31 @@ fn the_ring_holds_nine_woodcutters_and_the_tenth_takes_nothing() {
         }
     }
     let working = ever_carried.iter().filter(|carried| **carried).count();
-    let standing: Vec<(usize, Fixed, Fixed)> = ids
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| !ever_carried[*index])
-        .filter_map(|(index, id)| world.position(*id).map(|at| (index, at.0, at.1)))
-        .collect();
     assert_eq!(
-        working, 9,
-        "MEASURED {working} of 10 woodcutters took wood from one tree; the owner's cap is nine a square, and his save's own \
-         group is 9 + 7 over two squares"
+        working,
+        ruage_sim::ring_capacity(),
+        "MEASURED {working} of 18 woodcutters took wood from one tree; the ring's capacity is `2 * pi * 1.156 / 0.40`"
     );
-    assert!(
-        !standing.is_empty(),
-        "10 woodcutters and a ring of 9: at least one must be left out, but all 10 carried"
-    );
-    for (index, _, _) in &standing {
-        let at = world.position(ids[*index]).expect("a position");
-        let distance = tiles_between(at, tree, scale);
-        assert!(
-            distance > 1.27,
-            "MEASURED the standing woodcutter {index} at {distance:.3} tiles from the tree, inside the ring the working \
-             men occupy at {scale} raw units a tile"
-        );
+
+    // **And where they stand is the ring, a body apart**: the places, not a lucky tick's positions, because a man may be walking
+    // home with a load or passing through a neighbour on his way back (D189).
+    let places: Vec<(Fixed, Fixed)> = world
+        .gather_places()
+        .into_iter()
+        .map(|(_, (x, y))| (Fixed::from_raw(x), Fixed::from_raw(y)))
+        .filter(|place| tiles_between(*place, tree, scale) <= 1.27)
+        .collect();
+    let mut closest = f64::MAX;
+    for a in 0..places.len() {
+        for b in (a + 1)..places.len() {
+            let apart = tiles_between(places[a], places[b], scale);
+            closest = closest.min(apart);
+        }
     }
+    assert!(
+        closest >= 0.39,
+        "MEASURED the closest pair of places {closest:.3} tiles apart; two bodies are 0.40 wide"
+    );
 }
 
 /// **The owner's own arrangement, reproduced.** His save has six woodcutters round one tree at 1.105, 1.142, 1.160, 1.170, 1.170
@@ -281,13 +292,8 @@ fn the_owners_own_arrangement_lands_on_the_same_ring() {
     };
     let scale = world.scale();
     let node = the_tree(&world);
-    let anchor = world.position(node).expect("the tree's anchor");
     // **The square's centre, not the entity's anchor**: this fixture puts the tree on a tile corner, and every measured
     // distance in D186 is from the centre of the square the source occupies.
-    let square = (
-        Fixed::from_raw(anchor.0.raw() + scale / 2),
-        Fixed::from_raw(anchor.1.raw() + scale / 2),
-    );
     // The village's town centre is moved out of the way by the fixture map; the men go where his file says.
     let villager = world.role_unit("villager").expect("villager");
     let mut ids = Vec::new();
@@ -319,42 +325,36 @@ fn the_owners_own_arrangement_lands_on_the_same_ring() {
             })
             .expect("a gather order");
     }
-    // **The closest a man gets while working**, not where he happens to be at the end: a gatherer cycles between his place
-    // and the drop site, so his final tick may find him half way home.
-    let mut closest: Vec<(EntityId, f64, (Fixed, Fixed))> = ids
-        .iter()
-        .map(|id| (*id, f64::MAX, (Fixed::ZERO, Fixed::ZERO)))
-        .collect();
+    // **Where each man works, not where he is at the end of the run**: a gatherer cycles between his place and the drop site, so a
+    // single tick can catch him half way home - and since D189 he may pass *through* a neighbour on the way, which made the old
+    // "closest approach" measure read 0.357 for two men whose places are a body apart. The place is the claim: it is where he
+    // stands to work, and it is the number the ring is judged by.
     for _ in 0..1_200 {
         world.step().expect("a tick");
-        for (index, id) in ids.iter().enumerate() {
-            let working = world.entity(*id).is_some_and(
-                |entity| matches!(entity.task, Task::Gather { node: n, .. } if n == node),
-            );
-            if let (true, Some(at)) = (working, world.position(*id)) {
-                let here = tiles_between(at, square, scale);
-                if here < closest[index].1 {
-                    closest[index].1 = here;
-                    closest[index].2 = at;
-                }
+    }
+    let places: Vec<(EntityId, (Fixed, Fixed))> = world
+        .gather_places()
+        .into_iter()
+        .map(|(id, (x, y))| (id, (Fixed::from_raw(x), Fixed::from_raw(y))))
+        .collect();
+    let at = world.position(node).expect("the bush");
+    let mut closest = f64::MAX;
+    for (index, (id, place)) in places.iter().enumerate() {
+        let radius = gap(&world, *place, at);
+        assert!(
+            (1.05..=1.27).contains(&radius),
+            "MEASURED man {index} ({id:?}) working at {radius:.3} tiles from the bush; the ring is 1.156"
+        );
+        for (other, other_place) in places.iter().skip(index + 1) {
+            let apart = gap(&world, *place, *other_place);
+            if apart < closest {
+                closest = apart;
+                let _ = other;
             }
         }
     }
-    for (id, from_centre, _) in &closest {
-        assert!(*from_centre < f64::MAX, "{id:?} never worked the tree");
-    }
-    // **Bodies, not remembered distances**: no two of his six may stand inside each other.
-    let places: Vec<(EntityId, (Fixed, Fixed))> =
-        closest.iter().map(|(id, _, at)| (*id, *at)).collect();
-    for i in 0..places.len() {
-        for j in (i + 1)..places.len() {
-            let apart = tiles_between(places[i].1, places[j].1, scale);
-            assert!(
-                apart >= 0.39,
-                "MEASURED {:?} and {:?} {apart:.3} tiles apart; two villager bodies are 0.40 wide",
-                places[i].0,
-                places[j].0
-            );
-        }
-    }
+    assert!(
+        closest >= 0.39,
+        "MEASURED the closest pair of places {closest:.3} tiles apart; two villager bodies are 0.40 wide"
+    );
 }

@@ -4461,10 +4461,10 @@ the measurements say.
 
 *The mine save stores each object's position more than once (copies 0.10 apart), so its closest pair is not a spacing.
 
-**The capacity question, with positions this time.** Ten men worked that bush on the ring, 0.400 apart. `2 * pi * 1.143 / 0.400 =
-17.9`, so the ring fits eighteen - and the game used ten of them. Our engine's cap is **nine** because at eighteen slots the settle
-and the collision pass fight (measured: two men **0.345** apart against bodies 0.40 wide). The gap is therefore **ours, in the
-packing**, not the game's rule: the next attempt should keep eighteen slots and make the *settle* place a man at 0.400 without
-the collision pass shoving him off - a reserved place already exists to hang that on.
+**The capacity question is closed** (D188/D189): there is no cap. A place is any point on the 1.156 ring that is walkable and one
+body (0.40) clear of every other man and reservation, so the count follows the circumference - eighteen - and ten men now work one
+bush. Delivering a crowd needed the owner's choice of the two fixes: **own units pass through each other while walking** (the last
+step still respects a body, which keeps builders arriving), and the settle walks a man exactly onto his place. Acceptance repaths
+435 -> 240, made_room 151 -> 96.
 
 

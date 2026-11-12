@@ -49,6 +49,23 @@ fn tile_of(world: &World, id: EntityId) -> (i64, i64) {
 /// tests report both villagers on tile (0, 0).
 /// A villager at an arbitrary point, for fixtures that need a body **exactly** on a line - a tile is too coarse now that a
 /// walk aims at the middle of one (D114).
+fn spawn_enemy_at(world: &mut World, id: EntityId, point: (Fixed, Fixed)) {
+    let unit = world.start_villager_unit().expect("a villager role");
+    let scale = world.scale();
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player: 2,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: point,
+            speed: Fixed::from_raw(scale / 2),
+            hp: 25,
+            amount: 0,
+        })
+        .expect("an enemy can be placed");
+}
+
 fn spawn_villager_at(world: &mut World, id: EntityId, point: (Fixed, Fixed)) {
     let unit = world.start_villager_unit().expect("a villager role");
     let scale = world.scale();
@@ -64,6 +81,26 @@ fn spawn_villager_at(world: &mut World, id: EntityId, point: (Fixed, Fixed)) {
             amount: 0,
         })
         .expect("a villager can be placed");
+}
+
+fn spawn_enemy(world: &mut World, id: EntityId, x: u16, y: u16) {
+    let unit = world.start_villager_unit().expect("a villager role");
+    let scale = world.scale();
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player: 2,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(i64::from(x) * scale + scale / 2),
+                Fixed::from_raw(i64::from(y) * scale + scale / 2),
+            ),
+            speed: Fixed::from_raw(scale / 2),
+            hp: 25,
+            amount: 0,
+        })
+        .expect("an enemy can be placed");
 }
 
 fn spawn_villager(world: &mut World, id: EntityId, x: u16, y: u16) {
@@ -101,10 +138,12 @@ fn open_row(world: &World, span: u16) -> Option<(u16, u16)> {
     None
 }
 
-/// Two villagers walking through each other never share a tile, and both arrive. The test D98 owed, now satisfied by
-/// the original's mechanism rather than by waiting.
+/// **Two villagers crossing pass through each other and both arrive** (D189). The old assertion - never inside the standoff -
+/// was the old rule speaking: friendly bodies stopped a step before they met, which is exactly what left men stranded outside the
+/// gather band when ten were sent at one bush. The owner chose the original's behaviour: *your own units overlap while walking and
+/// separate where they stand*.
 #[test]
-fn two_villagers_crossing_never_share_a_tile_and_both_arrive() {
+fn two_villagers_crossing_pass_through_and_both_arrive() {
     let Some(mut world) = fresh() else { return };
     let Some((x, y)) = open_row(&world, 8) else {
         return;
@@ -124,23 +163,8 @@ fn two_villagers_crossing_never_share_a_tile_and_both_arrive() {
         to: (x, y),
     });
 
-    // **The assertion used to be "never share a tile"** - that was the old rule speaking. The rule is a distance now, so
-    // the test is one (C): two bodies never come inside the standoff their footprints need, which is the stronger claim
-    // and the one a crowd is judged by.
-    let reach = world.reach_between(a, b).raw();
-    for tick in 0..2_000 {
+    for _ in 0..2_000 {
         world.step().expect("step");
-        let (pa, pb) = (
-            world.position(a).expect("a position"),
-            world.position(b).expect("a position"),
-        );
-        let (dx, dy) = (pa.0.raw() - pb.0.raw(), pa.1.raw() - pb.1.raw());
-        let apart = dx * dx + dy * dy;
-        assert!(
-            apart >= reach * reach,
-            "they came {} raw units apart on tick {tick}, inside the {reach} their footprints need",
-            apart.unsigned_abs().isqrt()
-        );
     }
     let moved = tile_of(&world, a) != (i64::from(x), i64::from(y))
         && tile_of(&world, b) != (i64::from(x + 6), i64::from(y));
@@ -168,7 +192,9 @@ fn a_blocked_unit_goes_round_a_standing_body_and_arrives() {
     let walker = next_id(&world);
     let sitter = EntityId(walker.0 + 1);
     spawn_villager(&mut world, walker, x, y);
-    spawn_villager(&mut world, sitter, x + 3, y);
+    // **An enemy in the way**, because since D189 your own units pass through each other: the detour this test is about is the one
+    // a *hostile* body still forces.
+    spawn_enemy(&mut world, sitter, x + 3, y);
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
@@ -399,7 +425,9 @@ fn a_repath_route_is_pulled_like_a_planned_one() {
         i64::from(x + 6) * scale + scale / 2,
         i64::from(y) * scale + scale / 2,
     );
-    spawn_villager_at(
+    // **An enemy body on the line** (D189): your own units pass through each other now, so the only body that still forces a
+    // repath is a hostile one - and "the route around a body is pulled like a planned one" is still the claim being tested.
+    spawn_enemy_at(
         &mut world,
         sitter,
         (
