@@ -9,8 +9,9 @@
 //! under the villager's legs** - *"either villager fits in or don't"*; if the clear place is round the far side, *"take next tree
 //! instead"*; and the ring he dropped as a *rule* - the geometry is the only limit.
 //!
-//! So: no slot table, no nine. A man takes the nearest point on the 1.156 ring that is one body-diameter clear of every other man,
-//! and if the nearest such point is more than a tile and a half of walking away he takes the next source instead.
+//! So: no slot table, no nine. A man takes the nearest point on the **node's tile border** that is one body-diameter clear of every
+//! other man (D192; it was a 1.156-tile ring when this file was written), and if the nearest such point is more than a tile and a
+//! half of walking away he takes the next source instead.
 //!
 //! Written before the implementation (D7, SPEC §11).
 

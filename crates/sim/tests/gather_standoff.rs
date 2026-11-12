@@ -81,10 +81,10 @@ fn world_of(map_text: &str) -> Option<World> {
     Some(world)
 }
 
-/// **The villager ends up on the measured ring** (D186): **1.156** of a tile from the tree's square, which is where six
-/// woodcutters in the owner's own save stand (1.105, 1.142, 1.160, 1.170, 1.170, 1.189 - mean 1.156, spread 0.084). D169's
-/// 0.70 - the point where the two bodies' radii add up - is nearly half a tile inside it, and the engine stands there no
-/// more.
+/// **The villager ends up with his circle on the tree's tile** (D192): 0.20 of a tile from its border, which is what the owner's
+/// screenshots show (his men at **0.70** from a tile's centre and **0.99** at a corner). The 1.156 ring this file first asserted
+/// (D186, from the same save's mean) was the row *behind* them, and D169's 0.70-from-centre standoff was the radius pair rather than
+/// the tile - neither is the rule now.
 #[test]
 fn a_woodcutter_stands_on_the_measured_ring() {
     let Some(mut world) = world_of(MAP) else {

@@ -1,17 +1,16 @@
-//! **A gatherer stands on a ring 1.156 tiles out, not 0.70** (D186).
+//! **A gatherer stands with his circle on the node's tile** (D192; the 1.156 ring it replaced is D186's, and both came from the
+//! owner's save).
 //!
 //! Measured, not reasoned. The owner's save (`owner-test2.aoe2spgame`, VER 9.4 / 12.5) carries a per-unit order queue at
 //! `0x32ceb4` whose *from* points are standing positions. Six woodcutters round one tree sit at **1.105, 1.142, 1.160,
 //! 1.170, 1.170, 1.189** tiles from the source square's centre - mean **1.156**, spread **0.084** - and the three closest
 //! pairs are **0.404, 0.455, 0.710** apart, the first of which is exactly two villager radii (2 x 0.2): body touching body.
-//! **Nine men a square** is the owner's number - *"max 9 per each. 4 on corners and 4 on sides"* - and the file agrees: the
-//! sixteen orders over his two adjacent trees came out as **nine and seven**. Eighteen was this reviewer's misreading of the
-//! ring's circumference (`2 * pi * 1.156 / 0.404 = 17.97`) as the game's capacity, which the 9 + 7 split refutes.
+//! Those radii are D186's ring, which this file still names where the history matters; the **rule** is D192's - a man's circle
+//! touches the tile, which is **0.70** from its centre for a villager and **0.99** where two edges meet, and the ring was the row
+//! *behind* the men the owner was looking at.
 //!
-//! The engine's standoff was `radius[0] + node radius` - 0.2 + 0.5 = **0.70** (D169) - one man per side of the square
-//! (D182). That is nearly half a tile inside where the game puts its front row, which is why the owner's photograph and
-//! our render do not look alike.
-//!
+//! **Nine men a square** is the owner's number from the ring days - *"max 9 per each"* - and D188 dropped every cap: the capacity is
+//! the geometry (`2 * pi * 1.156 / 0.404 = 17.97` on a ring, eleven places on a tile's border), never a table.
 //! Written before the change (D7, SPEC §11).
 
 use std::path::PathBuf;

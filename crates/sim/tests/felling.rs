@@ -92,7 +92,7 @@ fn a_tree_is_still_standing_ten_seconds_in() {
 }
 
 /// **Sixteen seconds in, it is down.** 20 hit points at 1.5 a second is 13.3 seconds - the seventh chop - and the woodcutter
-/// spends up to two seconds walking out to his ring before the first one (D186: he settles 1.156 tiles out, not 0.70), so the
+/// spends up to two seconds walking out to the tile's border before the first chop (D192: 0.70 from its centre), so the
 /// window is the chop plus the approach. The *rate* is `the_chop_is_a_rate_per_second`'s business, not this window's.
 #[test]
 fn a_tree_is_down_within_sixteen_seconds() {

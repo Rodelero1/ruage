@@ -330,8 +330,9 @@ fn a_villager_walks_straight_over_dirt() {
     for _ in 0..4_000 {
         world.step().expect("step");
         let position = world.position(villager).expect("position");
-        // **Within the ring, not within one tile** (D186): a gatherer stands 1.156 tiles out, so "arrived" is the ring's
-        // reach and not the neighbouring tile's edge.
+        // **A coarse bound, not the rule.** What is tested is that he arrives at all; where he stands is the standoff tests'
+        // business. 1.3 tiles admits both the 1.156 ring (D186) and the border standoff (D192, 0.70 from the centre), so this
+        // assertion does not have to move when the rule does (SPEC §11, D193).
         let beside = (position.0.raw() - target.0.raw()).abs() <= scale * 13 / 10
             && (position.1.raw() - target.1.raw()).abs() <= scale * 13 / 10;
         if beside {

@@ -510,6 +510,27 @@ engine, it is deleted and re-implemented test-first.
 (horizontal slicing). Each test is written knowing what the previous cycle just taught us
 about the interface.
 
+### Tests assert relations, not measurements — D193
+
+A test states the **rule** and may quote the **measurement** that motivated it, in its failure message. It does not assert the
+measurement itself.
+
+```rust
+// yes: the rule
+assert!(distance_to_tile(worker, tile) <= radius, "MEASURED {distance:.3} from the border; his circle is {radius}");
+// no: last week's number
+assert!((distance_to_tile(worker, tile) - 0.70).abs() < 0.02);
+```
+
+**Evidence, measured.** When the standoff moved from a 1.156-tile ring to the tile's border, **eleven gather tests went red at once**,
+every one asserting the number `1.156` rather than the rule (a body touches its tile; two bodies are at least a diameter apart). The
+engine's behaviour was *more* correct and the suite said it was broken - and blame for a rewrite lands on whichever of the two is
+cheaper to change, which is never the rule.
+
+A measurement belongs in a test when the measurement **is** the claim (a save-game fixture asserting what the owner's file says); it
+does not belong when the claim is what the engine does. When a measured constant moves, only the constant moves; when a rule moves,
+every test that encoded the rule must change, and that churn is the signal that the test was pinning the wrong thing.
+
 ### Coverage — D7
 
 Behaviour-based, with no percentage target. The gate is "every behaviour has a test that was
