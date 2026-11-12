@@ -250,6 +250,9 @@ radii from (64.50, 78.50): 0.699 0.699 0.699 0.759 | 0.995 0.995 0.995 0.995 | 1
 
 - **`1.10-1.17`, ten men**, closest pair **0.400**, mean nearest **0.401** - the working ring, and the same radius the tree save
   shows (1.105-1.189) and the same spacing (0.404). **A bush and a tree share the ring.**
+  *(**Wrong, and corrected 2026-11-13**: this band is the node's four neighbouring tile centres (exactly 1.000) and four
+  diagonals (1.414), read out of the tile stream - not men. The workers are at 0.70 at an edge and 0.94 at a corner, i.e.
+  touching the tile. See the erratum at the end of this file and `docs/reviews/2026-11-13-the-standoff-is-measured.md`.)*
 - `0.995` four times - the neighbouring tiles' centres, exactly one tile out: men walking through, whose positions happen to be
   waypoints.
 - `0.699` three times - the tile's corner distance `0.5 * sqrt(2) = 0.707`, i.e. bodies just off the corners, walking past.
@@ -273,3 +276,29 @@ The mine's closest pair is polluted: that save stores each object's position **m
 30 bytes between them), so `--near` has to collapse them and two survivors can still be one body. Its *radii* are the sound number
 and they sit in the same band. The owner's own summary - *"tree, mine and berries are all the same in that aspect"* - is what the
 measurements say.
+
+## Erratum (2026-11-13): the "working ring" at 1.10-1.17 was the tile grid
+
+The measurement above from `bush.aoe2spgame` reported ten men at 1.100-1.174. **Those are not men.** The windowed scan
+reads every byte offset as a float pair, and round any one-tile node the *tile stream itself* supplies four exact
+**1.000** pairs (the four cardinal neighbouring centres) and four exact **1.414** pairs (the four diagonals). The old
+default band, 1.05-1.20, sat on exactly those.
+
+The owner re-sent the fixtures on 2026-11-13 - `tree`, `mine`, `bush`, **eight men on each**, game paused, plus a
+screenshot - and the nodes are findable without a guess (three tile centres appear nine times each in every save:
+`(76.5, 61.5)`, `(82.5, 66.5)`, `(87.5, 71.5)`). Measured in the touching band **0.60-0.98**:
+
+| save | bodies on the node | radii | mean | closest pair |
+|---|---|---|---|---|
+| `tree` | 7 | 0.641, 0.701 x3, 0.935 x3 | 0.793 | 0.661 |
+| `mine` | 7 | 0.641, 0.702 x3, 0.935 x3 | 0.793 | 0.661 |
+| `bush` | 7 | 0.702 x3, 0.760, 0.936 x3 | 0.811 | 0.663 |
+
+**0.70 = `0.5 + 0.2`** (a body touching the tile at an edge) and **0.935 = `0.5*sqrt(2) + 0.2`** (at a corner). One body
+per save sits at 1.054-1.055, just outside the envelope, unexplained and recorded. The three nodes behave identically,
+which is what the owner said all along - *"tree, mine and berries are all the same in that aspect"* - and it is the
+**radius** that was wrong, not that sentence.
+
+So: the standoff is the **touch** (D192, verified by D199), D186's 1.156 ring is withdrawn, and
+`tools/savegame_positions.py` now defaults to the touching band with the reason in its help text. Its one-body crash
+(`min()` of an empty sequence) was fixed test-first at the same time; five tests in `tools/test_savegame_positions.py`.

@@ -4883,3 +4883,38 @@ particulars"*) and what 1,656 lines inside `sim` contradicted.
 **Behaviour is unchanged, measured**: the acceptance run from the new crate prints `tick=36000 entities=142 players=1
 hash=91572e72c33cee93 repaths=409 made_room=0` - the same hash as before the move - and the workspace gate is green at **183 test
 binaries** with clippy and fmt clean.
+
+### D199 - the standoff is the touch, measured on the owner's own saves; D186's ring is withdrawn
+
+**What it says.** A gatherer stands with his body **touching the node's tile**: **0.70** from its centre at an edge
+(`0.5 + 0.2`) and **0.94** at a corner (`0.5*sqrt(2) + 0.2`). That is D192's rule, and this is the measurement that
+verifies it against the game rather than against a screenshot.
+
+**The evidence.** The owner sent `tree`, `mine` and `bush` saves (eight men on each, game paused) and a screenshot on
+2026-11-13. Each save's nodes are found without a guess - exactly three tile centres appear nine times each in the
+coordinate stream: `(76.5, 61.5)`, `(82.5, 66.5)`, `(87.5, 71.5)`. Measured in the band **0.60-0.98**, every node carries
+**seven** bodies at `0.641 / 0.701 x3 / 0.935 x3` (tree), `0.641 / 0.702 x3 / 0.935 x3` (mine),
+`0.702 x3 / 0.760 / 0.936 x3` (bush): means **0.793, 0.793, 0.811**, closest pair **0.661-0.663**. One body per save sits
+at 1.054, just outside, unexplained and recorded as such.
+
+**What it withdraws.** D186 read a **1.156** ring from the owner's earlier save, and
+`docs/reviews/2026-11-12-the-mine-and-the-ring.md` repeated it for three nodes (means 1.114-1.156). Both were measuring
+**the tile grid**: the windowed scan reads every byte offset as a float pair, so round a one-tile node it finds the four
+cardinal neighbouring centres at exactly **1.000** and the four diagonals at exactly **1.414**, and the old tool's default
+band `1.05-1.20` sat on precisely that row. **D186's ring is withdrawn**, and with it the "eighteen slots" capacity that
+was derived from the 1.156 circumference. The finding D186 got right is the one the owner stated: tree, mine and bush
+behave the same.
+
+**What it does not settle.** The **capacity**. The game shows seven to eight bodies at **0.66** spacing on the touching
+envelope; D192's geometry gives eleven places. Eleven is on the permissive side of the observation, so no test fails, but
+the two numbers are not the same claim and the game's spacing (0.66, not one body 0.40) says the limit is the ground, not
+a constant. Recorded in `docs/next-step.md` rather than resolved.
+
+**Also fixed, test-first, because the measurement exposed it.** `tools/savegame_positions.py`'s `ring_fit` raised
+`ValueError` on a band holding exactly one body (`min()` of an empty sequence), which is the commonest case there is; and
+its default band was the artefact band. Five tests in `tools/test_savegame_positions.py` went red
+(`FAILED (errors=3)`) before the fix; the band is now **0.60-0.98** and the docstring says why 1.00 is a tile centre.
+Review: `docs/reviews/2026-11-13-the-standoff-is-measured.md`.
+
+**Commits us to.** Any ring measurement quotes its band and its window, and a band that matches `0.5`, `1.0` or `1.414`
+exactly is a reason to suspect the tile stream rather than a body.

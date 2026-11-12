@@ -10,11 +10,14 @@ Usage:
 
     python3 tools/savegame_positions.py <save> --window 62 76 68 82 [--centre 64.5 78.5]
 
-`--window` is `minx miny maxx maxy` around the cluster of interest. The answer that matters is the radii column: men working one
-square stand at 1.10-1.17 tiles from its centre, spaced 0.40 apart, which is D186's ring.
+`--window` is `minx miny maxx maxy` around the cluster of interest. The answer that matters is the radii column: a worker
+stands with his body **touching the node's tile** - 0.70 from the centre at an edge, 0.94 at a corner - which is D192.
 
-Measured 2026-11-12 from `bush.aoe2spgame`: ten foragers, radii 1.100-1.174 (mean **1.143**), closest pair **0.400** - the same
-ring and the same spacing the tree save shows (`owner-test2`: 1.105-1.189), so bushes and trees share it.
+Measured 2026-11-13 from the owner's own `tree`, `mine` and `bush` saves (8 men on each, SHA-256 in the review
+`docs/reviews/2026-11-13-the-standoff-is-measured.md`): seven bodies per node at 0.641-0.760 (edge) and 0.935-0.936
+(corner), mean **0.79-0.81**, closest pair **0.661**. The exact **1.000** readings round every node are its four
+neighbouring tile centres and **1.414** are the four diagonals - artefacts that the old 1.05-1.20 band counted, which is
+where the 1.156 "ring" came from (D186, withdrawn by D199).
 """
 
 from __future__ import annotations
@@ -31,6 +34,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import savegame  # noqa: E402  (sibling module, same directory)
 
 STRIDE = 229
+
+# The band a worker's body occupies round a node's tile centre: 0.5 + 0.2 = 0.70 at an edge and
+# 0.5*sqrt(2) + 0.2 = 0.907 at a corner, measured 0.70 and 0.94 on the owner's saves (2026-11-13).
+# 1.00 is a neighbouring tile centre, not a worker: the four exact 1.000 readings round any node in
+# the owner's saves are its neighbours' centres, and 1.414 is the four diagonals. The 1.05-1.20 default
+# this replaces counted those artefacts, which is why the ring was believed to be 1.156 for a day.
+DEFAULT_BAND = (0.60, 0.98)
 
 
 def collect(body: bytes, window: tuple[float, float, float, float],
@@ -61,11 +71,18 @@ def collect(body: bytes, window: tuple[float, float, float, float],
 
 def ring_fit(points: list[tuple[float, float]], centre: tuple[float, float],
              low: float, high: float) -> tuple[int, float, float, float]:
-    """How many points sit in `[low, high]` of `centre`, their mean radius, the closest pair, and the mean nearest gap."""
+    """How many points sit in `[low, high]` of `centre`, their mean radius, the closest pair, and the mean nearest gap.
+
+    A band that holds exactly **one** body is a real answer, not an error: a lone worker on a node is
+    the commonest case there is. It has no neighbour to be close to, so both gaps are reported as zero
+    (found on the owner's saves, 2026-11-13: `min()` of an empty sequence raised `ValueError`).
+    """
     ring = [p for p in points if low <= math.hypot(p[0] - centre[0], p[1] - centre[1]) <= high]
     if not ring:
         return 0, 0.0, 0.0, 0.0
     radii = [math.hypot(p[0] - centre[0], p[1] - centre[1]) for p in ring]
+    if len(ring) == 1:
+        return 1, radii[0], 0.0, 0.0
     gaps = [
         min(math.hypot(p[0] - q[0], p[1] - q[1]) for j, q in enumerate(ring) if j != i)
         for i, p in enumerate(ring)
@@ -79,8 +96,9 @@ def main() -> int:
     parser.add_argument("--window", nargs=4, type=float, required=True, metavar=("MINX", "MINY", "MAXX", "MAXY"))
     parser.add_argument("--centre", nargs=2, type=float, metavar=("X", "Y"),
                         help="the square's centre in tiles; default is the middle of the window")
-    parser.add_argument("--band", nargs=2, type=float, default=(1.05, 1.20), metavar=("LOW", "HIGH"),
-                        help="the ring band to count in (default 1.05-1.20)")
+    parser.add_argument("--band", nargs=2, type=float, default=DEFAULT_BAND, metavar=("LOW", "HIGH"),
+                        help="the band to count in (default 0.60-1.00: a body touching the node's tile - "
+                             "0.70 at an edge, 0.94 at a corner. 1.00 is a tile centre, not a worker)")
     parser.add_argument("--near", type=float, default=0.20,
                         help="collapse points closer than this: one object stores its position more than once "
                              "(0.20 by default; real men stand 0.40 apart)")

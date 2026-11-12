@@ -34,3 +34,24 @@ seen as the 68- and 30-byte gaps). Collapsing at 0.2 leaves survivors that can s
 **What this does not settle.** Our engine's cap is **nine** and the game put **ten** on a bush; `2 * pi * 1.143 / 0.400 = 17.9` says
 the ring holds eighteen. The gap is our packing (the settle and the collision pass fight at 0.345 against 0.40 bodies), not the
 game's rule, and it is written down in `docs/next-step.md` as the next attempt to make.
+
+## Erratum, 2026-11-13: the ring this measured was the tile-centre row
+
+**The numbers in the table above are wrong, and the tool that produced them was counting artefacts.** The 1.05-1.20
+band this measurement used happens to contain the node's **four neighbouring tile centres (exactly 1.000)** and its
+**four diagonals (exactly 1.414)**, which the windowed scan reads out of the tile stream. They are not men, and the
+"closest pair 0.400" is the spacing of that artefact row.
+
+The owner re-sent the same three fixtures (`tree`, `mine`, `bush`, eight men on each, 2026-11-13). Measured in the
+touching band **0.60-0.98**, every node carries **seven** bodies at **0.641-0.760** (edge: `0.5 + 0.2`) and
+**0.935-0.936** (corner: `0.5*sqrt(2) + 0.2`), mean **0.79-0.81**, closest pair **0.661**. The exact 1.000 and 1.414
+readings round every node in every save are the four neighbours and the four diagonals.
+
+So the finding of this file stands - *tree, mine and berries behave the same* - but the number does not: the standoff is
+**0.70/0.94 (touching)**, not 1.11-1.16. D192 was right and D186 is withdrawn (D199). Full measurement, hashes and the
+tool defect it exposed: `docs/reviews/2026-11-13-the-standoff-is-measured.md`.
+
+Two lessons, both paid for here. **A band is a hypothesis**: a scan that reads every float pair will always find bodies at
+whatever radius you ask for, because tile centres and diagonals are exact numbers. And **the default argument was the
+bug**: `1.05-1.20` was written down before the geometry was understood, and every measurement that used it inherited the
+error silently.
