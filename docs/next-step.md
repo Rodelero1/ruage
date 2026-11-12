@@ -26,6 +26,11 @@ MCP may run in Deep mode with the native toolset (it cannot read the game otherw
 owner set.
 
 **Instrument notes, so a fresh session does not re-derive them.** craft-anything's CLI is
-`/opt/data/tools/craft-anything/bin/craft-anything-cli`; it needs `JAVA_HOME=/opt/data/tools/jdk-21.0.13+9` and that JDK's
-`bin` on `PATH` for anything Ghidra-adjacent, and `--deep` for anything that reads a target. Its function count is **19,484**
-where Ghidra's is **15,465**: a count is only comparable within one tool.
+`/opt/data/tools/craft-anything/bin/craft-anything-cli`. The MCP entry is now registered **deep**: args
+`mcp --all-tools --deep`, **323 tools**, `connect_timeout` 180, and its `env` `PATH` carries the JDK 21 `bin` and both Ghidra
+12.2 directories (without the JDK's `bin` on `PATH` the CLI reports java and Ghidra "not found" whatever `JAVA_HOME` says;
+`~/.config/craft-anything/config.toml` holds `deep_mode = true` under the runtime `HOME=/opt/data/home`). Ghidra is
+detected now, so the first Ghidra-backed call will pay the ~6.5 min import and 1.4 GB; the built-in engine needs neither and
+**every identification number in the evaluation came from it**. `/reload-mcp` loads the new entry into an open session; a new
+session picks it up anyway. Its function count is **19,484** where Ghidra's is **15,465**: a count is only comparable within
+one tool.
