@@ -118,3 +118,36 @@ its own and the owner's stated preference is bounded scope over maximal fidelity
    the whole evasion question.
 2. Read the ObSystem query it calls; compare it against our `Walk` layer and the entity occupancy scan.
 3. Only then `008007f0`, for the cost model and the tie-break.
+
+## The collision classification, read at last (2026-11-13): it is owner-blind
+
+`FUN_008a4360`'s collision block is now read line by line in the corpus
+(`/opt/data/tools/rea/pseudo-aokhd/FUN_008a4360_008a4360.c`, `move_obj.cpp:0x1225-0x129b`). What it does, in its own order:
+
+1. **The collisions are a global array**, `DAT_00de1998` entries of `DAT_00de19a0[]`, filled by `FUN_008a92a0` →
+   `FUN_00840440(x1,y1,x2,y2, mask, &count, &array, 0x19, 0xfffffffe, 0, 0)`. The query is at the **new position** and its
+   radius is `*(float*)(unit+0xc) +0x34) * param_7`, i.e. the unit's own radius field times a multiplier.
+2. **An entry is terrain when its `+8` object pointer is null** (`"Collision with terrain"`, line 0x122f).
+3. **Objects are classified by unit id, not by owner**: `piVar13[2]` (the collided unit's id at `+0x8`) is compared with
+   `*(int*)(order+0x24)` (the order's target id; negative means none) - equal → `"That's a target collision"` (0x1251),
+   otherwise `"That's a non-target collision"` (0x1256).
+4. **"Past" is a timestamp rule**: the entry counts as a *non-past* collision only if the path's creation time
+   (`+0x10`) is older than the other unit's own timestamp (`[vtable+0x2ac]`), plus a class test on `+0x16`
+   (`== 3`, `0x1b`, `0x27`, `0x34`). `"That's a non past collision"` (0x1265).
+5. **The answer to a non-past collision is a repath**, not a wait: unless the list is exactly one entry and that entry is
+   the target, it logs `"We have %d non-past collisions and %d terrain collisions, repathing"` (0x128b) and pushes them into
+   the avoid list.
+6. **The tie-break is a priority number, not a player**: over the same list it compares `[vtable+0x2b4]` on both units and
+   the lower one is told `"TOLD TO PAUSE BY UNIT %d"` (0x129b).
+
+**There is no player, team or alliance comparison anywhere in this block.** The only id comparison is against the order's
+target. The query's ninth argument is the sentinel **`-2`**, where another caller of the same function (`FUN_007f7460`)
+passes a real player value (`in_ECX[0x2a]`), which reads as "no owner restriction" - **an inference, not a proof**: the
+filter's own comparison has not been decoded, and the collision query reaches the object system through a virtual call
+(`[esi+0x2c8]`) that neither craft-anything nor REA resolves to a target.
+
+**Consequence for D189.** The rule that *your own units are not walls* has **no support in the binary**: the collision
+handler cannot tell a friend from an enemy, so a friend is returned by the query and counted as a non-past collision like
+any other, and the original's move is to repath around it. D189 was chosen to solve crowd delivery in our engine, not
+because the game does it. What the original does allow is the *past* exemption - a body the route already accounts for does
+not block, and a unit may overlap where it came from - which is the one part of our current behaviour it supports.
