@@ -101,9 +101,12 @@ step 7.2 -> 6.9 us, entities 142 -> 143, hash `ef7cdba9` -> `ac7cfd18`.
 the ghost both walk for **95 ticks**, then stop **0.30 tiles apart** - builder `(5.04, 4.39)`, squatter `(4.95, 4.68)`, idle villager
 behind them at `(5.00, 4.00)` - beside the pack's timber node at `(5,5)`, and never move again; the house stays at hp 1. Each is inside
 the other's diameter *and* inside the blocked tile's cushion, and the movement pass's give-way resolution needs a refusal to fire - but
-neither takes a step for the other to refuse. A friendly pass-through that ignores bodies entirely was tried and does **not** clear it. Next: a movement-pass fix for two own units
-both inside one another and against a wall (a mutual give-way that does not depend on a refusal), with its own three-unit test, then
-land D192.
+neither takes a step for the other to refuse. A friendly pass-through that ignores bodies entirely was tried and does **not** clear it.
+
+**Where it is not blocked, measured:** the frozen man asks the same step every tick and the movement pass *allows* it - `walkable=true`,
+clearance **0.120 -> 0.129** tiles. His task is still `Move`, his route has one waypoint, and `collide` has no friendly body to stop for.
+So the refusal is **downstream of `collide`**: the apply-stamp path in `move_bodies`, or a second consumer of the same route. Look there
+first, not in the collision rules.
 
 **Still owed, in order:**
 
