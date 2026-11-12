@@ -91,6 +91,18 @@ guards the rule (a diagonal gap between two trees is not a door) and passes on t
 already covers the plan; the overlap came from somewhere else - a placement, a settle, or a map whose resource tiles are not blocked.
 Ask for the save, or reproduce from the seed, before changing anything.
 
+**The touching standoff is built and parked** - branch `d192-touching-standoff`, commit `f591894`, review
+`docs/reviews/2026-11-13-touching-standoff.md`. A worker stands with his **circle on the tile** (`0.20` from the border, `0.70` from
+the centre), places come from `tiles::touching_places` (**eleven** on one tile), and the working test is `distance_to_tile <= radius`
+instead of a radius band. Every gather suite asserts it and the acceptance run improves: **made_room 96 -> 0**, repaths 435 -> 434,
+step 7.2 -> 6.9 us, entities 142 -> 143, hash `ef7cdba9` -> `ac7cfd18`.
+
+**What parks it:** `build::a_content_pack_with_our_own_resources_loads_and_spends` - a villager told to step **off** a ghost oscillates
+on its edge at `x = 4.95` for 2,000 ticks while the builder walks at the same approach tile, so the house stays at hp 1. Two of the
+player's own units fighting for one tile is a **movement** deadlock the standoff exposed; a friendly pass-through that ignores bodies
+entirely was tried and does not clear it. Next: reproduce it with two units in one test, decide whether step-aside should be a stable
+*placement* rather than a walk that can deadlock, then land.
+
 **Still owed, in order:**
 
 1. **The builder's ring is unmeasured.** The owner expects *"the same pattern"*; no save with a site under construction has been
