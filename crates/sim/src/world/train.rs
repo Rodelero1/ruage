@@ -5,8 +5,8 @@
 use ruage_fixed::Fixed;
 
 use crate::{
-    Command, Entity, EntityId, EntityKind, Job, RallyPoint, SimError, Task, TrainPlan, Training,
-    TrainingPause, World,
+    Command, Entity, EntityId, EntityKind, Job, RallyPoint, SimError, StepDecision, Task,
+    TrainPlan, Training, TrainingPause, World,
 };
 
 impl World {
@@ -250,6 +250,7 @@ impl World {
         let position = self.tile(spot);
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
         let inserted = self.insert(Entity {
+            last_step: StepDecision::Idle,
             id,
             player,
             kind: EntityKind::Unit,

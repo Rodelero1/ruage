@@ -6,7 +6,7 @@ use ruage_fixed::Fixed;
 
 use crate::{
     Command, CommandApply, Entity, EntityId, EntityKind, MAX_PLAYERS, RallyPoint, SimError, Stance,
-    Task, World,
+    StepDecision, Task, World,
 };
 impl World {
     /// Submit a command, refusing one that cannot be applied *at all* before it is queued. A bad
@@ -217,6 +217,7 @@ impl World {
                     Vec::new()
                 };
                 let inserted = self.insert(Entity {
+                    last_step: StepDecision::Idle,
                     id,
                     player,
                     kind,

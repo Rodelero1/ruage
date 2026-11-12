@@ -175,6 +175,9 @@ pub struct Entity {
     pub researching: Option<Research>,
     /// What the unit is carrying, in fixed point; whole resources are taken on deposit.
     pub carry: Fixed,
+    /// **What the movement pass decided for this body on its last tick** (D196). Instrumentation: not part of the state hash, and
+    /// written by the pass itself so reading it costs a lookup only when something asks (a test, a dump, a bug report).
+    pub last_step: StepDecision,
     /// The villager variant currently in use (the task's unit id), if any.
     pub variant: Option<u32>,
 }
@@ -465,6 +468,7 @@ pub struct Construction {
 /// Unit work in progress. A state machine small enough to hash and to explain: walking to a node
 /// and taking from it. Returning to a drop site is the next increment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+
 pub enum Task {
     #[default]
     Idle,
@@ -659,6 +663,85 @@ pub enum Command {
 
 mod error;
 pub use error::{ErrorClass, SimError};
+
+/// **What the movement pass decided for one body, this tick** (D193). `collide` decides in nine ordered rules and, before this, its
+/// answer was a pair of deltas - so "why is this man standing still" had no value to print, test or compare, and answering it took two
+/// hours of printing from inside the function, twice in one week.
+///
+/// Instrumentation, not state: nothing reads it in the tick and it is not hashed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StepDecision {
+    /// Nothing was asked of this body.
+    Idle,
+    /// The step was taken: ground clear, no body in the way.
+    Take,
+    /// The step was taken over a body the mover is already inside (D52).
+    TakeOverlapping,
+    /// The step was taken into a body at rest, whose repath routes round it from the next tick (rule 8).
+    TakeAtRest,
+    /// The step was slid along one clear axis: ground or a body on the planned line.
+    Slide,
+    /// The step was made by nudging once per route (rule 6).
+    MakeRoom,
+    /// The step was taken because the blocker refused one at this body on the same tick (rule 9).
+    GiveWay,
+    /// The same, when the blocker stood on the mover's own tile (rule 4).
+    GiveWayOwnTile,
+    /// Refused: the route's waypoint is blocked by ground, and a re-plan was asked for (D127).
+    WaitGround,
+    /// Refused: the blocker is the body the order was given to (rule 2).
+    WaitTarget,
+    /// Refused: a **hostile** body stands on the tile the order asked for (rule 2, D131/D192).
+    WaitGoal,
+    /// Refused: a moving body stands on the mover's own tile (rule 4).
+    WaitOwnTile,
+    /// Refused: anything else in the way (rule 9).
+    WaitBlocked,
+}
+
+impl StepDecision {
+    /// Every variant, in declaration order: the counter array is indexed by this.
+    pub const ALL: [Self; 13] = [
+        Self::Idle,
+        Self::Take,
+        Self::TakeOverlapping,
+        Self::TakeAtRest,
+        Self::Slide,
+        Self::MakeRoom,
+        Self::GiveWay,
+        Self::GiveWayOwnTile,
+        Self::WaitGround,
+        Self::WaitTarget,
+        Self::WaitGoal,
+        Self::WaitOwnTile,
+        Self::WaitBlocked,
+    ];
+
+    /// This variant's slot in the counter array.
+    pub fn index(self) -> usize {
+        Self::ALL
+            .iter()
+            .position(|other| *other == self)
+            .unwrap_or(0)
+    }
+
+    /// Whether the body was told to stand still this tick.
+    pub fn is_a_wait(self) -> bool {
+        matches!(
+            self,
+            Self::WaitGround
+                | Self::WaitTarget
+                | Self::WaitGoal
+                | Self::WaitOwnTile
+                | Self::WaitBlocked
+        )
+    }
+
+    /// Whether the refusal was "somebody stands on the tile you were sent to" - the clause D192 made hostile-only.
+    pub fn waited_for_a_goal_tile(self) -> bool {
+        self == Self::WaitGoal
+    }
+}
 
 impl std::error::Error for SimError {}
 
@@ -924,6 +1007,15 @@ pub struct World {
     /// How many times a blocked unit has re-planned its route. **Instrumentation, not state**: nothing reads it and it
     /// is not hashed; a test counts it to prove a known obstacle is not re-planned every tick (D98a).
     repath_count: u64,
+    /// The **last movement decision** for each body, and how many of each have been made (D193). Instrumentation, like the
+    /// counters above: never hashed, never read by the tick. `step_trace` was the review's name for it.
+    /// Counted per decision, in a flat array: a `BTreeMap` here cost **1.8 µs a tick** at 128 bodies (6.7 -> 8.5), which is a third
+    /// of the tick for instrumentation. The per-body trace lives on the entity (`Entity::last_step`) for the same reason.
+    step_counts: [u64; 13],
+    /// **Whether the movement trace is being written** (D196). Off by default: the per-body record and the counters cost **0.4 us of a
+    /// 6.7 us tick** (about 6%), which is a price the tick should not pay for a diagnostic nobody asked for. A test, a dump or a bug
+    /// report turns it on and pays it for that run.
+    tracing_steps: bool,
     /// How many of `repath_count` were forced by a **body** rather than by ground (D193 measurement). Instrumentation, like
     /// the total: never hashed, never read by the tick. It exists because D192 met a 70% rise in repaths and could say only
     /// that it had happened.
@@ -1405,6 +1497,8 @@ impl World {
             garrison_eject_at: Fixed::ZERO,
             paths: BTreeMap::new(),
             repath_count: 0,
+            step_counts: [0; 13],
+            tracing_steps: false,
             repath_by_body: 0,
             repath_by_ground: 0,
             repath_failures: 0,
@@ -1629,6 +1723,45 @@ impl World {
     /// never reads it and it is not hashed; a test counts it to prove a known obstacle is not re-planned every tick.
     pub fn repaths(&self) -> u64 {
         self.repath_count
+    }
+
+    /// **What the movement pass decided for this body on the last tick it was asked** (D196): `None` if there is no such entity.
+    pub fn last_step(&self, id: EntityId) -> Option<StepDecision> {
+        self.find(id).map(|entity| entity.last_step)
+    }
+
+    /// How many times this decision has been made, over the whole match. Instrumentation: a slice that changes how bodies answer each
+    /// other is judged by these the way it is judged by the bank.
+    pub fn step_count(&self, step: StepDecision) -> u64 {
+        self.step_counts[step.index()]
+    }
+
+    /// **Start writing the movement trace** (D196). Off by default and free when off; call this before the ticks you want to
+    /// explain.
+    pub fn trace_steps(&mut self) {
+        self.tracing_steps = true;
+    }
+
+    /// Whether the movement trace is being written.
+    pub fn is_tracing_steps(&self) -> bool {
+        self.tracing_steps
+    }
+
+    /// Record one decision. Called once per body per tick, from the movement pass.
+    pub(crate) fn record_step(&mut self, index: usize, id: EntityId, step: StepDecision) {
+        if !self.tracing_steps {
+            return;
+        }
+        self.step_counts[step.index()] += 1;
+        // **O(1), through the index the pass already has**: a `BTreeMap` keyed by id cost 1.8 µs a tick at 128 bodies (6.7 -> 8.5),
+        // which was a third of the tick for instrumentation. The fallback by id only runs on ticks where the list moved.
+        if let Some(entity) = self.entities.get_mut(index)
+            && entity.id == id
+        {
+            entity.last_step = step;
+        } else if let Some(entity) = self.find_mut(id) {
+            entity.last_step = step;
+        }
     }
 
     /// How many of `repaths()` a **body** forced, and how many **ground** did. Two counters rather than one because the
@@ -2381,6 +2514,7 @@ impl World {
             .unwrap_or(Fixed::ZERO);
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
         self.insert(Entity {
+            last_step: StepDecision::Idle,
             id,
             player,
             kind: EntityKind::Building,

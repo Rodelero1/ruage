@@ -9,7 +9,8 @@ use ruage_data::{Economy, Map, Units};
 use ruage_fixed::Fixed;
 
 use crate::{
-    Entity, EntityId, EntityKind, MAX_PLAYERS, SimError, Task, Walk, World, free_neighbour,
+    Entity, EntityId, EntityKind, MAX_PLAYERS, SimError, StepDecision, Task, Walk, World,
+    free_neighbour,
 };
 
 impl World {
@@ -305,6 +306,7 @@ impl World {
             let here = (centre.x, centre.y);
             used.insert(here);
             self.insert(Entity {
+                last_step: StepDecision::Idle,
                 id: EntityId(next_id),
                 player: centre.player,
                 kind: EntityKind::Building,
@@ -331,6 +333,7 @@ impl World {
                 })?;
                 used.insert(spot);
                 self.insert(Entity {
+                    last_step: StepDecision::Idle,
                     id: EntityId(next_id),
                     player: centre.player,
                     kind: EntityKind::Unit,
@@ -357,6 +360,7 @@ impl World {
                     })?;
                     used.insert(spot);
                     self.insert(Entity {
+                        last_step: StepDecision::Idle,
                         id: EntityId(next_id),
                         player: centre.player,
                         kind: EntityKind::Unit,
@@ -383,6 +387,7 @@ impl World {
         // for the same file.
         for node in &map.resources {
             self.insert(Entity {
+                last_step: StepDecision::Idle,
                 id: EntityId(next_id),
                 player: 0,
                 kind: EntityKind::Resource(node.slot),

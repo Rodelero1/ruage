@@ -926,7 +926,8 @@ impl World {
             refused: Vec::new(),
         };
         for (index, id, dx, dy) in deltas {
-            let (dx, dy) = self.collide(&mut pass, index, id, dx, dy);
+            let (dx, dy, why) = self.collide(&mut pass, index, id, dx, dy);
+            self.record_step(index, id, why);
             if dx != Fixed::ZERO || dy != Fixed::ZERO {
                 movers.push(id);
             }

@@ -4806,3 +4806,59 @@ friend as a wall on the last step, which is what D189 already said in words.
 103.4 -> **89.3 us**, entities at 1,800 s 139 -> **142**, hash `8999f1ba` -> `91572e72`, and **repaths 240 -> 409 (+70%)** - the one
 number that moves the wrong way, recorded here rather than smoothed over; the match still ends `players=1`. See
 `docs/reviews/2026-11-13-the-standoff-lands.md`.
+
+### D193 - a test asserts the rule and quotes the measurement
+
+**What it says.** A test states the **relation** (`distance_to_tile(worker, tile) <= radius`) and may quote the measurement that
+motivated it in its failure message. It does not assert the measurement. A measurement stays in a test only when the measurement *is*
+the claim - a save-game fixture saying what the owner's file holds.
+
+**Why, measured.** When the standoff moved from a 1.156-tile ring to the tile's border (D192), **eleven gather tests went red at once**,
+every one of them asserting the number rather than the rule. The engine was *more* correct and the suite said it was broken, and rewrite
+blame lands on whichever side is cheaper to change - which is never the rule. Recorded in SPEC §11 with both forms side by side.
+
+### D194 - an error says which kind of failure it is
+
+**What it says.** `SimError::class() -> ErrorClass`, three classes by **who is at fault**: `Refused` (38 variants - a legal order the
+world will not take now, here, or with what the player has), `BadRequest` (18 - the command names something that is not there, is not
+yours, or does not parse) and `Internal` (3 - fixed-point overflow, geometry overflow, a displacement with no legal spot). The match has
+**no wildcard arm**, so a new variant does not compile until it is classified.
+
+**Why.** Fifty-nine variants is right for a simulation - each names exactly what went wrong - but a caller could not tell "the player
+cannot do that" from "the engine is wrong" without matching all of them, so every UI path either swallowed errors or printed internals.
+
+### D195 - the next step is one step
+
+**What it says.** `docs/next-step.md` is capped at **16,384 bytes**, must start with `# OPEN`, and `tools/next_step.py --split` moves
+everything after the first block to `docs/history/next-step-<date>.md`. Enforced by `make check` and the pre-commit hook.
+
+**Why, measured.** The owner's rule is "compact first: persist state to files so a fresh session resumes without the conversation". By
+2026-11-12 that file was **350,038 bytes** - twenty times the largest source file - and this session read it at 101 KB and growing
+before it could start. One run moved **348,807 bytes** out and left **1,230**.
+
+### D196 - the movement decision is a value, and a hostile body at rest is still a body
+
+**What it says.** `collide` returns `(dx, dy, StepDecision)`: thirteen named outcomes (`Idle`, `Take`, `TakeOverlapping`, `TakeAtRest`,
+`Slide`, `MakeRoom`, `GiveWay`, `GiveWayOwnTile`, `WaitGround`, `WaitTarget`, `WaitGoal`, `WaitOwnTile`, `WaitBlocked`). The per-body
+record lives on `Entity::last_step` (not in the state hash) and is written only while **tracing** is on (`World::trace_steps()`), with
+flat counters in a `[u64; 13]`.
+
+**Why.** "Why is this man standing still" had no value to print, test or compare - it took two hours of printing from inside the
+function, twice in one week, and the second time the answer was a rule (`WaitGoal`) firing on a **friend**.
+
+**The rule it found, measured.** Two tests written for this decision exposed a second defect: a walker passed an **idle enemy** at
+**0.237 tiles** where two 0.2 radii need **0.4**, because rule 8's "a body at rest is not a wall" exemption - written for **resource
+nodes**, which carry no radius - was being applied to units too. The exemption now applies to nodes, buildings and friends only; a
+hostile unit at rest is bounded by the reach.
+
+**Cost, measured.** Recording costs **0.4 us** of a 6.7 us tick (6.6 -> 7.0 at 128 bodies) and is **off by default**; a run that wants
+the explanation pays it. A `BTreeMap` keyed by id was tried first and cost **1.8 us** on its own.
+
+### D197 - repaths are counted by reason
+
+**What it says.** `repaths_by_body()` and `repaths_by_ground()`, split at the single increment site using the `Repath.body` the struct
+already carried; printed by the headless as `repaths_body=`/`repaths_ground=`.
+
+**Why, measured.** D192 landed with repaths **240 -> 409** and no explanation. The split answered it: bodies stopped forcing re-plans
+altogether (**31 -> 0**) and every added re-plan is **ground** (122 -> 166) - men standing on a tile's border instead of a ring graze the
+node's blocked ground and re-plan, one every 217 ticks of 36,000.

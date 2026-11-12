@@ -7,8 +7,8 @@
 use ruage_fixed::Fixed;
 
 use crate::{
-    Entity, EntityId, EntityKind, MAX_GROUND_REPLANS, MAX_REPATHS_PER_TICK, Passing, Repath, Task,
-    World,
+    Entity, EntityId, EntityKind, MAX_GROUND_REPLANS, MAX_REPATHS_PER_TICK, Passing, Repath,
+    StepDecision, Task, World,
 };
 
 impl World {
@@ -185,18 +185,18 @@ impl World {
         id: EntityId,
         dx: Fixed,
         dy: Fixed,
-    ) -> (Fixed, Fixed) {
+    ) -> (Fixed, Fixed, StepDecision) {
         if dx == Fixed::ZERO && dy == Fixed::ZERO {
-            return (dx, dy);
+            return (dx, dy, StepDecision::Idle);
         }
         let Some(entity) = self.entities.get(index) else {
-            return (dx, dy);
+            return (dx, dy, StepDecision::Idle);
         };
         // **Only a unit collides with a body.** An arrow is an entity that moves through the same pass, and the first
         // version stopped every shot dead over the first unit it flew across - ten arrows froze mid-air over the town
         // centre. A building does not walk either, so this stays a rule about bodies.
         if entity.kind != EntityKind::Unit {
-            return (dx, dy);
+            return (dx, dy, StepDecision::Take);
         }
         let here = entity.position;
         let radius = self.body_radius(entity.unit);
@@ -211,7 +211,7 @@ impl World {
                     continue;
                 }
                 if self.step_is_walkable(here, (sx, sy), goal_tile, radius, entering) {
-                    return (sx, sy);
+                    return (sx, sy, StepDecision::Slide);
                 }
             }
             // **Ground, not a body** (D127). No slide means the route's next waypoint is now blocked - a house was built
@@ -229,14 +229,14 @@ impl World {
                     });
                 }
             }
-            return (Fixed::ZERO, Fixed::ZERO);
+            return (Fixed::ZERO, Fixed::ZERO, StepDecision::WaitGround);
         }
         let candidate = (
             Fixed::from_raw(here.0.raw() + dx.raw()),
             Fixed::from_raw(here.1.raw() + dy.raw()),
         );
         let Some((other, other_at)) = self.blocker_at(pass.bodies, id, radius, candidate) else {
-            return (dx, dy);
+            return (dx, dy, StepDecision::Take);
         };
         let stop = (Fixed::ZERO, Fixed::ZERO);
         // **Whose body is it** (D131 A, D189): the reach and the goal-tile refusal below are about **two players'** units. Two of
@@ -249,13 +249,13 @@ impl World {
                 .is_some_and(|other| other.player >= 1 && other.player != entity.player);
         // 2. The order's own business: the body it was sent at, or the ground it was sent to.
         if Self::order_target(entity) == Some(other) {
-            return stop;
+            return (stop.0, stop.1, StepDecision::WaitTarget);
         }
         if hostile
             && let Some((goal_tile, true)) = goal
             && self.tile_of(other_at) == goal_tile
         {
-            return stop;
+            return (stop.0, stop.1, StepDecision::WaitGoal);
         }
         // 3. A body the mover is **already inside** is not an obstruction (D52: "a body already overlapped is not made
         //    worse by moving"). Refusing cannot separate a pair a spawn or a push put inside each other, and it froze a
@@ -271,7 +271,7 @@ impl World {
             other_at.1.raw() - here.1.raw(),
         );
         if gap_x * gap_x + gap_y * gap_y < reach * reach {
-            return (dx, dy);
+            return (dx, dy, StepDecision::TakeOverlapping);
         }
         // **Whose ground is it** (D131 A): the reach is a bar between **two players' units**, because that is the pass the
         // owner remembers being a problem (*"narrow passes with 2 units passing in opposing directions"*). Two of your own
@@ -291,14 +291,15 @@ impl World {
         // **Enemy bodies are unchanged**: the reach above and `bound_to_reach` still hold two players' units apart, which is the
         // pass D131 was about.
         if !hostile {
-            return (dx, dy);
+            return (dx, dy, StepDecision::Take);
         }
-        let give = |step: (Fixed, Fixed)| {
-            if hostile {
+        let give = |step: (Fixed, Fixed), why: StepDecision| {
+            let delta = if hostile {
                 self.bound_to_reach(here, other_at, step, reach)
             } else {
                 step
-            }
+            };
+            (delta.0, delta.1, why)
         };
         // 4. A body standing on the **mover's own tile** is not something a plan can route around: the search would have
         //     to leave the tile it starts in, and what it found was a nine-waypoint route that walked backwards. The unit
@@ -306,9 +307,9 @@ impl World {
         //     a body at rest will not get out of the way, and waiting on it is waiting for ever.
         if self.tile_of_raw(other_at) == self.tile_of_raw(here) && pass.moving.contains(&other) {
             if self.wait_or_give_way(id, other, &mut pass.refused) {
-                return give((dx, dy));
+                return give((dx, dy), StepDecision::GiveWayOwnTile);
             }
-            return stop;
+            return (stop.0, stop.1, StepDecision::WaitOwnTile);
         }
         // 5. One axis alone, in a fixed order so two runs slide the same way.
         for (sx, sy) in [(dx.raw(), 0i64), (0, dy.raw())] {
@@ -320,7 +321,11 @@ impl World {
                 Fixed::from_raw(here.1.raw() + sy),
             );
             if self.blocker_at(pass.bodies, id, radius, slide).is_none() {
-                return (Fixed::from_raw(sx), Fixed::from_raw(sy));
+                return (
+                    Fixed::from_raw(sx),
+                    Fixed::from_raw(sy),
+                    StepDecision::Slide,
+                );
             }
         }
         // 6. Make room: **once per route**. A nudge is a way past one obstruction, not a way of life - uncapped, every
@@ -357,7 +362,11 @@ impl World {
                 }
                 if self.blocker_at(pass.bodies, id, radius, aside).is_none() {
                     pass.made_room.push(id);
-                    return (Fixed::from_raw(nx), Fixed::from_raw(ny));
+                    return (
+                        Fixed::from_raw(nx),
+                        Fixed::from_raw(ny),
+                        StepDecision::MakeRoom,
+                    );
                 }
             }
         }
@@ -383,20 +392,30 @@ impl World {
         //    tick 40,000 to 400,000 beside an idle friend). The step is taken and the repath above routes round it from
         //    the next tick - the overlap is at most one footprint, and it resolves; a frozen unit never does.
         if !pass.moving.contains(&other) {
+            // **A hostile unit at rest is still a body** (D193, measured). The exemption below exists because a resource node carries
+            // no radius, so `reach` falls back to a whole tile and a villager could not stand beside a tree - but it was being
+            // applied to *units* too, and a walker passed an idle enemy at **0.237** tiles where two 0.2 radii need `0.4`. The bound
+            // applies to a hostile unit; nodes, buildings and friends keep the exemption.
+            let a_unit = self
+                .find(other)
+                .is_some_and(|entity| entity.kind == EntityKind::Unit);
+            if hostile && a_unit {
+                return give((dx, dy), StepDecision::TakeAtRest);
+            }
             // **The bound does not apply to a body at rest** (measured: seven gather and rally tests failed when it did).
             // A resource node carries no radius, so `reach` falls back to a whole tile - and a villager must be able to
             // stand beside a tree to chop it, which the bound forbade: it stopped 5 tiles out, on the boundary circle of a
             // node it was walking to. The rule D131 is about is two bodies that both want the ground (rules 4 and 9), not
             // a mover against something that will never yield.
-            return (dx, dy);
+            return (dx, dy, StepDecision::TakeAtRest);
         }
         // 9. Otherwise wait - unless the blocker refused a step at this unit on the same tick, in which case one of the
         //    two has to give way or the pair is jammed. The give-way step is **bounded by the reach** (D131 A): a jam is
         //    never permanent, and a pair never overlaps.
         if self.wait_or_give_way(id, other, &mut pass.refused) {
-            return give((dx, dy));
+            return give((dx, dy), StepDecision::GiveWay);
         }
-        stop
+        (stop.0, stop.1, StepDecision::WaitBlocked)
     }
 
     /// **A step may not end inside the pair's reach** (D131 option A, the owner's call 2026-11-06: *"I think A should be

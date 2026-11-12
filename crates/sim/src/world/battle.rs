@@ -6,8 +6,8 @@ use ruage_data::Unit;
 use ruage_fixed::Fixed;
 
 use crate::{
-    Entity, EntityId, EntityKind, OCTANTS, Route, Shot, SimError, Stance, Task, World,
-    damage_between, integer_sqrt, scale_fixed, splitmix64,
+    Entity, EntityId, EntityKind, OCTANTS, Route, Shot, SimError, Stance, StepDecision, Task,
+    World, damage_between, integer_sqrt, scale_fixed, splitmix64,
 };
 impl World {
     /// The checks an attack order has to survive.
@@ -438,6 +438,7 @@ impl World {
         } = shot;
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
         self.insert(Entity {
+            last_step: StepDecision::Idle,
             id,
             player,
             kind: EntityKind::Projectile,
