@@ -4447,11 +4447,19 @@ inside a wall", the other three wall types (`117/119/155`).**The reserved place 
 it until the task changes, so a nearer arrival cannot take it and two men cannot swap it between ticks. Measured on the
 gathering-only fixture (`examples/gather_cost.rs`): repaths **224 -> 229**, made_room **124 -> 63**, men working **13 -> 16 of 18**.
 
-**The bush ring is measured, and it is the tree's** (2026-11-12). Unit positions are readable from the save at a **229-byte
-stride, x and y as float32** (`docs/save-format.md`, `tools/savegame_positions.py`). Around the bush square at `(64, 78)`:
-**ten men at 1.100-1.174, mean 1.143, closest pair 0.400** - the same ring as the tree (1.105-1.189) and the same spacing (0.404).
-So `GATHER_RING_MILLI = 1.156` stands for bushes too, and the owner's *"quite far from the berry bush"* is the game's own distance,
-not our error. Outstanding: a **mine** (gold/stone) has no measurement yet, but nothing suggests it differs.
+**The ring is measured for all three node types** (2026-11-12), from the object positions in the saves (records whose first
+eight bytes are `float32 x, float32 y` in tiles; `docs/save-format.md`, `tools/savegame_positions.py`):
+
+| node | men on the ring | radii | mean | closest pair |
+|---|---|---|---|---|
+| tree (`test.aoe2spgame`, 2nd) | 6 | 1.105-1.189 | **1.156** | 0.404 |
+| bush (`bush.aoe2spgame`) | 10 | 1.100-1.174 | **1.143** | 0.400 |
+| gold mine (`mine.aoe2spgame`) | 8-9 | 1.041-1.188 | **1.114** | polluted* |
+
+`GATHER_RING_MILLI = 1.156` stands for all three, and the owner's *"tree, mine and berries are all the same in that aspect"* is what
+the measurements say.
+
+*The mine save stores each object's position more than once (copies 0.10 apart), so its closest pair is not a spacing.
 
 **The capacity question, with positions this time.** Ten men worked that bush on the ring, 0.400 apart. `2 * pi * 1.143 / 0.400 =
 17.9`, so the ring fits eighteen - and the game used ten of them. Our engine's cap is **nine** because at eighteen slots the settle

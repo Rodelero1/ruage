@@ -260,3 +260,16 @@ radii from (64.50, 78.50): 0.699 0.699 0.699 0.759 | 0.995 0.995 0.995 0.995 | 1
 ```sh
 python3 tools/savegame_positions.py <save> --window 62 76 68 82 --centre 64.5 78.5
 ```
+
+**All three node types share the ring (measured 2026-11-12).** Using `tools/savegame_positions.py` on the owner's three saves:
+
+| node | save | men on the ring | radii | mean | closest pair |
+|---|---|---|---|---|---|
+| tree | `test.aoe2spgame` (2nd) | 6 | 1.105-1.189 | **1.156** | 0.404 |
+| bush | `bush.aoe2spgame` | 10 | 1.100-1.174 | **1.143** | 0.400 |
+| mine (gold) | `mine.aoe2spgame` | 8-9 | 1.041-1.188 | **1.114** | 0.24-0.40 |
+
+The mine's closest pair is polluted: that save stores each object's position **more than once** (copies 0.10 apart, gaps of 68 and
+30 bytes between them), so `--near` has to collapse them and two survivors can still be one body. Its *radii* are the sound number
+and they sit in the same band. The owner's own summary - *"tree, mine and berries are all the same in that aspect"* - is what the
+measurements say.
