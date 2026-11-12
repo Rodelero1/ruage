@@ -107,7 +107,6 @@ fn a_body_on_the_line_is_counted_as_a_body() {
         i64::from(x + 6) * scale + scale / 2,
         i64::from(y) * scale + scale / 2,
     );
-    let start = (i64::from(x) * scale, i64::from(y) * scale);
     let _ = goal_at;
     let _sitter = spawn_with(
         &mut world,

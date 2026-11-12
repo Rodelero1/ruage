@@ -507,3 +507,96 @@ impl std::fmt::Display for SimError {
         }
     }
 }
+
+/// **Which kind of failure an error is** (D193). Fifty-nine variants in one enum is right for a simulation - each says exactly what
+/// went wrong and where - but a caller cannot tell "the player cannot do that" from "the engine is wrong" without matching all of
+/// them, so every UI path either swallows errors or prints internals.
+///
+/// Three classes, decided by **who is at fault**:
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ErrorClass {
+    /// **The player may not do that** - now, here, or with what he has. A legal command that the world refuses: no route, not
+    /// enough wood, a site that is not clear, a match already over. The view shows it and moves on; nothing is broken.
+    Refused,
+    /// **The command is malformed or names something that is not there** - an entity that does not exist, another player's unit, a
+    /// scenario line that does not parse. The caller made a mistake; the view should not have offered the action.
+    BadRequest,
+    /// **The engine cannot answer for itself** - fixed-point overflow, a placement with no legal spot. This is a bug in this crate,
+    /// not in the player's click.
+    Internal,
+}
+
+impl SimError {
+    /// The class of this error.
+    ///
+    /// **The match has no wildcard arm on purpose**: a new variant does not compile until it is classified, which is the only
+    /// guarantee that stays true as the enum grows. `crates/sim/tests/error_class.rs` pins one variant of each class.
+    pub fn class(&self) -> ErrorClass {
+        match self {
+            // **Refused** - legal orders the world will not take.
+            Self::NoPath { .. }
+            | Self::NoSpace { .. }
+            | Self::NoVariant { .. }
+            | Self::FriendlyFire { .. }
+            | Self::NotATarget { .. }
+            | Self::Unarmed { .. }
+            | Self::CannotResearchHere { .. }
+            | Self::AlreadyResearching { .. }
+            | Self::AlreadyResearched { .. }
+            | Self::TechInProgress { .. }
+            | Self::QueueFull { .. }
+            | Self::Garrisoned { .. }
+            | Self::TooFar { .. }
+            | Self::CannotGarrisonHere { .. }
+            | Self::GarrisonTooDamaged { .. }
+            | Self::GarrisonFull { .. }
+            | Self::AlliedTarget { .. }
+            | Self::UnitBarred { .. }
+            | Self::UnitNotUpgraded { .. }
+            | Self::UnitUnavailable { .. }
+            | Self::MissingBuilding { .. }
+            | Self::AgeNeedsBuildings { .. }
+            | Self::TechBarred { .. }
+            | Self::MissingPrerequisite { .. }
+            | Self::TooManyResources { .. }
+            | Self::NotEnough { .. }
+            | Self::NotAFoundation { .. }
+            | Self::SiteOccupied { .. }
+            | Self::SiteBlocked { .. }
+            | Self::SiteUnscouted { .. }
+            | Self::SiteNotClear { .. }
+            | Self::NotTrainableHere { .. }
+            | Self::BuildingNotReady { .. }
+            | Self::TrainNeedsABuilding { .. }
+            | Self::NotABuilding { .. }
+            | Self::NotDeletable { .. }
+            | Self::StanceForbidsAttack { .. }
+            | Self::MatchOver => ErrorClass::Refused,
+
+            // **BadRequest** - the command itself is wrong.
+            Self::TooManyEntities { .. }
+            | Self::DuplicateEntity(_)
+            | Self::MissingUnit { .. }
+            | Self::MissingEntity(_)
+            | Self::Unresolved { .. }
+            | Self::EmptyLine
+            | Self::NotAResource { .. }
+            | Self::NotAUnit { .. }
+            | Self::NoTables
+            | Self::PlayerOutOfRange { .. }
+            | Self::UnknownResource { .. }
+            | Self::UnknownResourceName { .. }
+            | Self::NoRole { .. }
+            | Self::MissingTech { .. }
+            | Self::MissingEffect { .. }
+            | Self::UnknownCiv { .. }
+            | Self::OffMap { .. }
+            | Self::NotYours { .. } => ErrorClass::BadRequest,
+
+            // **Internal** - the engine's own arithmetic.
+            Self::Displacement { .. } | Self::Overflow(_) | Self::GeometryOverflow { .. } => {
+                ErrorClass::Internal
+            }
+        }
+    }
+}

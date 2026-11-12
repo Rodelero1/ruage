@@ -658,7 +658,7 @@ pub enum Command {
 }
 
 mod error;
-pub use error::SimError;
+pub use error::{ErrorClass, SimError};
 
 impl std::error::Error for SimError {}
 

@@ -22,4 +22,10 @@ if ! python3 tools/review_check.py; then
     exit 1
 fi
 
+# The one open step (D193): a next-step file that has grown into a second log is not a next step, and every session pays for it.
+if ! python3 tools/next_step.py --check >/dev/null; then
+    python3 tools/next_step.py --check >&2
+    exit 1
+fi
+
 exit 0

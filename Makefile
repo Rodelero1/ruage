@@ -26,7 +26,7 @@ PACK = --config $(CONFIG)/sim.toml \
        --effects $(CONFIG)/gamedata/effects.toml \
        --civs $(CONFIG)/gamedata/civs.toml
 
-.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check
+.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check next-step-check
 
 help:
 	@echo "make build      - build everything, release"
@@ -71,6 +71,9 @@ test: require-data
 decisions:
 	python3 tools/decisions.py
 
+next-step-check:
+	python3 tools/next_step.py --check
+
 decisions-check:
 	python3 tools/decisions.py --check
 
@@ -78,7 +81,7 @@ decisions-check:
 tools-test:
 	python3 -m unittest discover -s tools -p 'test_*.py'
 
-check: fmt clippy test tools-test
+check: fmt clippy test tools-test next-step-check
 	@echo "check: clean"
 
 fmt:
