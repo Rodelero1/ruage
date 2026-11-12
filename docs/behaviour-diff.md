@@ -82,6 +82,20 @@ game, periodic captures — closes exactly those. `docs/oracle.md` carries the p
 
 Screenshots alone would not close a single row. Saves and recordings together close most of them.
 
+## The instrument that changes the price of a row (2026-11-13)
+
+`craft-anything`'s built-in engine answers the **identification** half of a row in **1-2 s at 190 MiB**, with no Ghidra
+project and no import: raw string search (including literals Ghidra's inventory misses - it found `VER 5.7` at `0x9db348`
+and its one xref in **1 s**), function boundaries (**19,484** where Ghidra gives **15,465** - never quote one without its
+tool), function dossier, callers, and `core-feature-find`, which traced `repathing` to `sub_7f4330` and `sub_8a4360` - the
+two functions `docs/movement-in-the-binary.md` already names - in **2 s**. Its pseudo-C is a lifted listing (*"partly
+unstructured"*, 18 inline-asm in a 1,128-byte function), so it is an instrument for *finding*, and the Ghidra corpus stays
+the instrument for *reading*. The dat and the saves are outside it entirely. Full measurements, limits and errors:
+`docs/reviews/2026-11-13-craft-anything-evaluated.md`.
+
+**Per row, the query is now the same shape:** `core-feature-find --query "<the rule's own word>"` for rows 3-12, and
+`native-function-callers-list <address>` where a candidate is already known (row 2: `0x744d60`).
+
 ## What this file is for
 
 Each open row becomes a decision input: a row that rules **different** is a defect with an address; a row that rules

@@ -1,24 +1,31 @@
-# OPEN - the repath rise is answered; next is ErrorClass and the small tools
+# OPEN - one save decides whether D192 is fidelity or a regression
 
-**State, 2026-11-12 late.** D192 landed. Its +70% repath rise is **answered**: bodies stopped forcing re-plans altogether
-(**31 -> 0**) and every added re-plan is **ground** (122 -> 166 on the minimal scenario, 166 over 36,000 ticks). Instruments:
-`repaths_by_body()`/`repaths_by_ground()`, printed by the headless as `repaths_body=`/`repaths_ground=`; test
-`repath_reasons::a_body_on_the_line_is_counted_as_a_body`.
+**State, 2026-11-13.** `main` at `80e7dd3`, green (183 binaries, `EXIT 0`, clippy 0, fmt 0). The craft-anything evaluation is
+written and landed: `docs/reviews/2026-11-13-craft-anything-evaluated.md`. It answers the owner's question with measured
+numbers - its built-in engine reads the exe in 1-2 s at 190 MiB with no import, finds the `VER 5.7` literal Ghidra's
+inventory misses, traces `repathing` to the two movement functions, and does **not** recognise the dat or a save.
 
-**Done from that queue:** `ErrorClass` (D194), the `next-step.md` cap (D195, 350,038 -> 1,230 bytes), the SPEC §11 test rule and five
-stale docstrings (D193), `StepDecision` + `step_trace` (D196, which found enemy units being overlapped at rest: 0.237 against 0.4), and
-repaths by reason (D197).
+**The one open question, and it needs the owner.** D192 moved the gather standoff to the tile's border (**0.70** from a
+node's centre) on the strength of screenshots, while the project's own measurement of three saves
+(`docs/reviews/2026-11-12-the-mine-and-the-ring.md`) puts gatherers at **1.10-1.19**, mean 1.156, spaced 0.400, and the owner
+said *"tree, mine and berries are all the same in that aspect."* The fixtures that settle it (`bush`, `mine`, `test`) are no
+longer in the tree and not in `SaveGame.zip`. **One save plus one screenshot of the same moment, five or more men on one
+bush or tree**, ends it: radii from the save, touching-or-not from the screenshot.
 
-**Also done:** the inline-decision parser (four decisions the index could not see: 198 -> 202 parsed, dangling 12 -> 7) and
-`docs/dangling.toml`, a ratchet that refuses a *new* dangling id.
+**The queue while that waits** (no decisions needed):
 
-**Also done:** `crates/script` + `crates/harness` (D198) - the scenario language and the runners left the engine, which found three
-real layering breaks (three `World` queries the engine called from `script.rs`, two private methods the runner needed, and a binary test
-that could only live with its binary). Acceptance hash unchanged at `91572e72c33cee93`; 183 binaries.
+1. **Row 2 of the register, damage.** `native-function-callers-list 0x744d60` (~2 s) says whether the per-entry-drop
+   function is on the damage path at all; if it is, our total floor at `combat.toml`'s `minimum = 1` is a different rule and
+   the fix is test-first.
+2. **The Feudal gap.** `oracle.md`: our Feudal at ~14:30 against the game's ~9:30 - a 55% slower opening economy that no
+   decision answers. Rows 6, 7, 9 and 11 of the register, all `unknown-static`, all now cheap to locate by string trace.
+3. **`Vision` sub-struct** - the god-object split, no behavioural content. Last on purpose.
 
-**The queue, in order, no decisions needed:** (1) `Vision` sub-struct (the god-object split, smallest slice first).
+**Needs the owner, unchanged:** `crates/save` + `--load` (licensing, `docs/licensing.md`, D4 = B); whether the craft-anything
+MCP may run in Deep mode with the native toolset (it cannot read the game otherwise); and anything that changes a rule the
+owner set.
 
-**Needs the owner:** `crates/save` + `--load` (licensing, `docs/licensing.md`), and anything that changes a rule the owner set.
-
-**After that**, the architecture review's ranked backlog: `Step` enum + `step_trace`, the `next-step.md` cap, the test-invariant rule,
-`ErrorClass`, `crates/script`, `crates/save`.
+**Instrument notes, so a fresh session does not re-derive them.** craft-anything's CLI is
+`/opt/data/tools/craft-anything/bin/craft-anything-cli`; it needs `JAVA_HOME=/opt/data/tools/jdk-21.0.13+9` and that JDK's
+`bin` on `PATH` for anything Ghidra-adjacent, and `--deep` for anything that reads a target. Its function count is **19,484**
+where Ghidra's is **15,465**: a count is only comparable within one tool.
