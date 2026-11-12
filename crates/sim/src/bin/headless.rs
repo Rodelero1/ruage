@@ -327,13 +327,15 @@ fn run(args: &[String]) -> Result<(), String> {
     // `repaths` and `made_room` are counters of reactions the engine gives itself: a slice that changes how bodies
     // answer each other is judged by them as much as by the bank (C).
     println!(
-        "tick={} entities={} players={} hash={:016x} repaths={} made_room={}",
+        "tick={} entities={} players={} hash={:016x} repaths={} made_room={} repaths_body={} repaths_ground={}",
         world.tick(),
         world.entities().len(),
         players,
         world.state_hash(),
         world.repaths(),
-        world.made_room()
+        world.made_room(),
+        world.repaths_by_body(),
+        world.repaths_by_ground()
     );
     Ok(())
 }

@@ -1,13 +1,16 @@
-# OPEN - D192 landed; next is the repath regression and the review's backlog
+# OPEN - the repath rise is answered; next is ErrorClass and the small tools
 
-**State, 2026-11-13.** D192 (the touching standoff) is **landed**: a worker stands with his circle on the node's tile, eleven places on
-one tile, and `made_room` fell **96 -> 0**. The deadlock that parked it was a movement rule - *"the blocker stands on the tile the order
-asked for"* fired on a **friendly** body - and it is fixed (hostile-only), with `movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives`
-as its RED (1.011 tiles before, green after). Measured: step 7.2 -> 6.7 us, snapshot 103.4 -> 89.3 us, entities 139 -> 142, hash
-`8999f1ba` -> `91572e72`.
+**State, 2026-11-12 late.** D192 landed. Its +70% repath rise is **answered**: bodies stopped forcing re-plans altogether
+(**31 -> 0**) and every added re-plan is **ground** (122 -> 166 on the minimal scenario, 166 over 36,000 ticks). Instruments:
+`repaths_by_body()`/`repaths_by_ground()`, printed by the headless as `repaths_body=`/`repaths_ground=`; test
+`repath_reasons::a_body_on_the_line_is_counted_as_a_body`.
 
-**The one open number:** **repaths 240 -> 409 (+70%)**, unexplained. Either men whose place is on the far side now re-plan more, or
-there are simply more men at work. The instrument it needs does not exist: repaths per working villager-second.
+**The queue from the architecture review, in order, no decisions needed:** (1) `ErrorClass` on `SimError`; (2) a `next-step.md` cap
+with history moved to `docs/history/`; (3) the SPEC §11 rule that tests assert relations and quote measurements, converting the
+gather suite; (4) `Step` enum + `step_trace`; (5) `crates/script` extraction; (6) resolve the 12 dangling decision ids and the D190
+gap; (7) `Vision` sub-struct.
+
+**Needs the owner:** `crates/save` + `--load` (licensing, `docs/licensing.md`), and anything that changes a rule the owner set.
 
 **After that**, the architecture review's ranked backlog: `Step` enum + `step_trace`, the `next-step.md` cap, the test-invariant rule,
 `ErrorClass`, `crates/script`, `crates/save`.

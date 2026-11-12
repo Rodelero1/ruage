@@ -924,6 +924,12 @@ pub struct World {
     /// How many times a blocked unit has re-planned its route. **Instrumentation, not state**: nothing reads it and it
     /// is not hashed; a test counts it to prove a known obstacle is not re-planned every tick (D98a).
     repath_count: u64,
+    /// How many of `repath_count` were forced by a **body** rather than by ground (D193 measurement). Instrumentation, like
+    /// the total: never hashed, never read by the tick. It exists because D192 met a 70% rise in repaths and could say only
+    /// that it had happened.
+    repath_by_body: u64,
+    /// How many were forced by ground: a route whose waypoint is now blocked by terrain, a gate or a fresh building.
+    repath_by_ground: u64,
     /// How many ground re-plans **failed**. A counter, like `repath_count`, and not state: it exists so a test can say
     /// "this unit tried twice and stopped" instead of "this unit searched all match" (D135).
     repath_failures: u64,
@@ -1399,6 +1405,8 @@ impl World {
             garrison_eject_at: Fixed::ZERO,
             paths: BTreeMap::new(),
             repath_count: 0,
+            repath_by_body: 0,
+            repath_by_ground: 0,
             repath_failures: 0,
             made_room_count: 0,
             resources: None,
@@ -1621,6 +1629,17 @@ impl World {
     /// never reads it and it is not hashed; a test counts it to prove a known obstacle is not re-planned every tick.
     pub fn repaths(&self) -> u64 {
         self.repath_count
+    }
+
+    /// How many of `repaths()` a **body** forced, and how many **ground** did. Two counters rather than one because the
+    /// question "did this slice make bodies more work or is there simply more traffic?" cannot be answered from a total.
+    pub fn repaths_by_body(&self) -> u64 {
+        self.repath_by_body
+    }
+
+    /// See `repaths_by_body`.
+    pub fn repaths_by_ground(&self) -> u64 {
+        self.repath_by_ground
     }
 
     /// How many ground re-plans failed: the measure of a unit caught against ground it cannot answer for (D135).

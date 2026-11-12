@@ -1049,6 +1049,11 @@ impl World {
                             },
                         );
                         self.repath_count += 1;
+                        if body.is_some() {
+                            self.repath_by_body += 1;
+                        } else {
+                            self.repath_by_ground += 1;
+                        }
                     }
                     None => {
                         // The body joins the route's avoid set even though the search failed - the original's list is
