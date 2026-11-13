@@ -401,3 +401,76 @@ fn a_gatherer_five_tiles_away_reaches_his_node() {
         world.position(id).map(|p| p.1.raw() as f64 / scale as f64).unwrap_or(-1.0)
     );
 }
+
+/// **A friend standing still in the path is walked round, not waited on for ever** (D200). The engine asks for a repath round
+/// a blocking body only when that body is *not already* in the route's avoid set - and the avoid set's own comment says a
+/// collision with a body in it is **past**, "exactly what stops a blocked unit from repathing every tick". Measured on the
+/// trebuchet fixture: a villager with a live order, a reserved place and a three-point route sat at `WaitBlocked` for
+/// **400,000 ticks** beside a body that never moved, while `main` finished the same work in 11,359.
+#[test]
+fn a_gatherer_walks_round_a_friend_standing_in_his_path() {
+    let Some(mut world) = world_of(MAP_BUSH) else {
+        return;
+    };
+    let scale = world.scale();
+    let node = world
+        .entities()
+        .iter()
+        .find(|entity| matches!(entity.kind, EntityKind::Resource(_)))
+        .map(|entity| entity.id)
+        .expect("a bush at (10,6)");
+    let villager = world.role_unit("villager").expect("villager");
+    let (walker, stander) = (EntityId(9_680), EntityId(9_681));
+    for (id, at) in [(walker, (6i64, 6i64)), (stander, (8, 6))] {
+        world
+            .submit_checked(Command::Spawn {
+                id,
+                player: 1,
+                kind: EntityKind::Unit,
+                unit: Some(villager),
+                position: (
+                    Fixed::from_raw(at.0 * scale + scale / 2),
+                    Fixed::from_raw(at.1 * scale + scale / 2),
+                ),
+                speed: Fixed::parse("0.8", scale).expect("a speed"),
+                hp: 25,
+                amount: 0,
+            })
+            .expect("a villager");
+        world.step().expect("the villager lands");
+    }
+    let standing = world.position(stander).expect("the stander");
+    world
+        .submit_checked(Command::Gather { villager: walker, node })
+        .expect("a gather order");
+    world.trace_steps();
+    let tile = world.resource_tiles(node)[0];
+    let mut closest = f64::MAX;
+    let mut arrived = None;
+    for tick in 0..1_500 {
+        world.step().expect("a tick");
+        let Some(p) = world.position(walker) else { break };
+        let clearance = ruage_sim::tiles::distance_to_tile(
+            p,
+            (i64::from(tile.0), i64::from(tile.1)),
+            scale,
+        );
+        closest = closest.min(clearance as f64 / scale as f64);
+        if clearance <= scale / 3 {
+            arrived = Some(tick);
+            break;
+        }
+    }
+    assert_eq!(
+        world.position(stander),
+        Some(standing),
+        "the friend was supposed to stand still and was moved instead"
+    );
+    assert!(
+        arrived.is_some(),
+        "MEASURED the gatherer never reached the bush in 1,500 ticks; closest {closest:.2} tiles at ({:.2},{:.2}), last step {:?}",
+        world.position(walker).map(|p| p.0.raw() as f64 / scale as f64).unwrap_or(-1.0),
+        world.position(walker).map(|p| p.1.raw() as f64 / scale as f64).unwrap_or(-1.0),
+        world.last_step(walker)
+    );
+}

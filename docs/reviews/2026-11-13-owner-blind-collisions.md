@@ -353,3 +353,34 @@ man stands. Test-first, on this fixture, held to `main`'s 11,359 ticks and 6 s.
 
 **This is the third named cause in this review (jam, reservation book, delivery) and the first one that explains the 8x.**
 Each earlier candidate was measured and dismissed with a number; this one is a decision name from the engine itself.
+
+## Twelfth pass: three attempts at the standing friend, all measured, all reverted
+
+The reproduction is now a test (`gather_motion::a_gatherer_walks_round_a_friend_standing_in_his_path`): a gatherer at
+`(6,6)`, a friend standing at `(8,6)`, a bush at `(10,6)`, 1,500 ticks. Today it fails at **1.84 tiles, `WaitBlocked`** - the
+same decision as the trebuchet fixture.
+
+Three fixes were built and measured; **all three reverted**:
+
+| attempt | what it did | measured result |
+|---|---|---|
+| drop the `!known` guard for a **resting** body | asks for a repath even when the body is in the avoid set | repaths asked every tick (`budget=0` on entry), route unchanged, still `WaitBlocked` |
+| `leave_the_tile` | steps 0.02 sideways when a body shares the mover's tile | rejected at first (0.1 was inside the reach), then taken - mover crept to `(8.10,6.50)` and oscillated |
+| alternate start tile | plan from a free neighbour when the obstacle holds the start tile, first leg = that neighbour's centre | no change: `TakeAtRest` at the reach boundary, position unchanged |
+
+**The common cause, and why it is a design question rather than a bug fix:** the mover is *at the reach boundary of a body
+that will never move*, and his route points through it. Every mechanism the engine has answers "how do I not overlap" - none
+answers "how do I get past". The three answers available are mutually exclusive:
+
+1. **squeeze past** - allow the mover into the resting body's footprint for a tick or two (the at-rest rule already does this
+   when the step is non-zero; the zero-step case is the one that jams);
+2. **push the standing unit aside** - the sleeping body is displaced by the mover, as an RTS usually does, and the mover
+   keeps his line;
+3. **route round** - the plan must avoid the body's *point*, not its tile, and the search must be able to start from a tile
+   the body is not on. Attempt 3 was the first half of this and did not converge; the search kept returning the straight line
+   because the mover starts inside the reach, where no detour is representable as a tile path.
+
+**This is where an owner's ruling is needed**, because (1) and (2) look different in play, and (3) is the most expensive. The
+owner's standing rule is *"adopt original game behaviour"* - and the binary is the place to settle which of the three the game
+does. The collision block itself carries no owner test (measured earlier); what is not yet read is whether the *movement*
+update displaces the body it cannot pass.
