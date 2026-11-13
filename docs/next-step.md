@@ -1,9 +1,15 @@
-# OPEN - step 1: six tests, one of which may be a real defect
+# OPEN - step 1: D200 is merged; close its review and start row 2
 
-**State, 2026-11-13.** `main` at `a722263`, green (183 binaries, `EXIT 0`, clippy 0, fmt 0), acceptance `91572e72c33cee93`.
-The owner-blind collision rule (D200) and the measured geometry are built on **`d189-owner-blind`**, `67dabd1`: gather places
-`0.66` apart, spread evenly, **7 places** on one tile - the same seven his saves show. **79 test binaries green, 8 tests red**,
-every red one crowd delivery or a test that pins the old spacing.
+**State, 2026-11-13.** `main` carries **D200**: friends are solid and owner-blind; a tile seats **seven** at the measured 0.66;
+a body at rest is nudged only after **forty refused ticks**, only on the walker's own tile or his next waypoint, never if it is
+being worked; a `Return` aims at the walkable **yard**, not the building's blocked anchor; a place a body stands on is **stale**;
+the settle clamps its own step; placement is comfortable-0.66-first and packed-0.40-second, with a node-level re-lay; and an order
+a standing friend blocks **finishes where the man stands**.
+
+**Measured:** `ruage-sim` **122 test binaries green, 0 failed**; `ruage-data`, `ruage-fixed`, `ruage-script`, `ruage-harness` all
+green; fmt and clippy clean under `-D warnings`; acceptance at 48,000 ticks `entities=130 players=2 hash=17c79d51059de985
+repaths=31 made_room=6` against the old `repaths=579 made_room=0` - **seventeen times fewer re-plans**. The whole argument, every
+withdrawn rule and every measurement: `docs/reviews/2026-11-13-owner-blind-collisions.md`.
 
 ## The plan, in order. Do not start a step while the previous one is red.
 

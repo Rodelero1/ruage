@@ -198,3 +198,48 @@ fn units_that_already_share_a_tile_are_not_pushed_apart() {
         "a standing unit was pushed out of a tile it was already sharing"
     );
 }
+
+#[test]
+fn a_walker_never_ends_a_tick_inside_a_friend() {
+    // **The owner's rule (D189, revised 2026-11-13): "units shouldn't just pass over each other - in the game they
+    // obstruct each other and try to find a different path", and the original's collision block cannot tell a friend
+    // from an enemy (docs/movement-in-the-binary.md).** So this is checked *every tick*, not only at the end: the two
+    // existing tests above judge where a unit finishes, and a walker that overlaps its friend for 300 ticks on the way
+    // passes both of them.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let spearman = fx.economy.role["spearman"];
+    let speed = walk_speed(&world, &fx, spearman);
+    let stander = place(&mut world, 1, 9_710, spearman, (24, 20), Fixed::ZERO);
+    let walker = place(&mut world, 1, 9_711, spearman, (20, 20), speed);
+
+    world
+        .submit_checked(Command::Move {
+            unit: walker,
+            to: (26, 20),
+        })
+        .expect("move");
+
+    let reach = world.reach_between(walker, stander).raw();
+    let mut worst = i64::MAX;
+    let mut worst_tick = 0;
+    for tick in 0..600 {
+        world.step().expect("step");
+        let (a, b) = (
+            world.position(walker).expect("alive"),
+            world.position(stander).expect("alive"),
+        );
+        let (dx, dy) = (a.0.raw() - b.0.raw(), a.1.raw() - b.1.raw());
+        let apart = (dx * dx + dy * dy).isqrt();
+        if apart < worst {
+            worst = apart;
+            worst_tick = tick;
+        }
+    }
+
+    assert!(
+        worst >= reach - 1,
+        "the walker came {worst} raw units from its friend at tick {worst_tick}, inside the {reach} their footprints \
+         need - friends passed through each other"
+    );
+}

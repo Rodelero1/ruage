@@ -1000,6 +1000,12 @@ pub struct World {
     garrison_eject_at: Fixed,
     /// A route and the bodies it was planned around (D98a).
     pub(crate) paths: BTreeMap<EntityId, Route>,
+    /// **How many consecutive ticks a body has been refused by another body** (D200). Not hashed: it is a count of waiting,
+    /// not a position, and a route that is stalled for ever shows up in behaviour rather than in the state hash.
+    pub(crate) stalled: BTreeMap<EntityId, u32>,
+    /// **When a node's ring was last re-laid** (D200): a node that refuses a worker re-spreads its places at the packed
+    /// spacing, and this is the guard that stops it doing so every tick.
+    pub(crate) respread_at: BTreeMap<EntityId, u64>,
     /// How many times a blocked unit has re-planned its route. **Instrumentation, not state**: nothing reads it and it
     /// is not hashed; a test counts it to prove a known obstacle is not re-planned every tick (D98a).
     repath_count: u64,
@@ -1375,8 +1381,9 @@ pub const GATHER_PLACES: u16 = 180;
 /// man not gathering. The test is the *extra* walk over walking straight at the source.
 pub(crate) const GATHER_WALK_SLACK_MILLI: i64 = 1500;
 
-/// **How many men a node's tiles hold**: the touching places of every tile it occupies, for a body of `radius`. Derived from the
-/// geometry (D191/D192) - eleven for a villager on one tile - so there is no cap in a table and none to keep in step.
+/// **How many men a node's tiles hold**: the touching places of every tile it occupies, for a body of `radius`, spaced
+/// [`GATHER_SPACING_MILLI`] apart. Derived from the geometry (D191/D192) - seven for a villager on one tile - so there is no
+/// cap in a table and none to keep in step.
 #[must_use]
 pub fn touching_place_count(points: &[(u16, u16)], radius: i64, scale: i64) -> usize {
     points
@@ -1385,12 +1392,25 @@ pub fn touching_place_count(points: &[(u16, u16)], radius: i64, scale: i64) -> u
             crate::tiles::touching_places(
                 (i64::from(*x), i64::from(*y)),
                 radius,
-                (2 * radius).max(1),
+                spacing(scale),
                 scale,
             )
             .len()
         })
         .sum()
+}
+
+/// **How far apart two working men stand**, in thousandths of a tile: `0.660`.
+///
+/// Not one body (0.400). The owner's own saves measure **0.661-0.663** between seven men round one node, and the gap is the
+/// whole reason a crowd is deliverable: with friends blocking (D200), a place exactly one body from the next one is a place
+/// nobody can walk into, because the man walking to it is stopped at the reach. Seven places on the touching envelope is
+/// also what those saves show (`docs/reviews/2026-11-13-the-standoff-is-measured.md`, D199/D202).
+pub(crate) const GATHER_SPACING_MILLI: i64 = 660;
+
+/// [`GATHER_SPACING_MILLI`] in raw units, at this world's scale.
+pub(crate) fn spacing(scale: i64) -> i64 {
+    (scale * GATHER_SPACING_MILLI / 1000).max(1)
 }
 
 /// The **sine of 0, 2, 4 ... 90 degrees**, in millionths: the quarter table the ring is drawn from.
@@ -1492,6 +1512,8 @@ impl World {
             accuracy_scatter: 0,
             garrison_eject_at: Fixed::ZERO,
             paths: BTreeMap::new(),
+            stalled: BTreeMap::new(),
+            respread_at: BTreeMap::new(),
             repath_count: 0,
             step_counts: [0; 13],
             tracing_steps: false,
@@ -2879,7 +2901,23 @@ impl World {
             Task::Move { to } | Task::Hunt { to } => (to, true),
             // A drop site is worked, not occupied: two villagers must be able to hand in at one town
             // centre on the same tick, and a building's own tile is never free ground anyway.
-            Task::Return { drop, .. } => (self.find(drop)?.position, false),
+            // **A carrier aims at the yard, not at the building's own ground** (D200). The drop's anchor tile is blocked -
+            // it is a building - so every search that ends there fails, the route's stalls run out, and the man waits for
+            // the match: measured, a full-handed carrier at `(11.850,21.139)` in `WaitGround` for 400,000 ticks while the
+            // bank held 790 of 900. `approach_tile` names the walkable tile beside the footprint.
+            Task::Return { drop, .. } => {
+                let at = self.find(drop)?.position;
+                let tile = self.tile_of(at);
+                if self.tile_walkable(tile.0, tile.1) {
+                    (at, false)
+                } else {
+                    (
+                        self.approach_tile(self.tile_of(entity.position), drop)
+                            .map_or(at, |yard| self.tile_centre(yard)),
+                        false,
+                    )
+                }
+            }
             Task::Build { site } => (self.find(site)?.position, false),
             Task::Gather { node, .. } => (self.find(node)?.position, false),
             Task::Attack { target, .. } => (self.find(target)?.position, false),
@@ -3377,8 +3415,12 @@ impl World {
         if dx == 0 && dy == 0 {
             return None;
         }
-        // **Two bodies, touching** - the 0.400 of the owner's saves.
-        let too_close = (2 * worker_radius).max(1);
+        // **Comfortable, then packed** (D202, and the owner's rule of 2026-11-13). A ring at rest spaces men at the measured
+        // **0.66** - his own saves - and that is what a placement prefers. But a man arriving at a crowded node closes to
+        // **one diameter (0.40)**, which is a floor and never a target to cross: so the ring is searched at 0.66 first and at
+        // 0.40 only when the whole ring refuses. That is what lets ten men work a bush that seats seven comfortably.
+        let comfort = spacing(scale);
+        let packed = (2 * worker_radius).max(scale / 5);
         let centre = self.tile_centre(self.tile_of(target));
         let slack = scale * GATHER_WALK_SLACK_MILLI / 1000;
         let straight = integer_sqrt(
@@ -3386,75 +3428,81 @@ impl World {
         );
         let mut candidates: Vec<(Fixed, Fixed)> = Vec::new();
         for tile in self.resource_tiles(node) {
+            // Generated at the **packed** spacing: the comfortable places are the subset the clearance test accepts first.
             candidates.extend(crate::tiles::touching_places(
                 (i64::from(tile.0), i64::from(tile.1)),
                 worker_radius,
-                too_close,
+                packed,
                 scale,
             ));
         }
-        let mut best: Option<(i64, (Fixed, Fixed))> = None;
-        for point in candidates {
-            let (px, py) = (point.0.raw(), point.1.raw());
-            let away = integer_sqrt((px - from.0.raw()).pow(2) + (py - from.1.raw()).pow(2));
-            if best.as_ref().is_some_and(|(closest, _)| away >= *closest) {
-                continue;
+        for gap in [comfort, packed] {
+            let mut best: Option<(i64, (Fixed, Fixed))> = None;
+            for point in candidates.iter().copied() {
+                let (px, py) = (point.0.raw(), point.1.raw());
+                let away = integer_sqrt((px - from.0.raw()).pow(2) + (py - from.1.raw()).pow(2));
+                if best.as_ref().is_some_and(|(closest, _)| away >= *closest) {
+                    continue;
+                }
+                if away > straight + slack {
+                    continue;
+                }
+                let (Ok(x), Ok(y)) = (
+                    u16::try_from(px.div_euclid(scale)),
+                    u16::try_from(py.div_euclid(scale)),
+                ) else {
+                    continue;
+                };
+                if !self.tile_walkable(x, y) {
+                    continue;
+                }
+                let on_site = self.foundations.iter().any(|site| {
+                    self.footprint_rect(*site)
+                        .is_some_and(|(ax, ay, wide, tall)| {
+                            x >= ax
+                                && x < ax.saturating_add(wide)
+                                && y >= ay
+                                && y < ay.saturating_add(tall)
+                        })
+                });
+                if on_site {
+                    continue;
+                }
+                let near = |point: (Fixed, Fixed)| -> bool {
+                    let (bx, by) = (point.0.raw() - px, point.1.raw() - py);
+                    bx * bx + by * by < gap * gap
+                };
+                if self
+                    .entities
+                    .iter()
+                    .any(|other| other.id != worker && near(other.position))
+                {
+                    continue;
+                }
+                if taken
+                    .iter()
+                    .any(|(other, point)| *other != worker && near(*point))
+                {
+                    continue;
+                }
+                if self.gather_place.iter().any(|(other, (at, held))| {
+                    *other != worker
+                        && *at == node
+                        && near((Fixed::from_raw(held.0), Fixed::from_raw(held.1)))
+                        && self.place_is_live(*other, node)
+                }) {
+                    continue;
+                }
+                if check_path && !self.can_reach(from, point) {
+                    continue;
+                }
+                best = Some((away, point));
             }
-            if away > straight + slack {
-                continue;
+            if let Some((_, point)) = best {
+                return Some(Standoff::Point(point));
             }
-            let (Ok(x), Ok(y)) = (
-                u16::try_from(px.div_euclid(scale)),
-                u16::try_from(py.div_euclid(scale)),
-            ) else {
-                continue;
-            };
-            if !self.tile_walkable(x, y) {
-                continue;
-            }
-            let on_site = self.foundations.iter().any(|site| {
-                self.footprint_rect(*site)
-                    .is_some_and(|(ax, ay, wide, tall)| {
-                        x >= ax
-                            && x < ax.saturating_add(wide)
-                            && y >= ay
-                            && y < ay.saturating_add(tall)
-                    })
-            });
-            if on_site {
-                continue;
-            }
-            let near = |point: (Fixed, Fixed)| -> bool {
-                let (bx, by) = (point.0.raw() - px, point.1.raw() - py);
-                bx * bx + by * by < too_close * too_close
-            };
-            if self
-                .entities
-                .iter()
-                .any(|other| other.id != worker && near(other.position))
-            {
-                continue;
-            }
-            if taken
-                .iter()
-                .any(|(other, point)| *other != worker && near(*point))
-            {
-                continue;
-            }
-            if self.gather_place.iter().any(|(other, (at, held))| {
-                *other != worker
-                    && *at == node
-                    && near((Fixed::from_raw(held.0), Fixed::from_raw(held.1)))
-                    && self.place_is_live(*other, node)
-            }) {
-                continue;
-            }
-            if check_path && !self.can_reach(from, point) {
-                continue;
-            }
-            best = Some((away, point));
         }
-        Some(best.map_or(Standoff::NoRoom, |(_, point)| Standoff::Point(point)))
+        Some(Standoff::NoRoom)
     }
 
     /// **A point on the ring**, two degrees per place: `place` 0 is due east and the index grows anticlockwise. The quarter table

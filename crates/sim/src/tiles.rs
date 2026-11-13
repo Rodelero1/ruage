@@ -72,10 +72,13 @@ const SIN: [i64; 46] = [
 ///
 /// This is the whole standoff rule in one function. The owner's rule is that a villager works where **his circle fits**, so the
 /// number of places is not chosen - it falls out of `perimeter / spacing`, which for a villager on one tile is
-/// `4 + 2 * pi * 0.2 = 5.26` tiles of outline and `0.4` of body: **thirteen places**, and a bigger circle fits fewer.
+/// `4 + 2 * pi * 0.2 = 5.257` tiles of outline: **thirteen** at a body's width (0.4) and **seven** at the 0.66 the owner's
+/// saves measure between working men (D199/D202).
 ///
-/// The points are found by building candidates along the outline and keeping those at least `spacing` from every point kept
-/// before, in a fixed order - so the list is **deterministic**, which the hashed simulation requires.
+/// **The places are spread evenly, not fitted greedily.** The first version walked the outline and kept any candidate at least
+/// `spacing` from the ones already kept, which loses a place at every seam: it reported 11 where the arithmetic allows 13, and
+/// only **5** at 0.66 where it allows 7 - and with friends blocking (D200) a missing place is a man who cannot work. The walk
+/// below emits a place every `perimeter / count` of **arc length**, so the count is the arithmetic one.
 #[must_use]
 pub fn touching_places(
     tile: (i64, i64),
@@ -86,46 +89,136 @@ pub fn touching_places(
     if spacing <= 0 || radius < 0 || scale <= 0 {
         return Vec::new();
     }
+    let outline = grown_outline(tile, radius, scale);
+    if outline.is_empty() {
+        return Vec::new();
+    }
+    // Four sides plus four quarter circles: `4 * scale + 2 * pi * radius`, with pi as 3_141_593 millionths.
+    let quarter = radius * 1_571 / 1_000;
+    let perimeter = 4 * scale + 4 * quarter;
+    let mut count = (perimeter / spacing).max(1);
+    // **Round a corner, the chord is shorter than the arc.** Spreading `perimeter / spacing` places evenly gives the
+    // arithmetic count, but two places straddling a corner end up closer in a straight line than along the outline. The
+    // physical rule is what must hold: two bodies of this radius may never be inside one another, so the count steps down
+    // until the shortest *chord* between neighbours is at least `2 * radius`. `spacing` is the comfort distance (0.66 for
+    // gatherers, the owner's measurement); the overlap distance is the hard one. A villager gets **12** places at 0.4 and
+    // **7** at 0.66 - the same seven the owner's saves show.
+    let physical = (2 * radius).max(1);
+    loop {
+        let points = spread(&outline, perimeter, count);
+        if count <= 1 || neighbours_hold(&points, physical) {
+            return points;
+        }
+        count -= 1;
+    }
+}
+
+/// Emit `count` places from the outline, one every `perimeter / count` of **arc length**, starting at the first point.
+fn spread(outline: &[(i64, i64)], perimeter: i64, count: i64) -> Vec<(Fixed, Fixed)> {
+    let Some(&first) = outline.first() else {
+        return Vec::new();
+    };
+    let want = perimeter / count.max(1);
+    let mut kept: Vec<(Fixed, Fixed)> = Vec::with_capacity(usize::try_from(count).unwrap_or(16));
+    kept.push((Fixed::from_raw(first.0), Fixed::from_raw(first.1)));
+    let mut since = 0i64;
+    let mut last = first;
+    for &point in outline.iter().skip(1) {
+        let (dx, dy) = (point.0 - last.0, point.1 - last.1);
+        since += integer_sqrt(dx * dx + dy * dy);
+        if since >= want {
+            since -= want;
+            kept.push((Fixed::from_raw(point.0), Fixed::from_raw(point.1)));
+        }
+        last = point;
+    }
+    kept
+}
+
+/// Whether every pair of **neighbours** in the walk is at least `spacing` apart in a straight line, including the pair that
+/// closes the loop. The outline is convex and walked once, so a pair that is not adjacent is further apart than the pair next
+/// to it - checking neighbours is enough.
+fn neighbours_hold(points: &[(Fixed, Fixed)], spacing: i64) -> bool {
+    let near = |a: (Fixed, Fixed), b: (Fixed, Fixed)| {
+        let (dx, dy) = (a.0.raw() - b.0.raw(), a.1.raw() - b.1.raw());
+        dx * dx + dy * dy >= spacing * spacing
+    };
+    points.windows(2).all(|pair| near(pair[0], pair[1]))
+        && match (points.first(), points.last()) {
+            (Some(first), Some(last)) => near(*first, *last),
+            _ => true,
+        }
+}
+
+/// `value / 1_000_000`, rounded **up**: a corner offset must never land inside the tile it is supposed to touch.
+fn ceil_million(value: i64) -> i64 {
+    (value + 999_999) / 1_000_000
+}
+
+/// The grown square's outline in raw units, **in walk order** (bottom, bottom-right corner, right, top-right, top, top-left,
+/// left, bottom-left), sampled finely enough that arc length can be accumulated by walking it. Corners are 2-degree steps of
+/// the same sine table the ring uses; sides are `scale / 32` apart.
+fn grown_outline(tile: (i64, i64), radius: i64, scale: i64) -> Vec<(i64, i64)> {
     let (lo_x, lo_y) = (tile.0 * scale, tile.1 * scale);
     let (hi_x, hi_y) = (lo_x + scale, lo_y + scale);
-    let mut candidates: Vec<(i64, i64)> = Vec::new();
+    let step = (scale / 32).max(1);
+    let mut out: Vec<(i64, i64)> = Vec::new();
+    // **Ceiling, not truncation** (see `ceil_million`): a corner offset rounded *down* lands the place one raw unit inside
+    // the tile, and `body_clearance` measures that penetration on the acceptance map. Rounding up costs one raw unit of
+    // standoff - 1/20000 of a tile - and keeps the circle outside.
+    let mut push = |x: i64, y: i64| out.push((x, y));
 
-    // **The straight sides**, grown by the radius, walked every `spacing / 2` so the greedy pass has enough to choose from.
-    let step = (spacing / 2).max(1);
     let mut along = 0;
     while along <= scale {
-        candidates.push((lo_x + along, lo_y - radius));
-        candidates.push((lo_x + along, hi_y + radius));
-        candidates.push((lo_x - radius, lo_y + along));
-        candidates.push((hi_x + radius, lo_y + along));
+        push(lo_x + along, lo_y - radius);
         along += step;
     }
-    // **The rounded corners**: the quarter circle of `radius` round each corner point, every two degrees.
-    for (corner_x, corner_y) in [(lo_x, lo_y), (hi_x, lo_y), (hi_x, hi_y), (lo_x, hi_y)] {
-        for degree in 0..=45usize {
-            let (sin, cos) = (SIN[degree], SIN[45 - degree]);
-            candidates.push((
-                corner_x + radius * cos / 1_000_000 * if corner_x == hi_x { 1 } else { -1 },
-                corner_y + radius * sin / 1_000_000 * if corner_y == hi_y { 1 } else { -1 },
-            ));
-        }
+    // Bottom-right: sin/cos of 0..90 degrees, from `(hi_x, lo_y - r)` to `(hi_x + r, lo_y)`.
+    for degree in 0..=45usize {
+        let (sin, cos) = (SIN[degree], SIN[45 - degree]);
+        push(
+            hi_x + ceil_million(radius * sin),
+            lo_y - ceil_million(radius * cos),
+        );
     }
-
-    // **Keep only what fits**: a place is a place while it is `spacing` from every place already taken.
-    let mut kept: Vec<(i64, i64)> = Vec::new();
-    for (x, y) in candidates {
-        if distance_to_tile((Fixed::from_raw(x), Fixed::from_raw(y)), tile, scale) < radius {
-            continue;
-        }
-        if kept
-            .iter()
-            .any(|(kx, ky)| (kx - x).pow(2) + (ky - y).pow(2) < spacing.pow(2))
-        {
-            continue;
-        }
-        kept.push((x, y));
+    let mut along = step;
+    while along <= scale {
+        push(hi_x + radius, lo_y + along);
+        along += step;
     }
-    kept.into_iter()
-        .map(|(x, y)| (Fixed::from_raw(x), Fixed::from_raw(y)))
-        .collect()
+    // Top-right: from `(hi_x + r, hi_y)` to `(hi_x, hi_y + r)`.
+    for degree in 0..=45usize {
+        let (sin, cos) = (SIN[degree], SIN[45 - degree]);
+        push(
+            hi_x + ceil_million(radius * cos),
+            hi_y + ceil_million(radius * sin),
+        );
+    }
+    let mut along = step;
+    while along <= scale {
+        push(hi_x - along, hi_y + radius);
+        along += step;
+    }
+    // Top-left: from `(lo_x, hi_y + r)` to `(lo_x - r, hi_y)`.
+    for degree in 0..=45usize {
+        let (sin, cos) = (SIN[degree], SIN[45 - degree]);
+        push(
+            lo_x - ceil_million(radius * sin),
+            hi_y + ceil_million(radius * cos),
+        );
+    }
+    let mut along = step;
+    while along <= scale {
+        push(lo_x - radius, hi_y - along);
+        along += step;
+    }
+    // Bottom-left: from `(lo_x - r, lo_y)` back to `(lo_x, lo_y - r)`.
+    for degree in 0..=45usize {
+        let (sin, cos) = (SIN[degree], SIN[45 - degree]);
+        push(
+            lo_x - ceil_million(radius * cos),
+            lo_y - ceil_million(radius * sin),
+        );
+    }
+    out
 }
