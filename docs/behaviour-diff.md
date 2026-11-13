@@ -163,3 +163,15 @@ wrapper returns. The shape difference already registered stands: a **per-entry d
 at 1, so an attack wholly absorbed by armour deals **0** in the game and **1** to us. What is still open is only *which* caller is
 combat's: `0x741a30` is the candidate, and the corpus has no callers for it, so the next step is a vtable or a virtual-call
 resolve rather than another string search.
+
+**Row 2, why the corpus has no callers: `0x745060` is a virtual method.** A byte search of `AoK HD.exe` for each address as a
+little-endian literal:
+
+| address | literals in the binary | reading |
+|---|---|---|
+| `0x745060` | **5** (file offsets `0x5db0bc`, `0x5dba58`, `0x5dbce0`, `0x5dbf24`, `0x5dc0c4`) | **vtable slots** - the wrapper is a virtual method of five classes, which is why no caller exists to find |
+| `0x744ff0`, `0x741a30`, `0x744d60` | **0** | called directly; the decompiler's caller lists are complete for them, and `0x741a30`'s caller is not in the corpus |
+
+So "which of the five call sites is combat's" becomes a **class** question, not a call-site question: the damage wrapper is reached
+through a vtable, and the next instrument is to resolve those five slots to their owning class constructors - `native-xrefs` on the
+slot addresses - and read which class the combat code holds.
