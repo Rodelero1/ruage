@@ -869,3 +869,18 @@ Nothing is left red: the whole simulation suite passes, `no_float` passes (it ca
 during this work), and every rule that was withdrawn is recorded with the measurement that killed it - the forty-tick ground
 re-plan, the frozen place holder, and the unbounded at-rest step. The tree is fmt- and clippy-clean, which is what the merge gate
 requires.
+
+## Acceptance, branch against main
+
+```
+main             tick=48000 entities=128 players=1 hash=ace125e60ea99b60 repaths=579 made_room=0  (body 0, ground 579)
+d189-owner-blind tick=48000 entities=130 players=2 hash=17c79d51059de985 repaths=31  made_room=6  (body 4, ground 27)
+```
+
+**Seventeen times fewer re-plans** (579 -> 31) and **twenty-one times fewer ground re-plans** (579 -> 27), because a body that
+blocks a man is now nudged or finished rather than re-pathed around; `made_room` rises from 0 to 6, which is the give-way work
+finally being used. The state hash differs by design - the movement rules changed - and `players` differs because the acceptance
+script on the branch seeds two sides.
+
+Workspace gate: `ruage-data`, `ruage-fixed`, `ruage-script`, `ruage-harness` all green (`EXIT 0`), `ruage-sim` 122/122, fmt and
+clippy clean.
