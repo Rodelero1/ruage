@@ -680,3 +680,7 @@ It killed the overlap and killed navigation with it - a gatherer idled **1.45** 
 they hold a `Gather` task, cannot be seated, and crowd the ring - the game's answer is that they stand where they can and the
 player's answer is to build another mill. The engine needs the *NoRoom* policy (stand down, or wait outside) rather than
 re-choosing forever.
+
+**And the no-float test earned its keep:** it failed on `step.rs:927-929` - my own leftover `WRITER` probe prints, which
+convert to `f64` and were still in `settle_workers` after the trace was read. `no_float` scans the source, so an instrument left
+behind is caught by the build rather than by review. Removed; the probe now lives only in the review text.

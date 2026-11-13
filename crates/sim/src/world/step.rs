@@ -919,17 +919,6 @@ impl World {
                 continue;
             }
             if let Some(entity) = self.entities.iter_mut().find(|entity| entity.id == other) {
-                if std::env::var_os("RUAGE_PROBE_IDS").is_some() {
-                    let ids = std::env::var("RUAGE_PROBE_IDS").unwrap_or_default();
-                    if ids.split(',').any(|one| one.trim() == other.0.to_string()) {
-                        eprintln!("WRITER push id={:?} from=({:.4},{:.4}) to=({:.4},{:.4})",
-                            other,
-                            entity.position.0.raw() as f64 / self.scale as f64,
-                            entity.position.1.raw() as f64 / self.scale as f64,
-                            to.0.raw() as f64 / self.scale as f64,
-                            to.1.raw() as f64 / self.scale as f64);
-                    }
-                }
                 entity.position = to;
             }
         }
@@ -1086,18 +1075,6 @@ impl World {
                     Fixed::from_raw(dy.raw() / 2),
                 );
             }
-        if std::env::var_os("RUAGE_PROBE_IDS").is_some() {
-            let ids = std::env::var("RUAGE_PROBE_IDS").unwrap_or_default();
-            if ids.split(',').any(|one| one.trim() == id.0.to_string()) {
-                eprintln!("WRITER settle id={:?} from=({:.4},{:.4}) to=({:.4},{:.4}) d=({},{})",
-                    id,
-                    position.0.raw() as f64 / self.scale as f64,
-                    position.1.raw() as f64 / self.scale as f64,
-                    to.0.raw() as f64 / self.scale as f64,
-                    to.1.raw() as f64 / self.scale as f64,
-                    dx.raw(), dy.raw());
-            }
-        }
             if (dx.raw() != 0 || dy.raw() != 0)
                 && let Some(entity) = self.find_mut(id)
             {
