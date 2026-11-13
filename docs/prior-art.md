@@ -31,6 +31,29 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-13 — a roster renumbering, measured consistent; and the identity table's duplicates are six
+
+**`SiegeEngineers/aoc-reference-data`, one commit (`6d99a1fc` → `a53436be`): `data/players.yaml` and
+`data/teams.json` only.** The commit moves team **74 "Vikingos Nómadas"** (players 292, 459, 542) to
+**id 47**, renumbers every team from 47 to 73 up by one, and rewrites the `team:` field of 82 players
+to follow. Nothing in the repo that carries a published *game* value — unit, tech, civ — moved; this
+is the identity tables, twice.
+
+Checked on the new head instead of assumed: **84 teams with ids 1–84 contiguous; 285 `team:`
+references on players, none dangling; every team member id resolves to a player entry.** The
+renumbering is internally consistent, and the collision defect noted last time (an appended team
+reusing an id) is not repeated here.
+
+**The duplicate ids are six, not the one named on 2026-11-11:** 681 (Faith2Adventure, ALBO), 753
+(Thofou, Gali), 756 (Faneth, keenov), 771 (CC, DongHaiDi), 774 (VoNDutcH, Zenta), 775 (BingBing,
+Gengar). That is a measurement of the whole file, not a defect this commit introduced — its
+`players.yaml` diff touches `team:` lines and nothing else, so all six predate it. The rule stands and
+widens: this file is not an identity source for those six, and it remains usable for the published
+values we read it for, which did not move. A renumbering also changes what every cached team id
+*means* — if we ever key off one, re-read it rather than remember it.
+
+Nothing here is on an engine axis; no test bears on this tick.
+
 ## 2026-11-12 — plumbing on both sides; one lesson, and three numbers that are not ours to adopt
 
 **`librematch/genie`, 15 commits (`2cac47b3` → `f2d321e6`), 10-11 Nov, all `genie-core` porting.** The
