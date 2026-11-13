@@ -325,3 +325,31 @@ recording why - and `WaitOwnTile` is the only refusal that is silent: it waits f
 positions and route lengths for the ticks around the freeze. The owner's own save fixture showed the same pair of decisions
 (`WaitOwnTile` on one, `GiveWayOwnTile` on the other) - so the shape is known; what is not known is *who* the second body is
 on a map with one villager, and whether a route is being walked into a body that never yields.
+
+## Eleventh pass: `WaitBlocked`, forever - the decision that names the bug
+
+Trace on the trebuchet fixture (`trace_steps`, ticks 19,000-19,029), the man with a three-point route:
+
+```
+t=19000 WaitBlocked at=(16.235,13.800) carrying=0
+t=19001 WaitBlocked at=(16.235,13.800) carrying=0
+... identically for 400,000 ticks
+```
+
+**Not `WaitOwnTile`. `WaitBlocked`** - the step onto the route's next waypoint is refused because that ground holds a body,
+and the man waits instead of re-planning. The source says what should happen next (`lib.rs:676`): *"the step was taken into a
+body at rest, whose repath routes round it from the next tick (rule 8)"* - and the repath **never comes**: two repaths in the
+whole 400,000-tick run, zero made room.
+
+The mechanism that suppresses it is in the same file, three hundred lines of comment away: the avoid set lives **with** the
+route, and *"a collision with a unit in this set is past - the plan already accounts for it, which is exactly what stops a
+blocked unit from repathing every tick."* So when the body a route was planned around is **still standing there**, the
+collision is classified as already handled, no repath is asked for, and the man waits forever. One villager, one route, one
+body that never moves, and the engine calls it "past".
+
+**The rule the branch needs:** a `WaitBlocked` that repeats is a *stale* avoid set. After a bounded number of consecutive
+waits on the same waypoint (the `stalls` counter already exists for ground), clear the avoid set and plan again from where the
+man stands. Test-first, on this fixture, held to `main`'s 11,359 ticks and 6 s.
+
+**This is the third named cause in this review (jam, reservation book, delivery) and the first one that explains the 8x.**
+Each earlier candidate was measured and dismissed with a number; this one is a decision name from the engine itself.
