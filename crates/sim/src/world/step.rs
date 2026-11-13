@@ -49,6 +49,7 @@ impl World {
         self.step_gates();
         self.move_bodies(work.deltas)?;
         self.push_the_standing();
+        self.finish_blocked_orders();
         // **Settle onto the work** (D169): a worker that has arrived walks the last third of a tile onto the point where its
         // body and the node's touch. It is a placement, not a walk, because the movement rules only call a route finished on a
         // tile centre - a route ending 0.7 of a tile out is a route a worker never finishes.
@@ -923,6 +924,32 @@ impl World {
         }
     }
 
+    /// **An order that a standing body makes impossible is finished where the man stands** (D200). A `Move` onto a tile a
+    /// friend holds can never complete: the walker stops at the pair's reach, `reaches` is never true, and the order stays
+    /// live for ever (measured: still `Move` after 600 ticks, 1.011 tiles out). After the same forty refused ticks the nudge
+    /// waits for, the order is done - he is as close as his own side of the tile allows, which is what the player asked for
+    /// in a game where friends are solid.
+    fn finish_blocked_orders(&mut self) {
+        let done: Vec<EntityId> = self
+            .stalled
+            .iter()
+            .filter(|(_, waited)| **waited >= Self::STALLED_TICKS)
+            .map(|(id, _)| *id)
+            .filter(|id| {
+                matches!(
+                    self.find(*id).map(|entity| entity.task),
+                    Some(Task::Move { .. })
+                )
+            })
+            .collect();
+        for id in done {
+            if let Some(entity) = self.find_mut(id) {
+                entity.task = Task::Idle;
+            }
+            self.stalled.remove(&id);
+        }
+    }
+
     fn settle_workers(&mut self, settles: Vec<Settle>) {
         // **Speed is per second**, and a step is exact: `step_towards` is the movement pass's own arithmetic, so this cannot be a
         // fraction of a scale unit and cannot overshoot. Reading the stored speed raw was the first attempt's `15,600`.
@@ -933,11 +960,11 @@ impl World {
         // band (measured **1.962** tiles from the bush, never working). The step is therefore taken **along the ring**, in the
         // shorter direction, which is what a villager walking round a tree to its place does.
         // **Who is standing where**, once, so a blocked goal can be recognised before anybody moves.
-        let bodies: Vec<(EntityId, (Fixed, Fixed))> = self
+        let bodies: Vec<(EntityId, (Fixed, Fixed), Option<u32>)> = self
             .entities
             .iter()
             .filter(|entity| entity.kind == EntityKind::Unit)
-            .map(|entity| (entity.id, entity.position))
+            .map(|entity| (entity.id, entity.position, entity.unit))
             .collect();
         for (id, to, ring) in settles {
             // Read everything the decision needs **before** the mutable borrow: the body radius is the world's, not the entity's.
@@ -948,11 +975,15 @@ impl World {
                 continue;
             };
             let step = speed.raw() / tick_rate;
-            let reach = (2 * self.body_radius(unit)).max(1);
-            let blocked = bodies.iter().any(|(other, at)| {
-                *other != id
-                    && (at.0.raw() - to.0.raw()).pow(2) + (at.1.raw() - to.1.raw()).pow(2)
-                        < reach * reach
+            // **The pair's reach, not twice one body's radius** (D200). `2 * body_radius(..).max(1)` is two raw units when
+            // the content gives a unit no radius at all, so the settle thought nobody was ever in the way and walked men
+            // into each other: measured, the closest pair **0.083** and **0.107** tiles apart where the footprint needs 0.40.
+            // `reach_raw` is the number `collide` uses for the same question, including its one-tile fallback.
+            let blocked = bodies.iter().any(|(other, at, other_unit)| {
+                *other != id && {
+                    let reach = self.reach_raw(unit, *other_unit);
+                    (at.0.raw() - to.0.raw()).pow(2) + (at.1.raw() - to.1.raw()).pow(2) < reach * reach
+                }
             });
             let (dx, dy) = if blocked {
                 // **Slide, do not stand still** (D188): the step is the goal's direction turned about forty-five degrees, round the
@@ -2075,7 +2106,32 @@ impl World {
                     // **Arrived is close enough, not exactly on it.** The last step of a walk is often clipped by the ground
                     // or by a body, so an exact-equality test left a unit pacing at the doorstep of its goal for ever - which
                     // is how a builder failed to "arrive" at a site and a barracks was never finished (2026-11-04).
-                    if reaches(entity.position, to, delta.raw()) {
+                    // Arrival is exact here; an order that a standing body makes impossible is finished by
+                    // `finish_blocked_orders`, which knows *why* it cannot arrive rather than guessing from distance.
+                    // **Arrived beside a held goal** (D200): within a quarter tile of the neighbouring tile centre, when the
+                    // goal itself holds a body. `reaches` alone never fires there, because no step can get through.
+                    let pair = self.reach_raw(entity.unit, entity.unit);
+                    let held = self.entities.iter().any(|other| {
+                        other.id != entity.id
+                            && other.kind == EntityKind::Unit
+                            && {
+                                let reach = self.reach_raw(entity.unit, other.unit).max(pair);
+                                let (gx, gy) = (
+                                    other.position.0.raw() - to.0.raw(),
+                                    other.position.1.raw() - to.1.raw(),
+                                );
+                                gx * gx + gy * gy <= reach * reach
+                            }
+                    });
+                    let beside = held && {
+                        let (gx, gy) = (
+                            entity.position.0.raw() - to.0.raw(),
+                            entity.position.1.raw() - to.1.raw(),
+                        );
+                        let limit = self.scale + self.scale / 4;
+                        gx * gx + gy * gy <= limit * limit
+                    };
+                    if reaches(entity.position, to, delta.raw()) || beside {
                         work.finished.push(entity.id);
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))

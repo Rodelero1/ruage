@@ -550,3 +550,27 @@ crowd, it is two men in one shirt.
 D200 needs the predicate to accept standing at the pair's reach from the goal when the goal itself is taken.
 
 Both are engine, both are test-first next, and neither is a decision.
+
+## Nineteenth pass: two of the three defects fixed, and the third is a settle that does not clamp
+
+**Defect B is fixed.** A `Move` order onto a tile a friend holds used to stay live for ever - the walker stopped at the pair's
+reach, `reaches` was never true, and the task never ended. Two changes: `beside` accepts arrival within a quarter tile of the
+neighbouring tile centre when the goal itself holds a body, and a new `finish_blocked_orders` pass ends any `Move` that has been
+refused for the same forty ticks the nudge waits for. `movement` is 4/4; the order completes at **1.011** tiles and the friend
+does not move.
+
+**Two of my own errors in this pass, both caught by tests:**
+- the first `beside` limit was `scale + reach`, and `reach_raw` falls back to a *whole tile* when content gives no radius - so a
+  walker was declared arrived **1.839** tiles out. The limit is now `scale + scale/4`.
+- the whole first attempt at this pass was written while the tree was on `main` (a plan commit had moved it there), so the
+  settle fix was measured against `main`'s movement code. Same trap as the 0.038 overlap: **`git branch --show-current` before
+  quoting a measurement**.
+
+**Defect A is not fixed.** The settle now asks the engine's own `reach_raw` instead of `2 * body_radius(..).max(1)`, which was
+two raw units when a unit has no radius in content - but the closest pair is still **0.083** (`gather_standoff_rule`) and
+**0.107** (`gather_continuous`). So the overlap is not the reach arithmetic: two men *converge* on near-identical points, each
+sliding along the ring in the opposite direction from the other, and `settle_workers` moves a body **directly** - it does not go
+through `collide`, so nothing clamps the last step. The fix that follows from that: the settle must clamp like `give` does, or
+refuse the step when the *new* position would be inside the pair's reach.
+
+**Measured now:** `movement` 4/4, `gather_standoff_rule` 1/2, `gather_continuous` 3/4, `evasion` 6/6, `animals` 11/11.

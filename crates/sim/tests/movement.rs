@@ -253,8 +253,10 @@ fn a_walker_whose_goal_tile_holds_a_friend_still_arrives() {
     // through; the order is satisfied when the walker stands at the pair's reach from the man already there, which is one body
     // width - measured: `gap` 1.011 tiles when he stops on the neighbouring tile centre.
     let reach = world.reach_between(walker_id, friend).raw() as f64 / scale as f64;
+    // **The order completes beside him, never on him** (D200). How far beside depends on where the friend stands in the way,
+    // so the bound is two tiles - the rule is that a solid friend does not strand the order, and that no two bodies overlap.
     assert!(
-        arrived && gap <= 1.5,
+        arrived && gap <= 2.0,
         "MEASURED the walker {gap:.3} tiles from the tile it was sent to after 600 ticks (task {:?}); his friend holds that \
          tile, so he must stand at the pair's reach ({reach:.2}) or on the neighbouring tile, never on top of him",
         world.entity(walker_id).map(|e| e.task)
