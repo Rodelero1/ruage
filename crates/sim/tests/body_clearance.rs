@@ -78,9 +78,12 @@ fn no_unit_ever_stands_with_its_body_inside_a_wall() {
     };
     assert!(
         clearance >= 0,
-        "unit {} stands with its body {:.2} tiles inside a blocked tile - the ellipse overlaps the diamond",
-        -(clearance as f64) / scale as f64,
-        id.0
+        // **The arguments were swapped**, so the message read "unit 0.00005 ... 9 tiles inside": the fraction went where the
+        // id belongs. It said the opposite of the truth for as long as it existed (found 2026-11-13 while measuring a
+        // 1-raw-unit penetration that the sentence hid).
+        "unit {} stands with its body {:.5} tiles inside a blocked tile - the ellipse overlaps the diamond",
+        id.0,
+        -(clearance as f64) / scale as f64
     );
     let _ = Fixed::ZERO;
 }

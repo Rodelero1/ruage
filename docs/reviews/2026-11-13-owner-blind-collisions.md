@@ -98,3 +98,35 @@ overlap escape (rule 3 already returns the step). The next instrument is `step_t
 
 **And the two tests that pin the withdrawn rule still need rewriting** - a friend on the goal tile is now an obstacle
 (`step_decision`), and a walker arrives *beside* a friend rather than on top of it (`movement`).
+
+## Third pass: what is green, and the eight tests that are not
+
+**Whole `ruage-sim` suite, `--no-fail-fast`, on the branch: 79 test binaries green, 8 tests red.** Everything red is
+crowd delivery or a test that pins a capacity. The rest of the engine - combat, research, techs, decay, vision, site
+placement, body clearance, the one-tile corridor, the collision and evasion suites - is green.
+
+**Two defects found and fixed in this pass, both real:**
+
+1. **A corner offset was truncated, not ceiled**, so a place could land **one raw unit inside** the tile it was meant to
+   touch - and `body_clearance` caught it on the acceptance map. `ceil_million` now rounds outward; one raw unit is
+   1/20000 of a tile.
+2. **`body_clearance`'s failure message had its arguments swapped** - it read *"unit 0.00005 ... 9 tiles inside"* when the
+   truth was *"unit 9 ... 0.00005 tiles inside"*. A test that lies about the measurement is worse than no message; fixed.
+
+**Two experiments run and reverted, with their numbers, so the next session does not repeat them:**
+
+| experiment | result |
+|---|---|
+| give-way bounded by the reach (as it was) | two villagers **froze on one tile at a town centre's door** for 1,200 ticks: `WaitOwnTile` / `GiveWayOwnTile` every tick, positions identical at tick 1,200 and 2,400 |
+| give-way **never** bounded | `three_gatherers` went green, but a head-on pair in a one-tile corridor came **7,372** apart against the **8,000** their footprints need (D131 A broken), and `body_clearance` went red |
+| give-way unbounded **only when already inside the reach** | corridor green again, `body_clearance` red from the geometry bug above, and the door jam **unchanged** |
+
+So the door jam is not the bound. The trace says both men are on **one tile** and `pass.moving` holds the other, and the
+give-way step - bounded or not - does not move them. The next instrument is the apply-stamp path in `move_bodies`, exactly
+where D192's trace ended ("the refusal is downstream of `collide`").
+
+**The eight red tests, by cause:** `build` (a house not finished - the same door jam at a build site), `three_gatherers`
+and `a_woodcutter_whose_tree_runs_out...` (the jam), `six_settled_men_hold_their_places` and `ten_men_work_one_bush_a_body_apart`
+(capacity/placement expectations written for 0.40 spacing), `the_tile_holds_as_many_woodcutters` and
+`ten_men_touch_one_bush` (they compute places with `2 * radius` and expect 10-11 where the engine now has 7 - the game's own
+number), and `movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives` (pins the withdrawn rule).
