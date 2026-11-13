@@ -130,3 +130,34 @@ and `a_woodcutter_whose_tree_runs_out...` (the jam), `six_settled_men_hold_their
 (capacity/placement expectations written for 0.40 spacing), `the_tile_holds_as_many_woodcutters` and
 `ten_men_touch_one_bush` (they compute places with `2 * radius` and expect 10-11 where the engine now has 7 - the game's own
 number), and `movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives` (pins the withdrawn rule).
+
+## Fourth pass: there was no deadlock, and two of the reds were tests written for the old geometry
+
+**The "two men on one tile" deadlock was not a deadlock.** The committed test sampled **tick 1,200** and demanded three men
+standing at the bush at that instant. Measured over the whole run on this branch, per tick:
+
+```
+men standing at the bush: {0: 337, 1: 213, 2: 49, 3: 601}   all_three = 601 of 1,200
+closest pair over the whole run: 0.400 tiles  (exactly the reach, never inside it)
+```
+
+Three gatherers cycle - chop, carry, walk to the town centre, walk back - so a single sample catches one of them on the road.
+**The `WaitOwnTile`/`GiveWayOwnTile` steps were a commuting man squeezing past a working one**, and the three give-way
+variants tried earlier were answering a problem that did not exist. `three_gatherers_on_one_bush_do_not_pile_up` now measures
+the run: all three on the bush on at least 500 of 1,200 ticks, and no pair closer than 0.39 - it passes at **601** and **0.400**.
+
+**My own error, and it matters because it produced a wrong number twice.** I ran two probes while the working tree was on
+`main` rather than on this branch, and read them as D200 results: they reported a **0.038-tile** overlap and a different
+histogram. Both were `main`'s behaviour (friends passing through). Re-run on the branch they are 0.400 and 601/1,200. The
+lesson is mechanical: `git branch --show-current` before quoting a measurement, because the tree is the instrument.
+
+**Two tests were computing the capacity themselves and had drifted.** `gather_ring::the_tile_holds_as_many_woodcutters_as_touch_it`
+and `gather_touching::ten_men_touch_one_bush...` called `touching_places` with `2 * radius` (a 0.40 spacing) and expected
+10-11; the engine now spaces places at the measured **0.66** and holds **7**. The first now asks the engine's own
+`touching_place_count`, so it cannot drift again; the second expects 7.
+
+**Suite: 81 test binaries green, 6 tests red** (from 8). What is left: `build::a_content_pack...` (a house not finished - the
+one that may be a real defect), `ten_men_work_one_bush_a_body_apart` and `six_settled_men_hold_their_places` (written for
+0.40 spacing), `a_woodcutter_whose_tree_runs_out...`, `ten_men_touch_one_bush...` (a working man **0.174** from the tile -
+inside it, so a place or a settle is wrong somewhere), and `movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives`
+(which pins the withdrawn rule).

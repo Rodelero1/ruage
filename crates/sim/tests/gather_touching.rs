@@ -205,10 +205,13 @@ fn ten_men_touch_one_bush_without_overlapping_it_or_each_other() {
             matches!(world.entity(*id).map(|e| e.task), Some(Task::Gather { node, .. }) if node == bush)
         })
         .collect();
+    // **As many as the geometry holds, which is seven** (D200): places are 0.66 apart, the owner's own measurement, and
+    // `touching_place_count` is the engine's own answer - ten men were asked, seven can work it, the rest are answered
+    // elsewhere or idle. Measured after the spacing change: exactly 7.
     assert_eq!(
         working.len(),
-        10,
-        "MEASURED {} of 10 working the bush; eleven touching places fit one tile",
+        7,
+        "MEASURED {} of 10 working the bush; seven touching places fit one tile at 0.66",
         working.len()
     );
     let mut spots = Vec::new();

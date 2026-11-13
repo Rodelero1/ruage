@@ -181,81 +181,57 @@ fn three_gatherers_on_one_bush_do_not_pile_up() {
             })
             .expect("a gather order");
     }
+
+    // **Measured over the run, not sampled at one tick** (D200). Three gatherers cycle - chop, carry, walk to the town
+    // centre, walk back - so a single sample catches one of them on the road; the version of this test that sampled tick
+    // 1,200 called a carrier a deadlock. Measured on this branch before the assertion was written: all three on the bush on
+    // **601 of 1,200** ticks, and the closest pair over the whole run **0.400** - exactly the reach, never inside it.
+    let tile = world.resource_tiles(node)[0];
+    let mut all_three = 0u32;
+    let mut closest = f64::MAX;
     for _ in 0..1_200 {
         world.step().expect("a tick");
-    }
-    // **Only the men at work**: a villager walking in or out crosses other ground, and a crossing is a moment rather than a
-    // place. What must never happen is two men *working the same bush* inside each other.
-    let spots: Vec<(Fixed, Fixed)> = ids
-        .iter()
-        .filter(|id| {
-            world.entity(EntityId(**id)).is_some_and(
-                |entity| matches!(entity.task, Task::Gather { node: n, .. } if n == node),
-            )
-        })
-        .filter_map(|id| world.position(EntityId(*id)))
-        .filter(|spot| {
-            // **Touching the tile** (D192): 0.20 of a tile from its border, whatever part of the border he is against.
-            let tile = world.resource_tiles(node)[0];
+        let mut on = 0u32;
+        for id in ids {
+            let Some(p) = world.position(EntityId(id)) else {
+                continue;
+            };
+            let working = world
+                .entity(EntityId(id))
+                .is_some_and(|e| matches!(e.task, Task::Gather { node: n, .. } if n == node));
             let clearance = ruage_sim::tiles::distance_to_tile(
-                *spot,
+                p,
                 (i64::from(tile.0), i64::from(tile.1)),
-                world.scale(),
+                scale,
             );
-            (world.scale() / 8..=world.scale() / 3).contains(&clearance)
-        })
-        .collect();
-    // **The message names the rule and the measurement** (D193): "still in the world" was a lie - a man who is alive but
-    // two tiles away from his place failed the same assertion with a sentence that said nothing.
-    let detail: Vec<String> = ids
-        .iter()
-        .map(|id| {
-            let tile = world.resource_tiles(node)[0];
-            match world.entity(EntityId(*id)).map(|e| (e.task, e.position)) {
-                None => format!("{id}: gone"),
-                Some((task, at)) => {
-                    let clearance = ruage_sim::tiles::distance_to_tile(
-                        at,
-                        (i64::from(tile.0), i64::from(tile.1)),
-                        world.scale(),
-                    );
-                    format!(
-                        "{id}: {task:?} at ({:.2}, {:.2}), clearance {:.3}",
-                        at.0.raw() as f64 / world.scale() as f64,
-                        at.1.raw() as f64 / world.scale() as f64,
-                        clearance as f64 / world.scale() as f64
-                    )
+            if working && (scale / 8..=scale / 3).contains(&clearance) {
+                on += 1;
+            }
+        }
+        if on == 3 {
+            all_three += 1;
+        }
+        for (nth, a) in ids.iter().enumerate() {
+            for b in ids.iter().skip(nth + 1) {
+                if let (Some(pa), Some(pb)) = (
+                    world.position(EntityId(*a)),
+                    world.position(EntityId(*b)),
+                ) {
+                    let dx = (pa.0.raw() - pb.0.raw()) as f64 / scale as f64;
+                    let dy = (pa.1.raw() - pb.1.raw()) as f64 / scale as f64;
+                    closest = closest.min((dx * dx + dy * dy).sqrt());
                 }
             }
-        })
-        .collect();
-    assert_eq!(
-        spots.len(),
-        3,
-        "MEASURED {} of 3 men standing on the bush: {detail:?}",
-        spots.len()
-    );
-    // **All three gather the one bush** (D186): the ring round a source square holds eighteen men, so three is a small crowd.
-    let working = world
-        .entities()
-        .iter()
-        .filter(|entity| ids.contains(&entity.id.0))
-        .filter(|entity| matches!(entity.task, Task::Gather { node: at, .. } if at == node))
-        .count();
-    assert_eq!(
-        working, 3,
-        "{working} villagers are gathering the one bush; the geometry takes eleven"
-    );
-    // ... and whatever they are doing, no two bodies share the same ground.
-    for a in 0..spots.len() {
-        for b in (a + 1)..spots.len() {
-            let split = apart(spots[a], spots[b], scale);
-            assert!(
-                split >= 0.36,
-                "villagers {a} and {b} stand {split:.2} tiles apart - their bodies overlap on screen"
-            );
         }
     }
+    assert!(
+        all_three >= 500,
+        "all three villagers worked the bush on only {all_three} of 1,200 ticks (measured 601)"
+    );
+    assert!(
+        closest >= 0.39,
+        "two villagers came {closest:.3} tiles apart - their bodies overlap on screen (measured 0.400)"
+    );
 }
 
 /// The same one-tree map with the tree standing for **food** (a bush), which has no hit points and is foraged straight away.
