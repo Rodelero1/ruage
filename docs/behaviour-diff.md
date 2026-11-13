@@ -147,3 +147,19 @@ Consequences worth acting on rather than re-deriving:
    function by string, even after Ghidra renumbers its own `FUN_` names.
 4. The corpus itself is **install-derived and never committed** (D8/D22): 72 MB in `/opt/data/tools/rea/pseudo-aokhd`, the
    index in `/opt/data/tools/rea/source-path-index.txt`, both regenerable in ten minutes by the script named below.
+
+**Row 2, call sites read (2026-11-13).** The five callers of `0x744d60`, and what each does with it:
+
+| caller | call | shape |
+|---|---|---|
+| `0x744ff0` | `FUN_00744d60(param_1, 0, ...)`, multiplier `0x3f800000` (1.0) | thin wrapper: fills the three `(class, amount)` pairs and returns **their sum** |
+| `0x745060` | same, multiplier 1.0 | the same wrapper with its arguments in a different order |
+| `0x741a30` | two calls, one with a literal `0x26d` (621), both at 1.0 | a 6.7 KB function that builds records; the plausible combat path |
+| `0x6bb100` | `FUN_00744d60()` with no arguments at all | almost certainly a mis-attributed call (the listing shows no argument setup) |
+| `0x744d60` | itself | builds the picture: three pairs at `+0x18c/+0x18e`, `+0x192/+0x194`, `+0x198/+0x19a`, per-class armour from the float table at `+0x3c`, leftover folded into **class 3**, and every entry below 1 **dropped** (`class = -1`) |
+
+**So the multiplier is 1.0 at every call site** - nothing scales damage here - and the sum of the surviving classes is what the
+wrapper returns. The shape difference already registered stands: a **per-entry drop**, where `combat.toml` floors the **total**
+at 1, so an attack wholly absorbed by armour deals **0** in the game and **1** to us. What is still open is only *which* caller is
+combat's: `0x741a30` is the candidate, and the corpus has no callers for it, so the next step is a vtable or a virtual-call
+resolve rather than another string search.
