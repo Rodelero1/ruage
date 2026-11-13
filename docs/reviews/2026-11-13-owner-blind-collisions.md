@@ -737,3 +737,26 @@ where he happens to stand.
 
 Reverted, so the tree stays at the measured `118 green / 4 red`. The shape to build next is written here rather than in a comment
 in the code, because the next attempt should start from the numbers above, not from scratch.
+
+## Twenty-fifth pass: sticky, book-aware, and still four of ten - the capacity is notional
+
+Built the corrected shape: a full second unseated before standing down (`UNSEATED_TICKS = 20`), a booked place that cannot be
+reached counting as unseated, the booking released when the man stands down, and `seat_the_waiting` calling a man back only when
+the book shows a place free on his node.
+
+```
+MEASURED 4 of 10 men working the bush; the ring holds 7 at 0.66 spacing
+MEASURED 4 men working the bush and 7 places held
+```
+
+**Unchanged, and this is the finding rather than a failure of the plumbing:** the ring's capacity is **notional**. Seven points
+exist on the outline, but when bodies crowd the node only four of them can actually be stood on, and a man walking to the other
+three is refused by the bodies in the way. Counting ring points therefore over-seats the node, and any policy that trusts the
+count - crowd, wait, or idle - inherits the error.
+
+**What the game must be doing (to be confirmed against the binary):** capacity is not a property of the ring alone; it is how many
+bodies can stand at the node *given the bodies already there*. That is not a number this engine computes anywhere, and computing it
+is the real task - `standoff_point` answers it one man at a time, which is why the book and the crowd disagree.
+
+**Reverted**, so the tree stays at the measured `118 green / 4 red` rather than shipping four-of-ten. The four reds stand as the
+record of the gap: content-pack house, the ten-men bush (0.067 overlap), the woodcutter joining a patch, and the reservation book.
