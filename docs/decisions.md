@@ -4918,3 +4918,27 @@ Review: `docs/reviews/2026-11-13-the-standoff-is-measured.md`.
 
 **Commits us to.** Any ring measurement quotes its band and its window, and a band that matches `0.5`, `1.0` or `1.414`
 exactly is a reason to suspect the tile stream rather than a body.
+
+### D200 - collisions are owner-blind; a friend is a wall, and the winner is not the match outcome
+
+**The ruling** (owner, 2026-11-13): *"Adopt original game behaviour. Don't make difference of friend or foe as in original
+game."* And, on what to do when fidelity costs the acceptance run: *"For now, we're just testing functionality... functionality
+implemented items is enough"* - match resolution is not the acceptance test at this stage.
+
+**What the binary says, and it agrees.** `FUN_008a4360`'s collision block classifies each collision by **unit id against the
+order's target** and nothing else; there is no player, team or alliance test anywhere in it, and the collision query is issued
+with an owner sentinel rather than the mover's player (`docs/movement-in-the-binary.md`, read 2026-11-13). So a friend is a
+non-past collision exactly like an enemy, and the original's answer is to **repath** around it, not to pass through it.
+
+**This withdraws D189's point 1** ("your own units are not walls"). That rule was chosen to make a crowd deliverable, not
+because the game does it, and it let a walker pass through a friend for 300 ticks (measured: **0.307 tiles at tick 79**
+against the 0.4 two footprints need, test `collision::a_walker_never_ends_a_tick_inside_a_friend`).
+
+**Built, measured and parked** on `d189-owner-blind` (`eaa2d98`): `collision` 4/4 and `evasion` 6/6 green, `made_room` 0 -> 24,
+repaths 409 -> 45, and the acceptance match ends **`players=2`** where `main` ends `players=1`. Per the ruling above that is
+**not** the blocker any more. The blocker is functional: our gather places are spaced **one body apart (0.40)**, which is now
+exactly the reach that separates bodies, so a man cannot stand on the place next to a standing friend -
+`three_gatherers_on_one_bush_do_not_pile_up` delivers 1 of 3. The game spaces its working men at **0.661-0.663** (owner's
+saves, D199). Places must be spaced by more than the reach; that slice lands the rule.
+
+**Full measurement and the landing plan:** `docs/reviews/2026-11-13-owner-blind-collisions.md`.

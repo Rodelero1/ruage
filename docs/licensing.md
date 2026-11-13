@@ -205,3 +205,49 @@ spirit. It is not required for using a published file format.
 jurisdictions; nothing relevant to twenty-five-year-old RTS mechanics is in play here), trademarks
 (the game's name and art are not ours, which is what D8 and D21 already enforce), and the fact that
 those projects' *assets* are licensed to them by the game's owner, not by their GPL.
+
+## The save reader: what the decision actually is (2026-11-13)
+
+D4 = B keeps `docs/mechanics/`, SPEC §3/§4, `docs/oracle.md` and `config/gamedata/` out of the published set, but it does not
+say where a **format reader** belongs. `crates/save` + `--load` needs an answer before any code ships, so here is the question
+split into the parts that actually differ.
+
+**What the reader is.** `tools/savegame.py` and `docs/save-format.md` describe a container (raw DEFLATE), a versioned header
+(`VER 9.4`, a float32 save version), a `0x0A60`-framed string record, and a world section with a turn counter and 229-byte
+object records. Every one of those facts was obtained by **reading the game's loader and writer as behaviour** - what they
+compare, what version they refuse, which fields they branch on - and then by measuring the owner's own files. No decompiled
+text is reproduced anywhere in the reader or its documentation.
+
+**Where the legal weight actually sits.** Three different regimes, and only one of them is about the code:
+
+| Question | Regime | Answer |
+|---|---|---|
+| may we decompile to learn the format? | Software Directive 2009/24/EC Art. 6 | yes - interoperability, lawful user, indispensable information |
+| may we write and publish our own reader from that understanding? | Art. 6 + case law on functionality (CJEU *SAS v WPL*, 2012: functionality, a language and a file format are not protected expression) | yes - a format description is functional, not the program's expression |
+| may we publish a save file, or a test fixture made from one? | Database Directive 96/9/EC Art. 7 + D8 | **no** - that is the game's output and player content; it is the substantial-extraction case |
+
+So the risky act is **shipping artifacts**, not shipping a parser. The parser is the same posture as Wine reading PE files or
+openage reading `.slp`: an independently written description of a format, with the original's bytes and code left behind.
+
+### The options
+
+| | Where the reader lives | `--load` for a public clone | Licence consequence | Risk |
+|---|---|---|---|---|
+| **A** | `crates/save` in the engine | yes | engine stays MIT/Apache | the reader's field offsets were learned by decompilation; a strict reading of Art. 6's "do not distribute the information obtained where it reproduces the expression" can be raised, and answered with *functional, not expressive* - the SAS line - plus the provenance record |
+| **B** | the tooling repository (GPL-3.0), beside the importer | no: `save → TOML/JSON` becomes a build step | mirrors D12 exactly; engine keeps linking nothing | none that is new: the same bastion the dat parser already sits behind |
+| **C** | nowhere - local scratch only | no | none | `--load` and the snapshot oracle stay unshipped, which is today's state |
+| **D** | not built | - | - | the only oracle that can prove a mechanic per-tick is lost |
+
+**Recommendation: B now, A later, and only if the engine is published.** B unblocks the work this week - the 18 saves, the
+tick counter, stockpiles, the entity list - inside the repository boundary that already exists for the dat, and it makes no
+publishing decision about decompiled-derived offsets. A becomes a packaging change (move the module, keep the licence split)
+if and when the engine goes public, and it should carry the provenance paragraph that says the offsets came from the game's
+loader *as behaviour*, with the function addresses cited as evidence rather than as code.
+
+Three things are genuinely the owner's, and nothing in the binary answers them:
+
+1. **Does `--load` have to exist in the published engine, or is a tool-side conversion enough?** (A vs B.)
+2. **Is the engine being published at all yet**, and if so is a save reader inside or outside that set?
+3. **Is the provenance rule acceptable** - format facts cited as behaviour, no decompiled text, no fixtures committed,
+   synthetic tests plus SHA-256-keyed real-fixture tests that skip when the install is absent (the shape `tools/savegame.py`
+   already uses)?
