@@ -1000,6 +1000,9 @@ pub struct World {
     garrison_eject_at: Fixed,
     /// A route and the bodies it was planned around (D98a).
     pub(crate) paths: BTreeMap<EntityId, Route>,
+    /// **How many consecutive ticks a body has been refused by another body** (D200). Not hashed: it is a count of waiting,
+    /// not a position, and a route that is stalled for ever shows up in behaviour rather than in the state hash.
+    pub(crate) stalled: BTreeMap<EntityId, u32>,
     /// How many times a blocked unit has re-planned its route. **Instrumentation, not state**: nothing reads it and it
     /// is not hashed; a test counts it to prove a known obstacle is not re-planned every tick (D98a).
     repath_count: u64,
@@ -1506,6 +1509,7 @@ impl World {
             accuracy_scatter: 0,
             garrison_eject_at: Fixed::ZERO,
             paths: BTreeMap::new(),
+            stalled: BTreeMap::new(),
             repath_count: 0,
             step_counts: [0; 13],
             tracing_steps: false,

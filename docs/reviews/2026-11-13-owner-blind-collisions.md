@@ -441,3 +441,29 @@ tile edge share a tile far more often than the phrase "corner case" suggests.
 rest may be displaced at all. If yes, those three evasion tests change from "did not move" to "moved no more than a nudge and
 was never walked through", and the sheep test gains "unless it is being gathered". If no, the shared-tile freeze needs an
 answer that does not involve displacement, and none of the three routing attempts found one.
+
+## Fifteenth pass: the nudge, gated on being stuck - the freeze is gone and the old rules stand
+
+The nudge works only after a body has been refused **40 ticks in a row** (two seconds at 20 Hz), only for a body on the
+walker's **own tile**, only for a body with no route and no work place, and never for a body somebody is working (a sheep
+being sheared, a mine, an attack target). Everything else keeps the rule the engine already had: *the body it went round did
+not move*.
+
+```
+evasion                              11 passed     (including all three "did not move" rules)
+animals                               6 passed     (the sheep stands still)
+gather_motion                         5 passed     (the standing friend is no longer a dead end)
+research::a_trebuchet...              ok, 6.29 s   (main 5.86 s; before the nudge 46 s / 400,000 ticks / 200 of 400 banked)
+whole suite                          113 binaries green, 11 tests red
+```
+
+**The instrument that made the difference was `stalled`**: a per-entity count of consecutive `WaitBlocked` ticks, kept in the
+movement pass. `last_step` could not serve - it is only recorded when `trace_steps` is on, so the first version of this pass
+iterated an empty list on every real run and did nothing, which is a trap worth remembering.
+
+**The eleven reds are back to the six that were already there** (the content-pack house, the two tests written for 0.40 spacing,
+the woodcutter joining a patch, the reservation book, the withdrawn friend-on-goal rule) **plus five economy/skirmish rows**
+(`two_players` 790 of 900, `the_spear_line` 400 of 700, `both_sides_field_an_army`, `the_skirmish_only...`,
+`a_friend_on_the_goal_tile_is_a_take`). The economy rows are the next measurement: `repaths 29, made_room 0` at 400,000 ticks
+suggests a second stall, and the most likely candidate is the drop - carriers *are* posted (a `Return` task keeps its place),
+so the very rule that protects a worker's ground stops two carriers from nudging each other at the town centre.

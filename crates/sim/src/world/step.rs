@@ -48,6 +48,7 @@ impl World {
         // closes is solid for them.
         self.step_gates();
         self.move_bodies(work.deltas)?;
+        self.push_the_standing();
         // **Settle onto the work** (D169): a worker that has arrived walks the last third of a tile onto the point where its
         // body and the node's touch. It is a placement, not a walk, because the movement rules only call a route finished on a
         // tile centre - a route ending 0.7 of a tile out is a route a worker never finishes.
@@ -814,6 +815,109 @@ impl World {
         }
     }
 
+    /// **How long a body must be refused before the body in its way is nudged** (D200). Two seconds at 20 Hz: long enough
+    /// that a walker who can get round does get round - which is every case the evasion tests already cover, and why they
+    /// keep passing - and short enough that a man who cannot is not lost for the match.
+    const STALLED_TICKS: u32 = 40;
+
+    /// **A body with nothing to do is nudged out of a walker's way** (D200), but only after the walker has been refused for
+    /// `STALLED_TICKS` in a row. The engine's written rule until now is the opposite - *"the body it went round did not
+    /// move"*, asserted by three evasion tests and by the sheep being sheared - and that rule is right for every case where a
+    /// route exists. What it cannot cover is a body on the walker's **own tile**: there is no tile to plan round, so the
+    /// route runs through it and the step is refused for ever (measured: `WaitBlocked` for 400,000 ticks, the trebuchet
+    /// fixture 46 s against `main`'s 5.86 s).
+    ///
+    /// The shape is 0 A.D.'s, `CCmpUnitMotion_System.cpp`: a *static* body is displaced less than a walking one, damped, and
+    /// never far. Ours is a twentieth of a tile along the dominant axis, onto free ground, if no third body is there.
+    fn push_the_standing(&mut self) {
+        let step = (self.scale / 20).max(1);
+        let stuck: Vec<(EntityId, (Fixed, Fixed), i64)> = self
+            .stalled
+            .iter()
+            .filter(|(_, waited)| **waited >= Self::STALLED_TICKS)
+            .filter_map(|(id, _)| {
+                let entity = self.find(*id)?;
+                if entity.kind != EntityKind::Unit {
+                    return None;
+                }
+                self.paths.get(id)?.points.first()?;
+                Some((*id, entity.position, self.reach_between(*id, *id).raw()))
+            })
+            .collect();
+        for (id, here, reach) in stuck {
+            let window = reach + reach / 20;
+            let mut push: Option<(EntityId, (Fixed, Fixed))> = None;
+            for entity in self.entities() {
+                if entity.id == id || entity.kind != EntityKind::Unit {
+                    continue;
+                }
+                let (dx, dy) = (
+                    entity.position.0.raw() - here.0.raw(),
+                    entity.position.1.raw() - here.1.raw(),
+                );
+                if dx * dx + dy * dy > window * window {
+                    continue;
+                }
+                // **Only on the walker's own tile** - the case the planner cannot express.
+                if self.tile_of(entity.position) != self.tile_of(here) {
+                    continue;
+                }
+                // **Nothing is nudged that somebody is working.** A sheep being sheared, a mine nobody can move: a body
+                // that a gather order names is a target, not an obstacle.
+                let worked = self.entities().iter().any(|other| {
+                    matches!(
+                        other.task,
+                        Task::Gather { node, .. } | Task::Return { node, .. } if node == entity.id
+                    ) || matches!(other.task, Task::Attack { target, .. } if target == entity.id)
+                });
+                if worked {
+                    continue;
+                }
+                let busy = self
+                    .paths
+                    .get(&entity.id)
+                    .is_some_and(|route| !route.points.is_empty());
+                let posted = self.gather_place.contains_key(&entity.id);
+                if busy || posted {
+                    continue;
+                }
+                let away = if dx.abs() >= dy.abs() {
+                    (if dx >= 0 { step } else { -step }, 0)
+                } else {
+                    (0, if dy >= 0 { step } else { -step })
+                };
+                let to = (
+                    Fixed::from_raw(entity.position.0.raw() + away.0),
+                    Fixed::from_raw(entity.position.1.raw() + away.1),
+                );
+                push = Some((entity.id, to));
+                break;
+            }
+            let Some((other, to)) = push else { continue };
+            let (x, y) = self.tile_of_raw(to);
+            let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
+                continue;
+            };
+            if !self.is_free_ground(x, y) {
+                continue;
+            }
+            let crowded = self.entities().iter().any(|entity| {
+                entity.kind == EntityKind::Unit
+                    && entity.id != other
+                    && entity.id != id
+                    && (entity.position.0.raw() - to.0.raw()).pow(2)
+                        + (entity.position.1.raw() - to.1.raw()).pow(2)
+                        < reach * reach
+            });
+            if crowded {
+                continue;
+            }
+            if let Some(entity) = self.entities.iter_mut().find(|entity| entity.id == other) {
+                entity.position = to;
+            }
+        }
+    }
+
     fn settle_workers(&mut self, settles: Vec<Settle>) {
         // **Speed is per second**, and a step is exact: `step_towards` is the movement pass's own arithmetic, so this cannot be a
         // fraction of a scale unit and cannot overshoot. Reading the stored speed raw was the first attempt's `15,600`.
@@ -928,6 +1032,18 @@ impl World {
         for (index, id, dx, dy) in deltas {
             let (dx, dy, why) = self.collide(&mut pass, index, id, dx, dy);
             self.record_step(index, id, why);
+            // **Count the waits** (D200): a body refused by another body on this tick has been refused for one more tick
+            // than before; anything else clears the count. `last_step` cannot answer this - it is only recorded when
+            // `trace_steps` is on, which is why the first nudge pass saw an empty list on every real run.
+            match why {
+                crate::StepDecision::WaitBlocked => {
+                    let waited = self.stalled.get(&id).copied().unwrap_or(0).saturating_add(1);
+                    self.stalled.insert(id, waited);
+                }
+                _ => {
+                    self.stalled.remove(&id);
+                }
+            }
             if dx != Fixed::ZERO || dy != Fixed::ZERO {
                 movers.push(id);
             }
