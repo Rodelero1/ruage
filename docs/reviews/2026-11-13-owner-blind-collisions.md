@@ -684,3 +684,15 @@ re-choosing forever.
 **And the no-float test earned its keep:** it failed on `step.rs:927-929` - my own leftover `WRITER` probe prints, which
 convert to `f64` and were still in `settle_workers` after the trace was read. `no_float` scans the source, so an instrument left
 behind is caught by the build rather than by review. Removed; the probe now lives only in the review text.
+
+**Suite after the stale-place rule and the probe removal: 118 binaries green, 4 tests red.** The four are one family - *more men
+than the ring seats*: the content-pack house, the ten-men bush (closest pair 0.067), the woodcutter joining a patch, and the
+reservation book. Every one of them has **ten men ordered onto a ring of seven**, and the engine's current answer is to leave
+the three extra men holding `Gather` while standing where they can - which crowds the men who do hold places.
+
+**A refinement tried here:** the staleness window narrowed to the pair's reach (`0.4 + 0.05`) from the gather spacing (0.66),
+because places sit exactly 0.66 apart and every place looked stale to its own neighbour. `gather_standoff_rule` stays 5/5; the
+ten-men number did not move, so this is a correctness improvement without a measured effect yet.
+
+**What those four need is the *NoRoom* policy,** not another geometry rule: a worker who cannot be seated should stand outside and
+say so (idle), which is what the game does and what the owner's AI work will eventually own.

@@ -2005,7 +2005,13 @@ impl World {
                             other.id != entity.id
                                 && other.kind == EntityKind::Unit
                                 && {
-                                    let gap = crate::spacing(self.scale);
+                                    // **Just the pair's reach, not the gather spacing.** Places sit exactly `spacing` (0.66)
+                                    // apart, so asking for a body within 0.66 of a held place made every place look stale to its
+                                    // own neighbour: both re-chose, both moved, and the ten-men fixture came out at 0.067 tiles.
+                                    // A place is stale only when a body is close enough that the man cannot stand on it.
+                                    let gap = self
+                                        .reach_raw(entity.unit, other.unit)
+                                        + self.scale / 20;
                                     (other.position.0.raw() - place.0.raw()).pow(2)
                                         + (other.position.1.raw() - place.1.raw()).pow(2)
                                         < gap * gap
