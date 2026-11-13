@@ -22,6 +22,11 @@ woodcutter joining a patch, the reservation book, the withdrawn friend-on-goal r
 drop**: carriers hold places (`Return` keeps one, by design), and two carriers blocked by each other are both "busy", so
 neither is nudged and neither yields.
 
+**Measured since:** the stall is a **loaded carrier frozen in `Return`** - 200,000 raw (ten units, the full cap) carried, at
+`(11.85, 21.14)`, for 400,000 ticks, with three million left in the node. Not an empty return and not exhaustion: he cannot
+finish the approach to the drop. Next instrument: `trace_steps` on that fixture, printing his `last_step` and his distance to the
+drop's footprint - the same question that named the first stall.
+
 **Done when:** the five economy rows pass, the trebuchet fixture stays at ~6 s, and the branch merges.
 
 ### 2. Restate the three tests that pin the withdrawn rule
