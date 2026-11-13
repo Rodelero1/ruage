@@ -884,3 +884,31 @@ script on the branch seeds two sides.
 
 Workspace gate: `ruage-data`, `ruage-fixed`, `ruage-script`, `ruage-harness` all green (`EXIT 0`), `ruage-sim` 122/122, fmt and
 clippy clean.
+
+## The second diagnosis: six men on two tiles, and it is rule 4 that freezes them
+
+*Added after the merge was reverted. The first explanation - "the `Return` route aims at the building's blocked anchor" -
+is **not** what stops them, and the probe that produced it did not look at the decision.*
+
+`world.trace_steps()` at 400 s prints the movement pass's own answer for every loaded carrier:
+
+```
+id=3   at=(14.89,18.03) Gather@105   last=WaitOwnTile
+id=4   at=(14.33,18.41) Return@1     last=WaitOwnTile
+id=132 at=(14.56,17.63) Gather@105   last=WaitOwnTile
+id=134 at=(14.44,18.01) Return@1     last=WaitBlocked
+id=135 at=(14.16,17.65) Return@1     last=GiveWayOwnTile
+id=136 at=(14.86,18.43) Return@1     last=GiveWayOwnTile
+id=137 at=(14.48,17.21) Gather@105   last=WaitOwnTile
+```
+
+Seven villagers stand on **two tiles** - four on `(14, 18)`, three on `(14, 17)` - and every one of them is refused by a
+body on its **own tile** (rule 4). The rule's give-way step is bounded by the reach, the pairs are one body apart, so the
+bound returns zero: nobody moves, nobody re-plans (rule 4 returns before rule 7's repath), and the loads never reach the
+bank. That is why the bank reads 0 food at every report while wood climbs: the woodcutters' node is two men wide, the
+berry bush's is seven.
+
+**So the blocker is the crowd, not the drop site.** The packed 0.40 placement is geometrically legal (a tile holds four
+such bodies) but the movement pass cannot shuffle four men inside one tile, and `push_the_standing` skips every one of them
+because each holds a gather place. The measured shape is the one this note's own "capacity is notional" section predicted:
+the ring's places are real, the *traffic between them* is not.
