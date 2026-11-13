@@ -912,3 +912,60 @@ berry bush's is seven.
 such bodies) but the movement pass cannot shuffle four men inside one tile, and `push_the_standing` skips every one of them
 because each holds a gather place. The measured shape is the one this note's own "capacity is notional" section predicted:
 the ring's places are real, the *traffic between them* is not.
+
+## Re-land: a body on your own tile can be walked around sideways
+
+**Red first.** `crates/sim/tests/acceptance_economy.rs` (landed on `main` with the revert) at the reverted-merge tree:
+
+```
+the acceptance match banked no food by 400 s: 0 in the bank, 9 villagers
+the crew did not grow between 400 s and 800 s: 9 then 9
+```
+
+**The rule.** Rule 4 - a body on the mover's **own tile** - used to wait, and to give way, and nothing else. At one body
+apart the give-way bound returns zero, and rule 4 returns **before** rule 7's repath, so a man with a body on his own tile
+could not move and could not ask for a route: measured, five of seven villagers `WaitOwnTile` for the whole match, the bank
+at 0 food. A plan cannot leave the tile it starts in - but a **slide** can, and a sideways step *increases* the separation
+the bound exists to protect. Rule 4 now tries four directions before it gives up: the two axis steps (what rule 5 does) and
+then the two perpendiculars, taking the first that leaves the pair at or outside the reach and lands on a tile with no other
+body. Two runs choose the same step, because the order is fixed and every number is integer.
+
+**Green, measured on the same binary and the same command as the revert's numbers** (`--seed 7 --ticks 48000 --report 400`):
+
+```
+400s  wood   40 food    4 units 20 | 800s  wood   75 food   14 units 29 | 1200s wood  300 food  484 units 33
+1600s wood  415 food  594 units 37 | 2000s wood  805 food 1226 units 37 | 2400s wood 1215 food 1396 units 37
+tick=48000 entities=143 players=2 hash=2d93236ebb16961b repaths=373 made_room=140 repaths_body=77 repaths_ground=296
+```
+
+against `main`'s `food 56 / 397 / 667 / 388 / 650 / 690`, wood 2019, units 43, `entities=128 players=1
+hash=ace125e60ea99b60 repaths=579 made_room=0`. The branch now farms *more* food than `main` (1396 against 690) and holds
+less wood (1215 against 2019), which is a different opening, not a stalled one.
+
+**The match outcome, stated plainly rather than explained away.** The dump at 48,000 ticks:
+
+```
+p1 four spearmen in Attack at (45.4-46.3, 44.9-45.0)    p2 town centre id=6 hp 1451 of 2400, four villagers, one scout
+main: eleven soldiers stacked at (51.0, 43.0)           p2 eliminated
+```
+
+So the enemy is **not eliminated by 40:00** on the branch, and its town centre is at **60%** with four attackers on it -
+the siege is under way, the reinforcements arrive later because a friend is a wall. That is the owner's rule working as
+asked, and it is the one number a reader should weigh before landing: `players` is the highest surviving player id, so
+`players=2` here means "the enemy still stands at 40:00", not "the match is broken".
+
+## Performance
+
+The gate on this tree: `cargo test --workspace --no-fail-fast` **183 binaries, 0 failed, `EXIT 0`** (the count including the
+two new end-to-end guards), `cargo fmt --all -- --check` clean, `cargo clippy --workspace --all-targets -- -D warnings`
+clean. The acceptance run costs the same wall time as `main`'s (~40 s release) and its re-plans rise from the broken 31 to
+**373 against `main`'s 579**; `made_room` 0 -> 140 and `repaths_body` 0 -> 77, which is the slide doing exactly what it is
+for: men separating instead of pressing. The tick cost of the four extra probes is bounded - they run only for a body that
+is on the mover's own tile and only when the give-way bound returned zero.
+
+## Stability
+
+Nothing is left red, and the two new guards are the reason this cannot regress quietly: they run the acceptance world itself
+(seed 7, the shipped `config/acceptance.toml`) and assert that the bank holds food at 400 s and that the crew has grown by
+800 s. They were watched failing on the merged-but-unfixed tree and passing here. Every rule withdrawn in this work stays
+recorded with the measurement that killed it, and the `no_float` test still scans production code for a leftover probe.

@@ -118,10 +118,7 @@ fn what_the_carriers_are_told() {
     let food = world.slot_of("food").expect("a food column");
     play(&mut world, &mut runner, 400 * u64::from(rate));
     for entity in world.entities() {
-        if entity.kind == ruage_sim::EntityKind::Unit
-            && entity.player == 1
-            
-        {
+        if entity.kind == ruage_sim::EntityKind::Unit && entity.player == 1 {
             println!(
                 "carry id={:?} at=({:.2},{:.2}) carry={} task={:?} last={:?}",
                 entity.id,

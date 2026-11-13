@@ -312,7 +312,38 @@ impl World {
         //     a body at rest will not get out of the way, and waiting on it is waiting for ever.
         if self.tile_of_raw(other_at) == self.tile_of_raw(here) && pass.moving.contains(&other) {
             if self.wait_or_give_way(id, other, &mut pass.refused) {
-                return give((dx, dy), StepDecision::GiveWayOwnTile);
+                let delta = give((dx, dy), StepDecision::GiveWayOwnTile);
+                if delta.0 != Fixed::ZERO || delta.1 != Fixed::ZERO {
+                    return delta;
+                }
+            }
+            // **A body on the mover's own tile can still be walked around, sideways** (measured: seven villagers on two
+            // tiles at one node, five of them `WaitOwnTile` for forty game-minutes, the acceptance bank at **0 food** - the
+            // give-way bound is zero at one body apart and the rule returns before the repath, so nothing ever moves). A
+            // plan cannot leave the tile it starts in; a *slide* can, and a sideways step increases the separation the
+            // bound is protecting. Axis first, then the perpendicular, so two runs choose the same step.
+            for (sx, sy) in [
+                (dx.raw(), 0i64),
+                (0, dy.raw()),
+                (-dy.raw(), dx.raw()),
+                (dy.raw(), -dx.raw()),
+            ] {
+                if sx == 0 && sy == 0 {
+                    continue;
+                }
+                let (nx, ny) = (here.0.raw() + sx, here.1.raw() + sy);
+                let (gx, gy) = (other_at.0.raw() - nx, other_at.1.raw() - ny);
+                if gx * gx + gy * gy < reach * reach {
+                    continue;
+                }
+                let slide = (Fixed::from_raw(nx), Fixed::from_raw(ny));
+                if self.blocker_at(pass.bodies, id, radius, slide).is_none() {
+                    return (
+                        Fixed::from_raw(sx),
+                        Fixed::from_raw(sy),
+                        StepDecision::Slide,
+                    );
+                }
             }
             return (stop.0, stop.1, StepDecision::WaitOwnTile);
         }
