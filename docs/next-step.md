@@ -7,22 +7,27 @@ every red one crowd delivery or a test that pins the old spacing.
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
-### 1. Finish the six red tests *(branch work, no decision needed)*
+### 1. `WaitBlocked` forever - the avoid set calls a still-standing body "past" *(branch work, no decision needed)*
 
-**There was no deadlock.** Measured over 1,200 ticks on the branch: all three villagers work the bush on **601** ticks, and
-the closest pair over the whole run is **0.400** - exactly the reach. The `WaitOwnTile`/`GiveWayOwnTile` trace was a
-commuting man squeezing past a working one, and the old test's failure was a single sample catching him on the road.
+**The branch is 8x slower than `main` on one fixture and the economy starves**, and both are one bug:
 
-**Branch `d189-owner-blind` at `6fcc725`: 82 test binaries green, 5 tests red.** The 0.174 turned out to be a *walker* crossing
-near a node whose tile is not blocked ground - the assertion now reads the **reserved place**, and that found the real
-question: **one of ten men tasked to a bush holds no reserved place** (`EntityId(8504)`), so either a place is taken only at
-settle time or the reservation is dropped between order and settle. Two reds are tests written for 0.40 spacing
-(`ten_men_work_one_bush_a_body_apart`, `six_settled_men_hold_their_places`), one pins the withdrawn rule
-(`movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives`), one is the content-pack house, and one is the
-reservation question. Settle the reservation first - it is the only one that could change the engine.
+```
+main              research::a_trebuchet_cannot_be_trained_before_the_imperial_age   ok      5.86 s, 400 banked in 11,359 ticks
+d189-owner-blind  the same test                                                    FAILED  45-46 s, 400,000 ticks, 200 banked
+```
 
-**Done when:** every test on the branch is green or rewritten to the rule it actually asserts, the acceptance run is
-measured (`entities`, `repaths`, `made_room`, `hash`), and the branch merges.
+The villager ends frozen at `(16.235, 13.800)` with `WaitBlocked` **every tick for 400,000 ticks**, a live `Gather` order, a
+reserved place at `(19.80,15.41)` on the ring, and a **three-point route he will not walk**. Two repaths in the whole run,
+zero made room. Mechanics: `movement.rs` asks for a repath round a blocking body only when `!known` - and `known` is "*the
+blocker is already in the route's avoid set*", whose comment says a collision with that body is **past**. When the body is
+still standing there, nothing is ever asked for again, and rule 8's "routes round it from the next tick" never happens.
+
+**Done when:** a body at rest on a walker's waypoint is routed round (or yields within a bounded number of ticks), the
+trebuchet fixture is back at **11,359 ticks / ~6 s on the branch**, and the suite is green. Test-first: a gatherer with a
+friend standing still in his path, walked at 1,500 ticks, red today.
+
+Everything below step 2 is unchanged and still true: geometry is right (7 places at 0.66, closest pair 0.400, three men on a
+bush 601 of 1,200 ticks), the reservation book is inconsistent (raw 7 / live 4 / tasked 7) but is not what stops delivery.
 
 ### 2. Restate the three tests that pin the withdrawn rule
 
