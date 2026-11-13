@@ -467,3 +467,26 @@ the woodcutter joining a patch, the reservation book, the withdrawn friend-on-go
 `a_friend_on_the_goal_tile_is_a_take`). The economy rows are the next measurement: `repaths 29, made_room 0` at 400,000 ticks
 suggests a second stall, and the most likely candidate is the drop - carriers *are* posted (a `Return` task keeps its place),
 so the very rule that protects a worker's ground stops two carriers from nudging each other at the town centre.
+
+## Sixteenth pass: a loaded carrier, frozen at the drop - and one wrong field of mine
+
+The stall behind the economy reds, measured (`two_players_can_be_different_civilisations`, probe every 40,000 ticks):
+
+```
+t= 40000 stock=710  Gather{node 102} at=(10.80,20.41) carry=20000   node left 1,780,000
+t= 80000 stock=790  Return{node 104, drop 1} at=(11.85,21.14) carry=200000   node left 3,000,000
+t=120000..400000    identical to the line above
+```
+
+**He is carrying a full load - 200,000 raw, ten units, the whole `carry_cap` - and stands in `Return` for 400,000 ticks without
+reaching the town centre.** It is not a "returning nothing" state and not resource exhaustion (three million left in the node);
+it is a **carrier that cannot complete the approach to the drop**. The bank stops at 790 of 900 and the match starves.
+
+**My error, and it cost a build:** the probe read `entity.amount` and called it the carry. A villager's load is `carry`; `amount`
+is a *node's* remaining resource, so every reading was `0` and I "found" men walking home empty-handed. The fix I wrote for it
+flipped every `Return` - including loaded ones - back to `Gather`, which made the trebuchet fixture hang instead of run (a man
+would fill his hands, be told to gather again, and never deliver). Reverted. The test that "proved" the bug asserted on the same
+wrong field; it now reads `carry` and passes, and it stays as a guard, not as evidence.
+
+**Next instrument:** `trace_steps` on this fixture, printing the carrier's `last_step` and his distance to the drop's footprint -
+the same sentence that named the first stall (`WaitBlocked`) should name this one.

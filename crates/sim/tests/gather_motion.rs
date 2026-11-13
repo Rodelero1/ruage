@@ -482,3 +482,64 @@ fn a_gatherer_walks_round_a_friend_standing_in_his_path() {
         world.last_step(walker)
     );
 }
+
+/// **A villager is never left walking home with nothing to carry** (D200). Measured on the `two_players` fixture: a villager
+/// frozen in `Task::Return { node, drop }` with **carry = 0** at `(11.85, 21.14)` for **400,000 ticks**, the bank stuck at 790
+/// of 900 - every deposit after that never happens, and the match starves. A return with an empty load has nothing to deliver
+/// and nothing to do; it is not a state the engine should be able to hold.
+#[test]
+fn a_villager_is_never_stuck_returning_nothing() {
+    let Some(mut world) = world_of(MAP_BUSH) else {
+        return;
+    };
+    let scale = world.scale();
+    let node = world
+        .entities()
+        .iter()
+        .find(|entity| matches!(entity.kind, EntityKind::Resource(_)))
+        .map(|entity| entity.id)
+        .expect("a bush at (10,6)");
+    let villager = world.role_unit("villager").expect("villager");
+    let id = EntityId(9_690);
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: Some(villager),
+            position: (
+                Fixed::from_raw(6 * scale + scale / 2),
+                Fixed::from_raw(6 * scale + scale / 2),
+            ),
+            speed: Fixed::parse("0.8", scale).expect("a speed"),
+            hp: 25,
+            amount: 0,
+        })
+        .expect("a villager");
+    world.step().expect("the villager lands");
+    world
+        .submit_checked(Command::Gather { villager: id, node })
+        .expect("a gather order");
+    let mut empty_returns = 0u32;
+    let mut longest = 0u32;
+    for _ in 0..3_000 {
+        world.step().expect("a tick");
+        // **`carry`, not `amount`**: a villager's load is `carry`; `amount` is a *node's* remaining resource. The first
+        // version of this test read the wrong field, which is also how it came to "pass" against a fix that flipped every
+        // return order - including the loaded ones - back to gathering.
+        let empty = world.entity(id).is_some_and(|entity| {
+            entity.carry.raw() == 0 && matches!(entity.task, Task::Return { .. })
+        });
+        if empty {
+            empty_returns += 1;
+            longest = longest.max(empty_returns);
+        } else {
+            empty_returns = 0;
+        }
+    }
+    assert!(
+        longest <= 5,
+        "MEASURED the villager spent {longest} consecutive ticks walking home with nothing to carry; \
+         on the two_players fixture it never left that state in 400,000 ticks"
+    );
+}
