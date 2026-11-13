@@ -778,3 +778,12 @@ them - the gap is only 0.33 either side. Ten men fit round the tile only if the 
 whole ring at the finer spacing when a tenth man is refused. That is the second half of his rule, and it is a node-level operation
 (collect the live workers, sort by angle, re-assign from the packed ring), not another per-man search. The two-tier placement is
 the groundwork for it: the packed ring is already generated and already preferred last.
+
+**The second half is specified and not built.** A node that refuses a man must **re-lay its whole ring** at the packed spacing:
+take every live worker on the node, assign the packed places nearest-first, and let the settle walk them there. It is a
+node-level operation, so it needs the same rate limit the nudge uses (once per twenty ticks per node) or the ring will shuffle
+every tick. The trigger is the unseated counter of the previous pass - kept in this note rather than in the code, because the code
+that carried it was reverted when the count alone did not help.
+
+`gather_continuous::ten_men_work_one_bush_a_body_apart` now asserts **ten** working men with a **0.39** floor, so the harness for
+that work is already red and waiting.
