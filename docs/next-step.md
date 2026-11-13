@@ -1,5 +1,14 @@
 # OPEN - register row 2, then the Feudal gap
 
+**Ruling in flight: D189 is withdrawn, and its replacement is parked on a branch.** The owner: *"Adopt original game
+behaviour. Don't make difference of friend or foe as in original game."* The collision block was read and has no owner
+test (`docs/movement-in-the-binary.md`), so friends are walls. It is built on **`d189-owner-blind`** (commit `eaa2d98`) and
+**it cannot land yet**: the acceptance match ends `players=2` where `main` ends `players=1` — with friends blocking, the
+crowd machinery underneath is not good enough. The blocker is one number: our gather places are spaced one body apart
+(0.40), which *is* the new reach, so a man cannot stand on the place next to a standing friend; the game spaces its men at
+**0.66**. Full measurement and the three-step landing plan:
+`docs/reviews/2026-11-13-owner-blind-collisions.md` (on that branch).
+
 **State, 2026-11-13.** `main` at `a5812ad`, green (183 binaries, `EXIT 0`, clippy 0, fmt 0), acceptance hash
 `91572e72c33cee93`. Two things closed since the last entry:
 
