@@ -3421,7 +3421,6 @@ impl World {
         // 0.40 only when the whole ring refuses. That is what lets ten men work a bush that seats seven comfortably.
         let comfort = spacing(scale);
         let packed = (2 * worker_radius).max(scale / 5);
-        let too_close = comfort;
         let centre = self.tile_centre(self.tile_of(target));
         let slack = scale * GATHER_WALK_SLACK_MILLI / 1000;
         let straight = integer_sqrt(
@@ -3438,67 +3437,67 @@ impl World {
             ));
         }
         for gap in [comfort, packed] {
-        let mut best: Option<(i64, (Fixed, Fixed))> = None;
-        for point in candidates.iter().copied() {
-            let (px, py) = (point.0.raw(), point.1.raw());
-            let away = integer_sqrt((px - from.0.raw()).pow(2) + (py - from.1.raw()).pow(2));
-            if best.as_ref().is_some_and(|(closest, _)| away >= *closest) {
-                continue;
+            let mut best: Option<(i64, (Fixed, Fixed))> = None;
+            for point in candidates.iter().copied() {
+                let (px, py) = (point.0.raw(), point.1.raw());
+                let away = integer_sqrt((px - from.0.raw()).pow(2) + (py - from.1.raw()).pow(2));
+                if best.as_ref().is_some_and(|(closest, _)| away >= *closest) {
+                    continue;
+                }
+                if away > straight + slack {
+                    continue;
+                }
+                let (Ok(x), Ok(y)) = (
+                    u16::try_from(px.div_euclid(scale)),
+                    u16::try_from(py.div_euclid(scale)),
+                ) else {
+                    continue;
+                };
+                if !self.tile_walkable(x, y) {
+                    continue;
+                }
+                let on_site = self.foundations.iter().any(|site| {
+                    self.footprint_rect(*site)
+                        .is_some_and(|(ax, ay, wide, tall)| {
+                            x >= ax
+                                && x < ax.saturating_add(wide)
+                                && y >= ay
+                                && y < ay.saturating_add(tall)
+                        })
+                });
+                if on_site {
+                    continue;
+                }
+                let near = |point: (Fixed, Fixed)| -> bool {
+                    let (bx, by) = (point.0.raw() - px, point.1.raw() - py);
+                    bx * bx + by * by < gap * gap
+                };
+                if self
+                    .entities
+                    .iter()
+                    .any(|other| other.id != worker && near(other.position))
+                {
+                    continue;
+                }
+                if taken
+                    .iter()
+                    .any(|(other, point)| *other != worker && near(*point))
+                {
+                    continue;
+                }
+                if self.gather_place.iter().any(|(other, (at, held))| {
+                    *other != worker
+                        && *at == node
+                        && near((Fixed::from_raw(held.0), Fixed::from_raw(held.1)))
+                        && self.place_is_live(*other, node)
+                }) {
+                    continue;
+                }
+                if check_path && !self.can_reach(from, point) {
+                    continue;
+                }
+                best = Some((away, point));
             }
-            if away > straight + slack {
-                continue;
-            }
-            let (Ok(x), Ok(y)) = (
-                u16::try_from(px.div_euclid(scale)),
-                u16::try_from(py.div_euclid(scale)),
-            ) else {
-                continue;
-            };
-            if !self.tile_walkable(x, y) {
-                continue;
-            }
-            let on_site = self.foundations.iter().any(|site| {
-                self.footprint_rect(*site)
-                    .is_some_and(|(ax, ay, wide, tall)| {
-                        x >= ax
-                            && x < ax.saturating_add(wide)
-                            && y >= ay
-                            && y < ay.saturating_add(tall)
-                    })
-            });
-            if on_site {
-                continue;
-            }
-            let near = |point: (Fixed, Fixed)| -> bool {
-                let (bx, by) = (point.0.raw() - px, point.1.raw() - py);
-                bx * bx + by * by < gap * gap
-            };
-            if self
-                .entities
-                .iter()
-                .any(|other| other.id != worker && near(other.position))
-            {
-                continue;
-            }
-            if taken
-                .iter()
-                .any(|(other, point)| *other != worker && near(*point))
-            {
-                continue;
-            }
-            if self.gather_place.iter().any(|(other, (at, held))| {
-                *other != worker
-                    && *at == node
-                    && near((Fixed::from_raw(held.0), Fixed::from_raw(held.1)))
-                    && self.place_is_live(*other, node)
-            }) {
-                continue;
-            }
-            if check_path && !self.can_reach(from, point) {
-                continue;
-            }
-            best = Some((away, point));
-        }
             if let Some((_, point)) = best {
                 return Some(Standoff::Point(point));
             }

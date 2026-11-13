@@ -854,3 +854,18 @@ runs.
 ```
 whole suite   122 binaries green, 0 failed, EXIT 0
 ```
+
+## Performance
+
+The gate run on the finished branch: `cargo clippy --workspace --all-targets -- -D warnings` clean, `cargo fmt --all --check`
+clean, and `cargo test -p ruage-sim` **122 binaries green, 0 failed, EXIT 0** (from 79 green / 8 red at the start of the work).
+The trebuchet fixture - the one that measured the regression - is **6.29 s** against `main`'s 5.86 s for the same work, and the
+per-tick cost of the new passes is bounded: `push_the_standing` and `step_out_of_the_ring` run only for men already in
+`stalled`/unseated state, and `maybe_respread` is rate-limited to once per twenty ticks per node.
+
+## Stability
+
+Nothing is left red: the whole simulation suite passes, `no_float` passes (it caught a leftover `f64` probe in `settle_workers`
+during this work), and every rule that was withdrawn is recorded with the measurement that killed it - the forty-tick ground
+re-plan, the frozen place holder, and the unbounded at-rest step. The tree is fmt- and clippy-clean, which is what the merge gate
+requires.

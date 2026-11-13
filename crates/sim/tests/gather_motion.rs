@@ -213,10 +213,9 @@ fn three_gatherers_on_one_bush_do_not_pile_up() {
         }
         for (nth, a) in ids.iter().enumerate() {
             for b in ids.iter().skip(nth + 1) {
-                if let (Some(pa), Some(pb)) = (
-                    world.position(EntityId(*a)),
-                    world.position(EntityId(*b)),
-                ) {
+                if let (Some(pa), Some(pb)) =
+                    (world.position(EntityId(*a)), world.position(EntityId(*b)))
+                {
                     let dx = (pa.0.raw() - pb.0.raw()) as f64 / scale as f64;
                     let dy = (pa.1.raw() - pb.1.raw()) as f64 / scale as f64;
                     closest = closest.min((dx * dx + dy * dy).sqrt());
@@ -270,12 +269,6 @@ player = 2
 x = 16
 y = 1
 "#;
-
-fn apart(a: (Fixed, Fixed), b: (Fixed, Fixed), scale: i64) -> f64 {
-    let dx = (a.0.raw() - b.0.raw()) as f64 / scale as f64;
-    let dy = (a.1.raw() - b.1.raw()) as f64 / scale as f64;
-    (dx * dx + dy * dy).sqrt()
-}
 
 /// **No tick may move a gatherer further than its own speed.** A teleport is exactly that, and the owner sees it as a jump towards the bush.
 ///
@@ -383,11 +376,8 @@ fn a_gatherer_five_tiles_away_reaches_his_node() {
     for tick in 0..1_500 {
         world.step().expect("a tick");
         let Some(p) = world.position(id) else { break };
-        let clearance = ruage_sim::tiles::distance_to_tile(
-            p,
-            (i64::from(tile.0), i64::from(tile.1)),
-            scale,
-        );
+        let clearance =
+            ruage_sim::tiles::distance_to_tile(p, (i64::from(tile.0), i64::from(tile.1)), scale);
         reach = reach.min(clearance as f64 / scale as f64);
         if clearance <= scale / 3 {
             arrived = Some(tick);
@@ -397,8 +387,14 @@ fn a_gatherer_five_tiles_away_reaches_his_node() {
     assert!(
         arrived.is_some(),
         "MEASURED he never reached the bush in 1,500 ticks; closest {reach:.2} tiles, at ({:.2},{:.2}); measured frozen on the trebuchet fixture for 400,000 ticks",
-        world.position(id).map(|p| p.0.raw() as f64 / scale as f64).unwrap_or(-1.0),
-        world.position(id).map(|p| p.1.raw() as f64 / scale as f64).unwrap_or(-1.0)
+        world
+            .position(id)
+            .map(|p| p.0.raw() as f64 / scale as f64)
+            .unwrap_or(-1.0),
+        world
+            .position(id)
+            .map(|p| p.1.raw() as f64 / scale as f64)
+            .unwrap_or(-1.0)
     );
 }
 
@@ -441,7 +437,10 @@ fn a_gatherer_walks_round_a_friend_standing_in_his_path() {
     }
     let standing = world.position(stander).expect("the stander");
     world
-        .submit_checked(Command::Gather { villager: walker, node })
+        .submit_checked(Command::Gather {
+            villager: walker,
+            node,
+        })
         .expect("a gather order");
     world.trace_steps();
     let tile = world.resource_tiles(node)[0];
@@ -449,12 +448,11 @@ fn a_gatherer_walks_round_a_friend_standing_in_his_path() {
     let mut arrived = None;
     for tick in 0..1_500 {
         world.step().expect("a tick");
-        let Some(p) = world.position(walker) else { break };
-        let clearance = ruage_sim::tiles::distance_to_tile(
-            p,
-            (i64::from(tile.0), i64::from(tile.1)),
-            scale,
-        );
+        let Some(p) = world.position(walker) else {
+            break;
+        };
+        let clearance =
+            ruage_sim::tiles::distance_to_tile(p, (i64::from(tile.0), i64::from(tile.1)), scale);
         closest = closest.min(clearance as f64 / scale as f64);
         if clearance <= scale / 3 {
             arrived = Some(tick);
@@ -477,8 +475,14 @@ fn a_gatherer_walks_round_a_friend_standing_in_his_path() {
     assert!(
         arrived.is_some(),
         "MEASURED the gatherer never reached the bush in 1,500 ticks; closest {closest:.2} tiles at ({:.2},{:.2}), last step {:?}",
-        world.position(walker).map(|p| p.0.raw() as f64 / scale as f64).unwrap_or(-1.0),
-        world.position(walker).map(|p| p.1.raw() as f64 / scale as f64).unwrap_or(-1.0),
+        world
+            .position(walker)
+            .map(|p| p.0.raw() as f64 / scale as f64)
+            .unwrap_or(-1.0),
+        world
+            .position(walker)
+            .map(|p| p.1.raw() as f64 / scale as f64)
+            .unwrap_or(-1.0),
         world.last_step(walker)
     );
 }

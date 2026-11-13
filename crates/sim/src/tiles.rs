@@ -176,7 +176,10 @@ fn grown_outline(tile: (i64, i64), radius: i64, scale: i64) -> Vec<(i64, i64)> {
     // Bottom-right: sin/cos of 0..90 degrees, from `(hi_x, lo_y - r)` to `(hi_x + r, lo_y)`.
     for degree in 0..=45usize {
         let (sin, cos) = (SIN[degree], SIN[45 - degree]);
-        push(hi_x + ceil_million(radius * sin), lo_y - ceil_million(radius * cos));
+        push(
+            hi_x + ceil_million(radius * sin),
+            lo_y - ceil_million(radius * cos),
+        );
     }
     let mut along = step;
     while along <= scale {
@@ -186,7 +189,10 @@ fn grown_outline(tile: (i64, i64), radius: i64, scale: i64) -> Vec<(i64, i64)> {
     // Top-right: from `(hi_x + r, hi_y)` to `(hi_x, hi_y + r)`.
     for degree in 0..=45usize {
         let (sin, cos) = (SIN[degree], SIN[45 - degree]);
-        push(hi_x + ceil_million(radius * cos), hi_y + ceil_million(radius * sin));
+        push(
+            hi_x + ceil_million(radius * cos),
+            hi_y + ceil_million(radius * sin),
+        );
     }
     let mut along = step;
     while along <= scale {
@@ -196,7 +202,10 @@ fn grown_outline(tile: (i64, i64), radius: i64, scale: i64) -> Vec<(i64, i64)> {
     // Top-left: from `(lo_x, hi_y + r)` to `(lo_x - r, hi_y)`.
     for degree in 0..=45usize {
         let (sin, cos) = (SIN[degree], SIN[45 - degree]);
-        push(lo_x - ceil_million(radius * sin), hi_y + ceil_million(radius * cos));
+        push(
+            lo_x - ceil_million(radius * sin),
+            hi_y + ceil_million(radius * cos),
+        );
     }
     let mut along = step;
     while along <= scale {
@@ -206,7 +215,10 @@ fn grown_outline(tile: (i64, i64), radius: i64, scale: i64) -> Vec<(i64, i64)> {
     // Bottom-left: from `(lo_x - r, lo_y)` back to `(lo_x, lo_y - r)`.
     for degree in 0..=45usize {
         let (sin, cos) = (SIN[degree], SIN[45 - degree]);
-        push(lo_x - ceil_million(radius * cos), lo_y - ceil_million(radius * sin));
+        push(
+            lo_x - ceil_million(radius * cos),
+            lo_y - ceil_million(radius * sin),
+        );
     }
     out
 }

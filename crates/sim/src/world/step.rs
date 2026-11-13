@@ -855,7 +855,9 @@ impl World {
         // **Nearest place first**, one per man: the packing is greedy, which keeps the assignment stable between re-lays.
         let mut assigned = 0usize;
         for id in workers {
-            let Some(at) = self.position(id) else { continue };
+            let Some(at) = self.position(id) else {
+                continue;
+            };
             let mut best: Option<(i64, usize)> = None;
             for (index, point) in places.iter().enumerate() {
                 let far = (point.0.raw() - at.0.raw()).pow(2) + (point.1.raw() - at.1.raw()).pow(2);
@@ -885,7 +887,10 @@ impl World {
     /// never far. Ours is a twentieth of a tile along the dominant axis, onto free ground, if no third body is there.
     fn push_the_standing(&mut self) {
         let step = (self.scale / 20).max(1);
-        let stuck: Vec<(EntityId, (Fixed, Fixed), i64, (Fixed, Fixed))> = self
+        /// A man who has been refused long enough for the body in his way to be moved: who, where, the pair's reach, and the
+        /// point he is trying to get to.
+        struct Stuck(EntityId, (Fixed, Fixed), i64, (Fixed, Fixed));
+        let stuck: Vec<Stuck> = self
             .stalled
             .iter()
             .filter(|(_, waited)| **waited >= Self::STALLED_TICKS)
@@ -897,14 +902,23 @@ impl World {
                 // **A jammed man may have no waypoint left** - the builder whose route is spent, the man whose order is
                 // simply held - so the direction comes from his task's goal when the route is empty. Requiring a waypoint is
                 // why the builder/walker deadlock was never nudged: the builder had none.
-                let next = match self.paths.get(id).and_then(|route| route.points.first().copied()) {
+                let next = match self
+                    .paths
+                    .get(id)
+                    .and_then(|route| route.points.first().copied())
+                {
                     Some(point) => point,
                     None => self.tile_centre(self.goal_of(entity)?.0),
                 };
-                Some((*id, entity.position, self.reach_between(*id, *id).raw(), next))
+                Some(Stuck(
+                    *id,
+                    entity.position,
+                    self.reach_between(*id, *id).raw(),
+                    next,
+                ))
             })
             .collect();
-        for (id, here, reach, next) in stuck {
+        for Stuck(id, here, reach, next) in stuck {
             let window = reach + reach / 20;
             let mut push: Option<(EntityId, (Fixed, Fixed))> = None;
             for entity in self.entities() {
@@ -948,12 +962,8 @@ impl World {
                     .get(&entity.id)
                     .is_some_and(|route| !route.points.is_empty());
                 let posted = self.gather_place.contains_key(&entity.id);
-                let jammed = self
-                    .stalled
-                    .get(&entity.id)
-                    .copied()
-                    .unwrap_or(0)
-                    >= Self::STALLED_TICKS;
+                let jammed =
+                    self.stalled.get(&entity.id).copied().unwrap_or(0) >= Self::STALLED_TICKS;
                 if posted || (busy && !jammed) {
                     continue;
                 }
@@ -1075,7 +1085,8 @@ impl World {
             let blocked = bodies.iter().any(|(other, at, other_unit)| {
                 *other != id && {
                     let reach = self.reach_raw(unit, *other_unit);
-                    (at.0.raw() - to.0.raw()).pow(2) + (at.1.raw() - to.1.raw()).pow(2) < reach * reach
+                    (at.0.raw() - to.0.raw()).pow(2) + (at.1.raw() - to.1.raw()).pow(2)
+                        < reach * reach
                 }
             });
             let (dx, dy) = if blocked {
@@ -1133,17 +1144,15 @@ impl World {
                 let inside = bodies.iter().any(|(other, at, other_unit)| {
                     *other != id && {
                         let reach = self.reach_raw(unit, *other_unit);
-                        (candidate.0.raw() - at.0.raw()).pow(2) + (candidate.1.raw() - at.1.raw()).pow(2)
+                        (candidate.0.raw() - at.0.raw()).pow(2)
+                            + (candidate.1.raw() - at.1.raw()).pow(2)
                             < reach * reach
                     }
                 });
                 if !inside {
                     break;
                 }
-                (dx, dy) = (
-                    Fixed::from_raw(dx.raw() / 2),
-                    Fixed::from_raw(dy.raw() / 2),
-                );
+                (dx, dy) = (Fixed::from_raw(dx.raw() / 2), Fixed::from_raw(dy.raw() / 2));
             }
             if (dx.raw() != 0 || dy.raw() != 0)
                 && let Some(entity) = self.find_mut(id)
@@ -1202,8 +1211,14 @@ impl World {
                 | crate::StepDecision::WaitGround
                 | crate::StepDecision::GiveWayOwnTile
                 | crate::StepDecision::GiveWay
-                    if dx == Fixed::ZERO && dy == Fixed::ZERO => {
-                    let waited = self.stalled.get(&id).copied().unwrap_or(0).saturating_add(1);
+                    if dx == Fixed::ZERO && dy == Fixed::ZERO =>
+                {
+                    let waited = self
+                        .stalled
+                        .get(&id)
+                        .copied()
+                        .unwrap_or(0)
+                        .saturating_add(1);
                     self.stalled.insert(id, waited);
                 }
                 _ => {
@@ -2077,26 +2092,23 @@ impl World {
                         // 0.20 and 0.243 tiles apart in three fixtures. A place taken once is taken for as long as the order
                         // stands, and `place_is_live` releases it the moment the man is re-tasked.
                         // **A place a body now stands on is stale** (D200). The place is a property of the order, but a neighbour
-                    // who has since walked onto it cannot be walked through: keeping it made a man settle **0.094** tiles
-                    // inside him. A held place with a body within the gather spacing is released and re-chosen from the ring.
-                    let owned = owned_place.filter(|place| {
-                        !self.entities.iter().any(|other| {
-                            other.id != entity.id
-                                && other.kind == EntityKind::Unit
-                                && {
+                        // who has since walked onto it cannot be walked through: keeping it made a man settle **0.094** tiles
+                        // inside him. A held place with a body within the gather spacing is released and re-chosen from the ring.
+                        let owned = owned_place.filter(|place| {
+                            !self.entities.iter().any(|other| {
+                                other.id != entity.id && other.kind == EntityKind::Unit && {
                                     // **Just the pair's reach, not the gather spacing.** Places sit exactly `spacing` (0.66)
                                     // apart, so asking for a body within 0.66 of a held place made every place look stale to its
                                     // own neighbour: both re-chose, both moved, and the ten-men fixture came out at 0.067 tiles.
                                     // A place is stale only when a body is close enough that the man cannot stand on it.
-                                    let gap = self
-                                        .reach_raw(entity.unit, other.unit)
-                                        + self.scale / 20;
+                                    let gap =
+                                        self.reach_raw(entity.unit, other.unit) + self.scale / 20;
                                     (other.position.0.raw() - place.0.raw()).pow(2)
                                         + (other.position.1.raw() - place.1.raw()).pow(2)
                                         < gap * gap
                                 }
-                        })
-                    });
+                            })
+                        });
                         let found = match owned {
                             Some(place) => Some(crate::Standoff::Point(place)),
                             None => {
@@ -2271,16 +2283,14 @@ impl World {
                     // goal itself holds a body. `reaches` alone never fires there, because no step can get through.
                     let pair = self.reach_raw(entity.unit, entity.unit);
                     let held = self.entities.iter().any(|other| {
-                        other.id != entity.id
-                            && other.kind == EntityKind::Unit
-                            && {
-                                let reach = self.reach_raw(entity.unit, other.unit).max(pair);
-                                let (gx, gy) = (
-                                    other.position.0.raw() - to.0.raw(),
-                                    other.position.1.raw() - to.1.raw(),
-                                );
-                                gx * gx + gy * gy <= reach * reach
-                            }
+                        other.id != entity.id && other.kind == EntityKind::Unit && {
+                            let reach = self.reach_raw(entity.unit, other.unit).max(pair);
+                            let (gx, gy) = (
+                                other.position.0.raw() - to.0.raw(),
+                                other.position.1.raw() - to.1.raw(),
+                            );
+                            gx * gx + gy * gy <= reach * reach
+                        }
                     });
                     let beside = held && {
                         let (gx, gy) = (
