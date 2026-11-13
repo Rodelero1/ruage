@@ -607,3 +607,30 @@ measures **0.094** - so the nudge is not the cause either. The test does not exi
 something introduced with the 0.66 spacing, the even-spread ring or D200 itself puts two men a tenth of a tile apart while both
 work, and the suspects that remain are the paths that *place* a body rather than step it (`reserve_places` landing a man on a
 point chosen before his neighbour arrived, `settle_workers`' ring-slide when the clamp halves a step it has already taken).
+
+## Twenty-first pass: the overlap is the unplaced man, and the place book holds four for six
+
+The pair, traced every tick (`trace_steps`, both men):
+
+```
+t=900..907   0/4  gap 0.094 <-> 0.099   a=Idle  b=Idle      (both working)
+PROBE places = [(9700, 9.80, 6.406), (9701, 9.877, 7.158), (9702, 10.594, 7.20), (9703, 10.781, 5.80)]
+```
+
+**Four places for six men.** Both men in the overlapping pair are `Idle` - the movement pass is not moving them, they are
+working - and the gap oscillates by five thousandths of a tile every tick, which is a man being pulled by something other than
+a step. The two men of the pair hold **no place at all**: they are the extra workers a four-place ring cannot seat, standing in
+the band anyway because a bush can be worked from anywhere inside the reach.
+
+So the overlap is not a stepping bug and not a place-sharing bug: it is **an unplaced man, working without a place, standing
+inside a placed one**. The settle clamps its own step (so placed men keep their distance); the extra workers reach the band by
+ordinary walking, and the walking path's at-rest rule takes an **unbounded** step when the body in the way cannot yield (D200
+rule 8) - which is exactly how a man ends up a tenth of a tile inside his neighbour.
+
+**Tried and reverted in this pass:** a floor on the ring's minimum spacing (`2 * radius` becomes `scale / 5` when content gives
+no radius - the ring was not the cause, the closest pair is unchanged at 0.094), and bounding the at-rest step again (also
+unchanged, because the two men alternate being the mover). Neither shipped.
+
+**The rule that follows:** an unplaced worker must stand at the pair's reach from the man on the place he would overlap, or be
+turned away from the ring - the same choice the game makes when a resource is full, and the one the AI work will eventually
+take over.
