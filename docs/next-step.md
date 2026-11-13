@@ -1,4 +1,4 @@
-# OPEN - step 1: two men on one tile cannot pass each other
+# OPEN - step 1: six tests, one of which may be a real defect
 
 **State, 2026-11-13.** `main` at `a722263`, green (183 binaries, `EXIT 0`, clippy 0, fmt 0), acceptance `91572e72c33cee93`.
 The owner-blind collision rule (D200) and the measured geometry are built on **`d189-owner-blind`**, `67dabd1`: gather places
@@ -7,24 +7,21 @@ every red one crowd delivery or a test that pins the old spacing.
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
-### 1. Unjam two men on one tile *(branch work, no decision needed)*
+### 1. Finish the six red tests *(branch work, no decision needed)*
 
-**Why:** the 8 red tests are this defect or a capacity written for 0.40 spacing. Until two bodies can swap places, no crowd
-can be delivered and the branch cannot land.
+**There was no deadlock.** Measured over 1,200 ticks on the branch: all three villagers work the bush on **601** ticks, and
+the closest pair over the whole run is **0.400** - exactly the reach. The `WaitOwnTile`/`GiveWayOwnTile` trace was a
+commuting man squeezing past a working one, and the old test's failure was a single sample catching him on the road.
 
-**Evidence so far, so it is not re-derived:** two villagers at one town centre's door, positions identical at tick 1,200 and
-2,400, `WaitOwnTile` on one and `GiveWayOwnTile` on the other **every tick**; the give-way step is bounded by the reach
-(0.40) and they are 0.394 apart, so the bound returns zero. **Three give-way variants were tried and reverted** - bounded,
-unbounded, unbounded-only-when-overlapped - the last one fixed the one-tile corridor (7,372 -> 8,000 apart) but not the jam.
-The refusal is **downstream of `collide`**, which is where D192's trace ended too.
+**Branch `d189-owner-blind` at `5099b4c`: 81 test binaries green, 6 tests red.** Two are tests written for 0.40 spacing
+(`ten_men_work_one_bush_a_body_apart`, `six_settled_men_hold_their_places`), one pins the withdrawn rule
+(`movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives`), one is a woodcutter joining a patch
+(`a_woodcutter_whose_tree_runs_out...`), and **two may be real defects**: `build::a_content_pack...` (a house never finished)
+and `ten_men_touch_one_bush...`, which measures a working man **0.174** from the tile - inside it - where a place is 0.20.
+Chase the last two first: they are the only rows that could be the engine rather than the test.
 
-**Where to look:** the apply-stamp path in `move_bodies`; whether `pass.moving` and the route's next waypoint agree; what
-`step_trace` says for both men on the tick the give-way is granted. Numbers in
-`docs/reviews/2026-11-13-owner-blind-collisions.md`.
-
-**Done when:** `three_gatherers_on_one_bush_do_not_pile_up` green (3 of 3 at their places), the content-pack house finished,
-`ten_men_work_one_bush_a_body_apart` and `six_settled_men_hold_their_places` green, no new red anywhere, and the acceptance
-run measured (`entities`, `repaths`, `made_room`, `hash`).
+**Done when:** every test on the branch is green or rewritten to the rule it actually asserts, the acceptance run is
+measured (`entities`, `repaths`, `made_room`, `hash`), and the branch merges.
 
 ### 2. Restate the three tests that pin the withdrawn rule
 
