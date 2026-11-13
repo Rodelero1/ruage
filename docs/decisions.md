@@ -5028,3 +5028,36 @@ the narrow one: omission has to be deliberate.
 **Commits us to.** A `clarify` form is never where a decision question goes; a question worth the owner's attention is
 worth the evidence hunt before it, and a hunt that found nothing is part of the question rather than a reason to skip it.
 
+
+### D200 - friends are solid: the owner's rule, and the crowd it has to carry
+
+**What it says.** A body blocks whoever it belongs to. The collision block in the original has no player, team or alliance
+test anywhere in it and its query passes an owner sentinel (`docs/movement-in-the-binary.md`), and the owner ruled on
+2026-11-13: *"Adopt original game behaviour. Don't make difference of friend or foe as in original game."* So `hostile` is
+gone from `collide`; a friend blocks, slides, gives way or re-paths exactly as an enemy does. **D189's "your own units are
+not walls" is withdrawn** - it was chosen to make a crowd deliverable, not because the game does it.
+
+**The rest of the rule, as built.** A body at rest is nudged only after **forty refused ticks**, only when it stands on the
+walker's own tile or his next waypoint, and never when a gather order names it. A place a body stands on is **stale** - a
+held place with a body inside the pair's reach is released and re-chosen. Placement is **comfortable 0.66 first, packed
+0.40 only when the ring refuses**, with a node-level re-lay at most once per twenty ticks. A `Return` aims at the walkable
+yard, not the building's blocked anchor. An order a standing friend blocks **finishes where the man stands**.
+
+**The rule that made it land.** Rule 4 - a body on the mover's **own tile** - used to wait, and to give way, and nothing
+else. At one body apart the give-way bound returns zero *and* rule 4 returns before rule 7's repath, so a man could neither
+move nor ask for a route: measured, seven villagers on two tiles round one berry bush, five of them `WaitOwnTile` for the
+whole match, and the acceptance bank at **0 food from 400 s to 2,400 s**. A plan cannot leave the tile it starts in; a
+**slide** can, and a sideways step increases the separation the bound protects. Rule 4 now tries the two axis steps and then
+the two perpendiculars, taking the first that keeps the pair outside the reach and lands on a clear tile.
+
+**What it costs, measured.** `--seed 7 --ticks 48000`: food `4 / 14 / 484 / 594 / 1226 / 1396` against `main`'s
+`56 / 397 / 667 / 388 / 650 / 690`, wood 1215 against 2019, `entities=143 players=2 hash=2d93236ebb16961b repaths=373
+made_room=140` against `entities=128 players=1 hash=ace125e60ea99b60 repaths=579 made_room=0`. The enemy is **not
+eliminated by 40:00** - town centre at 1451 of 2400 hp with four spearmen in `Attack` on it, where `main` had razed it with
+eleven soldiers. `players` is the highest surviving player id, so `players=2` means "the enemy still stands", not "the match
+is broken": with friends solid, an army arrives later and the match is slower, which is the owner's rule working as asked.
+
+**Commits us to.** A crowd fixture at one node must always be able to bank - the guard is
+`crates/sim/tests/acceptance_economy.rs`, which runs the acceptance world itself and was red on the first merge. And any
+future "the match no longer resolves" report quotes the **town centre's hp and the attackers on it**, not the `players`
+number alone.

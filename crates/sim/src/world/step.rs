@@ -26,6 +26,9 @@ impl World {
         let mut work = self.decide()?;
 
         self.reserve_places(std::mem::take(&mut work.places));
+        for node in std::mem::take(&mut work.respreads) {
+            self.maybe_respread(node);
+        }
 
         self.resume_fights(work.engaging, work.turning, work.homing);
 
@@ -48,6 +51,8 @@ impl World {
         // closes is solid for them.
         self.step_gates();
         self.move_bodies(work.deltas)?;
+        self.push_the_standing();
+        self.finish_blocked_orders();
         // **Settle onto the work** (D169): a worker that has arrived walks the last third of a tile onto the point where its
         // body and the node's touch. It is a placement, not a walk, because the movement rules only call a route finished on a
         // tile centre - a route ending 0.7 of a tile out is a route a worker never finishes.
@@ -814,6 +819,237 @@ impl World {
         }
     }
 
+    /// **How long a body must be refused before the body in its way is nudged** (D200). Two seconds at 20 Hz: long enough
+    /// that a walker who can get round does get round - which is every case the evasion tests already cover, and why they
+    /// keep passing - and short enough that a man who cannot is not lost for the match.
+    const STALLED_TICKS: u32 = 40;
+
+    /// **Re-lay a node's ring when it refuses a man** (D200, the owner's rule of 2026-11-13), at most once per twenty ticks:
+    /// every re-lay moves every man on the node, so it must not happen on consecutive ticks.
+    fn maybe_respread(&mut self, node: EntityId) {
+        const EVERY: u64 = 20;
+        let last = self.respread_at.get(&node).copied().unwrap_or(0);
+        if self.tick.saturating_sub(last) < EVERY {
+            return;
+        }
+        let scale = self.scale;
+        let packed = (scale / 5) * 2;
+        let mut places: Vec<(Fixed, Fixed)> = Vec::new();
+        for tile in self.resource_tiles(node) {
+            places.extend(crate::tiles::touching_places(
+                (i64::from(tile.0), i64::from(tile.1)),
+                packed / 2,
+                packed,
+                scale,
+            ));
+        }
+        let workers: Vec<EntityId> = self
+            .entities()
+            .iter()
+            .filter(|entity| matches!(entity.task, Task::Gather { node: at, .. } if at == node))
+            .map(|entity| entity.id)
+            .collect();
+        if places.is_empty() || workers.is_empty() {
+            return;
+        }
+        // **Nearest place first**, one per man: the packing is greedy, which keeps the assignment stable between re-lays.
+        let mut assigned = 0usize;
+        for id in workers {
+            let Some(at) = self.position(id) else {
+                continue;
+            };
+            let mut best: Option<(i64, usize)> = None;
+            for (index, point) in places.iter().enumerate() {
+                let far = (point.0.raw() - at.0.raw()).pow(2) + (point.1.raw() - at.1.raw()).pow(2);
+                if best.is_none_or(|(closest, _)| far < closest) {
+                    best = Some((far, index));
+                }
+            }
+            if let Some((_, index)) = best {
+                let point = places.remove(index);
+                self.reserve_gather_place(id, node, point);
+                assigned += 1;
+            }
+        }
+        if assigned > 0 {
+            self.respread_at.insert(node, self.tick);
+        }
+    }
+
+    /// **A body with nothing to do is nudged out of a walker's way** (D200), but only after the walker has been refused for
+    /// `STALLED_TICKS` in a row. The engine's written rule until now is the opposite - *"the body it went round did not
+    /// move"*, asserted by three evasion tests and by the sheep being sheared - and that rule is right for every case where a
+    /// route exists. What it cannot cover is a body on the walker's **own tile**: there is no tile to plan round, so the
+    /// route runs through it and the step is refused for ever (measured: `WaitBlocked` for 400,000 ticks, the trebuchet
+    /// fixture 46 s against `main`'s 5.86 s).
+    ///
+    /// The shape is 0 A.D.'s, `CCmpUnitMotion_System.cpp`: a *static* body is displaced less than a walking one, damped, and
+    /// never far. Ours is a twentieth of a tile along the dominant axis, onto free ground, if no third body is there.
+    fn push_the_standing(&mut self) {
+        let step = (self.scale / 20).max(1);
+        /// A man who has been refused long enough for the body in his way to be moved: who, where, the pair's reach, and the
+        /// point he is trying to get to.
+        struct Stuck(EntityId, (Fixed, Fixed), i64, (Fixed, Fixed));
+        let stuck: Vec<Stuck> = self
+            .stalled
+            .iter()
+            .filter(|(_, waited)| **waited >= Self::STALLED_TICKS)
+            .filter_map(|(id, _)| {
+                let entity = self.find(*id)?;
+                if entity.kind != EntityKind::Unit {
+                    return None;
+                }
+                // **A jammed man may have no waypoint left** - the builder whose route is spent, the man whose order is
+                // simply held - so the direction comes from his task's goal when the route is empty. Requiring a waypoint is
+                // why the builder/walker deadlock was never nudged: the builder had none.
+                let next = match self
+                    .paths
+                    .get(id)
+                    .and_then(|route| route.points.first().copied())
+                {
+                    Some(point) => point,
+                    None => self.tile_centre(self.goal_of(entity)?.0),
+                };
+                Some(Stuck(
+                    *id,
+                    entity.position,
+                    self.reach_between(*id, *id).raw(),
+                    next,
+                ))
+            })
+            .collect();
+        for Stuck(id, here, reach, next) in stuck {
+            let window = reach + reach / 20;
+            let mut push: Option<(EntityId, (Fixed, Fixed))> = None;
+            for entity in self.entities() {
+                if entity.id == id || entity.kind != EntityKind::Unit {
+                    continue;
+                }
+                let (dx, dy) = (
+                    entity.position.0.raw() - here.0.raw(),
+                    entity.position.1.raw() - here.1.raw(),
+                );
+                if dx * dx + dy * dy > window * window {
+                    continue;
+                }
+                // **On the walker's own tile, or on the tile of his next waypoint.** The first is the case the planner
+                // cannot express; the second is the one it *tried* to solve and failed - a body standing on the very
+                // waypoint the route was planned through, which no re-plan around it can fix while it stays there.
+                // Measured: a loaded carrier at `(11.850,21.139)` stepping at `(12.000,21.000)` for 400,000 ticks, ten
+                // units in his hands, the bank stuck at 790 of 900.
+                let body_tile = self.tile_of(entity.position);
+                if body_tile != self.tile_of(here) && body_tile != self.tile_of(next) {
+                    continue;
+                }
+                // **Nothing is nudged that somebody is working.** A sheep being sheared, a mine nobody can move: a body
+                // that a gather order names is a target, not an obstacle.
+                let worked = self.entities().iter().any(|other| {
+                    matches!(
+                        other.task,
+                        Task::Gather { node, .. } | Task::Return { node, .. } if node == entity.id
+                    ) || matches!(other.task, Task::Attack { target, .. } if target == entity.id)
+                });
+                if worked {
+                    continue;
+                }
+                // **A jam of two ordered men resolves the same way** (D200). A builder and a walker can block each other on
+                // one tile for ever: neither is "a body with nothing to do", so neither was nudged, and the bounded give-way
+                // step is zero at nought distance - measured, a house site stuck at 1 hp for 2,000 ticks with the two men
+                // sharing the tile. A man who has been refused for the same forty ticks is one who is not getting on with
+                // his order, and he may be moved aside. A **posted** worker (one holding a place) is still left alone.
+                let busy = self
+                    .paths
+                    .get(&entity.id)
+                    .is_some_and(|route| !route.points.is_empty());
+                let posted = self.gather_place.contains_key(&entity.id);
+                let jammed =
+                    self.stalled.get(&entity.id).copied().unwrap_or(0) >= Self::STALLED_TICKS;
+                if posted || (busy && !jammed) {
+                    continue;
+                }
+                let away = if dx.abs() >= dy.abs() {
+                    (if dx >= 0 { step } else { -step }, 0)
+                } else {
+                    (0, if dy >= 0 { step } else { -step })
+                };
+                let to = (
+                    Fixed::from_raw(entity.position.0.raw() + away.0),
+                    Fixed::from_raw(entity.position.1.raw() + away.1),
+                );
+                push = Some((entity.id, to));
+                break;
+            }
+            let Some((other, to)) = push else { continue };
+            let (x, y) = self.tile_of_raw(to);
+            let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
+                continue;
+            };
+            if !self.is_free_ground(x, y) {
+                continue;
+            }
+            let crowded = self.entities().iter().any(|entity| {
+                entity.kind == EntityKind::Unit
+                    && entity.id != other
+                    && entity.id != id
+                    && (entity.position.0.raw() - to.0.raw()).pow(2)
+                        + (entity.position.1.raw() - to.1.raw()).pow(2)
+                        < reach * reach
+            });
+            if crowded {
+                continue;
+            }
+            if let Some(entity) = self.entities.iter_mut().find(|entity| entity.id == other) {
+                entity.position = to;
+            }
+        }
+    }
+
+    /// **An order that a standing body makes impossible is finished where the man stands** (D200). A `Move` onto a tile a
+    /// friend holds can never complete: the walker stops at the pair's reach, `reaches` is never true, and the order stays
+    /// live for ever (measured: still `Move` after 600 ticks, 1.011 tiles out). After the same forty refused ticks the nudge
+    /// waits for, the order is done - he is as close as his own side of the tile allows, which is what the player asked for
+    /// in a game where friends are solid.
+    fn finish_blocked_orders(&mut self) {
+        let done: Vec<EntityId> = self
+            .stalled
+            .iter()
+            .filter(|(_, waited)| **waited >= Self::STALLED_TICKS)
+            .map(|(id, _)| *id)
+            .filter(|id| {
+                matches!(
+                    self.find(*id).map(|entity| entity.task),
+                    Some(Task::Move { .. })
+                )
+            })
+            // **Only when the man in the way is going nowhere.** Two villagers crossing head-on block each other for a few
+            // ticks and then pass; finishing the order there stranded one of them three tiles short (measured). The order is
+            // only finished when the body in reach has **no route of its own** - a body at rest, which cannot move aside.
+            .filter(|id| {
+                let Some(here) = self.find(*id).map(|entity| entity.position) else {
+                    return false;
+                };
+                let reach = self.reach_between(*id, *id).raw() + self.scale / 20;
+                self.entities.iter().any(|other| {
+                    other.id != *id
+                        && other.kind == EntityKind::Unit
+                        && (other.position.0.raw() - here.0.raw()).pow(2)
+                            + (other.position.1.raw() - here.1.raw()).pow(2)
+                            <= reach * reach
+                        && self
+                            .paths
+                            .get(&other.id)
+                            .is_none_or(|route| route.points.is_empty())
+                })
+            })
+            .collect();
+        for id in done {
+            if let Some(entity) = self.find_mut(id) {
+                entity.task = Task::Idle;
+            }
+            self.stalled.remove(&id);
+        }
+    }
+
     fn settle_workers(&mut self, settles: Vec<Settle>) {
         // **Speed is per second**, and a step is exact: `step_towards` is the movement pass's own arithmetic, so this cannot be a
         // fraction of a scale unit and cannot overshoot. Reading the stored speed raw was the first attempt's `15,600`.
@@ -824,11 +1060,14 @@ impl World {
         // band (measured **1.962** tiles from the bush, never working). The step is therefore taken **along the ring**, in the
         // shorter direction, which is what a villager walking round a tree to its place does.
         // **Who is standing where**, once, so a blocked goal can be recognised before anybody moves.
-        let bodies: Vec<(EntityId, (Fixed, Fixed))> = self
+        // **Mutable on purpose**: each man who moves updates his entry before the next is considered. A snapshot taken once
+        // let two men walk to the same spot in the same tick - each check saw the other's *old* position - which is how two
+        // settled workers ended up **0.094** tiles apart where the footprint needs 0.40.
+        let mut bodies: Vec<(EntityId, (Fixed, Fixed), Option<u32>)> = self
             .entities
             .iter()
             .filter(|entity| entity.kind == EntityKind::Unit)
-            .map(|entity| (entity.id, entity.position))
+            .map(|entity| (entity.id, entity.position, entity.unit))
             .collect();
         for (id, to, ring) in settles {
             // Read everything the decision needs **before** the mutable borrow: the body radius is the world's, not the entity's.
@@ -839,11 +1078,16 @@ impl World {
                 continue;
             };
             let step = speed.raw() / tick_rate;
-            let reach = (2 * self.body_radius(unit)).max(1);
-            let blocked = bodies.iter().any(|(other, at)| {
-                *other != id
-                    && (at.0.raw() - to.0.raw()).pow(2) + (at.1.raw() - to.1.raw()).pow(2)
+            // **The pair's reach, not twice one body's radius** (D200). `2 * body_radius(..).max(1)` is two raw units when
+            // the content gives a unit no radius at all, so the settle thought nobody was ever in the way and walked men
+            // into each other: measured, the closest pair **0.083** and **0.107** tiles apart where the footprint needs 0.40.
+            // `reach_raw` is the number `collide` uses for the same question, including its one-tile fallback.
+            let blocked = bodies.iter().any(|(other, at, other_unit)| {
+                *other != id && {
+                    let reach = self.reach_raw(unit, *other_unit);
+                    (at.0.raw() - to.0.raw()).pow(2) + (at.1.raw() - to.1.raw()).pow(2)
                         < reach * reach
+                }
             });
             let (dx, dy) = if blocked {
                 // **Slide, do not stand still** (D188): the step is the goal's direction turned about forty-five degrees, round the
@@ -887,6 +1131,29 @@ impl World {
                 let (raw_x, raw_y) = step_towards(position, to, step);
                 (Fixed::from_raw(raw_x), Fixed::from_raw(raw_y))
             };
+            // **The settle steps directly, so it must clamp like `give` does** (D200). It does not go through `collide`, and
+            // nothing stopped the last step from ending inside a neighbour: two men converging along the ring from opposite
+            // sides measured **0.083** and **0.107** tiles apart where the footprint needs 0.40. Halving the step three times
+            // is enough for a step this small; a step that is still inside the pair's reach is not taken at all.
+            let (mut dx, mut dy) = (dx, dy);
+            for _ in 0..3 {
+                let candidate = (
+                    Fixed::from_raw(position.0.raw() + dx.raw()),
+                    Fixed::from_raw(position.1.raw() + dy.raw()),
+                );
+                let inside = bodies.iter().any(|(other, at, other_unit)| {
+                    *other != id && {
+                        let reach = self.reach_raw(unit, *other_unit);
+                        (candidate.0.raw() - at.0.raw()).pow(2)
+                            + (candidate.1.raw() - at.1.raw()).pow(2)
+                            < reach * reach
+                    }
+                });
+                if !inside {
+                    break;
+                }
+                (dx, dy) = (Fixed::from_raw(dx.raw() / 2), Fixed::from_raw(dy.raw() / 2));
+            }
             if (dx.raw() != 0 || dy.raw() != 0)
                 && let Some(entity) = self.find_mut(id)
             {
@@ -894,6 +1161,9 @@ impl World {
                     Fixed::from_raw(position.0.raw() + dx.raw()),
                     Fixed::from_raw(position.1.raw() + dy.raw()),
                 );
+                if let Some(slot) = bodies.iter_mut().find(|(who, _, _)| *who == id) {
+                    slot.1 = entity.position;
+                }
             }
             // **`velocity` is state, not a report** (found here): writing it from the settle made a villager 15 tiles away walk to a patch
             // the reach filter had refused (`a_worker_does_not_look_beyond_its_reach`) - the sim reads it back. The step is the position
@@ -928,6 +1198,33 @@ impl World {
         for (index, id, dx, dy) in deltas {
             let (dx, dy, why) = self.collide(&mut pass, index, id, dx, dy);
             self.record_step(index, id, why);
+            // **Count the waits** (D200): a body refused by another body on this tick has been refused for one more tick
+            // than before; anything else clears the count. `last_step` cannot answer this - it is only recorded when
+            // `trace_steps` is on, which is why the first nudge pass saw an empty list on every real run.
+            match why {
+                // **Every refusal counts, including a give-way that could not move** (D200). `WaitBlocked` is a body on the
+                // path, `WaitOwnTile` a body sharing the tile, and `GiveWayOwnTile` with a **zero step** is the same jam seen
+                // from the other man: at nought distance the give-way bound leaves no step at all, so counting decisions
+                // alone let one side look busy while both stood still - measured, a builder and a walker for 2,000 ticks.
+                crate::StepDecision::WaitBlocked
+                | crate::StepDecision::WaitOwnTile
+                | crate::StepDecision::WaitGround
+                | crate::StepDecision::GiveWayOwnTile
+                | crate::StepDecision::GiveWay
+                    if dx == Fixed::ZERO && dy == Fixed::ZERO =>
+                {
+                    let waited = self
+                        .stalled
+                        .get(&id)
+                        .copied()
+                        .unwrap_or(0)
+                        .saturating_add(1);
+                    self.stalled.insert(id, waited);
+                }
+                _ => {
+                    self.stalled.remove(&id);
+                }
+            }
             if dx != Fixed::ZERO || dy != Fixed::ZERO {
                 movers.push(id);
             }
@@ -995,6 +1292,9 @@ impl World {
                 let Some(from) = self.position(id) else {
                     continue;
                 };
+                // **A re-plan spends the wait** (D200): otherwise a man who is still stuck re-plans on every tick, because
+                // his wait count only grows. One search per forty ticks, per man, is the budget this rule is allowed.
+                self.stalled.remove(&id);
                 let start = self.tile_of(from);
                 let mut avoiding = self
                     .paths
@@ -1070,7 +1370,13 @@ impl World {
                         // goal it cannot reach is exactly the case that looped: `get_mut` returned `None`, nothing was
                         // counted, and the request came back every tick. So an entry is created for it.
                         if body.is_none() || !self.paths.contains_key(&id) {
-                            let stalls = self.paths.get(&id).map_or(0, |route| route.stalls) + 1;
+                            // Saturating: with the forty-tick gate a stalled man may now re-plan many times, and a `u8`
+                            // that overflows panics the whole match in a debug build (it did, in this test).
+                            let stalls = self
+                                .paths
+                                .get(&id)
+                                .map_or(0, |route| route.stalls)
+                                .saturating_add(1);
                             let route = self.paths.entry(id).or_default();
                             route.stalls = stalls;
                         }
@@ -1646,7 +1952,15 @@ impl World {
                         work.deposits.push(entity.id);
                         (Fixed::ZERO, Fixed::ZERO)
                     } else {
-                        let next = self.next_waypoint(entity.id).unwrap_or(target);
+                        // **A carrier with no waypoint aims at the yard, not at the building's anchor** (D200). The anchor
+                        // is blocked ground, so stepping at it is refused for ever: measured, a loaded carrier at
+                        // `(11.85, 21.14)` in `Return` for **400,000 ticks** with ten units in his hands, the bank stuck at
+                        // 790 of 900. `approach_tile` is the walkable tile beside the footprint - it exists for exactly this.
+                        let next = self.next_waypoint(entity.id).unwrap_or_else(|| {
+                            self.approach_tile(here, drop)
+                                .map(|tile| self.tile_centre(tile))
+                                .unwrap_or(target)
+                        });
                         let (dx, dy) = step_towards(entity.position, next, delta.raw());
                         (Fixed::from_raw(dx), Fixed::from_raw(dy))
                     }
@@ -1777,7 +2091,24 @@ impl World {
                         // man's destination moved as his neighbour moved and the two of them swapped places - measured 0.001,
                         // 0.20 and 0.243 tiles apart in three fixtures. A place taken once is taken for as long as the order
                         // stands, and `place_is_live` releases it the moment the man is re-tasked.
-                        let owned = owned_place;
+                        // **A place a body now stands on is stale** (D200). The place is a property of the order, but a neighbour
+                        // who has since walked onto it cannot be walked through: keeping it made a man settle **0.094** tiles
+                        // inside him. A held place with a body within the gather spacing is released and re-chosen from the ring.
+                        let owned = owned_place.filter(|place| {
+                            !self.entities.iter().any(|other| {
+                                other.id != entity.id && other.kind == EntityKind::Unit && {
+                                    // **Just the pair's reach, not the gather spacing.** Places sit exactly `spacing` (0.66)
+                                    // apart, so asking for a body within 0.66 of a held place made every place look stale to its
+                                    // own neighbour: both re-chose, both moved, and the ten-men fixture came out at 0.067 tiles.
+                                    // A place is stale only when a body is close enough that the man cannot stand on it.
+                                    let gap =
+                                        self.reach_raw(entity.unit, other.unit) + self.scale / 20;
+                                    (other.position.0.raw() - place.0.raw()).pow(2)
+                                        + (other.position.1.raw() - place.1.raw()).pow(2)
+                                        < gap * gap
+                                }
+                            })
+                        });
                         let found = match owned {
                             Some(place) => Some(crate::Standoff::Point(place)),
                             None => {
@@ -1798,6 +2129,15 @@ impl World {
                         // each attempt re-plans a route: the acceptance run went from 35 s to over 400 s with that loop in place. The
                         // owner's rule is applied where it is cheap and deterministic - when the order is given (`start_gather`) -
                         // and the ring is only the fallback.
+                        if found.is_none_or(|answer| matches!(answer, crate::Standoff::NoRoom))
+                            && owned.is_none()
+                        {
+                            // **The ring refused him: re-lay it** (D200). Seven men at the comfortable 0.66 leave gaps of 0.33
+                            // either side - less than the 0.40 floor - so a tenth can only be seated if the seated seven
+                            // shuffle. That is a node-level operation, so the node is queued and the work is done after the
+                            // entity loop, rate-limited to once per twenty ticks per node.
+                            work.respreads.push(node);
+                        }
                         if let Some(crate::Standoff::Point(stand)) = found {
                             // The ring's centre travels with the place: a man whose straight line to it is blocked steps **round
                             // the ring** instead of standing still (D188). Without it a crowd arriving from one side leaves men
@@ -1937,7 +2277,30 @@ impl World {
                     // **Arrived is close enough, not exactly on it.** The last step of a walk is often clipped by the ground
                     // or by a body, so an exact-equality test left a unit pacing at the doorstep of its goal for ever - which
                     // is how a builder failed to "arrive" at a site and a barracks was never finished (2026-11-04).
-                    if reaches(entity.position, to, delta.raw()) {
+                    // Arrival is exact here; an order that a standing body makes impossible is finished by
+                    // `finish_blocked_orders`, which knows *why* it cannot arrive rather than guessing from distance.
+                    // **Arrived beside a held goal** (D200): within a quarter tile of the neighbouring tile centre, when the
+                    // goal itself holds a body. `reaches` alone never fires there, because no step can get through.
+                    let pair = self.reach_raw(entity.unit, entity.unit);
+                    let held = self.entities.iter().any(|other| {
+                        other.id != entity.id && other.kind == EntityKind::Unit && {
+                            let reach = self.reach_raw(entity.unit, other.unit).max(pair);
+                            let (gx, gy) = (
+                                other.position.0.raw() - to.0.raw(),
+                                other.position.1.raw() - to.1.raw(),
+                            );
+                            gx * gx + gy * gy <= reach * reach
+                        }
+                    });
+                    let beside = held && {
+                        let (gx, gy) = (
+                            entity.position.0.raw() - to.0.raw(),
+                            entity.position.1.raw() - to.1.raw(),
+                        );
+                        let limit = self.scale + self.scale / 4;
+                        gx * gx + gy * gy <= limit * limit
+                    };
+                    if reaches(entity.position, to, delta.raw()) || beside {
                         work.finished.push(entity.id);
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))
@@ -2025,4 +2388,6 @@ struct TickWork {
     settles: Vec<Settle>,
     /// Men who chose a place on a node's ring this tick and must now keep it (D186 addendum 5).
     places: Vec<(EntityId, EntityId, (Fixed, Fixed))>,
+    /// Nodes that refused a worker this tick and should re-lay their ring (D200, the owner's rule of 2026-11-13).
+    respreads: Vec<EntityId>,
 }

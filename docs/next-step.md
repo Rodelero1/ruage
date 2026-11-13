@@ -1,72 +1,60 @@
-# OPEN - the Return that aims at a blocked anchor: fix it, then re-land D200
+# OPEN - D200 is on `main` with its crowd fix; next is register row 2, damage
 
-**State, 2026-11-13 (second session of the day).** `main` is the pre-D200 behaviour, restored by `git revert -m 1 2c7d8e1`:
-the whole workspace gate is green and the acceptance match is back to `entities=128 players=1 hash=ace125e60ea99b60
-repaths=579 made_room=0`, food 56 / 397 / 667 / 690 at 400 / 800 / 1200 / 2400 s.
+**State, 2026-11-13 (second session).** `main` carries **D200** - friends are solid, a tile seats seven at the measured
+0.66, a body at rest is nudged only after forty refused ticks, a place a body stands on is stale, and **a body on the
+mover's own tile can now be walked around sideways**. The last one is what made the difference: without it, seven villagers
+stood on two tiles in `WaitOwnTile` for the whole match and the acceptance bank held **0 food from 400 s to 2,400 s**.
 
-**Why it was reverted.** The D200 merge passed every test and both gates and killed the acceptance match's food economy: after
-it, the bank held **0 food at every report** from 400 s to 2,400 s, wood climbed 70 -> 790, units fell 43 -> 14, and player 2 -
-four villagers and an untouched town centre - was still standing at 48,000 ticks. The mechanism is measured, not guessed:
-four loaded carriers freeze 1.7-2.4 tiles from their town centre, each with a **one-point route aimed at the building's own
-blocked anchor** (`next=(320000,320000)` = tile `(16,16)`, `touching=false`, 419 identical probe ticks), so the deposit test
-never fires and `approach_tile` is only consulted when there is *no* route. Full measurement, the wrong claims in the merged
-review (its hash and its `players` explanation), and the probe output: `docs/reviews/2026-11-13-d200-reverted-food-stall.md`.
+**Measured, `--seed 7 --ticks 48000 --report 400`:** food `4 / 14 / 484 / 594 / 1226 / 1396`, wood `40 / 75 / 300 / 415 /
+805 / 1215`, units `20 / 29 / 33 / 37 / 37 / 37`; summary `entities=143 players=2 hash=2d93236ebb16961b repaths=373
+made_room=140 repaths_body=77 repaths_ground=296`. Against `main` before D200: food `56 / 397 / 667 / 388 / 650 / 690`, wood
+2019, units 43, `entities=128 players=1 hash=ace125e60ea99b60 repaths=579 made_room=0`. The branch farms **more** food and
+holds less wood - a different opening, not a stalled one. Gate: 184 binaries, 841 passed, 0 failed, 21 ignored, `EXIT 0`,
+fmt and clippy clean.
 
-**Branch `d189-owner-blind` keeps every commit of D200** (last `1ef3a85`, merged as `2c7d8e1` before the revert). Nothing is
-lost; `main` is green.
+**The one cost, stated plainly.** The enemy is **not eliminated by 40:00**: its town centre is at **1451 of 2400 hp** with
+four spearmen in `Attack` on it, where `main` had already razed it with eleven soldiers. `players` is the highest surviving
+player id, so `players=2` means "the enemy still stands", not "the match is broken". The record, with every withdrawn rule
+and its measurement: `docs/reviews/2026-11-13-owner-blind-collisions.md`; the revert and what it taught:
+`docs/reviews/2026-11-13-d200-reverted-food-stall.md`.
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
-### 1. The crowd on one tile: seven men, two tiles, rule 4 *(next)*
+### 1. Register row 2 - damage *(next)*
 
-The reverted merge's stall is **not** the drop site. `world.trace_steps()` at 400 s shows seven villagers on **two tiles** -
-four on `(14, 18)`, three on `(14, 17)` - every one refused by a body on its **own tile**: `WaitOwnTile` ×5,
-`GiveWayOwnTile` ×2, `WaitBlocked` ×1. Rule 4 bounds the give-way step by the pair's reach, the pairs are one body (0.40)
-apart, so the bound returns zero and nobody moves; and rule 4 returns **before** rule 7's repath, so nobody re-plans either.
-`push_the_standing` skips all seven because each holds a gather place (and a body at rest is never nudged when it is
-posted).
-
-**The guard already exists and is green here, red there:** `crates/sim/tests/acceptance_economy.rs` - the acceptance world
-at seed 7, `food > 0` at 400 s and a growing crew by 800 s. Any D200-shaped change has to keep it green.
-
-**Done when:** a crowd of seven on one node banks food - either the placement stops handing out places the traffic cannot
-reach, or rule 4 gains an escape (a repath, or a nudge that does not exempt a posted man who is not standing on his place)
-- and the acceptance match's food line reads like `main`'s.
-
-### 2. Re-land D200 on top of the fix
-
-Re-merge or re-apply `d189-owner-blind`, run the acceptance match, and require the two numbers that were red: **food reaches
-the bank** (a non-zero bank at 400 s and a rising unit count), and the summary line's `players` is stated with its mechanism
-(highest surviving player id) rather than explained away. The workspace gate and the review numbers go in the same commit.
-
-### 3. Register row 2 - damage *(investigation started; two doc commits landed before the revert and stay)*
-
-`0x744d60` has five call sites (`0x6bb100`, `0x741a30` x2, `0x744ff0`, `0x745060`); `docs/behaviour-diff.md` now records what
-each one reads (multiplier 1.0 everywhere, the wrapper sums) and that the per-entry drop stands. Open: which call site is
+`0x744d60` has five call sites (`0x6bb100`, `0x741a30` x2, `0x744ff0`, `0x745060`); `docs/behaviour-diff.md` records what
+each reads (multiplier 1.0 everywhere, the wrapper sums) and that the per-entry drop stands. Open: which call site is
 combat's path, and whether the game drops each sub-1 class entry or floors the total (`combat.toml`'s `minimum = 1`).
+Two seconds a query with craft-anything, then reading the owned function.
 **Done when:** row 2 is ruled `same` or `different` with the address, and a `different` becomes a test-first fix.
 
-### 4. `World::from_state` and the tool-side converter (B shape) - `--load`
+### 2. `World::from_state` and the tool-side converter (B shape) - `--load`
 
 A versioned world description the engine builds from, produced by a GPL tool now and by a reader inside the engine later. The
 18 saves in the install become a differential oracle: run 1,200 ticks from `brit7`, compare with `brit8`.
 **Done when:** `ruage-headless --load <save>` runs and the converter's output describes a *world*, not a transcript.
 
-### 5. The importer into `tools/` and a bootstrap step
+### 3. The importer into `tools/` and a bootstrap step
 
 One repository, GPL-3.0 directory with its own licence file, invoked once at install time.
 **Done when:** a clean clone with only `Age2HD/` present builds and produces `config/gamedata/`.
 
-### 6. Content (D201): names by three lists, prose rewritten, campaigns ours only
+### 4. Content (D201): names by three lists, prose rewritten, campaigns ours only
 
-### 7. Publish cleanup: quote-and-cite the five docs, licence plumbing, CI gates, README
+### 5. Publish cleanup: quote-and-cite the five docs, licence plumbing, CI gates, README
+
+### 6. The gather capacity, restated as a question the saves can answer
+
+The game shows seven to eight bodies at **0.66** on a node's touching envelope; our ring hands out places at 0.66 first and
+0.40 when the ring refuses. Both are now exercised by the acceptance run, so the difference is visible; what is not settled
+is whether a **ninth** man should stand outside and wait (the crowd policy this work shipped) or walk to another node.
 
 ## Needs the owner - and only this
 
 - the **A vs B** publishing answer (does `--load` live in a published engine, and is the engine public yet) -
   `docs/licensing.md`, "B now, A later";
-- anything that changes a rule he set. **D200 is his ruling and it is not in question**: friends are solid, and the engine
-  will do it - but it re-lands only when the acceptance match still feeds itself.
+- **whether "the enemy is eliminated inside 40 minutes" is a requirement.** With friends solid it is now a pacing question,
+  not a stall: the town centre is at 60% with four attackers on it at 40:00. Nothing in the suite depends on the answer.
 
 **Decided elsewhere, not on this plan:** pacing/AI (owner: later, with the AI), the renderer (D18), the `Vision` split (no
 behavioural content - last on purpose).
@@ -74,7 +62,7 @@ behavioural content - last on purpose).
 ## Standing rules for this plan
 
 Test-first, with the red run shown. Measure before and after. Every step ends committed and pushed. A step that cannot go
-green is parked on a branch with its diagnosis, **never left red on `main`** - which is exactly what happened here.
+green is parked on a branch with its diagnosis, **never left red on `main`**.
 
 ## Instrument notes, so a fresh session does not re-derive them
 
@@ -87,9 +75,11 @@ The acceptance command that matters (release, 40 minutes of game time):
   --script config/acceptance.toml --seed 7 --ticks 48000 --report 400 --dump build/dump.csv
 ```
 
-`--dump` writes `kind,player,id,unit,slot,x,y,amount,hp,carry,path,task`; `path` is the route's length, which is how the
-carrier stall was found (`path=1`, one point, the anchor). A probe on a `Task` arm is env-gated and removed in the same
-session - `no_float` catches a leftover `as f64` in production code.
+`--dump` writes `kind,player,id,unit,slot,x,y,amount,hp,carry,path,task`. **`world.trace_steps()` is the instrument for a
+stuck body, not `Entity::last_step`**: that field is only recorded when tracing is on, so reading it on a normal run returns
+the value from seeding and reads as `Idle`. `crates/sim/tests/acceptance_economy.rs` runs the acceptance world itself and is
+the guard that would have caught this regression; keep it green. Probes on a `Task` arm are env-gated and removed in the
+same session - `no_float` catches a leftover `as f64` in production code.
 
 craft-anything's CLI is `/opt/data/tools/craft-anything/bin/craft-anything-cli`; the MCP entry is registered **deep**
 (`mcp --all-tools --deep`, 323 tools, `connect_timeout` 180) and its `PATH` must carry the JDK 21 `bin` and both Ghidra 12.2

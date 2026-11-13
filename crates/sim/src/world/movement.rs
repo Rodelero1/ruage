@@ -239,22 +239,41 @@ impl World {
             return (dx, dy, StepDecision::Take);
         };
         let stop = (Fixed::ZERO, Fixed::ZERO);
-        // **Whose body is it** (D131 A, D189): the reach and the goal-tile refusal below are about **two players'** units. Two of
-        // your own villagers are not walls - they pass while walking (D189) and separate where they stand - and treating them as
-        // one froze a man told to step off a fresh foundation for 2,000 ticks, 1.011 tiles from the tile he was sent to, because an
-        // idle neighbour stood on it (measured; the house stayed at hp 1).
-        let hostile = entity.player >= 1
-            && self
-                .find(other)
-                .is_some_and(|other| other.player >= 1 && other.player != entity.player);
+        // **Whose body it is does not matter** (D200, the owner: *"Don't make difference of friend or foe as in original
+        // game"*). The original's collision block compares the collided unit's **id** with the order's target and nothing
+        // else - no player, team or alliance test anywhere in it, and the query passes an owner sentinel rather than the
+        // unit's player (`docs/movement-in-the-binary.md`, read 2026-11-13). So a friend is a non-past collision exactly
+        // like an enemy: it blocks, and the answer to it is a repath. **D189's "your own units are not walls" is
+        // withdrawn** - it was chosen to make a crowd deliverable, not because the game does it, and it is why a walker
+        // could pass through a friend for 300 ticks (measured: 0.307 tiles at tick 79, `collision.rs`).
+        let a_unit = self
+            .find(other)
+            .is_some_and(|other| other.kind == EntityKind::Unit);
         // 2. The order's own business: the body it was sent at, or the ground it was sent to.
         if Self::order_target(entity) == Some(other) {
             return (stop.0, stop.1, StepDecision::WaitTarget);
         }
-        if hostile
+        if a_unit
             && let Some((goal_tile, true)) = goal
             && self.tile_of(other_at) == goal_tile
         {
+            // **A body on the goal tile asks for a route round it, not for a wait, unless the mover is already beside
+            // it** (D200). This clause used to be hostile-only and to hold the walker still, which is a freeze when the
+            // body never moves: a villager ordered off a fresh foundation stood 1.011 tiles from his goal for 2,000 ticks
+            // (D192). With no owner test the same clause would hold a man off a tile a *friend* occupies for ever, so it
+            // repaths - the original's answer to a non-target collision. The `adjacent` guard is what keeps that from
+            // spinning: a man already beside the tile he was sent to has *arrived* for every purpose the game has, and
+            // re-planning there buys a search a tick (measured: 525 repaths in 600 ticks without it).
+            let tile = self.tile_of_raw(here);
+            let adjacent = (tile.0 - i64::from(goal_tile.0)).abs() <= 1
+                && (tile.1 - i64::from(goal_tile.1)).abs() <= 1;
+            if !adjacent && pass.repaths.len() < MAX_REPATHS_PER_TICK {
+                pass.repaths.push(Repath {
+                    unit: id,
+                    body: Some(other),
+                    goal: goal_tile,
+                });
+            }
             return (stop.0, stop.1, StepDecision::WaitGoal);
         }
         // 3. A body the mover is **already inside** is not an obstruction (D52: "a body already overlapped is not made
@@ -278,27 +297,13 @@ impl World {
         // villagers brushing past each other is how AoE2 moves a crowd - the deck's own page 9 says *"formations allow for
         // some friendly overlap"* - and bounding those as well measured a match that no longer resolved: 164 entities
         // against 141, both players alive at 1,800 s where the baseline had eliminated one, refusals 574 -> 1,021.
-        // **Your own units are not walls** (D189, D192). The owner chose this between the two ways out of the crowd problem
-        // (*"1"*): his bodies may overlap while walking, and they are separated where they stand. Without it, ten men sent at one
-        // bush cannot be delivered - the men behind cannot pass the men in front, and the settle, which moves a body directly,
-        // either steps inside a neighbour (measured 1.962 and 0.144 tiles out) or strands a man outside the band.
-        //
-        // **The last step used to be the exception, and that exception was the bug.** A walker was held for any friendly body on
-        // the tile his order asked for, so a villager told to step off a fresh foundation stood **1.011 tiles** from his goal for
-        // 2,000 ticks while an idle neighbour stood there, and the house stayed at hp 1. A friend is not a wall on the last step
-        // either; the settle and the work places are what keep men apart where it matters.
-        //
-        // **Enemy bodies are unchanged**: the reach above and `bound_to_reach` still hold two players' units apart, which is the
-        // pass D131 was about.
-        if !hostile {
-            return (dx, dy, StepDecision::Take);
-        }
+        // **Your own units are walls** (D200, revising D189/D192). This was the exemption that let two of your villagers
+        // walk through each other; the owner's rule - and the original's, which cannot tell friend from foe - is that a
+        // body blocks whoever it belongs to, and the mover slides, gives way or repaths round it. The crowd-delivery
+        // problem D189 was solving is the settle's job (reserved places, D186) and is measured separately, not bought by
+        // letting bodies overlap.
         let give = |step: (Fixed, Fixed), why: StepDecision| {
-            let delta = if hostile {
-                self.bound_to_reach(here, other_at, step, reach)
-            } else {
-                step
-            };
+            let delta = self.bound_to_reach(here, other_at, step, reach);
             (delta.0, delta.1, why)
         };
         // 4. A body standing on the **mover's own tile** is not something a plan can route around: the search would have
@@ -307,7 +312,38 @@ impl World {
         //     a body at rest will not get out of the way, and waiting on it is waiting for ever.
         if self.tile_of_raw(other_at) == self.tile_of_raw(here) && pass.moving.contains(&other) {
             if self.wait_or_give_way(id, other, &mut pass.refused) {
-                return give((dx, dy), StepDecision::GiveWayOwnTile);
+                let delta = give((dx, dy), StepDecision::GiveWayOwnTile);
+                if delta.0 != Fixed::ZERO || delta.1 != Fixed::ZERO {
+                    return delta;
+                }
+            }
+            // **A body on the mover's own tile can still be walked around, sideways** (measured: seven villagers on two
+            // tiles at one node, five of them `WaitOwnTile` for forty game-minutes, the acceptance bank at **0 food** - the
+            // give-way bound is zero at one body apart and the rule returns before the repath, so nothing ever moves). A
+            // plan cannot leave the tile it starts in; a *slide* can, and a sideways step increases the separation the
+            // bound is protecting. Axis first, then the perpendicular, so two runs choose the same step.
+            for (sx, sy) in [
+                (dx.raw(), 0i64),
+                (0, dy.raw()),
+                (-dy.raw(), dx.raw()),
+                (dy.raw(), -dx.raw()),
+            ] {
+                if sx == 0 && sy == 0 {
+                    continue;
+                }
+                let (nx, ny) = (here.0.raw() + sx, here.1.raw() + sy);
+                let (gx, gy) = (other_at.0.raw() - nx, other_at.1.raw() - ny);
+                if gx * gx + gy * gy < reach * reach {
+                    continue;
+                }
+                let slide = (Fixed::from_raw(nx), Fixed::from_raw(ny));
+                if self.blocker_at(pass.bodies, id, radius, slide).is_none() {
+                    return (
+                        Fixed::from_raw(sx),
+                        Fixed::from_raw(sy),
+                        StepDecision::Slide,
+                    );
+                }
             }
             return (stop.0, stop.1, StepDecision::WaitOwnTile);
         }
@@ -392,15 +428,23 @@ impl World {
         //    tick 40,000 to 400,000 beside an idle friend). The step is taken and the repath above routes round it from
         //    the next tick - the overlap is at most one footprint, and it resolves; a frozen unit never does.
         if !pass.moving.contains(&other) {
-            // **A hostile unit at rest is still a body** (D193, measured). The exemption below exists because a resource node carries
-            // no radius, so `reach` falls back to a whole tile and a villager could not stand beside a tree - but it was being
-            // applied to *units* too, and a walker passed an idle enemy at **0.237** tiles where two 0.2 radii need `0.4`. The bound
-            // applies to a hostile unit; nodes, buildings and friends keep the exemption.
-            let a_unit = self
-                .find(other)
-                .is_some_and(|entity| entity.kind == EntityKind::Unit);
-            if hostile && a_unit {
-                return give((dx, dy), StepDecision::TakeAtRest);
+            // **A unit at rest is still a body** (D193, and D200 removed the owner test from it). The exemption below
+            // exists because a resource node carries no radius, so `reach` falls back to a whole tile and a villager could
+            // not stand beside a tree - and it was being applied to *units* too: a walker passed an idle enemy at **0.237**
+            // tiles where two 0.2 radii need `0.4`. The bound applies to any unit, friend or not; nodes and buildings keep
+            // the exemption, which is the case it was written for.
+            if a_unit {
+                let delta = give((dx, dy), StepDecision::TakeAtRest);
+                if delta.0 != Fixed::ZERO || delta.1 != Fixed::ZERO {
+                    return delta;
+                }
+                // **A body at rest inside the reach leaves no step at all** (D200). Returning it would freeze the mover
+                // beside a man who is never going to move - the exact failure D192 traced (2,000 ticks, 1.011 tiles out,
+                // house at hp 1) - so the pair resolves it the way rule 9 does: one refuses, the other gives way.
+                if self.wait_or_give_way(id, other, &mut pass.refused) {
+                    return give((dx, dy), StepDecision::GiveWay);
+                }
+                return (stop.0, stop.1, StepDecision::WaitBlocked);
             }
             // **The bound does not apply to a body at rest** (measured: seven gather and rally tests failed when it did).
             // A resource node carries no radius, so `reach` falls back to a whole tile - and a villager must be able to

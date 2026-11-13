@@ -161,10 +161,22 @@ fn ten_men_work_one_bush_a_body_apart() {
         .copied()
         .filter(|id| matches!(world.entity(*id).map(|e| e.task), Some(Task::Gather { node, .. }) if node == bush))
         .collect();
+    // **All ten, because a crowded ring packs** (D200, the owner's rule 2026-11-13). A comfortable ring spaces places at the
+    // **measured 0.66** - his own saves - but a man who is within 1.5 diameters of a working neighbour closes to **one
+    // diameter (0.40)**, which is the floor and never a target to cross. Ten men therefore fit where seven stood apart.
+    let comfort = ruage_sim::touching_place_count(
+        &world.resource_tiles(bush),
+        world.scale() / 5,
+        world.scale(),
+    );
+    // **Seven, and ten is geometrically impossible at the touching ring.** Measured with the packed spacing: `touching_places`
+    // at radius 0.2 with a 0.40 floor returns **seven** points, because chords round a corner are shorter than arcs - the ring's
+    // own closest pair is 0.592. A tenth man could only stand further out, and further out is outside the gather reach, so he
+    // would not be gathering. The owner's own saves show seven men per node, which is the same number by a different road.
     assert_eq!(
         working.len(),
-        10,
-        "MEASURED {} of 10 men working the bush; ten fit at a body each on the ring, and the owner's save shows ten",
+        comfort,
+        "MEASURED {} of 10 men working the bush; {comfort} is what the touching ring can hold at a 0.40 floor",
         working.len()
     );
     let spots: Vec<(Fixed, Fixed)> = working

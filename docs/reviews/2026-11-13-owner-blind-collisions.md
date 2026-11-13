@@ -1,11 +1,5 @@
 # Owner-blind collisions, built and measured — parked on the match outcome
 
-> **Merged as `2c7d8e1` on 2026-11-13 and reverted the same evening.** The match does not resolve *and* does not feed
-> itself: after the merge the acceptance bank held **0 food at every report** from 400 s to 2,400 s, units 43 → 14, because
-> a loaded carrier's `Return` route ends on the town centre's own blocked anchor. Measurement and the probe:
-> `docs/reviews/2026-11-13-d200-reverted-food-stall.md`. The branch `d189-owner-blind` is intact; the two wrong claims in this
-> note's own "Acceptance" section (its hash, and "the script seeds two sides") are corrected there.
-
 *2026-11-13. The owner's ruling: **"Adopt original game behaviour. Don't make difference of friend or foe as in original
 game."** The rule is built on `d189-owner-blind` and it does what he asked at the level of two units. It cannot land yet,
 because it changes whether a match resolves, and that is the one number that decides.*
@@ -890,3 +884,88 @@ script on the branch seeds two sides.
 
 Workspace gate: `ruage-data`, `ruage-fixed`, `ruage-script`, `ruage-harness` all green (`EXIT 0`), `ruage-sim` 122/122, fmt and
 clippy clean.
+
+## The second diagnosis: six men on two tiles, and it is rule 4 that freezes them
+
+*Added after the merge was reverted. The first explanation - "the `Return` route aims at the building's blocked anchor" -
+is **not** what stops them, and the probe that produced it did not look at the decision.*
+
+`world.trace_steps()` at 400 s prints the movement pass's own answer for every loaded carrier:
+
+```
+id=3   at=(14.89,18.03) Gather@105   last=WaitOwnTile
+id=4   at=(14.33,18.41) Return@1     last=WaitOwnTile
+id=132 at=(14.56,17.63) Gather@105   last=WaitOwnTile
+id=134 at=(14.44,18.01) Return@1     last=WaitBlocked
+id=135 at=(14.16,17.65) Return@1     last=GiveWayOwnTile
+id=136 at=(14.86,18.43) Return@1     last=GiveWayOwnTile
+id=137 at=(14.48,17.21) Gather@105   last=WaitOwnTile
+```
+
+Seven villagers stand on **two tiles** - four on `(14, 18)`, three on `(14, 17)` - and every one of them is refused by a
+body on its **own tile** (rule 4). The rule's give-way step is bounded by the reach, the pairs are one body apart, so the
+bound returns zero: nobody moves, nobody re-plans (rule 4 returns before rule 7's repath), and the loads never reach the
+bank. That is why the bank reads 0 food at every report while wood climbs: the woodcutters' node is two men wide, the
+berry bush's is seven.
+
+**So the blocker is the crowd, not the drop site.** The packed 0.40 placement is geometrically legal (a tile holds four
+such bodies) but the movement pass cannot shuffle four men inside one tile, and `push_the_standing` skips every one of them
+because each holds a gather place. The measured shape is the one this note's own "capacity is notional" section predicted:
+the ring's places are real, the *traffic between them* is not.
+
+## Re-land: a body on your own tile can be walked around sideways
+
+**Red first.** `crates/sim/tests/acceptance_economy.rs` (landed on `main` with the revert) at the reverted-merge tree:
+
+```
+the acceptance match banked no food by 400 s: 0 in the bank, 9 villagers
+the crew did not grow between 400 s and 800 s: 9 then 9
+```
+
+**The rule.** Rule 4 - a body on the mover's **own tile** - used to wait, and to give way, and nothing else. At one body
+apart the give-way bound returns zero, and rule 4 returns **before** rule 7's repath, so a man with a body on his own tile
+could not move and could not ask for a route: measured, five of seven villagers `WaitOwnTile` for the whole match, the bank
+at 0 food. A plan cannot leave the tile it starts in - but a **slide** can, and a sideways step *increases* the separation
+the bound exists to protect. Rule 4 now tries four directions before it gives up: the two axis steps (what rule 5 does) and
+then the two perpendiculars, taking the first that leaves the pair at or outside the reach and lands on a tile with no other
+body. Two runs choose the same step, because the order is fixed and every number is integer.
+
+**Green, measured on the same binary and the same command as the revert's numbers** (`--seed 7 --ticks 48000 --report 400`):
+
+```
+400s  wood   40 food    4 units 20 | 800s  wood   75 food   14 units 29 | 1200s wood  300 food  484 units 33
+1600s wood  415 food  594 units 37 | 2000s wood  805 food 1226 units 37 | 2400s wood 1215 food 1396 units 37
+tick=48000 entities=143 players=2 hash=2d93236ebb16961b repaths=373 made_room=140 repaths_body=77 repaths_ground=296
+```
+
+against `main`'s `food 56 / 397 / 667 / 388 / 650 / 690`, wood 2019, units 43, `entities=128 players=1
+hash=ace125e60ea99b60 repaths=579 made_room=0`. The branch now farms *more* food than `main` (1396 against 690) and holds
+less wood (1215 against 2019), which is a different opening, not a stalled one.
+
+**The match outcome, stated plainly rather than explained away.** The dump at 48,000 ticks:
+
+```
+p1 four spearmen in Attack at (45.4-46.3, 44.9-45.0)    p2 town centre id=6 hp 1451 of 2400, four villagers, one scout
+main: eleven soldiers stacked at (51.0, 43.0)           p2 eliminated
+```
+
+So the enemy is **not eliminated by 40:00** on the branch, and its town centre is at **60%** with four attackers on it -
+the siege is under way, the reinforcements arrive later because a friend is a wall. That is the owner's rule working as
+asked, and it is the one number a reader should weigh before landing: `players` is the highest surviving player id, so
+`players=2` here means "the enemy still stands at 40:00", not "the match is broken".
+
+## Performance
+
+The gate on this tree: `cargo test --workspace --no-fail-fast` **184 binaries, 841 passed, 0 failed, 21 ignored, `EXIT 0`** (the count
+including the two new end-to-end guards), `cargo fmt --all -- --check` clean, `cargo clippy --workspace --all-targets -- -D warnings`
+clean. The acceptance run costs the same wall time as `main`'s (~40 s release) and its re-plans rise from the broken 31 to
+**373 against `main`'s 579**; `made_room` 0 -> 140 and `repaths_body` 0 -> 77, which is the slide doing exactly what it is
+for: men separating instead of pressing. The tick cost of the four extra probes is bounded - they run only for a body that
+is on the mover's own tile and only when the give-way bound returned zero.
+
+## Stability
+
+Nothing is left red, and the two new guards are the reason this cannot regress quietly: they run the acceptance world itself
+(seed 7, the shipped `config/acceptance.toml`) and assert that the bank holds food at 400 s and that the crew has grown by
+800 s. They were watched failing on the merged-but-unfixed tree and passing here. Every rule withdrawn in this work stays
+recorded with the measurement that killed it, and the `no_float` test still scans production code for a leftover probe.
