@@ -27,7 +27,18 @@ neither is nudged and neither yields.
 finish the approach to the drop. Next instrument: `trace_steps` on that fixture, printing his `last_step` and his distance to the
 drop's footprint - the same question that named the first stall.
 
-**Done when:** the five economy rows pass, the trebuchet fixture stays at ~6 s, and the branch merges.
+**The economy is fixed** (`af4f0aa`): a `Return` was aiming at the **drop's own anchor tile**, which is blocked ground, so
+every search to it failed and the carrier waited in `WaitGround` for 400,000 ticks with ten units in his hands. He now aims at
+the walkable yard (`approach_tile`). **All twenty research rows pass**; the suite is **114 binaries green, 9 red**.
+
+**The nine reds, and the two engine defects behind four of them:**
+- two settled workers measured **0.083 and 0.107 tiles apart** - `standoff_point` picks correctly, the **settle** can walk a man
+  onto a point another body already holds;
+- a `Move` order onto an occupied tile **never completes**: the walker stops 1.011 tiles out, correctly, and his task stays
+  `Move` for ever because "arrived" is judged only against the goal point;
+- plus the content-pack house, the reservation book (3 men working with no place while 4 of 7 are held), and three skirmish rows.
+
+**Done when:** those two defects are fixed test-first, the remaining test rewrites are done, and the branch merges.
 
 ### 2. Restate the three tests that pin the withdrawn rule
 
