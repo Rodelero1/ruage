@@ -384,3 +384,29 @@ answers "how do I get past". The three answers available are mutually exclusive:
 owner's standing rule is *"adopt original game behaviour"* - and the binary is the place to settle which of the three the game
 does. The collision block itself carries no owner test (measured earlier); what is not yet read is whether the *movement*
 update displaces the body it cannot pass.
+
+## Thirteenth pass: the two rules cannot both hold, and only one of them is ours
+
+Two candidates were measured against each other on the same tree, and they are the whole question:
+
+**A. The bounded step stands (no overlap ever).** `a_gatherer_walks_round_a_friend_standing_in_his_path`: FAILED, `WaitBlocked`
+at 1.84 tiles for 1,500 ticks. The trebuchet fixture: **46 s, 400,000 ticks, 200 of 400 banked**. The suite: 5 red.
+`an_enemy_body_on_the_line_changes_the_decision` passes (8,000 raw units of separation kept).
+
+**B. An at-rest body is stepped into (squeeze past).** The same friend test: **ok**. The trebuchet fixture: **5.89 s** - `main`
+is 5.86 s. The suite: **114 binaries green, 10 red**, and the 46-second stall is gone. But
+`an_enemy_body_on_the_line_changes_the_decision` fails at **4,803 raw units where two 0.2 radii need 8,000** - a walker standing
+*inside* a body at rest.
+
+**So: no rule inside "never overlap" makes a man pass a body that will not move in a one-tile gap.** Three attempts at routing
+round (lateral step, alternate start tile, repath past a known body) all end in the same place - the mover at the reach
+boundary with a route through the body - and B fixes the freeze only by allowing the overlap the engine forbids.
+
+**The remaining answer is the one RTS games use and the one the engine has no rule for: the body at rest yields.** A man
+walking into a standing friend displaces him by up to a footprint; then no one overlaps at the end of the tick, the mover keeps
+his line, and the frozen-with-a-route state cannot arise. That is a rule about a *body without an order*, and it changes what
+the player sees, so it is the owner's to call - and the binary is where to check it: `sub_8a4360` (doIntelligentMovementUpdate)
+is the function that would do it, and the read is a code walk, not a string search (the corpus's own pseudocode carries no
+"displace" literal).
+
+**Tree left at the committed state** (`46e5cc7`): no half-applied fix, the reproduction test red, the numbers above in this file.
