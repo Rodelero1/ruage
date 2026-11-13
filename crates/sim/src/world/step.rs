@@ -894,7 +894,13 @@ impl World {
                 if entity.kind != EntityKind::Unit {
                     return None;
                 }
-                let next = *self.paths.get(id)?.points.first()?;
+                // **A jammed man may have no waypoint left** - the builder whose route is spent, the man whose order is
+                // simply held - so the direction comes from his task's goal when the route is empty. Requiring a waypoint is
+                // why the builder/walker deadlock was never nudged: the builder had none.
+                let next = match self.paths.get(id).and_then(|route| route.points.first().copied()) {
+                    Some(point) => point,
+                    None => self.tile_centre(self.goal_of(entity)?.0),
+                };
                 Some((*id, entity.position, self.reach_between(*id, *id).raw(), next))
             })
             .collect();
@@ -932,12 +938,23 @@ impl World {
                 if worked {
                     continue;
                 }
+                // **A jam of two ordered men resolves the same way** (D200). A builder and a walker can block each other on
+                // one tile for ever: neither is "a body with nothing to do", so neither was nudged, and the bounded give-way
+                // step is zero at nought distance - measured, a house site stuck at 1 hp for 2,000 ticks with the two men
+                // sharing the tile. A man who has been refused for the same forty ticks is one who is not getting on with
+                // his order, and he may be moved aside. A **posted** worker (one holding a place) is still left alone.
                 let busy = self
                     .paths
                     .get(&entity.id)
                     .is_some_and(|route| !route.points.is_empty());
                 let posted = self.gather_place.contains_key(&entity.id);
-                if busy || posted {
+                let jammed = self
+                    .stalled
+                    .get(&entity.id)
+                    .copied()
+                    .unwrap_or(0)
+                    >= Self::STALLED_TICKS;
+                if posted || (busy && !jammed) {
                     continue;
                 }
                 let away = if dx.abs() >= dy.abs() {
@@ -1176,7 +1193,9 @@ impl World {
             // than before; anything else clears the count. `last_step` cannot answer this - it is only recorded when
             // `trace_steps` is on, which is why the first nudge pass saw an empty list on every real run.
             match why {
-                crate::StepDecision::WaitBlocked => {
+                // **Both waits count**: `WaitBlocked` is a body in the way on the path, `WaitOwnTile` is a body sharing the
+                // mover's tile. The second is the one that deadlocked a builder and a walker for 2,000 ticks.
+                crate::StepDecision::WaitBlocked | crate::StepDecision::WaitOwnTile => {
                     let waited = self.stalled.get(&id).copied().unwrap_or(0).saturating_add(1);
                     self.stalled.insert(id, waited);
                 }

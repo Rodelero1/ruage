@@ -812,3 +812,26 @@ hoped-for ten.
 ```
 gather_continuous 2/2   gather_motion 6/6   gather_standoff_rule 4/4   gather_touching 3/3
 ```
+
+## Twenty-eighth pass: 121 green, 1 red - and the last one is a two-man jam
+
+```
+whole suite   121 binaries green, 1 test red     (only a_content_pack_with_our_own_resources_loads_and_spends)
+```
+
+The house never leaves hp 1, and the trace says why: **the builder and a walker stand on the same tile, each waiting for the
+other.**
+
+```
+PROBE owntile id=EntityId(2) other=EntityId(4) other_task=Move{to (5.5,4.5)}   here=(4,4)
+PROBE owntile id=EntityId(4) other=EntityId(2) other_task=Build{site 11}       here=(4,4)
+```
+
+Neither is "a body with nothing to do", so `push_the_standing` skipped both, and the bounded give-way step is zero at nought
+distance. Three fixes went in and are kept (all suites still green): `WaitOwnTile` now counts toward the stall total, a jammed
+man **with an order** may be nudged after the same forty ticks, and the nudge gets its direction from the man's task goal when his
+route is empty (the builder had no waypoint at all - which is why he was never a candidate).
+
+**It still fails**, so the pair must be re-jamming after the nudge: the push moves the body, the builder steps back onto the tile,
+and the loop repeats. The next instrument is the one that worked here - the pair's `last_step` and positions every tick for the
+first 200 ticks - and the likely rule is that the *walker* should route round rather than the builder being shoved off his own site.
