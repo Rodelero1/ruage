@@ -300,3 +300,28 @@ same resumption the movement pass already does for a body that has been given th
 requires him to arrive; then the rule in `move_bodies`/`settle_workers` that rebuilds a route for a live gather order whose
 place is not reached. The measurement to hold it to is the one above: **11,359 ticks and 6 s on `main`** - the branch must
 come back to that, not just pass.
+
+## Tenth pass: he has a route, and he will not walk it
+
+The state dump was one layer too shallow. The frozen villager **holds a live route of three points**:
+
+```
+PROBE worker EntityId(2) task node EntityId(12) book Some((EntityId(12), (396000, 308125))) route 3
+```
+
+so "no route, nothing rebuilds one" is wrong, and the `resume_workers` pass I wrote for it **never fired** - reverted, with
+its reason recorded rather than left as dead code. The route exists, three waypoints long, and the man stands still for
+400,000 ticks with **two repaths and zero made room in the whole run**. That is the movement pass refusing every step without
+recording why - and `WaitOwnTile` is the only refusal that is silent: it waits for a body that is itself waiting.
+
+**What is established, in order:**
+1. the geometry is right (7 places at 0.66, closest pair 0.400, three men on a bush 601 of 1,200 ticks);
+2. the reservation book is inconsistent (raw 7, live 4, tasked 7) but is not what stops delivery;
+3. a villager with a live order and a valid place can stand **frozen with a route in hand** while `main` completes the same
+   fixture in 11,359 ticks and 6 s;
+4. the branch is **8x slower** on that fixture (46 s) and the economy starves at 200 of 400.
+
+**The next instrument is the one that worked before:** `trace_steps()` on this fixture, printing the two bodies' `last_step`,
+positions and route lengths for the ticks around the freeze. The owner's own save fixture showed the same pair of decisions
+(`WaitOwnTile` on one, `GiveWayOwnTile` on the other) - so the shape is known; what is not known is *who* the second body is
+on a map with one villager, and whether a route is being walked into a body that never yields.

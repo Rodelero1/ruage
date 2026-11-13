@@ -339,3 +339,65 @@ fn a_gatherer_never_moves_further_in_a_tick_than_its_speed() {
     }
     assert!(worst > 0, "the villager never moved at all");
 }
+
+/// **A gatherer who is neither walking nor working asks for a route again** (D200). Measured on the trebuchet fixture: a
+/// villager frozen at (16.23,13.80) with a live `Gather` task, a reserved place at (19.80,15.41) and `progress = 0`, for
+/// **400,000 ticks** - 3.9 tiles from his work, with no route and nothing that would ever build one. `main` has no such
+/// state (it banks the same 400 in 11,359 ticks), so the movement rule introduced it.
+#[test]
+fn a_gatherer_five_tiles_away_reaches_his_node() {
+    let Some(mut world) = world_of(MAP_BUSH) else {
+        return;
+    };
+    let scale = world.scale();
+    let node = world
+        .entities()
+        .iter()
+        .find(|entity| matches!(entity.kind, EntityKind::Resource(_)))
+        .map(|entity| entity.id)
+        .expect("a bush at (10,6)");
+    let villager = world.role_unit("villager").expect("villager");
+    let id = EntityId(9_670);
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: Some(villager),
+            position: (
+                Fixed::from_raw(5 * scale + scale / 2),
+                Fixed::from_raw(6 * scale + scale / 2),
+            ),
+            speed: Fixed::parse("0.8", scale).expect("a speed"),
+            hp: 25,
+            amount: 0,
+        })
+        .expect("a villager");
+    world.step().expect("the villager lands");
+    world
+        .submit_checked(Command::Gather { villager: id, node })
+        .expect("a gather order");
+    let tile = world.resource_tiles(node)[0];
+    let mut reach = f64::MAX;
+    let mut arrived = None;
+    for tick in 0..1_500 {
+        world.step().expect("a tick");
+        let Some(p) = world.position(id) else { break };
+        let clearance = ruage_sim::tiles::distance_to_tile(
+            p,
+            (i64::from(tile.0), i64::from(tile.1)),
+            scale,
+        );
+        reach = reach.min(clearance as f64 / scale as f64);
+        if clearance <= scale / 3 {
+            arrived = Some(tick);
+            break;
+        }
+    }
+    assert!(
+        arrived.is_some(),
+        "MEASURED he never reached the bush in 1,500 ticks; closest {reach:.2} tiles, at ({:.2},{:.2}); measured frozen on the trebuchet fixture for 400,000 ticks",
+        world.position(id).map(|p| p.0.raw() as f64 / scale as f64).unwrap_or(-1.0),
+        world.position(id).map(|p| p.1.raw() as f64 / scale as f64).unwrap_or(-1.0)
+    );
+}
