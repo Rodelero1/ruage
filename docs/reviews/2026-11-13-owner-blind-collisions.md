@@ -410,3 +410,34 @@ is the function that would do it, and the read is a code walk, not a string sear
 "displace" literal).
 
 **Tree left at the committed state** (`46e5cc7`): no half-applied fix, the reproduction test red, the numbers above in this file.
+
+## Fourteenth pass: the nudge works, and it breaks three rules we already wrote down
+
+Built the 0 A.D.-shaped nudge (a body with nothing to do, in a walker's path, is displaced a twentieth of a tile along the
+dominant axis, onto free ground, never into a third body). Measured:
+
+```
+gather_motion::a_gatherer_walks_round_a_friend_standing_in_his_path   ok      (was WaitBlocked at 1.84 tiles)
+research::a_trebuchet_cannot_be_trained_before_the_imperial_age       ok      6.24 s   (main 5.86 s; without the nudge 46 s)
+full suite                                                            110 green, 16 red
+```
+
+**The 8x is gone and the economy delivers.** But four of the sixteen reds are rules the engine already states, not tests written
+for old geometry:
+
+| test | what it says | what the nudge did |
+|---|---|---|
+| `evasion::a_blocked_unit_goes_round_a_standing_body_and_arrives` | *"the body it went round did not move"* | moved it from `(5,2)` to `(6,2)` |
+| `evasion::a_body_on_the_goal_is_never_entered_and_costs_no_repath` | *"the body standing there did not move"* | moved it |
+| `evasion::a_repath_route_is_pulled_like_a_planned_one` | route pulling invariant | broken by a moved body |
+| `animals::a_gathered_sheep_stands_still` | *"nothing gathers a sheep into walking"* | pushed a sheep being sheared |
+
+**So the engine's written rule today is "a body at rest is never displaced; the walker goes round it"**, and that rule is what
+freezes a walker when the body shares his tile - the planner has no tile to go round. Scoping the nudge to the mover's own tile
+reduced the damage but did not remove it: `a_blocked_unit_goes_round...` still lost its body, because two units standing near a
+tile edge share a tile far more often than the phrase "corner case" suggests.
+
+**Reverted, branch clean at `98b3b48`.** The measurements above are the evidence for the one question left: whether a body at
+rest may be displaced at all. If yes, those three evasion tests change from "did not move" to "moved no more than a nudge and
+was never walked through", and the sheep test gains "unless it is being gathered". If no, the shared-tile freeze needs an
+answer that does not involve displacement, and none of the three routing attempts found one.

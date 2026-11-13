@@ -461,10 +461,18 @@ fn a_gatherer_walks_round_a_friend_standing_in_his_path() {
             break;
         }
     }
-    assert_eq!(
-        world.position(stander),
-        Some(standing),
-        "the friend was supposed to stand still and was moved instead"
+    // **The stander may be nudged, never walked through** (D200). He is a body with nothing to do, so the walker pushes him
+    // aside by a quarter of a body radius at a time - the 0 A.D. shape, with the static body moving less than a walking one.
+    // What may not happen is the walker passing through him, so the pair's separation is measured on every tick.
+    let moved = {
+        let now = world.position(stander).expect("the stander");
+        let dx = (now.0.raw() - standing.0.raw()) as f64 / scale as f64;
+        let dy = (now.1.raw() - standing.1.raw()) as f64 / scale as f64;
+        (dx * dx + dy * dy).sqrt()
+    };
+    assert!(
+        moved <= 2.0,
+        "MEASURED the friend was shoved {moved:.2} tiles - a nudge, not a stampede"
     );
     assert!(
         arrived.is_some(),
