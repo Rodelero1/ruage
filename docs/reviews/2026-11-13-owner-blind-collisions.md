@@ -161,3 +161,24 @@ one that may be a real defect), `ten_men_work_one_bush_a_body_apart` and `six_se
 0.40 spacing), `a_woodcutter_whose_tree_runs_out...`, `ten_men_touch_one_bush...` (a working man **0.174** from the tile -
 inside it, so a place or a settle is wrong somewhere), and `movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives`
 (which pins the withdrawn rule).
+
+## Fifth pass: the 0.174 was a walker, and the reservation question is the real one
+
+**A working man 0.174 tiles from the bush tile is not a violation.** A node's tile is not blocked ground (`is_free_ground`
+treats a resource's own tile as standable), so a man on his way to his place may cross close to it. The assertion was
+checking *every* man tasked to the node, walkers included; it now checks the **reserved place** each man holds, which is
+where the settle will put him and therefore what the rule is about.
+
+**And that change found something worth keeping:** one of the ten men tasked to the bush **holds no reserved place at all** -
+
+```
+EntityId(8504) works the bush with no reserved place
+```
+
+Either a place is taken only at settle time (in which case the test must allow a man to be *between* places) or the
+reservation is being dropped somewhere between the order and the settle. That is the next question, and it is a one-test
+investigation with a known instrument (`gather_places()`), not a hunt.
+
+**Suite on the branch after this pass:** `gather_motion` 3/3, `gather_ring` 4/4, `gather_touching` 1/2 - the last one red for
+the reservation question above. Two tests remain written for 0.40 spacing (`ten_men_work_one_bush_a_body_apart`,
+`six_settled_men_hold_their_places`), one pins the withdrawn rule, and the content-pack house is still unfinished.

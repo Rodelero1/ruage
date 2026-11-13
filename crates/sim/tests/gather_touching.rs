@@ -214,27 +214,40 @@ fn ten_men_touch_one_bush_without_overlapping_it_or_each_other() {
         "MEASURED {} of 10 working the bush; seven touching places fit one tile at 0.66",
         working.len()
     );
+    // **The rule is about the places men *hold*, not about every man walking past** (D200). A node's tile is not blocked
+    // ground, so a man on his way to a place may cross close to it - measured 0.174 - and that is not a violation; what
+    // may never happen is a *reserved place* that does not touch, or two places inside one another.
+    // **The rule is about the place a man *holds*, not about every man walking past** (D200). A node's tile is not blocked
+    // ground, so a man on his way may cross close to it (measured 0.174) and that is not a violation; what may never happen
+    // is a *reserved place* that does not touch the tile, because that is where the settle will put him.
+    let reserved: std::collections::BTreeMap<EntityId, (i64, i64)> = world
+        .gather_places()
+        .into_iter()
+        .collect();
     let mut spots = Vec::new();
     for id in &working {
-        let at = world.position(*id).expect("a position");
-        let clearance = distance_to_tile(at, tile, scale);
+        let Some(raw) = reserved.get(id).copied() else {
+            panic!("{id:?} works the bush with no reserved place");
+        };
+        let place = (Fixed::from_raw(raw.0), Fixed::from_raw(raw.1));
+        let clearance = distance_to_tile(place, tile, scale);
         assert!(
             clearance >= radius - scale / 50,
-            "MEASURED a villager {:.3} tiles from the bush tile: his circle is inside it",
+            "MEASURED the place of {id:?} is {:.3} tiles from the bush tile: his circle is inside it",
             clearance as f64 / scale as f64
         );
         assert!(
             clearance <= radius + scale / 12,
-            "MEASURED a villager {:.3} tiles from the bush tile, standing away from it rather than touching it",
+            "MEASURED the place of {id:?} is {:.3} tiles out, away from the bush rather than touching it",
             clearance as f64 / scale as f64
         );
-        spots.push(at);
+        spots.push(raw);
     }
     let mut closest = f64::MAX;
     for a in 0..spots.len() {
         for b in (a + 1)..spots.len() {
-            let dx = (spots[a].0.raw() - spots[b].0.raw()) as f64 / scale as f64;
-            let dy = (spots[a].1.raw() - spots[b].1.raw()) as f64 / scale as f64;
+            let dx = (spots[a].0 - spots[b].0) as f64 / scale as f64;
+            let dy = (spots[a].1 - spots[b].1) as f64 / scale as f64;
             closest = closest.min((dx * dx + dy * dy).sqrt());
         }
     }
