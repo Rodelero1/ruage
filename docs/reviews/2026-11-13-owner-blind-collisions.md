@@ -717,3 +717,23 @@ overlap problem but a *refusal* problem.
 **Reverted rather than kept**: the stand-down, because it measured nothing. The next rule to build is the inverse - an unplaced
 worker **steps away from the node** until a place frees, so the ring can seat him - and it is testable on the same fixture that
 prints the line above.
+
+## Twenty-fourth pass: the owner chose "back off and wait", and the naive form thrashes
+
+Built it as a **waiting queue**: an unplaced worker inside the ring's reach stands down (`Task::Idle`), his node is remembered in
+`waiting_for_place`, and `seat_the_waiting` hands the order back as soon as `standoff_point` can give him a point. Measured on the
+ten-men fixture:
+
+```
+MEASURED 4 of 10 men working the bush; the ring holds 7 at 0.66 spacing        (was 7 of 10)
+MEASURED 4 men working the bush and 7 places held
+```
+
+**Worse, and for a visible reason: it thrashes.** A man stands down because no place can be *measured* for him right now (a body is
+inside the spacing), is re-seated the moment one can, walks in, refuses again, stands down - so at any sample four are working and
+three are in transit. The queue is the right shape; the trigger is not: standing down must be **sticky** (only after the same
+forty refused ticks the nudge uses) and re-seating must require a place that is **free in the book**, not merely measurable from
+where he happens to stand.
+
+Reverted, so the tree stays at the measured `118 green / 4 red`. The shape to build next is written here rather than in a comment
+in the code, because the next attempt should start from the numbers above, not from scratch.
