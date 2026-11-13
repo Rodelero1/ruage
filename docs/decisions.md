@@ -5061,3 +5061,25 @@ is broken": with friends solid, an army arrives later and the match is slower, w
 `crates/sim/tests/acceptance_economy.rs`, which runs the acceptance world itself and was red on the first merge. And any
 future "the match no longer resolves" report quotes the **town centre's hp and the attackers on it**, not the `players`
 number alone.
+
+### D204 - no pushing: a man who cannot get his square looks for another tile of the same resource
+
+**What it says.** The owner, 2026-11-13, playing the D200 merge: *"I don't like villagers pushing other villagers. I want
+instead to look for another free place at next tile with same resource instead of fighting over the place at the same
+tile."* So displacement is **not** the answer to a contested work place. A worker who cannot stand his square at a node
+does not shove the man who holds it: he takes the next node of the **same resource column** that has a free place, and only
+when there is none does he stand down and wait.
+
+**What it replaces.** `push_the_standing` (D200) - a body at rest displaced a twentieth of a tile after forty refused
+ticks. It stays in the tree only as the *last* resort for a body that has no work at all (a man blocking a corridor); it may
+no longer be the engine's answer to a crowd at a resource. This is also the owner's rule from D182, now applied on the
+contested path as well as at order time: *"try another nearest resource of the same kind"*.
+
+**Why it matters here.** The nudge was the only thing that let a crowd of seven on one bush move at all after D200, and the
+acceptance match's food economy depended on it; with displacement gone, the crowd policy has to be **re-targeting**, which
+is the shape the owner asked for and which the AI layer will want anyway.
+
+**Commits us to.** A contest at a node resolves by finding another node, never by moving a man off his square; the fixture
+is two men ordered onto one occupied square (the second arrives at a different node of the same column, or waits when there
+is none), watched red first. Until it is built, `push_the_standing` is a **known contradiction** with this decision and
+`docs/next-step.md` carries it as step 1.
