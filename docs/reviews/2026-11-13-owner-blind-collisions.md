@@ -526,3 +526,27 @@ joining a patch, the reservation book, the withdrawn friend-on-goal rule) plus t
 **One rule was tried and withdrawn:** allowing a third ground re-plan after forty stalled ticks fixed nothing on its own (the
 goal was the problem, not the budget) and broke `ground_it_cannot_cross_is_re_planned_at_most_twice`, which is a written rule.
 Reverted; the cap stands.
+
+## Eighteenth pass: two test rewrites, and the two real defects they exposed
+
+Rewrote the two tests that pinned the withdrawn rules - `gather_continuous::ten_men_work_one_bush_a_body_apart` now asks the
+engine's own capacity instead of asserting ten, and `movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives` now
+requires him to stand at the pair's reach **beside** the friend rather than through him. Neither went green, and neither is a
+test problem:
+
+```
+gather_continuous: MEASURED the closest pair 0.107 tiles apart; a villager's circle is 0.40 wide and must fit
+gather_standoff_rule: MEASURED the closest pair 0.083 tiles apart after ten seconds; two bodies are 0.40 wide
+movement: the walker 1.011 tiles from the tile he was sent to after 600 ticks, task still Move
+```
+
+**Defect A - two settled men standing 0.1 tiles apart.** `standoff_point` refuses a place within 0.66 of any body, so the
+choice is right; the **settle** is not - it walks a man onto the point it chose, and two men can arrive at the same point from
+opposite sides in one tick, or a man can be settled onto a point a body has since occupied. Two bodies 0.083 apart is not a
+crowd, it is two men in one shirt.
+
+**Defect B - a move order never completes on an occupied tile.** The walker stops 1.011 tiles out, correctly, and his task stays
+`Move` for ever: "arrived" is still judged only against the goal point, so an order onto a tile a friend holds never finishes.
+D200 needs the predicate to accept standing at the pair's reach from the goal when the goal itself is taken.
+
+Both are engine, both are test-first next, and neither is a decision.

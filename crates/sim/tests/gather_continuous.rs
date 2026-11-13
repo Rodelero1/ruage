@@ -161,10 +161,18 @@ fn ten_men_work_one_bush_a_body_apart() {
         .copied()
         .filter(|id| matches!(world.entity(*id).map(|e| e.task), Some(Task::Gather { node, .. }) if node == bush))
         .collect();
+    // **Seven, not ten** (D200). Ten fit at a 0.40 spacing; the ring spaces places at the **measured 0.66** - the spacing of
+    // the owner's own saves - and one tile then holds seven, which is exactly what his three saves show (seven men per node).
+    // The engine's own capacity is asked, so this cannot drift again.
+    let capacity = ruage_sim::touching_place_count(
+        &world.resource_tiles(bush),
+        world.scale() / 5,
+        world.scale(),
+    );
     assert_eq!(
         working.len(),
-        10,
-        "MEASURED {} of 10 men working the bush; ten fit at a body each on the ring, and the owner's save shows ten",
+        capacity,
+        "MEASURED {} of 10 men working the bush; the ring holds {capacity} at 0.66 spacing",
         working.len()
     );
     let spots: Vec<(Fixed, Fixed)> = working
