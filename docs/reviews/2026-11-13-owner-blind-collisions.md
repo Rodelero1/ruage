@@ -240,3 +240,34 @@ game has them stack at the drop the same way they stack at a node, and we have n
 
 **My error, again, recorded because it cost a pass:** I read the first six reds as six separate test problems and rewrote
 tests for three of them before reading all six messages together. Five of them say the same sentence.
+
+## Eighth pass: the control test - one test, two branches, 8x the time
+
+The same test, run on both trees, same machine, back to back:
+
+```
+main              a_trebuchet_cannot_be_trained_before_the_imperial_age   ok      5.86 s
+d189-owner-blind  a_trebuchet_cannot_be_trained_before_the_imperial_age   FAILED  46.03 s
+                  could not bank 400 in column 0; the bank holds 200
+```
+
+**This is the measurement the whole branch needed.** D200 is not merely "some tests now disagree": the simulation is **8x slower**
+and the economy **starves** - the same game, same map, same orders, 200 banked instead of 400, in a test that on `main` finishes
+in six seconds.
+
+Eight times is not a small constant; it is a loop. The candidates, in the order worth checking:
+
+1. **repathing storms** - `MAX_REPATHS_PER_TICK` bounds each tick, but if every blocked man repaths every tick against every
+   neighbour the pass becomes quadratic in a crowd (the branch's acceptance run showed `repaths=45 made_room=24` on `main`'s
+   `409/0` - different map, so not directly comparable, but the direction is worth measuring on the same map);
+2. **give-way churn** - a granted give-way that is refused next tick returns the pair to `WaitOwnTile` forever, which is CPU
+   burned, not progress;
+3. **`standoff_point` scanning places against every held place** for every worker every tick (it is called by the settle, the
+   picker and the order path).
+
+**Instrument, and it is one run:** the same test with per-tick counters printed every 600 ticks - `passes`, `repaths`,
+`made_room`, `moved` - which tells a quadratic pass from a churn loop in a single execution.
+
+**What this pass settles:** the geometry is right (7 places, 0.66, 0.400 apart), the reservation book is inconsistent but not
+the cause of the reds, and the branch's real defect is **cost and throughput under a crowd**. Nothing lands on `main` until
+that 46 s is back near 6 s.
