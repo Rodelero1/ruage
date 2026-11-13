@@ -100,7 +100,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <header><h1>Decisions</h1>
 <p class="lede">Every rule the corpus states, what it rests on, and what it has not decided yet. Generated from <code>docs/decisions.md</code> and the U-register; nothing on this page is typed by hand, so a wrong label means the classifier is wrong and can be seen to be wrong.</p>
 <ul class="coverage" id="coverage">
-<li data-k="decisions"><b>204</b> decisions</li>
+<li data-k="decisions"><b>208</b> decisions</li>
 <li data-k="amended"><b>11</b> amended</li>
 <li data-k="corrected"><b>4</b> corrected</li>
 <li data-k="superseded"><b>6</b> superseded</li>
@@ -479,7 +479,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </div>
 </details>
 <details class="group" id="area-pathfinding-movement" data-area="Pathfinding &amp; movement" data-unfinished="0" data-undecided="2" open>
-<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">23 decisions · 2 undecided · 2 with no stated basis</span></summary>
+<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">24 decisions · 2 undecided · 2 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U5</span> Are unit speeds in tiles/second, and what is the tile size in world units? Speed 1.35 (knight) is consistent with tiles/s.</li>
 <li><span class="id">U7</span> What pathing algorithm does the game use (A, flow field, something else), and what are its cost weights?</li>
@@ -926,6 +926,26 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <button class="verdict" data-verdict="question" data-id="D197">question</button>
 <button class="verdict" data-verdict="wrong" data-id="D197">wrong</button>
 <input class="note" data-note="D197" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D200" data-id="D200" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D200</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-13</span>
+<h3>collisions are owner-blind; a friend is a wall, and the winner is not the match outcome</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>That rule was chosen to make a crowd deliverable, not because the game does it, and it let a walker pass through a friend for 300 ticks (measured: 0.307 tiles at tick 79 against the 0.4 two footprints need, test collision::a_walker_never_en</li>
+<li>Built, measured and parked on d189-owner-blind (eaa2d98): collision 4/4 and evasion 6/6 green, made_room 0 -&gt; 24, repaths 409 -&gt; 45, and the acceptance match ends players=2 where main ends players=1.</li>
+<li>Full measurement and the landing plan: docs/reviews/2026-11-13-owner-blind-collisions.md.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D200">
+<button class="verdict" data-verdict="agree" data-id="D200">agree</button>
+<button class="verdict" data-verdict="question" data-id="D200">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D200">wrong</button>
+<input class="note" data-note="D200" placeholder="note (saved with the verdict)">
 </div>
 </article>
 </div>
@@ -3858,7 +3878,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </div>
 </details>
 <details class="group" id="area-licensing-publication" data-area="Licensing &amp; publication" data-unfinished="0" data-undecided="0" open>
-<summary><span class="range">Licensing &amp; publication</span> <span class="gcount">5 decisions · 1 with no stated basis</span></summary>
+<summary><span class="range">Licensing &amp; publication</span> <span class="gcount">7 decisions · 1 with no stated basis</span></summary>
 <div class="kind" data-kind="decisions">
 <article class="decision s-amended" id="d-D4" data-id="D4" data-origins="owner dat binary published" data-unresolved="0" data-status="amended">
 <div class="head">
@@ -3965,10 +3985,47 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D81" placeholder="note (saved with the verdict)">
 </div>
 </article>
+<article class="decision s-decided" id="d-D201" data-id="D201" data-origins="owner dat" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D201</span>
+<span class="status decided">decided</span>
+<h3>content: our own campaigns only, names by three lists, all prose rewritten</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The original game&#x27;s campaigns and scenarios are read in place from the owner&#x27;s install and played locally, and are never converted into a shipped artifact, committed, or quoted in public docs - the owner&#x27;s words: &quot;The only campaigns and sce</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-dat">dat</span></summary><ul>
+<li>Commits us to. No campaign data in config/ or any tracked path; converted scenarios only in build/; descriptions authored, never imported from the dat&#x27;s string tables; a rename list maintained with the content pack; and the project&#x27;s presen</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D201">
+<button class="verdict" data-verdict="agree" data-id="D201">agree</button>
+<button class="verdict" data-verdict="question" data-id="D201">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D201">wrong</button>
+<input class="note" data-note="D201" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D202" data-id="D202" data-origins="dat" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D202</span>
+<span class="status decided">decided</span>
+<h3>the target shape is &quot;A-prime&quot;: self-contained sources, the install as the only input</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-dat">dat</span></summary><ul>
+<li>The one thing &quot;A-prime&quot; cannot include, and does not need. &quot;The data generated once, reviewed, and made part of the game&quot; is the only sentence of the goal that does not fit: the dat&#x27;s numbers are a substantial extraction of their database (</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D202">
+<button class="verdict" data-verdict="agree" data-id="D202">agree</button>
+<button class="verdict" data-verdict="question" data-id="D202">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D202">wrong</button>
+<input class="note" data-note="D202" placeholder="note (saved with the verdict)">
+</div>
+</article>
 </div>
 </details>
 <details class="group" id="area-project-process" data-area="Project process" data-unfinished="1" data-undecided="0" open>
-<summary><span class="range">Project process</span> <span class="gcount">19 decisions · 1 unfinished · 1 superseded · 3 with no stated basis</span></summary>
+<summary><span class="range">Project process</span> <span class="gcount">20 decisions · 1 unfinished · 1 superseded · 3 with no stated basis</span></summary>
 <div class="kind" data-kind="unfinished"><h4>Not finished</h4><ul class="gaps">
 <li data-decision="D18"><a class="id" href="#d-D18">D18</a> Not yet done, deliberately: there is no renderer. The headless run is the harness, and a renderer is a large piece of work that buys nothing until the simulation is worth watching. &quot;Ready for replacement&quot; is therefore written as a schema and a boundary, not as a graphics engine.</li>
 </ul></div>
@@ -4361,6 +4418,38 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D195" placeholder="note (saved with the verdict)">
 </div>
 </article>
+<article class="decision s-decided" id="d-D203" data-id="D203" data-origins="owner measured published prior-art review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D203</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-13</span>
+<h3>a rule asked for twice goes into the tree, and a question the owner must answer arrives after the evidence</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>Why. The owner asked for it in these words: &quot;I always want to compact prior implementation of feature and then adversarial review on performance and stability after that.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The review comes after the change, covers performance and stability, and carries a measured number.</li>
+<li>Review: tools/review_check.py refuses a commit that changes crates/, config/, tools/, Age2HD/ or build/ without a staged note holding a measured ## Performance and a ## Stability; the hook runs that too.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-published">published</span></summary><ul>
+<li>A decision the owner must make is the last step, not the first. The order is: the original game first (run it, watch it, read its own data, read the binary), then the adjacent open-source projects and published sources (docs/prior-art.md, t</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-prior-art">prior-art</span></summary><ul>
+<li>A decision the owner must make is the last step, not the first. The order is: the original game first (run it, watch it, read its own data, read the binary), then the adjacent open-source projects and published sources (docs/prior-art.md, t</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>Every step is bracketed by a compact and an adversarial review. The compact&#x27;s first half is the feature&#x27;s prior implementation - where it lives (file:line), which tests pin it, what it measures today - because a plan written over an unnamed</li>
+<li>The review comes after the change, covers performance and stability, and carries a measured number.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D203">
+<button class="verdict" data-verdict="agree" data-id="D203">agree</button>
+<button class="verdict" data-verdict="question" data-id="D203">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D203">wrong</button>
+<input class="note" data-note="D203" placeholder="note (saved with the verdict)">
+</div>
+</article>
 </div>
 </details>
 </section>
@@ -4368,7 +4457,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <p class="note">Ids named in the docs or the code that no decision section defines. Each is either a missing decision or a typo in a citation; both are cheap to fix and neither is visible in a prose read.</p>
 <ul class="refs">
 <li><span class="id">D115</span> <code>SPEC.md:654</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D115</span> <code>SPEC.md:679</code> | 2026-11-08 | v1.129 - **the yard is not wall, and the outline goes outside (D161)**, with research in `docs/building-collision.md`: the game&#x27;s collision is th</li>
+<li><span class="id">D115</span> <code>SPEC.md:680</code> | 2026-11-08 | v1.129 - **the yard is not wall, and the outline goes outside (D161)**, with research in `docs/building-collision.md`: the game&#x27;s collision is th</li>
 <li><span class="id">D115</span> <code>crates/sim/tests/animals.rs:310</code> // any movement rule, and the test only ever passed because a body&#x27;s centre could stand on the core&#x27;s corner (D115).</li>
 <li><span class="id">D115</span> <code>crates/view/src/lib.rs:1180</code> /// The renderer needs it because a building is not always solid all over: the town centre keeps a **yard** (D115), whose tiles a</li>
 <li><span class="id">D115</span> <code>crates/view/tests/virtual_fence.rs:7</code> //! The engine has enforced exactly that since D115 - the town centre is a **4-tile core plus a walkable yard**, and the walk grid refuses</li>
@@ -4386,7 +4475,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:174</code> `D82`, `D115`, `D122b`, `D124`, `D125b`, `D126`, `D136`, `D192`). D192 is the parked standoff and belongs to a branch; the rest are</li>
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D122b</span> <code>SPEC.md:654</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D122b</span> <code>SPEC.md:717</code> | 2026-11-05 | v1.91 - **the adversarial review of the panel and the farm (D122b).** Owner: *&quot;Please do complete adversarial review on performance and stability</li>
+<li><span class="id">D122b</span> <code>SPEC.md:718</code> | 2026-11-05 | v1.91 - **the adversarial review of the panel and the farm (D122b).** Owner: *&quot;Please do complete adversarial review on performance and stability</li>
 <li><span class="id">D122b</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
 <li><span class="id">D122b</span> <code>docs/dangling.toml:10</code> D122b = &quot;part of the D121-D126 sequence the corpus lists as never written down&quot;</li>
 <li><span class="id">D122b</span> <code>docs/decisions.md:4020</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
@@ -4395,7 +4484,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D122b</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:174</code> `D82`, `D115`, `D122b`, `D124`, `D125b`, `D126`, `D136`, `D192`). D192 is the parked standoff and belongs to a branch; the rest are</li>
 <li><span class="id">D122b</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D124</span> <code>SPEC.md:654</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D124</span> <code>SPEC.md:715</code> | 2026-11-05 | v1.93 - **a husk is a farm crossed out (D124).** Owner: *&quot;As of now, husk can get the same pictogram as farm but crossed over.&quot;* A spent farm&#x27;s c</li>
+<li><span class="id">D124</span> <code>SPEC.md:716</code> | 2026-11-05 | v1.93 - **a husk is a farm crossed out (D124).** Owner: *&quot;As of now, husk can get the same pictogram as farm but crossed over.&quot;* A spent farm&#x27;s c</li>
 <li><span class="id">D124</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
 <li><span class="id">D124</span> <code>docs/dangling.toml:11</code> D124 = &quot;part of the D121-D126 sequence the corpus lists as never written down&quot;</li>
 <li><span class="id">D124</span> <code>docs/decisions.md:4020</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
@@ -4405,7 +4494,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D124</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:174</code> `D82`, `D115`, `D122b`, `D124`, `D125b`, `D126`, `D136`, `D192`). D192 is the parked standoff and belongs to a branch; the rest are</li>
 <li><span class="id">D124</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D125b</span> <code>SPEC.md:654</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D125b</span> <code>SPEC.md:713</code> | 2026-11-05 | v1.95 - **the ring is a curve, not a diamond (D125b).** Owner, on the rendered frame: *&quot;I see a diamond, not elipse in the example&quot;* - correct, a</li>
+<li><span class="id">D125b</span> <code>SPEC.md:714</code> | 2026-11-05 | v1.95 - **the ring is a curve, not a diamond (D125b).** Owner, on the rendered frame: *&quot;I see a diamond, not elipse in the example&quot;* - correct, a</li>
 <li><span class="id">D125b</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
 <li><span class="id">D125b</span> <code>docs/dangling.toml:12</code> D125b = &quot;part of the D121-D126 sequence the corpus lists as never written down&quot;</li>
 <li><span class="id">D125b</span> <code>docs/decisions.md:4020</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
@@ -4415,7 +4504,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D125b</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:174</code> `D82`, `D115`, `D122b`, `D124`, `D125b`, `D126`, `D136`, `D192`). D192 is the parked standoff and belongs to a branch; the rest are</li>
 <li><span class="id">D125b</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D126</span> <code>SPEC.md:654</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D126</span> <code>SPEC.md:712</code> | 2026-11-05 | v1.96 - **the minimap&#x27;s crossing lines were seams (D126).** Owner: *&quot;Minimap has 2 crossing lines artifact.&quot;* The minimap painted one diamond per</li>
+<li><span class="id">D126</span> <code>SPEC.md:713</code> | 2026-11-05 | v1.96 - **the minimap&#x27;s crossing lines were seams (D126).** Owner: *&quot;Minimap has 2 crossing lines artifact.&quot;* The minimap painted one diamond per</li>
 <li><span class="id">D126</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
 <li><span class="id">D126</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
 <li><span class="id">D126</span> <code>docs/dangling.toml:10</code> D122b = &quot;part of the D121-D126 sequence the corpus lists as never written down&quot;</li>
@@ -4433,9 +4522,9 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D126</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D126</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:45</code> - **The ratchet is a ratchet, not a mute**: recording a gap requires a note, so the next session reads *why* D126 has no decision rather</li>
 <li><span class="id">D136</span> <code>SPEC.md:654</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D136</span> <code>SPEC.md:695</code> | 2026-11-07 | v1.113 - **`lib.rs` 8,731 -&gt; 4,106 (D145).** The owner: *&quot;Go ahead if it is still more than 5000 lines file.&quot;* Twelve more mechanical moves - `wo</li>
-<li><span class="id">D136</span> <code>SPEC.md:696</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
-<li><span class="id">D136</span> <code>SPEC.md:696</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
+<li><span class="id">D136</span> <code>SPEC.md:696</code> | 2026-11-07 | v1.113 - **`lib.rs` 8,731 -&gt; 4,106 (D145).** The owner: *&quot;Go ahead if it is still more than 5000 lines file.&quot;* Twelve more mechanical moves - `wo</li>
+<li><span class="id">D136</span> <code>SPEC.md:697</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
+<li><span class="id">D136</span> <code>SPEC.md:697</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
 <li><span class="id">D136</span> <code>crates/sim/src/world/gather.rs:3</code> //! Moved out of `lib.rs` unchanged in D136. `nearest_like` is the replacement search - it asks whether a node can actually</li>
 <li><span class="id">D136</span> <code>crates/sim/src/world/memory.rs:3</code> //! Moved out of `lib.rs` unchanged in D136. The anti-cheat is the point of the file: a rule may ask what its player has</li>
 <li><span class="id">D136</span> <code>crates/sim/src/world/movement.rs:3</code> //! Moved out of `lib.rs` unchanged (D136). `collide` is the only entry point the tick uses; everything else answers one</li>
@@ -4466,7 +4555,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </ul>
 </section>
 <section id="health"><h2>How this page knows</h2>
-<p>Parsed 204 decisions and 11 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
+<p>Parsed 208 decisions and 11 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
 <p>A basis is recorded only from a phrase in the decision itself, and the phrase is shown beside the label. <b>No stated basis</b> is the reliable category: it needs no pattern to be right. <b>Unresolved language</b> is a reading list, not a verdict - the quoted sentence is there to be judged.</p>
 <p>The scan for broken references reads <code>docs/</code>, <code>crates/</code>, <code>config/</code>, <code>SPEC.md</code> and <code>README.md</code>. <code>tools/</code> is excluded: its fixtures name ids that are meant not to exist.</p>
 <p class="empty">Every decision heading was placed.</p>

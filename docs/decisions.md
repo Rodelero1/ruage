@@ -4990,3 +4990,41 @@ goal explicitly keeps.
 **Commits us to.** `World::from_state` as the seam between B and A; no dat-derived table in a tracked path (D8); the importer
 back in this repository by the time a stranger is expected to build; and the target recorded here so a later session does not
 re-open "which option did we pick".
+
+### D203 - a rule asked for twice goes into the tree, and a question the owner must answer arrives after the evidence
+
+**What it says.** Three standing instructions the owner gave on 2026-11-13, written down because a rule that lives in a
+conversation does not reach the next thread:
+
+1. **Every step is bracketed by a compact and an adversarial review.** The compact's first half is the feature's *prior
+   implementation* - where it lives (`file:line`), which tests pin it, what it measures today - because a plan written
+   over an unnamed implementation cannot say what it is changing. The review comes after the change, covers performance
+   **and** stability, and carries a measured number. `AGENTS.md`'s four-step routine is that rule; its step 1 now says so.
+2. **A decision the owner must make is the last step, not the first.** The order is: the original game first (run it,
+   watch it, read its own data, read the binary), then the adjacent open-source projects and published sources
+   (`docs/prior-art.md`, the wiki, the manual), and only then the question - which carries what each attempt found,
+   including the attempt that found nothing.
+3. **The question does not expire.** It goes in the reply with the turn ended, and it is recorded as a `U<n>` row in the
+   U-register before that, so a reboot at 04:00, a new thread or a week's silence cannot lose it. A `clarify` form is for
+   a choice that blocks the current step; `agent.clarify_timeout` is now `0`, so a form that is open cannot expire
+   unanswered mid-conversation - but a form holds the turn, so it is not where a decision question goes.
+
+**Why.** The owner asked for it in these words: *"I always want to compact prior implementation of feature and then
+adversarial review on performance and stability after that. When my decision is needed, I always want original game to be
+checked how it deals with the problem, if no solution is found then I want other OSS projects and other sources in the web
+to be checked and then provided with the question which never timeouts with information gathered."* Each of the three has
+already failed once here: a review was skipped twice before `tools/review_check.py` existed, a `clarify` form came back
+unreadable and expired unanswered (`references/docs-and-decision-index.md`), and a question asked inside a thread was gone
+with the thread.
+
+**The enforcement, and what it does not cover.** Compact: `tools/next_step.py --check` refuses a `next-step.md` over
+16 KB or not headed by one open step, and `.githooks/pre-commit` runs it. Review: `tools/review_check.py` refuses a
+commit that changes `crates/`, `config/`, `tools/`, `Age2HD/` or `build/` without a staged note holding a measured
+`## Performance` and a `## Stability`; the hook runs that too. Question: `tools/decisions.py --check` refuses an open
+`U<n>` with no area in `docs/decision-areas.toml`, and this entry files itself (`D203 = "Project process"`). **Nothing
+here stops `--no-verify`**, and no script can tell whether a review is honest - only a reader can. The gate's claim is
+the narrow one: omission has to be deliberate.
+
+**Commits us to.** A `clarify` form is never where a decision question goes; a question worth the owner's attention is
+worth the evidence hunt before it, and a hunt that found nothing is part of the question rather than a reason to skip it.
+
