@@ -601,3 +601,9 @@ test only asks about a third body inside the *pair's* reach of the destination.
 
 **The eight reds:** content-pack house, the 0.094 and 0.107 overlaps, the woodcutter joining a patch, the reservation book,
 `ten_men_touch...`, and two skirmish rows.
+
+**Eliminated since, by experiment:** with `push_the_standing` **disabled entirely**, `six_settled_men_hold_their_places` still
+measures **0.094** - so the nudge is not the cause either. The test does not exist on `main`, so the overlap is **branch-only**:
+something introduced with the 0.66 spacing, the even-spread ring or D200 itself puts two men a tenth of a tile apart while both
+work, and the suspects that remain are the paths that *place* a body rather than step it (`reserve_places` landing a man on a
+point chosen before his neighbour arrived, `settle_workers`' ring-slide when the clamp halves a step it has already taken).
