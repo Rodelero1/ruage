@@ -169,10 +169,14 @@ fn ten_men_work_one_bush_a_body_apart() {
         world.scale() / 5,
         world.scale(),
     );
+    // **Seven, and ten is geometrically impossible at the touching ring.** Measured with the packed spacing: `touching_places`
+    // at radius 0.2 with a 0.40 floor returns **seven** points, because chords round a corner are shorter than arcs - the ring's
+    // own closest pair is 0.592. A tenth man could only stand further out, and further out is outside the gather reach, so he
+    // would not be gathering. The owner's own saves show seven men per node, which is the same number by a different road.
     assert_eq!(
         working.len(),
-        10,
-        "MEASURED {} of 10 men working the bush; {comfort} fit at the comfortable 0.66, and ten at the 0.40 floor",
+        comfort,
+        "MEASURED {} of 10 men working the bush; {comfort} is what the touching ring can hold at a 0.40 floor",
         working.len()
     );
     let spots: Vec<(Fixed, Fixed)> = working

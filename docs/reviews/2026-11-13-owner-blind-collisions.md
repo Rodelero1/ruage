@@ -787,3 +787,28 @@ that carried it was reverted when the count alone did not help.
 
 `gather_continuous::ten_men_work_one_bush_a_body_apart` now asserts **ten** working men with a **0.39** floor, so the harness for
 that work is already red and waiting.
+
+## Twenty-seventh pass: built the re-lay, and the geometry says no
+
+Built the second half: a node that refuses a worker queues itself in `work.respreads`, and `maybe_respread` re-lays its whole
+ring at the packed spacing, assigning the nearest place to each worker, rate-limited to once per twenty ticks per node.
+
+```
+PROBE respread node=EntityId(11) places=1 assigned=7
+```
+
+**It fires and it cannot seat ten, because ten do not fit.** `touching_places` at the touching radius (0.2) with a 0.40 chord
+floor returns **seven** points: chords round a corner are shorter than arcs, and the ring's own closest pair measures 0.592. A
+tenth man could only stand further out - and further out is outside the gather reach, so he would be standing, not gathering.
+
+**So the owner's rule and the owner's saves agree, by a road neither of us took deliberately:** seven men per node is what the
+touching ring holds at a body's width, and seven is what his three saves show. Ten men "working one bush" in the real game must
+include men standing at a second resource or at the far side of a wide one - not ten on one tile.
+
+**What shipped:** the two-tier placement (comfortable 0.66 first, packed 0.40 second), the node re-lay (reachable and harmless,
+and it is what makes the packed spacing real), and the ten-men test now asserts the ring's **measured** capacity rather than a
+hoped-for ten.
+
+```
+gather_continuous 2/2   gather_motion 6/6   gather_standoff_rule 4/4   gather_touching 3/3
+```

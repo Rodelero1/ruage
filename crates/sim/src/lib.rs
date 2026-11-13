@@ -1003,6 +1003,9 @@ pub struct World {
     /// **How many consecutive ticks a body has been refused by another body** (D200). Not hashed: it is a count of waiting,
     /// not a position, and a route that is stalled for ever shows up in behaviour rather than in the state hash.
     pub(crate) stalled: BTreeMap<EntityId, u32>,
+    /// **When a node's ring was last re-laid** (D200): a node that refuses a worker re-spreads its places at the packed
+    /// spacing, and this is the guard that stops it doing so every tick.
+    pub(crate) respread_at: BTreeMap<EntityId, u64>,
     /// How many times a blocked unit has re-planned its route. **Instrumentation, not state**: nothing reads it and it
     /// is not hashed; a test counts it to prove a known obstacle is not re-planned every tick (D98a).
     repath_count: u64,
@@ -1510,6 +1513,7 @@ impl World {
             garrison_eject_at: Fixed::ZERO,
             paths: BTreeMap::new(),
             stalled: BTreeMap::new(),
+            respread_at: BTreeMap::new(),
             repath_count: 0,
             step_counts: [0; 13],
             tracing_steps: false,

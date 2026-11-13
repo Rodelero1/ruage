@@ -26,6 +26,9 @@ impl World {
         let mut work = self.decide()?;
 
         self.reserve_places(std::mem::take(&mut work.places));
+        for node in std::mem::take(&mut work.respreads) {
+            self.maybe_respread(node);
+        }
 
         self.resume_fights(work.engaging, work.turning, work.homing);
 
@@ -820,6 +823,56 @@ impl World {
     /// that a walker who can get round does get round - which is every case the evasion tests already cover, and why they
     /// keep passing - and short enough that a man who cannot is not lost for the match.
     const STALLED_TICKS: u32 = 40;
+
+    /// **Re-lay a node's ring when it refuses a man** (D200, the owner's rule of 2026-11-13), at most once per twenty ticks:
+    /// every re-lay moves every man on the node, so it must not happen on consecutive ticks.
+    fn maybe_respread(&mut self, node: EntityId) {
+        const EVERY: u64 = 20;
+        let last = self.respread_at.get(&node).copied().unwrap_or(0);
+        if self.tick.saturating_sub(last) < EVERY {
+            return;
+        }
+        let scale = self.scale;
+        let packed = (scale / 5) * 2;
+        let mut places: Vec<(Fixed, Fixed)> = Vec::new();
+        for tile in self.resource_tiles(node) {
+            places.extend(crate::tiles::touching_places(
+                (i64::from(tile.0), i64::from(tile.1)),
+                packed / 2,
+                packed,
+                scale,
+            ));
+        }
+        let workers: Vec<EntityId> = self
+            .entities()
+            .iter()
+            .filter(|entity| matches!(entity.task, Task::Gather { node: at, .. } if at == node))
+            .map(|entity| entity.id)
+            .collect();
+        if places.is_empty() || workers.is_empty() {
+            return;
+        }
+        // **Nearest place first**, one per man: the packing is greedy, which keeps the assignment stable between re-lays.
+        let mut assigned = 0usize;
+        for id in workers {
+            let Some(at) = self.position(id) else { continue };
+            let mut best: Option<(i64, usize)> = None;
+            for (index, point) in places.iter().enumerate() {
+                let far = (point.0.raw() - at.0.raw()).pow(2) + (point.1.raw() - at.1.raw()).pow(2);
+                if best.is_none_or(|(closest, _)| far < closest) {
+                    best = Some((far, index));
+                }
+            }
+            if let Some((_, index)) = best {
+                let point = places.remove(index);
+                self.reserve_gather_place(id, node, point);
+                assigned += 1;
+            }
+        }
+        if assigned > 0 {
+            self.respread_at.insert(node, self.tick);
+        }
+    }
 
     /// **A body with nothing to do is nudged out of a walker's way** (D200), but only after the walker has been refused for
     /// `STALLED_TICKS` in a row. The engine's written rule until now is the opposite - *"the body it went round did not
@@ -2038,6 +2091,15 @@ impl World {
                         // each attempt re-plans a route: the acceptance run went from 35 s to over 400 s with that loop in place. The
                         // owner's rule is applied where it is cheap and deterministic - when the order is given (`start_gather`) -
                         // and the ring is only the fallback.
+                        if found.is_none_or(|answer| matches!(answer, crate::Standoff::NoRoom))
+                            && owned.is_none()
+                        {
+                            // **The ring refused him: re-lay it** (D200). Seven men at the comfortable 0.66 leave gaps of 0.33
+                            // either side - less than the 0.40 floor - so a tenth can only be seated if the seated seven
+                            // shuffle. That is a node-level operation, so the node is queued and the work is done after the
+                            // entity loop, rate-limited to once per twenty ticks per node.
+                            work.respreads.push(node);
+                        }
                         if let Some(crate::Standoff::Point(stand)) = found {
                             // The ring's centre travels with the place: a man whose straight line to it is blocked steps **round
                             // the ring** instead of standing still (D188). Without it a crowd arriving from one side leaves men
@@ -2290,4 +2352,6 @@ struct TickWork {
     settles: Vec<Settle>,
     /// Men who chose a place on a node's ring this tick and must now keep it (D186 addendum 5).
     places: Vec<(EntityId, EntityId, (Fixed, Fixed))>,
+    /// Nodes that refused a worker this tick and should re-lay their ring (D200, the owner's rule of 2026-11-13).
+    respreads: Vec<EntityId>,
 }

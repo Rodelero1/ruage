@@ -305,7 +305,18 @@ fn every_man_working_a_node_holds_a_place() {
         })
         .map(|entity| entity.id)
         .collect();
-    let held = world.gather_places().len();
+    // **Only the places held by men still on this order.** The book is not swept when an order changes - `place_is_live`
+    // asks the task at read time - so a raw count includes men who have long since been re-tasked, and measured 10 held for
+    // 7 working men.
+    let held = world
+        .gather_places()
+        .into_iter()
+        .filter(|(id, _)| {
+            world.entity(*id).is_some_and(|entity| {
+                matches!(entity.task, Task::Gather { node: at, .. } | Task::Return { node: at, .. } if at == bush)
+            })
+        })
+        .count();
     let _ = scale;
     assert_eq!(
         held,
