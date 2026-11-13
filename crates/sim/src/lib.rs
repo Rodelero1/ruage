@@ -3411,9 +3411,13 @@ impl World {
         if dx == 0 && dy == 0 {
             return None;
         }
-        // **Two bodies, a gap apart** (D202): the owner's saves measure 0.661-0.663 between working men, not 0.400. With
-        // friends blocking, a place exactly one body from its neighbour is a place nobody can walk into.
-        let too_close = spacing(scale);
+        // **Comfortable, then packed** (D202, and the owner's rule of 2026-11-13). A ring at rest spaces men at the measured
+        // **0.66** - his own saves - and that is what a placement prefers. But a man arriving at a crowded node closes to
+        // **one diameter (0.40)**, which is a floor and never a target to cross: so the ring is searched at 0.66 first and at
+        // 0.40 only when the whole ring refuses. That is what lets ten men work a bush that seats seven comfortably.
+        let comfort = spacing(scale);
+        let packed = (2 * worker_radius).max(scale / 5);
+        let too_close = comfort;
         let centre = self.tile_centre(self.tile_of(target));
         let slack = scale * GATHER_WALK_SLACK_MILLI / 1000;
         let straight = integer_sqrt(
@@ -3421,15 +3425,17 @@ impl World {
         );
         let mut candidates: Vec<(Fixed, Fixed)> = Vec::new();
         for tile in self.resource_tiles(node) {
+            // Generated at the **packed** spacing: the comfortable places are the subset the clearance test accepts first.
             candidates.extend(crate::tiles::touching_places(
                 (i64::from(tile.0), i64::from(tile.1)),
                 worker_radius,
-                too_close,
+                packed,
                 scale,
             ));
         }
+        for gap in [comfort, packed] {
         let mut best: Option<(i64, (Fixed, Fixed))> = None;
-        for point in candidates {
+        for point in candidates.iter().copied() {
             let (px, py) = (point.0.raw(), point.1.raw());
             let away = integer_sqrt((px - from.0.raw()).pow(2) + (py - from.1.raw()).pow(2));
             if best.as_ref().is_some_and(|(closest, _)| away >= *closest) {
@@ -3461,7 +3467,7 @@ impl World {
             }
             let near = |point: (Fixed, Fixed)| -> bool {
                 let (bx, by) = (point.0.raw() - px, point.1.raw() - py);
-                bx * bx + by * by < too_close * too_close
+                bx * bx + by * by < gap * gap
             };
             if self
                 .entities
@@ -3489,7 +3495,11 @@ impl World {
             }
             best = Some((away, point));
         }
-        Some(best.map_or(Standoff::NoRoom, |(_, point)| Standoff::Point(point)))
+            if let Some((_, point)) = best {
+                return Some(Standoff::Point(point));
+            }
+        }
+        Some(Standoff::NoRoom)
     }
 
     /// **A point on the ring**, two degrees per place: `place` 0 is due east and the index grows anticlockwise. The quarter table

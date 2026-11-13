@@ -760,3 +760,21 @@ is the real task - `standoff_point` answers it one man at a time, which is why t
 
 **Reverted**, so the tree stays at the measured `118 green / 4 red` rather than shipping four-of-ten. The four reds stand as the
 record of the gap: content-pack house, the ten-men bush (0.067 overlap), the woodcutter joining a patch, and the reservation book.
+
+## Twenty-sixth pass: the owner's rule, first half - comfortable, then packed
+
+The owner's rule (2026-11-13): *a villager joining others at work, within 1.5 diameters, closes to one diameter; if the space is
+full he waits, and then idles.* Built the first half - **placement is two-tier**:
+
+- the ring is searched at the measured **0.66** first (his own saves, and what an uncrowded bush looks like);
+- only when the whole ring refuses is it searched at **0.40**, one diameter, the floor;
+
+```
+gather_motion 6/6   gather_standoff_rule 4/4   gather_ring 4/4   gather_continuous: still 7 of 10
+```
+
+**Why the count did not move:** the seven seated men are already spread evenly at 0.66, and 0.40 clearance is impossible *between*
+them - the gap is only 0.33 either side. Ten men fit round the tile only if the **seated men shuffle**, i.e. the node re-lays its
+whole ring at the finer spacing when a tenth man is refused. That is the second half of his rule, and it is a node-level operation
+(collect the live workers, sort by angle, re-assign from the packed ring), not another per-man search. The two-tier placement is
+the groundwork for it: the packed ring is already generated and already preferred last.
