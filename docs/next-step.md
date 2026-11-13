@@ -7,27 +7,22 @@ every red one crowd delivery or a test that pins the old spacing.
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
-### 1. `WaitBlocked` forever - the avoid set calls a still-standing body "past" *(branch work, no decision needed)*
+### 1. The nudge landed; the drop is the next stall *(branch work, no decision needed)*
 
-**The branch is 8x slower than `main` on one fixture and the economy starves**, and both are one bug:
+**`WaitBlocked` forever is fixed.** A body at rest is nudged out of a walker's way only after **40 refused ticks**, only for a
+body on the walker's **own tile**, never for a body somebody is working: the 0 A.D. shape, damped hard. Measured on the branch
+(`0ef5de2`): the trebuchet fixture **ok in 6.29 s** where it took 46 s and banked 200 of 400, and the rules the engine already
+states are intact - `evasion` 11/11 including all three *"the body it went round did not move"*, `animals` 6/6 including the
+sheep that must stand still, `gather_motion` 5/5.
 
-```
-main              research::a_trebuchet_cannot_be_trained_before_the_imperial_age   ok      5.86 s, 400 banked in 11,359 ticks
-d189-owner-blind  the same test                                                    FAILED  45-46 s, 400,000 ticks, 200 banked
-```
+**Suite: 113 binaries green, 11 tests red.** Six were already there (content-pack house, two tests written for 0.40 spacing, the
+woodcutter joining a patch, the reservation book, the withdrawn friend-on-goal rule). **Five are economy and skirmish**:
+`two_players` 790 of 900 banked, `the_spear_line` 400 of 700, `both_sides_field_an_army`, `the_skirmish_only...`,
+`a_friend_on_the_goal_tile_is_a_take`. At 400,000 ticks with `repaths 29, made_room 0` these look like a **second stall, at the
+drop**: carriers hold places (`Return` keeps one, by design), and two carriers blocked by each other are both "busy", so
+neither is nudged and neither yields.
 
-The villager ends frozen at `(16.235, 13.800)` with `WaitBlocked` **every tick for 400,000 ticks**, a live `Gather` order, a
-reserved place at `(19.80,15.41)` on the ring, and a **three-point route he will not walk**. Two repaths in the whole run,
-zero made room. Mechanics: `movement.rs` asks for a repath round a blocking body only when `!known` - and `known` is "*the
-blocker is already in the route's avoid set*", whose comment says a collision with that body is **past**. When the body is
-still standing there, nothing is ever asked for again, and rule 8's "routes round it from the next tick" never happens.
-
-**Done when:** a body at rest on a walker's waypoint is routed round (or yields within a bounded number of ticks), the
-trebuchet fixture is back at **11,359 ticks / ~6 s on the branch**, and the suite is green. Test-first: a gatherer with a
-friend standing still in his path, walked at 1,500 ticks, red today.
-
-Everything below step 2 is unchanged and still true: geometry is right (7 places at 0.66, closest pair 0.400, three men on a
-bush 601 of 1,200 ticks), the reservation book is inconsistent (raw 7 / live 4 / tasked 7) but is not what stops delivery.
+**Done when:** the five economy rows pass, the trebuchet fixture stays at ~6 s, and the branch merges.
 
 ### 2. Restate the three tests that pin the withdrawn rule
 
