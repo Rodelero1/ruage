@@ -1,12 +1,13 @@
 # OPEN - register row 2, then the Feudal gap
 
 **Ruling in flight: D189 is withdrawn, and its replacement is on a branch.** The owner: *"Adopt original game behaviour.
-Don't make difference of friend or foe as in original game."* The collision block was read and has no owner test
-(`docs/movement-in-the-binary.md`), so friends are walls (D200). Built on **`d189-owner-blind`**, now at `ddbce02`:
-gather places are **0.66** apart and `touching_places` spreads them evenly, so one tile yields **7** places - the same seven
-the owner's saves show - and `tile_geometry`/`collision`/`evasion` are green. **The blocker is a new defect**: three carriers
-freeze at one drop site (positions identical at tick 1,200 and 2,400), and the goal-tile and overlap rules are already ruled
-out; next instrument is `step_trace`. Two tests still pin the withdrawn rule. Full state:
+Don't make difference of friend or foe as in original game."* Friends are walls (D200), and the geometry now produces the
+game's own number: gather places `0.66` apart, spread evenly round a tile's outline, **7 places** on one tile - the same
+seven his saves show. Branch **`d189-owner-blind`** at `67dabd1`: **79 test binaries green, 8 tests red**, and every red one
+is crowd delivery or a test that pins a capacity. The blocker is one defect: **two men on one tile cannot get past each
+other** - `WaitOwnTile`/`GiveWayOwnTile` every tick for 1,200 ticks at a town centre's door, unchanged whether the give-way
+step is bounded or not. Next instrument: the apply-stamp path in `move_bodies`, where D192's trace also ended. Two give-way
+experiments and a 1-raw-unit geometry bug are recorded with numbers in
 `docs/reviews/2026-11-13-owner-blind-collisions.md` (on that branch).
 
 **State, 2026-11-13.** `main` at `a5812ad`, green (183 binaries, `EXIT 0`, clippy 0, fmt 0), acceptance hash
