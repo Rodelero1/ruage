@@ -592,11 +592,12 @@ gather_standoff_rule   3 of 4      the closest pair 0.094
 whole suite          115 green, 8 red
 ```
 
-**Still open, and now located exactly:** two men on one node end **0.094** tiles apart with **identical `progress` (4780)** -
-which is only possible if they were given the **same place**. So the overlap is not the settle's step, not the reach
-arithmetic and not the ring (the ring's own closest pair measures **0.592** for seven places): it is the *place book* handing
-one point to two men, and `standoff_point`'s `taken` list only covers choices made in the same tick while `gather_place` only
-covers men whose booking is still live.
+**Still open:** two men on one node end **0.094** tiles apart, both working (progress 4780 each). **My first reading of that
+was wrong** - identical progress does not prove a shared place: every worker on one node has the same `rate_per_tick`, so their
+progress is equal whenever they started together, which is the ordinary case. What is ruled out is narrower than I wrote: the
+ring is fine (its seven places measure **0.592** apart at the closest), the settle's step is now clamped, and the reach
+arithmetic is the engine's own. What is not yet excluded is the **nudge**: it moves a body 0.05 at a time and its `crowded`
+test only asks about a third body inside the *pair's* reach of the destination.
 
 **The eight reds:** content-pack house, the 0.094 and 0.107 overlaps, the woodcutter joining a patch, the reservation book,
 `ten_men_touch...`, and two skirmish rows.
