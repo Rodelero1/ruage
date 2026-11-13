@@ -651,3 +651,32 @@ yields. So the mechanism I named is not in the tree, and the overlap is still un
 **Next instrument, and it is the only one left that can answer this:** print, for those two ids only, every writer that can move a
 body - `settle_workers`' chosen point, `reserve_places`' reservation, and the position before/after each tick - which turns a
 five-thousandths oscillation into a named call site.
+
+## Twenty-second pass: the stale place, and what the writer trace actually said
+
+The writer trace answered it: only `settle_workers` moves either man, and it moves the **place holder** onto a point a body is
+already standing on, every tick, in a 0.005-tile loop.
+
+```
+WRITER settle id=EntityId(9700) from=(9.8022,6.4090) to=(9.8000,6.4062) d=(11,-99)
+WRITER settle id=EntityId(9700) from=(9.8027,6.4040) to=(9.8000,6.4062) d=(-11,99)
+```
+
+**The rule that fixed it: a place a body now stands on is stale.** The place is a property of the order (D186), but a neighbour
+who walked onto it cannot be walked through - so a held place with a body inside the gather spacing is released and re-chosen
+from the ring, exactly as if it had never been taken.
+
+```
+gather_standoff_rule   5 passed    both overlap tests (six men, and the four-places-for-six case)
+gather_motion          6 passed    the standing friend is walked past/round, not through
+gather_continuous      1 of 2      closest pair 0.067 in the ten-men fixture (was 0.111)
+```
+
+**What did not work, and was reverted rather than kept:** freezing a place holder whose next step would land inside a neighbour.
+It killed the overlap and killed navigation with it - a gatherer idled **1.45** tiles from his bush with a body in the path, and
+`a_worker_goes_to_food_it_has_found` failed too. A rule that stops a man moving cannot also let him arrive.
+
+**Still open:** the ten-men fixture, where the ring seats seven and three men are unplaced. Those three are the senior case now:
+they hold a `Gather` task, cannot be seated, and crowd the ring - the game's answer is that they stand where they can and the
+player's answer is to build another mill. The engine needs the *NoRoom* policy (stand down, or wait outside) rather than
+re-choosing forever.

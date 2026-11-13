@@ -919,6 +919,17 @@ impl World {
                 continue;
             }
             if let Some(entity) = self.entities.iter_mut().find(|entity| entity.id == other) {
+                if std::env::var_os("RUAGE_PROBE_IDS").is_some() {
+                    let ids = std::env::var("RUAGE_PROBE_IDS").unwrap_or_default();
+                    if ids.split(',').any(|one| one.trim() == other.0.to_string()) {
+                        eprintln!("WRITER push id={:?} from=({:.4},{:.4}) to=({:.4},{:.4})",
+                            other,
+                            entity.position.0.raw() as f64 / self.scale as f64,
+                            entity.position.1.raw() as f64 / self.scale as f64,
+                            to.0.raw() as f64 / self.scale as f64,
+                            to.1.raw() as f64 / self.scale as f64);
+                    }
+                }
                 entity.position = to;
             }
         }
@@ -1075,6 +1086,18 @@ impl World {
                     Fixed::from_raw(dy.raw() / 2),
                 );
             }
+        if std::env::var_os("RUAGE_PROBE_IDS").is_some() {
+            let ids = std::env::var("RUAGE_PROBE_IDS").unwrap_or_default();
+            if ids.split(',').any(|one| one.trim() == id.0.to_string()) {
+                eprintln!("WRITER settle id={:?} from=({:.4},{:.4}) to=({:.4},{:.4}) d=({},{})",
+                    id,
+                    position.0.raw() as f64 / self.scale as f64,
+                    position.1.raw() as f64 / self.scale as f64,
+                    to.0.raw() as f64 / self.scale as f64,
+                    to.1.raw() as f64 / self.scale as f64,
+                    dx.raw(), dy.raw());
+            }
+        }
             if (dx.raw() != 0 || dy.raw() != 0)
                 && let Some(entity) = self.find_mut(id)
             {
@@ -1997,7 +2020,21 @@ impl World {
                         // man's destination moved as his neighbour moved and the two of them swapped places - measured 0.001,
                         // 0.20 and 0.243 tiles apart in three fixtures. A place taken once is taken for as long as the order
                         // stands, and `place_is_live` releases it the moment the man is re-tasked.
-                        let owned = owned_place;
+                        // **A place a body now stands on is stale** (D200). The place is a property of the order, but a neighbour
+                    // who has since walked onto it cannot be walked through: keeping it made a man settle **0.094** tiles
+                    // inside him. A held place with a body within the gather spacing is released and re-chosen from the ring.
+                    let owned = owned_place.filter(|place| {
+                        !self.entities.iter().any(|other| {
+                            other.id != entity.id
+                                && other.kind == EntityKind::Unit
+                                && {
+                                    let gap = crate::spacing(self.scale);
+                                    (other.position.0.raw() - place.0.raw()).pow(2)
+                                        + (other.position.1.raw() - place.1.raw()).pow(2)
+                                        < gap * gap
+                                }
+                        })
+                    });
                         let found = match owned {
                             Some(place) => Some(crate::Standoff::Point(place)),
                             None => {
