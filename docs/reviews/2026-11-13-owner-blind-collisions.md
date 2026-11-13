@@ -182,3 +182,33 @@ investigation with a known instrument (`gather_places()`), not a hunt.
 **Suite on the branch after this pass:** `gather_motion` 3/3, `gather_ring` 4/4, `gather_touching` 1/2 - the last one red for
 the reservation question above. Two tests remain written for 0.40 spacing (`ten_men_work_one_bush_a_body_apart`,
 `six_settled_men_hold_their_places`), one pins the withdrawn rule, and the content-pack house is still unfinished.
+
+## Sixth pass: the reservation book is inconsistent, and my fix for it regressed the suite
+
+**First, my error.** I built a `claim_places` pass (a man standing on the ring who holds no place takes the ground under his
+feet) plus a live-only filter in `gather_places`. It looked right on one test and **regressed the suite from 5 red to 11**
+(killed at 93 green / 11 failed: `collision`, `evasion` and several gather rows). Both engine edits are **reverted**; only an
+unrelated warning cleanup in `tiles.rs` is kept. A pass that changes the standoff bookkeeping globally needs to be reasoned
+from the book, not iterated against one test.
+
+**What the same probe says depending on how the book is read** - this is the finding, and it is why the last three passes
+disagreed with each other:
+
+| read | places counted | men tasked to the bush |
+|---|---|---|
+| raw map (`gather_places` before) | **7** (some stale) | 7 |
+| live only (`place_is_live`) | **4** | 7 |
+| with the claim pass, raw | 10, then 8 | 7 |
+
+So the map holds entries for men who are **no longer on that order** (it is never swept - `place_is_live` is asked at read
+time by `standoff_point`), and it lacks entries for men who **walked on without a settle** (the settle only reserves places it
+chose itself). Both are true at once, which is why "seven men, four places" and "seven men, ten places" were the same seven
+men.
+
+**Not re-tried:** claiming a place from a man's position with a band of `reach + half a tile` (a man who had stopped 0.686 out
+claimed ground he was not working) and excluding neighbours by `distance_to_tile(held, his tile)` (that finds *every*
+neighbour on the same tile "taken", so the pass never fired).
+
+**Next instrument, one script:** for 1,800 ticks on the ten-men fixture, print every `gather_place` entry as
+`(worker, node, live?, worker's task, clearance of the place)` and every working man with no entry. That reads the whole book
+at once instead of guessing which filter is right.

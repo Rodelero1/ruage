@@ -220,14 +220,17 @@ fn ten_men_touch_one_bush_without_overlapping_it_or_each_other() {
     // **The rule is about the place a man *holds*, not about every man walking past** (D200). A node's tile is not blocked
     // ground, so a man on his way may cross close to it (measured 0.174) and that is not a violation; what may never happen
     // is a *reserved place* that does not touch the tile, because that is where the settle will put him.
-    let reserved: std::collections::BTreeMap<EntityId, (i64, i64)> = world
-        .gather_places()
-        .into_iter()
-        .collect();
+    // **The rule is about the place a man *holds* for this node** (D200). A node's tile is not blocked ground, so a man on
+    // his way may cross close to it (measured 0.174) and that is not a violation; what may never happen is a reserved place
+    // that does not touch the tile, or two of them inside one another.
+    let reserved: std::collections::BTreeMap<EntityId, (i64, i64)> =
+        world.gather_places().into_iter().collect();
     let mut spots = Vec::new();
+    let mut unplaced = Vec::new();
     for id in &working {
         let Some(raw) = reserved.get(id).copied() else {
-            panic!("{id:?} works the bush with no reserved place");
+            unplaced.push(*id);
+            continue;
         };
         let place = (Fixed::from_raw(raw.0), Fixed::from_raw(raw.1));
         let clearance = distance_to_tile(place, tile, scale);
@@ -243,6 +246,12 @@ fn ten_men_touch_one_bush_without_overlapping_it_or_each_other() {
         );
         spots.push(raw);
     }
+    // A man may be left without a place only when **all seven are taken**; otherwise his destination moves every tick.
+    assert!(
+        unplaced.is_empty() || spots.len() == 7,
+        "MEASURED {unplaced:?} working the bush with no place while only {} of seven are held",
+        spots.len()
+    );
     let mut closest = f64::MAX;
     for a in 0..spots.len() {
         for b in (a + 1)..spots.len() {
@@ -254,5 +263,54 @@ fn ten_men_touch_one_bush_without_overlapping_it_or_each_other() {
     assert!(
         closest >= 0.39,
         "MEASURED the closest pair {closest:.3} tiles apart; a villager's circle is 0.40 wide"
+    );
+}
+
+/// **A man working a node holds a place on it** (D186 addendum 5). The place is what stops his destination moving as his
+/// neighbours move - the owner's *"it feels rather random"* - and it is what stops a newcomer being handed the spot a man is
+/// already working. Measured before this test was written: **seven men tasked to one bush, four places held**.
+#[test]
+fn every_man_working_a_node_holds_a_place() {
+    let Some(mut world) = world_of(MAP) else {
+        return;
+    };
+    let scale = world.scale();
+    let bush = world
+        .entities()
+        .iter()
+        .find(|entity| matches!(entity.kind, EntityKind::Resource(_)))
+        .map(|entity| entity.id)
+        .expect("a bush at (10,6)");
+    for index in 0..10i64 {
+        let id = EntityId(8_700 + index as u32);
+        spawn(&mut world, id, (9 + index % 4, 3 + index / 4));
+        world
+            .submit_checked(Command::Gather {
+                villager: id,
+                node: bush,
+            })
+            .expect("a gather order");
+    }
+    for _ in 0..1_800 {
+        world.step().expect("a tick");
+    }
+    let tasked: Vec<EntityId> = world
+        .entities()
+        .iter()
+        .filter(|entity| {
+            matches!(
+                entity.task,
+                Task::Gather { node, .. } | Task::Return { node, .. } if node == bush
+            )
+        })
+        .map(|entity| entity.id)
+        .collect();
+    let held = world.gather_places().len();
+    let _ = scale;
+    assert_eq!(
+        held,
+        tasked.len(),
+        "MEASURED {} men working the bush and {held} places held - a man without a place re-chooses one every tick",
+        tasked.len()
     );
 }

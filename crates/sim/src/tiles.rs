@@ -90,9 +90,9 @@ pub fn touching_places(
         return Vec::new();
     }
     let outline = grown_outline(tile, radius, scale);
-    let Some(&first) = outline.first() else {
+    if outline.is_empty() {
         return Vec::new();
-    };
+    }
     // Four sides plus four quarter circles: `4 * scale + 2 * pi * radius`, with pi as 3_141_593 millionths.
     let quarter = radius * 1_571 / 1_000;
     let perimeter = 4 * scale + 4 * quarter;
