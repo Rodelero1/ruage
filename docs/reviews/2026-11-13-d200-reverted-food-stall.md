@@ -39,28 +39,37 @@ They do not move again: at 48,000 ticks they hold the same positions and the sam
 
 ## The mechanism, from the engine's own numbers
 
-An env-gated probe (`RUAGE_PROBE_CARRY`) in the `Task::Return` arm printed every tick for a loaded carrier: its position, the
-tile it stands on, the point its route is aiming at, the route's length, and whether it counts as touching the drop site:
+**First answer, wrong, kept so the next session does not repeat it.** An env-gated probe in the `Task::Return` arm printed
+each loaded carrier's route: one point long, aimed at `(320000,320000)` - the town centre's own blocked tile. That looked
+like the answer ("a `Return` aimed at an anchor it can never stand on"), and it is *not* what stops them: the men are 2.4
+tiles out and the building's reach is 2.2, so the anchor is not yet in play. The probe read the route and never read the
+decision - `Entity::last_step` is only recorded when tracing is on, so its `Idle` was the value from seeding.
+
+**The answer, from `world.trace_steps()` at 400 s**, which prints what the movement pass actually decided:
 
 ```
-PROBE carry id=EntityId(135) at=(283254,352965) here=(14, 17) next=(320000,320000) route=1 touching=false    (419 consecutive ticks, identical)
-PROBE carry id=EntityId(134) at=(288712,360254) here=(14, 18) next=(320000,320000) route=1 touching=false
-PROBE carry id=EntityId(136) at=(297103,368506) here=(14, 18) next=(320000,320000) route=1 touching=false
+id=3   at=(14.89,18.03) Gather@105   last=WaitOwnTile
+id=4   at=(14.33,18.41) Return@1     last=WaitOwnTile
+id=132 at=(14.56,17.63) Gather@105   last=WaitOwnTile
+id=134 at=(14.44,18.01) Return@1     last=WaitBlocked
+id=135 at=(14.16,17.65) Return@1     last=GiveWayOwnTile
+id=136 at=(14.86,18.43) Return@1     last=GiveWayOwnTile
+id=137 at=(14.48,17.21) Gather@105   last=WaitOwnTile
 ```
 
-`next=(320000,320000)` is raw scale-20,000 coordinates: **the town centre's own tile, `(16, 16)`** - the building's blocked
-anchor. The route is one point long and that point is the anchor. So the carrier walks at a tile he can never stand on, the
-collision bound holds him at the pair's reach (friends are solid now, and a building is a friend), and the deposit test
-never fires: not `touching` by tile (he is 1-2 tiles from the anchor, not ±1 tile), not `touching` by radius, and not on the
-footprint. `next_waypoint` keeps returning the anchor, so `approach_tile` - which the code falls back to **only when there is
-no route at all** - never gets asked. Four men in a line, 1.7-2.4 tiles out, all pointing at the same unreachable point, for
-48,000 ticks.
+Seven villagers stand on **two tiles** - four on `(14, 18)`, three on `(14, 17)` - and every one of them is refused by a
+body on its **own tile** (rule 4). The give-way step is bounded by the pair's reach, the pairs are one body (0.40) apart,
+so the bound returns exactly zero: nobody moves, nobody re-plans (rule 4 returns before rule 7's repath), and the loads
+never reach the bank. Wood still climbs because the woodcutters work a node two men wide; the berry bush seats seven.
 
-Why the tests did not catch it: every fixture in `crates/sim/tests` stages a drop site whose anchor is the tile the man can
-approach (a mill beside grass, a town centre with a clear yard), and the `Return` route is planned to a standable tile
-there. The acceptance match's town centre sits with its own footprint around the anchor, so the route the AI hands out ends
-on blocked ground. `a_crowd_all_banks_its_loads` - the guard written for exactly this - passes both before and after the
-change.
+`push_the_standing` would break that jam, and it skips all seven: each holds a gather place, and `posted` is an exemption
+from the nudge. The places are legal - a tile really does hold four 0.40-wide bodies - but the traffic between them is not.
+
+Why the tests did not catch it: no fixture runs the acceptance match's own economy, and every crowd fixture stages three
+to six men on a node whose neighbours they can walk to. The guard that would have caught it is now in the suite:
+`crates/sim/tests/acceptance_economy.rs` - the acceptance world at seed 7, asserting after 400 s that the bank holds food
+and after 800 s that the crew has grown. It is **red on the merged tree** (0 food, 9 villagers) and green here (56 food,
+22 villagers).
 
 **Why `players` moved, and why the merged review's explanation is wrong.** The review said *"`players` differs because the
 acceptance script on the branch seeds two sides."* The script is `config/acceptance.toml`, the merge changed no config file,

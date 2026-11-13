@@ -17,16 +17,21 @@ lost; `main` is green.
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
-### 1. The `Return` whose waypoint is not standable ground *(next, test-first)*
+### 1. The crowd on one tile: seven men, two tiles, rule 4 *(next)*
 
-A `Return` route that ends on a building's own anchor can never complete. The fix belongs in the `Task::Return` arm
-(`crates/sim/src/world/step.rs:~1959`): a waypoint that is not walkable ground is replaced by `approach_tile`, whether or not
-a route exists - today `approach_tile` is the `unwrap_or_else` of `next_waypoint`, so a route *to the anchor* wins.
+The reverted merge's stall is **not** the drop site. `world.trace_steps()` at 400 s shows seven villagers on **two tiles** -
+four on `(14, 18)`, three on `(14, 17)` - every one refused by a body on its **own tile**: `WaitOwnTile` ×5,
+`GiveWayOwnTile` ×2, `WaitBlocked` ×1. Rule 4 bounds the give-way step by the pair's reach, the pairs are one body (0.40)
+apart, so the bound returns zero and nobody moves; and rule 4 returns **before** rule 7's repath, so nobody re-plans either.
+`push_the_standing` skips all seven because each holds a gather place (and a body at rest is never nudged when it is
+posted).
 
-**The fixture comes first, and it must be watched red:** a drop site that is a **town centre with its own footprint** (not a
-mill beside grass), a bush two tiles off, four carriers approaching from open ground - the acceptance match's own geometry,
-which every existing drop test sidesteps. `a_crowd_all_banks_its_loads` passes before and after the change and is therefore
-not the harness for this.
+**The guard already exists and is green here, red there:** `crates/sim/tests/acceptance_economy.rs` - the acceptance world
+at seed 7, `food > 0` at 400 s and a growing crew by 800 s. Any D200-shaped change has to keep it green.
+
+**Done when:** a crowd of seven on one node banks food - either the placement stops handing out places the traffic cannot
+reach, or rule 4 gains an escape (a repath, or a nudge that does not exempt a posted man who is not standing on his place)
+- and the acceptance match's food line reads like `main`'s.
 
 ### 2. Re-land D200 on top of the fix
 
