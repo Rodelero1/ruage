@@ -835,3 +835,22 @@ route is empty (the builder had no waypoint at all - which is why he was never a
 **It still fails**, so the pair must be re-jamming after the nudge: the push moves the body, the builder steps back onto the tile,
 and the loop repeats. The next instrument is the one that worked here - the pair's `last_step` and positions every tick for the
 first 200 ticks - and the likely rule is that the *walker* should route round rather than the builder being shoved off his own site.
+
+## Twenty-ninth pass: the last red, and it was the give-way that could not move
+
+Root cause of the builder/walker jam, from the per-tick trace:
+
+```
+t=24   id=2 Build{site 11}   WaitOwnTile        at (4,4)
+t=24   id=4 Move{to (5.5,4.5)} GiveWayOwnTile   at (4,4)
+t=60.. identical
+```
+
+The walker **did** give way every tick - and moved nothing, because at nought distance the give-way bound leaves no step at all.
+So from the stall counter's point of view he was "not waiting", the nudge skipped him as a busy man, and the pair stood still for
+the match. The counter now treats a **zero-step give-way as a refusal**, the same as a wait, so the jam is visible and the nudge
+runs.
+
+```
+whole suite   122 binaries green, 0 failed, EXIT 0
+```

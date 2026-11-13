@@ -1193,9 +1193,16 @@ impl World {
             // than before; anything else clears the count. `last_step` cannot answer this - it is only recorded when
             // `trace_steps` is on, which is why the first nudge pass saw an empty list on every real run.
             match why {
-                // **Both waits count**: `WaitBlocked` is a body in the way on the path, `WaitOwnTile` is a body sharing the
-                // mover's tile. The second is the one that deadlocked a builder and a walker for 2,000 ticks.
-                crate::StepDecision::WaitBlocked | crate::StepDecision::WaitOwnTile => {
+                // **Every refusal counts, including a give-way that could not move** (D200). `WaitBlocked` is a body on the
+                // path, `WaitOwnTile` a body sharing the tile, and `GiveWayOwnTile` with a **zero step** is the same jam seen
+                // from the other man: at nought distance the give-way bound leaves no step at all, so counting decisions
+                // alone let one side look busy while both stood still - measured, a builder and a walker for 2,000 ticks.
+                crate::StepDecision::WaitBlocked
+                | crate::StepDecision::WaitOwnTile
+                | crate::StepDecision::WaitGround
+                | crate::StepDecision::GiveWayOwnTile
+                | crate::StepDecision::GiveWay
+                    if dx == Fixed::ZERO && dy == Fixed::ZERO => {
                     let waited = self.stalled.get(&id).copied().unwrap_or(0).saturating_add(1);
                     self.stalled.insert(id, waited);
                 }
