@@ -294,3 +294,55 @@ save-specific fields, A becomes a rewrite of the engine's seeding path instead o
 **What makes it expensive if done out of order:** letting the converter's output be a *transcript of the file* (offsets,
 padding, sections) instead of a description of a world - then A must publish the transcript, which is the Art. 6 problem
 again, and the engine carries format detail it should never know.
+
+## What must be redone before this is distributable (2026-11-13)
+
+The owner's goal: **clone, point at `Age2HD/`, play — nothing else needed**, with game *data* and (later) art replaced by
+ours. This is the honest inventory, measured against the tree today, grouped by what it actually costs.
+
+### 1. Things that are not ours at all
+
+| What | State today | What "distributable" requires |
+|---|---|---|
+| the content data (1,166 units x ~200 fields, 801 techs, 798 effects, 32 civs) | generated into `config/gamedata/`, gitignored, produced by an importer in **another repository** | either **generate at first run** (importer in this repo) or **author our own numbers**. Shipping theirs is the Art. 7 problem, not a packaging one |
+| sprites, sounds, string tables | read **in place** from the install | nothing - this is already lawful. Replacing them is an optional endgame, not a blocker |
+| names and trademarks - "Age of Empires", civ and unit names, the visual style | used as-is | a public project must not read as official; renaming arrives with authored content |
+
+**Measured:** a clean clone `cargo build`s **now** (the engine needs no game data to compile), and runs a world from the
+tracked `config/*.toml`; it cannot produce `config/gamedata/`, which is exactly the gap above.
+
+### 2. Our own writing that quotes their code
+
+| What | Count | Fix |
+|---|---|---|
+| the game's own source paths, e.g. `c:\users\jakes_workstation\...\move_obj.cpp` | **5 files** (`movement-in-the-binary.md`, `behaviour-diff.md`, `binary-class-map.md`, `decisions.md`, `reviews/2026-11-07-the-binary-names-itself.md`) | rewrite as findings: cite the **address** and the **behaviour**, drop the quoted path (and the third party's username with it) |
+| the game's log/assertion strings, e.g. `"We have %d non-past collisions and %d terrain collisions, repathing"` | **3 files** | same: paraphrase the branch, cite the address; a quoted line of their code is the expression Art. 6 says not to distribute |
+| decompiled pseudocode fragments in reviews | several | keep the conclusion and the address, delete the listing |
+
+This is mechanical, and it does **not** weaken the analysis: an address plus a described branch is stronger evidence than a
+paraphrase of Ghidra's output, and it survives a re-decompile.
+
+### 3. Structure, so that "clone and run" is true
+
+1. **The importer lives in-repo** - `tools/` with its own GPL-3.0 licence file (or rewritten in Rust, which removes the
+   question entirely). Reverses D12's repository boundary into a directory boundary; the engine still links nothing.
+2. **A bootstrap step and an install-path argument**, failing with one clear sentence when the install is missing.
+3. **Licence plumbing**: per-directory `LICENSE`/`NOTICE`, the engine dual MIT/Apache untouched, and a **CI assertion** that
+   no engine crate depends on a GPL one - the failure mode is an edge appearing months later, which prose cannot catch.
+4. **README/quickstart**, and the path-based content gate moved into CI (the pre-commit hook is not installed by
+   contributors).
+5. **Decide what the docs are**: D4 = B keeps `docs/mechanics/`, SPEC §3/§4, `docs/oracle.md` and the decision log internal.
+   The public set is engine + tooling + a README, and code comments currently cite `docs/mechanics/…`, which will not ship.
+
+### 4. History
+
+Zero game data has ever been committed (verified against the remote at first push, and the pre-commit hook has refused it
+since). **That stays true only if the generated tables are never committed** - a scrub is a history rewrite, not a delete.
+
+### The order that costs least
+
+1. Importer into `tools/` + bootstrap (days) - unblocks "clone and run".
+2. Quote-and-cite rewrite of the five docs (days) - unblocks publishing the analysis.
+3. Licence plumbing, CI gates, README (days).
+4. Authored content pack (months) - the only route that also makes the *data* ours.
+5. Own art and audio (unbounded) - optional forever.
