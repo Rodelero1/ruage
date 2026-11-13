@@ -634,3 +634,20 @@ unchanged, because the two men alternate being the mover). Neither shipped.
 **The rule that follows:** an unplaced worker must stand at the pair's reach from the man on the place he would overlap, or be
 turned away from the ring - the same choice the game makes when a resource is full, and the one the AI work will eventually
 take over.
+
+**Correction to the paragraph above, before anyone acts on it.** I wrote that the walking path takes an *unbounded* step into a
+body at rest. It does not: in the committed code the at-rest branch for a **unit** is bounded (`give`), then give-way, then
+`WaitBlocked`; the unbounded `TakeAtRest` is the branch for a **node or building** - something that is not a body and never
+yields. So the mechanism I named is not in the tree, and the overlap is still unexplained by anything measured.
+
+**What is established, and nothing more:**
+1. six men are ordered onto a bush whose ring seats **four**;
+2. the overlapping pair (ids 9700/9704) hold **no place** - they are the extra workers;
+3. both are `Idle` (working) with their gap oscillating 0.094 <-> 0.099 every tick, so something moves a body a few thousandths
+   per tick without a step being taken;
+4. eliminated by experiment: the nudge (disabled, unchanged), the ring's spacing floor (unchanged), the at-rest bound (not in the
+   unit path at all), the settle clamp (unchanged).
+
+**Next instrument, and it is the only one left that can answer this:** print, for those two ids only, every writer that can move a
+body - `settle_workers`' chosen point, `reserve_places`' reservation, and the position before/after each tick - which turns a
+five-thousandths oscillation into a named call site.
