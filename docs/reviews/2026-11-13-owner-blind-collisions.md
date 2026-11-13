@@ -490,3 +490,39 @@ wrong field; it now reads `carry` and passes, and it stays as a guard, not as ev
 
 **Next instrument:** `trace_steps` on this fixture, printing the carrier's `last_step` and his distance to the drop's footprint -
 the same sentence that named the first stall (`WaitBlocked`) should name this one.
+
+## Seventeenth pass: the carrier was aiming at a wall, and the goal itself was the wall
+
+The trace that named it:
+
+```
+t=20000  Gather{node 103}                          at=(12.781,18.800)
+t=40000  Gather{node 102}  carry=20000             at=(10.800,20.406)
+t=60000  Return{node 104, drop 1} carry=200000     at=(11.850,21.139)  last=WaitGround   <- forever
+```
+
+`WaitGround`, not `WaitBlocked` - and **29 ground re-plans, 0 body re-plans**. The cause is in `goal_of`: for a `Return` it
+returned `self.find(drop)?.position`, the **town centre's own anchor**, which is blocked ground by definition. Every search
+that ended there failed, the route's two stall re-plans were spent on searches that could not succeed, and the man waited
+for the match with ten units in his hands while the bank sat at 790 of 900.
+
+**The fix is one goal, not a patrol of the movement pass:** a `Return` now aims at the **walkable yard**
+(`approach_tile` - the tile beside the footprint that already existed for this purpose), and the follow-up fallback in the
+`Return` arm does the same when the route has no waypoint left. Two smaller things came with it: the nudge now also accepts a
+body standing on the walker's **next waypoint** tile (the same dead end one tile out), and the stall counters saturate - a
+`u8` that overflows panics the match in a debug build, which this fixture did once the re-plans resumed.
+
+```
+research (all twenty)    20 passed, 0 failed   (two_players 53.6 s, the spear line ok)
+evasion                   6 passed             including ground_it_cannot_cross_is_re_planned_at_most_twice
+whole suite             114 binaries green, 9 red
+```
+
+**The nine reds:** the six that were always there (content-pack house, two tests written for 0.40 spacing, the woodcutter
+joining a patch, the reservation book, the withdrawn friend-on-goal rule) plus three skirmish rows
+(`both_sides_field_an_army`, `the_skirmish_only_refuses_what_the_fight_has_taken`, `a_friend_on_the_goal_tile_is_a_take`).
+**Every economy row now passes**, which is the whole of the five that were starving.
+
+**One rule was tried and withdrawn:** allowing a third ground re-plan after forty stalled ticks fixed nothing on its own (the
+goal was the problem, not the budget) and broke `ground_it_cannot_cross_is_re_planned_at_most_twice`, which is a written rule.
+Reverted; the cap stands.

@@ -2897,7 +2897,23 @@ impl World {
             Task::Move { to } | Task::Hunt { to } => (to, true),
             // A drop site is worked, not occupied: two villagers must be able to hand in at one town
             // centre on the same tick, and a building's own tile is never free ground anyway.
-            Task::Return { drop, .. } => (self.find(drop)?.position, false),
+            // **A carrier aims at the yard, not at the building's own ground** (D200). The drop's anchor tile is blocked -
+            // it is a building - so every search that ends there fails, the route's stalls run out, and the man waits for
+            // the match: measured, a full-handed carrier at `(11.850,21.139)` in `WaitGround` for 400,000 ticks while the
+            // bank held 790 of 900. `approach_tile` names the walkable tile beside the footprint.
+            Task::Return { drop, .. } => {
+                let at = self.find(drop)?.position;
+                let tile = self.tile_of(at);
+                if self.tile_walkable(tile.0, tile.1) {
+                    (at, false)
+                } else {
+                    (
+                        self.approach_tile(self.tile_of(entity.position), drop)
+                            .map_or(at, |yard| self.tile_centre(yard)),
+                        false,
+                    )
+                }
+            }
             Task::Build { site } => (self.find(site)?.position, false),
             Task::Gather { node, .. } => (self.find(node)?.position, false),
             Task::Attack { target, .. } => (self.find(target)?.position, false),

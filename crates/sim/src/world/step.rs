@@ -831,7 +831,7 @@ impl World {
     /// never far. Ours is a twentieth of a tile along the dominant axis, onto free ground, if no third body is there.
     fn push_the_standing(&mut self) {
         let step = (self.scale / 20).max(1);
-        let stuck: Vec<(EntityId, (Fixed, Fixed), i64)> = self
+        let stuck: Vec<(EntityId, (Fixed, Fixed), i64, (Fixed, Fixed))> = self
             .stalled
             .iter()
             .filter(|(_, waited)| **waited >= Self::STALLED_TICKS)
@@ -840,11 +840,11 @@ impl World {
                 if entity.kind != EntityKind::Unit {
                     return None;
                 }
-                self.paths.get(id)?.points.first()?;
-                Some((*id, entity.position, self.reach_between(*id, *id).raw()))
+                let next = *self.paths.get(id)?.points.first()?;
+                Some((*id, entity.position, self.reach_between(*id, *id).raw(), next))
             })
             .collect();
-        for (id, here, reach) in stuck {
+        for (id, here, reach, next) in stuck {
             let window = reach + reach / 20;
             let mut push: Option<(EntityId, (Fixed, Fixed))> = None;
             for entity in self.entities() {
@@ -858,8 +858,13 @@ impl World {
                 if dx * dx + dy * dy > window * window {
                     continue;
                 }
-                // **Only on the walker's own tile** - the case the planner cannot express.
-                if self.tile_of(entity.position) != self.tile_of(here) {
+                // **On the walker's own tile, or on the tile of his next waypoint.** The first is the case the planner
+                // cannot express; the second is the one it *tried* to solve and failed - a body standing on the very
+                // waypoint the route was planned through, which no re-plan around it can fix while it stays there.
+                // Measured: a loaded carrier at `(11.850,21.139)` stepping at `(12.000,21.000)` for 400,000 ticks, ten
+                // units in his hands, the bank stuck at 790 of 900.
+                let body_tile = self.tile_of(entity.position);
+                if body_tile != self.tile_of(here) && body_tile != self.tile_of(next) {
                     continue;
                 }
                 // **Nothing is nudged that somebody is working.** A sheep being sheared, a mine nobody can move: a body
@@ -1111,6 +1116,9 @@ impl World {
                 let Some(from) = self.position(id) else {
                     continue;
                 };
+                // **A re-plan spends the wait** (D200): otherwise a man who is still stuck re-plans on every tick, because
+                // his wait count only grows. One search per forty ticks, per man, is the budget this rule is allowed.
+                self.stalled.remove(&id);
                 let start = self.tile_of(from);
                 let mut avoiding = self
                     .paths
@@ -1186,7 +1194,13 @@ impl World {
                         // goal it cannot reach is exactly the case that looped: `get_mut` returned `None`, nothing was
                         // counted, and the request came back every tick. So an entry is created for it.
                         if body.is_none() || !self.paths.contains_key(&id) {
-                            let stalls = self.paths.get(&id).map_or(0, |route| route.stalls) + 1;
+                            // Saturating: with the forty-tick gate a stalled man may now re-plan many times, and a `u8`
+                            // that overflows panics the whole match in a debug build (it did, in this test).
+                            let stalls = self
+                                .paths
+                                .get(&id)
+                                .map_or(0, |route| route.stalls)
+                                .saturating_add(1);
                             let route = self.paths.entry(id).or_default();
                             route.stalls = stalls;
                         }
@@ -1762,7 +1776,15 @@ impl World {
                         work.deposits.push(entity.id);
                         (Fixed::ZERO, Fixed::ZERO)
                     } else {
-                        let next = self.next_waypoint(entity.id).unwrap_or(target);
+                        // **A carrier with no waypoint aims at the yard, not at the building's anchor** (D200). The anchor
+                        // is blocked ground, so stepping at it is refused for ever: measured, a loaded carrier at
+                        // `(11.85, 21.14)` in `Return` for **400,000 ticks** with ten units in his hands, the bank stuck at
+                        // 790 of 900. `approach_tile` is the walkable tile beside the footprint - it exists for exactly this.
+                        let next = self.next_waypoint(entity.id).unwrap_or_else(|| {
+                            self.approach_tile(here, drop)
+                                .map(|tile| self.tile_centre(tile))
+                                .unwrap_or(target)
+                        });
                         let (dx, dy) = step_towards(entity.position, next, delta.raw());
                         (Fixed::from_raw(dx), Fixed::from_raw(dy))
                     }
