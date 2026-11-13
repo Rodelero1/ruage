@@ -205,7 +205,36 @@ fn three_gatherers_on_one_bush_do_not_pile_up() {
             (world.scale() / 8..=world.scale() / 3).contains(&clearance)
         })
         .collect();
-    assert_eq!(spots.len(), 3, "all three villagers are still in the world");
+    // **The message names the rule and the measurement** (D193): "still in the world" was a lie - a man who is alive but
+    // two tiles away from his place failed the same assertion with a sentence that said nothing.
+    let detail: Vec<String> = ids
+        .iter()
+        .map(|id| {
+            let tile = world.resource_tiles(node)[0];
+            match world.entity(EntityId(*id)).map(|e| (e.task, e.position)) {
+                None => format!("{id}: gone"),
+                Some((task, at)) => {
+                    let clearance = ruage_sim::tiles::distance_to_tile(
+                        at,
+                        (i64::from(tile.0), i64::from(tile.1)),
+                        world.scale(),
+                    );
+                    format!(
+                        "{id}: {task:?} at ({:.2}, {:.2}), clearance {:.3}",
+                        at.0.raw() as f64 / world.scale() as f64,
+                        at.1.raw() as f64 / world.scale() as f64,
+                        clearance as f64 / world.scale() as f64
+                    )
+                }
+            }
+        })
+        .collect();
+    assert_eq!(
+        spots.len(),
+        3,
+        "MEASURED {} of 3 men standing on the bush: {detail:?}",
+        spots.len()
+    );
     // **All three gather the one bush** (D186): the ring round a source square holds eighteen men, so three is a small crowd.
     let working = world
         .entities()

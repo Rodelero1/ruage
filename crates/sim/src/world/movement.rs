@@ -385,16 +385,7 @@ impl World {
                 .paths
                 .get(&id)
                 .is_some_and(|route| route.avoiding.contains(&other));
-            // **Near the goal, a body still earns a repath, a wall does not** (D200). D98a suppressed re-plans here
-            // because a search that ends where it began buys nothing - true for terrain, which cannot move, and false for
-            // a man: with friends blocking (D200), the third villager sent at one bush stands 0.4 from a settled
-            // neighbour with his own place two steps round it, and only a route round the body gets him there (measured:
-            // 1 of 3 men reached the bush without this). The route's own `stalls` counter still caps the work at
-            // MAX_GROUND_REPLANS, so this cannot spin.
-            let a_body = self
-                .find(other)
-                .is_some_and(|other| other.kind == EntityKind::Unit);
-            if (!near_goal || a_body) && !known && pass.repaths.len() < MAX_REPATHS_PER_TICK {
+            if !near_goal && !known && pass.repaths.len() < MAX_REPATHS_PER_TICK {
                 pass.repaths.push(Repath {
                     unit: id,
                     body: Some(other),

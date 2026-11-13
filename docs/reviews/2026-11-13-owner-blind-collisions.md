@@ -65,3 +65,36 @@ collision rule, it is a regression until the crowd machinery underneath it works
 
 **D200 itself is recorded on the branch, not on `main`**: the owner has ruled, and the rule is right, but the decision is
 not landed until the engine can deliver a crowd without overlap.
+
+## Second pass: the places were the problem, and the game's own number now falls out
+
+**Gather places are spaced `0.66`, not one body.** `GATHER_SPACING_MILLI = 660`, with the owner's three saves behind it
+(0.661-0.663 between working men, D199). One body (0.40) is now *exactly* the reach that separates bodies, so a place one
+body from its neighbour is a place nobody can walk into.
+
+**`touching_places` was fitting places greedily, and losing one at every seam.** It walked the grown square's outline and kept
+any candidate at least `spacing` from the ones already kept, which under-fills: **11 places where the perimeter arithmetic
+allows 13**, and **5 at 0.66 where it allows 7** - and with friends blocking, a missing place is a man who cannot work.
+It now emits a place every `perimeter / count` of **arc length** and steps the count down until the shortest *chord* between
+neighbours is at least `2 * radius` (the physical rule; `spacing` is the comfort distance). Measured on one tile, radius 0.2:
+
+| spacing | before (greedy) | now (even + chord-limited) |
+|---|---|---|
+| 0.40 | 11 | **10** |
+| 0.60 | 7 | **8** |
+| **0.66** | **5** | **7** - the same seven the owner's saves show |
+
+That is the first time the engine's own geometry produces the game's number, and `ten_men_touch_one_bush` now reports
+**7 of 10 working the bush** where it reported 5.
+
+**Green on the branch:** `tile_geometry` 4/4, `collision` 4/4 (including the owner's never-inside-a-friend test),
+`evasion` 6/6.
+
+**Still red, and it is a new defect rather than the old one.** Three carriers are **frozen at one drop site** - at
+`(4.76, 10.02)`, `(4.56, 10.36)` and `(4.97, 10.36)`, positions identical at tick 1,200 and tick 2,400, two in `Return` with
+a load and one in `Gather` with none. They are within 0.2 of each other and none steps. Ruled out by experiment, not argument:
+the goal-tile rule (a `Return`'s target is a body, and skipping that rule for bodies changed nothing - reverted), and the
+overlap escape (rule 3 already returns the step). The next instrument is `step_trace`: which rule refuses, per man, per tick.
+
+**And the two tests that pin the withdrawn rule still need rewriting** - a friend on the goal tile is now an obstacle
+(`step_decision`), and a walker arrives *beside* a friend rather than on top of it (`movement`).

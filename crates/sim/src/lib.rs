@@ -1375,8 +1375,9 @@ pub const GATHER_PLACES: u16 = 180;
 /// man not gathering. The test is the *extra* walk over walking straight at the source.
 pub(crate) const GATHER_WALK_SLACK_MILLI: i64 = 1500;
 
-/// **How many men a node's tiles hold**: the touching places of every tile it occupies, for a body of `radius`. Derived from the
-/// geometry (D191/D192) - eleven for a villager on one tile - so there is no cap in a table and none to keep in step.
+/// **How many men a node's tiles hold**: the touching places of every tile it occupies, for a body of `radius`, spaced
+/// [`GATHER_SPACING_MILLI`] apart. Derived from the geometry (D191/D192) - seven for a villager on one tile - so there is no
+/// cap in a table and none to keep in step.
 #[must_use]
 pub fn touching_place_count(points: &[(u16, u16)], radius: i64, scale: i64) -> usize {
     points
@@ -1385,12 +1386,25 @@ pub fn touching_place_count(points: &[(u16, u16)], radius: i64, scale: i64) -> u
             crate::tiles::touching_places(
                 (i64::from(*x), i64::from(*y)),
                 radius,
-                (2 * radius).max(1),
+                spacing(scale),
                 scale,
             )
             .len()
         })
         .sum()
+}
+
+/// **How far apart two working men stand**, in thousandths of a tile: `0.660`.
+///
+/// Not one body (0.400). The owner's own saves measure **0.661-0.663** between seven men round one node, and the gap is the
+/// whole reason a crowd is deliverable: with friends blocking (D200), a place exactly one body from the next one is a place
+/// nobody can walk into, because the man walking to it is stopped at the reach. Seven places on the touching envelope is
+/// also what those saves show (`docs/reviews/2026-11-13-the-standoff-is-measured.md`, D199/D202).
+pub(crate) const GATHER_SPACING_MILLI: i64 = 660;
+
+/// [`GATHER_SPACING_MILLI`] in raw units, at this world's scale.
+pub(crate) fn spacing(scale: i64) -> i64 {
+    (scale * GATHER_SPACING_MILLI / 1000).max(1)
 }
 
 /// The **sine of 0, 2, 4 ... 90 degrees**, in millionths: the quarter table the ring is drawn from.
@@ -3377,8 +3391,9 @@ impl World {
         if dx == 0 && dy == 0 {
             return None;
         }
-        // **Two bodies, touching** - the 0.400 of the owner's saves.
-        let too_close = (2 * worker_radius).max(1);
+        // **Two bodies, a gap apart** (D202): the owner's saves measure 0.661-0.663 between working men, not 0.400. With
+        // friends blocking, a place exactly one body from its neighbour is a place nobody can walk into.
+        let too_close = spacing(scale);
         let centre = self.tile_centre(self.tile_of(target));
         let slack = scale * GATHER_WALK_SLACK_MILLI / 1000;
         let straight = integer_sqrt(
