@@ -696,3 +696,24 @@ ten-men number did not move, so this is a correctness improvement without a meas
 
 **What those four need is the *NoRoom* policy,** not another geometry rule: a worker who cannot be seated should stand outside and
 say so (idle), which is what the game does and what the owner's AI work will eventually own.
+
+## Twenty-third pass: the ring is not full, and that is why nobody can be seated
+
+Tried the NoRoom stand-down: if every live place on a node is held, an unplaced worker's order is finished. **It never fired**, and
+the reason it could not is the actual finding:
+
+```
+MEASURED [8504, 8505, 8506] working the bush with no place while only 4 of seven are held
+```
+
+**Three of the seven places are free and three men hold none**, so the book is not full and the stand-down has nothing to say. The
+three cannot be assigned because `standoff_point` refuses *every* candidate point: its guard is "no body within the gather spacing
+of this point", and the unplaced men are standing near the ring, so every free place is refused on their account.
+
+**The crowd is self-perpetuating**: men who cannot be seated stand around the ring, and their standing is what stops the book from
+seating them. That is why the last four reds all show ten men on a seven-place ring - it is not a capacity problem and not an
+overlap problem but a *refusal* problem.
+
+**Reverted rather than kept**: the stand-down, because it measured nothing. The next rule to build is the inverse - an unplaced
+worker **steps away from the node** until a place frees, so the ring can seat him - and it is testable on the same fixture that
+prints the line above.
