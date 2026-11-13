@@ -271,3 +271,32 @@ Eight times is not a small constant; it is a loop. The candidates, in the order 
 **What this pass settles:** the geometry is right (7 places, 0.66, 0.400 apart), the reservation book is inconsistent but not
 the cause of the reds, and the branch's real defect is **cost and throughput under a crowd**. Nothing lands on `main` until
 that 46 s is back near 6 s.
+
+## Ninth pass: the dead state, named exactly
+
+The trebuchet test, instrumented (per-tick counters on failure, a state dump of the villager):
+
+```
+main:             banked 400 in 11,359 ticks, 6.13 s
+d189-owner-blind: 400,000 ticks, bank holds 200, repaths 2 (body 1), made_room 0, 45 s
+
+t=20000   task=Gather{node 12} at=(16.23,13.80) carry=0 progress=0 place=(19.80,15.41) node_tiles=[(20,15)]
+t=200000  identical
+```
+
+**He is frozen 3.9 tiles from his place, with a valid reserved place on the ring, a live gather task, an empty carry, and
+`progress = 0`.** Not blocked (2 repaths in the whole run, zero made room), not gathering, not walking. He never moves again.
+
+So the defect is a **dead state**: a worker whose order landed, whose place is reserved, and whose route is gone - consumed,
+failed, or never rebuilt - has nothing that gives him a new one. `bank()` in the test only re-tasks a man whose task is `Idle`,
+and his task is `Gather`, so the test drives him forever into the same wall.
+
+**Why `main` does not have it:** the same fixture banks 400 in 11,359 ticks there. The difference the branch introduced is the
+movement rule (friends are walls) and the place spacing; whichever of the two leaves a route finished-but-not-arrived, the
+answer is the same missing rule: **a worker not touching his node, with no route to his place, must ask for one again** - the
+same resumption the movement pass already does for a body that has been given the right of way.
+
+**Next step, test-first, on this exact fixture:** a test that walks a worker to a place, removes the route mid-walk, and
+requires him to arrive; then the rule in `move_bodies`/`settle_workers` that rebuilds a route for a live gather order whose
+place is not reached. The measurement to hold it to is the one above: **11,359 ticks and 6 s on `main`** - the branch must
+come back to that, not just pass.

@@ -234,7 +234,6 @@ fn the_tile_holds_as_many_woodcutters_as_touch_it() {
         return;
     };
     let node = the_tree(&world);
-    let tile = world.resource_tiles(node)[0];
     // **The engine's own capacity**, not a second opinion: `touching_place_count` is what the settle uses, so a test that
     // computes the number itself can only disagree with the engine (D200: places are 0.66 apart now, and one tile holds
     // seven - the owner's own measurement - where a 0.40 spacing claimed eleven).
