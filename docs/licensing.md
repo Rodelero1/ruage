@@ -251,3 +251,46 @@ Three things are genuinely the owner's, and nothing in the binary answers them:
 3. **Is the provenance rule acceptable** - format facts cited as behaviour, no decompiled text, no fixtures committed,
    synthetic tests plus SHA-256-keyed real-fixture tests that skip when the install is absent (the shape `tools/savegame.py`
    already uses)?
+
+### B now, A later: what makes that migration cheap, and what must be true before it starts
+
+B is the tooling repository (GPL-3.0, `save → our own state file`, engine reads the state file). A is the engine reading the
+save directly, MIT/Apache, `--load` in a published clone. **The migration is a change of producer, not of engine**, and that
+is the whole design rule: everything below exists so that A is "swap the reader behind an unchanged model".
+
+**The one decision that makes A cheap, taken now.** The engine's entry point is `World::from_state(state)` - a plain,
+versioned description of a starting position (map, players, stockpiles, ages, techs, entities with owner/hp/task/position,
+tick). In B a tool writes it; in A a reader builds the same struct in-process. If this model is designed late, or grows
+save-specific fields, A becomes a rewrite of the engine's seeding path instead of a one-module swap.
+
+**Ordered steps between the two.**
+
+1. **Freeze the state schema and version it** (`state v1`), with strict loading (D6): an unknown or missing key fails, so a
+   format change cannot pass silently. This is the contract both sides read.
+2. **Write the tool-side converter against the format notes**, not against the eventual engine reader, and keep every
+   format fact in one module with its evidence cited as *behaviour* (loader gate, version field, record framing) - never a
+   pasted decompilation.
+3. **Write the engine-side reader from `docs/save-format.md` alone**, ideally in a different session from the converter -
+   the discipline that makes "functional, not expressive" a record rather than a claim. If a step cannot be written without
+   opening the GPL converter, the notes are incomplete, and *that* is the finding.
+4. **Diff the two producers on every save in the install** (31 files today): field-for-field equality, with any difference
+   named and explained. This is the migration's acceptance test, and it runs before any switch.
+5. **Switch `--load` to the direct reader**, keep the converter as a tool for formats the engine does not read, and leave
+   both paths alive until the suite is green on the engine side.
+6. **Re-run the publish checklist**: `cargo tree` shows no GPL crate in the workspace, the published tarball carries no
+   fixtures or saves, the docs rule still holds (no complete tables), and `make check` plus the decision and next-step gates
+   are green.
+
+**Prerequisites before step 3 may start** - not steps, gates:
+
+- the state model is stable (no schema churn for a release);
+- `docs/save-format.md` is complete enough that a fresh reader can be written from it without the converter's source;
+- the provenance note exists for the module (what was learned, from where, as behaviour);
+- **the engine is actually going to be published**, and D4's publish set has been re-confirmed - if it is not, B is the
+  destination and A never has to happen, which is the cheapest outcome of all;
+- a mechanical licence check exists in CI (a dependency-graph assertion, not a promise in prose), because the failure mode
+  here is a GPL edge appearing in the workspace months later and nobody noticing.
+
+**What makes it expensive if done out of order:** letting the converter's output be a *transcript of the file* (offsets,
+padding, sections) instead of a description of a world - then A must publish the transcript, which is the Art. 6 problem
+again, and the engine carries format detail it should never know.
