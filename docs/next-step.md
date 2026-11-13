@@ -1,77 +1,67 @@
-# OPEN - step 1: D200 is merged; close its review and start row 2
+# OPEN - the Return that aims at a blocked anchor: fix it, then re-land D200
 
-**State, 2026-11-13.** `main` carries **D200**: friends are solid and owner-blind; a tile seats **seven** at the measured 0.66;
-a body at rest is nudged only after **forty refused ticks**, only on the walker's own tile or his next waypoint, never if it is
-being worked; a `Return` aims at the walkable **yard**, not the building's blocked anchor; a place a body stands on is **stale**;
-the settle clamps its own step; placement is comfortable-0.66-first and packed-0.40-second, with a node-level re-lay; and an order
-a standing friend blocks **finishes where the man stands**.
+**State, 2026-11-13 (second session of the day).** `main` is the pre-D200 behaviour, restored by `git revert -m 1 2c7d8e1`:
+the whole workspace gate is green and the acceptance match is back to `entities=128 players=1 hash=ace125e60ea99b60
+repaths=579 made_room=0`, food 56 / 397 / 667 / 690 at 400 / 800 / 1200 / 2400 s.
 
-**Measured:** `ruage-sim` **122 test binaries green, 0 failed**; `ruage-data`, `ruage-fixed`, `ruage-script`, `ruage-harness` all
-green; fmt and clippy clean under `-D warnings`; acceptance at 48,000 ticks `entities=130 players=2 hash=17c79d51059de985
-repaths=31 made_room=6` against the old `repaths=579 made_room=0` - **seventeen times fewer re-plans**. The whole argument, every
-withdrawn rule and every measurement: `docs/reviews/2026-11-13-owner-blind-collisions.md`.
+**Why it was reverted.** The D200 merge passed every test and both gates and killed the acceptance match's food economy: after
+it, the bank held **0 food at every report** from 400 s to 2,400 s, wood climbed 70 -> 790, units fell 43 -> 14, and player 2 -
+four villagers and an untouched town centre - was still standing at 48,000 ticks. The mechanism is measured, not guessed:
+four loaded carriers freeze 1.7-2.4 tiles from their town centre, each with a **one-point route aimed at the building's own
+blocked anchor** (`next=(320000,320000)` = tile `(16,16)`, `touching=false`, 419 identical probe ticks), so the deposit test
+never fires and `approach_tile` is only consulted when there is *no* route. Full measurement, the wrong claims in the merged
+review (its hash and its `players` explanation), and the probe output: `docs/reviews/2026-11-13-d200-reverted-food-stall.md`.
+
+**Branch `d189-owner-blind` keeps every commit of D200** (last `1ef3a85`, merged as `2c7d8e1` before the revert). Nothing is
+lost; `main` is green.
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
-### 1. D200 is green on the branch - merge it *(no decision needed)*
+### 1. The `Return` whose waypoint is not standable ground *(next, test-first)*
 
-**Branch `d189-owner-blind` at `6998247`: `cargo test -p ruage-sim` 122 binaries green, 0 failed, EXIT 0; `cargo fmt --all
---check` clean; `cargo clippy --workspace --all-targets -- -D warnings` clean.** The last red was the content-pack house, and its
-cause was a **give-way that could not move**: at nought distance the give-way bound leaves no step, so the walker looked "busy"
-while standing still and the nudge skipped him. A zero-step give-way now counts as a refusal, the jam is visible, and the pair
-resolves.
+A `Return` route that ends on a building's own anchor can never complete. The fix belongs in the `Task::Return` arm
+(`crates/sim/src/world/step.rs:~1959`): a waypoint that is not walkable ground is replaced by `approach_tile`, whether or not
+a route exists - today `approach_tile` is the `unwrap_or_else` of `next_waypoint`, so a route *to the anchor* wins.
 
-**Remaining before the merge:** the **workspace** gate for the other crates (`ruage-data`, `ruage-fixed`, `ruage-script`,
-`ruage-harness` - `ruage-sim` is already green) and the **acceptance run** (`make headless`, twice on the branch) to record
-`entities`, `repaths`, `made_room` and `hash` against `main`'s baseline of `entities=128 players=1 hash=ace125e60ea99b60
-repaths=579 made_room=0`. Then merge, push, and close the review.
+**The fixture comes first, and it must be watched red:** a drop site that is a **town centre with its own footprint** (not a
+mill beside grass), a bush two tiles off, four carriers approaching from open ground - the acceptance match's own geometry,
+which every existing drop test sidesteps. `a_crowd_all_banks_its_loads` passes before and after the change and is therefore
+not the harness for this.
 
-**What landed, in one line each:** friends are solid; a body at rest is nudged only after 40 refused ticks, only on the walker's
-own tile or his next waypoint, never if it is being worked; a `Return` aims at the walkable yard rather than the building's
-blocked anchor; a place a body stands on is stale; the settle clamps its own step; placement is comfortable-0.66-first and
-packed-0.40-second, with a node-level re-lay; and an order a standing friend blocks finishes where the man stands.
+### 2. Re-land D200 on top of the fix
 
-### 2. Restate the three tests that pin the withdrawn rule
+Re-merge or re-apply `d189-owner-blind`, run the acceptance match, and require the two numbers that were red: **food reaches
+the bank** (a non-zero bank at 400 s and a rising unit count), and the summary line's `players` is stated with its mechanism
+(highest surviving player id) rather than explained away. The workspace gate and the review numbers go in the same commit.
 
-`step_decision::a_friend_on_the_goal_tile_is_a_take` (a friend on the goal tile is now an obstacle and the mover stops beside
-it), `movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives` (arrives *beside*, not on), and
-`evasion::two_villagers_crossing_pass_through_and_both_arrive` (they go round each other). Two gather tests compute places
-with `2 * radius` and expect 10-11; they should call the engine's own capacity so they cannot drift.
+### 3. Register row 2 - damage *(investigation started; two doc commits landed before the revert and stay)*
 
-### 3. Land D200 on `main`
-
-Whole-workspace gate (fmt, clippy `-D warnings`, every test), acceptance numbers recorded, review updated, merged, pushed.
-
-### 4. Register row 2 - damage *(investigation, no code until ruled)*
-
-`0x744d60` has five call sites (`0x6bb100`, `0x741a30` x2, `0x744ff0`, `0x745060`). Which is combat's path, and does the game
-drop each sub-1 class entry (as `0x744d60` does) or floor the total (as our `combat.toml` `minimum = 1` does)? Two seconds a
-query with craft-anything, then reading.
-
+`0x744d60` has five call sites (`0x6bb100`, `0x741a30` x2, `0x744ff0`, `0x745060`); `docs/behaviour-diff.md` now records what
+each one reads (multiplier 1.0 everywhere, the wrapper sums) and that the per-entry drop stands. Open: which call site is
+combat's path, and whether the game drops each sub-1 class entry or floors the total (`combat.toml`'s `minimum = 1`).
 **Done when:** row 2 is ruled `same` or `different` with the address, and a `different` becomes a test-first fix.
 
-### 5. `World::from_state` and the tool-side converter (B shape) - `--load`
+### 4. `World::from_state` and the tool-side converter (B shape) - `--load`
 
-The seam that makes B -> A a swap: a versioned world description the engine can build from, produced by a GPL tool now and
-by a reader inside the engine later. 18 saves in the install become a differential oracle: run 1,200 ticks from `brit7`,
-compare with `brit8`.
+A versioned world description the engine builds from, produced by a GPL tool now and by a reader inside the engine later. The
+18 saves in the install become a differential oracle: run 1,200 ticks from `brit7`, compare with `brit8`.
+**Done when:** `ruage-headless --load <save>` runs and the converter's output describes a *world*, not a transcript.
 
-**Done when:** `ruage-headless --load <save>` runs and the converter's output describes a *world*, not a transcript of the file.
+### 5. The importer into `tools/` and a bootstrap step
 
-### 6. The importer into `tools/` and a bootstrap step
-
-The structural half of A-prime: one repository, GPL-3.0 directory with its own licence file, invoked once at install time.
+One repository, GPL-3.0 directory with its own licence file, invoked once at install time.
 **Done when:** a clean clone with only `Age2HD/` present builds and produces `config/gamedata/`.
 
-### 7. Content (D201): names by three lists, prose rewritten, campaigns ours only
+### 6. Content (D201): names by three lists, prose rewritten, campaigns ours only
 
-### 8. Publish cleanup: quote-and-cite the five docs, licence plumbing, CI gates, README
+### 7. Publish cleanup: quote-and-cite the five docs, licence plumbing, CI gates, README
 
 ## Needs the owner - and only this
 
 - the **A vs B** publishing answer (does `--load` live in a published engine, and is the engine public yet) -
   `docs/licensing.md`, "B now, A later";
-- anything that changes a rule he set.
+- anything that changes a rule he set. **D200 is his ruling and it is not in question**: friends are solid, and the engine
+  will do it - but it re-lands only when the acceptance match still feeds itself.
 
 **Decided elsewhere, not on this plan:** pacing/AI (owner: later, with the AI), the renderer (D18), the `Vision` split (no
 behavioural content - last on purpose).
@@ -79,16 +69,28 @@ behavioural content - last on purpose).
 ## Standing rules for this plan
 
 Test-first, with the red run shown. Measure before and after. Every step ends committed and pushed. A step that cannot go
-green is parked on a branch with its diagnosis, **never left red on `main`**.
+green is parked on a branch with its diagnosis, **never left red on `main`** - which is exactly what happened here.
 
 ## Instrument notes, so a fresh session does not re-derive them
 
+The acceptance command that matters (release, 40 minutes of game time):
+
+```
+./target/release/ruage-headless --config config/sim.toml --map config/map.toml --economy config/economy.toml \
+  --units config/gamedata/units.toml --resources config/resources.toml --combat config/combat.toml \
+  --techs config/gamedata/techs.toml --effects config/gamedata/effects.toml --civs config/gamedata/civs.toml \
+  --script config/acceptance.toml --seed 7 --ticks 48000 --report 400 --dump build/dump.csv
+```
+
+`--dump` writes `kind,player,id,unit,slot,x,y,amount,hp,carry,path,task`; `path` is the route's length, which is how the
+carrier stall was found (`path=1`, one point, the anchor). A probe on a `Task` arm is env-gated and removed in the same
+session - `no_float` catches a leftover `as f64` in production code.
+
 craft-anything's CLI is `/opt/data/tools/craft-anything/bin/craft-anything-cli`; the MCP entry is registered **deep**
 (`mcp --all-tools --deep`, 323 tools, `connect_timeout` 180) and its `PATH` must carry the JDK 21 `bin` and both Ghidra 12.2
-directories - without the JDK's `bin` the CLI reports java and Ghidra "not found" whatever `JAVA_HOME` says. **Every
-identification number in the evaluation came from its built-in engine**, which needs no Ghidra; a Ghidra-backed call pays
-~6.5 min and 1.4 GB. Its function count is **19,484** where Ghidra's is **15,465** - never quote one without its tool. The
-REA corpus is `/opt/data/tools/rea/pseudo-aokhd` (15,465 functions) and is the *reading* instrument.
+directories. **Every identification number in the evaluation came from its built-in engine**, which needs no Ghidra; a
+Ghidra-backed call pays ~6.5 min and 1.4 GB. Its function count is **19,484** where Ghidra's is **15,465** - never quote one
+without its tool. The REA corpus is `/opt/data/tools/rea/pseudo-aokhd` (15,465 functions) and is the *reading* instrument.
 
 **Owner saves live in scratch, never in the tree** (D8/D22): `/opt/data/cache/scratch/owner-saves/`, SHA-256 `6bc5f8a6…`
 (tree), `b9455053…` (mine), `bbc92744…` (bush), save version 12.5.

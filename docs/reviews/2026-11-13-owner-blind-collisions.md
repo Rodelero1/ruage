@@ -1,5 +1,11 @@
 # Owner-blind collisions, built and measured — parked on the match outcome
 
+> **Merged as `2c7d8e1` on 2026-11-13 and reverted the same evening.** The match does not resolve *and* does not feed
+> itself: after the merge the acceptance bank held **0 food at every report** from 400 s to 2,400 s, units 43 → 14, because
+> a loaded carrier's `Return` route ends on the town centre's own blocked anchor. Measurement and the probe:
+> `docs/reviews/2026-11-13-d200-reverted-food-stall.md`. The branch `d189-owner-blind` is intact; the two wrong claims in this
+> note's own "Acceptance" section (its hash, and "the script seeds two sides") are corrected there.
+
 *2026-11-13. The owner's ruling: **"Adopt original game behaviour. Don't make difference of friend or foe as in original
 game."** The rule is built on `d189-owner-blind` and it does what he asked at the level of two units. It cannot land yet,
 because it changes whether a match resolves, and that is the one number that decides.*

@@ -218,10 +218,8 @@ fn bank(world: &mut World, slot: usize, want: u32) {
     let villager = first_villager(world);
     let mut node = nearest_node(world, villager, slot).expect("a node of that column");
     world.submit(Command::Gather { villager, node });
-    let mut ticks = 0u64;
     for _ in 0..400_000 {
         world.step().expect("step");
-        ticks += 1;
         if world.stock(1, slot) >= want {
             return;
         }
@@ -240,11 +238,8 @@ fn bank(world: &mut World, slot: usize, want: u32) {
         }
     }
     panic!(
-        "could not bank {want} in column {slot} in {ticks} ticks; the bank holds {}; repaths {} (body {}), made_room {}",
-        world.stock(1, slot),
-        world.repaths(),
-        world.repaths_by_body(),
-        world.made_room()
+        "could not bank {want} in column {slot}; the bank holds {}",
+        world.stock(1, slot)
     );
 }
 

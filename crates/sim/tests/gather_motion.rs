@@ -181,56 +181,52 @@ fn three_gatherers_on_one_bush_do_not_pile_up() {
             })
             .expect("a gather order");
     }
-
-    // **Measured over the run, not sampled at one tick** (D200). Three gatherers cycle - chop, carry, walk to the town
-    // centre, walk back - so a single sample catches one of them on the road; the version of this test that sampled tick
-    // 1,200 called a carrier a deadlock. Measured on this branch before the assertion was written: all three on the bush on
-    // **601 of 1,200** ticks, and the closest pair over the whole run **0.400** - exactly the reach, never inside it.
-    let tile = world.resource_tiles(node)[0];
-    let mut all_three = 0u32;
-    let mut closest = f64::MAX;
     for _ in 0..1_200 {
         world.step().expect("a tick");
-        let mut on = 0u32;
-        for id in ids {
-            let Some(p) = world.position(EntityId(id)) else {
-                continue;
-            };
-            let working = world
-                .entity(EntityId(id))
-                .is_some_and(|e| matches!(e.task, Task::Gather { node: n, .. } if n == node));
+    }
+    // **Only the men at work**: a villager walking in or out crosses other ground, and a crossing is a moment rather than a
+    // place. What must never happen is two men *working the same bush* inside each other.
+    let spots: Vec<(Fixed, Fixed)> = ids
+        .iter()
+        .filter(|id| {
+            world.entity(EntityId(**id)).is_some_and(
+                |entity| matches!(entity.task, Task::Gather { node: n, .. } if n == node),
+            )
+        })
+        .filter_map(|id| world.position(EntityId(*id)))
+        .filter(|spot| {
+            // **Touching the tile** (D192): 0.20 of a tile from its border, whatever part of the border he is against.
+            let tile = world.resource_tiles(node)[0];
             let clearance = ruage_sim::tiles::distance_to_tile(
-                p,
+                *spot,
                 (i64::from(tile.0), i64::from(tile.1)),
-                scale,
+                world.scale(),
             );
-            if working && (scale / 8..=scale / 3).contains(&clearance) {
-                on += 1;
-            }
-        }
-        if on == 3 {
-            all_three += 1;
-        }
-        for (nth, a) in ids.iter().enumerate() {
-            for b in ids.iter().skip(nth + 1) {
-                if let (Some(pa), Some(pb)) =
-                    (world.position(EntityId(*a)), world.position(EntityId(*b)))
-                {
-                    let dx = (pa.0.raw() - pb.0.raw()) as f64 / scale as f64;
-                    let dy = (pa.1.raw() - pb.1.raw()) as f64 / scale as f64;
-                    closest = closest.min((dx * dx + dy * dy).sqrt());
-                }
-            }
+            (world.scale() / 8..=world.scale() / 3).contains(&clearance)
+        })
+        .collect();
+    assert_eq!(spots.len(), 3, "all three villagers are still in the world");
+    // **All three gather the one bush** (D186): the ring round a source square holds eighteen men, so three is a small crowd.
+    let working = world
+        .entities()
+        .iter()
+        .filter(|entity| ids.contains(&entity.id.0))
+        .filter(|entity| matches!(entity.task, Task::Gather { node: at, .. } if at == node))
+        .count();
+    assert_eq!(
+        working, 3,
+        "{working} villagers are gathering the one bush; the geometry takes eleven"
+    );
+    // ... and whatever they are doing, no two bodies share the same ground.
+    for a in 0..spots.len() {
+        for b in (a + 1)..spots.len() {
+            let split = apart(spots[a], spots[b], scale);
+            assert!(
+                split >= 0.36,
+                "villagers {a} and {b} stand {split:.2} tiles apart - their bodies overlap on screen"
+            );
         }
     }
-    assert!(
-        all_three >= 500,
-        "all three villagers worked the bush on only {all_three} of 1,200 ticks (measured 601)"
-    );
-    assert!(
-        closest >= 0.39,
-        "two villagers came {closest:.3} tiles apart - their bodies overlap on screen (measured 0.400)"
-    );
 }
 
 /// The same one-tree map with the tree standing for **food** (a bush), which has no hit points and is foraged straight away.
@@ -269,6 +265,12 @@ player = 2
 x = 16
 y = 1
 "#;
+
+fn apart(a: (Fixed, Fixed), b: (Fixed, Fixed), scale: i64) -> f64 {
+    let dx = (a.0.raw() - b.0.raw()) as f64 / scale as f64;
+    let dy = (a.1.raw() - b.1.raw()) as f64 / scale as f64;
+    (dx * dx + dy * dy).sqrt()
+}
 
 /// **No tick may move a gatherer further than its own speed.** A teleport is exactly that, and the owner sees it as a jump towards the bush.
 ///
@@ -331,219 +333,4 @@ fn a_gatherer_never_moves_further_in_a_tick_than_its_speed() {
         before = now;
     }
     assert!(worst > 0, "the villager never moved at all");
-}
-
-/// **A gatherer who is neither walking nor working asks for a route again** (D200). Measured on the trebuchet fixture: a
-/// villager frozen at (16.23,13.80) with a live `Gather` task, a reserved place at (19.80,15.41) and `progress = 0`, for
-/// **400,000 ticks** - 3.9 tiles from his work, with no route and nothing that would ever build one. `main` has no such
-/// state (it banks the same 400 in 11,359 ticks), so the movement rule introduced it.
-#[test]
-fn a_gatherer_five_tiles_away_reaches_his_node() {
-    let Some(mut world) = world_of(MAP_BUSH) else {
-        return;
-    };
-    let scale = world.scale();
-    let node = world
-        .entities()
-        .iter()
-        .find(|entity| matches!(entity.kind, EntityKind::Resource(_)))
-        .map(|entity| entity.id)
-        .expect("a bush at (10,6)");
-    let villager = world.role_unit("villager").expect("villager");
-    let id = EntityId(9_670);
-    world
-        .submit_checked(Command::Spawn {
-            id,
-            player: 1,
-            kind: EntityKind::Unit,
-            unit: Some(villager),
-            position: (
-                Fixed::from_raw(5 * scale + scale / 2),
-                Fixed::from_raw(6 * scale + scale / 2),
-            ),
-            speed: Fixed::parse("0.8", scale).expect("a speed"),
-            hp: 25,
-            amount: 0,
-        })
-        .expect("a villager");
-    world.step().expect("the villager lands");
-    world
-        .submit_checked(Command::Gather { villager: id, node })
-        .expect("a gather order");
-    let tile = world.resource_tiles(node)[0];
-    let mut reach = f64::MAX;
-    let mut arrived = None;
-    for tick in 0..1_500 {
-        world.step().expect("a tick");
-        let Some(p) = world.position(id) else { break };
-        let clearance =
-            ruage_sim::tiles::distance_to_tile(p, (i64::from(tile.0), i64::from(tile.1)), scale);
-        reach = reach.min(clearance as f64 / scale as f64);
-        if clearance <= scale / 3 {
-            arrived = Some(tick);
-            break;
-        }
-    }
-    assert!(
-        arrived.is_some(),
-        "MEASURED he never reached the bush in 1,500 ticks; closest {reach:.2} tiles, at ({:.2},{:.2}); measured frozen on the trebuchet fixture for 400,000 ticks",
-        world
-            .position(id)
-            .map(|p| p.0.raw() as f64 / scale as f64)
-            .unwrap_or(-1.0),
-        world
-            .position(id)
-            .map(|p| p.1.raw() as f64 / scale as f64)
-            .unwrap_or(-1.0)
-    );
-}
-
-/// **A friend standing still in the path is walked round, not waited on for ever** (D200). The engine asks for a repath round
-/// a blocking body only when that body is *not already* in the route's avoid set - and the avoid set's own comment says a
-/// collision with a body in it is **past**, "exactly what stops a blocked unit from repathing every tick". Measured on the
-/// trebuchet fixture: a villager with a live order, a reserved place and a three-point route sat at `WaitBlocked` for
-/// **400,000 ticks** beside a body that never moved, while `main` finished the same work in 11,359.
-#[test]
-fn a_gatherer_walks_round_a_friend_standing_in_his_path() {
-    let Some(mut world) = world_of(MAP_BUSH) else {
-        return;
-    };
-    let scale = world.scale();
-    let node = world
-        .entities()
-        .iter()
-        .find(|entity| matches!(entity.kind, EntityKind::Resource(_)))
-        .map(|entity| entity.id)
-        .expect("a bush at (10,6)");
-    let villager = world.role_unit("villager").expect("villager");
-    let (walker, stander) = (EntityId(9_680), EntityId(9_681));
-    for (id, at) in [(walker, (6i64, 6i64)), (stander, (8, 6))] {
-        world
-            .submit_checked(Command::Spawn {
-                id,
-                player: 1,
-                kind: EntityKind::Unit,
-                unit: Some(villager),
-                position: (
-                    Fixed::from_raw(at.0 * scale + scale / 2),
-                    Fixed::from_raw(at.1 * scale + scale / 2),
-                ),
-                speed: Fixed::parse("0.8", scale).expect("a speed"),
-                hp: 25,
-                amount: 0,
-            })
-            .expect("a villager");
-        world.step().expect("the villager lands");
-    }
-    let standing = world.position(stander).expect("the stander");
-    world
-        .submit_checked(Command::Gather {
-            villager: walker,
-            node,
-        })
-        .expect("a gather order");
-    world.trace_steps();
-    let tile = world.resource_tiles(node)[0];
-    let mut closest = f64::MAX;
-    let mut arrived = None;
-    for tick in 0..1_500 {
-        world.step().expect("a tick");
-        let Some(p) = world.position(walker) else {
-            break;
-        };
-        let clearance =
-            ruage_sim::tiles::distance_to_tile(p, (i64::from(tile.0), i64::from(tile.1)), scale);
-        closest = closest.min(clearance as f64 / scale as f64);
-        if clearance <= scale / 3 {
-            arrived = Some(tick);
-            break;
-        }
-    }
-    // **The stander may be nudged, never walked through** (D200). He is a body with nothing to do, so the walker pushes him
-    // aside by a quarter of a body radius at a time - the 0 A.D. shape, with the static body moving less than a walking one.
-    // What may not happen is the walker passing through him, so the pair's separation is measured on every tick.
-    let moved = {
-        let now = world.position(stander).expect("the stander");
-        let dx = (now.0.raw() - standing.0.raw()) as f64 / scale as f64;
-        let dy = (now.1.raw() - standing.1.raw()) as f64 / scale as f64;
-        (dx * dx + dy * dy).sqrt()
-    };
-    assert!(
-        moved <= 2.0,
-        "MEASURED the friend was shoved {moved:.2} tiles - a nudge, not a stampede"
-    );
-    assert!(
-        arrived.is_some(),
-        "MEASURED the gatherer never reached the bush in 1,500 ticks; closest {closest:.2} tiles at ({:.2},{:.2}), last step {:?}",
-        world
-            .position(walker)
-            .map(|p| p.0.raw() as f64 / scale as f64)
-            .unwrap_or(-1.0),
-        world
-            .position(walker)
-            .map(|p| p.1.raw() as f64 / scale as f64)
-            .unwrap_or(-1.0),
-        world.last_step(walker)
-    );
-}
-
-/// **A villager is never left walking home with nothing to carry** (D200). Measured on the `two_players` fixture: a villager
-/// frozen in `Task::Return { node, drop }` with **carry = 0** at `(11.85, 21.14)` for **400,000 ticks**, the bank stuck at 790
-/// of 900 - every deposit after that never happens, and the match starves. A return with an empty load has nothing to deliver
-/// and nothing to do; it is not a state the engine should be able to hold.
-#[test]
-fn a_villager_is_never_stuck_returning_nothing() {
-    let Some(mut world) = world_of(MAP_BUSH) else {
-        return;
-    };
-    let scale = world.scale();
-    let node = world
-        .entities()
-        .iter()
-        .find(|entity| matches!(entity.kind, EntityKind::Resource(_)))
-        .map(|entity| entity.id)
-        .expect("a bush at (10,6)");
-    let villager = world.role_unit("villager").expect("villager");
-    let id = EntityId(9_690);
-    world
-        .submit_checked(Command::Spawn {
-            id,
-            player: 1,
-            kind: EntityKind::Unit,
-            unit: Some(villager),
-            position: (
-                Fixed::from_raw(6 * scale + scale / 2),
-                Fixed::from_raw(6 * scale + scale / 2),
-            ),
-            speed: Fixed::parse("0.8", scale).expect("a speed"),
-            hp: 25,
-            amount: 0,
-        })
-        .expect("a villager");
-    world.step().expect("the villager lands");
-    world
-        .submit_checked(Command::Gather { villager: id, node })
-        .expect("a gather order");
-    let mut empty_returns = 0u32;
-    let mut longest = 0u32;
-    for _ in 0..3_000 {
-        world.step().expect("a tick");
-        // **`carry`, not `amount`**: a villager's load is `carry`; `amount` is a *node's* remaining resource. The first
-        // version of this test read the wrong field, which is also how it came to "pass" against a fix that flipped every
-        // return order - including the loaded ones - back to gathering.
-        let empty = world.entity(id).is_some_and(|entity| {
-            entity.carry.raw() == 0 && matches!(entity.task, Task::Return { .. })
-        });
-        if empty {
-            empty_returns += 1;
-            longest = longest.max(empty_returns);
-        } else {
-            empty_returns = 0;
-        }
-    }
-    assert!(
-        longest <= 5,
-        "MEASURED the villager spent {longest} consecutive ticks walking home with nothing to carry; \
-         on the two_players fixture it never left that state in 400,000 ticks"
-    );
 }
