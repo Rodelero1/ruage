@@ -212,3 +212,31 @@ neighbour on the same tile "taken", so the pass never fired).
 **Next instrument, one script:** for 1,800 ticks on the ten-men fixture, print every `gather_place` entry as
 `(worker, node, live?, worker's task, clearance of the place)` and every working man with no entry. That reads the whole book
 at once instead of guessing which filter is right.
+
+## Seventh pass: the reds are one defect - men cannot share a drop point
+
+Every remaining red, read from its own message, is the same story: **a crowd cannot deliver.**
+
+```
+research: could not bank 400 in column 0; the bank holds 200
+research: could not bank 700 in column 2; the bank holds 400
+research: could not bank 900 in column 1; the bank holds 790
+skirmish: player 1 never fielded infantry: the skirmish is one-sided
+skirmish: the skirmish hit a script error: ["player 1 has no unit militia"]
+build:    a_content_pack_with_our_own_resources_loads_and_spends - the house is never finished
+gather:   a_woodcutter_whose_tree_runs_out_joins_a_patch_that_already_has_men_on_it
+```
+
+The banks stall at a fraction of what the tests need, and the skirmish cannot field a unit at all. With D200 friends are walls, so
+men queue at the drop: **the economy starves not because gathering is wrong but because delivery throughput is**, and a test
+that needs 700 banked holds 400 because the queue is at the town centre, not in the fields.
+
+**Not a parallel-test artefact.** Re-run serially (`-- --test-threads=1`) on `research`, `skirmish`, `step_decision`:
+`17 passed; 3 failed`, same messages, 181 s. The suite is not racing on a shared file; the numbers are the numbers.
+
+**So step 1 is not geometry and not the reservation book - it is the drop.** The places on a node are fine (7, 0.66, 0.400
+apart, three men working 601 of 1,200 ticks). What the branch lacks is a rule for many men delivering to one building: the
+game has them stack at the drop the same way they stack at a node, and we have no standoff ring for a building's drop point.
+
+**My error, again, recorded because it cost a pass:** I read the first six reds as six separate test problems and rewrote
+tests for three of them before reading all six messages together. Five of them say the same sentence.
