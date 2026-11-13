@@ -4962,3 +4962,31 @@ settles that a `.scx` reader is publishable while a converted `.scx` is not - th
 **Commits us to.** No campaign data in `config/` or any tracked path; converted scenarios only in `build/`; descriptions
 authored, never imported from the dat's string tables; a rename list maintained with the content pack; and the project's
 presentation (title, logo, README, no "HD Edition") staying clear of the trademark.
+
+### D202 - the target shape is "A-prime": self-contained sources, the install as the only input
+
+**What it says.** The owner's goal, as he put it: *"the sources to contain everything so that I can install it on top of
+Age2HD and nothing else would be needed"* - with only the game's sounds and graphics reused, and those from the install.
+That is **A of the save-reader options, widened**: the engine, the importer and the content schema all live in this
+repository, `--load` is the engine's own, and a user supplies one thing - their copy of the game.
+
+Five pieces, and the order they become true:
+
+| piece | state |
+|---|---|
+| engine builds and runs from a clean clone | **true today** (`cargo build` needs no game data) |
+| `--load` in the engine | starts as **B** (tool-side converter behind `World::from_state`), becomes **A** once the reader is written from `docs/save-format.md` alone - gates in `docs/licensing.md` |
+| the importer lives here, not in another repository | not yet (D12 moved it out); returns as a GPL-3.0 directory under `tools/`, or as our own Rust reader later |
+| content: names by three lists, all prose rewritten, campaigns only ours | the rule is D201; the content work comes with the authored pack |
+| assets read in place; ours later | true today (D21) |
+
+**The one thing "A-prime" cannot include, and does not need.** *"The data generated once, reviewed, and made part of the
+game"* is the only sentence of the goal that does not fit: the dat's numbers are a substantial extraction of their database
+(Database Directive Art. 7) and committing them is the one act no packaging choice repairs. **It is also not required by the
+user experience** - "install on top of Age2HD, nothing else needed" is satisfied by generating the tables at first run from
+that very install. Committing them would only matter for running *without* the original game, which is the one thing the
+goal explicitly keeps.
+
+**Commits us to.** `World::from_state` as the seam between B and A; no dat-derived table in a tracked path (D8); the importer
+back in this repository by the time a stranger is expected to build; and the target recorded here so a later session does not
+re-open "which option did we pick".
