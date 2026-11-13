@@ -574,3 +574,29 @@ through `collide`, so nothing clamps the last step. The fix that follows from th
 refuse the step when the *new* position would be inside the pair's reach.
 
 **Measured now:** `movement` 4/4, `gather_standoff_rule` 1/2, `gather_continuous` 3/4, `evasion` 6/6, `animals` 11/11.
+
+## Twentieth pass: the settle clamps, the order waits for the man who cannot move, and two men still share a place
+
+**In:** the settle now clamps its own step (halved until it stays outside the pair's reach) and updates its body snapshot
+per move instead of once per tick - a snapshot let two men walk to the same spot in one tick because each check saw the
+other's old position. `finish_blocked_orders` now finishes a `Move` **only when the man in the way has no route of his own**:
+the first version ended orders whenever the forty ticks ran out, and two villagers crossing head-on blocked each other long
+enough to strand one of them **three tiles short** (`a at (8,2)`, goal `(11,2)`) - caught by
+`evasion::two_villagers_crossing_pass_through_and_both_arrive`, which now passes.
+
+```
+evasion                6 passed    incl. the crossing test and the ground-replan cap
+movement               4 passed    the blocked Move finishes at 1.011 tiles, the friend does not move
+gather_continuous      3 of 4      the closest pair 0.107
+gather_standoff_rule   3 of 4      the closest pair 0.094
+whole suite          115 green, 8 red
+```
+
+**Still open, and now located exactly:** two men on one node end **0.094** tiles apart with **identical `progress` (4780)** -
+which is only possible if they were given the **same place**. So the overlap is not the settle's step, not the reach
+arithmetic and not the ring (the ring's own closest pair measures **0.592** for seven places): it is the *place book* handing
+one point to two men, and `standoff_point`'s `taken` list only covers choices made in the same tick while `gather_place` only
+covers men whose booking is still live.
+
+**The eight reds:** content-pack house, the 0.094 and 0.107 overlaps, the woodcutter joining a patch, the reservation book,
+`ten_men_touch...`, and two skirmish rows.

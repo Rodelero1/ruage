@@ -941,6 +941,26 @@ impl World {
                     Some(Task::Move { .. })
                 )
             })
+            // **Only when the man in the way is going nowhere.** Two villagers crossing head-on block each other for a few
+            // ticks and then pass; finishing the order there stranded one of them three tiles short (measured). The order is
+            // only finished when the body in reach has **no route of its own** - a body at rest, which cannot move aside.
+            .filter(|id| {
+                let Some(here) = self.find(*id).map(|entity| entity.position) else {
+                    return false;
+                };
+                let reach = self.reach_between(*id, *id).raw() + self.scale / 20;
+                self.entities.iter().any(|other| {
+                    other.id != *id
+                        && other.kind == EntityKind::Unit
+                        && (other.position.0.raw() - here.0.raw()).pow(2)
+                            + (other.position.1.raw() - here.1.raw()).pow(2)
+                            <= reach * reach
+                        && self
+                            .paths
+                            .get(&other.id)
+                            .is_none_or(|route| route.points.is_empty())
+                })
+            })
             .collect();
         for id in done {
             if let Some(entity) = self.find_mut(id) {
@@ -960,7 +980,10 @@ impl World {
         // band (measured **1.962** tiles from the bush, never working). The step is therefore taken **along the ring**, in the
         // shorter direction, which is what a villager walking round a tree to its place does.
         // **Who is standing where**, once, so a blocked goal can be recognised before anybody moves.
-        let bodies: Vec<(EntityId, (Fixed, Fixed), Option<u32>)> = self
+        // **Mutable on purpose**: each man who moves updates his entry before the next is considered. A snapshot taken once
+        // let two men walk to the same spot in the same tick - each check saw the other's *old* position - which is how two
+        // settled workers ended up **0.094** tiles apart where the footprint needs 0.40.
+        let mut bodies: Vec<(EntityId, (Fixed, Fixed), Option<u32>)> = self
             .entities
             .iter()
             .filter(|entity| entity.kind == EntityKind::Unit)
@@ -1027,6 +1050,31 @@ impl World {
                 let (raw_x, raw_y) = step_towards(position, to, step);
                 (Fixed::from_raw(raw_x), Fixed::from_raw(raw_y))
             };
+            // **The settle steps directly, so it must clamp like `give` does** (D200). It does not go through `collide`, and
+            // nothing stopped the last step from ending inside a neighbour: two men converging along the ring from opposite
+            // sides measured **0.083** and **0.107** tiles apart where the footprint needs 0.40. Halving the step three times
+            // is enough for a step this small; a step that is still inside the pair's reach is not taken at all.
+            let (mut dx, mut dy) = (dx, dy);
+            for _ in 0..3 {
+                let candidate = (
+                    Fixed::from_raw(position.0.raw() + dx.raw()),
+                    Fixed::from_raw(position.1.raw() + dy.raw()),
+                );
+                let inside = bodies.iter().any(|(other, at, other_unit)| {
+                    *other != id && {
+                        let reach = self.reach_raw(unit, *other_unit);
+                        (candidate.0.raw() - at.0.raw()).pow(2) + (candidate.1.raw() - at.1.raw()).pow(2)
+                            < reach * reach
+                    }
+                });
+                if !inside {
+                    break;
+                }
+                (dx, dy) = (
+                    Fixed::from_raw(dx.raw() / 2),
+                    Fixed::from_raw(dy.raw() / 2),
+                );
+            }
             if (dx.raw() != 0 || dy.raw() != 0)
                 && let Some(entity) = self.find_mut(id)
             {
@@ -1034,6 +1082,9 @@ impl World {
                     Fixed::from_raw(position.0.raw() + dx.raw()),
                     Fixed::from_raw(position.1.raw() + dy.raw()),
                 );
+                if let Some(slot) = bodies.iter_mut().find(|(who, _, _)| *who == id) {
+                    slot.1 = entity.position;
+                }
             }
             // **`velocity` is state, not a report** (found here): writing it from the settle made a villager 15 tiles away walk to a patch
             // the reach filter had refused (`a_worker_does_not_look_beyond_its_reach`) - the sim reads it back. The step is the position
