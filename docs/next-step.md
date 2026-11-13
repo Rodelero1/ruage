@@ -7,38 +7,23 @@ every red one crowd delivery or a test that pins the old spacing.
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
-### 1. The nudge landed; the drop is the next stall *(branch work, no decision needed)*
+### 1. D200 is green on the branch - merge it *(no decision needed)*
 
-**`WaitBlocked` forever is fixed.** A body at rest is nudged out of a walker's way only after **40 refused ticks**, only for a
-body on the walker's **own tile**, never for a body somebody is working: the 0 A.D. shape, damped hard. Measured on the branch
-(`0ef5de2`): the trebuchet fixture **ok in 6.29 s** where it took 46 s and banked 200 of 400, and the rules the engine already
-states are intact - `evasion` 11/11 including all three *"the body it went round did not move"*, `animals` 6/6 including the
-sheep that must stand still, `gather_motion` 5/5.
+**Branch `d189-owner-blind` at `6998247`: `cargo test -p ruage-sim` 122 binaries green, 0 failed, EXIT 0; `cargo fmt --all
+--check` clean; `cargo clippy --workspace --all-targets -- -D warnings` clean.** The last red was the content-pack house, and its
+cause was a **give-way that could not move**: at nought distance the give-way bound leaves no step, so the walker looked "busy"
+while standing still and the nudge skipped him. A zero-step give-way now counts as a refusal, the jam is visible, and the pair
+resolves.
 
-**Suite: 113 binaries green, 11 tests red.** Six were already there (content-pack house, two tests written for 0.40 spacing, the
-woodcutter joining a patch, the reservation book, the withdrawn friend-on-goal rule). **Five are economy and skirmish**:
-`two_players` 790 of 900 banked, `the_spear_line` 400 of 700, `both_sides_field_an_army`, `the_skirmish_only...`,
-`a_friend_on_the_goal_tile_is_a_take`. At 400,000 ticks with `repaths 29, made_room 0` these look like a **second stall, at the
-drop**: carriers hold places (`Return` keeps one, by design), and two carriers blocked by each other are both "busy", so
-neither is nudged and neither yields.
+**Remaining before the merge:** the **workspace** gate for the other crates (`ruage-data`, `ruage-fixed`, `ruage-script`,
+`ruage-harness` - `ruage-sim` is already green) and the **acceptance run** (`make headless`, twice on the branch) to record
+`entities`, `repaths`, `made_room` and `hash` against `main`'s baseline of `entities=128 players=1 hash=ace125e60ea99b60
+repaths=579 made_room=0`. Then merge, push, and close the review.
 
-**Measured since:** the stall is a **loaded carrier frozen in `Return`** - 200,000 raw (ten units, the full cap) carried, at
-`(11.85, 21.14)`, for 400,000 ticks, with three million left in the node. Not an empty return and not exhaustion: he cannot
-finish the approach to the drop. Next instrument: `trace_steps` on that fixture, printing his `last_step` and his distance to the
-drop's footprint - the same question that named the first stall.
-
-**The economy is fixed** (`af4f0aa`): a `Return` was aiming at the **drop's own anchor tile**, which is blocked ground, so
-every search to it failed and the carrier waited in `WaitGround` for 400,000 ticks with ten units in his hands. He now aims at
-the walkable yard (`approach_tile`). **All twenty research rows pass**; the suite is **114 binaries green, 9 red**.
-
-**The nine reds, and the two engine defects behind four of them:**
-- two settled workers measured **0.083 and 0.107 tiles apart** - `standoff_point` picks correctly, the **settle** can walk a man
-  onto a point another body already holds;
-- a `Move` order onto an occupied tile **never completes**: the walker stops 1.011 tiles out, correctly, and his task stays
-  `Move` for ever because "arrived" is judged only against the goal point;
-- plus the content-pack house, the reservation book (3 men working with no place while 4 of 7 are held), and three skirmish rows.
-
-**Done when:** those two defects are fixed test-first, the remaining test rewrites are done, and the branch merges.
+**What landed, in one line each:** friends are solid; a body at rest is nudged only after 40 refused ticks, only on the walker's
+own tile or his next waypoint, never if it is being worked; a `Return` aims at the walkable yard rather than the building's
+blocked anchor; a place a body stands on is stale; the settle clamps its own step; placement is comfortable-0.66-first and
+packed-0.40-second, with a node-level re-lay; and an order a standing friend blocks finishes where the man stands.
 
 ### 2. Restate the three tests that pin the withdrawn rule
 
