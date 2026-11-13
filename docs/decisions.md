@@ -4942,3 +4942,23 @@ exactly the reach that separates bodies, so a man cannot stand on the place next
 saves, D199). Places must be spaced by more than the reach; that slice lands the rule.
 
 **Full measurement and the landing plan:** `docs/reviews/2026-11-13-owner-blind-collisions.md`.
+
+### D201 - content: our own campaigns only, names by three lists, all prose rewritten
+
+**What it says.** The project ships **only content authored for it**. The original game's campaigns and scenarios are read
+in place from the owner's install and played locally, and are **never** converted into a shipped artifact, committed, or
+quoted in public docs - the owner's words: *"The only campaigns and scenarios to be shipped by the project are the one made
+for it. Never the ones taken from original game. 100%."*
+
+Names follow three lists (`docs/licensing.md`): **keep** historical ethnonyms and generic unit nouns (Persians, Huns,
+Teutons, knight, archer - neither authored nor trademarked); **rename** what AoE2 coined (the "Woad Raider" is the clearest);
+**rewrite all prose** - unit, tech and building descriptions, tooltips, campaign dialogue - because sentences are the thing
+that is actually copyrightable. The medieval vocabulary is the register; 0 A.D.'s "Achaemenids" is antiquity and not ours.
+
+**Why it matters now rather than at publish time.** The rule decides what the string tables and the content pack are allowed
+to contain, and the string table is the first thing that would otherwise be copied without anyone thinking about it. It also
+settles that a `.scx` reader is publishable while a converted `.scx` is not - the code is ours, the scenario is theirs.
+
+**Commits us to.** No campaign data in `config/` or any tracked path; converted scenarios only in `build/`; descriptions
+authored, never imported from the dat's string tables; a rename list maintained with the content pack; and the project's
+presentation (title, logo, README, no "HD Edition") staying clear of the trademark.

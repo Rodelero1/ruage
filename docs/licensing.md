@@ -346,3 +346,38 @@ since). **That stays true only if the generated tables are never committed** - a
 3. Licence plumbing, CI gates, README (days).
 4. Authored content pack (months) - the only route that also makes the *data* ours.
 5. Own art and audio (unbounded) - optional forever.
+
+## Content policy: names, prose, campaigns (2026-11-13, D201)
+
+The owner's rule, in his words: *"The only campaigns and scenarios to be shipped by the project are the one made for it.
+Never the ones taken from original game. 100%."* The rest follows from what each thing actually is.
+
+### Three lists for names
+
+| list | what goes in it | why |
+|---|---|---|
+| **keep** | historical ethnonyms and generic unit nouns - Persians, Huns, Goths, Mongols, Teutons, Saracens, Britons, Franks, Celts, Vikings; knight, archer, crossbowman, light cavalry, spearman, mangonel, trebuchet | no authorship, no trademark: a people's name and a common noun cannot be owned |
+| **rename** | names that exist only because AoE2 coined them (the "Woad Raider" is the clearest) | a coinage is their expression; our unit gets our name |
+| **rewrite** | **all prose** - unit, tech and building descriptions, tooltips, hints, campaign dialogue | sentences are copyrightable; this is the part that is actually mandatory |
+
+**The test for the first two lists:** would a historian recognise the word on its own? Then keep it. Does it exist only
+because the game invented it? Then rename. The medieval vocabulary is the right register anyway - "Achaemenids" is 0 A.D.'s
+antiquity, not ours; "Persians" is period-neutral and stays.
+
+**Britons -> English** and **Franks -> French** are historical choices, free to make or not make. Only the *presentation* -
+title, logo, README, any "HD Edition" - is where trademark actually bites.
+
+### Campaigns and scenarios
+
+- **Shipped:** only scenarios and campaigns authored for this project. No exceptions.
+- **The game's own:** read **in place** from the install and played locally - that is the user's copy, used as the assets
+  are - and **never converted into a shipped artifact, committed, or quoted in public documentation**. A `.scx` converted to
+  our format is a derivative of their work; the moment it leaves the machine it is distribution.
+- **A cache of converted scenarios** lives in `build/` or scratch, under the same rule as inflated dats (D8).
+- The reader itself (a `.scx`/`.cpx` parser, a trigger system) is **our code** and is publishable; D15 already puts scenarios
+  outside the current slice, so this is a priced "later" item.
+
+### Art and audio
+
+Read in place now; replaced by our own (CC-BY-SA, per-asset attribution) if and when the owner chooses (D21). Nothing here
+blocks distribution today, because nothing is copied.
