@@ -956,8 +956,8 @@ asked, and it is the one number a reader should weigh before landing: `players` 
 
 ## Performance
 
-The gate on this tree: `cargo test --workspace --no-fail-fast` **183 binaries, 0 failed, `EXIT 0`** (the count including the
-two new end-to-end guards), `cargo fmt --all -- --check` clean, `cargo clippy --workspace --all-targets -- -D warnings`
+The gate on this tree: `cargo test --workspace --no-fail-fast` **184 binaries, 841 passed, 0 failed, 21 ignored, `EXIT 0`** (the count
+including the two new end-to-end guards), `cargo fmt --all -- --check` clean, `cargo clippy --workspace --all-targets -- -D warnings`
 clean. The acceptance run costs the same wall time as `main`'s (~40 s release) and its re-plans rise from the broken 31 to
 **373 against `main`'s 579**; `made_room` 0 -> 140 and `repaths_body` 0 -> 77, which is the slide doing exactly what it is
 for: men separating instead of pressing. The tick cost of the four extra probes is bounded - they run only for a body that
