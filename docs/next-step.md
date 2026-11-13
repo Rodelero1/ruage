@@ -13,12 +13,13 @@ every red one crowd delivery or a test that pins the old spacing.
 the closest pair over the whole run is **0.400** - exactly the reach. The `WaitOwnTile`/`GiveWayOwnTile` trace was a
 commuting man squeezing past a working one, and the old test's failure was a single sample catching him on the road.
 
-**Branch `d189-owner-blind` at `5099b4c`: 81 test binaries green, 6 tests red.** Two are tests written for 0.40 spacing
+**Branch `d189-owner-blind` at `6fcc725`: 82 test binaries green, 5 tests red.** The 0.174 turned out to be a *walker* crossing
+near a node whose tile is not blocked ground - the assertion now reads the **reserved place**, and that found the real
+question: **one of ten men tasked to a bush holds no reserved place** (`EntityId(8504)`), so either a place is taken only at
+settle time or the reservation is dropped between order and settle. Two reds are tests written for 0.40 spacing
 (`ten_men_work_one_bush_a_body_apart`, `six_settled_men_hold_their_places`), one pins the withdrawn rule
-(`movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives`), one is a woodcutter joining a patch
-(`a_woodcutter_whose_tree_runs_out...`), and **two may be real defects**: `build::a_content_pack...` (a house never finished)
-and `ten_men_touch_one_bush...`, which measures a working man **0.174** from the tile - inside it - where a place is 0.20.
-Chase the last two first: they are the only rows that could be the engine rather than the test.
+(`movement::a_walker_whose_goal_tile_holds_a_friend_still_arrives`), one is the content-pack house, and one is the
+reservation question. Settle the reservation first - it is the only one that could change the engine.
 
 **Done when:** every test on the branch is green or rewritten to the rule it actually asserts, the acceptance run is
 measured (`entities`, `repaths`, `made_room`, `hash`), and the branch merges.
