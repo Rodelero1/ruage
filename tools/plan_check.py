@@ -58,6 +58,10 @@ CELL = re.compile(r"^\*\*([A-Za-z][A-Za-z -]{2,12})\*\*$")
 CITATION = re.compile(r"([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:rs|toml|md|py|yml|sh|inc|json))(?::(\d+)(?:-(\d+))?)?")
 COMMAND = ("grep", "python", "make", "cargo", "git", "./", "ls ", "wc ")
 
+#: A citation of another project or of the game install. The prefix is the claim that the file is **not** in this tree,
+#: so it is checked by name (it must be prefixed) rather than resolved locally.
+EXTERNAL = ("genie:", "openaok:", "install:", "ruage-tools:")
+
 
 class Findings:
     """A list that also counts what was covered, so a green run can say what it looked at."""
@@ -219,7 +223,7 @@ def _citations(text: str, index: Index, findings: Findings) -> None:
         # A span is prose, a shell command or a citation, and the citation pattern decides: an extension is in the
         # pattern, so a command's words and flags cannot match it. Only a span that is itself a command is skipped -
         # skipping every span that holds a space silently excluded `file:line description`.
-        if span.startswith(COMMAND):
+        if span.startswith(COMMAND) or span.startswith(EXTERNAL):
             continue
         for match in CITATION.finditer(span):
             cited, first, last = match.group(1), match.group(2), match.group(3)

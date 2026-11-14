@@ -137,6 +137,17 @@ class TheCitations(unittest.TestCase):
             "a citation with a trailing description is the shape this document uses most often",
         )
 
+    def test_an_external_source_is_named_and_not_checked_here(self) -> None:
+        """A citation of another project or the install is evidence *about them*, not a path in this tree.
+
+        The prefix is the claim: `genie:`, `openaok:` and `install:` mean the file lives elsewhere, so the check skips it
+        by name rather than by luck — a bare path that does not exist is still a finding.
+        """
+        good = GOOD.replace("`README.md:1` (U1)", "`README.md:1` (U1) `genie:players/market.rs` `install:AoK HD.exe`")
+        self.assertEqual(findings(good), [])
+        bad = good.replace("`genie:players/market.rs`", "`genie-ish:players/market.rs`")
+        self.assertTrue(any("market.rs" in finding for finding in findings(bad)))
+
     def test_a_u_row_or_d_row_is_only_a_reference_if_the_corpus_has_it(self) -> None:
         bad = GOOD.replace("`README.md:1` (U1)", "`README.md:1` (U99)")
         bad = bad.replace("## 8. Probes", "See D99.\n\n## 8. Probes")
