@@ -136,12 +136,21 @@ fn corridor() -> Option<World> {
     Some(world)
 }
 
-/// Two villagers walk at each other down a corridor one tile wide, with a tree row above and below.
+/// Two villagers walk at each other down a corridor one tile wide, with a tree row above and below - **ordered apart**, so
+/// neither is the other's mate.
 ///
 /// Without a make-room step they deadlock: each refuses the other's step, a one-tile row gives no sideways component to
 /// slide on, and the repath cannot help because both already stand inside the tile it would avoid. The assertion is the
-/// standoff the whole slice is about - and since D131's option A they **do not pass**: a giving-way step may no longer end
-/// inside the pair's reach, so the pair stops nose to nose, which is what the game does in this geometry.
+/// standoff the whole slice is about - and they **do not pass**: a step may not end inside the pair's reach, so the pair
+/// stops nose to nose.
+///
+/// **Two corrections to this file's original reasoning, both from the binary read of 2026-11-14.** (1) The pair used to be
+/// ordered in one tick; under **D207** that is a *group*, and a group walks over itself - the game's own words are
+/// *"military units moving in groups can go over each other"* - so the fixture now puts a tick between the orders to keep
+/// testing the solid case. (2) This test used to justify the standoff with *"no pushing allowed"* (Klingers, page 9); that
+/// quote is about **pushing**, not about overlap - the collision block never clamps a step against another body, and the
+/// pair's real answer in the game is the pause plus a repath (`docs/reviews/2026-11-14-...` D208). Until that pause exists
+/// here, this file pins the standoff; it is expected to become an *arrival* test when D208 lands.
 #[test]
 fn a_head_on_pair_in_a_one_tile_corridor_never_overlaps() {
     let Some(mut world) = corridor() else {
@@ -161,6 +170,9 @@ fn a_head_on_pair_in_a_one_tile_corridor_never_overlaps() {
         unit: a,
         to: (right, row),
     });
+    // **A tick between the orders**: in one tick this pair would be a group (D207) and a group may overlap, which is the
+    // other half of the rule and is tested in `group_overlap.rs`.
+    world.step().expect("a tick between the orders");
     world.submit(Command::Move {
         unit: b,
         to: (left, row),

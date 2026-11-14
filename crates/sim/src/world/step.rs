@@ -91,6 +91,23 @@ impl World {
                 self.refusal = Some((actor, why, self.tick));
             }
         }
+        self.stamp_group();
+    }
+
+    /// **Form the tick's group** (D207). Every unit ordered to move in this tick is a mate of every other one ordered with
+    /// it; a lone order leaves its unit with no mates, which is what makes "walk, then stop" different from "walk together".
+    fn stamp_group(&mut self) {
+        if self.ordered_now.is_empty() {
+            return;
+        }
+        let group = std::mem::take(&mut self.ordered_now);
+        for &id in &group {
+            let mates: BTreeSet<EntityId> =
+                group.iter().copied().filter(|other| *other != id).collect();
+            if let Some(route) = self.paths.get_mut(&id) {
+                route.mates = mates;
+            }
+        }
     }
 
     /// Hunts that found an enemy start the fight, patrols at their far end turn, defensive units go home.
@@ -1378,6 +1395,13 @@ impl World {
                         } else {
                             self.paths.get(&id).map_or(0, |route| route.stalls)
                         };
+                        // **A re-plan does not dissolve the group** (D207): the man keeps the mates his order gave him,
+                        // because the order is still the same order - only its route changed.
+                        let mates = self
+                            .paths
+                            .get(&id)
+                            .map(|route| route.mates.clone())
+                            .unwrap_or_default();
                         self.paths.insert(
                             id,
                             Route {
@@ -1385,6 +1409,7 @@ impl World {
                                 avoiding,
                                 gave_way,
                                 stalls,
+                                mates,
                             },
                         );
                         self.repath_count += 1;

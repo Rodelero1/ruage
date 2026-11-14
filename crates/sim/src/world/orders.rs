@@ -166,6 +166,16 @@ impl World {
         if self.outcome.is_some() {
             return Err(SimError::MatchOver);
         }
+        // **A movement order joins this tick's group** (D207): orders that land together were given together, which is the
+        // interim stand-in for a selection this engine does not have. Read *before* the arm runs, because an order that is
+        // refused afterwards must not leave the unit in a group it never moved with.
+        if let Command::Move { unit, .. }
+        | Command::WalkTo { unit, .. }
+        | Command::AttackMove { unit, .. }
+        | Command::Patrol { unit, .. } = &command
+        {
+            self.ordered_now.insert(*unit);
+        }
         match command {
             Command::Spawn {
                 id,

@@ -249,6 +249,14 @@ impl World {
         let a_unit = self
             .find(other)
             .is_some_and(|other| other.kind == EntityKind::Unit);
+        // 1b. **A group walks over itself** (D207). The original drops an exempt collider outright: its classifier answers
+        //     "past" for a unit on the route's exemption list and never pauses, re-paths or bounds the step, and that list
+        //     is the mover's *moving selection-mates* (`FUN_008007f0`, read 2026-11-14). Its own developers describe the
+        //     consequence on the bug forum: *"Military units moving in groups can go over each other."* So a mate is taken
+        //     as ground that is not there - no reach, no wait - while everybody else stays solid.
+        if a_unit && self.is_mate(id, other) {
+            return (dx, dy, StepDecision::TakeOverlapping);
+        }
         // 2. The order's own business: the body it was sent at, or the ground it was sent to.
         if Self::order_target(entity) == Some(other) {
             return (stop.0, stop.1, StepDecision::WaitTarget);

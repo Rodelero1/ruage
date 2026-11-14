@@ -5202,3 +5202,37 @@ That is worth saying out loud because the acceleration slice would have cost all
 regain it (the owner's own memory: *"units that somehow fell behind slightly speed up to catch up"*), a unit ahead does not
 slow below its speed. That rule belongs with the formation, not with `Entity::speed`, and it may not be implemented as a
 per-tick acceleration of individual units.
+
+### D207 - a group walks over itself, and everyone else is solid
+
+**Owner, 2026-11-14:** *"OK. 1 now and 2 later"* - while the engine has no selection, orders submitted in the **same tick**
+form the group; an explicit group id on the command replaces the heuristic later.
+
+**What it settles, and what it replaces.** Three slices tried to answer a unit collision with a geometry rule - a re-plan
+round the body (D200's branch), a lateral slide, a nudge - and each ended as an exemption list of its own: measured 33, then
+18, then 31 red tests as the mechanism moved around the suite. The binary read of 2026-11-14 says why. The search
+`FUN_008007f0` **never reads the route's ignore list**; its body-aware input is the mover's **moving selection-mates**
+(verified at `FUN_008007f0:139-140`), consulted as exact tile membership; every other body is **invisible to the plan**, and
+the collision classifier `FUN_007fe010` *drops* an exempt collider - no pause, no repath, no bound. Forgotten Empires states
+the same rule in public: units *"give up their formation (and therefore block each other) when: stop button is pressed / click
+on enemy unit / attack move"*, and *"military units moving in groups can go over each other"* (official bug forum, 2026).
+
+**What it builds.** `Route.mates` (hashed) written at order time from `World.ordered_now` - every `Move`/`WalkTo`/`AttackMove`/
+`Patrol` that lands in the same `drain_orders`; `World::is_mate(a, b)` is **mutual**, so a unit that leaves the group (its
+route is gone) stops being walked over in the same tick; `collide` rule 1b takes the step for a live mate with no reach, no
+wait and no repath - the original's "drop the collider entirely"; a re-plan preserves `mates`, because the order did not change.
+
+**What it costs.** Measured interleaved A/B on the acceptance world: `main` 30,479 / 30,366 ms against D207 31,266 / 30,750 ms
+- **+1.5%**, 6.3 -> 6.5 us/tick, two map lookups per *collision*. The acceptance run's summary and hash are **byte-identical**
+(`c3b10f4b09e17a43`, 160 entities, 324 repaths): the script orders one villager at a time, so it never forms a group and the
+rule is inert there - the evidence is the three tests, not the timeline.
+
+**The known compromise, stated rather than hidden.** "Same tick" is not "same selection": a caller that issues eight separate
+moves in one tick gets group behaviour it did not ask for, and a selection ordered over several ticks gets none. That is
+accepted for now (owner's option 1); the register row for an explicit group id stays open, and when it lands `mates` is
+filled from the command rather than from the tick.
+
+**Basis.** `FUN_008007f0`, `FUN_00801a20`, `FUN_007fe010`, `FUN_007ffd70`/`FUN_007fffe0` (read 2026-11-14); the Forgotten
+Empires forum answer *Investigations into Pathfinding* (2026); the DE talk's *"units bump into others, stop and repath around.
+No pushing allowed"* with "some friendly overlap" (`docs/pathfinding-from-the-talk.md`, page 9); the owner's ruling above.
+Review: `docs/reviews/2026-11-14-d207-group-overlap.md`.

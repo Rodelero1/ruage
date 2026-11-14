@@ -1,0 +1,192 @@
+//! **A head-on is settled by time, not geometry** (D208). The original never clamps a step against another body: at the
+//! movement site the radius retraction's result is written to a local that is read nowhere (`0x8a7fe7` is the instruction
+//! after the call, and it tests a debug flag). A pair meeting is resolved by pausing the higher id, repathing the lower one
+//! once, and then classifying the collision **"past"** - `path->createdAt < other->lastMoveTime` - so the winner walks
+//! through and the loser resumes afterwards.
+//!
+//! Written before the implementation (D7). Today the engine refuses a step that would end inside `r1 + r2`
+//! (`bound_to_reach`), which has no counterpart in the binary and is what freezes this pair.
+
+use ruage_fixed::Fixed;
+use ruage_sim::{Command, EntityId, EntityKind, World};
+
+mod common;
+
+fn fresh() -> Option<World> {
+    common::fresh()
+}
+
+fn next_id(world: &World) -> EntityId {
+    EntityId(
+        world
+            .entities()
+            .iter()
+            .map(|entity| entity.id.0)
+            .max()
+            .unwrap_or(0)
+            + 1,
+    )
+}
+
+fn spawn_villager(world: &mut World, id: EntityId, x: u16, y: u16) {
+    let unit = world.start_villager_unit().expect("a villager role");
+    let scale = world.scale();
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(i64::from(x) * scale),
+                Fixed::from_raw(i64::from(y) * scale),
+            ),
+            speed: Fixed::from_raw(scale / 2),
+            hp: 25,
+            amount: 0,
+        })
+        .expect("a villager can be placed");
+}
+
+fn open_row(world: &World, span: u16) -> Option<(u16, u16)> {
+    let (width, height) = (64u16, 64u16);
+    for y in 2..height.saturating_sub(2) {
+        for x in 2..width.saturating_sub(span) {
+            if (0..span).all(|d| world.is_free_ground(x + d, y)) {
+                if (8..24).contains(&x) && (8..24).contains(&y) {
+                    continue;
+                }
+                return Some((x, y));
+            }
+        }
+    }
+    None
+}
+
+fn tile_of(world: &World, id: EntityId) -> (i64, i64) {
+    let scale = world.scale();
+    let (x, y) = world.position(id).expect("the entity has a position");
+    (x.raw().div_euclid(scale), y.raw().div_euclid(scale))
+}
+
+fn apart(world: &World, a: EntityId, b: EntityId) -> i64 {
+    let (ax, ay) = world.position(a).expect("a has a position");
+    let (bx, by) = world.position(b).expect("b has a position");
+    let (dx, dy) = (ax.raw() - bx.raw(), ay.raw() - by.raw());
+    (dx * dx + dy * dy).max(0)
+}
+
+/// **Two men who meet head-on pass each other.** They are ordered a tick apart, so neither is the other's mate (D207) and
+/// the collision is a real one: the game's answer is the pause plus one repath, and the outcome is that both arrive. The
+/// engine's current answer is a permanent standoff at exactly `r1 + r2`, which is what this test refuses to accept.
+#[test]
+fn two_men_meeting_head_on_pass_each_other() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let Some((x, y)) = open_row(&world, 8) else {
+        return;
+    };
+    let a = next_id(&world);
+    let b = EntityId(a.0 + 1);
+    spawn_villager(&mut world, a, x, y);
+    spawn_villager(&mut world, b, x + 6, y);
+    world.step().expect("the spawns land");
+
+    world.submit(Command::Move {
+        unit: a,
+        to: (x + 6, y),
+    });
+    world.step().expect("a tick between the orders");
+    world.submit(Command::Move {
+        unit: b,
+        to: (x, y),
+    });
+
+    let reach = world.reach_between(a, b).raw();
+    let mut closest = i64::MAX;
+    let mut met = false;
+    for _ in 0..2_000 {
+        world.step().expect("step");
+        let gap = apart(&world, a, b);
+        closest = closest.min(gap);
+        if gap < reach * reach {
+            met = true;
+        }
+    }
+    let near = |id: EntityId, goal: (u16, u16)| {
+        let (tx, ty) = tile_of(&world, id);
+        (tx - i64::from(goal.0)).abs() <= 1 && (ty - i64::from(goal.1)).abs() <= 1
+    };
+    assert!(
+        met,
+        "MEASURED the pair never came inside the {} raw reach (closest {}): they did not meet, so this fixture is not \
+         testing a collision",
+        reach,
+        closest.max(0).isqrt()
+    );
+    assert!(
+        near(a, (x + 6, y)) && near(b, (x, y)),
+        "MEASURED a head-on pair never got past each other: a at {:?}, b at {:?} after 2,000 ticks, reach {} raw - the \
+         original lets the winner walk through the paused loser (its collision block never clamps a step against a body)",
+        tile_of(&world, a),
+        tile_of(&world, b),
+        reach
+    );
+}
+
+/// **The loser stands for the drawn pause, and no longer.** The original's own duration is `rand()*1.25/32767 + 0.25`
+/// seconds; the *first* stand must fall in that band and the pair must still get past. A stand that never ends is the
+/// freeze this slice exists to remove, and a stand shorter than a quarter second is not the game's rule either.
+#[test]
+fn the_loser_stands_for_the_drawn_pause() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let Some((x, y)) = open_row(&world, 8) else {
+        return;
+    };
+    let a = next_id(&world);
+    let b = EntityId(a.0 + 1);
+    spawn_villager(&mut world, a, x, y);
+    spawn_villager(&mut world, b, x + 6, y);
+    world.step().expect("the spawns land");
+
+    world.submit(Command::Move {
+        unit: a,
+        to: (x + 6, y),
+    });
+    world.step().expect("a tick between the orders");
+    world.submit(Command::Move {
+        unit: b,
+        to: (x, y),
+    });
+
+    // The longest run of ticks in which the **higher id** does not move at all, from the moment they first touch.
+    let mut touching = false;
+    let mut standing = 0u32;
+    let mut first_stand = 0u32;
+    let mut last = world.position(b).expect("b has a position");
+    for _ in 0..2_000 {
+        world.step().expect("step");
+        let now = world.position(b).expect("b has a position");
+        let moved = now.0 != last.0 || now.1 != last.1;
+        last = now;
+        if apart(&world, a, b) < world.reach_between(a, b).raw().pow(2) {
+            touching = true;
+        }
+        if touching && !moved {
+            standing += 1;
+            first_stand = first_stand.max(standing);
+        } else if moved {
+            standing = 0;
+        }
+    }
+    let seconds = f64::from(first_stand) / f64::from(world.tick_rate_hz());
+    assert!(
+        (0.25..=1.50).contains(&seconds),
+        "MEASURED the loser's longest stand was {} ticks ({seconds:.3} s): the original draws 0.25-1.50 s and re-rolls on \
+         a fresh collision",
+        first_stand
+    );
+}

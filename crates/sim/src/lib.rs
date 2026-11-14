@@ -921,6 +921,13 @@ pub(crate) struct Route {
     /// How many times this route has been re-planned because its **ground** went stale. Capped: a route whose goal is buried
     /// behind new walls would otherwise search again on every tick, which is the cost D98a's "past" rule exists to avoid.
     pub(crate) stalls: u8,
+    /// **The men this unit was ordered with** (D207). The original's table of exceptions is its *selection*: the search
+    /// avoids the mover's moving selection-mates and its collision classifier drops them entirely, so a moving group walks
+    /// over itself while everybody else is solid (read 2026-11-14; Forgotten Empires' own forum answer: *"units give up
+    /// their formation (and therefore block each other) when: stop button is pressed / click on enemy unit / attack move"*).
+    /// This engine has no selection, so the interim rule is the owner's: **orders submitted in one tick form the group**,
+    /// and an explicit group id on the command replaces it later (D207).
+    pub(crate) mates: BTreeSet<EntityId>,
 }
 
 /// What one tick of the movement pass carries between steps: the bodies that can be in the way, who has a step to take,
@@ -977,6 +984,9 @@ pub struct World {
     command_apply: CommandApply,
     pub(crate) entities: Vec<Entity>,
     queue: Vec<Command>,
+    /// **Who was given a movement order in the tick being drained** (D207). Emptied at the end of every `drain_orders`, so
+    /// it is scratch, not state: two runs that queue the same commands in the same ticks agree about it by construction.
+    pub(crate) ordered_now: BTreeSet<EntityId>,
     /// Cloned at seed time so a command can be resolved without threading references through the
     /// tick loop. A replay carries ids, never numbers.
     pub(crate) units: Option<Units>,
@@ -1443,6 +1453,7 @@ impl World {
             command_apply: settings.command_apply,
             entities: Vec::new(),
             queue: Vec::new(),
+            ordered_now: BTreeSet::new(),
             units: None,
             economy: None,
             techs: None,
@@ -3241,6 +3252,20 @@ impl World {
     /// ground - a tree, a mine, a town centre - is worked from the ring around it, which the predicates express in the
     /// same units.
     #[must_use]
+    /// **Whether these two move as one group** (D207): each has the other on its route's mate list, which is what makes the
+    /// exemption *mutual*. Mutuality is not decoration: the original ends the exemption when a unit leaves its formation -
+    /// "stop button is pressed / click on enemy unit / attack move" - and a stopped man's route is gone, so his old mates
+    /// must stop walking over him the same tick.
+    pub(crate) fn is_mate(&self, a: EntityId, b: EntityId) -> bool {
+        self.paths
+            .get(&a)
+            .is_some_and(|route| route.mates.contains(&b))
+            && self
+                .paths
+                .get(&b)
+                .is_some_and(|route| route.mates.contains(&a))
+    }
+
     pub fn reach_between(&self, a: EntityId, b: EntityId) -> Fixed {
         let unit = |id: EntityId| self.find(id).and_then(|entity| entity.unit);
         Fixed::from_raw(self.reach_raw(unit(a), unit(b)))
