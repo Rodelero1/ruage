@@ -151,3 +151,47 @@ handler cannot tell a friend from an enemy, so a friend is returned by the query
 any other, and the original's move is to repath around it. D189 was chosen to solve crowd delivery in our engine, not
 because the game does it. What the original does allow is the *past* exemption - a body the route already accounts for does
 not block, and a unit may overlap where it came from - which is the one part of our current behaviour it supports.
+
+## The tie-break read at last (2026-11-14): **the priority number is the unit's id, and the loser pauses 0.25–1.5 s**
+
+`[vtable+0x2b4]` is **not a data field** - it is a virtual call, and the move-object implementation returns the object's own id:
+
+```
+0x8a80ed  call *0x2b4(%edx)      ; iVar5 = unit->priority()
+0x8a80f9  call *0x2b4(%ebx)      ; iVar6 = other->priority()
+0x8a80ff  cmp %esi,%eax / jle    ; if iVar5 < iVar6 { "TOLD TO PAUSE BY UNIT %d" }
+```
+
+The move-object vtable is `0x9e82c0` (its constructor at `0x8a13b2` stores it and then zeroes exactly the offsets the collision
+block uses: `+0x104` position, `+0x128` path, `+0x130` velocity). Slot `+0x2b4` = VA `0x9e8574` = **`0x4c8a90`, whose whole body
+is `mov 0x8(%ecx),%eax; ret`** - `*(int*)(this+8)`, the id the same function prints as `objId=%d`. A sibling class implements
+the same slot as `mov $0x7fffffff,%eax; ret`, i.e. "never has priority", which confirms the slot means priority rather than
+identity-by-accident.
+
+**So the rule is: lower unit id has right of way; the higher-id unit is told to pause.** Not a formation slot, not an order
+sequence number, not a timestamp (that is the neighbouring slot `+0x2ac` = `0x4b0860` = `mov 0x134(%ecx)`, the value the log
+calls `lastMoveTime`), and not a dat field.
+
+**What "told to pause" does.** Slot `+0x2b0` = `0x8aa6d0`, whole body:
+
+```c
+if (*(int *)(in_ECX + 0x128) != 0) { *(undefined4 *)(*(int *)(in_ECX + 0x128) + 0x28) = param_1; }   // path->pause = arg
+```
+
+The argument is a duration, drawn at the call site as `rand() * 1.25 / 32767 + 0.25` - **0.25 to 1.50 seconds**, in real
+seconds, not ticks. The paused unit **keeps its path**, advances no waypoint, does not move, and resumes where it left off
+when the timer runs out (`"Pause time is %.10f, taking off %.10f"`, then `"Pause time is still > 0 (isMoving = %d), returning
+MoveResultNone"`). The *pauser* is the one that repaths (`"We have %d non-past collisions and %d terrain collisions,
+repathing"`). Two facts about the list matter: the pause loop runs **after** the repath decision and does **not** re-apply the
+past filter, so a "past" collider can still be paused; and the only early-out is a list of exactly one entry that is the
+order's target.
+
+**The original says its own pause is not sync safe.** The `rand()` wrapper (`0x5404f0`) logs *"Usage of rand() has been
+disabled because not considered sync safe. Permission denied triggered by %s(%d)"* - so a faithful reimplementation draws the
+same uniform 0.25-1.5 s from **our** seeded stream, never from a global.
+
+**Consequence for us.** Our movement pass already processes bodies in id order, so the *winner* of a head-on is the same man
+the original picks - by accident, not by rule. What we do not have is the loser's **bounded pause with a resume**: we give
+way, slide or nudge, and the pair can stand for ever (measured 2026-11-13: seven villagers on two tiles, `WaitOwnTile` for
+the whole match, the acceptance bank at 0 food). A 0.25-1.5 s pause that keeps the path would have been *safer* than what we
+had, because it is bounded by a countdown rather than by the other man moving.
