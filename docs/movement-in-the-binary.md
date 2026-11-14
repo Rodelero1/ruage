@@ -195,3 +195,57 @@ the original picks - by accident, not by rule. What we do not have is the loser'
 way, slide or nudge, and the pair can stand for ever (measured 2026-11-13: seven villagers on two tiles, `WaitOwnTile` for
 the whole match, the acceptance bank at 0 food). A 0.25-1.5 s pause that keeps the path would have been *safer* than what we
 had, because it is bounded by a countdown rather than by the other man moving.
+
+### Follow-up (2026-11-14): what the id *is* is still open, and the tie-break is not arrival order
+
+The owner asked the obvious next question - *"isn't it just identifier which unit came to tile first, first served first?"* -
+and the answer is **no**, with one correction to the section above.
+
+**Corrected: the constructors do not set the id.** An exhaustive scan of the move-object constructor (`0x8a1350-0x8a1560`) and
+both base constructors (`0x88b070-0x88b130`, `0x8b12b0-0x8b13e0`) finds **zero** stores to `[reg+0x8]`; they set the vtable and
+zero the collision fields. The getter (`0x4c8a90`) and setter (`0x4c8aa0`, COMDAT-folded beside it) exist separately, and the
+setter's callers are **serializer and editor paths** (`0x4ca116`, `0x4ca6e5`, `0x4ccc6d`, `0x4cd1fb`, `0x4eabff`, `0x681e5a`) -
+one of them reads the value out of a struct field and hands it to `setId`. So an id **can be pushed in from saved or editor
+data**, and "creation order" is an inference, not a fact.
+
+What is established about it:
+- **`World::addObject` (`0x72aba0`, vtable `+0x40`) is the only consumer**: it reads `obj->[0x8]`, stores the object at
+  `table[id]` (`world+0xe8`, count `+0xec`, published as `ds:0xde1160`), refuses negative ids in the main path, and **grows the
+  table to fit an arbitrary id** (`newcap = id + id/10`) rather than assuming sequence.
+- There are **two id spaces** - `0..9999` and a negative one `-1..-999` - and an explicit **release-by-id** routine
+  (`0x735860`) that writes `table[id]=0` in either. A two-space handle table with release is not a sequence counter.
+- **The function that allocates an id for a newly trained unit was not found**: it sits behind virtual calls
+  (`Player::addUnit 0x74cf80` -> `world->addObject` through `[vtbl+0x40]`), and no store-to-`+8` attributable to unit creation
+  survives in the corpus.
+
+**The tie-break is re-verified byte for byte** and reads no time, no distance and no occupancy:
+
+```
+008a80ed call [edx+0x2b4]     ; self   -> esi
+008a80f9 call [edx+0x2b4]     ; other  -> eax
+008a80ff cmp  eax,esi / jle   ; pause only when other > self
+008a8107 mov  esi,[ebx] / 008a8141 call [esi+0x2b0]   ; other->setPause(rand*1.25/32767+0.25)
+008a815e lea  eax,[edi+0x8] … "TOLD TO PAUSE BY UNIT %d"    ; prints SELF's id
+```
+
+**The only time rule in the block is the past filter, and it runs one way** (`move_obj.cpp:2063`):
+
+```c
+uVar4 = *(uint *)(iVar5 + 0x10);   // our path's creation time
+uVar14 = (**(code **)(*piVar13 + 0x2ac))();   // the other unit's lastMoveTime
+if (uVar4 < uVar14) -> "That's a non past collision" (counted) else "That's a past collision" (ignored)
+```
+
+`+0x134` (`lastMoveTime`) is **motion recency, not tile occupancy**: it is refreshed to the world clock whenever the object's
+position has changed by more than `1e-7`, on placement, and on a state change. It is per-object, never per-tile, and the `0x2b4`
+comparison never reads it.
+
+**No distance or claim rule exists**: the only geometry in the block is the radius-overlap query at the new position
+(`0x843410(self_radius * 1.0)` plus a box clamp); every other distance is self->target/goal/waypoint. The nearest thing to a
+claim is route-local - `"That's a path ignore unit"` / `"…highest linked path ignore unit"`, membership by id in the path's
+ignore list.
+
+**So the honest verdict is narrower than the section above**: the winner is whoever holds the **lower object handle**, a number
+nothing on the movement path ever writes or compares against time. If ids are creation-assigned it is oldest-object-wins; if
+they are recycled slots or imported from a save it is arbitrary. *First come, first served* is **not** a rule anywhere in the
+binary, and "who stood here longer" cannot be asked of it at all.
