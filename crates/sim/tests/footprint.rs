@@ -144,12 +144,12 @@ fn corridor() -> Option<World> {
 /// standoff the whole slice is about - and they **do not pass**: a step may not end inside the pair's reach, so the pair
 /// stops nose to nose.
 ///
-/// **Restated for D208** - twice, and both times because the rule changed under it. (1) The pair used to be ordered in one
+/// **Restated for D210** - twice, and both times because the rule changed under it. (1) The pair used to be ordered in one
 /// tick; under **D207** that is a *group*, and a group walks over itself, so the fixture now puts a tick between the orders.
 /// (2) It used to assert that the pair **never overlaps**, justified by *"no pushing allowed"* (Klingers, page 9). That quote
 /// is about **pushing**: the binary's collision block never clamps a step against another body (the radius retraction's
 /// result is discarded at `0x8a7fe7`), and a head-on is settled by **time** - pause the loser, repath the winner, then
-/// classify the loser *past* and walk through him. So the assertion is now the D208 outcome: the pair meets, and they get
+/// classify the loser *past* and walk through him. So the assertion is now the D210 outcome: the pair meets, and they get
 /// past each other.
 #[test]
 fn a_head_on_pair_in_a_one_tile_corridor_never_overlaps() {
@@ -184,7 +184,7 @@ fn a_head_on_pair_in_a_one_tile_corridor_never_overlaps() {
         world.step().expect("step");
         let gap = apart(&world, a, b);
         closest = closest.min(gap);
-        // **No per-tick overlap assertion any more** (D208). It used to say the pair may never come inside the reach, which
+        // **No per-tick overlap assertion any more** (D210). It used to say the pair may never come inside the reach, which
         // was D131's rule; the binary has no such bound - a head-on is settled by the pause and the "past" test - so the
         // observable moved from "never inside" to "they meet, and they get past". A made-up threshold here would be a test
         // weakened to fit the code, which is the one thing this file exists to prevent.
@@ -196,7 +196,7 @@ fn a_head_on_pair_in_a_one_tile_corridor_never_overlaps() {
         closest <= reach + scale / 2,
         "the pair never came closer than {closest} raw units against a reach of {reach}: they never met"
     );
-    // **And they got past each other** (D208). A one-tile corridor has no sideways room, so the game's answer is the pause
+    // **And they got past each other** (D210). A one-tile corridor has no sideways room, so the game's answer is the pause
     // and the "past" test - not a permanent standoff. Asserting the swap, rather than the overlap, is what keeps this a
     // behavioural test: whoever walks through whom is the engine's business.
     let far = |id: EntityId, goal: u16| {

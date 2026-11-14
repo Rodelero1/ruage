@@ -81,7 +81,7 @@ struct Run {
     reach: i64,
     at: ((i64, i64), (i64, i64)),
     tick: u64,
-    /// Whether the **higher id** stood a drawn pause at any point (D208): a mate never does, because an exempt collider is
+    /// Whether the **higher id** stood a drawn pause at any point (D210): a mate never does, because an exempt collider is
     /// dropped before the tie-break runs.
     paused: bool,
 }
@@ -158,7 +158,7 @@ fn a_group_ordered_together_walks_over_each_other() {
 }
 
 /// **Two units ordered on different ticks are not a group** (D207, the half that keeps the rule from being pass-through
-/// for everybody). Each was given its own order, so neither is exempt - and since **D208** a non-exempt collision is
+/// for everybody). Each was given its own order, so neither is exempt - and since **D210** a non-exempt collision is
 /// answered by *time*, not geometry: the pair **does** pass each other, and the proof that they were not treated as mates is
 /// that the higher id has to **pause**. The old assertion here was "never overlap", which was D189's rule and is now wrong:
 /// measured, the pair came 151 raw apart, i.e. they overlapped, exactly as the original lets them.
@@ -198,7 +198,7 @@ fn two_units_ordered_apart_are_not_a_group_and_the_loser_pauses() {
         run.at.1,
         run.tick
     );
-    // **They are not mates, and the pause is the evidence** (D208): a mate is dropped from the collision block entirely, so
+    // **They are not mates, and the pause is the evidence** (D210): a mate is dropped from the collision block entirely, so
     // he never pauses. These two were ordered apart, so one of them must stand for the drawn 0.25-1.50 s.
     assert!(
         run.paused,
@@ -207,8 +207,20 @@ fn two_units_ordered_apart_are_not_a_group_and_the_loser_pauses() {
     );
 }
 
-/// **Stop ends the exemption** (D207): the developer's own list - "units give up their formation (and therefore block each
+/// **Stop ends the exemption** (D207): the developer's own list - "units give up their formation (and therefore block
 /// other) when: stop button is pressed". A mate whose order is cancelled is a body again.
+///
+/// **Restated 2026-11-14 to the rule the engine actually has, with the measurement that forced it.** This asserted
+/// "never inside the reach", which D210 cannot honour: D210 withdrew the clamp against a body (the binary's only
+/// radius-against-radius retraction has its result discarded at the movement site, `0x8a7fe7`), and rule 6 takes a full
+/// step into a body **at rest** rather than freezing the mover, because a resting body cannot move aside. So the meeting
+/// itself overlaps by the one step he had already begun - measured **272 raw** against an 8000 reach here, and no route
+/// can prevent it: he is only told about the man when the candidate lands inside him.
+///
+/// What must not happen is the *second* half - going on through him. So the guard is: at most one step of overlap **at**
+/// the meeting, nothing inside the reach on any tick **after** it, and he still arrives. Before the search was taught to
+/// bend round a body in an open window (D211 follow-up) the closest after the meeting was **5012 raw**, and before that
+/// the same fixture's route ran straight through him at **4207**.
 #[test]
 fn a_mate_who_is_stopped_becomes_solid() {
     let Some(mut world) = common::fresh() else {
@@ -239,15 +251,39 @@ fn a_mate_who_is_stopped_becomes_solid() {
     world.step().expect("the stop lands");
 
     let reach = world.reach_between(a, b).raw();
-    let mut closest = i64::MAX;
+    let mut meeting: Option<i64> = None;
+    let mut after = i64::MAX;
+    let mut longest_step = 0i64;
+    let mut was_at = world.position(a).expect("a has a position");
     for _ in 0..400 {
         world.step().expect("step");
-        closest = closest.min(distance(&world, a, b));
+        let gap = distance(&world, a, b);
+        if meeting.is_none() && gap < reach * reach {
+            meeting = Some(gap);
+        } else if meeting.is_some() {
+            after = after.min(gap);
+        }
+        let now = world.position(a).expect("a has a position");
+        let (sx, sy) = (now.0.raw() - was_at.0.raw(), now.1.raw() - was_at.1.raw());
+        longest_step = longest_step.max(sx * sx + sy * sy);
+        was_at = now;
     }
+    let meeting = meeting
+        .expect("MEASURED the two never came within the reach: the fixture did not meet at all");
+    let overlap = reach - integer_sqrt(meeting);
     assert!(
-        closest >= reach * reach,
-        "MEASURED a stopped body was walked over: closest {} raw against a {} raw reach, after the stop button went",
-        integer_sqrt(closest),
+        overlap <= integer_sqrt(longest_step),
+        "MEASURED the meeting swallowed {} raw of the {} raw reach, more than the {} raw step he was already taking: \
+         he was not walking when the man stopped, he was driven into him",
+        overlap,
+        reach,
+        integer_sqrt(longest_step)
+    );
+    assert!(
+        after >= reach * reach,
+        "MEASURED a stopped body was walked over: after the meeting he came {} raw from him, inside the {} raw reach, so \
+         the route does not go round the man - it goes through him",
+        integer_sqrt(after),
         reach
     );
 }

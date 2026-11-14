@@ -49,6 +49,30 @@ fn tile_of(world: &World, id: EntityId) -> (i64, i64) {
 /// tests report both villagers on tile (0, 0).
 /// A villager at an arbitrary point, for fixtures that need a body **exactly** on a line - a tile is too coarse now that a
 /// walk aims at the middle of one (D114).
+/// Integer square root, for reporting a squared distance as raw units. Local on purpose: the sim has no float, so a test
+/// that reports one number does not need one either.
+fn integer_sqrt(value: i64) -> i64 {
+    let mut root = 0i64;
+    if value <= 0 {
+        return 0;
+    }
+    let mut bit = 1i64 << 62;
+    let mut rest = value;
+    while bit > rest {
+        bit >>= 2;
+    }
+    while bit != 0 {
+        if rest >= root + bit {
+            rest -= root + bit;
+            root = (root >> 1) + bit;
+        } else {
+            root >>= 1;
+        }
+        bit >>= 2;
+    }
+    root
+}
+
 fn spawn_enemy_at(world: &mut World, id: EntityId, point: (Fixed, Fixed)) {
     let unit = world.start_villager_unit().expect("a villager role");
     let scale = world.scale();
@@ -396,8 +420,14 @@ fn an_arms_route_ends_where_it_can_strike() {
 
 /// **M1: a repathed route is pulled, like a planned one.** The search answers with a node per tile, and a route stored that
 /// way is walked tile centre to tile centre - the staircase the owner keeps seeing, because most long walks in a busy base
-/// are repaths rather than first plans. The route the unit is handed after a repath must be the pulled one: three points
-/// around a single body on a row, not seven nodes through every tile of the detour.
+/// are repaths rather than first plans. The route the unit is handed after a repath must be the pulled one.
+///
+/// **Restated 2026-11-14 for a body that is a disc** (D211): a rectangle has four corners and a route round one needs two
+/// of them, which is where this fixture's "three points" came from. A *body* is an octagon of shoulders, so the honest
+/// pulled route bends at his shoulder and nowhere else - measured here, five of the eight vertices plus the goal. The
+/// claim is therefore the shape, not the count: every point between the first and last is **on the clearance circle**
+/// (`clearance` to `1.1 x clearance` from his centre), which a tile staircase cannot be - a tile centre is `0.5` tiles off
+/// a body at `0.43`, i.e. `1.16 x clearance`, outside the band.
 #[test]
 fn a_repath_route_is_pulled_like_a_planned_one() {
     let Some(mut world) = fresh() else { return };
@@ -425,8 +455,19 @@ fn a_repath_route_is_pulled_like_a_planned_one() {
         i64::from(x + 6) * scale + scale / 2,
         i64::from(y) * scale + scale / 2,
     );
-    // **An enemy body on the line** (D189): your own units pass through each other now, so the only body that still forces a
-    // repath is a hostile one - and "the route around a body is pulled like a planned one" is still the claim being tested.
+    world.step().expect("the walker's spawn lands");
+
+    world.submit(Command::Move {
+        unit: walker,
+        to: (x + 6, y),
+    });
+    // **An enemy body on the line, placed after the route exists** (restated 2026-11-14). A stander is an obstacle to the
+    // search that meets it (D210b), so an enemy standing on the line *before* the order is simply planned around: measured
+    // on `main`, `repaths = 0` and the walker arrived at `(8.5, 2.5)` - the plan doing its job, and nothing left for this
+    // test to measure. The claim here is about the *repathed* route's shape, so the route has to go stale first: the
+    // hostile body is placed on it once the walker is under way.
+    world.step().expect("the order lands");
+    let before = world.repaths();
     spawn_enemy_at(
         &mut world,
         sitter,
@@ -435,13 +476,7 @@ fn a_repath_route_is_pulled_like_a_planned_one() {
             Fixed::from_raw((start.1 + goal_at.1) / 2),
         ),
     );
-    world.step().expect("the spawns land");
-
-    let before = world.repaths();
-    world.submit(Command::Move {
-        unit: walker,
-        to: (x + 6, y),
-    });
+    world.step().expect("the enemy lands");
     let mut stored = None;
     for _ in 0..2_000 {
         world.step().expect("step");
@@ -457,8 +492,31 @@ fn a_repath_route_is_pulled_like_a_planned_one() {
             world.position(walker).map(|p| (p.0.raw(), p.1.raw()))
         );
     };
+    let clearance = world.reach_between(walker, sitter).raw();
+    let limit = clearance + clearance / 10;
+    let sitter_at = world.position(sitter).expect("the sitter is alive");
+    let points = world.route_points(walker);
+    let interior = points.len().saturating_sub(2);
     assert!(
-        stored <= 3,
-        "the repathed route holds {stored} waypoints: a route per tile is the staircase, a pulled one is three"
+        points.len() <= 8,
+        "the repathed route holds {stored} waypoints ({interior} between the ends): an octagon of shoulders is at most \
+         eight, so more than that is not a route round this body at all"
     );
+    for (index, point) in points
+        .iter()
+        .enumerate()
+        .take(points.len().saturating_sub(1))
+        .skip(1)
+    {
+        let (dx, dy) = (
+            point.0.raw() - sitter_at.0.raw(),
+            point.1.raw() - sitter_at.1.raw(),
+        );
+        let gap = integer_sqrt(dx * dx + dy * dy);
+        assert!(
+            (clearance..=limit).contains(&gap),
+            "MEASURED waypoint {index} of the repath sits {gap} raw from the body, outside the {clearance}..{limit} \
+             band its shoulder is on: the route is a staircase of tile centres, not a bend round him"
+        );
+    }
 }

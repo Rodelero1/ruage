@@ -189,7 +189,7 @@ pub struct Entity {
     /// can still be told to pause. Ticks, never seconds: the draw is in milliseconds and the tick rate converts it once.
     /// State - it decides which tick the man may move again - so it is hashed when it is not zero.
     pub pause_remaining: u16,
-    /// **The tick this body last actually moved** (D208) - the original's `+0x134 lastMoveTime`. A collider that has not
+    /// **The tick this body last actually moved** (D210) - the original's `+0x134 lastMoveTime`. A collider that has not
     /// moved since the mover's route was planned is *past* and the collision block drops it: with the step no longer clamped
     /// against a body, that test is what ends a head-on.
     pub last_moved: u64,
@@ -922,7 +922,7 @@ pub(crate) struct Route {
     /// How many times this route has been re-planned because its **ground** went stale. Capped: a route whose goal is buried
     /// behind new walls would otherwise search again on every tick, which is the cost D98a's "past" rule exists to avoid.
     pub(crate) stalls: u8,
-    /// **The tick this route was planned on** (D208): the original stamps `path+0x10` with the clock, and compares it with a
+    /// **The tick this route was planned on** (D210): the original stamps `path+0x10` with the clock, and compares it with a
     /// collider's `lastMoveTime` to decide whether that collider is *past* - "he has not moved since I planned round this,
     /// so my route already accounts for him". With the step no longer clamped against a body, this is what ends a head-on:
     /// the loser is paused, stops moving, and the winner's next collision with him is past.
@@ -2020,14 +2020,14 @@ impl World {
     ///
     /// `radius` is the body's own footprint: a route for a scout is not a route for a house. A caller that only asks whether
     /// a place is reachable passes `0`, because the question is about walls, not clearance.
-    /// **The bodies a search must treat as ground** (D208b). The original inserts an object into its per-search rectangle
+    /// **The bodies a search must treat as ground** (D210b). The original inserts an object into its per-search rectangle
     /// list when it is not on the ignore list **and its velocity is zero** (`FUN_007f9d80`), and the list is rebuilt for
     /// every search - never written into the shared grid. That is what makes the *past* test sound: a man who is standing
     /// still is planned around, so a route that later meets him can only be an old route.
     ///
     /// A body counts as standing when it did **not move on the last tick**. Not "has no route" and not "is idle": a man
     /// walking to his death this tick must not become a wall to everybody who plans after him.
-    /// **The same standers, as discs** (D209): a centre and the clearance a route must keep from it - `my radius + his`,
+    /// **The same standers, as discs** (D211): a centre and the clearance a route must keep from it - `my radius + his`,
     /// which is the distance the original grows its obstacle rectangles by. The search bends round these, so a detour can
     /// pass inside one tile; the tile set below is the same men for the search that can only think in tiles.
     fn stander_bodies(
@@ -2038,7 +2038,7 @@ impl World {
     ) -> Vec<((Fixed, Fixed), i64)> {
         let mut bodies = Vec::new();
         for entity in &self.entities {
-            // **Never moved is standing** (D209): `last_moved == 0` is the "no step yet" sentinel, and at tick 1 every
+            // **Never moved is standing** (D211): `last_moved == 0` is the "no step yet" sentinel, and at tick 1 every
             // body in a fresh world carries it - the first version skipped them all and the plan answered a straight line
             // through a man who had been standing there since the map was seeded.
             if entity.kind != EntityKind::Unit
@@ -2050,12 +2050,12 @@ impl World {
             if tile == from_tile || tile == to_tile {
                 continue;
             }
-            // **Exactly the reach, not a hair more** (D209). An eighth of a tile of margin looked harmless and was not: a
+            // **Exactly the reach, not a hair more** (D211). An eighth of a tile of margin looked harmless and was not: a
             // gather ring's places are 0.40 apart, so a clearance of 0.45 puts every neighbour's place inside a standing
             // worker's disc and the crowd can no longer reach its own ring - measured, 18 tests red across gather,
             // depletion and rally. Touching is legal in the original (its clamp stops a body exactly at `r1 + r2`), so the
             // search asks for the reach and no more.
-            // **The sum, and no tile-wide fallback** (D209). A gather place is planned with radius `0`, and the first
+            // **The sum, and no tile-wide fallback** (D211). A gather place is planned with radius `0`, and the first
             // version fell back to a whole tile of clearance when the sum was zero - so every neighbour blocked a tile
             // around himself and a worker could not reach his own ring (measured: the tree untouched at `Fixed(100000)`
             // in `a_depleted_node_stops_yielding`). Zero clearance means "no disc", which is right for two points.
@@ -2093,7 +2093,7 @@ impl World {
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
         let (start, goal) = (self.tile_of(from), self.tile_of(to));
-        // **A place route is not a walk** (D209): `radius == 0` means "reach this square", which is how a gatherer is sent to
+        // **A place route is not a walk** (D211): `radius == 0` means "reach this square", which is how a gatherer is sent to
         // his reserved place - and the ring already reserved it against every other body (D186/D188). Modelling the crowd as
         // obstacles *again* here made a dense little map unroutable (`NoPath from (0,0) to (3,1)`, the tree never touched),
         // so a place route ignores them and the reservation does the work.
@@ -3334,19 +3334,7 @@ impl World {
             .map_or(0, |value| value.raw())
     }
 
-    /// The standoff two bodies keep from each other: the sum of their footprints' radii, or **one whole tile** when the
-    /// content gives them no radius at all.
-    ///
-    /// One number for two rules (C): `collide` refuses a step that ends inside it, and the arrival predicates accept work
-    /// at it, so "too close to stand" and "close enough to work" cannot drift apart. A target whose own tile is blocked
-    /// ground - a tree, a mine, a town centre - is worked from the ring around it, which the predicates express in the
-    /// same units.
-    #[must_use]
-    /// **Whether these two move as one group** (D207): each has the other on its route's mate list, which is what makes the
-    /// exemption *mutual*. Mutuality is not decoration: the original ends the exemption when a unit leaves its formation -
-    /// "stop button is pressed / click on enemy unit / attack move" - and a stopped man's route is gone, so his old mates
-    /// must stop walking over him the same tick.
-    /// **Plan a route, stamped with when it was planned** (D208). Every route goes through here so that the *past* test has
+    /// **Plan a route, stamped with when it was planned** (D212). Every route goes through here so that the *past* test has
     /// something to compare against: the original writes the world clock into `path+0x10` when a search returns, and a
     /// collider whose `lastMoveTime` is newer than that is the one case the collision block re-acts to.
     pub(crate) fn put_route(&mut self, id: EntityId, mut route: Route) {
@@ -3354,7 +3342,7 @@ impl World {
         self.paths.insert(id, route);
     }
 
-    /// **Whether a collider is past** (D208): it has not moved since this body's route was planned, so the route already
+    /// **Whether a collider is past** (D210): it has not moved since this body's route was planned, so the route already
     /// accounts for it. The original's test is `path->createdAt < other->lastMoveTime`; a past collider is dropped - no
     /// pause, no repath and no bound - and with the step unclamped that is what lets the winner walk through the paused loser.
     pub(crate) fn is_past(&self, id: EntityId, other: EntityId) -> bool {
@@ -3368,6 +3356,10 @@ impl World {
         created >= moved
     }
 
+    /// **Whether these two move as one group** (D207): each has the other on its route's mate list, which is what makes the
+    /// exemption *mutual*. Mutuality is not decoration: the original ends the exemption when a unit leaves its formation -
+    /// "stop button is pressed / click on enemy unit / attack move" - and a stopped man's route is gone, so his old mates
+    /// must stop walking over him the same tick.
     pub(crate) fn is_mate(&self, a: EntityId, b: EntityId) -> bool {
         self.paths
             .get(&a)

@@ -1084,7 +1084,7 @@ impl World {
         deltas: Vec<(usize, EntityId, Fixed, Fixed)>,
     ) -> Result<(), SimError> {
         let mut reached: Vec<(EntityId, (Fixed, Fixed))> = Vec::new();
-        // **The clock, for `last_moved`** (D208): a body that takes a step this tick is the only thing that makes another
+        // **The clock, for `last_moved`** (D210): a body that takes a step this tick is the only thing that makes another
         // body's route *stale*, which is the original's `+0x134 lastMoveTime` and the whole of its "past" test.
         let now = self.tick;
         // Whatever actually moved this tick is what can see something new (D50a).
@@ -1265,7 +1265,7 @@ impl World {
                     .and_then(|route| route.points.last().copied())
                     .unwrap_or_else(|| self.tile_centre(goal));
                 let radius = self.body_radius(self.find(id).and_then(|entity| entity.unit));
-                // **The pencil** (D209): the men standing in the way are discs the route bends round, and the body that
+                // **The pencil** (D211): the men standing in the way are discs the route bends round, and the body that
                 // caused this repath is one of them whether or not he is moving - he is the reason the route is being
                 // planned again. A tile-only search cannot pass a man in a lane; this one can.
                 let mut discs = self.stander_bodies(radius, start, goal);

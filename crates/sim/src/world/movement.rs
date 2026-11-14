@@ -265,7 +265,7 @@ impl World {
         if a_unit && self.is_mate(id, other) {
             return (dx, dy, StepDecision::TakeOverlapping);
         }
-        // 1c. **A collider that has not moved since this route was planned is past** (D208), and the original drops it:
+        // 1c. **A collider that has not moved since this route was planned is past** (D210), and the original drops it:
         //     no pause, no repath, no bound. This is the second half of what ends a head-on - the loser is paused, stops
         //     moving, and from then on he is old news to a route planned after his last step. The order's own target is
         //     excluded: a man sent at something arrives beside it, he does not walk through it.
@@ -370,7 +370,7 @@ impl World {
                 // should be it"*). Halving rather than arithmetic: the constraint is a circle round the other body, so
                 // the largest fitting step is found by trying the step and then 1/2, 1/4, ... of it - five integer
                 // probes at worst, all in fixed point and no sqrt.
-                // **No clamp against a body** (D208). `bound_to_reach` used to halve the step until it ended outside
+                // **No clamp against a body** (D210). `bound_to_reach` used to halve the step until it ended outside
                 // `r1 + r2`, which is stricter than the game: the binary's only radius-against-radius retraction has its
                 // result discarded at the movement site (`0x8a7fe7`), and its position setter clamps against the map border
                 // alone. What ends the encounter is the pause (rule 4) and the *past* test above, not geometry.
@@ -386,38 +386,6 @@ impl World {
         // 7. Anything else: stand still. The blocker is moving, so the pair has an answer next tick - and if it is this
         //    body that lost the tie-break, rule 4 has already paused it.
         (stop.0, stop.1, StepDecision::WaitBlocked)
-    }
-
-    /// **A step may not end inside the pair's reach** (D131 option A, the owner's call 2026-11-06: *"I think A should be
-    /// it"*, with his own memory that *"narrow passes with 2 units passing in opposing directions were a problem"*).
-    ///
-    /// Two rules used to hand a body its **full** step into another body's space: 8 (a blocker at rest) and 9 (give way).
-    /// Measured on the one-tile corridor, the pair ended **7,372** raw units apart against the **8,000** their radii need -
-    /// 628 inside, 1/32 of a tile. AoE2's answer to the same geometry is *"units bump into others, stop and repath around.
-    /// No pushing allowed"* (Klingers, Meeting C++ 2025, page 9), so the pair is allowed to **stop**; what it is not
-    /// allowed to do is overlap.
-    ///
-    /// Halving rather than arithmetic: the constraint is a circle around the other body, so the largest fitting step is
-    /// found by trying the step and then 1/2, 1/4, ... of it - five integer probes at worst, all in fixed point, no sqrt.
-    fn bound_to_reach(
-        &self,
-        here: (Fixed, Fixed),
-        other: (Fixed, Fixed),
-        step: (Fixed, Fixed),
-        reach: i64,
-    ) -> (Fixed, Fixed) {
-        for shift in 0..=5 {
-            let div = 1i64 << shift;
-            let (nx, ny) = (step.0.raw() / div, step.1.raw() / div);
-            let (gx, gy) = (
-                other.0.raw() - (here.0.raw() + nx),
-                other.1.raw() - (here.1.raw() + ny),
-            );
-            if gx * gx + gy * gy >= reach * reach {
-                return (Fixed::from_raw(nx), Fixed::from_raw(ny));
-            }
-        }
-        (Fixed::ZERO, Fixed::ZERO)
     }
 
     /// The entity an order is trying to reach, when the order has one. `Move` has none - its goal is a place, and that

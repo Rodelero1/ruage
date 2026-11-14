@@ -1,67 +1,64 @@
-# OPEN - D208 needs sub-tile clearance in the search, and that is the next slice
+# OPEN - the *past* test and the stander set cannot fire, because `last_moved` is stamped on bodies that did not move
 
-**Where it stands, 2026-11-14, on `d208-time-not-geometry`.** Both halves of the original's collision rule are built:
+**Where it stands, 2026-11-14 late, branch `d208-time-not-geometry` (landing on `main`).** The collision story is closed:
+D210 (a collision is settled by time and by the clock, never by geometry), D210b (a standing body is an obstacle to the
+search that meets it), D211 (the search bends round a body inside a tile - bodies as discs with an octagon of shoulders),
+D212 (a search that starts inside a body is re-seeded at `2 x clearance`, and only *away*). All four are in
+`docs/decisions.md`; the mechanism and its measurements are in `docs/reviews/2026-11-14-d211-shoulders.md`, and the
+narrative of how the guard got there is `docs/history/next-step-2026-11-14-the-guard.md`.
 
-- **no clamp**: a step is never refused because it would end inside `r1 + r2`. The binary's only radius-against-radius
-  retraction has its result discarded at the movement site (`0x8a7fe7`), and its position setter clamps against the map
-  border alone. `bound_to_reach` is no longer called from `collide`.
-- **time, not geometry**: the loser of the id comparison is paused 0.25-1.50 s, and a collider that has **not** moved since
-  the route was planned is *past* and dropped (`path->createdAt >= other->lastMoveTime`). `Route.created`,
-  `Entity::last_moved`, one `put_route` choke point, and `World::is_past`.
-- **standing bodies are search obstacles** (D208b): `stander_tiles` returns the tiles of units that did not move on the last
-  tick - the original's rule is "insert into the per-search rectangle list iff not ignored and velocity is zero"
-  (`FUN_007f9d80`) - and both `plan_path` and the re-plan pass that set to the search. Per search, never in the shared grid.
+## The one open step
 
-**Green:** `head_on.rs` 2/2 - two men meeting head-on pass each other, and the loser stands for the first stand of the drawn
-0.25-1.50 s.
+**`move_bodies` writes `entity.last_moved = now` for every delta it is handed, including the `(0,0)` delta of a body that
+did not move.** Measured on a stopped villager: its `last_moved` advanced on every tick it stood still. Two rules read that
+field, and both are therefore dead:
 
-**Not green, and each for a different reason:**
+1. **The past test** (`World::is_past`, D210): `created >= moved` with `moved` always the current tick can only hold for a
+   route planned *this* tick, so a collider is never "past". The head-on passes today through the pause and through rule 3
+   ("a body already overlapped is not made worse by moving"), not through the rule D210 says ends an encounter.
+2. **The stander set** (`stander_tiles`, `stander_bodies`, D210b): only a body that has **never** moved is a stander (`last_moved == 0` passes the filter); a body that moved and then stopped is stamped every tick, so it is never one. The only body a plan treats as an obstacle today is therefore one that has not moved since the world was seeded, or one a re-plan names explicitly.
 
-| test | measured | why |
-|---|---|---|
-| `group_overlap::two_units_ordered_apart_stay_solid` | closest **151 raw** against an **8000** reach | **the test is now obsolete**: D208 says two men who meet *do* pass each other. It must be rewritten to assert the D208 outcome (both arrive, the loser pauses 0.25-1.50 s), not "never overlap". |
-| `group_overlap::a_mate_who_is_stopped_becomes_solid` | closest **4207 raw** | a **real gap**: after a stop the man is solid again, and the walker should route round him - but he is **adjacent**, and our search works on **tile corners**, so no detour exists that does not begin inside his tile. The fallback straight line then ghosts through him. |
-| `footprint::a_head_on_pair_in_a_one_tile_corridor_never_overlaps` | 7346 raw on tick 66 | the same gap, in its sharpest form: a one-tile corridor has no tile-level detour at all. |
+**So the step is:** a red test that a body which did not move is a stander and a body that did is not (probe
+`entity.last_moved` and `stander_bodies`), then the guard in `move_bodies`, then **the whole gate**, then **the timing that
+D210b's first attempt measured at 2.3x** - switching the stander set on turns many plans from "straight line" into "graph
+with eight more nodes per body", and that is a different engine. Do not land the guard without the number.
 
-**The next slice is therefore the search's resolution, not another movement rule.** The original's search works on continuous
-rectangles (each body a box of `pos ± radius`, grown by the mover's radius), so it can thread a gap a tile-corner graph
-cannot describe. Ours cannot, and no arrangement of step rules has ever fixed that - three slices tried.
+## What the step just finished cost, and how it was measured
 
-Two ways forward, and they cost differently:
+- the last red guard, `group_overlap::a_mate_who_is_stopped_becomes_solid`, went **4207** raw (a route straight through the
+  stopped man) -> **5012** (a re-seed that hopped over him) -> **7728 at the meeting only, 8664 afterwards** (an octagon
+  round him, and he arrives). Green, restated to D210's outcome: at most one step of overlap *at* the meeting, nothing
+  inside the reach on any later tick.
+- two `right_of_way` fixtures were restated for the same reason: orders submitted in one tick are a **group** (D207) and a
+  mate never pauses, so the pause fixture had to give each man his own tick; and the "jammed on one tile" fixture starts
+  0.45 tiles apart and is inside the 0.40 reach by the second tick, where D52 governs.
 
-1. **sub-tile clearance in `short.rs`** - nodes offset from a body's disc rather than tile corners (what the earlier
-   "free-space pather" note proposed). Faithful, and it is the piece that makes D208's *past* test sound everywhere.
-2. **restate the two failing guards** to D208's outcome and accept that an adjacent body is walked through until (1) lands.
-   Cheaper, honest, and measurable: the acceptance hash moves either way.
+## Known red on `main` and parked, not hidden
 
-Measured on this branch (`--seed 7 --ticks 48000`, release): `entities=158 players=2 hash=c2ed74016ee533ea repaths=508
-made_room=0 repaths_body=174 repaths_ground=334`, against `main`'s `entities=160 hash=c3b10f4b09e17a43 repaths=324
-made_room=147 repaths_body=83 repaths_ground=241`.
+Two failures were found on `e0312f9` itself (the main checkout, real pack) while landing this step, and one of them is a
+real defect:
 
+- **A builder with a live route is asked for no step, for ever.** `build::a_content_pack_with_our_own_resources_loads_and_spends`
+  is `#[ignore]`d with that sentence. Measured: the worker is ordered to build at `(3, 4)` on a **6x6** map, its route holds
+  one waypoint at tile `(5, 4)`, it stands at `(5.03, 4.37)` - **0.47 tiles away** - and its step is **`Idle`** (nothing was
+  asked of it) for 1,900 ticks, `repaths = 0`, `repath_failures = 0`. So the house never leaves its site state. This is the
+  silent-stall class: a body with a waypoint in hand and a `Build` task that no rule asks anything of. Probe: `trace_steps()`
+  plus `world.route_points(villager)` on that fixture.
+- **A repath route round a body used to be asserted as "three waypoints".** `evasion::a_repath_route_is_pulled_like_a_planned_one`
+  failed on `main` for a *different* reason - a stander placed before the order is planned around, so no repath ever
+  happened (`repaths = 0`, the walker arrived). Restated here: the enemy is placed on the line **after** the route exists,
+  and the claim is the shape (every waypoint between the ends sits on the body's clearance circle), not the count. A body is
+  an octagon of shoulders, so the honest pulled route round one is five of its eight vertices, not two rectangle corners.
 
-## The 18 failures this branch carries (gate `d209e`, private target dir)
+## Hazards a fresh session must not re-learn the hard way
 
-- a_body_on_the_line_is_counted_as_a_body
-- a_broken_file_in_a_present_pack_fails_the_fixture
-- a_content_pack_with_our_own_resources_loads_and_spends
-- a_depleted_node_stops_yielding
-- a_man_who_cannot_get_his_square_takes_the_next_tree
-- a_mate_who_is_stopped_becomes_solid
-- a_partial_load_comes_home_when_the_node_runs_out
-- a_present_but_broken_marker_fails_rather_than_skipping
-- a_repath_route_is_pulled_like_a_planned_one
-- a_unit_rallied_to_its_own_building_stays_inside
-- a_villager_rallied_onto_stone_gathers_stone_not_the_wood_around_it
-- a_villager_walks_around_a_forest_wall_and_never_enters_it
-- an_enemy_body_on_the_line_changes_the_decision
-- an_enemy_is_only_visible_while_somebody_watches
-- the_higher_id_pauses_for_a_quarter_to_one_and_a_half_seconds_and_keeps_its_route
-- three_gatherers_on_one_bush_do_not_pile_up
-- two_units_jammed_on_the_same_tile_neither_stands_for_ever
-- two_villagers_on_one_node_cannot_take_more_than_it_holds
-
-
-Two of these (`a_broken_file_in_a_present_pack_fails_the_fixture`,
-`a_present_but_broken_marker_fails_rather_than_skipping`) are this worktree's **symlinked** `config/gamedata`, not the code.
-The rest need triage on a checkout whose pack is real - `gather` is 21/21 in isolation, so at least part of this list is the
-same environment effect leaking into fixtures that load the pack.
+- **A missing pack passes every world test silently.** `config/gamedata/` is gitignored, so a fresh worktree has none, and
+  every fixture does `let Some(mut world) = common::fresh() else { return; }`. A whole file reports `ok` without running an
+  assertion - measured here: `group_overlap` "passed" and then failed at once with the pack copied in. **Copy**
+  `config/gamedata/*.toml` into the worktree; never symlink it (the pack-loader tests write into that directory).
+- **One `CARGO_TARGET_DIR` per checkout** - two worktrees sharing one swap test binaries under a running suite.
+- **A doc that promises a mechanism is not the mechanism.** "Eight shoulder points round every body" was in a review and in a
+  code comment and did not exist; the two fixtures that were supposed to exercise it were satisfied by a whole-tile
+  rectangle. When a review claims a mechanism, grep for it.
+- **A `#[must_use]` left over a deleted function** lands on whatever is inserted next to it: `put_route` inherited one from
+  an orphaned standoff doc block and `-D warnings` refused the tree. Read the diff around a structural edit.

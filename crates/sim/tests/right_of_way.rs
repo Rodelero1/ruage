@@ -215,8 +215,11 @@ type Point = (i64, i64);
 type Route = Vec<(Fixed, Fixed)>;
 
 /// One crossing, walked to its end: the higher id's tick-by-tick record of `(position, waypoints left)`, whether both
-/// men arrived, how many ticks it took, the closest the pair ever came (squared raw units), and the reach their two
-/// footprints need.
+/// men arrived, and how many ticks it took.
+///
+/// **The closest approach and the reach are gone from this record** (2026-11-14): the fixture that read them asserted
+/// "never inside the reach", which D212 withdrew when it removed the clamp against a body. A field nobody reads is a
+/// measurement nobody takes; whoever restates that guard to D212's rule can put them back with it.
 struct Crossing {
     /// `(where the higher id stood, its remaining waypoint list)` per tick.
     trail: Vec<(Point, Route)>,
@@ -224,8 +227,6 @@ struct Crossing {
     lower: Vec<Point>,
     arrived: bool,
     ticks: i64,
-    closest: i64,
-    reach: i64,
 }
 
 /// **One crossing**: the two given men are ordered to each other's place and walked until both arrive (or 2,500 ticks,
@@ -254,6 +255,11 @@ fn cross(
             to: tile(goal_low),
         }),
     );
+    // **Two men, not a group** (D207). Orders submitted in one tick are a group, a group walks over itself, and a mate is
+    // dropped before the tie-break - so a fixture that ordered both men in the same tick could never see this rule fire.
+    // Measured 2026-11-14: with the two orders on one tick the loser stood for **1** tick (the group pass-through), and
+    // with them a tick apart the same fixture produces the drawn 0.25-1.50 s stand.
+    world.step().expect("the lower man's order is his own");
     common::must(
         "a move order",
         world.submit_checked(Command::Move {
@@ -261,19 +267,14 @@ fn cross(
             to: tile(goal_high),
         }),
     );
-    let reach = world.reach_between(lower, higher).raw();
-
     let mut trail = Vec::new();
     let mut lower_trail = Vec::new();
-    let mut closest = i64::MAX;
     let mut arrived = false;
     let mut ticks = 0;
     for tick in 0..2_500i64 {
         world.step().expect("a tick");
         trail.push((at(&world, higher), world.route_points(higher)));
         lower_trail.push(at(&world, lower));
-        let (one, two) = (at(&world, higher), at(&world, lower));
-        closest = closest.min((one.0 - two.0).pow(2) + (one.1 - two.1).pow(2));
         ticks = tick;
         if near(&world, lower, goal_low) && near(&world, higher, goal_high) {
             arrived = true;
@@ -285,8 +286,6 @@ fn cross(
         lower: lower_trail,
         arrived,
         ticks,
-        closest,
-        reach,
     }
 }
 
@@ -499,26 +498,22 @@ fn two_units_jammed_on_the_same_tile_neither_stands_for_ever() {
         centre(scale, (6, 10)),
     );
 
+    // **Restated 2026-11-14: what this fixture can still prove is the freeze, and that is what its name says.** Two
+    // assertions were removed, each with the measurement that makes it wrong rather than merely inconvenient:
+    //
+    // - the **pause**: the pair start 0.45 tiles apart and each takes 0.04 tiles a tick, so by the second tick they are
+    //   0.29 tiles apart - already inside the 0.40 the two footprints need. From there D52 governs ("a body already
+    //   overlapped is not made worse by moving") and the tie-break never runs: measured, no tick of stand longer than 1.
+    // - **"nobody is inside anybody"**: the same 0.29 tiles, and D210 withdrew the clamp against a body on the binary's
+    //   own evidence. Asserting the reach here contradicts a landed decision.
+    //
+    // The freeze is the guard: whatever route the pair take, **both must finish the crossing**.
     let (still, _) = longest_still(&crossing.trail);
-    assert!(
-        still >= tick_rate / 4,
-        "MEASURED a unit jammed on one tile stood still for {still} ticks at the longest ({:.3} s): the loser of a \
-         collision pauses for at least 0.25 s, and this is the geometry the 2026-11-13 freeze was made of",
-        still as f64 / tick_rate as f64
-    );
     assert!(
         still <= longest,
         "MEASURED a unit jammed on one tile stood still for {still} ticks ({:.3} s) at the longest: a pause is bounded \
          at 1.50 s, so a longer stand is the freeze by another name",
         still as f64 / tick_rate as f64
-    );
-    // **Nobody is inside anybody.** The pair may share a tile - the game does - but the two footprints may not overlap:
-    // a lower id that simply stepped into the other man would show up here as a distance below the reach.
-    assert!(
-        crossing.closest >= crossing.reach * crossing.reach,
-        "MEASURED the pair came {} raw units from each other where the two footprints need {}",
-        (crossing.closest as f64).sqrt() as i64,
-        crossing.reach
     );
     assert!(
         crossing.arrived,

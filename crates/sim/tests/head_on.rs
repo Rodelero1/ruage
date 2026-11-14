@@ -1,4 +1,4 @@
-//! **A head-on is settled by time, not geometry** (D208). The original never clamps a step against another body: at the
+//! **A head-on is settled by time, not geometry** (D210). The original never clamps a step against another body: at the
 //! movement site the radius retraction's result is written to a local that is read nowhere (`0x8a7fe7` is the instruction
 //! after the call, and it tests a debug flag). A pair meeting is resolved by pausing the higher id, repathing the lower one
 //! once, and then classifying the collision **"past"** - `path->createdAt < other->lastMoveTime` - so the winner walks

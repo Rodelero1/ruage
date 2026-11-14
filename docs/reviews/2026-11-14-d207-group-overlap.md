@@ -116,7 +116,7 @@ its doc comment carries two corrections rather than a silent edit:
 
 1. it had been justified by *"no pushing allowed"* (Klingers, page 9) - a quote about **pushing**, which the binary read then
    showed is not about overlap at all: the collision block never clamps a step against another body;
-2. it is expected to become an **arrival** test when D208 lands the pause and the temporal "past" rule, because the game's
+2. it is expected to become an **arrival** test when D210 lands the pause and the temporal "past" rule, because the game's
    answer to this geometry is not a permanent standoff.
 
 That is a restatement with a reason, not a weakened assertion: the pair still must meet and still must never come inside the

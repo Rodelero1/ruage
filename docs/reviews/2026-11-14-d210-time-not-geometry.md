@@ -1,4 +1,4 @@
-# D208 - the head-on is settled by time; the search cannot yet carry it
+# D210 - the head-on is settled by time; the search cannot yet carry it
 
 **Verdict: parked.** The rule is right and reproduces the binary, and measured against `main` it is **2.3x slower** and
 still ghosts through a body that stood next to the walker, because our search works on tile corners. Nothing here is
@@ -27,7 +27,7 @@ the drawn 0.25-1.50 s rather than a freeze.
 
 | test | measured | verdict |
 |---|---|---|
-| `group_overlap::two_units_ordered_apart_stay_solid` | closest **151 raw** against an **8000** reach | **the test is obsolete**, not the code: D208's rule is that two men who meet *do* pass. It must be rewritten to D208's outcome. |
+| `group_overlap::two_units_ordered_apart_stay_solid` | closest **151 raw** against an **8000** reach | **the test is obsolete**, not the code: D210's rule is that two men who meet *do* pass. It must be rewritten to D210's outcome. |
 | `group_overlap::a_mate_who_is_stopped_becomes_solid` | closest **4207 raw** | **a real gap**: after a stop the man is solid again, and the walker should route round him - but he is **adjacent**, and a tile-corner graph has no detour that does not begin inside his tile. The fallback straight line ghosts through him. |
 | `footprint::a_head_on_pair_in_a_one_tile_corridor_never_overlaps` | 7346 raw on tick 66 | the same gap at its sharpest: a one-tile corridor has no tile-level detour at all. |
 
@@ -35,7 +35,7 @@ the drawn 0.25-1.50 s rather than a freeze.
 
 Interleaved A/B on the acceptance world, same box, alternating (`build/headless-main` against `build/headless-d208`):
 
-| run | `main` | D208 |
+| run | `main` | D210 |
 |---|---|---|
 | round 1 | 31,001 ms | 68,084 ms |
 | round 2 | 30,491 ms | 73,319 ms |

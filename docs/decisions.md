@@ -5266,3 +5266,115 @@ filled from the command rather than from the tick.
 Empires forum answer *Investigations into Pathfinding* (2026); the DE talk's *"units bump into others, stop and repath around.
 No pushing allowed"* with "some friendly overlap" (`docs/pathfinding-from-the-talk.md`, page 9); the owner's ruling above.
 Review: `docs/reviews/2026-11-14-d207-group-overlap.md`.
+
+### D210 - a collision is settled by time and by the clock, never by geometry: the step is not clamped against a body
+
+**What it says (read from `AoK HD.exe`, 2026-11-14).** Two things, and both replace rules this engine had invented:
+
+1. **A step is never refused because it would end inside another body.** The binary's only radius-against-radius
+   retraction has its **result discarded** at the movement site (`0x8a7fe7`), and its position setter clamps against the
+   **map border alone**. There is no push, no slide, no bound, and no "make room".
+2. **What ends an encounter is the pause and the clock.** The loser of the handle comparison stands for 0.25-1.50 s
+   (D205), and a collider whose `+0x134 lastMoveTime` is **older than the mover's route** (`path+0x10`, written when a
+   search returns) is **past**: the collision block drops it - no pause, no repath, no bound - so the winner walks on
+   through a man who stopped before this route existed.
+
+**What it builds.** `pass.pauses` and `Entity::pause_remaining` (D205); `Route.created` stamped at every `put_route`;
+`Entity::last_moved` written where a body's position actually changes; `World::is_past(id, other)` reading
+`created >= moved`; `bound_to_reach` no longer called from `collide`; rule 6, which takes the step into a body **at rest**
+instead of freezing the mover, because a resting body cannot move aside and waiting on it is waiting for ever.
+
+**What it supersedes.** The clamp clause of D131-A ("a step may not end inside the pair's reach"), which the owner chose on
+2026-11-06. It was right about the *outcome* (two units must get past each other) and wrong about the *mechanism*: the
+original gets past by pausing and by the past test, not by halving steps. The outcome is now asserted by
+`right_of_way::the_higher_id_pauses...` and `head_on::two_men_meeting_head_on_pass_each_other`; the mechanism by
+`head_on::the_loser_stands_for_the_drawn_pause`.
+
+**A defect this decision carries, stated rather than buried.** `move_bodies` writes `last_moved` for **every** delta it is
+handed, including the `(0,0)` delta of a body that did not move (measured: an `Idle` villager's `last_moved` advanced every
+tick). So today the *past* test can never be true (`moved` is always the current tick) and the stander set below is always
+empty. The two rules that read it are therefore inert, and the work that makes them live - one guard plus the timing the
+first attempt measured at 2.3x - is `docs/next-step.md`'s first item, not something this decision claims.
+
+**Basis.** `0x8a7fe7`, `0x8aa6d0`, `+0x134`, `path+0x10` (`docs/movement-in-the-binary.md`, read 2026-11-14); the DE
+talk's *"units bump into others, stop and repath around. No pushing allowed"*; the owner's D205 ruling.
+Reviews: `docs/reviews/2026-11-14-d205-pause.md`, `docs/reviews/2026-11-14-d210-time-not-geometry.md`.
+
+### D210b - a standing body is an obstacle to the search that meets it, and only to *that* search
+
+**What it says.** The original's search inserts an object into its per-search obstacle list when it is **not on the ignore
+list and its velocity is zero** (`FUN_007f9d80`), and the list is rebuilt for every search - never written into the shared
+grid. That is what makes the past test sound: a man standing still is planned *around*, so a route that later meets him can
+only be an old route.
+
+**What it builds.** `stander_tiles` and `stander_bodies`: every unit that did not move on the last tick, excluding the two
+ends' own tiles ("a search that cannot stand on its own start is not a search, and a goal a body occupies is still *come as
+close as you can*"), passed to both planners and to the re-plan.
+
+**What it cost, and the two errors it produced.** The first version fell back to a **whole tile** of clearance when the
+radius sum was zero; a gather place is planned with radius `0`, so every standing neighbour blocked a tile around himself
+and a worker never reached his own ring - `gather` 3 red, the tree untouched at `Fixed(100000)`. A one-eighth-tile margin
+added on top of that reddened 18 tests for the same reason: the ring's places are 0.40 apart. Both are gone; the clearance
+is the sum and nothing else.
+
+**Measured cost when it was built:** 2.3x on the acceptance run (31.0 s -> 68.1 s), because with bodies as obstacles
+`short_range` failed far more often and every failure ran the whole-route fallback. That number is why the mechanism is
+**parked**: it is built, tested, and inert while `last_moved` is wrong (D210's defect) - and it must not be switched on
+without its own measurement, because a rule that turns one search into two per tick is a different engine.
+
+### D211 - the search bends round a body inside a tile: bodies are discs with an octagon of shoulders
+
+**What it says.** The original's search works on **continuous rectangles** - each body a box of `pos +- radius`, grown by the
+mover's radius - so it can thread a gap narrower than a tile. Ours built its graph out of tile corners, and no arrangement
+of *movement* rules could express a detour inside one tile: three slices tried (D200, the slide, the nudge) and each was
+withdrawn. This is the same statement in the search instead of in `collide`.
+
+**What it builds** (`short_range_clear`, `crates/sim/src/short.rs`):
+
+- **bodies are discs**: `(centre, clearance)` with `clearance = my radius + his`, exactly, tested in integers
+  (`cross^2 >= clearance^2 * length^2`, no division, no sqrt, i128);
+- **an octagon of shoulders per body**: the eight vertices of the polygon *circumscribing* the clearance circle, so the
+  edges between them are tangent and a route can run along them at exactly the clearance. The vertices are at
+  `1.083 x clearance` (axis) and `0.765 x clearance` (diagonal) - a regular octagon's circumradius is `1/cos(22.5 deg)`
+  times its edge distance, rounded **out** by a fifth of a per-cent so no edge cuts the circle in integer arithmetic;
+- **the straight-line shortcut asks the discs**: it used to return before `bodies` was read at all, which is how a man
+  standing alone in an open field was walked through (measured: closest **5012 raw** against an 8000 reach, and the
+  re-plan's "detour" passed 0.25 tiles from his centre);
+- **an empty rectangle set is not a failure**: the window can be clear of terrain and still hold the man the search was
+  asked to route round, and his octagon is then the whole graph.
+
+**Two defects found in the mechanism as first committed, both by measurement rather than by reading:**
+
+- `clears_disc`'s endpoint case was an **OR**. When the perpendicular foot falls outside the segment the nearest point is
+  an end, so a segment is clear only when **both** ends are clear; the code read `d(a) >= c || d(b) >= c`, which calls a
+  line clear whenever its far end is far - exactly the "from inside him to beyond him" line the predicate exists to refuse;
+- **the shoulder nodes did not exist.** The earlier pass's review (`docs/reviews/2026-11-14-d211-clearance.md`) and the code's own doc comment both described them; `grep shoulder`
+  found the comment and nothing else. The two `clearance.rs` fixtures passed without them, because the stander's *tile* was
+  in the avoid set and a whole-tile rectangle existed to bend round - so the sub-tile claim was never exercised. It is now,
+  by two tests that call `short_range_clear` directly with a hand-built `Walk` and no world under them.
+
+**What it costs.** PERF-PLACEHOLDER. The added work per plan is eight nodes per standing body and a disc test per edge; the
+graph stays `O(n^2)` in nodes, so the stander set that D210b would enable multiplies node count by nine per body - the reason
+D210b's timing has to be taken together with this one.
+
+**Basis.** The DE talk's method (*shrink the units to points, expand the obstacles, be careful with the start and the end*,
+`docs/pathfinding-from-the-talk.md`); `FUN_007f9d80` for the per-search body list; measurement in
+`docs/reviews/2026-11-14-d211-clearance.md` and its follow-up.
+
+### D212 - a search that starts inside a body is re-seeded at twice the clearance, and only *away* from him
+
+**What it says.** `FUN_007fb220`, the low-level search: it asks whether its **start** point is inside an obstruction, and if
+so it offsets the start by **`2 x radius`** along each direction of a fixed table, re-seeds the search at the first free
+one, and returns `3` ("no low-level path") only when every direction is blocked.
+
+**What it builds.** The same re-seed in `short_range_clear`: when the start is inside a body's clearance, a fixed ring of
+eight directions is tried at `2 x clearance`, and the first candidate that is free of every disc becomes the head of the
+route.
+
+**What the binary alone does not settle, and measurement did.** A candidate on the **far side** of the man is free, and
+walking to it means walking through him: measured 3702 raw against an 8000 reach, worse than doing nothing (4207). A free
+point beyond a man you are already inside is a *destination*, not a place to start. So the anchor must move **away** from
+every disc the start is inside - the same rule the graph's first edges use (`step_out_ok`), because it is the same question.
+
+**Basis.** `FUN_007fb220` and the direction table at `0x9e252c` (read 2026-11-14); the talk's "be careful about the start and
+end points"; measurement in `docs/reviews/2026-11-14-d211-clearance.md`.

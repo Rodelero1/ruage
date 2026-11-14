@@ -1,15 +1,17 @@
-//! **A small enough pencil** (D209): a route must be able to bend round a *body* at less than a tile's clearance.
+//! **A small enough pencil** (D211): a route must be able to bend round a *body* at less than a tile's clearance.
 //!
 //! The original's search works on continuous rectangles - each body a box of `pos +- radius`, grown by the mover's radius -
 //! so it can thread a gap between a man and a wall that is narrower than a tile. Ours builds its graph out of **tile
 //! corners**, so the only detours it can express are whole-tile ones: beside a body that stands in a corridor, or next to
 //! the walker himself, there is no such detour, the search fails, the fallback draws a straight line, and the walker ghosts
-//! through him - measured at 4207 raw against an 8000 reach (D208).
+//! through him - measured at 4207 raw against an 8000 reach (D210).
 //!
 //! Written before the implementation (D7).
 
+use std::collections::BTreeSet;
+
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, World};
+use ruage_sim::{Command, EntityId, EntityKind, Walk, World, short_range_clear};
 
 mod common;
 
@@ -174,4 +176,158 @@ fn a_man_beside_the_lane_is_cleared_without_a_detour_round_the_block() {
         closest.max(0).isqrt(),
         reach
     );
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// **The search itself, with no world under it.** The two fixtures above go through the engine, so they can be
+// satisfied by the *tile* the stander occupies rather than by his disc (measured: they are, which is why the
+// sub-tile mechanism they were written for was never exercised). These two ask `short_range_clear` directly.
+// ---------------------------------------------------------------------------------------------------------------
+
+/// A flat map, a projected into raw units, and the exact segment-to-point test the search owes its callers.
+const SCALE: i64 = 20_000;
+const RADIUS: i64 = SCALE / 5;
+
+fn flat(width: u16, height: u16) -> Walk {
+    let map = ruage_data::Map {
+        width,
+        height,
+        terrain: vec![ruage_data::Terrain::Grass; usize::from(width) * usize::from(height)],
+        resources: Vec::new(),
+        town_centers: Vec::new(),
+    };
+    Walk::from_map(&map)
+}
+
+fn corner(x: i64, y: i64) -> (Fixed, Fixed) {
+    (Fixed::from_raw(x * SCALE), Fixed::from_raw(y * SCALE))
+}
+
+/// The squared distance from a point to a segment, in raw units: the nearer end when the perpendicular foot falls
+/// outside, otherwise `cross^2 / length` (floored, which can only make the assertion below stricter).
+fn segment_gap(a: (i64, i64), b: (i64, i64), centre: (i64, i64)) -> i128 {
+    let (abx, aby) = (i128::from(b.0 - a.0), i128::from(b.1 - a.1));
+    let (acx, acy) = (i128::from(centre.0 - a.0), i128::from(centre.1 - a.1));
+    let length = abx * abx + aby * aby;
+    if length == 0 {
+        return acx * acx + acy * acy;
+    }
+    let dot = acx * abx + acy * aby;
+    if !(0..=length).contains(&dot) {
+        let (bcx, bcy) = (i128::from(centre.0 - b.0), i128::from(centre.1 - b.1));
+        return (acx * acx + acy * acy).min(bcx * bcx + bcy * bcy);
+    }
+    let cross = (abx * acy - aby * acx).abs();
+    (cross * cross) / length
+}
+
+fn route_stats(points: &[(Fixed, Fixed)], from: (Fixed, Fixed), centre: (i64, i64)) -> (i128, f64) {
+    let mut closest = i128::MAX;
+    let mut length = 0.0f64;
+    let mut previous = (from.0.raw(), from.1.raw());
+    for point in points {
+        let here = (point.0.raw(), point.1.raw());
+        closest = closest.min(segment_gap(previous, here, centre));
+        let (dx, dy) = (
+            f64::from((here.0 - previous.0) as i32),
+            f64::from((here.1 - previous.1) as i32),
+        );
+        length += (dx * dx + dy * dy).sqrt();
+        previous = here;
+    }
+    (closest, length)
+}
+
+/// **A body alone in an open field is an obstacle.** Nothing blocks the window's tiles, so the search takes its
+/// straight-line shortcut - and that shortcut never looked at the bodies, so a man standing in an open field was
+/// walked through. Measured in the engine: `group_overlap::a_mate_who_is_stopped_becomes_solid`, closest **5012 raw
+/// against the 8000** the pair's footprints need, with the re-plan that was supposed to route round him producing a
+/// route whose second leg passes 0.25 tiles from his centre.
+///
+/// The second assertion is a guard on the fix, not the rule: a 0.4-tile obstacle between two points ten tiles apart
+/// cannot lengthen the walk by more than half a tile if the bend is drawn beside him, so two tiles still fails a route
+/// that runs to the window's edge and back.
+#[test]
+fn a_body_alone_in_an_open_field_is_rounded_like_a_wall() {
+    let walk = flat(16, 16);
+    let scale = SCALE;
+    let centre = (
+        Fixed::from_raw(7 * scale + scale / 2),
+        Fixed::from_raw(7 * scale),
+    );
+    let clearance = 2 * RADIUS;
+    let bodies = [(centre, clearance)];
+    let from = corner(2, 7);
+    let to = corner(12, 7);
+
+    let points = short_range_clear(&walk, SCALE, from, to, RADIUS, &BTreeSet::new(), &bodies)
+        .expect("an open field with one man in it is a path");
+    assert_eq!(
+        points.last().copied(),
+        Some(to),
+        "the route must end on the goal, it ends at {:?}",
+        points.last()
+    );
+    let (closest, length) = route_stats(&points, from, (centre.0.raw(), centre.1.raw()));
+    let keep = i128::from(clearance) * i128::from(clearance);
+    assert!(
+        closest >= keep,
+        "MEASURED the route passes {} raw from a man it must keep {} raw from: the window holds no blocked tile, so \
+         the straight-line shortcut answered before the bodies were read",
+        (closest as f64).sqrt(),
+        clearance
+    );
+    let straight = f64::from((to.0.raw() - from.0.raw()) as i32);
+    assert!(
+        length <= straight + 2.0 * scale as f64,
+        "MEASURED the detour is {:.2} tiles for a straight line of {:.2}: that is a walk to the window's edge, not a \
+         bend round one man",
+        length / scale as f64,
+        straight / scale as f64
+    );
+}
+
+/// **A walker who starts inside a man steps away from him first.** This is the case D212's re-seed exists for, and the
+/// one place where "a free candidate" is not enough: a point beyond the man is free, and walking to it means walking
+/// through him (measured 3702 raw against 8000 when the far side was allowed). Leaving a disc is legal, entering it is
+/// not - so the first waypoint must move **away** from the centre.
+#[test]
+fn a_walker_starting_inside_a_body_steps_away_before_going_round() {
+    let walk = flat(16, 16);
+    let scale = SCALE;
+    let centre = (Fixed::from_raw(7 * scale), Fixed::from_raw(7 * scale));
+    let clearance = 2 * RADIUS;
+    let bodies = [(centre, clearance)];
+    // 0.35 tiles from the centre: inside the 0.4 the pair's footprints need.
+    let from = (
+        Fixed::from_raw(7 * scale - 7 * scale / 20),
+        Fixed::from_raw(7 * scale),
+    );
+    let to = corner(12, 7);
+
+    let points = short_range_clear(&walk, SCALE, from, to, RADIUS, &BTreeSet::new(), &bodies)
+        .expect("a walker already touching a man can still be given a route round him");
+    let first = points
+        .first()
+        .copied()
+        .expect("the re-seed puts a point at the head");
+    let (cx, cy) = (centre.0.raw(), centre.1.raw());
+    let (sx, sy) = (from.0.raw(), from.1.raw());
+    let (fx, fy) = (first.0.raw(), first.1.raw());
+    let dot = (fx - sx) * (cx - sx) + (fy - sy) * (cy - sy);
+    assert!(
+        dot <= 0,
+        "MEASURED the first step goes {} raw towards the man's centre, from a point already inside his clearance: a \
+         free point on his far side is a destination, not a place to start",
+        dot
+    );
+    let (closest, _) = route_stats(&points, first, (cx, cy));
+    let keep = i128::from(clearance) * i128::from(clearance);
+    assert!(
+        closest >= keep,
+        "MEASURED the route from the first waypoint passes {} raw from him, inside the {} raw it must keep",
+        (closest as f64).sqrt(),
+        clearance
+    );
+    assert_eq!(points.last().copied(), Some(to), "and it must still arrive");
 }

@@ -63,7 +63,7 @@ pub fn short_range(
     short_range_clear(walk, scale, from, to, radius, avoid, &[])
 }
 
-/// **A small enough pencil** (D209): the same search, with bodies as **discs** instead of tiles.
+/// **A small enough pencil** (D211): the same search, with bodies as **discs** instead of tiles.
 ///
 /// The original plans on continuous rectangles - each body a box of `pos +- radius`, grown by the mover's radius - so it can
 /// thread a gap narrower than a tile. A graph built only from tile corners cannot: beside a man standing in a lane there is
@@ -90,7 +90,7 @@ pub fn short_range_clear(
     // touch at a corner"). One raw unit of expansion closes every such pinch and is invisible in play.
     let radius = radius.max(1);
 
-    // **A start inside a body is re-seeded** (D210). The original does exactly this in its low-level search: when the start
+    // **A start inside a body is re-seeded** (D212). The original does exactly this in its low-level search: when the start
     // point falls inside an obstruction it offsets it by `2 x radius` along a fixed ring of directions, re-seeds from the
     // first free one, and returns "no low-level path" only when every one is blocked (`FUN_007fb220`). Without it a walker
     // whose nose is inside the man who just stopped in front of him can never plan round him - the search has no legal
@@ -127,21 +127,26 @@ pub fn short_range_clear(
             if inside(candidate, bodies) > 0 {
                 continue;
             }
-            // **And the step out must not cross him** (D210): a candidate on the far side is "free" but the straight line to
-            // it runs through the body - measured 3702 raw against an 8000 reach, i.e. the anchor made the overlap worse.
+            // **And the step out must not cross him** (D212): a candidate on the far side is "free" but the straight line
+            // to it runs through the body - measured 3702 raw against an 8000 reach, i.e. the anchor made the overlap
+            // worse. A point beyond the man he is stuck inside is a *destination*, not a place to start: the anchor must
+            // move away from every disc the start is inside, and clear every other one.
             let here = (from.0.raw(), from.1.raw());
-            if bodies
-                .iter()
-                .any(|(centre, clearance)| {
-                    !clears_disc(here, candidate, (centre.0.raw(), centre.1.raw()), *clearance)
-                })
-            {
+            if bodies.iter().any(|(centre, clearance)| {
+                !step_out_ok(
+                    here,
+                    candidate,
+                    (centre.0.raw(), centre.1.raw()),
+                    *clearance,
+                )
+            }) {
                 continue;
             }
             let tile_x = candidate.0.div_euclid(scale);
             let tile_y = candidate.1.div_euclid(scale);
             let (map_w, map_h) = walk.size();
-            if !(0..i64::from(map_w)).contains(&tile_x) || !(0..i64::from(map_h)).contains(&tile_y) {
+            if !(0..i64::from(map_w)).contains(&tile_x) || !(0..i64::from(map_h)).contains(&tile_y)
+            {
                 continue;
             }
             if walk.blocked(
@@ -150,17 +155,12 @@ pub fn short_range_clear(
             ) {
                 continue;
             }
-            anchor = Some((
-                Fixed::from_raw(candidate.0),
-                Fixed::from_raw(candidate.1),
-            ));
+            anchor = Some((Fixed::from_raw(candidate.0), Fixed::from_raw(candidate.1)));
             from = anchor.expect("just set");
             break;
         }
-        if anchor.is_none() {
-            // Every offset blocked: the original answers 3 here, which its caller reads as "no low-level path".
-            return None;
-        }
+        // Every offset blocked: the original answers 3 here, which its caller reads as "no low-level path".
+        anchor?;
     }
 
     let with_anchor = |mut points: Vec<(Fixed, Fixed)>| -> Vec<(Fixed, Fixed)> {
@@ -212,13 +212,28 @@ pub fn short_range_clear(
             }
         }
     }
-    // Nothing in the window: the route is the straight line, which is the overwhelmingly common case and costs one pass.
-    if blocked.is_empty() {
+    // **Nothing in the window, nothing in the way.** The straight line is the route, which is the overwhelmingly common
+    // case and costs one pass - but "nothing in the window" means nothing in the *tiles*, and this shortcut used to
+    // return before `bodies` was read at all. An open field with one man in it therefore answered with a line through
+    // him: measured, `group_overlap::a_mate_who_is_stopped_becomes_solid`, closest 5012 raw against the 8000 the pair's
+    // footprints need, with the re-plan that was asked for producing a "detour" whose second leg passed 0.25 tiles from
+    // his centre. A body is an obstacle to this search exactly as a wall is (D211), so the shortcut must ask both.
+    let clear_of_bodies = |a: (i64, i64), b: (i64, i64)| {
+        bodies.iter().all(|(centre, clearance)| {
+            clears_disc(a, b, (centre.0.raw(), centre.1.raw()), *clearance)
+        })
+    };
+    if blocked.is_empty() && clear_of_bodies((from.0.raw(), from.1.raw()), (to.0.raw(), to.1.raw()))
+    {
         return Some(with_anchor(vec![to]));
     }
 
     let rects = rectangles(&blocked);
-    if rects.is_empty() || rects.len() > MAX_RECTS {
+    // **An empty rectangle set is not a failure when a body stands in the window** (D211 follow-up): the window can be
+    // clear of terrain and still hold the man this search was asked to route round, and his octagon is then the whole of
+    // the graph. `rectangles` cannot return an empty set for a non-empty window, so this test only ever fired on the case
+    // above - which used to be answered before this point.
+    if rects.len() > MAX_RECTS {
         return None;
     }
     // The Minkowski sum: every obstruction grows by the body's radius, so the body may be shrunk to the point `from`/`to`.
@@ -275,6 +290,37 @@ pub fn short_range_clear(
             }
         }
     }
+    // **A body is a polygon, not a point** (D211). Each disc contributes the eight vertices of the octagon that
+    // *circumscribes* its clearance circle, so the edges between adjacent vertices are tangent to it and a route can run
+    // along them at exactly the clearance - which is what lets a detour bend **inside one tile**. This is the mechanism the
+    // D211 review described and the code did not have: `clearance.rs`'s two fixtures passed without it, because the
+    // stander's own *tile* was in the avoid set and a whole-tile rectangle existed to bend round, so nothing ever asked
+    // for a sub-tile bend.
+    //
+    // The octagon's radius is `1.083 x clearance` and its diagonal vertices are at `0.765 x clearance` - a regular
+    // octagon's circumradius is `1/cos(22.5 deg) = 1.0824` times its edge distance, and rounding *out* by a fifth of a
+    // per-cent keeps every edge at or beyond the circle in integer arithmetic. That slack is 0.0009 of the clearance (7
+    // raw units for two villagers), far below anything the simulation can see, and it is deliberate: rounding *in* would
+    // make every tangent edge cut the disc and the graph would have no legal step at all.
+    for (centre, clearance) in bodies {
+        let (cx, cy) = (centre.0.raw(), centre.1.raw());
+        let axis = clearance * 1083 / 1000;
+        let diagonal = clearance * 765 / 1000;
+        for point in [
+            (cx + axis, cy),
+            (cx - axis, cy),
+            (cx, cy + axis),
+            (cx, cy - axis),
+            (cx + diagonal, cy + diagonal),
+            (cx + diagonal, cy - diagonal),
+            (cx - diagonal, cy + diagonal),
+            (cx - diagonal, cy - diagonal),
+        ] {
+            if inside(point) {
+                nodes.insert(point);
+            }
+        }
+    }
     if nodes.len() > MAX_NODES {
         return None;
     }
@@ -288,23 +334,22 @@ pub fn short_range_clear(
     let mut visible: Vec<Vec<usize>> = vec![Vec::new(); count];
     for i in 0..count {
         for j in (i + 1)..count {
-            // **Two kinds of obstacle now** (D209): terrain, which is boxes, and bodies, which are discs. A man who has just
-            // met somebody is inside that man's clearance by definition, so an edge *leaving* the start's disc is allowed -
-            // otherwise the graph would have no legal first step at all.
-            let from_start = i == start_index || j == start_index;
+            // **Two kinds of obstacle now** (D211): terrain, which is boxes, and bodies, which are discs. A man who has just
+            // met somebody is inside that man's clearance by definition, so an edge *leaving* the start's disc is allowed
+            // iff it moves **away** from the centre - one rule, `step_out_ok`, shared with the re-seed, because a step that
+            // ends on the far side of the man he is stuck inside is a step through him.
             let clear_of_boxes = boxes
                 .iter()
                 .all(|rect| !enters_interior(nodes[i], nodes[j], *rect));
             let clear_of_bodies = bodies.iter().all(|(centre, clearance)| {
                 let at = (centre.0.raw(), centre.1.raw());
-                clears_disc(nodes[i], nodes[j], at, *clearance)
-                    // **A step out of a body must widen the gap** (D209). The first version allowed *any* edge from a node
-                    // inside the clearance circle, and a straight line from inside it through it counts as an edge - the
-                    // walker simply aimed at his goal through the man. Only a step that ends farther from that centre than
-                    // it began is a step out.
-                    || (from_start
-                        && contains_disc(nodes[i], at, *clearance)
-                        && square(nodes[j], at) > square(nodes[i], at))
+                if i == start_index {
+                    step_out_ok(nodes[i], nodes[j], at, *clearance)
+                } else if j == start_index {
+                    step_out_ok(nodes[j], nodes[i], at, *clearance)
+                } else {
+                    clears_disc(nodes[i], nodes[j], at, *clearance)
+                }
             });
             if clear_of_boxes && clear_of_bodies {
                 visible[i].push(j);
@@ -441,19 +486,16 @@ fn clears_disc(a: (i64, i64), b: (i64, i64), centre: (i64, i64), clearance: i64)
     let dot = acx * abx + acy * aby;
     if !(0..=length).contains(&dot) {
         let (bcx, bcy) = (i128::from(centre.0 - b.0), i128::from(centre.1 - b.1));
-        return acx * acx + acy * acy >= reach || bcx * bcx + bcy * bcy >= reach;
+        // **Both ends, not either** (found 2026-11-14). The foot lies outside the segment, so the distance to it is
+        // monotone along it and the nearest point is an end: the segment is clear only when **both** ends are. This read
+        // `d(a) >= reach || d(b) >= reach`, which calls a segment clear whenever its *far* end is far - so a line that
+        // begins inside a man's clearance and ends on his other side passed, which is exactly the "walk through him"
+        // this predicate exists to refuse (measured: the route's second leg 0.25 tiles from a centre it had to keep
+        // 0.4 from).
+        return acx * acx + acy * acy >= reach && bcx * bcx + bcy * bcy >= reach;
     }
     let cross = (abx * acy - aby * acx).abs();
     cross * cross >= reach * length
-}
-
-/// Squared distance, for comparing two points against one centre without a sqrt.
-fn square(point: (i64, i64), centre: (i64, i64)) -> i128 {
-    let (dx, dy) = (
-        i128::from(point.0 - centre.0),
-        i128::from(point.1 - centre.1),
-    );
-    dx * dx + dy * dy
 }
 
 /// Whether a point is inside a body's clearance circle - the licence to *leave* one, never to enter it.
@@ -463,6 +505,26 @@ fn contains_disc(point: (i64, i64), centre: (i64, i64), clearance: i64) -> bool 
         i128::from(point.1 - centre.1),
     );
     dx * dx + dy * dy < i128::from(clearance) * i128::from(clearance)
+}
+
+/// **May a step leave the point it starts on?** One rule, asked by the re-seed and by the graph's first edges, because
+/// the two ask the same question and the first version answered it two different ways - both wrong.
+///
+/// A step from **outside** a disc must stay clear of it. A step from **inside** one can never be clear (every line from an
+/// interior point passes within the clearance), so the only legal ones are those that move *away* from that centre: the
+/// walker is already overlapping - a man stopped in front of him - and leaving is the whole point, while a step that ends
+/// on his far side is a step through him. Measured both ways: "any edge off the start" let the walker aim straight at his
+/// goal through the man (3702 raw against an 8000 reach), and "any edge that widens the gap" still admitted the far side,
+/// which is the same walk in one hop.
+fn step_out_ok(from: (i64, i64), to: (i64, i64), centre: (i64, i64), clearance: i64) -> bool {
+    if !contains_disc(from, centre, clearance) {
+        return clears_disc(from, to, centre, clearance);
+    }
+    let (step_x, step_y) = (i128::from(to.0 - from.0), i128::from(to.1 - from.1));
+    let (out_x, out_y) = (i128::from(centre.0 - from.0), i128::from(centre.1 - from.1));
+    // `<= 0` and not `< 0`: a step exactly along the tangent neither approaches the centre nor enters the disc, and a man
+    // wedged in a crowd may have nothing else - refusing it would leave him no legal first step at all.
+    step_x * out_x + step_y * out_y <= 0
 }
 
 fn enters_interior(a: (i64, i64), b: (i64, i64), rect: Box4) -> bool {
