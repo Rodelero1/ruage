@@ -90,6 +90,86 @@ pub fn short_range_clear(
     // touch at a corner"). One raw unit of expansion closes every such pinch and is invisible in play.
     let radius = radius.max(1);
 
+    // **A start inside a body is re-seeded** (D210). The original does exactly this in its low-level search: when the start
+    // point falls inside an obstruction it offsets it by `2 x radius` along a fixed ring of directions, re-seeds from the
+    // first free one, and returns "no low-level path" only when every one is blocked (`FUN_007fb220`). Without it a walker
+    // whose nose is inside the man who just stopped in front of him can never plan round him - the search has no legal
+    // first step - so the old straight route survives and he walks through. The anchor becomes the route's first waypoint.
+    let mut from = from;
+    let mut anchor: Option<(Fixed, Fixed)> = None;
+    let inside = |point: (i64, i64), bodies: &[((Fixed, Fixed), i64)]| -> i64 {
+        bodies
+            .iter()
+            .filter(|(centre, clearance)| {
+                contains_disc(point, (centre.0.raw(), centre.1.raw()), *clearance)
+            })
+            .map(|(_, clearance)| *clearance)
+            .max()
+            .unwrap_or(0)
+    };
+    let trapped = inside((from.0.raw(), from.1.raw()), bodies);
+    if trapped > 0 {
+        // A fixed ring, in tenths of a raw unit: the four axes and the four diagonals (the binary's table is a sampled ring
+        // of unit vectors; these eight are the same shape and are exact in integers).
+        const RING: [(i64, i64); 8] = [
+            (100, 0),
+            (-100, 0),
+            (0, 100),
+            (0, -100),
+            (71, 71),
+            (-71, -71),
+            (-71, 71),
+            (71, -71),
+        ];
+        let out = trapped * 2;
+        for (dx, dy) in RING {
+            let candidate = (from.0.raw() + out * dx / 100, from.1.raw() + out * dy / 100);
+            if inside(candidate, bodies) > 0 {
+                continue;
+            }
+            // **And the step out must not cross him** (D210): a candidate on the far side is "free" but the straight line to
+            // it runs through the body - measured 3702 raw against an 8000 reach, i.e. the anchor made the overlap worse.
+            let here = (from.0.raw(), from.1.raw());
+            if bodies
+                .iter()
+                .any(|(centre, clearance)| {
+                    !clears_disc(here, candidate, (centre.0.raw(), centre.1.raw()), *clearance)
+                })
+            {
+                continue;
+            }
+            let tile_x = candidate.0.div_euclid(scale);
+            let tile_y = candidate.1.div_euclid(scale);
+            let (map_w, map_h) = walk.size();
+            if !(0..i64::from(map_w)).contains(&tile_x) || !(0..i64::from(map_h)).contains(&tile_y) {
+                continue;
+            }
+            if walk.blocked(
+                u16::try_from(tile_x).unwrap_or(u16::MAX),
+                u16::try_from(tile_y).unwrap_or(u16::MAX),
+            ) {
+                continue;
+            }
+            anchor = Some((
+                Fixed::from_raw(candidate.0),
+                Fixed::from_raw(candidate.1),
+            ));
+            from = anchor.expect("just set");
+            break;
+        }
+        if anchor.is_none() {
+            // Every offset blocked: the original answers 3 here, which its caller reads as "no low-level path".
+            return None;
+        }
+    }
+
+    let with_anchor = |mut points: Vec<(Fixed, Fixed)>| -> Vec<(Fixed, Fixed)> {
+        if let Some(anchor) = anchor {
+            points.insert(0, anchor);
+        }
+        points
+    };
+
     // The window: the endpoints' own tiles, a margin, clipped to the map.
     let (width, height) = walk.size();
     let tile = |value: Fixed| -> i64 { value.raw().div_euclid(scale) };
@@ -134,7 +214,7 @@ pub fn short_range_clear(
     }
     // Nothing in the window: the route is the straight line, which is the overwhelmingly common case and costs one pass.
     if blocked.is_empty() {
-        return Some(vec![to]);
+        return Some(with_anchor(vec![to]));
     }
 
     let rects = rectangles(&blocked);
@@ -173,7 +253,7 @@ pub fn short_range_clear(
         .iter()
         .all(|(centre, clearance)| clears_disc(a, b, (centre.0.raw(), centre.1.raw()), *clearance));
     if clear_of_bodies && boxes.iter().all(|rect| !enters_interior(a, b, *rect)) {
-        return Some(vec![to]);
+        return Some(with_anchor(vec![to]));
     }
 
     // Nodes: the two endpoints and the four corners of every expanded rectangle. `BTreeSet` for a deterministic order -
@@ -284,17 +364,16 @@ pub fn short_range_clear(
     // costs a tick of standing still - which also made a lead-shot prediction read zero motion for a runner
     // (`an_arrow_misses_a_runner_unless_ballistics_leads_the_shot`, 2026-11-04).
     chain.remove(0);
-    Some(
-        chain
-            .into_iter()
-            .map(|index| {
-                (
-                    Fixed::from_raw(nodes[index].0),
-                    Fixed::from_raw(nodes[index].1),
-                )
-            })
-            .collect(),
-    )
+    let points: Vec<(Fixed, Fixed)> = chain
+        .into_iter()
+        .map(|index| {
+            (
+                Fixed::from_raw(nodes[index].0),
+                Fixed::from_raw(nodes[index].1),
+            )
+        })
+        .collect();
+    Some(with_anchor(points))
 }
 
 /// Merge blocked tiles into maximal rectangles: extend a run right along its row, then down while every column of the run
