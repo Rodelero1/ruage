@@ -5236,3 +5236,45 @@ filled from the command rather than from the tick.
 Empires forum answer *Investigations into Pathfinding* (2026); the DE talk's *"units bump into others, stop and repath around.
 No pushing allowed"* with "some friendly overlap" (`docs/pathfinding-from-the-talk.md`, page 9); the owner's ruling above.
 Review: `docs/reviews/2026-11-14-d207-group-overlap.md`.
+
+### D208 - the order of work is a checked tree, and the mechanics we defer are deferred by seam
+
+**Owner, 2026-11-14**, six answers to the questions `docs/dependency-tree.md` §12 carried: *(1)* the target is **a correct
+engine**, not a playable product first; *(2)* **one civ** until the data debts close; *(3)* monks, trade, naval and relics
+are **not in v1, but the architecture must be ready for them**; *(4)* publishing is **B** - the engine and its tooling
+public, the spec and the mechanics internal; *(5)* the binary register's **row 2 now, then the oracle**, because rows 3-12
+are `needs-oracle`; *(6)* "the enemy is eliminated inside 40 minutes" is **not a requirement**.
+
+**What it settles, and what it replaces.** Every slice in this project has carried its own plan, and the plans were written
+in whatever order the last session happened to work in - so a slice would be started and then found to depend on something
+unbuilt. The owner's request was a tree of the items, their status and the order, and this is it: `docs/dependency-tree.md`,
+**64 items** in five groups - foundations, the simulation, **the debts**, the missing mechanics, the product - with the
+edges, seven phases and a gate per phase. The debts are the finding: **fourteen places where a row marked done is hollow**,
+each proved by a probe that can fail (attribute 1 is `Range` where the game means line of sight; nothing reads construction
+rate 195; `DisableTech` is parsed and never consulted; no farm reseed queue; a Horse Collar farm holds 325 against the
+game's 250).
+
+**What it builds.** One document, one check and one rule. `tools/plan_check.py` (**eight checks, ten tests**) refuses the
+ways a status table rots: an id defined twice or referred to and never defined, an open item that no phase names, a
+`DONE-ish` row whose hole is unnamed, a status outside the legend, a citation whose file does not exist or whose line is
+past the end, and a `U`/`D` id the corpora do not have. It runs in `make check`. The **seams** are the answer to the owner's
+third answer without building the mechanics: R1 a body has a domain and ground has a surface; R2 an order that is an
+ability; R3 a roll is its own seeded stream; R4 victory is a content table; R5 a price is state. Each is proved by a fixture
+*pack*, never by the mechanic, and none puts a game's word in `crates/` (D17).
+
+**What it costs.** Measured, five runs: **266 ms** over the document (32,577 bytes, 64 items, 104 citations). The first
+version took **3,304 ms** because its file index walked `target/`; pruning the walk made it 12× faster. Nothing here is in
+the tick - the tool is Python and is never linked into the engine. On first run the check found **six genuine misses in the
+document it was written for** (M4-M7 and T8/T13 unscheduled, S11's hole named by an `M` while only a `T` was accepted), and
+two defects in the tool itself were found by mutating it rather than by reading it.
+
+**What it does not settle.** A green check says the document is *consistent*, never that a status is *true*; a row that
+lies passes. That is what §11's probes and the adversarial review are for. Four stale claims were found while writing the
+tree and are recorded there rather than quietly fixed in their own files: D152 still lists gates and unit pushing as
+missing (D154/D204 shipped them), `civs.rs`'s header says the team bonus is unapplied (`research.rs:221` applies it),
+`window.rs` says there is no input or HUD, and SPEC v1.153's "the standoffs still use the ring" was superseded by D192.
+
+**Basis.** The owner's six answers, quoted above; the tree's own probes (`grep -rn '\b195\b' crates`, `DisableTech` in
+`crates/sim`, `reseed`, `crates/data/src/techs.rs:96`); the importer's name table,
+`ruage-tools/genconfig/records.py:125`. Review: `docs/reviews/2026-11-14-plan-check.md` and
+`docs/reviews/2026-11-14-dependency-tree.md`.

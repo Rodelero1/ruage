@@ -339,6 +339,6 @@ grep -c '^| [0-9]' docs/behaviour-diff.md          # rows still open outweigh ro
 | 5 | Register rows vs the oracle | **row 2, then pause for the oracle** | T8 narrows to row 2 (Phase 1); rows 3-12 resume with the oracle from Phase 4 |
 | 6 | "The enemy is eliminated inside 40 minutes" | **not a requirement** | the pacing question is closed rather than deferred; nothing tests it, and the AI's aggression is tuned later with the AI (D152) |
 
-**Still owed:** a `D`-row in `docs/decisions.md` carrying these six answers. It is not in the same commit as this table
-because another session's uncommitted work was in that file at the time; the row is the first item of the next step in
-`docs/next-step.md`, and until it lands these answers live here.
+**Where these live in the corpus:** `docs/decisions.md` **D208**, filed under *Project process* in
+`docs/decision-areas.toml` — the six answers, the fourteen debts, the eight checks and the five seams, as one decision
+rather than six loose remarks. This table stays the short form; D208 is the one a reader is sent to.

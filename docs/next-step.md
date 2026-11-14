@@ -22,3 +22,29 @@ carrying the others.
 
 **Open register rows.** (1) explicit group id on the command; (2) the three search fixes above, extracted from `d205-pause`;
 (3) D205's pause, after those.
+
+## The whole tree, and the next slice (D208, 2026-11-14)
+
+**`docs/dependency-tree.md` is the map** - 64 items with the evidence for each status, the fourteen hollow "done" rows
+(T1-T14), the five seams for the deferred mechanics, seven phases and a gate each - and `make plan-check` refuses it when
+an open item is missing from the sequence. This file stays the short plan for the next few steps; D208 is the decision.
+
+**Next: T1a + T1b, the attribute names (phase 0, the first of the live wrong numbers).** Compact, before any code:
+
+- **Where it lives now.** The pack's attribute names come from the importer, `ruage-tools/genconfig/records.py:125`:
+  `ATTRIBUTE_NAMES` maps **1 to `"range"`** and has **no 12**, so 177 commands in `config/gamedata/effects.toml` are
+  `range` and attribute 12 becomes `other:12`. In the engine, `crates/data/src/techs.rs:96` classifies `1 => Attribute::Range`
+  too. Range modifiers **are** consumed - `crates/sim/src/world/battle.rs:96` resolves `range` through `scale_fixed` - and
+  line of sight is **never** modified: `los` is read raw at `lib.rs:3155`, `seed.rs:146`, `memory.rs:250`, `report.rs:128`.
+- **What that measures today.** Town Watch and Town Patrol (effects 8, 280) add +4 to attribute 1 for classes 3 and 52, so
+  a watch tower's **attack range** goes 8 -> 12 and its sight stays 10. Greek Fire (effect 518, attribute 12, fire galleys
+  529/532/1103 at range 2.49) matches nothing.
+- **Which tests pin what.** `crates/data/tests/techs.rs` (the attribute table and the packed attack), `crates/sim/tests/modifiers.rs`,
+  `min_range.rs` (Andean Sling) and `range_boxes.rs` for what a modifier reaches; `vision.rs` for sight. **Watch them fail
+  first**: a tower after Town Watch keeps range 8 **and** sees four more tiles; a fire galley with Greek Fire outranges one
+  without.
+- **The slice is two commits in two repos** (D12): the importer's dict plus its pytest and a regenerated `config/gamedata/`
+  (not committed, D8), then the engine's classifier and a `line_of_sight` consumer in vision. Landing one alone leaves the
+  pack and the engine disagreeing about attribute 1, which is the failure this compact exists to prevent.
+- **Then, in phase 0 order:** T4 (farm base 175 from resource 36), T9 (U17's negative packing), T10 (elevation or a stated
+  zero).
