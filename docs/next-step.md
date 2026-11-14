@@ -1,4 +1,4 @@
-# OPEN - D204 is on `main`; next is the carrier half of it, then register row 2
+# OPEN - D204 is on `main`; its carrier half is parked on `d204-carriers` (measured), next is register row 2
 
 **State, 2026-11-14.** **D204** is built and green: a man who cannot get his square at a node **takes the next tile of the
 same resource column**, and no body with a gather order is displaced by anybody. `push_the_standing` still nudges a body
@@ -16,23 +16,32 @@ against 4**. Wall time 61.3 s -> 30.3 s; the like-for-like tick `7.4-8.4 us -> 6
 loaded carriers, 2 idle, 0 gatherers**. The resource case was never a shove: it was **45,359 refusals of a square**, over 18
 distinct villagers, one refused on **1,782 consecutive ticks**. Both halves are in
 `crates/sim/tests/no_pushing.rs`; the record, with the gate that was written first and withdrawn, is
-`docs/reviews/2026-11-14-d204-no-pushing.md`.
+`docs/reviews/2026-11-14-d204-no-pushing.md`. **Re-measured on `main` 2026-11-14: 161 displacements, 0 of them
+carriers** - the carriers were the pre-D204 match, and step 1 below says what that did to the slice.
 
 **The one cost, stated plainly.** The enemy is **not** eliminated by 40:00 (its town centre stands and `players=2` means
 "the enemy still stands"). That is unchanged from the D200 merge and is a pacing question, not a stall.
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
-### 1. The carrier half of D204 *(next, test-first)*
+### 1. The carrier half of D204 - **parked, measured** *(not to be repeated as written)*
 
-A body with a **gather** order is never moved now; a **loaded carrier** still is - **76 of the 310** displacements the
-acceptance run measured on `main` were men walking a load home (`Task::Return`), which is the other half of the owner's
-*"villagers pushing other villagers"*. Extend the gate in `push_the_standing` to `Task::Gather | Task::Return`, and **write
-the fixture first**: a loaded carrier shoved off his way home, watched red. The pieces to stage it: a bush and a town
-centre, a villager ordered to gather until he is in `Return` with a load, then a stalled man whose next waypoint is the
-carrier's tile.
+Attempted on branch `d204-carriers` (`46cec66`), no production change, and **the observable did not bite**. The slice was
+to extend the gate in `push_the_standing` to `Task::Gather | Task::Return`, watched red through `World::made_room()`;
+`made_room` counts the *walker's own* make-room step (`movement.rs:400` -> `step.rs:1317`, C1b), not the standing body's
+displacement, so the seven-villager fixture reads **7 on `main` and 7 with the gate extended**, and the acceptance run is
+identical both ways (`hash=c3b10f4b09e17a43 made_room=147`, 30.2 s).
 
-### 2. Register row 2 - damage *(after that)*
+**And the 76 carriers are not in this match any more.** Printing the task of every body `push_the_standing` moved:
+`46cec66` moves **161** (147 `Build`, 12 `Attack`, 2 `Idle`, **0 `Return`**); `7d00be8` (pre-D204) reproduces the recorded
+**310** (232 / **76** / 2). Every `Return` candidate the run considers - **22,253** of them - is already skipped by
+`posted || (busy && !jammed)`. Record: `docs/reviews/2026-11-14-d204-carriers.md`; fixture kept at
+`crates/sim/tests/carrier_no_pushing.rs`, `#[ignore]`d.
+
+**Reopens only with a `Return` carrier who is jammed and holds no gather place** - no fixture found one - and then
+watched by **position**, not by `made_room`.
+
+### 2. Register row 2 - damage *(next)*
 
 `0x744d60` has five call sites (`0x6bb100`, `0x741a30` x2, `0x744ff0`, `0x745060`); `docs/behaviour-diff.md` records what
 each reads (multiplier 1.0 everywhere, the wrapper sums) and that the per-entry drop stands. Open: which call site is

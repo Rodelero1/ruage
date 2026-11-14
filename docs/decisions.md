@@ -5116,3 +5116,26 @@ is none), watched red first. Until it is built, `push_the_standing` is a **known
    `a_gatherer_walks_round_a_friend_standing_in_his_path` red (*"never reached the bush in 1,500 ticks; closest 1.84"*),
    because D204 keeps the nudge for a body with no work at all. The rule is scoped to the shover being refused a square,
    and to the body moved having a gather order.
+
+#### D204 second addendum - the carrier half is parked: the counter does not measure the rule
+
+*2026-11-14, branch `d204-carriers` from `46cec66`. No production code changed; the fixture is
+`crates/sim/tests/carrier_no_pushing.rs`, `#[ignore]`d, and the record is
+`docs/reviews/2026-11-14-d204-carriers.md`.*
+
+The slice was "extend the gate to `Task::Gather | Task::Return`", watched red through `World::made_room() == 0` in a
+crowd that only gathers and carries home. **That observable does not witness this rule**: `made_room` counts the
+*walker's own* make-room step (`movement.rs:400` -> `step.rs:1317`, C1b), while `push_the_standing` moves the standing
+body and counts nothing. Measured: the seven-villager fixture reads `made_room = 7` on `main` and **7 again with the
+gate extended**, and the acceptance run is identical both ways (`hash=c3b10f4b09e17a43 made_room=147`, 30.2 s). No test
+can be watched green, so none was built.
+
+**And the displacements it was written for are gone from the match.** Printing the task of every body
+`push_the_standing` moved over the acceptance run: `46cec66` moves **161** - 147 `Build`, 12 `Attack`, 2 `Idle`,
+**0 `Return`**, 0 `Gather` - while `7d00be8` (pre-D204) reproduces the recorded **310** = 232 `Build`, **76 `Return`**,
+2 `Idle`. The 76 carriers were a property of the pre-D204 match; the one D204 left behind has none. Mechanically, all
+**22,253** `Return` candidates the run considers are already skipped by `posted || (busy && !jammed)`: a carrier walking
+home is busy, and a carrier who is jammed still holds his reserved ring place.
+
+**What would reopen it**: a `Return` carrier who is jammed **and** holds no gather place. No fixture reached one. That
+is the body a future test has to find, watched by position, not by `made_room`.
