@@ -33,7 +33,7 @@ pub use path::{
     Walk, find_path, find_path_avoiding, line_clear, line_clear_avoiding, nearest_reachable,
 };
 use ruage_fixed::Fixed;
-pub use short::short_range;
+pub use short::{short_range, short_range_clear};
 
 /// The largest number of players a match can have: eight, so four-versus-four (D20). It is a
 /// constant rather than a runtime number because stockpiles are fixed-size arrays, and it is eight
@@ -2027,13 +2027,47 @@ impl World {
     ///
     /// A body counts as standing when it did **not move on the last tick**. Not "has no route" and not "is idle": a man
     /// walking to his death this tick must not become a wall to everybody who plans after him.
+    /// **The same standers, as discs** (D209): a centre and the clearance a route must keep from it - `my radius + his`,
+    /// which is the distance the original grows its obstacle rectangles by. The search bends round these, so a detour can
+    /// pass inside one tile; the tile set below is the same men for the search that can only think in tiles.
+    fn stander_bodies(
+        &self,
+        radius: i64,
+        from_tile: (u16, u16),
+        to_tile: (u16, u16),
+    ) -> Vec<((Fixed, Fixed), i64)> {
+        let mut bodies = Vec::new();
+        for entity in &self.entities {
+            // **Never moved is standing** (D209): `last_moved == 0` is the "no step yet" sentinel, and at tick 1 every
+            // body in a fresh world carries it - the first version skipped them all and the plan answered a straight line
+            // through a man who had been standing there since the map was seeded.
+            if entity.kind != EntityKind::Unit
+                || (entity.last_moved != 0 && entity.last_moved + 1 >= self.tick)
+            {
+                continue;
+            }
+            let tile = self.tile_of(entity.position);
+            if tile == from_tile || tile == to_tile {
+                continue;
+            }
+            // **Exactly the reach, not a hair more** (D209). An eighth of a tile of margin looked harmless and was not: a
+            // gather ring's places are 0.40 apart, so a clearance of 0.45 puts every neighbour's place inside a standing
+            // worker's disc and the crowd can no longer reach its own ring - measured, 18 tests red across gather,
+            // depletion and rally. Touching is legal in the original (its clamp stops a body exactly at `r1 + r2`), so the
+            // search asks for the reach and no more.
+            let sum = radius + self.body_radius(entity.unit);
+            bodies.push((entity.position, if sum == 0 { self.scale } else { sum }));
+        }
+        bodies
+    }
+
     fn stander_tiles(&self, from_tile: (u16, u16), to_tile: (u16, u16)) -> BTreeSet<(u16, u16)> {
         let mut tiles = BTreeSet::new();
         for entity in &self.entities {
             if entity.kind != EntityKind::Unit {
                 continue;
             }
-            if entity.last_moved + 1 >= self.tick {
+            if entity.last_moved != 0 && entity.last_moved + 1 >= self.tick {
                 continue;
             }
             let tile = self.tile_of(entity.position);
@@ -2056,7 +2090,8 @@ impl World {
         let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
         let (start, goal) = (self.tile_of(from), self.tile_of(to));
         let standers = self.stander_tiles(start, goal);
-        if let Some(points) = short_range(walk, self.scale, from, to, radius, &standers) {
+        let bodies = self.stander_bodies(radius, start, goal);
+        if let Some(points) = short_range_clear(walk, self.scale, from, to, radius, &standers, &bodies) {
             return Ok(points);
         }
         // The geometry declined: the tile search answers instead, and its corners become the route.

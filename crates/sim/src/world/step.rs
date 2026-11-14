@@ -9,7 +9,7 @@ use ruage_fixed::Fixed;
 
 use crate::{
     EntityId, EntityKind, Landing, MAX_PLAYERS, Passing, Repath, Rot, Route, Shot, SimError,
-    Stance, Task, World, find_path_avoiding, integer_sqrt, reaches, short_range, step_towards,
+    Stance, Task, World, find_path_avoiding, integer_sqrt, reaches, short_range_clear, step_towards,
 };
 /// **A man to move onto his place**: who, where, and - when the place is on a gather ring - that ring's centre, so a blocked
 /// walk can slide round it (D189).
@@ -1264,8 +1264,18 @@ impl World {
                     .and_then(|route| route.points.last().copied())
                     .unwrap_or_else(|| self.tile_centre(goal));
                 let radius = self.body_radius(self.find(id).and_then(|entity| entity.unit));
+                // **The pencil** (D209): the men standing in the way are discs the route bends round, and the body that
+                // caused this repath is one of them whether or not he is moving - he is the reason the route is being
+                // planned again. A tile-only search cannot pass a man in a lane; this one can.
+                let mut discs = self.stander_bodies(radius, start, goal);
+                if let Some(other) = body
+                    && let Some(at) = self.position(other)
+                {
+                    let sum = radius + self.body_radius(self.find(other).and_then(|entity| entity.unit));
+                    discs.push((at, if sum == 0 { self.scale } else { sum }));
+                }
                 let planned = match self.walk.as_ref() {
-                    Some(walk) => short_range(walk, self.scale, from, aim, radius, &obstacles)
+                    Some(walk) => short_range_clear(walk, self.scale, from, aim, radius, &obstacles, &discs)
                         .or_else(|| {
                             find_path_avoiding(walk, start, goal, &obstacles)
                                 .map(|steps| self.corners(walk, start, steps, aim))

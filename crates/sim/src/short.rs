@@ -60,6 +60,25 @@ pub fn short_range(
     radius: i64,
     avoid: &BTreeSet<(u16, u16)>,
 ) -> Option<Vec<(Fixed, Fixed)>> {
+    short_range_clear(walk, scale, from, to, radius, avoid, &[])
+}
+
+/// **A small enough pencil** (D209): the same search, with bodies as **discs** instead of tiles.
+///
+/// The original plans on continuous rectangles - each body a box of `pos +- radius`, grown by the mover's radius - so it can
+/// thread a gap narrower than a tile. A graph built only from tile corners cannot: beside a man standing in a lane there is
+/// no free *tile* to route through, the search fails, the fallback straightens the route, and the walker ghosts through him
+/// (measured 2026-11-14: 4000 raw against an 8000 reach). `bodies` is `(centre, clearance)`: the route keeps `clearance`
+/// clear of each centre, and the graph gains eight **shoulder points** round every body so the detour can bend inside a tile.
+pub fn short_range_clear(
+    walk: &Walk,
+    scale: i64,
+    from: (Fixed, Fixed),
+    to: (Fixed, Fixed),
+    radius: i64,
+    avoid: &BTreeSet<(u16, u16)>,
+    bodies: &[((Fixed, Fixed), i64)],
+) -> Option<Vec<(Fixed, Fixed)>> {
     if from == to {
         return Some(Vec::new());
     }
@@ -150,7 +169,10 @@ pub fn short_range(
 
     // The straight line first: if nothing stands on it, the path *is* the goal (the talk's step 2).
     let (a, b) = ((from.0.raw(), from.1.raw()), (to.0.raw(), to.1.raw()));
-    if boxes.iter().all(|rect| !enters_interior(a, b, *rect)) {
+    let clear_of_bodies = bodies.iter().all(|(centre, clearance)| {
+        clears_disc(a, b, (centre.0.raw(), centre.1.raw()), *clearance)
+    });
+    if clear_of_bodies && boxes.iter().all(|rect| !enters_interior(a, b, *rect)) {
         return Some(vec![to]);
     }
 
@@ -186,10 +208,19 @@ pub fn short_range(
     let mut visible: Vec<Vec<usize>> = vec![Vec::new(); count];
     for i in 0..count {
         for j in (i + 1)..count {
-            if boxes
+            // **Two kinds of obstacle now** (D209): terrain, which is boxes, and bodies, which are discs. A man who has just
+            // met somebody is inside that man's clearance by definition, so an edge *leaving* the start's disc is allowed -
+            // otherwise the graph would have no legal first step at all.
+            let from_start = i == start_index || j == start_index;
+            let clear_of_boxes = boxes
                 .iter()
-                .all(|rect| !enters_interior(nodes[i], nodes[j], *rect))
-            {
+                .all(|rect| !enters_interior(nodes[i], nodes[j], *rect));
+            let clear_of_bodies = bodies.iter().all(|(centre, clearance)| {
+                let at = (centre.0.raw(), centre.1.raw());
+                clears_disc(nodes[i], nodes[j], at, *clearance)
+                    || (from_start && contains_disc(nodes[i], at, *clearance))
+            });
+            if clear_of_boxes && clear_of_bodies {
                 visible[i].push(j);
                 visible[j].push(i);
             }
@@ -311,6 +342,35 @@ fn rectangles(blocked: &[(u16, u16)]) -> Vec<Rect> {
 ///
 /// Liang-Barsky, in exact rational arithmetic (no floats anywhere in this crate's simulation, and no sampled segment that
 /// could step over a thin rectangle).
+/// **Does the segment stay `clearance` away from the point?** Integer only: the perpendicular distance is `cross / length`,
+/// so the test is `cross^2 >= clearance^2 * length^2` - no division, no sqrt, exact in i128.
+fn clears_disc(a: (i64, i64), b: (i64, i64), centre: (i64, i64), clearance: i64) -> bool {
+    let (abx, aby) = (i128::from(b.0 - a.0), i128::from(b.1 - a.1));
+    let (acx, acy) = (i128::from(centre.0 - a.0), i128::from(centre.1 - a.1));
+    let reach = i128::from(clearance) * i128::from(clearance);
+    let length = abx * abx + aby * aby;
+    if length == 0 {
+        return acx * acx + acy * acy >= reach;
+    }
+    // Within the perpendicular band the nearest point is the foot; outside it, one of the ends.
+    let dot = acx * abx + acy * aby;
+    if !(0..=length).contains(&dot) {
+        let (bcx, bcy) = (i128::from(centre.0 - b.0), i128::from(centre.1 - b.1));
+        return acx * acx + acy * acy >= reach || bcx * bcx + bcy * bcy >= reach;
+    }
+    let cross = (abx * acy - aby * acx).abs();
+    cross * cross >= reach * length
+}
+
+/// Whether a point is inside a body's clearance circle - the licence to *leave* one, never to enter it.
+fn contains_disc(point: (i64, i64), centre: (i64, i64), clearance: i64) -> bool {
+    let (dx, dy) = (
+        i128::from(point.0 - centre.0),
+        i128::from(point.1 - centre.1),
+    );
+    dx * dx + dy * dy < i128::from(clearance) * i128::from(clearance)
+}
+
 fn enters_interior(a: (i64, i64), b: (i64, i64), rect: Box4) -> bool {
     let (bx0, by0, bx1, by1) = rect;
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
