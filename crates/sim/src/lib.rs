@@ -2055,8 +2055,12 @@ impl World {
             // worker's disc and the crowd can no longer reach its own ring - measured, 18 tests red across gather,
             // depletion and rally. Touching is legal in the original (its clamp stops a body exactly at `r1 + r2`), so the
             // search asks for the reach and no more.
+            // **The sum, and no tile-wide fallback** (D209). A gather place is planned with radius `0`, and the first
+            // version fell back to a whole tile of clearance when the sum was zero - so every neighbour blocked a tile
+            // around himself and a worker could not reach his own ring (measured: the tree untouched at `Fixed(100000)`
+            // in `a_depleted_node_stops_yielding`). Zero clearance means "no disc", which is right for two points.
             let sum = radius + self.body_radius(entity.unit);
-            bodies.push((entity.position, if sum == 0 { self.scale } else { sum }));
+            bodies.push((entity.position, sum));
         }
         bodies
     }
@@ -2091,7 +2095,9 @@ impl World {
         let (start, goal) = (self.tile_of(from), self.tile_of(to));
         let standers = self.stander_tiles(start, goal);
         let bodies = self.stander_bodies(radius, start, goal);
-        if let Some(points) = short_range_clear(walk, self.scale, from, to, radius, &standers, &bodies) {
+        if let Some(points) =
+            short_range_clear(walk, self.scale, from, to, radius, &standers, &bodies)
+        {
             return Ok(points);
         }
         // The geometry declined: the tile search answers instead, and its corners become the route.

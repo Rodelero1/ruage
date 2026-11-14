@@ -81,22 +81,30 @@ struct Run {
     reach: i64,
     at: ((i64, i64), (i64, i64)),
     tick: u64,
+    /// Whether the **higher id** stood a drawn pause at any point (D208): a mate never does, because an exempt collider is
+    /// dropped before the tie-break runs.
+    paused: bool,
 }
 
 fn run(world: &mut World, a: EntityId, b: EntityId, ticks: u32) -> Run {
     let reach = world.reach_between(a, b).raw();
     let mut closest = i64::MAX;
+    let mut paused = false;
     for _ in 0..ticks {
         world.step().expect("step");
         if world.position(a).is_some() && world.position(b).is_some() {
             closest = closest.min(distance(world, a, b));
         }
+        paused |= world
+            .entity(b)
+            .is_some_and(|entity| entity.pause_remaining > 0);
     }
     Run {
         closest,
         reach,
         at: (tile_of(world, a), tile_of(world, b)),
         tick: world.tick(),
+        paused,
     }
 }
 
@@ -150,10 +158,12 @@ fn a_group_ordered_together_walks_over_each_other() {
 }
 
 /// **Two units ordered on different ticks are not a group** (D207, the half that keeps the rule from being pass-through
-/// for everybody). Each was given its own order, so each is solid: they must both arrive without ever overlapping. This is
-/// the behaviour `main` already has, and it is here so the exemption cannot quietly widen into D189's walk-through-all.
+/// for everybody). Each was given its own order, so neither is exempt - and since **D208** a non-exempt collision is
+/// answered by *time*, not geometry: the pair **does** pass each other, and the proof that they were not treated as mates is
+/// that the higher id has to **pause**. The old assertion here was "never overlap", which was D189's rule and is now wrong:
+/// measured, the pair came 151 raw apart, i.e. they overlapped, exactly as the original lets them.
 #[test]
-fn two_units_ordered_apart_stay_solid() {
+fn two_units_ordered_apart_are_not_a_group_and_the_loser_pauses() {
     let Some(mut world) = common::fresh() else {
         return;
     };
@@ -183,17 +193,17 @@ fn two_units_ordered_apart_stay_solid() {
     };
     assert!(
         near(a, (x + 6, y)) && near(b, (x, y)),
-        "both have to arrive even though neither yields: a at {:?}, b at {:?} after {} ticks",
+        "both have to arrive: a at {:?}, b at {:?} after {} ticks",
         run.at.0,
         run.at.1,
         run.tick
     );
+    // **They are not mates, and the pause is the evidence** (D208): a mate is dropped from the collision block entirely, so
+    // he never pauses. These two were ordered apart, so one of them must stand for the drawn 0.25-1.50 s.
     assert!(
-        run.closest >= run.reach * run.reach,
-        "MEASURED the closest these two came was {} raw, inside the {} raw reach: separate orders are not a group, so \
-         neither may walk over the other",
-        integer_sqrt(run.closest),
-        run.reach
+        run.paused,
+        "MEASURED a pair ordered apart was never paused at {} ticks: the engine treated separate orders as a group",
+        run.tick
     );
 }
 

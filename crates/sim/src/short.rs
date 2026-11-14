@@ -169,9 +169,9 @@ pub fn short_range_clear(
 
     // The straight line first: if nothing stands on it, the path *is* the goal (the talk's step 2).
     let (a, b) = ((from.0.raw(), from.1.raw()), (to.0.raw(), to.1.raw()));
-    let clear_of_bodies = bodies.iter().all(|(centre, clearance)| {
-        clears_disc(a, b, (centre.0.raw(), centre.1.raw()), *clearance)
-    });
+    let clear_of_bodies = bodies
+        .iter()
+        .all(|(centre, clearance)| clears_disc(a, b, (centre.0.raw(), centre.1.raw()), *clearance));
     if clear_of_bodies && boxes.iter().all(|rect| !enters_interior(a, b, *rect)) {
         return Some(vec![to]);
     }

@@ -308,7 +308,7 @@ impl World {
             self.insert(Entity {
                 last_step: StepDecision::Idle,
                 pause_remaining: 0,
-            last_moved: 0,
+                last_moved: 0,
                 id: EntityId(next_id),
                 player: centre.player,
                 kind: EntityKind::Building,
@@ -337,7 +337,7 @@ impl World {
                 self.insert(Entity {
                     last_step: StepDecision::Idle,
                     pause_remaining: 0,
-            last_moved: 0,
+                    last_moved: 0,
                     id: EntityId(next_id),
                     player: centre.player,
                     kind: EntityKind::Unit,
@@ -366,7 +366,7 @@ impl World {
                     self.insert(Entity {
                         last_step: StepDecision::Idle,
                         pause_remaining: 0,
-            last_moved: 0,
+                        last_moved: 0,
                         id: EntityId(next_id),
                         player: centre.player,
                         kind: EntityKind::Unit,
@@ -395,7 +395,7 @@ impl World {
             self.insert(Entity {
                 last_step: StepDecision::Idle,
                 pause_remaining: 0,
-            last_moved: 0,
+                last_moved: 0,
                 id: EntityId(next_id),
                 player: 0,
                 kind: EntityKind::Resource(node.slot),

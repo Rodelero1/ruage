@@ -229,7 +229,7 @@ impl World {
                 let inserted = self.insert(Entity {
                     last_step: StepDecision::Idle,
                     pause_remaining: 0,
-            last_moved: 0,
+                    last_moved: 0,
                     id,
                     player,
                     kind,

@@ -144,13 +144,13 @@ fn corridor() -> Option<World> {
 /// standoff the whole slice is about - and they **do not pass**: a step may not end inside the pair's reach, so the pair
 /// stops nose to nose.
 ///
-/// **Two corrections to this file's original reasoning, both from the binary read of 2026-11-14.** (1) The pair used to be
-/// ordered in one tick; under **D207** that is a *group*, and a group walks over itself - the game's own words are
-/// *"military units moving in groups can go over each other"* - so the fixture now puts a tick between the orders to keep
-/// testing the solid case. (2) This test used to justify the standoff with *"no pushing allowed"* (Klingers, page 9); that
-/// quote is about **pushing**, not about overlap - the collision block never clamps a step against another body, and the
-/// pair's real answer in the game is the pause plus a repath (`docs/reviews/2026-11-14-...` D208). Until that pause exists
-/// here, this file pins the standoff; it is expected to become an *arrival* test when D208 lands.
+/// **Restated for D208** - twice, and both times because the rule changed under it. (1) The pair used to be ordered in one
+/// tick; under **D207** that is a *group*, and a group walks over itself, so the fixture now puts a tick between the orders.
+/// (2) It used to assert that the pair **never overlaps**, justified by *"no pushing allowed"* (Klingers, page 9). That quote
+/// is about **pushing**: the binary's collision block never clamps a step against another body (the radius retraction's
+/// result is discarded at `0x8a7fe7`), and a head-on is settled by **time** - pause the loser, repath the winner, then
+/// classify the loser *past* and walk through him. So the assertion is now the D208 outcome: the pair meets, and they get
+/// past each other.
 #[test]
 fn a_head_on_pair_in_a_one_tile_corridor_never_overlaps() {
     let Some(mut world) = corridor() else {
@@ -184,17 +184,35 @@ fn a_head_on_pair_in_a_one_tile_corridor_never_overlaps() {
         world.step().expect("step");
         let gap = apart(&world, a, b);
         closest = closest.min(gap);
-        assert!(
-            gap >= reach,
-            "the pair came {gap} raw units apart on tick {tick}, inside the {reach} their footprints need"
-        );
+        // **No per-tick overlap assertion any more** (D208). It used to say the pair may never come inside the reach, which
+        // was D131's rule; the binary has no such bound - a head-on is settled by the pause and the "past" test - so the
+        // observable moved from "never inside" to "they meet, and they get past". A made-up threshold here would be a test
+        // weakened to fit the code, which is the one thing this file exists to prevent.
+        let _ = tick;
     }
-    // **They met**, which is what makes the invariant mean something: a pair that walked away from each other would
-    // satisfy it for free. They are not expected to get past - AoE2's answer to this geometry is "no pushing allowed"
-    // (Klingers, page 9) - so the second assertion is about the encounter, not the arrival.
+    // **They met**, which is what makes the test mean something: a pair that walked away from each other would satisfy it
+    // for free.
     assert!(
         closest <= reach + scale / 2,
         "the pair never came closer than {closest} raw units against a reach of {reach}: they never met"
+    );
+    // **And they got past each other** (D208). A one-tile corridor has no sideways room, so the game's answer is the pause
+    // and the "past" test - not a permanent standoff. Asserting the swap, rather than the overlap, is what keeps this a
+    // behavioural test: whoever walks through whom is the engine's business.
+    let far = |id: EntityId, goal: u16| {
+        let (x, _) = world.position(id).expect("a position");
+        (x.raw().div_euclid(scale) - i64::from(goal)).abs() <= 1
+    };
+    assert!(
+        far(a, right) && far(b, left),
+        "MEASURED the corridor pair never got past each other in 2,000 ticks: a at {:?}, b at {:?}, reach {reach} raw - \
+         the original pauses the loser and fronts the winner through the gap",
+        world
+            .position(a)
+            .map(|p| (p.0.raw() / scale, p.1.raw() / scale)),
+        world
+            .position(b)
+            .map(|p| (p.0.raw() / scale, p.1.raw() / scale))
     );
 }
 
