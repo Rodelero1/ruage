@@ -1,4 +1,4 @@
-# OPEN - D204 is built on branch `d204-no-pushing` (not merged); next is register row 2, damage
+# OPEN - D204 is on `main`; next is the carrier half of it, then register row 2
 
 **State, 2026-11-14.** **D204** is built and green: a man who cannot get his square at a node **takes the next tile of the
 same resource column**, and no body with a gather order is displaced by anybody. `push_the_standing` still nudges a body
@@ -23,7 +23,16 @@ distinct villagers, one refused on **1,782 consecutive ticks**. Both halves are 
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
-### 1. Register row 2 - damage *(next)*
+### 1. The carrier half of D204 *(next, test-first)*
+
+A body with a **gather** order is never moved now; a **loaded carrier** still is - **76 of the 310** displacements the
+acceptance run measured on `main` were men walking a load home (`Task::Return`), which is the other half of the owner's
+*"villagers pushing other villagers"*. Extend the gate in `push_the_standing` to `Task::Gather | Task::Return`, and **write
+the fixture first**: a loaded carrier shoved off his way home, watched red. The pieces to stage it: a bush and a town
+centre, a villager ordered to gather until he is in `Return` with a load, then a stalled man whose next waypoint is the
+carrier's tile.
+
+### 2. Register row 2 - damage *(after that)*
 
 `0x744d60` has five call sites (`0x6bb100`, `0x741a30` x2, `0x744ff0`, `0x745060`); `docs/behaviour-diff.md` records what
 each reads (multiplier 1.0 everywhere, the wrapper sums) and that the per-entry drop stands. Open: which call site is
