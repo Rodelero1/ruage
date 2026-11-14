@@ -100,11 +100,11 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <header><h1>Decisions</h1>
 <p class="lede">Every rule the corpus states, what it rests on, and what it has not decided yet. Generated from <code>docs/decisions.md</code> and the U-register; nothing on this page is typed by hand, so a wrong label means the classifier is wrong and can be seen to be wrong.</p>
 <ul class="coverage" id="coverage">
-<li data-k="decisions"><b>210</b> decisions</li>
+<li data-k="decisions"><b>211</b> decisions</li>
 <li data-k="amended"><b>12</b> amended</li>
 <li data-k="corrected"><b>4</b> corrected</li>
 <li data-k="superseded"><b>6</b> superseded</li>
-<li data-k="uncited"><b>41</b> no stated basis</li>
+<li data-k="uncited"><b>42</b> no stated basis</li>
 <li data-k="gaps"><b>27</b> named gaps</li>
 <li data-k="undecided"><b>12</b> undecided questions</li>
 <li data-k="dangling"><b>7</b> dangling references</li>
@@ -479,7 +479,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </div>
 </details>
 <details class="group" id="area-pathfinding-movement" data-area="Pathfinding &amp; movement" data-unfinished="0" data-undecided="2" open>
-<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">26 decisions · 2 undecided · 2 with no stated basis</span></summary>
+<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">27 decisions · 2 undecided · 3 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U5</span> Are unit speeds in tiles/second, and what is the tile size in world units? Speed 1.35 (knight) is consistent with tiles/s.</li>
 <li><span class="id">U7</span> What pathing algorithm does the game use (A, flow field, something else), and what are its cost weights?</li>
@@ -992,6 +992,20 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <button class="verdict" data-verdict="question" data-id="D205">question</button>
 <button class="verdict" data-verdict="wrong" data-id="D205">wrong</button>
 <input class="note" data-note="D205" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D206" data-id="D206" data-origins="none" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D206</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-14</span>
+<h3>speed is constant; formations are the only speed adjustment, and they are later</h3></div>
+<div class="basis"><span class="tag tag-none">no stated basis</span></div>
+<div class="verdicts" data-for="D206">
+<button class="verdict" data-verdict="agree" data-id="D206">agree</button>
+<button class="verdict" data-verdict="question" data-id="D206">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D206">wrong</button>
+<input class="note" data-note="D206" placeholder="note (saved with the verdict)">
 </div>
 </article>
 </div>
@@ -4601,7 +4615,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </ul>
 </section>
 <section id="health"><h2>How this page knows</h2>
-<p>Parsed 210 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
+<p>Parsed 211 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
 <p>A basis is recorded only from a phrase in the decision itself, and the phrase is shown beside the label. <b>No stated basis</b> is the reliable category: it needs no pattern to be right. <b>Unresolved language</b> is a reading list, not a verdict - the quoted sentence is there to be judged.</p>
 <p>The scan for broken references reads <code>docs/</code>, <code>crates/</code>, <code>config/</code>, <code>SPEC.md</code> and <code>README.md</code>. <code>tools/</code> is excluded: its fixtures name ids that are meant not to exist.</p>
 <p class="empty">Every decision heading was placed.</p>

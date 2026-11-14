@@ -5178,3 +5178,27 @@ units.
 resumes; the lower id gets through. (2) The owner's screenshot: a loaded carrier and a gatherer meeting on one tile both reach
 their destinations. (3) The acceptance match still banks food (`crates/sim/tests/acceptance_economy.rs`). Until (1)-(3) are
 green on a branch this decision is **built, not landed**, and `docs/next-step.md` carries it as step 1.
+
+### D206 - speed is constant; formations are the only speed adjustment, and they are later
+
+**What it says (owner, 2026-11-14).** *"units do not accelerate and decelerate under normal conditions. Maintenance of the
+formation is the only speed adjustment."* So the engine keeps its current model - a unit moves at its dat speed divided by
+the tick rate, from its first tick to its last, with no ramp - and the **one** place a speed ever varies is a formation
+keeping station, which is not built and is deferred (*"Formations later"*, same message).
+
+**What it withdraws.** The owner's own earlier instruction in the same sitting (*"Add acceleration"*) and the reading of
+`move_obj.cpp:3069-3145` ("Maximum forward velocity", `getMaxVelFwd`, "vel < 10.f", "cap unit max vel") as proof that the
+original ramps. It does have acceleration **plumbing** - `007ff920` integrates `acceleration`, `velocity` and position, and the
+maximum-velocity function has a pause branch - but the owner, who has played it for years, says normal movement is at a constant
+speed and only formation maintenance changes it. **The plumbing stays unexplained rather than refuted**: recorded as a register
+row, not as a fact either way. What would settle it is a recording: trace one unit's per-tick displacement across a start and a
+stop and look for the ramp.
+
+**What it protects.** SPEC §6.1's exact row survives - *per-tick displacement is `speed / tick_rate`, enforced by
+`Fixed::div_exact`* - so no tolerance needs restating, no fixture hash moves for this reason, and the arithmetic stays linear.
+That is worth saying out loud because the acceleration slice would have cost all three.
+
+**Commits us to.** When formations arrive they carry the only speed modifier: a unit behind its station moves faster to
+regain it (the owner's own memory: *"units that somehow fell behind slightly speed up to catch up"*), a unit ahead does not
+slow below its speed. That rule belongs with the formation, not with `Entity::speed`, and it may not be implemented as a
+per-tick acceleration of individual units.
