@@ -30,6 +30,10 @@ carrier slice: the carrier half is parked because it would be dead code (`docs/r
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
+**This list is the next few steps, not the whole map.** `docs/dependency-tree.md` (2026-11-14) holds every item with the
+evidence that decides its status, the 14 places where a "done" is hollow (T1-T14), the missing mechanics and the phase
+order — read it before choosing a slice that is not on this list.
+
 ### 1. The carrier half of D204 - **parked, measured** *(not to be repeated as written)*
 
 Attempted on branch `d204-carriers` (`46cec66`), no production change, and **the observable did not bite**. The slice was
