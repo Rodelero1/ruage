@@ -1795,3 +1795,46 @@ fix, nothing more.
 **Nothing actionable.** XS is DE's scenario-scripting language; our target is HD 5.7 and scenario
 scripts are out of the slice (D15). No U-number is touched, and D13, D14, D17 and D18 are unchanged —
 D14's narrow-borrow rule already anticipated the licence by citing facts rather than copying prose.
+
+## 2026-11-14 — a survey for what the tree was missing, and the filter that kept it honest
+
+Not the scheduled watch: a **question-driven** survey, asked by the owner — *"evaluate the original game and other relevant
+open-source projects if they contain other items that are missing in the dependency tree."* Three sources, in the
+`AGENTS.md` order, and the findings became `docs/dependency-tree.md` §5 (M11-M25), §4 (T15-T17) and §5b.
+
+**The original first.** Two facts about the install did the work. (1) **84 source-file names survive in
+`AoK HD.exe`** (assert and log strings) — `act_misl.cpp`, `tact_cnv.cpp`, `tact_obt.cpp`, `group.cpp`, `motion.cpp`,
+`trigger.cpp`, `rmm_*.cpp`, `command.cpp`, `player.cpp`, `visible.cpp` — which is a partial map of the engine written by
+the engine itself. (2) **104 `.per` AI files** in `resources/_common/ai/`, whose action vocabulary is the game's own list
+of what a player can be told to do: `release-escrow` (**1,531 uses**), `sell-commodity`/`buy-commodity` (31 each),
+`commodity-buying-price`, `set-escrow-percentage`, `tribute-to-player` (4), `players-stance` (16), `resign` (3),
+`idle-farm-count` (8), `town-under-attack` (1). String counts settled the rest: `waypoint` 83, `tribute` 47,
+`formation` 42, `trade` 33, `relic` 26, `wonder` 17, `resign` 18, `diplomacy` 13, `follow` 12, `guard` 9, `treaty` 9,
+`regicide` 2, `doppleganger` 2 — plus three command names that decide whole features:
+`TRIBE_COMMAND_TOWN_BELL` with `TownBell(uId=%d, activate=%d)`, and the market's sell/buy commands.
+
+**`librematch/genie` (DE 158041), read for its structure, not its code.** `docs/ENGINE_SYSTEMS.md` gives the **21 steps of
+one tick** and **19 systems**, each with the game's classes and source files — that document is the best index of an AoE2
+simulation anyone has published, and it is what turned "we might be missing something" into a list. Two of its findings
+**corrected** our own plan rather than adding to it: the random protocol is **11 WELL512a streams reseeded from a frame
+seed every tick** (ours are two PCG32 streams, never reseeded — now T15), and there is a **turn** — only the current
+player's unit AIs run fully (T16). Its `players/` README also settled the shape of diplomacy, tribute, treason, treaty,
+the market, history and the object tracker.
+
+**`Zaydme/openaok` (the 1999 game) as the third rung, and the more useful one for scope.** Its "What works" list is a
+complete feature list for the era — random maps from the original scripts, the market and trade carts/cogs and tribute,
+garrisons **and the town bell**, monks and relics, docks and transports, **the original AI scripts in an interpreter**,
+campaigns with triggers, Wonder/relic/Regicide/score victory, diplomacy and flares and cheats, and lockstep with desync
+detection. It is AoK, not DE, so it is the closest published thing to what HD 5.7 should feel like.
+
+**The filter that matters.** genie targets a **later build than ours**, so every candidate was checked against the install
+before it became an item: `pasture`, `mule cart`, `empire wars` and `solidify` are **0 hits** in `AoK HD.exe` and are
+recorded in `docs/dependency-tree.md` §5b as *not* items. `treaty`, by contrast, is real in HD
+(`mTreatyLength`, `TREATY_COUNTDOWN_MSG`, `TREATY_OVER_MSG`), and the dat carries `MONK`, `DOCK`, `TCART`, `COGXX`,
+`FTRAP`, `KINGX` and `RELIC` — so those are HD mechanics and not later-build ones. **Absence is a finding too**, and a list
+of what the game never had is what stops the next session porting a class name from the wrong build.
+
+**Two employment notes.** `genie` is AGPL/GPL-3.0 and `openaok` GPL; nothing here is copied — the systems list is a fact
+about their organisation, the ids and counts are facts about our install (D13/D14). And a citation of their files is
+written with a `genie:`/`openaok:` prefix, which `tools/plan_check.py` treats as external by design, so the tree's own
+path check never mistakes their files for ours.

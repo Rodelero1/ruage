@@ -33,6 +33,18 @@ with eight more nodes per body", and that is a different engine. Do not land the
   mate never pauses, so the pause fixture had to give each man his own tick; and the "jammed on one tile" fixture starts
   0.45 tiles apart and is inside the 0.40 reach by the second tick, where D52 governs.
 
+## Register rows still open (kept from `main`'s plan, D208 and D207)
+
+- **An explicit group id on the command.** Until it lands, "same tick" is not "same selection": a caller issuing eight
+  separate moves in one tick gets group behaviour it did not ask for, and a selection ordered across several ticks gets
+  none. When it lands, `mates` is filled from the command rather than from `ordered_now`, and the three tests in
+  `crates/sim/tests/group_overlap.rs` keep their names.
+- **The three search fixes extracted from `d205-pause`, and D205's pause on top of them** - both rows are **closed by this
+  branch**: the pause is D210, the re-plan's knowledge of bodies and the "past" exemption are D210/D210b, and the fast path
+  that answered "walk through him" is D211. What they needed first was a search that can route round a body, which is what
+  D211 built.
+- `docs/dependency-tree.md` is the map: read it (and re-run its probes) before choosing a slice that is not on this file.
+
 ## Known red on `main` and parked, not hidden
 
 Two failures were found on `e0312f9` itself (the main checkout, real pack) while landing this step, and one of them is a

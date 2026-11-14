@@ -1,13 +1,13 @@
 """What `tools/plan_check.py` must be able to refuse, and the real document it must accept.
 
 The dependency tree is a status table whose whole value is that a row can be checked (`docs/dependency-tree.md`, §1 and
-§11). A table nobody checks rots in the two ways that cost this project sessions: an id that is referred to and never
+§11). A table nobody checks rots in the two ways that have cost this project sessions: an id that is referred to and never
 defined, and an open item that is defined and never scheduled. Both are silent, so both are tests.
 
-Every case here is a **finding** the tool must produce on a small document written for it, plus one run over the real
-document, which must be clean.
+Each case writes a small tree, because the checks read the corpora they cite: a fixture that borrowed the real
+`docs/decisions.md` would pass on an id the real corpus happens to mention, which is the opposite of a test.
 
-Run: `python3 -m unittest tools.test_plan_check -v`
+Run: `python3 -m unittest discover -s tools -p 'test_plan_check.py' -v`
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from pathlib import Path
 
 import plan_check
 
-# A document that must pass every check: one item of each kind, referenced everywhere it has to be, and a real file.
+# A document that must pass every check: one item of each kind, referenced where it has to be, and a real file.
 GOOD = """# A tree
 
 ## 1. How to read it
@@ -46,20 +46,27 @@ GOOD = """# A tree
 |---|---|---|---|---|
 | T1 | a wrong number | it lands in the wrong field | `README.md:1` (U1) | nothing |
 
-## 5. Product
+## 5. Missing
+
+| id | Item | Status | Needs |
+|---|---|---|---|
+| M1 | a mechanic | **MISSING** | F1 |
+
+## 6. Product
 
 | id | Item | Status | Needs |
 |---|---|---|---|
 | P1 | save load | **MISSING** | F1 |
 
-## 6. The sequence
+## 7. The sequence
 
 ### Phase 0
 
 1. **T1** — the number.
-2. **P1** — the loader.
+2. **M1** — the mechanic.
+3. **P1** — the loader.
 
-## 7. Probes
+## 8. Probes
 
 ```sh
 grep -n x README.md
@@ -68,11 +75,7 @@ grep -n x README.md
 
 
 def findings(document: str, name: str = "doc.md") -> list[str]:
-    """Run the tool over `document` written into a scratch tree, and return its findings.
-
-    The scratch tree also carries the two corpora the checks read, because a citation of `U1` or `D1` is only a
-    reference if the register and the decision corpus have it — the real ones must not be able to make a fixture pass.
-    """
+    """Run the tool over `document` written into a scratch tree, and return its findings."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "README.md").write_text("# one line\n", encoding="utf-8")
@@ -107,7 +110,7 @@ class TheIds(unittest.TestCase):
         self.assertTrue(any("T9" in finding for finding in findings(bad)))
 
     def test_an_open_item_that_no_phase_names_is_refused(self) -> None:
-        bad = GOOD.replace("2. **P1** — the loader.", "")
+        bad = GOOD.replace("3. **P1** — the loader.", "")
         self.assertTrue(
             any("P1" in finding for finding in findings(bad)),
             "an item nobody scheduled is the miss this document exists to prevent",
@@ -127,9 +130,27 @@ class TheCitations(unittest.TestCase):
         bad = GOOD.replace("`README.md:1` (U1)", "`README.md:99` (U1)")
         self.assertTrue(any("README.md" in finding for finding in findings(bad)))
 
+    def test_a_line_after_a_description_is_still_checked(self) -> None:
+        bad = GOOD.replace("`README.md:1` (U1)", "`README.md:99 one line` (U1)")
+        self.assertTrue(
+            any("README.md" in finding for finding in findings(bad)),
+            "a citation with a trailing description is the shape this document uses most often",
+        )
+
+    def test_an_external_source_is_named_and_not_checked_here(self) -> None:
+        """A citation of another project or the install is evidence *about them*, not a path in this tree.
+
+        The prefix is the claim: `genie:`, `openaok:` and `install:` mean the file lives elsewhere, so the check skips it
+        by name rather than by luck — a bare path that does not exist is still a finding.
+        """
+        good = GOOD.replace("`README.md:1` (U1)", "`README.md:1` (U1) `genie:players/market.rs` `install:AoK HD.exe`")
+        self.assertEqual(findings(good), [])
+        bad = good.replace("`genie:players/market.rs`", "`genie-ish:players/market.rs`")
+        self.assertTrue(any("market.rs" in finding for finding in findings(bad)))
+
     def test_a_u_row_or_d_row_is_only_a_reference_if_the_corpus_has_it(self) -> None:
         bad = GOOD.replace("`README.md:1` (U1)", "`README.md:1` (U99)")
-        bad = bad.replace("## 7. Probes", "See D99.\n\n## 7. Probes")
+        bad = bad.replace("## 8. Probes", "See D99.\n\n## 8. Probes")
         found = findings(bad)
         self.assertTrue(any("U99" in finding for finding in found))
         self.assertTrue(any("D99" in finding for finding in found))

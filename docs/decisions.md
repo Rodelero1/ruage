@@ -4991,6 +4991,60 @@ goal explicitly keeps.
 back in this repository by the time a stranger is expected to build; and the target recorded here so a later session does not
 re-open "which option did we pick".
 
+### D209 - the step's diff goes through the AI reviewer, and its findings are checked like anyone else's
+
+**What it says.** `make ai-review` runs `ocr review` (open-code-review, Alibaba, Apache-2.0) over the step's diff and
+writes `build/ocr-review.json`. It is an **input** to the adversarial review, not a replacement for it: it reads the diff
+and the files around it and answers in findings, it cannot run a probe, and it has no access to the game, the saves or the
+install. A finding is therefore a hypothesis until one of us checks it, and the note says which findings were accepted and
+which were refused, with the reason.
+
+**Why.** The owner asked for it by name on 2026-11-14. On its first real run - commit `06772fe`, 33 lines of code - it
+found seven things, and **three were defects worth catching**: a new `is_mate` function inserted *between* a `#[must_use]`
+and the doc comment that belonged to `reach_between`, so both attached to the wrong function; `i64::isqrt` re-implemented
+by hand in a crate on edition 2024, which has it; and a `.max(0)` that neither guards nor documents the overflow it looks
+like it guards. Two more were tests asserting behaviour that is not implemented yet.
+
+**The one that matters most, and that I checked.** deepseek-v4.1-flash found that `stamp_group` builds a unit's mates from
+*every* id ordered to move in the tick, with no owner test - and a route's mates are exactly what a body stops being solid
+to (`lib.rs`: "avoids the mover's moving selection-mates and its collision classifier drops them entirely"). Two players'
+orders landing in one tick would therefore make each other's units walk through one another. Verified in the source at
+`06772fe` and **still unfixed at `ed94756`**, which is the state of `main` as this is written. That finding alone is worth
+the whole exercise.
+
+**The cost, measured.** On the same 33-line commit, four configurations:
+
+| settings | model | outcome | tokens | time |
+|---|---|---|---|---|
+| tool defaults: max effort, 8 workers, no ceiling | kimi-k2.7-code | complete, 10 findings | 1,438,799 | 15m43s |
+| `--effort low --concurrency 2 --max-tokens-budget 400000` | kimi-k2.7-code | complete, 7 findings | 409,607 | 5m30s |
+| the same, `--max-tokens-budget 700000` | **deepseek-v4.1-flash** | **partial**, 11 findings, 2 files cut | 862,827 | 5m6s |
+| the same, `--max-tokens-budget 1200000` | **deepseek-v4.1-flash** | **partial**, 11 findings, 3 files cut | 1,355,935 | 4m45s |
+| `--max-tools 50 --max-tokens-budget 700000` | **deepseek-v4.1-flash** | **complete**, 10 findings, 8 of 8 groups | 763,785 | 5m17s |
+
+The owner chose **deepseek-v4.1-flash** on 2026-11-14. It is the more thorough reviewer of the two - it found the missing
+owner test in `stamp_group`, a wasteful clone on the repath path, and a doc comment citing a review file that does not
+exist, none of which kimi-k2.7-code reported - and it costs about **1.86x** a complete kimi pass (763,785 against
+409,607).
+
+**Which knob decides whether a review finishes, measured.** Raising the *token ceiling* did not: 400k, 700k and 1.2M ended
+`partial` at 551,573 / 862,827 / 1,355,935 tokens, two or three of eight groups cut for budget each time. Bounding the
+*rounds* did: `--max-tools 50` at a 700k ceiling finished **complete, 8 of 8 groups, 10 findings, 763,785 tokens, 5m17s**.
+The groups were never too expensive; unbounded exploration (the default is 100 tool rounds) inflated them until the ceiling
+cut whichever had not started. So the target pins `OCR_MAX_TOOLS=50`, keeps the ceiling as a runaway stop, and still prints
+every cut file with its classification - a `partial` run must never read as a whole-diff review.
+
+**Where it stands.** Installed under `/opt/data/tools/npm/` from npm (`@alibaba-group/ocr-linux-x64`, so the package's
+postinstall download never runs), `ocr` symlinked onto `PATH` at `/opt/data/home/.local/bin/ocr`, configured in
+`~/.opencodereview/config.json` (mode 600) against the opencode-go endpoint with **deepseek-v4.1-flash**. That endpoint needs an
+`x-opencode-session` header, which is why the provider carries `extra_headers`; a plain OpenAI provider config answers
+`400 MissingSessionID`. It is **not** in the pre-commit hook: a review costs minutes and tokens, and a hook that slow
+teaches `git commit --no-verify`.
+
+**Commits us to.** A step's note names the AI-review run it folded in - the commit, the settings, the tokens, and which
+findings it accepted or refused - and an accepted finding becomes a test or a measurement, never just a comment.
+
+
 ### D203 - a rule asked for twice goes into the tree, and a question the owner must answer arrives after the evidence
 
 **What it says.** Three standing instructions the owner gave on 2026-11-13, written down because a rule that lives in a
@@ -5267,6 +5321,59 @@ Empires forum answer *Investigations into Pathfinding* (2026); the DE talk's *"u
 No pushing allowed"* with "some friendly overlap" (`docs/pathfinding-from-the-talk.md`, page 9); the owner's ruling above.
 Review: `docs/reviews/2026-11-14-d207-group-overlap.md`.
 
+### D208 - the order of work is a checked tree, and the mechanics we defer are deferred by seam
+
+**Owner, 2026-11-14**, six answers to the questions `docs/dependency-tree.md` §12 carried: *(1)* the target is **a correct
+engine**, not a playable product first; *(2)* **one civ** until the data debts close; *(3)* monks, trade, naval and relics
+are **not in v1, but the architecture must be ready for them**; *(4)* publishing is **B** - the engine and its tooling
+public, the spec and the mechanics internal; *(5)* the binary register's **row 2 now, then the oracle**, because rows 3-12
+are `needs-oracle`; *(6)* "the enemy is eliminated inside 40 minutes" is **not a requirement**.
+
+**What it settles, and what it replaces.** Every slice in this project has carried its own plan, and the plans were written
+in whatever order the last session happened to work in - so a slice would be started and then found to depend on something
+unbuilt. The owner's request was a tree of the items, their status and the order, and this is it: `docs/dependency-tree.md`,
+**64 items** in five groups - foundations, the simulation, **the debts**, the missing mechanics, the product - with the
+edges, seven phases and a gate per phase. The debts are the finding: **fourteen places where a row marked done is hollow**,
+each proved by a probe that can fail (attribute 1 is `Range` where the game means line of sight; nothing reads construction
+rate 195; `DisableTech` is parsed and never consulted; no farm reseed queue; a Horse Collar farm holds 325 against the
+game's 250).
+
+**What it builds.** One document, one check and one rule. `tools/plan_check.py` (**eight checks, ten tests**) refuses the
+ways a status table rots: an id defined twice or referred to and never defined, an open item that no phase names, a
+`DONE-ish` row whose hole is unnamed, a status outside the legend, a citation whose file does not exist or whose line is
+past the end, and a `U`/`D` id the corpora do not have. It runs in `make check`. The **seams** are the answer to the owner's
+third answer without building the mechanics: R1 a body has a domain and ground has a surface; R2 an order that is an
+ability; R3 a roll is its own seeded stream; R4 victory is a content table; R5 a price is state. Each is proved by a fixture
+*pack*, never by the mechanic, and none puts a game's word in `crates/` (D17).
+
+**What it costs.** Measured, five runs: **266 ms** over the document (32,577 bytes, 64 items, 104 citations). The first
+version took **3,304 ms** because its file index walked `target/`; pruning the walk made it 12× faster. Nothing here is in
+the tick - the tool is Python and is never linked into the engine. On first run the check found **six genuine misses in the
+document it was written for** (M4-M7 and T8/T13 unscheduled, S11's hole named by an `M` while only a `T` was accepted), and
+two defects in the tool itself were found by mutating it rather than by reading it.
+
+**What it does not settle.** A green check says the document is *consistent*, never that a status is *true*; a row that
+lies passes. That is what §11's probes and the adversarial review are for. Four stale claims were found while writing the
+tree and are recorded there rather than quietly fixed in their own files: D152 still lists gates and unit pushing as
+missing (D154/D204 shipped them), `civs.rs`'s header says the team bonus is unapplied (`research.rs:221` applies it),
+`window.rs` says there is no input or HUD, and SPEC v1.153's "the standoffs still use the ring" was superseded by D192.
+
+**Amended 2026-11-14, after a survey of the original and its neighbours.** The owner asked whether the original game and
+the published engines hold items the tree was missing, and they do: the install's own strings and its 104 `.per` AI files,
+plus `librematch/genie`'s systems list and `Zaydme/openaok`'s feature list, added **M11-M25** (waypoint queues, follow and
+guard, the town bell, facing and the animation clock, player diplomacy, tribute, treaty, the market's prices, trade carts
+and cogs, victory modes beyond conquest, scenario triggers, random map generation, the `.per` interpreter, the network
+layer, and chat/taunts/flares/cheats) and **T15-T17**. Two of those correct the tree rather than extend it: the random
+protocol is **eleven streams reseeded from a frame seed every tick** (not "a roll is its own stream", which was R3's
+weaker form) and there is a **turn** (only one player's unit AIs run fully), so R3 was rewritten and T15/T16 sit in
+Phase 3. Six candidates were **refused as later-build features** — pastures, the mule cart, Empire Wars, `Wait_Solidify`,
+genie's passive-ability task kinds and `fmath` — because their names are zero hits in `AoK HD.exe` or they are DE
+content, and they are recorded in `docs/dependency-tree.md` §5b so the next session does not port them.
+
+**Basis.** The owner's six answers, quoted above; the tree's own probes (`grep -rn '\b195\b' crates`, `DisableTech` in
+`crates/sim`, `reseed`, `crates/data/src/techs.rs:96`); the importer's name table,
+`ruage-tools/genconfig/records.py:125`. Review: `docs/reviews/2026-11-14-plan-check.md` and
+`docs/reviews/2026-11-14-dependency-tree.md`.
 ### D210 - a collision is settled by time and by the clock, never by geometry: the step is not clamped against a body
 
 **What it says (read from `AoK HD.exe`, 2026-11-14).** Two things, and both replace rules this engine had invented:
