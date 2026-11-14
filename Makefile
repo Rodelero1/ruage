@@ -112,11 +112,16 @@ OCR ?= ocr
 OCR_ARGS ?= --commit HEAD
 OCR_EFFORT ?= low
 OCR_CONCURRENCY ?= 2
-# A cost stop, not a completion target. Measured on the same 33-line commit: kimi-k2.7-code finished inside 410k;
-# deepseek-v4.1-flash spent 551,573 at a 400k ceiling, 862,827 at 700k and 1,355,935 at 1.2M, and **never finished** - each
-# ceiling was overrun and two or three of eight groups were cut with `classification: budget`. Raising it bought tokens,
-# not completeness, so it is pinned where a run is affordable and the parts that were cut are printed below.
+# Two knobs, and only one of them was ever the cause of a `partial` run. Measured on the same 33-line commit:
+#   * raising the token ceiling at the default 100 tool rounds bought tokens and no completeness - 551,573 (400k),
+#     862,827 (700k), 1,355,935 (1.2M), every one `partial` with two or three of eight groups cut for budget;
+#   * bounding the rounds instead - `--max-tools 50` at a 700k ceiling - finished: **complete, 8 of 8 groups, 10 findings,
+#     763,785 tokens, 5m17s**. The groups were not too expensive; they were exploring without a bound, and the ceiling
+#     then cut whichever ones had not started.
+# So the ceiling is a runaway stop (a normal complete run of this diff is ~764k) and the round bound is what makes a
+# review finish. The cut list is still printed, because a partial run must never read as a whole-diff review.
 OCR_BUDGET ?= 700000
+OCR_MAX_TOOLS ?= 50
 # It excludes Markdown by extension (as `unsupported_ext`) but *not* `.toml` or `.html`: a docs-only commit of mine cost
 # **236,189 tokens and 3m21s** reviewing a TOML and the 333 KB generated `docs/site/index.html`, and returned nothing.
 OCR_EXCLUDE ?= docs/**,build/**,target/**,config/gamedata/**,**/*.html
@@ -125,7 +130,7 @@ ai-review:
 	@command -v $(OCR) >/dev/null || { echo "ai-review: no '$(OCR)' on PATH - npm i -g @alibaba-group/open-code-review @alibaba-group/ocr-linux-x64, then see D209"; exit 1; }
 	@mkdir -p build
 	$(OCR) review $(OCR_ARGS) --effort $(OCR_EFFORT) --concurrency $(OCR_CONCURRENCY) \
-		--max-tokens-budget $(OCR_BUDGET) --exclude '$(OCR_EXCLUDE)' --audience agent --format json -o build/ocr-review.json
+		--max-tokens-budget $(OCR_BUDGET) --max-tools $(OCR_MAX_TOOLS) --exclude '$(OCR_EXCLUDE)' --audience agent --format json -o build/ocr-review.json
 	@python3 -c "import json;d=json.load(open('build/ocr-review.json'));s=d.get('summary') or {};print('ai-review:',d.get('status','?'),'-',s.get('files_reviewed','?'),'files,',s.get('comments','?'),'comments,',s.get('total_tokens','?'),'tokens,',s.get('elapsed','?'));f=[(i.get('path'),i.get('classification')) for i in (d.get('manifest',{}).get('coverage',{}).get('failed') or [])];print('ai-review: CUT -',', '.join(p+' ('+str(c)+')' for p,c in f),'- those files were not read') if f else None" || echo "ai-review: no run manifest written (preview, or the review did not start)"
 
 # The gate's own tests: the file the gate is written in is the file most likely to rot.

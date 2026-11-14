@@ -35,6 +35,7 @@ of changed code:
 | 3 | the same, **deepseek-v4.1-flash** (the owner's choice) | 8, 1 cut | 10 | **551,573**, budget exceeded | **5m49s**, 33 tool calls |
 | 4 | the same at `--max-tokens-budget 700000` | 8, 2 cut | 11 | **862,827**, budget exceeded | **5m6s**, 47 tool calls |
 | 5 | the same at `--max-tokens-budget 1200000` | 8, 3 cut | 11 | **1,355,935**, budget exceeded | **4m45s** |
+| 6 | **`--max-tools 50` at 700k** | **8 of 8** | 10 | **763,785** | **5m17s**, 40 tool calls, **complete** |
 
 The first row is the number that matters for how this is used: **1.44M tokens and a quarter of an hour for 33 lines**,
 because the agent reads whole files (the crate's `lib.rs` is 234 KB) and iterated 75 tool calls. On 2 CPUs with 8
@@ -46,13 +47,17 @@ Install cost: two npm packages, no compilation, `ocr version` in 0.2 s; `ocr llm
 reasoning-model reply.
 
 **What the model change cost, and what it bought.** deepseek-v4.1-flash is the better reviewer: on the same commit it
-found the missing owner test in `stamp_group` (`step.rs:103`) and a wasteful clone on the repath path (`step.rs:1400`), both
-of which kimi-k2.7-code missed. I checked the first one against the source rather than relaying it - a route's `mates` are
-what a body stops being solid to, so two players' orders in one tick would let their units walk through each other - and it
-is **still unfixed on `main`** at `ed94756`. What it did not do is finish: at 400k, 700k and 1.2M tokens the run ended
-`partial`, overrunning each ceiling and cutting two or three of eight groups for budget. **Raising the ceiling bought
-tokens, not completeness**, which is why the make target now pins 700,000 as a cost stop and prints every cut file with its
-classification instead of pretending a partial run was a whole one.
+found the missing owner test in `stamp_group` (`step.rs:103`), a wasteful clone on the repath path (`step.rs:1400`), and a
+doc comment citing a review file that does not exist, none of which kimi-k2.7-code reported. I checked the first against
+the source rather than relaying it - a route's `mates` are what a body stops being solid to, so two players' orders in one
+tick would let their units walk through each other - and it is **still unfixed on `main`**.
+
+**The knob that decides whether a review finishes is the tool-round bound, not the token ceiling.** Rows 3-5 raised the
+ceiling and stayed `partial` every time; row 6 bounded the rounds at 50 and finished, 8 of 8 groups, at 763,785 tokens.
+The groups were not too expensive - unbounded exploration (default 100 rounds) inflated them until the ceiling cut whichever
+had not started. That is why `OCR_MAX_TOOLS=50` is now pinned: a complete deepseek pass costs ~764k against kimi's ~410k,
+and the ceiling is only a runaway stop. The cut list stays printed, because a `partial` run must never read as a whole-diff
+review.
 
 ## Stability - what was attacked
 
@@ -102,7 +107,11 @@ classification instead of pretending a partial run was a whole one.
    (`unsupported_ext`) is what showed it.
 4. **I set `--max-tools 25`.** The tool refused it (`below minimum 50, using 50`) and said so on stderr; the run I quote
    above is therefore not the run I asked for. Reported rather than silently retried.
-5. **I paid three times to learn one thing.** After the 400k run came back `partial`, I raised the ceiling to 700k and then
+5. **I published a conclusion I had not tested to the end.** After three `partial` runs I wrote that this model "never
+   finishes this diff" and made the ceiling a cost stop - without trying `--max-tools`, which is the setting that decides
+   it. One run at 50 bounded rounds came back complete on the first attempt. The corrected claim is in D209 and above; the
+   lesson is that "I raised the ceiling and it still failed" is evidence about one knob, not about the tool.
+6. **I paid three times to learn one thing.** After the 400k run came back `partial`, I raised the ceiling to 700k and then
    to 1.2M expecting a complete run, and spent **2,770,335 tokens** across the three to discover that this model expands to
    fill whatever ceiling it is given on this diff. The right move was one run to read the mechanism (`classification:
    budget`, checked before each round) and then a decision, not two more purchases. The finding is now in the Makefile

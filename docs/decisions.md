@@ -5020,14 +5020,19 @@ the whole exercise.
 | `--effort low --concurrency 2 --max-tokens-budget 400000` | kimi-k2.7-code | complete, 7 findings | 409,607 | 5m30s |
 | the same, `--max-tokens-budget 700000` | **deepseek-v4.1-flash** | **partial**, 11 findings, 2 files cut | 862,827 | 5m6s |
 | the same, `--max-tokens-budget 1200000` | **deepseek-v4.1-flash** | **partial**, 11 findings, 3 files cut | 1,355,935 | 4m45s |
+| `--max-tools 50 --max-tokens-budget 700000` | **deepseek-v4.1-flash** | **complete**, 10 findings, 8 of 8 groups | 763,785 | 5m17s |
 
 The owner chose **deepseek-v4.1-flash** on 2026-11-14. It is the more thorough reviewer of the two - it found the missing
-owner test in `stamp_group` and a wasteful clone on the repath path that kimi-k2.7-code did not - and it is the more
-expensive one, and **raising the ceiling did not make it finish**: 400k, 700k and 1.2M all ended `partial`, with two or
-three of eight groups cut for budget, at 551,573 / 862,827 / 1,355,935 tokens. So the ceiling is a **cost stop, not a
-completion target** (700,000), and the make target prints every cut file with its classification - a `partial` review that
-silently skipped a file is the failure worth guarding against, and this model makes `partial` the normal outcome on a diff
-this size. If a complete pass matters more than the model, kimi-k2.7-code finished the same diff in 409,607 tokens.
+owner test in `stamp_group`, a wasteful clone on the repath path, and a doc comment citing a review file that does not
+exist, none of which kimi-k2.7-code reported - and it costs about **1.86x** a complete kimi pass (763,785 against
+409,607).
+
+**Which knob decides whether a review finishes, measured.** Raising the *token ceiling* did not: 400k, 700k and 1.2M ended
+`partial` at 551,573 / 862,827 / 1,355,935 tokens, two or three of eight groups cut for budget each time. Bounding the
+*rounds* did: `--max-tools 50` at a 700k ceiling finished **complete, 8 of 8 groups, 10 findings, 763,785 tokens, 5m17s**.
+The groups were never too expensive; unbounded exploration (the default is 100 tool rounds) inflated them until the ceiling
+cut whichever had not started. So the target pins `OCR_MAX_TOOLS=50`, keeps the ceiling as a runaway stop, and still prints
+every cut file with its classification - a `partial` run must never read as a whole-diff review.
 
 **Where it stands.** Installed under `/opt/data/tools/npm/` from npm (`@alibaba-group/ocr-linux-x64`, so the package's
 postinstall download never runs), `ocr` symlinked onto `PATH` at `/opt/data/home/.local/bin/ocr`, configured in
