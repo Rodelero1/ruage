@@ -22,6 +22,12 @@ carriers** - the carriers were the pre-D204 match, and step 1 below says what th
 **The one cost, stated plainly.** The enemy is **not** eliminated by 40:00 (its town centre stands and `players=2` means
 "the enemy still stands"). That is unchanged from the D200 merge and is a pacing question, not a stall.
 
+**Where the pushing actually is now, measured on this tree** (a probe over the acceptance run printing the task of every
+body `push_the_standing` moved): **161 displacements - 147 `Build`, 12 `Attack`, 2 `Idle`, 0 `Gather`, 0 `Return`**. So no
+carrier and no gatherer is being shoved any more; what is left is **a builder shoved off his site** and **a soldier shoved
+in a fight**, and both of them have nowhere else to go by construction. That is a design question for the owner, not the
+carrier slice: the carrier half is parked because it would be dead code (`docs/reviews/2026-11-14-d204-carriers.md`).
+
 ## The plan, in order. Do not start a step while the previous one is red.
 
 ### 1. The carrier half of D204 - **parked, measured** *(not to be repeated as written)*
