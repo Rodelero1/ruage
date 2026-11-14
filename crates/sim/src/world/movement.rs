@@ -329,10 +329,21 @@ impl World {
             let tile = self.tile_of_raw(here);
             let near_goal = (tile.0 - i64::from(goal_tile.0)).abs() <= 1
                 && (tile.1 - i64::from(goal_tile.1)).abs() <= 1;
-            let known = self
-                .paths
-                .get(&id)
-                .is_some_and(|route| route.avoiding.contains(&other));
+            // **The exemption expires when that body moves** (D205, the original's `past` test): a route that planned
+            // round a man who has since walked somewhere else no longer knows about him, so the collision counts again and
+            // the winner asks for a fresh route. A permanent pass was measured to freeze a pair for 2,500 ticks.
+            let known = self.paths.get(&id).is_some_and(|route| {
+                route.avoiding.get(&other).is_some_and(|planned_at| {
+                    self.find(other).is_some_and(|body| {
+                        let (gx, gy) = (
+                            body.position.0.raw() - planned_at.0.raw(),
+                            body.position.1.raw() - planned_at.1.raw(),
+                        );
+                        // Still on the ground the plan was made around: within a tile of where it stood.
+                        gx * gx + gy * gy <= self.scale * self.scale
+                    })
+                })
+            });
             if !near_goal && !known && pass.repaths.len() < MAX_REPATHS_PER_TICK {
                 pass.repaths.push(Repath {
                     unit: id,
@@ -365,11 +376,17 @@ impl World {
                 // to tick 2,500 and the acceptance bank flat from 400 s to 2,400 s). A **tangential** step moves along the
                 // circle the bound protects rather than across it, so it costs no overlap: the older unit slides past the
                 // man it has just paused instead of standing until the pause ends and blocks him again.
-                if let Some(aside) = self.tangential_step(
-                    pass, id, radius, here, (dx, dy), other_at, reach, goal_tile, entering,
-                ) {
-                    return (aside.0, aside.1, StepDecision::Slide);
-                }
+        // **A body on my own tile is the one collision a tile plan cannot express**: the search would have to leave the tile
+        // it starts in, so the re-plan drops such a blocker (`bodies` filters the start tile) and this man would stand for
+        // ever - measured, 2,500 ticks at exactly the reach. The answer is a step *along* the reach, which keeps the pair
+        // apart while the older unit gets past. Anywhere else the re-plan is the answer (D205).
+        if self.tile_of_raw(other_at) == self.tile_of_raw(here)
+            && let Some(aside) = self.tangential_step(
+                pass, id, radius, here, (dx, dy), other_at, reach, goal_tile, entering,
+            )
+        {
+            return (aside.0, aside.1, StepDecision::Slide);
+        }
                 // **A body at rest inside the reach leaves no step at all**, and this body has right of way (rule 4), so
                 // it has nothing left to try: it stands where it is and the other man's pause is what will move the pair.
                 return (stop.0, stop.1, StepDecision::WaitBlocked);
@@ -381,25 +398,31 @@ impl World {
             // something that will never yield.
             return (dx, dy, StepDecision::TakeAtRest);
         }
-        // 7. **A blocker that is moving is not an answer either** (D205, measured 2026-11-14): a queue of loaded carriers
-        //    at one drop site all stand - eight of them at 48,000 ticks holding ten each, the wood bank flat - because each
-        //    waits for the man in front and the re-plan cannot see a body. The tangent that rule 6 uses for a body at rest
-        //    works here too: it moves along the reach instead of into it. Standing still is the last resort, not the answer.
-        if let Some(aside) = self.tangential_step(
-            pass, id, radius, here, (dx, dy), other_at, reach, goal_tile, entering,
-        ) {
+        // 7. Anything else: stand still for this tick. The blocker is moving, so the pair has an answer next tick - and if
+        //    it is this body that lost the tie-break, rule 4 has already paused it. **No tangent here**: the answer to a body
+        //    in the way is the re-plan (D205), which now keeps the pair's reach clear of it (`short_range_around`); a lateral
+        //    step round a moving man was measured to break fifteen stance, gather and rally rules.
+        // **A body on my own tile is the one collision a tile plan cannot express**: the search would have to leave the tile
+        // it starts in, so the re-plan drops such a blocker (`bodies` filters the start tile) and this man would stand for
+        // ever - measured, 2,500 ticks at exactly the reach. The answer is a step *along* the reach, which keeps the pair
+        // apart while the older unit gets past. Anywhere else the re-plan is the answer (D205).
+        if self.tile_of_raw(other_at) == self.tile_of_raw(here)
+            && let Some(aside) = self.tangential_step(
+                pass, id, radius, here, (dx, dy), other_at, reach, goal_tile, entering,
+            )
+        {
             return (aside.0, aside.1, StepDecision::Slide);
         }
         (stop.0, stop.1, StepDecision::WaitBlocked)
     }
 
 
-    /// **A step along the circle the reach protects, when the straight one is bounded to zero** (D205).
+    /// **A step along the circle the reach protects, for a body on the mover's own tile** (D205).
     ///
-    /// The pair meets at exactly the reach, where any step at the other body bounds to nothing, and the re-plan cannot help:
-    /// the search plans round *tiles*, so in one tile it cannot see the body at all (measured 2026-11-14: the winner
-    /// `WaitBlocked` from tick 70 to 2,500, the acceptance bank flat). A tangential step moves *along* the circle rather than
-    /// across it, so it costs no overlap. `None` when neither tangent is walkable, or lands inside a third body.
+    /// That one collision is the only one a tile plan cannot express: the search would have to leave the tile it starts in,
+    /// and the re-plan therefore filters the body out (`bodies` drops a blocker standing on the start tile) - measured
+    /// 2026-11-14, the winner `WaitBlocked` for 2,500 ticks at exactly the reach with `bodies=[]`. A tangential step moves
+    /// *along* the circle instead of across it, so it costs no overlap. Every other collision is the re-plan's job.
     #[allow(clippy::too_many_arguments)]
     fn tangential_step(
         &self,

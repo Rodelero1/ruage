@@ -60,6 +60,24 @@ pub fn short_range(
     radius: i64,
     avoid: &BTreeSet<(u16, u16)>,
 ) -> Option<Vec<(Fixed, Fixed)>> {
+    short_range_around(walk, scale, from, to, radius, avoid, &[])
+}
+
+/// **The plan with bodies in it** (D205). A re-plan's avoided units are not ground: each is a body of its own radius
+/// standing somewhere in a tile, and the route has to clear the **pair's** reach (`mine + theirs`), not merely the mover's
+/// own radius from the tile. Expanding a body's tile by the mover's radius alone - which is what the terrain rectangle does,
+/// and what this function did to bodies - leaves room for a waypoint 0.2 of a tile from a 0.2 body, and `bound_to_reach`
+/// then refuses it: measured 2026-11-14, the detour's first waypoint landed **400 raw inside** the pair's reach and the
+/// unit stood there for the rest of the match. `bodies` is `(tile, pair reach)` pairs.
+pub fn short_range_around(
+    walk: &Walk,
+    scale: i64,
+    from: (Fixed, Fixed),
+    to: (Fixed, Fixed),
+    radius: i64,
+    avoid: &BTreeSet<(u16, u16)>,
+    bodies: &[((u16, u16), i64)],
+) -> Option<Vec<(Fixed, Fixed)>> {
     if from == to {
         return Some(Vec::new());
     }
@@ -114,26 +132,44 @@ pub fn short_range(
         }
     }
     // Nothing in the window: the route is the straight line, which is the overwhelmingly common case and costs one pass.
-    if blocked.is_empty() {
+    // **A body is something in the window even when no tile is** (D205): the first version of this checked `blocked` alone,
+    // so a re-plan asked to go round a unit in open ground answered with the straight line through him.
+    if blocked.is_empty() && bodies.is_empty() {
         return Some(vec![to]);
     }
 
     let rects = rectangles(&blocked);
-    if rects.is_empty() || rects.len() > MAX_RECTS {
-        return None;
-    }
-    // The Minkowski sum: every obstruction grows by the body's radius, so the body may be shrunk to the point `from`/`to`.
-    let boxes: Vec<Box4> = rects
+    // **A body is a disc, so its tile grows by the pair's reach** (D205): `bound_to_reach` will demand `mine + theirs` of
+    // every step, so the plan has to keep that much clear or its first waypoint is refused - measured 2026-11-14, the
+    // detour's first waypoint landed 400 raw inside the reach and the unit stood there for the rest of the match.
+    let body_rects: Vec<(Rect, i64)> = bodies
         .iter()
-        .map(|rect| {
+        .map(|((x, y), reach)| {
             (
-                i64::from(rect.x0) * scale - radius,
-                i64::from(rect.y0) * scale - radius,
-                (i64::from(rect.x1) + 1) * scale + radius,
-                (i64::from(rect.y1) + 1) * scale + radius,
+                Rect {
+                    x0: *x,
+                    y0: *y,
+                    x1: *x,
+                    y1: *y,
+                },
+                (*reach).max(radius),
             )
         })
         .collect();
+    if (rects.is_empty() && body_rects.is_empty()) || rects.len() + body_rects.len() > MAX_RECTS {
+        return None;
+    }
+    // The Minkowski sum: every obstruction grows by the body's radius, so the body may be shrunk to the point `from`/`to`.
+    let grow = |rect: &Rect, by: i64| {
+        (
+            i64::from(rect.x0) * scale - by,
+            i64::from(rect.y0) * scale - by,
+            (i64::from(rect.x1) + 1) * scale + by,
+            (i64::from(rect.y1) + 1) * scale + by,
+        )
+    };
+    let mut boxes: Vec<Box4> = rects.iter().map(|rect| grow(rect, radius)).collect();
+    boxes.extend(body_rects.iter().map(|(rect, by)| grow(rect, *by)));
 
     // **Fence the window.** The talk's own lesson: "whoops, I edge-walked the whole map". An obstacle that runs out of the
     // window is not an obstacle that ends there, and a graph allowed to step over the window's border walks round the cut
@@ -182,14 +218,29 @@ pub fn short_range(
     // Visibility: an edge exists where the straight line enters no expanded rectangle's interior. Every edge lies inside
     // the window (both ends do, and the window is a rectangle), and every blocked tile in the window is covered by one of
     // these boxes, so rectangle clearance *is* tile clearance, only stricter by the body's radius.
+    // **A start already inside a body's reach must be allowed to leave it** (D205). A man who meets another is, by
+    // definition, standing inside the pair's reach; expanding that body's tile therefore puts the plan's own start inside an
+    // obstacle and every edge from it is refused - measured 2026-11-14, `short_range_around` returned `None` and the paired
+    // fallback straightened the route back through the body. Such a box is ignored for the *first* edge only: a step out of
+    // the zone is legal, and the collision bound still refuses any step that ends inside it.
+    let escape: Vec<Box4> = boxes
+        .iter()
+        .copied()
+        .filter(|rect| {
+            nodes[start_index].0 >= rect.0
+                && nodes[start_index].0 <= rect.2
+                && nodes[start_index].1 >= rect.1
+                && nodes[start_index].1 <= rect.3
+        })
+        .collect();
     let count = nodes.len();
     let mut visible: Vec<Vec<usize>> = vec![Vec::new(); count];
     for i in 0..count {
         for j in (i + 1)..count {
-            if boxes
-                .iter()
-                .all(|rect| !enters_interior(nodes[i], nodes[j], *rect))
-            {
+            let from_start = i == start_index || j == start_index;
+            if boxes.iter().all(|rect| {
+                !enters_interior(nodes[i], nodes[j], *rect) || (from_start && escape.contains(rect))
+            }) {
                 visible[i].push(j);
                 visible[j].push(i);
             }

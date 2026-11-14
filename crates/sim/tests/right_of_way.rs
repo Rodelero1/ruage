@@ -238,6 +238,7 @@ fn cross(
     goal_high: (i64, i64),
 ) -> Crossing {
     let mut world = world_of(pack, OPEN);
+    world.trace_steps();
     let scale = world.scale();
     let lower = spawn(pack, &mut world, 9_000, lower_at);
     let higher = spawn(pack, &mut world, 9_001, higher_at);
@@ -279,6 +280,13 @@ fn cross(
             arrived = true;
             break;
         }
+    }
+    if !arrived {
+        println!("DEBUG lower  task={:?} step={:?} at={:?} route={:?}",
+            world.entity(lower).map(|e| e.task), world.last_step(lower), at(&world, lower), world.route_points(lower));
+        println!("DEBUG higher task={:?} step={:?} at={:?} route={:?}",
+            world.entity(higher).map(|e| e.task), world.last_step(higher), at(&world, higher), world.route_points(higher));
+        println!("DEBUG repaths={} made_room={} tick={}", world.repaths(), world.made_room(), world.tick());
     }
     Crossing {
         trail,

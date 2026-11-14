@@ -210,7 +210,9 @@ impl World {
             if !route.avoiding.is_empty() {
                 fnv_bytes(&mut hash, b"route");
                 fnv_bytes(&mut hash, &(route.avoiding.len() as u32).to_le_bytes());
-                for other in &route.avoiding {
+                for (other, at) in &route.avoiding {
+                    fnv_bytes(&mut hash, &at.0.raw().to_le_bytes());
+                    fnv_bytes(&mut hash, &at.1.raw().to_le_bytes());
                     fnv_bytes(&mut hash, &other.0.to_le_bytes());
                 }
             }

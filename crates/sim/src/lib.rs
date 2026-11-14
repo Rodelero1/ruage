@@ -33,7 +33,7 @@ pub use path::{
     Walk, find_path, find_path_avoiding, line_clear, line_clear_avoiding, nearest_reachable,
 };
 use ruage_fixed::Fixed;
-pub use short::short_range;
+pub use short::{short_range, short_range_around};
 
 /// The largest number of players a match can have: eight, so four-versus-four (D20). It is a
 /// constant rather than a runtime number because stockpiles are fixed-size arrays, and it is eight
@@ -913,8 +913,12 @@ pub(crate) struct Route {
     /// the geometry declined. The last point is the goal itself, so an order between tiles lands where it pointed (A).
     /// **A paused body keeps this list untouched** (D205): the pause is a timer, not a re-plan.
     pub(crate) points: Vec<(Fixed, Fixed)>,
-    /// Units this route was planned around. Not hashed on its own: it is part of the route, and the route is hashed.
-    pub(crate) avoiding: BTreeSet<EntityId>,
+    /// Units this route was planned around, **and where each stood when it was planned**. Not hashed on its own: it is part
+    /// of the route, and the route is hashed. The position is what makes the exemption expire: the original counts a body as
+    /// "past" only while it has not moved since the path was created (`path+0x10 <` the other unit's `lastMoveTime`), and a
+    /// set that never forgot handed us a permanent pass - measured 2026-11-14, a winner `WaitBlocked` for 2,500 ticks beside a
+    /// man it had planned round once and who had moved away and back.
+    pub(crate) avoiding: BTreeMap<EntityId, (Fixed, Fixed)>,
     /// How many times this route has been re-planned because its **ground** went stale. Capped: a route whose goal is buried
     /// behind new walls would otherwise search again on every tick, which is the cost D98a's "past" rule exists to avoid.
     pub(crate) stalls: u8,

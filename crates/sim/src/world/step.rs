@@ -9,7 +9,7 @@ use ruage_fixed::Fixed;
 
 use crate::{
     EntityId, EntityKind, Landing, MAX_PLAYERS, Passing, Repath, Rot, Route, Shot, SimError,
-    Stance, Task, World, find_path_avoiding, integer_sqrt, reaches, short_range, step_towards,
+    Stance, Task, World, find_path_avoiding, integer_sqrt, reaches, short_range_around, step_towards,
 };
 /// **A man to move onto his place**: who, where, and - when the place is on a gather ring - that ring's centre, so a blocked
 /// walk can slide round it (D189).
@@ -1223,17 +1223,25 @@ impl World {
                     .map(|route| route.avoiding.clone())
                     .unwrap_or_default();
                 if let Some(other) = body {
-                    avoiding.insert(other);
+                    let seen_at = self.position(other).unwrap_or_else(|| self.tile_centre(goal));
+                    avoiding.insert(other, seen_at);
                 }
-                let obstacles: BTreeSet<(u16, u16)> = avoiding
-                    .iter()
+                // **A body is a disc with its own radius, not a blocked square** (D205). `bound_to_reach` will refuse
+                // any step that ends inside `mine + theirs`, so a plan that clears only *the mover's* radius from the
+                // body's tile hands back a first waypoint inside the reach - measured 2026-11-14, 400 raw inside, and the
+                // unit stood for the rest of the match. The pair's reach travels with the tile it stands on.
+                let bodies: Vec<((u16, u16), i64)> = avoiding
+                    .keys()
                     .filter_map(|other| {
-                        self.position(*other).map(|position| self.tile_of(position))
+                        let tile = self.tile_of(self.position(*other)?);
+                        // The ground the unit already stands on is not an obstacle to plan around: a box around it
+                        // makes the search leave the tile it starts in, which produced a nine-waypoint route backwards.
+                        (tile != start)
+                            .then(|| (tile, self.reach_between(id, *other).raw()))
                     })
-                    // The ground the unit already stands on is not an obstacle to plan around: an avoid set that holds
-                    // it makes the search leave the tile it starts in, which produced a nine-waypoint route backwards.
-                    .filter(|tile| *tile != start)
                     .collect();
+                // The long-range fallback still plans over tiles, so it needs the same bodies as blocked ground.
+                let obstacles: BTreeSet<(u16, u16)> = bodies.iter().map(|(tile, _)| *tile).collect();
                 // **The old route's last point is the goal**, so the repath aims where the order pointed rather than at the
                 // centre of a tile; the geometry then answers the whole question, avoiding the bodies by `avoid` (D98a).
                 let aim = self
@@ -1243,7 +1251,9 @@ impl World {
                     .unwrap_or_else(|| self.tile_centre(goal));
                 let radius = self.body_radius(self.find(id).and_then(|entity| entity.unit));
                 let planned = match self.walk.as_ref() {
-                    Some(walk) => short_range(walk, self.scale, from, aim, radius, &obstacles)
+                    Some(walk) => {
+                        short_range_around(walk, self.scale, from, aim, radius, &BTreeSet::new(), &bodies)
+                    }
                         .or_else(|| {
                             find_path_avoiding(walk, start, goal, &obstacles)
                                 .map(|steps| self.corners(walk, start, steps, aim))
@@ -1297,8 +1307,12 @@ impl World {
                             let route = self.paths.entry(id).or_default();
                             route.stalls = stalls;
                         }
-                        if let (Some(route), Some(other)) = (self.paths.get_mut(&id), body) {
-                            route.avoiding.insert(other);
+                        // Where the body stood when this route was planned: the exemption lasts only while it stays there.
+                        if let Some(other) = body {
+                            let seen_at = self.position(other).unwrap_or_else(|| self.tile_centre(goal));
+                            if let Some(route) = self.paths.get_mut(&id) {
+                                route.avoiding.insert(other, seen_at);
+                            }
                         }
                         // A reaction the engine gives itself has no caller: its refusal goes into state, where the
                         // dump can show it, rather than being dropped (D71's lesson).
