@@ -31,7 +31,10 @@ of changed code:
 | run | settings | files | comments | tokens | elapsed |
 |---|---|---|---|---|---|
 | 1 | tool defaults: max effort, 8 workers, no ceiling | 9 | 10 | **1,438,799** (1,359,621 in / 79,178 out, 1,211,136 cached) | **15m43s**, 75 tool calls |
-| 2 | `--effort low --concurrency 2 --max-tokens-budget 400000` | 9 | 7 | **409,607** (369,122 in / 40,485 out, 293,632 cached) | **5m30s**, 21 tool calls |
+| 2 | `--effort low --concurrency 2 --max-tokens-budget 400000`, kimi-k2.7-code | 9 | 7 | **409,607** (369,122 in / 40,485 out, 293,632 cached) | **5m30s**, 21 tool calls |
+| 3 | the same, **deepseek-v4.1-flash** (the owner's choice) | 8, 1 cut | 10 | **551,573**, budget exceeded | **5m49s**, 33 tool calls |
+| 4 | the same at `--max-tokens-budget 700000` | 8, 2 cut | 11 | **862,827**, budget exceeded | **5m6s**, 47 tool calls |
+| 5 | the same at `--max-tokens-budget 1200000` | 8, 3 cut | 11 | **1,355,935**, budget exceeded | **4m45s** |
 
 The first row is the number that matters for how this is used: **1.44M tokens and a quarter of an hour for 33 lines**,
 because the agent reads whole files (the crate's `lib.rs` is 234 KB) and iterated 75 tool calls. On 2 CPUs with 8
@@ -41,6 +44,15 @@ guess.
 
 Install cost: two npm packages, no compilation, `ocr version` in 0.2 s; `ocr llm test` round trip 7 s including a
 reasoning-model reply.
+
+**What the model change cost, and what it bought.** deepseek-v4.1-flash is the better reviewer: on the same commit it
+found the missing owner test in `stamp_group` (`step.rs:103`) and a wasteful clone on the repath path (`step.rs:1400`), both
+of which kimi-k2.7-code missed. I checked the first one against the source rather than relaying it - a route's `mates` are
+what a body stops being solid to, so two players' orders in one tick would let their units walk through each other - and it
+is **still unfixed on `main`** at `ed94756`. What it did not do is finish: at 400k, 700k and 1.2M tokens the run ended
+`partial`, overrunning each ceiling and cutting two or three of eight groups for budget. **Raising the ceiling bought
+tokens, not completeness**, which is why the make target now pins 700,000 as a cost stop and prints every cut file with its
+classification instead of pretending a partial run was a whole one.
 
 ## Stability - what was attacked
 
@@ -90,7 +102,12 @@ reasoning-model reply.
    (`unsupported_ext`) is what showed it.
 4. **I set `--max-tools 25`.** The tool refused it (`below minimum 50, using 50`) and said so on stderr; the run I quote
    above is therefore not the run I asked for. Reported rather than silently retried.
-5. **I did it again.** A second probe run inside `execute_code` timed out at 280 s and again left an `ocr` child calling
+5. **I paid three times to learn one thing.** After the 400k run came back `partial`, I raised the ceiling to 700k and then
+   to 1.2M expecting a complete run, and spent **2,770,335 tokens** across the three to discover that this model expands to
+   fill whatever ceiling it is given on this diff. The right move was one run to read the mechanism (`classification:
+   budget`, checked before each round) and then a decision, not two more purchases. The finding is now in the Makefile
+   comment so the next person does not repeat it.
+6. **I did it again.** A second probe run inside `execute_code` timed out at 280 s and again left an `ocr` child calling
    the model. Found with `pgrep -f opencodereview`, killed, and the lesson is now in the make target's comment: **reviews
    go through `terminal(background=true)` or `make ai-review`, never through a cell with a five-minute cap.**
 

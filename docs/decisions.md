@@ -5005,16 +5005,33 @@ and the doc comment that belonged to `reach_between`, so both attached to the wr
 by hand in a crate on edition 2024, which has it; and a `.max(0)` that neither guards nor documents the overflow it looks
 like it guards. Two more were tests asserting behaviour that is not implemented yet.
 
-**The cost, measured.** The tool's defaults - max effort, 8 workers, no token ceiling - spent **1,438,799 tokens**
-(1,359,621 in, 79,178 out, 1,211,136 of the input served from cache) and **15m43s** on that 33-line commit, across 75
-tool calls. The same diff at the pinned settings - `--effort low --concurrency 2 --max-tokens-budget 400000` - took
-**409,607 tokens and 5m30s**: same nine files, seven findings instead of ten, and the best of them (the `#[must_use]`
-drift) in both. This box has 2 CPUs and a metered endpoint, so the cheap setting is the default and a review note that
-quotes a run says which settings produced it.
+**The one that matters most, and that I checked.** deepseek-v4.1-flash found that `stamp_group` builds a unit's mates from
+*every* id ordered to move in the tick, with no owner test - and a route's mates are exactly what a body stops being solid
+to (`lib.rs`: "avoids the mover's moving selection-mates and its collision classifier drops them entirely"). Two players'
+orders landing in one tick would therefore make each other's units walk through one another. Verified in the source at
+`06772fe` and **still unfixed at `ed94756`**, which is the state of `main` as this is written. That finding alone is worth
+the whole exercise.
+
+**The cost, measured.** On the same 33-line commit, four configurations:
+
+| settings | model | outcome | tokens | time |
+|---|---|---|---|---|
+| tool defaults: max effort, 8 workers, no ceiling | kimi-k2.7-code | complete, 10 findings | 1,438,799 | 15m43s |
+| `--effort low --concurrency 2 --max-tokens-budget 400000` | kimi-k2.7-code | complete, 7 findings | 409,607 | 5m30s |
+| the same, `--max-tokens-budget 700000` | **deepseek-v4.1-flash** | **partial**, 11 findings, 2 files cut | 862,827 | 5m6s |
+| the same, `--max-tokens-budget 1200000` | **deepseek-v4.1-flash** | **partial**, 11 findings, 3 files cut | 1,355,935 | 4m45s |
+
+The owner chose **deepseek-v4.1-flash** on 2026-11-14. It is the more thorough reviewer of the two - it found the missing
+owner test in `stamp_group` and a wasteful clone on the repath path that kimi-k2.7-code did not - and it is the more
+expensive one, and **raising the ceiling did not make it finish**: 400k, 700k and 1.2M all ended `partial`, with two or
+three of eight groups cut for budget, at 551,573 / 862,827 / 1,355,935 tokens. So the ceiling is a **cost stop, not a
+completion target** (700,000), and the make target prints every cut file with its classification - a `partial` review that
+silently skipped a file is the failure worth guarding against, and this model makes `partial` the normal outcome on a diff
+this size. If a complete pass matters more than the model, kimi-k2.7-code finished the same diff in 409,607 tokens.
 
 **Where it stands.** Installed under `/opt/data/tools/npm/` from npm (`@alibaba-group/ocr-linux-x64`, so the package's
 postinstall download never runs), `ocr` symlinked onto `PATH` at `/opt/data/home/.local/bin/ocr`, configured in
-`~/.opencodereview/config.json` (mode 600) against the opencode-go endpoint with `kimi-k2.7-code`. That endpoint needs an
+`~/.opencodereview/config.json` (mode 600) against the opencode-go endpoint with **deepseek-v4.1-flash**. That endpoint needs an
 `x-opencode-session` header, which is why the provider carries `extra_headers`; a plain OpenAI provider config answers
 `400 MissingSessionID`. It is **not** in the pre-commit hook: a review costs minutes and tokens, and a hook that slow
 teaches `git commit --no-verify`.
