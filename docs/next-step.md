@@ -1,24 +1,33 @@
-# OPEN - D207 is on `main`: a group walks over itself. Next: the explicit group id (register), and D205's pause on top of it
+# OPEN - D208 is half built on `d208-time-not-geometry`: the head-on is solved, and solidity is not yet
 
-**State, 2026-11-14.** **D207** is built and green: units ordered in the **same tick** are mates, a mate is not solid (the
-step is taken, no reach, no wait, no repath), and the exemption is mutual - a man whose order is cancelled is solid again in
-the same tick. Review with the numbers: `docs/reviews/2026-11-14-d207-group-overlap.md`.
+**Measured, 2026-11-14.** `crates/sim/tests/head_on.rs` is **2/2 green** on this branch: two men meeting head-on now pass
+each other, and the loser stands for the **first** stand of the drawn 0.25-1.50 s. That is the original's mechanism, read
+out of the binary the same day: no step is clamped against a body (the radius retraction's result is discarded at
+`0x8a7fe7`), the loser is paused, and the winner's next route - planned after the loser stopped - classifies him **past**
+(`path->createdAt >= other->lastMoveTime`) and walks through.
 
-**What is deferred, deliberately.** The owner's option 2 - an explicit group id on the command - is the register row. Until it
-lands, "same tick" is not "same selection": a caller issuing eight separate moves in one tick gets group behaviour it did not
-ask for, and a selection ordered across several ticks gets none. When it lands, `mates` is filled from the command instead of
-from `ordered_ticks`, and the three tests in `crates/sim/tests/group_overlap.rs` keep their names.
+**What is not solved, and why this branch is not on `main`.** The *past* test is only sound because the original's search
+treats a **standing** body as an obstacle rectangle (`FUN_007f9d80`: insert as obstacle iff the object is not ignored and
+its velocity is zero, or it is in the must-collision list). Our search does not: `Walk` is terrain only, and a re-plan avoids
+just the bodies it collided with. So `created >= moved` also makes every **standing** man "past", and two of D207's guards
+say so, measured:
 
-**The parked branch.** `d205-pause` (`e251ca2`) holds D205 - the 0.25-1.50 s pause for the higher id, correct and measured -
-plus three real fixes that the binary read now says were the wrong shape: the re-plan learnt about bodies (`short_range_around`),
-the "past" exemption learnt to expire when a body moves, and `short_range`'s fast path stopped answering "walk through him".
-Those three are **fidelity bugs in their own right** and worth re-landing on their own, without D205's pause, once the pause has
-something to sit on. Not merged.
+```
+a_mate_who_is_stopped_becomes_solid      MEASURED a stopped body was walked over: closest 4207 raw against an 8000 raw reach
+two_units_ordered_apart_stay_solid       MEASURED the closest these two came was 151 raw, inside the 8000 raw reach
+```
 
-**The pause's missing half.** With D207 landed, a non-mate collision still has no run-time answer in our engine: the original
-pauses the loser (D205, parked) and re-plans. The order that follows is: land D207's mechanism (done), then re-land the three
-search fixes alone, then the pause on top - each with its own red test, because each of the last three attempts failed by
-carrying the others.
+**The next slice is therefore D208b, and it is a search change:** a body that is **not moving this tick** goes into the
+route's blocked-tile set (the per-search rectangle list the binary builds in `007f6ff0`, rebuilt per search, never written
+into the shared grid). Then *past* is sound again: a standing man is planned around, a paused loser is the one exception,
+and a man who moves into your path after planning is non-past and forces the repath.
 
-**Open register rows.** (1) explicit group id on the command; (2) the three search fixes above, extracted from `d205-pause`;
-(3) D205's pause, after those.
+**Cost of what is already here** (`--seed 7 --ticks 48000`, release): `entities=158 players=2
+hash=c2ed74016ee533ea repaths=508 made_room=0 repaths_body=174 repaths_ground=334` against `main`'s `entities=160
+players=2 hash=c3b10f4b09e17a43 repaths=324 made_room=147 repaths_body=83 repaths_ground=241`. **More repaths (+57%)** and
+no made-room steps at all - the trade D208b has to be measured against.
+
+**Also on this branch, uncommitted in spirit:** `Route.created`, `Entity::last_moved`, `put_route` (one choke point that
+stamps a route with the tick it was planned), `World::is_past`, and the removal of `bound_to_reach` from the body path.
+`bound_to_reach` itself is kept for now - the attack and building paths still use its idea - but it is no longer called from
+`collide`.

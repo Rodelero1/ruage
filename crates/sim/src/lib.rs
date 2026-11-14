@@ -71,6 +71,14 @@ pub(crate) const MAX_GROUND_REPLANS: u8 = 2;
 /// A unit the budget leaves out simply waits this tick, which is what a blocked unit does anyway, and tries again next.
 pub(crate) const MAX_REPATHS_PER_TICK: usize = 4;
 
+/// **How long the loser of a unit collision is paused** (D205): the original draws `rand()*1.25/32767+0.25`, i.e. a
+/// uniform **0.25 to 1.50 seconds**, and stores it on the path as a countdown. Ours is drawn in milliseconds from the
+/// same shape - `250 + roll % 1251` - and converted to ticks with the tick rate, so no float is ever stored.
+pub(crate) const PAUSE_MIN_MS: i64 = 250;
+
+/// The width of the draw: `[250, 1500]` ms inclusive, the original's `1.25 s` spread.
+pub(crate) const PAUSE_SPREAD_MS: u32 = 1_251;
+
 pub const MAX_PLAYERS: usize = 8;
 
 /// The largest number of stockpiled resources a match can have. Like `MAX_PLAYERS` this is a
@@ -176,6 +184,15 @@ pub struct Entity {
     pub last_step: StepDecision,
     /// The villager variant currently in use (the task's unit id), if any.
     pub variant: Option<u32>,
+    /// **How many more ticks this body stands still because it lost a collision** (D205). The original keeps this on
+    /// the path (`path+0x28`, written by `0x8aa6d0` and nothing else); ours is per entity because a body with no route
+    /// can still be told to pause. Ticks, never seconds: the draw is in milliseconds and the tick rate converts it once.
+    /// State - it decides which tick the man may move again - so it is hashed when it is not zero.
+    pub pause_remaining: u16,
+    /// **The tick this body last actually moved** (D208) - the original's `+0x134 lastMoveTime`. A collider that has not
+    /// moved since the mover's route was planned is *past* and the collision block drops it: with the step no longer clamped
+    /// against a body, that test is what ends a head-on.
+    pub last_moved: u64,
 }
 
 /// What a hit is worth. Comes from `combat.toml`; the per-unit numbers come from `units.toml`.
@@ -660,7 +677,7 @@ pub enum Command {
 mod error;
 pub use error::{ErrorClass, SimError};
 
-/// **What the movement pass decided for one body, this tick** (D193). `collide` decides in nine ordered rules and, before this, its
+/// **What the movement pass decided for one body, this tick** (D193). `collide` decides in ordered rules and, before this, its
 /// answer was a pair of deltas - so "why is this man standing still" had no value to print, test or compare, and answering it took two
 /// hours of printing from inside the function, twice in one week.
 ///
@@ -675,41 +692,32 @@ pub enum StepDecision {
     TakeOverlapping,
     /// The step was taken into a body at rest, whose repath routes round it from the next tick (rule 8).
     TakeAtRest,
-    /// The step was slid along one clear axis: ground or a body on the planned line.
+    /// The step was slid along one clear axis of **ground** the route's waypoint runs into.
     Slide,
-    /// The step was made by nudging once per route (rule 6).
-    MakeRoom,
-    /// The step was taken because the blocker refused one at this body on the same tick (rule 9).
-    GiveWay,
-    /// The same, when the blocker stood on the mover's own tile (rule 4).
-    GiveWayOwnTile,
+    /// Refused: this body lost a unit collision and stands still until its pause runs out (D205). It keeps its path.
+    Paused,
     /// Refused: the route's waypoint is blocked by ground, and a re-plan was asked for (D127).
     WaitGround,
     /// Refused: the blocker is the body the order was given to (rule 2).
     WaitTarget,
-    /// Refused: a **hostile** body stands on the tile the order asked for (rule 2, D131/D192).
+    /// Refused: a body stands on the tile the order asked for (rule 2, D131/D192/D200).
     WaitGoal,
-    /// Refused: a moving body stands on the mover's own tile (rule 4).
-    WaitOwnTile,
-    /// Refused: anything else in the way (rule 9).
+    /// Refused: anything else in the way (the last rule).
     WaitBlocked,
 }
 
 impl StepDecision {
     /// Every variant, in declaration order: the counter array is indexed by this.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 10] = [
         Self::Idle,
         Self::Take,
         Self::TakeOverlapping,
         Self::TakeAtRest,
         Self::Slide,
-        Self::MakeRoom,
-        Self::GiveWay,
-        Self::GiveWayOwnTile,
+        Self::Paused,
         Self::WaitGround,
         Self::WaitTarget,
         Self::WaitGoal,
-        Self::WaitOwnTile,
         Self::WaitBlocked,
     ];
 
@@ -725,11 +733,7 @@ impl StepDecision {
     pub fn is_a_wait(self) -> bool {
         matches!(
             self,
-            Self::WaitGround
-                | Self::WaitTarget
-                | Self::WaitGoal
-                | Self::WaitOwnTile
-                | Self::WaitBlocked
+            Self::Paused | Self::WaitGround | Self::WaitTarget | Self::WaitGoal | Self::WaitBlocked
         )
     }
 
@@ -911,16 +915,18 @@ pub(crate) struct Repath {
 pub(crate) struct Route {
     /// Remaining waypoints, **as points**: the geometry's corners (D113), or the centres of the tiles a search returned when
     /// the geometry declined. The last point is the goal itself, so an order between tiles lands where it pointed (A).
+    /// **A paused body keeps this list untouched** (D205): the pause is a timer, not a re-plan.
     pub(crate) points: Vec<(Fixed, Fixed)>,
     /// Units this route was planned around. Not hashed on its own: it is part of the route, and the route is hashed.
     pub(crate) avoiding: BTreeSet<EntityId>,
-    /// This route has already **made room** once (C1b). A nudge is a way past one obstruction, not a way of life: the
-    /// second obstruction on the same route is answered by refusing the step and re-planning, or a crowded base becomes
-    /// villagers stepping aside for each other and never arriving.
-    pub(crate) gave_way: bool,
     /// How many times this route has been re-planned because its **ground** went stale. Capped: a route whose goal is buried
     /// behind new walls would otherwise search again on every tick, which is the cost D98a's "past" rule exists to avoid.
     pub(crate) stalls: u8,
+    /// **The tick this route was planned on** (D208): the original stamps `path+0x10` with the clock, and compares it with a
+    /// collider's `lastMoveTime` to decide whether that collider is *past* - "he has not moved since I planned round this,
+    /// so my route already accounts for him". With the step no longer clamped against a body, this is what ends a head-on:
+    /// the loser is paused, stops moving, and the winner's next collision with him is past.
+    pub(crate) created: u64,
     /// **The men this unit was ordered with** (D207). The original's table of exceptions is its *selection*: the search
     /// avoids the mover's moving selection-mates and its collision classifier drops them entirely, so a moving group walks
     /// over itself while everybody else is solid (read 2026-11-14; Forgotten Empires' own forum answer: *"units give up
@@ -932,16 +938,16 @@ pub(crate) struct Route {
 
 /// What one tick of the movement pass carries between steps: the bodies that can be in the way, who has a step to take,
 /// and the reactions it collects for **after** the loop (a repath plans a route and must not be run while the entity list
-/// is being walked; a nudge writes a flag the pass reads).
+/// is being walked; a pause is drawn from the seeded stream and written to an entity).
 pub(crate) struct Passing<'a> {
     pub(crate) bodies: &'a [(i64, i64, EntityId, usize, i64)],
     /// Who has something to do this tick. A body at rest cannot move aside for anybody, which is the difference between
     /// waiting a tick and waiting for ever.
     pub(crate) moving: &'a BTreeSet<EntityId>,
     pub(crate) repaths: Vec<Repath>,
-    pub(crate) made_room: Vec<EntityId>,
-    /// `(mover, blocker)` for every refused step this tick, in entity order: a pair that refused at each other is a jam.
-    pub(crate) refused: Vec<(EntityId, EntityId)>,
+    /// Bodies told to pause by a collision this tick, in entity order, possibly naming the same body twice (each side of
+    /// the pair sees the other). Applied after the pass, where the seeded stream can be drawn from.
+    pub(crate) pauses: Vec<EntityId>,
 }
 
 /// **What a unit's card reads** (2026-11-04): the numbers the bottom-central panel puts beside a portrait.
@@ -1023,7 +1029,7 @@ pub struct World {
     /// counters above: never hashed, never read by the tick. `step_trace` was the review's name for it.
     /// Counted per decision, in a flat array: a `BTreeMap` here cost **1.8 µs a tick** at 128 bodies (6.7 -> 8.5), which is a third
     /// of the tick for instrumentation. The per-body trace lives on the entity (`Entity::last_step`) for the same reason.
-    step_counts: [u64; 13],
+    step_counts: [u64; StepDecision::ALL.len()],
     /// **Whether the movement trace is being written** (D196). Off by default: the per-body record and the counters cost **0.4 us of a
     /// 6.7 us tick** (about 6%), which is a price the tick should not pay for a diagnostic nobody asked for. A test, a dump or a bug
     /// report turns it on and pays it for that run.
@@ -1037,8 +1043,9 @@ pub struct World {
     /// How many ground re-plans **failed**. A counter, like `repath_count`, and not state: it exists so a test can say
     /// "this unit tried twice and stopped" instead of "this unit searched all match" (D135).
     repath_failures: u64,
-    /// How many times a step made room instead of being refused (C1b). A counter, like `repath_count`, because it is a
-    /// reaction the engine gives itself and has no caller to report to.
+    /// How many times a step made room instead of being refused (C1b). **Withdrawn by D205**: the make-room step is gone,
+    /// so this stays at zero and is kept only because the headless summary prints it and a reader compares that line
+    /// against older runs - a zero here is the change, not a missing feature.
     made_room_count: u64,
     /// The tech and effect tables, when they have been loaded. A research order is resolved against
     /// them the way damage is resolved against `combat.toml`: once, at order time.
@@ -1536,7 +1543,7 @@ impl World {
             stalled: BTreeMap::new(),
             respread_at: BTreeMap::new(),
             repath_count: 0,
-            step_counts: [0; 13],
+            step_counts: [0; StepDecision::ALL.len()],
             tracing_steps: false,
             repath_by_body: 0,
             repath_by_ground: 0,
@@ -1821,7 +1828,9 @@ impl World {
         self.repath_failures
     }
 
-    /// How many steps have made room for a body in the way (C1b). Exposed so a test can say a nudge happened **once**.
+    /// How many steps have made room for a body in the way (C1b). **Always zero since D205**, which withdrew the
+    /// make-room step, the give-way and the nudge at unit collisions; kept so the headless summary's `made_room=` field
+    /// stays comparable across runs.
     #[must_use]
     pub fn made_room(&self) -> u64 {
         self.made_room_count
@@ -2431,7 +2440,7 @@ impl World {
             self.stand_down(id);
             match self.plan_path(position, entry.home, 0) {
                 Ok(route) => {
-                    self.paths.insert(
+                    self.put_route(
                         id,
                         Route {
                             points: route,
@@ -2558,6 +2567,8 @@ impl World {
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
         self.insert(Entity {
             last_step: StepDecision::Idle,
+            pause_remaining: 0,
+            last_moved: 0,
             id,
             player,
             kind: EntityKind::Building,
@@ -2608,7 +2619,7 @@ impl World {
             Some(stand) => self.plan_path_for(villager, from, stand)?,
             None => self.plan_path_for(villager, from, position)?,
         };
-        self.paths.insert(
+        self.put_route(
             villager,
             Route {
                 points: route,
@@ -2666,7 +2677,7 @@ impl World {
             Some(stand) => self.plan_path_for(villager, from, stand)?,
             None => self.plan_path_for(villager, from, position)?,
         };
-        self.paths.insert(
+        self.put_route(
             villager,
             Route {
                 points: route,
@@ -3256,6 +3267,28 @@ impl World {
     /// exemption *mutual*. Mutuality is not decoration: the original ends the exemption when a unit leaves its formation -
     /// "stop button is pressed / click on enemy unit / attack move" - and a stopped man's route is gone, so his old mates
     /// must stop walking over him the same tick.
+    /// **Plan a route, stamped with when it was planned** (D208). Every route goes through here so that the *past* test has
+    /// something to compare against: the original writes the world clock into `path+0x10` when a search returns, and a
+    /// collider whose `lastMoveTime` is newer than that is the one case the collision block re-acts to.
+    pub(crate) fn put_route(&mut self, id: EntityId, mut route: Route) {
+        route.created = self.tick;
+        self.paths.insert(id, route);
+    }
+
+    /// **Whether a collider is past** (D208): it has not moved since this body's route was planned, so the route already
+    /// accounts for it. The original's test is `path->createdAt < other->lastMoveTime`; a past collider is dropped - no
+    /// pause, no repath and no bound - and with the step unclamped that is what lets the winner walk through the paused loser.
+    pub(crate) fn is_past(&self, id: EntityId, other: EntityId) -> bool {
+        // **The comparison is the original's, and its direction is the whole rule**: a collider is *past* when he has
+        // **not** moved since this route was planned - `path->createdAt >= other->lastMoveTime`. The first version of this
+        // had it backwards, which made two men walking at each other permanently "past" and ghost through one another.
+        let Some(created) = self.paths.get(&id).map(|route| route.created) else {
+            return false;
+        };
+        let moved = self.find(other).map_or(0, |entity| entity.last_moved);
+        created >= moved
+    }
+
     pub(crate) fn is_mate(&self, a: EntityId, b: EntityId) -> bool {
         self.paths
             .get(&a)
@@ -4040,6 +4073,16 @@ impl World {
             // A villager's load and a building's queue are not a resource node's holdings.
             EntityKind::Unit | EntityKind::Projectile => None,
         }
+    }
+
+    /// **The remaining waypoint list itself**, for a test that has to say a paused body kept it (D205). A copy: the route
+    /// is state and a caller must not be able to write through the read.
+    #[must_use]
+    pub fn route_points(&self, id: EntityId) -> Vec<(Fixed, Fixed)> {
+        self.paths
+            .get(&id)
+            .map(|route| route.points.clone())
+            .unwrap_or_default()
     }
 
     /// How many waypoints are left on this entity's route: 0 means it is standing on its goal (or has none).

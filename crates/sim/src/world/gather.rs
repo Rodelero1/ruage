@@ -479,7 +479,7 @@ impl World {
                 return Err(error);
             }
         };
-        self.paths.insert(
+        self.put_route(
             villager,
             Route {
                 points: route,

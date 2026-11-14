@@ -110,7 +110,9 @@ fn two_men_meeting_head_on_pass_each_other() {
         world.step().expect("step");
         let gap = apart(&world, a, b);
         closest = closest.min(gap);
-        if gap < reach * reach {
+        // **Touching counts** (the binary's own clamp allows exactly `r1 + r2`): a pair that stops at the reach has met,
+        // and the fixture's job is to prove the collision happened at all.
+        if gap <= reach * reach {
             met = true;
         }
     }
@@ -162,9 +164,10 @@ fn the_loser_stands_for_the_drawn_pause() {
         to: (x, y),
     });
 
-    // The longest run of ticks in which the **higher id** does not move at all, from the moment they first touch.
+    // **The first stand**, from the moment they first touch until the loser moves again - not the longest one, which would
+    // be his idle time at his goal afterwards (that mistake measured 1,779 ticks / 89 s on the first run of this test).
+    let reach = world.reach_between(a, b).raw();
     let mut touching = false;
-    let mut standing = 0u32;
     let mut first_stand = 0u32;
     let mut last = world.position(b).expect("b has a position");
     for _ in 0..2_000 {
@@ -172,14 +175,14 @@ fn the_loser_stands_for_the_drawn_pause() {
         let now = world.position(b).expect("b has a position");
         let moved = now.0 != last.0 || now.1 != last.1;
         last = now;
-        if apart(&world, a, b) < world.reach_between(a, b).raw().pow(2) {
+        if apart(&world, a, b) <= reach * reach {
             touching = true;
         }
-        if touching && !moved {
-            standing += 1;
-            first_stand = first_stand.max(standing);
-        } else if moved {
-            standing = 0;
+        if touching {
+            if moved {
+                break;
+            }
+            first_stand += 1;
         }
     }
     let seconds = f64::from(first_stand) / f64::from(world.tick_rate_hz());

@@ -194,7 +194,7 @@ impl World {
         // The marker is also how this unit is known to be **already stepping aside**: `step_aside` returns early when it
         // is there, so a step-aside is one order and one route rather than a path search a tick.
         self.resuming.insert(id, resumable);
-        self.paths.insert(
+        self.put_route(
             id,
             Route {
                 points: route,
@@ -543,7 +543,7 @@ impl World {
         };
         let mut target = None;
         if let Ok(route) = self.plan_path(from, to, 0) {
-            self.paths.insert(
+            self.put_route(
                 unit,
                 Route {
                     points: route,
@@ -572,7 +572,7 @@ impl World {
                         }
                         let candidate = self.tile_centre((cx, cy));
                         if let Ok(route) = self.plan_path(from, candidate, 0) {
-                            self.paths.insert(
+                            self.put_route(
                                 unit,
                                 Route {
                                     points: route,
@@ -631,7 +631,7 @@ impl World {
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
         let route = self.plan_path_for(unit, entity.position, goal)?;
         let here = self.tile_of(entity.position);
-        self.paths.insert(
+        self.put_route(
             unit,
             Route {
                 points: route,

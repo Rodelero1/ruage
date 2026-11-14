@@ -189,7 +189,7 @@ impl World {
                 // Nothing better than the target itself: the old behaviour, and the collision rule will still stop it.
                 None => self.plan_path_for(attacker, position, victim)?,
             };
-            self.paths.insert(
+            self.put_route(
                 attacker,
                 Route {
                     points: route,
@@ -439,6 +439,8 @@ impl World {
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
         self.insert(Entity {
             last_step: StepDecision::Idle,
+            pause_remaining: 0,
+            last_moved: 0,
             id,
             player,
             kind: EntityKind::Projectile,
