@@ -100,7 +100,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <header><h1>Decisions</h1>
 <p class="lede">Every rule the corpus states, what it rests on, and what it has not decided yet. Generated from <code>docs/decisions.md</code> and the U-register; nothing on this page is typed by hand, so a wrong label means the classifier is wrong and can be seen to be wrong.</p>
 <ul class="coverage" id="coverage">
-<li data-k="decisions"><b>209</b> decisions</li>
+<li data-k="decisions"><b>210</b> decisions</li>
 <li data-k="amended"><b>12</b> amended</li>
 <li data-k="corrected"><b>4</b> corrected</li>
 <li data-k="superseded"><b>6</b> superseded</li>
@@ -479,7 +479,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </div>
 </details>
 <details class="group" id="area-pathfinding-movement" data-area="Pathfinding &amp; movement" data-unfinished="0" data-undecided="2" open>
-<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">25 decisions · 2 undecided · 2 with no stated basis</span></summary>
+<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">26 decisions · 2 undecided · 2 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U5</span> Are unit speeds in tiles/second, and what is the tile size in world units? Speed 1.35 (knight) is consistent with tiles/s.</li>
 <li><span class="id">U7</span> What pathing algorithm does the game use (A, flow field, something else), and what are its cost weights?</li>
@@ -949,7 +949,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D200" placeholder="note (saved with the verdict)">
 </div>
 </article>
-<article class="decision s-decided" id="d-D204" data-id="D204" data-origins="owner" data-unresolved="0" data-status="decided">
+<article class="decision s-decided" id="d-D204" data-id="D204" data-origins="owner measured" data-unresolved="0" data-status="decided">
 <div class="head">
 <span class="id">D204</span>
 <span class="status decided">decided</span>
@@ -960,12 +960,38 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li>This is also the owner&#x27;s rule from D182, now applied on the contested path as well as at order time: &quot;try another nearest resource of the same kind&quot;.</li>
 <li>Why it matters here. The nudge was the only thing that let a crowd of seven on one bush move at all after D200, and the acceptance match&#x27;s food economy depended on it; with displacement gone, the crowd policy has to be re-targeting, which i</li>
 </ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>When the search finds nothing the count restarts at zero, so a second look is another STALLED_TICKS away rather than every tick, which is the cost D182 measured at 35 s -&gt; 400 s. 2.</li>
+<li>What the nudge was really doing, measured on main over the acceptance run before any code moved: 310 displacements, 232 on builders, 76 on loaded carriers walking home, 2 on idle bodies, 0 on gatherers.</li>
+<li>Acceptance, measured: entities=143 players=2 hash=2d93236ebb16961b repaths=373 made_room=140 -&gt; entities=160 players=2 hash=c3b10f4b09e17a43 repaths=324 made_room=147; food 4/14/484/594/1226/1396 -&gt; 45/49/268/120/660/450; wood 40/75/300/415</li>
+</ul></details>
 </div>
 <div class="verdicts" data-for="D204">
 <button class="verdict" data-verdict="agree" data-id="D204">agree</button>
 <button class="verdict" data-verdict="question" data-id="D204">question</button>
 <button class="verdict" data-verdict="wrong" data-id="D204">wrong</button>
 <input class="note" data-note="D204" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D205" data-id="D205" data-origins="owner binary" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D205</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-14</span>
+<h3>right of way is the lower entity id, and the loser pauses 0.25-1.50 s on its own path</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>What it costs, accepted with the decision. Our EntityId is a monotonic spawn counter, so &quot;lower handle&quot; means the older unit wins every contested tile; the owner chose the mechanism knowing that.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-binary">binary</span></summary><ul>
+<li>Read out of AoK HD.exe byte for byte (docs/movement-in-the-binary.md, last two sections): when a step&#x27;s collision list holds a unit that is not the order&#x27;s target, the mover compares [vtable+0x2b4] on both units - a virtual call whose move-</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D205">
+<button class="verdict" data-verdict="agree" data-id="D205">agree</button>
+<button class="verdict" data-verdict="question" data-id="D205">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D205">wrong</button>
+<input class="note" data-note="D205" placeholder="note (saved with the verdict)">
 </div>
 </article>
 </div>
@@ -4575,11 +4601,11 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </ul>
 </section>
 <section id="health"><h2>How this page knows</h2>
-<p>Parsed 209 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
+<p>Parsed 210 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
 <p>A basis is recorded only from a phrase in the decision itself, and the phrase is shown beside the label. <b>No stated basis</b> is the reliable category: it needs no pattern to be right. <b>Unresolved language</b> is a reading list, not a verdict - the quoted sentence is there to be judged.</p>
 <p>The scan for broken references reads <code>docs/</code>, <code>crates/</code>, <code>config/</code>, <code>SPEC.md</code> and <code>README.md</code>. <code>tools/</code> is excluded: its fixtures name ids that are meant not to exist.</p>
 <p class="empty">Every decision heading was placed.</p>
-<p class="stamp">Corpus as of 2026-11-13. Rebuild with <code>make decisions</code>.</p>
+<p class="stamp">Corpus as of 2026-11-14. Rebuild with <code>make decisions</code>.</p>
 </section></main>
 <script>(function(){
   var KEY='ruage-decisions-review';

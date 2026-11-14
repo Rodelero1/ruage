@@ -5139,3 +5139,42 @@ home is busy, and a carrier who is jammed still holds his reserved ring place.
 
 **What would reopen it**: a `Return` carrier who is jammed **and** holds no gather place. No fixture reached one. That
 is the body a future test has to find, watched by position, not by `made_room`.
+
+### D205 - right of way is the lower entity id, and the loser pauses 0.25-1.50 s on its own path
+
+**What it says (owner, 2026-11-14: *"1"*).** Copy the original's collision tie-break rather than invent one. Read out of
+`AoK HD.exe` byte for byte (`docs/movement-in-the-binary.md`, last two sections): when a step's collision list holds a unit
+that is not the order's target, the mover compares **`[vtable+0x2b4]`** on both units - a virtual call whose move-object
+implementation returns `*(int*)(this+8)`, the object handle - and the unit with the **higher** value is told to pause:
+
+```
+008a80ed call [edx+0x2b4]   ; self  -> esi
+008a80f9 call [edx+0x2b4]   ; other -> eax
+008a80ff cmp  eax,esi / jle ; pause only when other > self
+008a8107 mov  esi,[ebx] / 008a8141 call [esi+0x2b0]   ; other->setPause(rand*1.25/32767+0.25)
+```
+
+`+0x2b0` = `0x8aa6d0`, whose whole body writes **the current path's pause timer** (`path+0x28`) and nothing else. So the loser
+**keeps its path**, advances no waypoint, does not move, and resumes where it left off when the timer expires; the winner
+repaths or stops. The duration is uniform **0.25-1.50 s** (`rand()*1.25/32767 + 0.25`).
+
+**What it replaces.** The three inventions in `collide`: the give-way mutex (**rule 9** and its own-tile twin), the axis/
+perpendicular **slide** (rule 5 and the own-tile slide), and the **nudge** (`push_the_standing`). A unit-level collision is now
+answered one way: *the lower id proceeds, the higher id pauses*. D204's re-target at a contested **resource square** stays - it
+is a placement rule for workers, not a collision answer - and so do the settle, the reserved places and the gather ring.
+
+**What it costs, accepted with the decision.** Our `EntityId` is a monotonic spawn counter, so "lower handle" means **the older
+unit wins every contested tile**; the owner chose the mechanism knowing that. The pause is drawn from **our seeded RNG**, never
+a global (the original's own `rand()` wrapper logs *"not considered sync safe"*), which means the RNG stream is consumed at a
+new place and every existing replay of a fixture with a collision changes its trajectory - determinism is preserved, the old
+hashes are not.
+
+**Why it is worth it.** A pause is bounded by a countdown, so the pair can never stand for ever: the 2026-11-13 freeze (seven
+villagers on two tiles, `WaitOwnTile` for the whole match, the acceptance bank at 0 food) is impossible by construction rather
+than by another exemption. And it removes state: no `refused` list, no per-route `gave_way` flag, no stall counter at all for
+units.
+
+**Owed, test-first.** (1) Two units meeting head-on: the higher id is paused for 0.25-1.50 s, keeps its waypoint list, and
+resumes; the lower id gets through. (2) The owner's screenshot: a loaded carrier and a gatherer meeting on one tile both reach
+their destinations. (3) The acceptance match still banks food (`crates/sim/tests/acceptance_economy.rs`). Until (1)-(3) are
+green on a branch this decision is **built, not landed**, and `docs/next-step.md` carries it as step 1.
