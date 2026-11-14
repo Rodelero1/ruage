@@ -4991,6 +4991,38 @@ goal explicitly keeps.
 back in this repository by the time a stranger is expected to build; and the target recorded here so a later session does not
 re-open "which option did we pick".
 
+### D209 - the step's diff goes through the AI reviewer, and its findings are checked like anyone else's
+
+**What it says.** `make ai-review` runs `ocr review` (open-code-review, Alibaba, Apache-2.0) over the step's diff and
+writes `build/ocr-review.json`. It is an **input** to the adversarial review, not a replacement for it: it reads the diff
+and the files around it and answers in findings, it cannot run a probe, and it has no access to the game, the saves or the
+install. A finding is therefore a hypothesis until one of us checks it, and the note says which findings were accepted and
+which were refused, with the reason.
+
+**Why.** The owner asked for it by name on 2026-11-14. On its first real run - commit `06772fe`, 33 lines of code - it
+found seven things, and **three were defects worth catching**: a new `is_mate` function inserted *between* a `#[must_use]`
+and the doc comment that belonged to `reach_between`, so both attached to the wrong function; `i64::isqrt` re-implemented
+by hand in a crate on edition 2024, which has it; and a `.max(0)` that neither guards nor documents the overflow it looks
+like it guards. Two more were tests asserting behaviour that is not implemented yet.
+
+**The cost, measured.** The tool's defaults - max effort, 8 workers, no token ceiling - spent **1,438,799 tokens**
+(1,359,621 in, 79,178 out, 1,211,136 of the input served from cache) and **15m43s** on that 33-line commit, across 75
+tool calls. The same diff at the pinned settings - `--effort low --concurrency 2 --max-tokens-budget 400000` - took
+**409,607 tokens and 5m30s**: same nine files, seven findings instead of ten, and the best of them (the `#[must_use]`
+drift) in both. This box has 2 CPUs and a metered endpoint, so the cheap setting is the default and a review note that
+quotes a run says which settings produced it.
+
+**Where it stands.** Installed under `/opt/data/tools/npm/` from npm (`@alibaba-group/ocr-linux-x64`, so the package's
+postinstall download never runs), `ocr` symlinked onto `PATH` at `/opt/data/home/.local/bin/ocr`, configured in
+`~/.opencodereview/config.json` (mode 600) against the opencode-go endpoint with `kimi-k2.7-code`. That endpoint needs an
+`x-opencode-session` header, which is why the provider carries `extra_headers`; a plain OpenAI provider config answers
+`400 MissingSessionID`. It is **not** in the pre-commit hook: a review costs minutes and tokens, and a hook that slow
+teaches `git commit --no-verify`.
+
+**Commits us to.** A step's note names the AI-review run it folded in - the commit, the settings, the tokens, and which
+findings it accepted or refused - and an accepted finding becomes a test or a measurement, never just a comment.
+
+
 ### D203 - a rule asked for twice goes into the tree, and a question the owner must answer arrives after the evidence
 
 **What it says.** Three standing instructions the owner gave on 2026-11-13, written down because a rule that lives in a

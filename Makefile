@@ -26,7 +26,7 @@ PACK = --config $(CONFIG)/sim.toml \
        --effects $(CONFIG)/gamedata/effects.toml \
        --civs $(CONFIG)/gamedata/civs.toml
 
-.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check next-step-check plan-check
+.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check next-step-check plan-check ai-review
 
 help:
 	@echo "make build      - build everything, release"
@@ -36,6 +36,7 @@ help:
 	@echo "make test       - every test"
 	@echo "make check      - fmt + clippy + tests: the pre-commit gate"
 	@echo "make review     - the review gate: does the staged change carry its review?"
+	@echo "make ai-review  - the same change through the AI reviewer (OCR_ARGS=--commit HASH by default HEAD)"
 	@echo "make decisions  - rebuild the browsable decision index (docs/site/index.html)"
 	@echo "make plan-check - is docs/dependency-tree.md consistent, and is every open item scheduled?"
 	@echo "make clean      - remove target/"
@@ -99,6 +100,28 @@ clippy:
 # The review gate, runnable by hand; `.githooks/pre-commit` runs the same script and refuses the commit.
 review:
 	python3 tools/review_check.py
+
+# The AI reviewer (open-code-review, the `ocr` CLI): an input to the adversarial review, never a replacement for it. It
+# reads the diff and the files around it and answers in findings - it cannot run the probe, so the numbers in the note
+# are still ours, and a finding is a hypothesis until one of us checks it.
+#
+# Tuned for this box: 2 CPUs and a metered endpoint. The tool's own defaults (max effort, 8 workers, no ceiling) spent
+# **1,438,799 tokens and 15m43s** on a 33-line commit; low effort with two workers is the setting to compare against
+# before raising either. The JSON lands in build/, which is gitignored: a note quotes the run, the repo does not carry it.
+OCR ?= ocr
+OCR_ARGS ?= --commit HEAD
+OCR_EFFORT ?= low
+OCR_CONCURRENCY ?= 2
+OCR_BUDGET ?= 400000
+# It excludes Markdown by extension (as `unsupported_ext`) but *not* `.toml` or `.html`: a docs-only commit of mine cost
+# **236,189 tokens and 3m21s** reviewing a TOML and the 333 KB generated `docs/site/index.html`, and returned nothing.
+OCR_EXCLUDE ?= docs/**,build/**,target/**,config/gamedata/**,**/*.html
+
+ai-review:
+	@mkdir -p build
+	$(OCR) review $(OCR_ARGS) --effort $(OCR_EFFORT) --concurrency $(OCR_CONCURRENCY) \
+		--max-tokens-budget $(OCR_BUDGET) --exclude '$(OCR_EXCLUDE)' --audience agent --format json -o build/ocr-review.json
+	@python3 -c "import json;d=json.load(open('build/ocr-review.json'));s=d.get('summary') or {};print('ai-review:',d.get('status','?'),'-',s.get('files_reviewed','?'),'files,',s.get('comments','?'),'comments,',s.get('total_tokens','?'),'tokens,',s.get('elapsed','?'))" || echo "ai-review: no run manifest written (preview, or the review did not start)"
 
 # The gate's own tests: the file the gate is written in is the file most likely to rot.
 review-test:

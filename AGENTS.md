@@ -16,7 +16,10 @@ an agent reading this: **these four steps bracket every increment, and the third
    reply, never silently.
 3. **Adversarial review - performance and stability, with numbers.** Before the words "done" or "landed":
    measure the change against the previous commit (the probe A/B, same generated data), ask what *else* stands where the
-   change stands, hunt the failure no test covers, and report your own errors including a misreported test count. Write the
+   change stands, hunt the failure no test covers, and report your own errors including a misreported test count.
+   **Put the same diff through `make ai-review`** (open-code-review, D209) before writing the note: it reads the files
+   around the change and answers in findings. Fold them in, and say which you accepted and which you refused and why — a
+   finding is a hypothesis until one of us checks it, and it cannot run the probe. Write the
    review to `docs/reviews/<date>-<topic>.md` with a `## Performance` section holding a **measured** number and a
    `## Stability` section naming what was attacked. **The gate enforces the file's existence**: `.githooks/pre-commit` runs
    `tools/review_check.py` and refuses a commit that changes `crates/`, `config/`, `tools/`, `Age2HD/` or `build/`
