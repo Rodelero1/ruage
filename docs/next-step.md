@@ -1,22 +1,25 @@
-# OPEN - D200 is on `main` with its crowd fix; next is register row 2, damage
+# OPEN - D204 is built on branch `d204-no-pushing` (not merged); next is register row 2, damage
 
-**State, 2026-11-13 (second session).** `main` carries **D200** - friends are solid, a tile seats seven at the measured
-0.66, a body at rest is nudged only after forty refused ticks, a place a body stands on is stale, and **a body on the
-mover's own tile can now be walked around sideways**. The last one is what made the difference: without it, seven villagers
-stood on two tiles in `WaitOwnTile` for the whole match and the acceptance bank held **0 food from 400 s to 2,400 s**.
+**State, 2026-11-14.** **D204** is built and green: a man who cannot get his square at a node **takes the next tile of the
+same resource column**, and no body with a gather order is displaced by anybody. `push_the_standing` still nudges a body
+with **no work at all** - a bystander in a doorway, a soldier in a corridor - which is the decision's own scope.
 
-**Measured, `--seed 7 --ticks 48000 --report 400`:** food `4 / 14 / 484 / 594 / 1226 / 1396`, wood `40 / 75 / 300 / 415 /
-805 / 1215`, units `20 / 29 / 33 / 37 / 37 / 37`; summary `entities=143 players=2 hash=2d93236ebb16961b repaths=373
-made_room=140 repaths_body=77 repaths_ground=296`. Against `main` before D200: food `56 / 397 / 667 / 388 / 650 / 690`, wood
-2019, units 43, `entities=128 players=1 hash=ace125e60ea99b60 repaths=579 made_room=0`. The branch farms **more** food and
-holds less wood - a different opening, not a stalled one. Gate: 184 binaries, 841 passed, 0 failed, 21 ignored, `EXIT 0`,
-fmt and clippy clean.
+**Measured, `--seed 7 --ticks 48000 --report 400`:** food `45 / 49 / 268 / 120 / 660 / 450`, wood `80 / 96 / 135 / 75 /
+395 / 185`, units `20 / 31 / 35 / 44 / 46 / 48`; summary `entities=160 players=2 hash=c3b10f4b09e17a43 repaths=324
+made_room=147 repaths_body=83 repaths_ground=241`. Against `main` before D204 (`7d00be8`): food `4 / 14 / 484 / 594 / 1226
+/ 1396`, wood 1215, units 37, `entities=143 players=2 hash=2d93236ebb16961b repaths=373 made_room=140`. **Eleven more
+units and a smaller bank** - the match spends rather than banks - and the early game is the improvement: **45 food at 400 s
+against 4**. Wall time 61.3 s -> 30.3 s; the like-for-like tick `7.4-8.4 us -> 6.5-6.8 us`. Gate: 185 binaries, 843 passed,
+0 failed, 21 ignored, fmt and clippy clean.
 
-**The one cost, stated plainly.** The enemy is **not eliminated by 40:00**: its town centre is at **1451 of 2400 hp** with
-four spearmen in `Attack` on it, where `main` had already razed it with eleven soldiers. `players` is the highest surviving
-player id, so `players=2` means "the enemy still stands", not "the match is broken". The record, with every withdrawn rule
-and its measurement: `docs/reviews/2026-11-13-owner-blind-collisions.md`; the revert and what it taught:
-`docs/reviews/2026-11-13-d200-reverted-food-stall.md`.
+**What the nudge was doing, measured before the change:** 310 displacements over the acceptance run - **232 builders, 76
+loaded carriers, 2 idle, 0 gatherers**. The resource case was never a shove: it was **45,359 refusals of a square**, over 18
+distinct villagers, one refused on **1,782 consecutive ticks**. Both halves are in
+`crates/sim/tests/no_pushing.rs`; the record, with the gate that was written first and withdrawn, is
+`docs/reviews/2026-11-14-d204-no-pushing.md`.
+
+**The one cost, stated plainly.** The enemy is **not** eliminated by 40:00 (its town centre stands and `players=2` means
+"the enemy still stands"). That is unchanged from the D200 merge and is a pacing question, not a stall.
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
@@ -47,14 +50,16 @@ One repository, GPL-3.0 directory with its own licence file, invoked once at ins
 
 The game shows seven to eight bodies at **0.66** on a node's touching envelope; our ring hands out places at 0.66 first and
 0.40 when the ring refuses. Both are now exercised by the acceptance run, so the difference is visible; what is not settled
-is whether a **ninth** man should stand outside and wait (the crowd policy this work shipped) or walk to another node.
+is whether a **ninth** man should stand outside and wait (the crowd policy this work shipped) or walk to another node - and
+D204 has now made "walk to another node" the engine's answer wherever the man was refused a square, which may be what the
+saves were showing all along.
 
 ## Needs the owner - and only this
 
 - the **A vs B** publishing answer (does `--load` live in a published engine, and is the engine public yet) -
   `docs/licensing.md`, "B now, A later";
-- **whether "the enemy is eliminated inside 40 minutes" is a requirement.** With friends solid it is now a pacing question,
-  not a stall: the town centre is at 60% with four attackers on it at 40:00. Nothing in the suite depends on the answer.
+- **whether "the enemy is eliminated inside 40 minutes" is a requirement.** With friends solid it is a pacing question,
+  not a stall. Nothing in the suite depends on the answer.
 
 **Decided elsewhere, not on this plan:** pacing/AI (owner: later, with the AI), the renderer (D18), the `Vision` split (no
 behavioural content - last on purpose).
@@ -85,7 +90,7 @@ craft-anything's CLI is `/opt/data/tools/craft-anything/bin/craft-anything-cli`;
 (`mcp --all-tools --deep`, 323 tools, `connect_timeout` 180) and its `PATH` must carry the JDK 21 `bin` and both Ghidra 12.2
 directories. **Every identification number in the evaluation came from its built-in engine**, which needs no Ghidra; a
 Ghidra-backed call pays ~6.5 min and 1.4 GB. Its function count is **19,484** where Ghidra's is **15,465** - never quote one
-without its tool. The REA corpus is `/opt/data/tools/rea/pseudo-aokhd` (15,465 functions) and is the *reading* instrument.
+without its tool. The REA corpus is `/opt/data/tools/rea/pseudo-aokhd` (15,465 functions) and it is the *reading* instrument.
 
 **Owner saves live in scratch, never in the tree** (D8/D22): `/opt/data/cache/scratch/owner-saves/`, SHA-256 `6bc5f8a6…`
 (tree), `b9455053…` (mine), `bbc92744…` (bush), save version 12.5.

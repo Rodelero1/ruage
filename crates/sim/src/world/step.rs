@@ -29,6 +29,9 @@ impl World {
         for node in std::mem::take(&mut work.respreads) {
             self.maybe_respread(node);
         }
+        // **Before the re-tasks** (D204): a man the ring has refused for long enough is sent to another node this same
+        // tick, so the count that decides it and the order that answers it are read from the same state.
+        self.count_refused_squares(std::mem::take(&mut work.square_refusals));
 
         self.resume_fights(work.engaging, work.turning, work.homing);
 
@@ -255,6 +258,22 @@ impl World {
             );
             if !already && let Err(error) = self.start_attack(hunter, animal) {
                 self.refusal = Some((hunter, error, self.tick));
+            }
+        }
+    }
+
+    /// **Fold in how long each man has stood refused a square** (D204). `decide` reads the world and cannot write it, so
+    /// the counts travel as work like the re-tasks do; this is where they land. `None` forgets a man's count - he has a
+    /// square, or has just been sent elsewhere - so a man who is seated is never charged for the wait at the node he left.
+    fn count_refused_squares(&mut self, refusals: Vec<(EntityId, Option<(EntityId, u32)>)>) {
+        for (id, refusal) in refusals {
+            match refusal {
+                Some((node, ticks)) => {
+                    self.square_refused.insert(id, (node, ticks));
+                }
+                None => {
+                    self.square_refused.remove(&id);
+                }
             }
         }
     }
@@ -899,6 +918,14 @@ impl World {
                 if entity.kind != EntityKind::Unit {
                     return None;
                 }
+                // **A man refused a square at a resource never shoves anybody** (D204). Displacement is not the answer
+                // to a crowd at a resource - the owner's words - so the man who cannot stand his square does not push the
+                // man who holds it: he looks at the next tile of the same resource (the gather arm's `square_refused`
+                // count), and waits when there is none. The body-side gate below is the same rule seen from the other
+                // side; this one keeps a worker at a node from being the shover in the first place.
+                if self.square_refused.contains_key(id) {
+                    return None;
+                }
                 // **A jammed man may have no waypoint left** - the builder whose route is spent, the man whose order is
                 // simply held - so the direction comes from his task's goal when the route is empty. Requiring a waypoint is
                 // why the builder/walker deadlock was never nudged: the builder had none.
@@ -950,6 +977,17 @@ impl World {
                     ) || matches!(other.task, Task::Attack { target, .. } if target == entity.id)
                 });
                 if worked {
+                    continue;
+                }
+                // **A man working a resource, or walking to one, is never moved off his square** (D204). The owner played
+                // the D200 merge and said so: *"I don't like villagers pushing other villagers"*. A displaced man is a
+                // man whose gather order is silently set back by a nudge he never asked for - the nudge moves him a
+                // twentieth of a tile and the settle then walks him back, so the two rules take turns; measured on the
+                // crowded-tree fixture, a body of the crowd was shoved **0.15** tiles off its square by a man who could
+                // not get one of his own. The answer to that man is the *second* half of D204 - he looks at the next tile
+                // of the same resource (the gather arm's `square_refused` count) - which is why he is skipped here too.
+                let gathering = matches!(entity.task, Task::Gather { .. });
+                if gathering {
                     continue;
                 }
                 // **A jam of two ordered men resolves the same way** (D200). A builder and a walker can block each other on
@@ -2137,6 +2175,39 @@ impl World {
                             // shuffle. That is a node-level operation, so the node is queued and the work is done after the
                             // entity loop, rate-limited to once per twenty ticks per node.
                             work.respreads.push(node);
+                            // **A man who cannot get his square looks at the next tile of the same resource** (D204, the
+                            // owner: *"I want instead to look for another free place at next tile with same resource instead
+                            // of fighting over the place at the same tile"*). The count is what keeps this from being the
+                            // per-tick re-plan D182 measured at 35 s -> 400 s: a man passing through a crowd does nothing,
+                            // and one who has stood here refused for `STALLED_TICKS` - the wait the displacement rule used
+                            // to spend before shoving somebody - looks once, and waits again when there is nowhere to go.
+                            //
+                            // Measured on the crowded-tree fixture: the thirteenth man stood beside it with **progress 0**
+                            // for 2,000 ticks while the tree of the same column five tiles east was untouched, and one
+                            // member of the crowd was nudged **0.15** tiles off his place.
+                            let waited = self
+                                .square_refused
+                                .get(&entity.id)
+                                .copied()
+                                .filter(|(at, _)| *at == node)
+                                .map_or(0, |(_, count)| count);
+                            if waited >= Self::STALLED_TICKS {
+                                match self.nearest_like_free(entity.position, node, entity.id) {
+                                    Some(next) => {
+                                        work.square_refusals.push((entity.id, None));
+                                        work.retasks.push((entity.id, next));
+                                    }
+                                    // **Nowhere else has a place**: he stands down and waits, and looks again after the
+                                    // same wait - a node frees up when its own crowd goes home to eat.
+                                    None => work.square_refusals.push((entity.id, Some((node, 0)))),
+                                }
+                            } else {
+                                work.square_refusals
+                                    .push((entity.id, Some((node, waited.saturating_add(1)))));
+                            }
+                        } else if self.square_refused.contains_key(&entity.id) {
+                            // He has a square: the count of refusals belongs to the node he has left.
+                            work.square_refusals.push((entity.id, None));
                         }
                         if let Some(crate::Standoff::Point(stand)) = found {
                             // The ring's centre travels with the place: a man whose straight line to it is blocked steps **round
@@ -2390,4 +2461,8 @@ struct TickWork {
     places: Vec<(EntityId, EntityId, (Fixed, Fixed))>,
     /// Nodes that refused a worker this tick and should re-lay their ring (D200, the owner's rule of 2026-11-13).
     respreads: Vec<EntityId>,
+    /// **How long each man has stood refused a square** (D204): `Some((node, ticks))` is a man still refused at that
+    /// node, `None` is a man who has a square - or has just been sent to another one - so his count goes. Carried here
+    /// because `decide` reads the world and never writes it; `count_refused_squares` folds these in after the loop.
+    square_refusals: Vec<(EntityId, Option<(EntityId, u32)>)>,
 }

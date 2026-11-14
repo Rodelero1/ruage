@@ -5083,3 +5083,36 @@ is the shape the owner asked for and which the AI layer will want anyway.
 is two men ordered onto one occupied square (the second arrives at a different node of the same column, or waits when there
 is none), watched red first. Until it is built, `push_the_standing` is a **known contradiction** with this decision and
 `docs/next-step.md` carries it as step 1.
+
+#### D204 addendum - built: the refusal is counted, the next tile is taken, and nobody holding a square is moved
+
+*2026-11-14. Branch `d204-no-pushing`, one commit. Two tests in `crates/sim/tests/no_pushing.rs`, watched red first:*
+`a_man_who_cannot_get_his_square_takes_the_next_tree` *and* `a_crowd_at_a_tree_is_never_pushed`.
+
+1. **The count.** `World::square_refused` brackets a worker as `(node, refused ticks in a row)`, folded in after `decide`
+   (`count_refused_squares`) because `decide` reads the world and never writes it. After `STALLED_TICKS` - the wait the
+   displacement rule used to spend - he asks `nearest_like_free` once, and is re-tasked through the existing
+   `work.retasks` path. When the search finds nothing the count restarts at zero, so a second look is another
+   `STALLED_TICKS` away rather than every tick, which is the cost D182 measured at **35 s -> 400 s**.
+2. **The two gates in `push_the_standing`.** A man **refused a square at a node** does not shove anybody (he has the
+   D204 answer instead), and a body **with a gather order** is never moved: he is working a resource or walking to one.
+   Everything else keeps the nudge - a bystander in a doorway, a soldier in a corridor - which is D204's own scope.
+3. **What the nudge was really doing**, measured on `main` over the acceptance run before any code moved: **310
+   displacements, 232 on builders, 76 on loaded carriers walking home, 2 on idle bodies, 0 on gatherers**. So the
+   "villagers pushing villagers" the owner saw in a match was at building sites and drop sites, and the resource case
+   was not a shove at all but a man **standing in `NoRoom`**: **45,359 refusals** over the run, **18 distinct
+   villagers**, one refused on **1,782 consecutive ticks**.
+4. **The fixture is the owner's own picture**: every square of one tree's ring taken by a standing body, one more man
+   sent at that tree, and a second tree of the same column five tiles east. On `main` he stands beside the crowded tree
+   with **progress 0** for 2,000 ticks and one member of the crowd is shoved **0.15** tiles off his place; on this branch
+   he works the far tree and nobody moves.
+5. **Acceptance, measured**: `entities=143 players=2 hash=2d93236ebb16961b repaths=373 made_room=140` ->
+   `entities=160 players=2 hash=c3b10f4b09e17a43 repaths=324 made_room=147`; food `4/14/484/594/1226/1396` ->
+   `45/49/268/120/660/450`; wood `40/75/300/415/805/1215` -> `80/96/135/75/395/185`; units `20/29/33/37/37/37` ->
+   `20/31/35/44/46/48`. **Eleven more units and a smaller bank**: the match spends what it has instead of banking it.
+   Wall time **61.3 s -> 30.3 s**, and the like-for-like tick `7.4-8.4 us -> 6.5-6.8 us`. The full record, including the
+   gate that was written first and killed by `gather_motion`, is `docs/reviews/2026-11-14-d204-no-pushing.md`.
+6. **Withdrawn**: "a man with a gather order never nudges anybody" - the simpler reading of the owner's sentence. It took
+   `a_gatherer_walks_round_a_friend_standing_in_his_path` red (*"never reached the bush in 1,500 ticks; closest 1.84"*),
+   because D204 keeps the nudge for a body with no work at all. The rule is scoped to the shover being refused a square,
+   and to the body moved having a gather order.

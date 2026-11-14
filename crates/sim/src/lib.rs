@@ -1156,6 +1156,15 @@ pub struct World {
     /// Bookkeeping, and not hashed: it is re-derived from the tasks every time it is read (`place_is_live`), so a re-tasked
     /// man's place dies with the order rather than needing a sweep.
     gather_place: BTreeMap<EntityId, (EntityId, (i64, i64))>,
+    /// **How long a man has been refused a square at the node he was sent to** (D204): worker -> (node, refused ticks
+    /// in a row). The owner's rule is that a worker who cannot stand at his node *looks at the next tile of the same
+    /// resource* rather than shoving the man who holds the square - and the look costs a search, so it is taken only
+    /// once he has actually been refused for as long as the displacement rule used to wait (`STALLED_TICKS`), not on
+    /// every tick he spends beside a crowd.
+    ///
+    /// Bookkeeping, and not hashed: it is read against the man's current task node, so a re-tasked man's count dies
+    /// with the order rather than needing a sweep.
+    square_refused: BTreeMap<EntityId, (EntityId, u32)>,
     /// **Sites that could not start because somebody was standing on them** (D183 §4). Bookkeeping, not simulation state:
     /// it exists so the refusal goes out **once per state change** rather than once a tick, and like `foundations` and
     /// `open_gates` it is derived from the world every tick, so it is not hashed. A site leaves the set the moment its
@@ -1499,6 +1508,7 @@ impl World {
             foundations: BTreeSet::new(),
             stalled_sites: BTreeSet::new(),
             gather_place: BTreeMap::new(),
+            square_refused: BTreeMap::new(),
             requires_built: BTreeMap::new(),
             age_needs: BTreeMap::new(),
             roster: [false; MAX_PLAYERS],
