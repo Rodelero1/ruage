@@ -26,7 +26,7 @@ PACK = --config $(CONFIG)/sim.toml \
        --effects $(CONFIG)/gamedata/effects.toml \
        --civs $(CONFIG)/gamedata/civs.toml
 
-.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check next-step-check
+.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check next-step-check plan-check
 
 help:
 	@echo "make build      - build everything, release"
@@ -37,6 +37,7 @@ help:
 	@echo "make check      - fmt + clippy + tests: the pre-commit gate"
 	@echo "make review     - the review gate: does the staged change carry its review?"
 	@echo "make decisions  - rebuild the browsable decision index (docs/site/index.html)"
+	@echo "make plan-check - is docs/dependency-tree.md consistent, and is every open item scheduled?"
 	@echo "make clean      - remove target/"
 
 build:
@@ -74,6 +75,11 @@ decisions:
 next-step-check:
 	python3 tools/next_step.py --check
 
+# The dependency tree (docs/dependency-tree.md): every id defined once, every open item named by a phase, every citation
+# pointing at a file that exists and a line inside it. Its own tests are in tools/test_plan_check.py.
+plan-check:
+	python3 tools/plan_check.py
+
 decisions-check:
 	python3 tools/decisions.py --check
 
@@ -81,7 +87,7 @@ decisions-check:
 tools-test:
 	python3 -m unittest discover -s tools -p 'test_*.py'
 
-check: fmt clippy test tools-test next-step-check
+check: fmt clippy test tools-test next-step-check plan-check
 	@echo "check: clean"
 
 fmt:
