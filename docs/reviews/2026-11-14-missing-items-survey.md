@@ -1,6 +1,6 @@
 # Review — what the original and its neighbours have that the tree did not (2026-11-14)
 
-**What changed.** `docs/dependency-tree.md` gains **15 missing mechanics (M11-M25)**, **two debts (T15, T16)**, a
+**What changed.** `docs/dependency-tree.md` gains **15 missing mechanics (M11-M25)**, **three debts (T15-T17)**, a
 "verified absent from HD 5.7" table and a corrected seam (**R3**). `tools/plan_check.py` learns one thing: a citation
 prefixed `genie:`, `openaok:`, `install:` or `ruage-tools:` names a file that is **not** in this tree, so it is skipped by
 the prefix rather than by luck — without it, every external citation would read as a broken path.

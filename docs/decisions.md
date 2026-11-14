@@ -5306,6 +5306,18 @@ tree and are recorded there rather than quietly fixed in their own files: D152 s
 missing (D154/D204 shipped them), `civs.rs`'s header says the team bonus is unapplied (`research.rs:221` applies it),
 `window.rs` says there is no input or HUD, and SPEC v1.153's "the standoffs still use the ring" was superseded by D192.
 
+**Amended 2026-11-14, after a survey of the original and its neighbours.** The owner asked whether the original game and
+the published engines hold items the tree was missing, and they do: the install's own strings and its 104 `.per` AI files,
+plus `librematch/genie`'s systems list and `Zaydme/openaok`'s feature list, added **M11-M25** (waypoint queues, follow and
+guard, the town bell, facing and the animation clock, player diplomacy, tribute, treaty, the market's prices, trade carts
+and cogs, victory modes beyond conquest, scenario triggers, random map generation, the `.per` interpreter, the network
+layer, and chat/taunts/flares/cheats) and **T15-T17**. Two of those correct the tree rather than extend it: the random
+protocol is **eleven streams reseeded from a frame seed every tick** (not "a roll is its own stream", which was R3's
+weaker form) and there is a **turn** (only one player's unit AIs run fully), so R3 was rewritten and T15/T16 sit in
+Phase 3. Six candidates were **refused as later-build features** — pastures, the mule cart, Empire Wars, `Wait_Solidify`,
+genie's passive-ability task kinds and `fmath` — because their names are zero hits in `AoK HD.exe` or they are DE
+content, and they are recorded in `docs/dependency-tree.md` §5b so the next session does not port them.
+
 **Basis.** The owner's six answers, quoted above; the tree's own probes (`grep -rn '\b195\b' crates`, `DisableTech` in
 `crates/sim`, `reseed`, `crates/data/src/techs.rs:96`); the importer's name table,
 `ruage-tools/genconfig/records.py:125`. Review: `docs/reviews/2026-11-14-plan-check.md` and

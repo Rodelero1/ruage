@@ -118,6 +118,7 @@ OCR_BUDGET ?= 400000
 OCR_EXCLUDE ?= docs/**,build/**,target/**,config/gamedata/**,**/*.html
 
 ai-review:
+	@command -v $(OCR) >/dev/null || { echo "ai-review: no '$(OCR)' on PATH - npm i -g @alibaba-group/open-code-review @alibaba-group/ocr-linux-x64, then see D209"; exit 1; }
 	@mkdir -p build
 	$(OCR) review $(OCR_ARGS) --effort $(OCR_EFFORT) --concurrency $(OCR_CONCURRENCY) \
 		--max-tokens-budget $(OCR_BUDGET) --exclude '$(OCR_EXCLUDE)' --audience agent --format json -o build/ocr-review.json
