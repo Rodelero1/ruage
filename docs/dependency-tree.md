@@ -80,7 +80,7 @@ are ordered by what they unblock, not by size.
 
 | id | Debt | Why it is a dependency, not a nit | Evidence (grep it) | Unblocks |
 |---|---|---|---|---|
-| **T1** | **Attribute 1 is line of sight, 12 is range — our table has them the wrong way round** | Town Watch/Town Patrol move a tower's **attack range** 8 → 12 where the game moves its *sight*; Greek Fire (effect 518, attribute 12) is inert. Every range modifier in the pack lands in the wrong field for two classes. | `crates/data/src/techs.rs:96` → `1 => Attribute::Range`; the unit rows put `los` on 1 and `range` on 12 (U21) | S10, S16, any tower/archer work, U21 |
+| **T1** | **Attribute 1 is line of sight, 12 is range — and the names come from the importer** | Town Watch/Town Patrol move a tower's **attack range** 8 → 12 where the game moves its *sight*, and Greek Fire (effect 518, attribute 12) is inert because the pack calls 12 `other:12`. Two repos: the name table is `ruage-tools` `ATTRIBUTE_NAMES` (`1: "range"`, no 12), the classifier is `crates/data/src/techs.rs:96`, and no sight modifier is consumed anywhere. | `ruage-tools/genconfig/records.py:125`, `crates/data/src/techs.rs:96`, raw `los` at `lib.rs:3155`, `seed.rs:146`, `memory.rs:250`, `report.rs:128` (U21) | S10, S11, S16, M2, and every tower/archer upgrade |
 | **T2** | **Four effect kinds are still unread: 0, 101 (tech cost), 102 (disable tech), 103 (tech time)** | 97 tech-cost and 25 tech-time commands apply nothing today; a cheaper-tech bonus or a civ's barred tech silently does nothing. `DisableTech` is *parsed* and never consulted. | `crates/data/src/techs.rs:131 DisableTech`, `:501 kind 101`; `grep -rn DisableTech crates/sim` → **0** (U2) | S7, S8, S16, M2 |
 | **T3** | **`build` counts builder-ticks and never reads construction rate (resource 195)** | Spanish barracks finish in the same ticks as a British one; the dat's 1.3 is loaded and unused. Also the civ's kind-1 *sets* are not applied at match start. | `grep -rn '\b195\b' crates --include='*.rs'` → no hit (U19) | S5, S16, M2 |
 | **T4** | **Farm food base is 250 in `economy.toml`; the dat's base is 175** | A Horse Collar farm holds 325 where the game holds 250; a Chinese one 295 against 220. The number is authored, not read from the pack's per-civ resource 36. | `config/economy.toml` `[farm.depletion] food_per_farm = 250`; asserted at `crates/data/tests/economy.rs:78` (U20) | Economy fidelity, S16, M2 |
@@ -181,60 +181,113 @@ F4 overrides ────────────────────┘    
    P3 importer in tools ─► P6 publish ─► P4 assets ─► P5 AI ─► P8 sound
 ```
 
+## 7b. The seams that keep the deferred mechanics cheap — the owner's "architecture must be ready"
+
+**Ruled 2026-11-14: monks, trade, naval and relics are *not* in v1, and the architecture must be ready for them.** "Ready"
+is a testable claim here, so it is written as five **seams** — each proved by a fixture *pack*, never by the mechanic — and
+each is a slice small enough to land in one pass. None of them names a game's word in `crates/` (D17).
+
+| id | Seam | Today | The proof (a test that fails until the seam exists) |
+|---|---|---|---|
+| **R1** | **A body has a domain; ground has a surface** — one walkability grid becomes one predicate | `tile_walkable`, `is_free_ground`, `can_reach` and the placement tests each read `Terrain` plus footprints directly | A pack declares `domain = "water"` on a unit and a map tile `W`; a fixture unit stands on the water and **refuses the grass**, with no `enum` in `crates/` naming either |
+| **R2** | **An order that is an ability** | `Command` grows a variant per mechanic (a monk, then attack-ground) and `Task` grows the matching arm | `Command::Cast { unit, ability, target }` where `ability` resolves through a content table (range, cooldown, roll, effect); a pack declares an ability that only starts a cooldown, and the engine runs it |
+| **R3** | **A roll is its own seeded stream** | two RNG streams, `sim` and `map`, chosen at load | a third named stream for rolls: the same seed gives the same sequence, and a match that never rolls leaves `sim`/`map` untouched (state hash identical) |
+| **R4** | **Victory is a table the engine evaluates, not a function** | `MatchOutcome` is conquest, derived from the seat roster | `[[victory]]` in content with kinds the engine can evaluate from state (`seats`, `relics`, `building_standing`); the conquest rule re-expressed in it, and **the acceptance hash does not move** |
+| **R5** | **A price is state, not a field** | the stockpile is a fixed-width row per player; nothing moves | prices as a hashed vector derived from content and updated by a rule; a world with no market hashes exactly as today |
+
+**Where they go in the order:** after **Phase 3** (they touch the state hash and the RNG, which Phase 3 settles) and
+**before Phase 5** (breadth multiplies the call sites each seam has to change). **R1 is the expensive one** and the only
+one on a hot path — it must carry a before/after tick measurement, and the acceptance hash must be byte-identical.
+
+**What "ready" does not mean:** it does not mean building the mechanics early, and it does not mean guessing their numbers.
+A seam is a shape; a monk's faith cost, a trade route's value and a relic's count stay open questions until they are read
+from the data or asked.
+
 ## 8. The sequence
 
 Six phases. **A phase's gate is the previous phase's last item green and pushed.** Within a phase the order is the
 cheap-first order: a live defect that changes a number a player can see before a mechanism nobody has asked for.
 
 ### Phase 0 — the live wrong numbers (days, no owner input needed)
-1. **T1** — attribute 1 → `line_of_sight`, 12 → `range`, in `crates/data`, with the two effects that prove it (Town
-   Watch keeps a tower's range at 8; a fire galley with Greek Fire outranges one without).
-2. **T4** — farm base from the pack's per-civ resource 36 (175), techs added on top; tests for 175 / 250 / 220.
-3. **T9** — U17's negative packing, or an explicit refusal that names the effect (a wrong number is worse than a stop).
-4. **T10** — either an elevation field or a stated zero with a test that says so.
+1. **T1a** — the attribute names, **in the importer**: `ruage-tools/genconfig/records.py`'s `ATTRIBUTE_NAMES` has
+   `1: "range"` and no `12`, so the pack names 177 range modifiers from attribute 1 and attribute 12 is `other:12`. The
+   fix is two dict entries (`1: "line_of_sight"`, `12: "range"`), its own pytest, a regenerated `config/gamedata/`, and
+   the two pinned facts it must keep (Fletching adds +1 range; Town Watch adds +4 to line of sight for classes 3 and 52).
+   **This is a second repository** (D12) and that is why T1 looked like a one-line change and is not.
+2. **T1b** — the engine half: `Attribute::from_id` (`crates/data/src/techs.rs:96`) gains `LineOfSight` and `Range` in the
+   right slots, and **vision consumes a line-of-sight modifier** — today `los` is read raw at four sites (`lib.rs:3155`,
+   `seed.rs:146`, `memory.rs:250`, `report.rs:128`) with no modifier ever applied, so the moment T1a lands, a +4 LOS
+   tech is inert unless this slice lands with it. Range modifiers are already consumed (`battle.rs:96`), which is exactly
+   why attribute-1 modifiers currently reach combat's range.
+3. **T4** — farm base from the pack's per-civ resource 36 (175), techs added on top; tests for 175 / 250 / 220.
+4. **T9** — U17's negative packing, or an explicit refusal that names the effect (a wrong number is worse than a stop).
+5. **T10** — either an elevation field or a stated zero with a test that says so.
 
-*Why first:* each is small, each is a **wrong** number rather than a missing feature, and each is an input to a later
-phase (T1 to M2, T4 to M2, T9 to S7).
+*Why first:* each is a **wrong** number rather than a missing feature, and each is an input to a later phase (T1 to M2,
+T4 to M2, T9 to S7). *Why T1a and T1b are one phase and two commits:* the importer's names and the engine's consumers are
+one behaviour split by the licence boundary, and landing either alone leaves the pack and the engine disagreeing about what
+attribute 1 means.
 
 ### Phase 1 — the effect interpreter closes (one slice)
-5. **T2** — kinds 0, 101, 102, 103 (tech cost, tech time, disable tech, set attribute), then **T5**'s tech bars, which is
-   the same code path: a civ's identity is a disable list.
-6. **T6** — U10's kind-3 replace semantics: live units of the upgraded id, units in production, and the queue.
+6. **T2** — kinds 0, 101, 102, 103 (tech cost, tech time, disable tech, set attribute), then **T5**'s tech bars, which is
+   the same code path: a civ's identity is a disable list. **T8**'s register row 2 (damage) closes here too — it is the
+   one row of the register that is already located, so it leaves the register with an answer instead of a queue.
+7. **T6** — U10's kind-3 replace semantics: live units of the upgraded id, units in production, and the queue.
 
 *Gate:* a British player cannot research a British-barred tech, and a tech-cost bonus changes a price with a test.
 
 ### Phase 2 — the economy's own rules (one slice each)
-7. **T3** — construction rate 195 and the civ's kind-1 sets applied at match start.
-8. **T7** — U22's contract in three tests: LOS + 5 bound, footprint-seeded drop-site search at site LOS + 10, 30 reach
+8. **T3** — construction rate 195 and the civ's kind-1 sets applied at match start.
+9. **T7** — U22's contract in three tests: LOS + 5 bound, footprint-seeded drop-site search at site LOS + 10, 30 reach
    tests then the fallback. **Measure before/after**: the repath and `made_room` counters already exist.
-9. **T14** — farm reseed queue, once the farm's food base is right (T4).
+10. **T14** — farm reseed queue, once the farm's food base is right (T4).
 
 *Gate:* the acceptance run's food/wood columns move only where the change says they should.
 
 ### Phase 3 — determinism and order (a slice with a measurement)
-10. **T11** — tick rate: one discriminating probe (reload-bound fight captured at high fps, or a save's own clock),
+11. **T11** — tick rate: one discriminating probe (reload-bound fight captured at high fps, or a save's own clock),
     then restate §6.1's ms column if it moves.
-11. **T12** — U18: decide the intra-tick order from the binary's `BaseWorld::update` (the one address the register has
+12. **T12** — U18: decide the intra-tick order from the binary's `BaseWorld::update` (the one address the register has
     not read), test first ("a unit killed by an earlier blow still swings"), then the apply loop.
 
 *Gate:* the acceptance hash is unchanged on the same tick rate — an order change that moves the hash is a behaviour change
 and must be recorded as one.
 
+### Phase 3b — the seams for the mechanics that are deferred but must not be blocked (§7b)
+13. **R3** (a roll's own seeded stream) and **R4** (victory as a content table), then **R5** (a price is state), then
+    **R2** (an order that is an ability), then **R1** (a body's domain).
+
+*Why this order inside the phase:* R3 and R4 are the two that move the state hash, so they go first while the acceptance
+hash is the instrument; R1 is a hot-path refactor and goes last, with a before/after tick measurement and a byte-identical
+acceptance hash as its gate. *Why here in the sequence:* after Phase 3 (which settles the RNG and the update order these
+seams touch) and before Phase 5 (breadth multiplies every call site R1 has to change).
+
+*Gate:* a fixture pack expresses a water-only unit, an ability, a relic victory and a market price **without** `crates/`
+learning any of their names; and the acceptance match's hash is byte-identical.
+
 ### Phase 4 — the oracle (one slice per step, and this is where the questions stop being arguments)
-12. **P1** `World::from_state` + `--load` (B shape). 13. **P2** the 18 saves as a differential oracle. 14. **P3** the
-importer inside `tools/` and the bootstrap.
+14. **P1** `World::from_state` + `--load`, in the **B shape** the owner ruled on 2026-11-14: a tool-side converter behind
+    the seam, so the engine needs no reader of its own.
+15. **P2** the 18 install saves as a differential oracle — 1,200 ticks from `brit7` compared with `brit8`.
+16. **P3** the importer inside `tools/` and a bootstrap step, so a clean clone with only `Age2HD/` produces
+    `config/gamedata/`.
 
 *Why after 0–3:* the saves can settle T4, T7, T11 and T12, but they settle them **better** once the code they test is
 already right — and P1/P2 is the expensive slice that turns every later "is this right?" into a comparison.
 
 ### Phase 5 — breadth, on a correct base
-15. **M2** civ breadth (needs T1, T2, T3, T4, T5, T6 — all of them, which is why it is here). 16. **M1** fog occlusion.
-17. Then, **in the owner's stated order** (D152): UI polish, then graphics (**P4** asset pack + renderer), then **P5** AI,
-then **P8** sound. 18. **M3–M8** monks, trade, naval, relics, repair, attack-ground — each only after the owner says it
-is in v1, because each needs content the pack does not carry.
+17. **M2** civ breadth — **not in v1** (owner, 2026-11-14); it is listed here so the tree is complete, and it waits until
+    T1, T2, T3, T4, T5 and T6 are all closed.
+18. **M1** fog occlusion.
+19. Then, **in the owner's stated order** (D152): UI polish, then graphics — **T13** first, because the renderer needs
+    `world_units_per_tile` resolved — then **P4** (asset pack + renderer), then **P5** AI, then **P8** sound.
+20. **Not in v1, listed so nothing is forgotten** (owner, 2026-11-14): **M3** monks, **M4** trade, **M5** naval,
+    **M6** relics, **M7** repair, **M8** attack-ground. §7b's seams are what keeps them a schedule question rather than a
+    rewrite, and a named range would be exactly where one goes missing — so each is named.
 
 ### Phase 6 — the product
-19. **P6** publish cleanup, **P7** content (D201), **M10** replays/lockstep. 20. **M9** formations last, per D206.
+21. **P6** publish cleanup, **P7** content (D201), **M10** replays/lockstep.
+22. **M9** formations last, per D206.
 
 ## 9. What not to start yet, and the honest reason
 
@@ -275,17 +328,19 @@ grep -n 'world_units_per_tile' config/movement.toml # T13 closed when it is not 
 grep -c '^| [0-9]' docs/behaviour-diff.md          # rows still open outweigh rows ruled
 ```
 
-## 12. Needs the owner — the questions this tree cannot answer
+## 12. The owner's answers, 2026-11-14 — and what each changes
 
-1. **Which milestone is this tree optimising for** — a correct engine, or a playable product (graphics + AI + one civ)?
-   The order above is the *correct-engine* order; a product-first order starts at P1/P4 and pays T5 last.
-2. **Is civ breadth in v1?** If yes, Phase 5's M2 moves to Phase 2's end; if no, T5 can stay `PART` for months.
-3. **Are monks / trade / naval / relics in v1?** Each is content the pack does not carry, and none of them makes a
-   villager gather wood.
-4. **A-vs-B publishing** (does `--load` live in a published engine, and is the engine public yet) — it decides whether
-   Phase 4 is one slice or two repositories' worth. `docs/licensing.md`, "B now, A later".
-5. **Is "the enemy is eliminated inside 40 minutes" a requirement?** It is currently a pacing question, not a stall; no
-   test depends on the answer.
-6. **Register rows vs the oracle:** continue the binary register row by row (each row ~a session, craft-anything), or
-   pause it until P2's saves can answer the same questions — this is the one place where doing it in the *other* order
-   wastes a whole row.
+| # | Question | Answer | Consequence, applied above |
+|---|---|---|---|
+| 1 | The milestone | **(a) a correct engine** | the phase order stands as written; the product rows (P4-P8) stay last |
+| 2 | Civ breadth in v1 | **(a) no** — one civ until the debts close | M2 stays in Phase 5, after T1, T2, T3, T4, T5, T6 |
+| 3 | Monks / trade / naval / relics in v1 | **none — but the architecture must be ready** | §7b's five seams, R1-R5, are now scheduled work: Phase 3b, and their absence from the order would be a miss |
+| 4 | A vs B publishing | **B** | the engine is published, the spec and mechanics stay internal; `--load` starts as the tool-side converter (`World::from_state`), and P2/P3 follow that shape |
+| 5 | Register rows vs the oracle | **as recommended** — row 2, then pause for the oracle | T8 narrows to row 2; Phase 1 finishes row 2, Phase 4 builds P1/P2, and rows 3-12 resume with an oracle to settle them |
+| 6 | "The enemy is eliminated inside 40 minutes" | **not a requirement** | the pacing question is closed, not deferred: nothing tests it, and the AI's aggression is tuned later with the AI (D152) |
+
+**Still owed, and named because an unrecorded ruling is the failure D203 exists to prevent:** a `D`-row in
+`docs/decisions.md` carrying the six answers above. It is **not in this commit** on purpose — another session has an
+uncommitted, staged change in `docs/decisions.md` (its `d207` slice), and adding a row there right now would put its work
+in my commit. The row is the first item of the next step in `docs/next-step.md`, and until it lands these answers live
+here, which is a weaker home but not a lost one.

@@ -2020,6 +2020,33 @@ impl World {
     ///
     /// `radius` is the body's own footprint: a route for a scout is not a route for a house. A caller that only asks whether
     /// a place is reachable passes `0`, because the question is about walls, not clearance.
+    /// **The bodies a search must treat as ground** (D208b). The original inserts an object into its per-search rectangle
+    /// list when it is not on the ignore list **and its velocity is zero** (`FUN_007f9d80`), and the list is rebuilt for
+    /// every search - never written into the shared grid. That is what makes the *past* test sound: a man who is standing
+    /// still is planned around, so a route that later meets him can only be an old route.
+    ///
+    /// A body counts as standing when it did **not move on the last tick**. Not "has no route" and not "is idle": a man
+    /// walking to his death this tick must not become a wall to everybody who plans after him.
+    fn stander_tiles(&self, from_tile: (u16, u16), to_tile: (u16, u16)) -> BTreeSet<(u16, u16)> {
+        let mut tiles = BTreeSet::new();
+        for entity in &self.entities {
+            if entity.kind != EntityKind::Unit {
+                continue;
+            }
+            if entity.last_moved + 1 >= self.tick {
+                continue;
+            }
+            let tile = self.tile_of(entity.position);
+            // **The two ends are always walkable**: a search that cannot stand on its own start is not a search, and a goal
+            // a body occupies is still "come as close as you can".
+            if tile == from_tile || tile == to_tile {
+                continue;
+            }
+            tiles.insert(tile);
+        }
+        tiles
+    }
+
     pub(crate) fn plan_path(
         &self,
         from: (Fixed, Fixed),
@@ -2028,7 +2055,8 @@ impl World {
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
         let (start, goal) = (self.tile_of(from), self.tile_of(to));
-        if let Some(points) = short_range(walk, self.scale, from, to, radius, &BTreeSet::new()) {
+        let standers = self.stander_tiles(start, goal);
+        if let Some(points) = short_range(walk, self.scale, from, to, radius, &standers) {
             return Ok(points);
         }
         // The geometry declined: the tile search answers instead, and its corners become the route.
@@ -2037,7 +2065,7 @@ impl World {
         let steps = if start == goal || line_clear(walk, start, goal) {
             vec![goal]
         } else {
-            find_path(walk, start, goal).ok_or(SimError::NoPath {
+            find_path_avoiding(walk, start, goal, &standers).ok_or(SimError::NoPath {
                 from: start,
                 to: goal,
             })?

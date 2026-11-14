@@ -209,6 +209,11 @@ impl World {
             // when non-empty, so a world that never collides hashes exactly as one written before D98a.
             // A route's mates decide whether a body is solid to it, so they are state (D207). Written only when
             // non-empty, so a world with no group orders hashes as it did before this existed.
+            // **When the route was planned** decides which colliders are past (D208), so it is state.
+            if route.created != 0 {
+                fnv_bytes(&mut hash, b"created");
+                fnv_bytes(&mut hash, &route.created.to_le_bytes());
+            }
             if !route.mates.is_empty() {
                 fnv_bytes(&mut hash, b"mates");
                 fnv_bytes(&mut hash, &(route.mates.len() as u32).to_le_bytes());
@@ -227,6 +232,11 @@ impl World {
         for entity in &self.entities {
             fnv_bytes(&mut hash, &entity.id.0.to_le_bytes());
             fnv_bytes(&mut hash, &entity.player.to_le_bytes());
+            // **When this body last moved** decides whether a collider is past (D208), so it is state.
+            if entity.last_moved != 0 {
+                fnv_bytes(&mut hash, b"moved");
+                fnv_bytes(&mut hash, &entity.last_moved.to_le_bytes());
+            }
             let (tag, resource) = match entity.kind {
                 EntityKind::Projectile => (b'p', 0u8),
                 EntityKind::Building => (b'b', 0u8),
