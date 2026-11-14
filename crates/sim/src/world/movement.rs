@@ -359,6 +359,17 @@ impl World {
                 if delta.0 != Fixed::ZERO || delta.1 != Fixed::ZERO {
                     return (delta.0, delta.1, StepDecision::TakeAtRest);
                 }
+                // **Right of way still has to get past him** (D205). The pair meets at exactly the reach, where a step
+                // straight at the blocker bounds to zero and the re-plan cannot help - the search plans round *tiles*, and
+                // in one tile it cannot see the body at all (measured on this branch: the winner `WaitBlocked` from tick 70
+                // to tick 2,500 and the acceptance bank flat from 400 s to 2,400 s). A **tangential** step moves along the
+                // circle the bound protects rather than across it, so it costs no overlap: the older unit slides past the
+                // man it has just paused instead of standing until the pause ends and blocks him again.
+                if let Some(aside) = self.tangential_step(
+                    pass, id, radius, here, (dx, dy), other_at, reach, goal_tile, entering,
+                ) {
+                    return (aside.0, aside.1, StepDecision::Slide);
+                }
                 // **A body at rest inside the reach leaves no step at all**, and this body has right of way (rule 4), so
                 // it has nothing left to try: it stands where it is and the other man's pause is what will move the pair.
                 return (stop.0, stop.1, StepDecision::WaitBlocked);
@@ -370,9 +381,60 @@ impl World {
             // something that will never yield.
             return (dx, dy, StepDecision::TakeAtRest);
         }
-        // 7. Anything else: stand still. The blocker is moving, so the pair has an answer next tick - and if it is this
-        //    body that lost the tie-break, rule 4 has already paused it.
+        // 7. **A blocker that is moving is not an answer either** (D205, measured 2026-11-14): a queue of loaded carriers
+        //    at one drop site all stand - eight of them at 48,000 ticks holding ten each, the wood bank flat - because each
+        //    waits for the man in front and the re-plan cannot see a body. The tangent that rule 6 uses for a body at rest
+        //    works here too: it moves along the reach instead of into it. Standing still is the last resort, not the answer.
+        if let Some(aside) = self.tangential_step(
+            pass, id, radius, here, (dx, dy), other_at, reach, goal_tile, entering,
+        ) {
+            return (aside.0, aside.1, StepDecision::Slide);
+        }
         (stop.0, stop.1, StepDecision::WaitBlocked)
+    }
+
+
+    /// **A step along the circle the reach protects, when the straight one is bounded to zero** (D205).
+    ///
+    /// The pair meets at exactly the reach, where any step at the other body bounds to nothing, and the re-plan cannot help:
+    /// the search plans round *tiles*, so in one tile it cannot see the body at all (measured 2026-11-14: the winner
+    /// `WaitBlocked` from tick 70 to 2,500, the acceptance bank flat). A tangential step moves *along* the circle rather than
+    /// across it, so it costs no overlap. `None` when neither tangent is walkable, or lands inside a third body.
+    #[allow(clippy::too_many_arguments)]
+    fn tangential_step(
+        &self,
+        pass: &Passing<'_>,
+        id: EntityId,
+        radius: i64,
+        here: (Fixed, Fixed),
+        step: (Fixed, Fixed),
+        other_at: (Fixed, Fixed),
+        reach: i64,
+        goal: Option<(u16, u16)>,
+        entering: bool,
+    ) -> Option<(Fixed, Fixed)> {
+        for (tx, ty) in [(-step.1.raw(), step.0.raw()), (step.1.raw(), -step.0.raw())] {
+            if tx == 0 && ty == 0 {
+                continue;
+            }
+            let tangent = (Fixed::from_raw(tx), Fixed::from_raw(ty));
+            if !self.step_is_walkable(here, tangent, goal, radius, entering) {
+                continue;
+            }
+            let aside = self.bound_to_reach(here, other_at, tangent, reach);
+            if aside.0 == Fixed::ZERO && aside.1 == Fixed::ZERO {
+                continue;
+            }
+            let to = (
+                Fixed::from_raw(here.0.raw() + aside.0.raw()),
+                Fixed::from_raw(here.1.raw() + aside.1.raw()),
+            );
+            if self.blocker_at(pass.bodies, id, radius, to).is_some() {
+                continue;
+            }
+            return Some(aside);
+        }
+        None
     }
 
     /// **A step may not end inside the pair's reach** (D131 option A, the owner's call 2026-11-06: *"I think A should be

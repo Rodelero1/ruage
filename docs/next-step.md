@@ -1,4 +1,4 @@
-# OPEN - D205's pause is built on branch `d205-pause` and is NOT landable: the winner has no way past the man it pauses
+# OPEN - D205 is parked on `d205-pause`: the pause is right, the pather is the missing half
 
 **State, 2026-11-14.** D205's rule is **implemented and measured** on branch `d205-pause` (from `bb467dd`), and it **cannot
 land as specified**. The tie-break is faithful to the binary - lower entity id has right of way, the higher id pauses a
