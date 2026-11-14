@@ -31,6 +31,70 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-14 — genie's action deletions and the gate U22 was missing; two fixes in openage; openaok packages
+
+**`librematch/genie`, 42 commits (`f2d321e6` → `62831fa8`), 11-13 Nov, 208 files, ~12,700 lines added.**
+Two subjects: the **G-06 test batch** (the building update and gates, gathering, the ownership change,
+the work tasks, the town bell's commands, the release, the unit AI's order slots — a new `tests.rs`
+beside each port) and the **action list's deletions**, which stopped being "not ported" and became a
+subsystem of their own: `World::delete_actions` (`FUN_140a98620`), `World::set_only_action` (slot 0x808,
+`FUN_14106e990`), and `objects/teardown.rs`'s `NextHead` and `admit`.
+
+**The one tick fact, and where it stops.** A deleted head whose list still holds another action, on a
+unit below state 3, **restarts that action at once** (slot 0x28 with 0) *on the unit's step*; an action
+added after an install is the other argument (1). So the sequence inside one object is live, not
+deferred to the next tick. That is evidence for the "sequence, not snapshot" reading of U18 **inside one
+object only**: `world/step.rs` and `world/schedule.rs` are absent from all 42 commits, so the order
+*between* objects stands exactly where 2026-11-05 left it.
+
+**U22 gains the gate its contract was missing.** `gathering/closest_resource/tests.rs` (new) states
+`FUN_140c49760` from a drop site (`0x140c49d17`): the footprint-seeded pass at the **site's sight + 10**
+runs only where the site's tile lies **in the gatherer's zone** (`FUN_14118eea0` against `FUN_1411958c0`)
+or the site is a **dock or a port** (masters 45 and 2172, the build layer's new `SEARCH_FROM_FOOTPRINT`
+role); otherwise the search starts from the **site's tile alone** at the **gatherer's sight + 5**, with
+**no second pass from the unit**. And the unit AI's own search **passes over its current target**
+(`+0x48`). The recorded contract — "a first pass from the footprint … then the unit's own pass at
+LOS + 5" — described the dock/zone branch and made the fallback sound like the sequence.
+
+**The population peak is held after all: the 2026-11-12 sentence above needs this correction.**
+`a8b51dc6` gives `Player::population_peak` (`+0x6fc`, not saved). `add_attribute` raises it when
+attribute 11's new value is above it (`COMISS`/`JBE`, so a NaN and an equal value leave it), the load
+sets it to the population as loaded (`FUN_14163e970`), a new player's is 0. What still stands is that
+**no simulation rule reads it**: the only readers are the platform's statistics routines
+(`FUN_140e402e0`, `FUN_140d9fca0`). "Genie does not hold it" is false now; "nothing in the sim reads
+it" was and remains true.
+
+**A produced unit's placement is now specified whole.** `production/spawn/closest_spot.rs` (new,
+`FUN_1411c52f0`): the square about the building at its x radius + the unit's + the tuning gap, walked
+side by side (bottom from the left, right from the top, top from the right, left from the bottom) in
+steps of the unit's x radius, at least **0.1**, each point sorted by squared distance from the goal and
+the first free one taken. The goal is the gather point unless it names the building itself, else the
+building unit AI's queue front, else the gather point's own point.
+
+**`SFTtech/openage`, 8 commits (`6d147f48` → `5f042b9c`), 12-14 Nov — four fixes, no design change.**
+
+- `Grid`'s constructor read `sectors.at(0)` from the parameter after moving it into `this->sectors`; it
+  now reads `this->sectors.at(0)`. The sector size the pather takes was a moved-from read — undefined
+  behaviour, not merely a wrong number.
+- `ConcurrentQueue::pop()` took a `scoped_lock` and then called `front()`, which waited on the same
+  mutex; one predicate wait under one lock now. A deadlock, fixed.
+- Paths cross the C++/Python boundary as `str` (new `openage/util/fslike/cpp_tests.pyx`), and
+  `GameSimulation` re-attaches a renderer that arrived before the game existed.
+- **Still no fixed tick**; U12 is untouched here, and so is U7's algorithm question — a bug in the
+  pather's sector grid, not a new pather.
+
+**`Zaydme/openaok`, 2 commits (`73b6f067` → `95cb8a05`), 14 Nov — packaging.** `--no-sound` and
+`--no-movies` leave the audio and the movies out and the manifest lists only what is present; a chosen
+folder replaces the previous copy; `extract_hotkeys.py` treats a truncated `EMPIRES2.EXE` (the SafeDisc
+loader) as "no hotkeys" instead of failing the data's preparation. Their install is already a broad one
+(1999 CD, HD, Android/iOS/Switch); the posture is the one D22 implies — an optional file's absence
+degrades a feature, it does not stop the build.
+
+**Nothing on our axes from openage or openaok. One licence line:** genie is AGPL-3.0 and this week's
+`closest_spot.rs` is the kind of self-contained ~130-line routine that invites "it is only a small
+function" thinking. It is a port of `FUN_1411c52f0`; rewrite it from the exe and a test of ours, or
+derive it, never translate the file.
+
 ## 2026-11-13 — a roster renumbering, measured consistent; and the identity table's duplicates are six
 
 **`SiegeEngineers/aoc-reference-data`, one commit (`6d99a1fc` → `a53436be`): `data/players.yaml` and
@@ -66,7 +130,8 @@ relation-4 tests ask it (`task_finder/mod.rs`'s `allied`, `FUN_141663dc0`, with 
 units that are in motion; and the attribute store (`FUN_1416674b0`) is whole — a computer player's
 resource set above 0 puts aside `share x value` as **escrow**, attribute 262 names the player's
 civilisation-name override string, and attribute 11's population peak has **no simulation reader at
-all**: its only readers are the platform's statistics routines, so genie does not hold it (`75126697`).
+all**: its only readers are the platform's statistics routines, so genie does not hold it (`75126697`). *(Superseded 2026-11-14: `a8b51dc6` holds it as
+`Player::population_peak`; the simulation still does not read it.)*
 
 **U18 is unchanged again.** The only order that moved is *world* level — one step appended between
 `LastRandoms` and `Vision`. `world/step.rs`'s diff is plumbing a `treaty` reference through `Step`, and
