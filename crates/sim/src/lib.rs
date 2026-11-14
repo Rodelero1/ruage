@@ -2093,8 +2093,18 @@ impl World {
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
         let (start, goal) = (self.tile_of(from), self.tile_of(to));
-        let standers = self.stander_tiles(start, goal);
-        let bodies = self.stander_bodies(radius, start, goal);
+        // **A place route is not a walk** (D209): `radius == 0` means "reach this square", which is how a gatherer is sent to
+        // his reserved place - and the ring already reserved it against every other body (D186/D188). Modelling the crowd as
+        // obstacles *again* here made a dense little map unroutable (`NoPath from (0,0) to (3,1)`, the tree never touched),
+        // so a place route ignores them and the reservation does the work.
+        let (standers, bodies) = if radius == 0 {
+            (BTreeSet::new(), Vec::new())
+        } else {
+            (
+                self.stander_tiles(start, goal),
+                self.stander_bodies(radius, start, goal),
+            )
+        };
         if let Some(points) =
             short_range_clear(walk, self.scale, from, to, radius, &standers, &bodies)
         {

@@ -218,7 +218,13 @@ pub fn short_range_clear(
             let clear_of_bodies = bodies.iter().all(|(centre, clearance)| {
                 let at = (centre.0.raw(), centre.1.raw());
                 clears_disc(nodes[i], nodes[j], at, *clearance)
-                    || (from_start && contains_disc(nodes[i], at, *clearance))
+                    // **A step out of a body must widen the gap** (D209). The first version allowed *any* edge from a node
+                    // inside the clearance circle, and a straight line from inside it through it counts as an edge - the
+                    // walker simply aimed at his goal through the man. Only a step that ends farther from that centre than
+                    // it began is a step out.
+                    || (from_start
+                        && contains_disc(nodes[i], at, *clearance)
+                        && square(nodes[j], at) > square(nodes[i], at))
             });
             if clear_of_boxes && clear_of_bodies {
                 visible[i].push(j);
@@ -360,6 +366,15 @@ fn clears_disc(a: (i64, i64), b: (i64, i64), centre: (i64, i64), clearance: i64)
     }
     let cross = (abx * acy - aby * acx).abs();
     cross * cross >= reach * length
+}
+
+/// Squared distance, for comparing two points against one centre without a sqrt.
+fn square(point: (i64, i64), centre: (i64, i64)) -> i128 {
+    let (dx, dy) = (
+        i128::from(point.0 - centre.0),
+        i128::from(point.1 - centre.1),
+    );
+    dx * dx + dy * dy
 }
 
 /// Whether a point is inside a body's clearance circle - the licence to *leave* one, never to enter it.
