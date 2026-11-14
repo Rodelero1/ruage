@@ -343,18 +343,29 @@ fn the_higher_id_pauses_for_a_quarter_to_one_and_a_half_seconds_and_keeps_its_ro
         still as f64 / tick_rate as f64
     );
 
-    // **It keeps its route.** No waypoint may be spent while the timer runs: the pause writes the path's timer and
-    // nothing else (`0x8aa6d0`), so the waypoint list before, during and after the stand is the same list.
+    // **It keeps its destination, and spends nothing while it stands.** The pause writes the path's timer and nothing
+    // else (`0x8aa6d0`), so no waypoint is consumed by standing.
+    //
+    // **Restated 2026-11-14: the list may be *replaced*, and must not be *spent*.** The loser of the tie-break used to
+    // pause itself and return, which meant it never asked for a route - and against a man who never moves that is a
+    // deadlock for ever (measured: a scout `Paused` from tick 50 to tick 550 with a live route,
+    // `vision::an_enemy_is_only_visible_while_somebody_watches`). It now falls through to the rest of the collision
+    // block, so it *re-plans round the man while it stands* - measured here, 6 waypoints before the stand and 5 during.
+    // What the rule still promises is that standing spends nothing: the route always ends where the order put it, and the
+    // unit arrives.
     let before = crossing.trail[start.saturating_sub(1)].1.clone();
     let during: Vec<Route> = crossing.trail[start..start + still as usize]
         .iter()
         .map(|(_, left)| left.clone())
         .collect();
     assert!(
-        during.iter().all(|left| *left == before),
-        "MEASURED the paused unit's waypoint list changed while it stood still: {} before, {:?} during",
-        before.len(),
-        during.iter().map(std::vec::Vec::len).collect::<Vec<_>>()
+        during.iter().all(|left| left.last() == before.last()),
+        "MEASURED the paused unit's destination changed while it stood still: {:?} before, {:?} during",
+        before.last(),
+        during
+            .iter()
+            .map(|left| left.last().copied())
+            .collect::<Vec<_>>()
     );
 
     // **The winner proceeds.** During the loser's stand the lower id's position must change: if both stand, the pair is
@@ -468,6 +479,48 @@ fn a_loaded_carrier_and_a_gatherer_meeting_on_one_tile_both_arrive() {
         "MEASURED the gatherer never took from the bush: his task is {:?} at {:?}",
         world.entity(gatherer).map(|entity| entity.task),
         tile_of(&world, gatherer)
+    );
+}
+
+/// **A pause is not a deadlock** (D210). The tie-break only ever *imposes* a pause on the other man; the mover that loses
+/// it keeps its path and carries on to the rest of the collision rules, which is where its own answer lives (a re-plan
+/// round the body, or a step into a body at rest). A body that pauses **itself** has no such answer: it stands, so the
+/// collision is still there next tick, so it stands again - for ever, whenever the man it lost to has no order of his own
+/// and never moves.
+///
+/// Measured on `vision::an_enemy_is_only_visible_while_somebody_watches` before this was fixed: the scout was `Paused` at
+/// `(614150, 614150)` from tick 50 to tick 550 with a live route, and the enemy he could not get past never moved at all.
+#[test]
+fn a_loser_does_not_stand_for_ever_against_a_man_who_never_moves() {
+    let Some(pack) = pack() else { return };
+    let mut world = world_of(&pack, OPEN);
+    let scale = world.scale();
+    // The stander has the **lower** id and no order, so the walker loses the tie-break against him.
+    let stander = spawn(&pack, &mut world, 9_000, centre(scale, (11, 8)));
+    let walker = spawn(&pack, &mut world, 9_001, centre(scale, (8, 8)));
+    common::must(
+        "a move order",
+        world.submit_checked(Command::Move {
+            unit: walker,
+            to: (14, 8),
+        }),
+    );
+    let mut arrived = false;
+    for _ in 0..2_000 {
+        world.step().expect("a tick");
+        if near(&world, walker, centre(scale, (14, 8))) {
+            arrived = true;
+            break;
+        }
+    }
+    assert!(
+        arrived,
+        "MEASURED the walker never arrived: he is at {:?} (tile {:?}) after 2,000 ticks against a man standing at {:?} \
+         (tile {:?}) who has no order and never moved - the loser of the tie-break stood for ever",
+        at(&world, walker),
+        tile_of(&world, walker),
+        at(&world, stander),
+        tile_of(&world, stander)
     );
 }
 

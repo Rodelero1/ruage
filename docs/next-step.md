@@ -45,22 +45,32 @@ with eight more nodes per body", and that is a different engine. Do not land the
   D211 built.
 - `docs/dependency-tree.md` is the map: read it (and re-run its probes) before choosing a slice that is not on this file.
 
-## Known red on `main` and parked, not hidden
+## Regressions this branch carries, parked by name
 
-Two failures were found on `e0312f9` itself (the main checkout, real pack) while landing this step, and one of them is a
-real defect:
+The collision slices before this one left failures that **pass on `main` (`e0312f9`)** - measured there, and measured again
+with D211's search change removed, so they are neither `main`'s nor this slice's. Two are left, both in the *arrival*
+family rather than the collision one, and both are `#[ignore]`d with the sentence below in the attribute:
 
-- **A builder with a live route is asked for no step, for ever.** `build::a_content_pack_with_our_own_resources_loads_and_spends`
-  is `#[ignore]`d with that sentence. Measured: the worker is ordered to build at `(3, 4)` on a **6x6** map, its route holds
-  one waypoint at tile `(5, 4)`, it stands at `(5.03, 4.37)` - **0.47 tiles away** - and its step is **`Idle`** (nothing was
-  asked of it) for 1,900 ticks, `repaths = 0`, `repath_failures = 0`. So the house never leaves its site state. This is the
-  silent-stall class: a body with a waypoint in hand and a `Build` task that no rule asks anything of. Probe: `trace_steps()`
-  plus `world.route_points(villager)` on that fixture.
-- **A repath route round a body used to be asserted as "three waypoints".** `evasion::a_repath_route_is_pulled_like_a_planned_one`
-  failed on `main` for a *different* reason - a stander placed before the order is planned around, so no repath ever
-  happened (`repaths = 0`, the walker arrived). Restated here: the enemy is placed on the line **after** the route exists,
-  and the claim is the shape (every waypoint between the ends sits on the body's clearance circle), not the count. A body is
-  an octagon of shoulders, so the honest pulled route round one is five of its eight vertices, not two rectangle corners.
+- **`rally::a_unit_rallied_to_its_own_building_stays_inside`** — a villager trained at a town centre whose rally point is the
+  town centre's own tile never reaches `Task::Garrisoned` (measured `inside = 0` after 600 ticks). Probe: the trained unit's
+  `task` and `position` each tick; it is walking, not standing, so this is the *arrival predicate* or the goal-tile branch of
+  `collide` (rule 2), not the pause.
+- **`no_pushing::a_man_who_cannot_get_his_square_takes_the_next_tree`** — a villager sent to a second tree because his first
+  square was refused ends in `Task::Return { node: 12, drop: 1 }` at `(11.378, 6.947)` and never arrives anywhere for 2,000
+  ticks. Probe: the same, plus `world.route_points(id)` - he holds a route, so the question is why he stops following it.
+- **`build::a_content_pack_with_our_own_resources_loads_and_spends`** fails on `main` too: a builder with a live route is
+  asked for **no step at all** (`step = Idle`) for 1,900 ticks, 0.47 tiles from its own waypoint, `repaths = 0`. Parked with
+  the same sentence in its attribute.
+
+## A deadlock found and fixed while landing this (D210 corrected)
+
+The tie-break used to pause **the loser itself** and return, so the loser never asked for a route. Against a man who has no
+order and never moves that is a freeze for ever: measured on `vision::an_enemy_is_only_visible_while_somebody_watches`, a
+scout stood `Paused` at `(614150, 614150)` from tick 50 to tick 550. The original only ever calls `setPause` on **the other**
+unit (`cmp eax,esi / jle`), and the mover that loses the comparison goes on to the rest of the collision block - which is
+where its own answer lives. Fixed test-first
+(`right_of_way::a_loser_does_not_stand_for_ever_against_a_man_who_never_moves`, red with the walker parked on the stander's
+tile for 2,000 ticks), and it closed `vision` and one of the two `rally` fixtures on its own.
 
 ## Hazards a fresh session must not re-learn the hard way
 

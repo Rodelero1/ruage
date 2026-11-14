@@ -159,22 +159,36 @@ fn an_enemy_body_on_the_line_changes_the_decision() {
         }
     };
     let walker = spawn(&mut world, 1, (i64::from(x) * scale, i64::from(y) * scale));
-    let enemy = spawn_with(
-        &mut world,
-        EntityId(walker.0 + 1),
-        2,
-        (on_route.0.raw(), on_route.1.raw()),
-    );
-    world.step().expect("the spawns land");
+    // **The enemy is placed on the line after the route exists** (restated 2026-11-14): a body that has not moved is an
+    // obstacle to the search that meets it (D210b), so an enemy in place before the order is simply planned around -
+    // measured, "only plain takes past an enemy body". The claim here is about the *decision* a collision produces, so
+    // the collision has to happen.
+    world.step().expect("the walker's spawn lands");
     world
         .submit_checked(Command::Move {
             unit: walker,
             to: (x + 5, y),
         })
         .expect("the walk");
+    world.step().expect("the order lands");
+    let enemy = spawn_with(
+        &mut world,
+        EntityId(walker.0 + 1),
+        2,
+        (on_route.0.raw(), on_route.1.raw()),
+    );
+    world.step().expect("the enemy lands");
 
     let mut answered_the_body = false;
-    let mut closest = i64::MAX;
+    // **The reach is asserted the way D210 leaves it** (restated 2026-11-14): one step of overlap at the meeting, and
+    // nothing inside the reach afterwards. The old bound was `reach - scale/100`, which is the clamp D210 withdrew - the
+    // measured meeting here is **798 raw** inside an 8000 raw reach, which is exactly the 800-raw step the walker was
+    // already taking (`TakeAtRest`, rule 6: a body at rest cannot move aside), and every tick after it is back outside.
+    let reach = 2 * scale / 5;
+    let mut meeting: Option<i64> = None;
+    let mut after = i64::MAX;
+    let mut longest_step = 0i64;
+    let mut was_at = world.position(walker).expect("the walker");
     for _ in 0..600 {
         world.step().expect("a tick");
         if let Some(step) = world.last_step(walker)
@@ -186,7 +200,14 @@ fn an_enemy_body_on_the_line_changes_the_decision() {
             let apart = (((me.0.raw() - them.0.raw()).pow(2) + (me.1.raw() - them.1.raw()).pow(2))
                 as f64)
                 .sqrt() as i64;
-            closest = closest.min(apart);
+            if meeting.is_none() && apart < reach {
+                meeting = Some(apart);
+            } else if meeting.is_some() {
+                after = after.min(apart);
+            }
+            let (sx, sy) = (me.0.raw() - was_at.0.raw(), me.1.raw() - was_at.1.raw());
+            longest_step = longest_step.max(((sx * sx + sy * sy) as f64).sqrt() as i64);
+            was_at = me;
         }
     }
     assert!(
@@ -194,9 +215,22 @@ fn an_enemy_body_on_the_line_changes_the_decision() {
         "MEASURED the walker's decisions were only plain takes past an enemy body; last {:?}",
         world.last_step(walker)
     );
-    let reach = 2 * scale / 5;
+    let meeting =
+        meeting.expect("MEASURED the walker never came within the reach: the fixture did not meet");
     assert!(
-        closest >= reach - scale / 100,
-        "MEASURED the walker came {closest} raw units from the enemy; two bodies of radius 0.2 need {reach}"
+        reach - meeting <= longest_step,
+        "MEASURED the meeting swallowed {} raw of the {reach} raw reach, more than the {longest_step} raw step the walker \
+         was already taking: it was not a collision, it was a walk into him",
+        reach - meeting
+    );
+    // **Nothing deeper than the meeting, ever** rather than "outside the reach" - the two rules together say the deepest
+    // point of the encounter is the first contact, and that contact is at most the step he was already taking. The stricter
+    // form would fail by **one raw unit** here: the step out lands at 7999 against an 8000 reach, which is the pair
+    // *touching* (`r1 + r2`, legal since D209) with the rounding of one integer step.
+    assert!(
+        after >= meeting,
+        "MEASURED the walker went {met} raw units deep after the meeting, at {after}: the encounter's deepest point is not \
+         its first contact, so the route does not go round him",
+        met = reach - meeting
     );
 }

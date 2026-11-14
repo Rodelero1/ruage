@@ -108,19 +108,24 @@ fn a_body_on_the_line_is_counted_as_a_body() {
         i64::from(y) * scale + scale / 2,
     );
     let _ = goal_at;
+    world.step().expect("the walker's spawn lands");
+    world.submit(Command::Move {
+        unit: walker,
+        to: (x + 6, y),
+    });
+    // **The body arrives on the line after the route exists** (restated 2026-11-14). A body that has not moved is an
+    // obstacle to the search that meets it (D210b), so an enemy standing on the line *before* the order is planned around
+    // and nothing ever collides: measured, `repaths = 0` and "the scene never met the body". The claim is about the
+    // *re-plan*, so the route has to go stale first.
+    world.step().expect("the order lands");
+    let before = world.repaths();
     let _sitter = spawn_with(
         &mut world,
         EntityId(walker.0 + 1),
         2,
         (on_route.0.raw(), on_route.1.raw()),
     );
-    world.step().expect("the spawns land");
-
-    let before = world.repaths();
-    world.submit(Command::Move {
-        unit: walker,
-        to: (x + 6, y),
-    });
+    world.step().expect("the enemy lands");
     for _ in 0..2_000 {
         world.step().expect("a tick");
         if world.repaths() > before {

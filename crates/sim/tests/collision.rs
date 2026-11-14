@@ -221,9 +221,18 @@ fn a_walker_never_ends_a_tick_inside_a_friend() {
         .expect("move");
 
     let reach = world.reach_between(walker, stander).raw();
-    let mut worst = i64::MAX;
-    let mut worst_tick = 0;
-    for tick in 0..600 {
+    // **Restated 2026-11-14 to D210's outcome: one step of overlap at the meeting, nothing deeper after it.** The old
+    // assertion was `worst >= reach - 1` - the clamp D210 withdrew, on the binary's own evidence (its only
+    // radius-against-radius retraction has its result discarded at the movement site, `0x8a7fe7`). What the rules now
+    // promise is that the *deepest* point of an encounter is its first contact, and that contact is at most the step the
+    // walker was already taking: measured here, **222 raw** inside an 8000 raw reach, against an 800-raw step at tick 74 -
+    // after which he is round the man and away. A walker that goes *through* a friend keeps getting deeper, which this
+    // still catches.
+    let mut meeting: Option<i64> = None;
+    let mut deepest_after = i64::MAX;
+    let mut longest_step = 0i64;
+    let mut was_at = world.position(walker).expect("alive");
+    for _ in 0..600 {
         world.step().expect("step");
         let (a, b) = (
             world.position(walker).expect("alive"),
@@ -231,15 +240,29 @@ fn a_walker_never_ends_a_tick_inside_a_friend() {
         );
         let (dx, dy) = (a.0.raw() - b.0.raw(), a.1.raw() - b.1.raw());
         let apart = (dx * dx + dy * dy).isqrt();
-        if apart < worst {
-            worst = apart;
-            worst_tick = tick;
+        if meeting.is_none() && apart < reach {
+            meeting = Some(apart);
+        } else if meeting.is_some() {
+            deepest_after = deepest_after.min(apart);
         }
+        let (sx, sy) = (a.0.raw() - was_at.0.raw(), a.1.raw() - was_at.1.raw());
+        longest_step = longest_step.max((sx * sx + sy * sy).isqrt());
+        was_at = a;
     }
 
+    let meeting =
+        meeting.expect("MEASURED the walker never came within the reach: the fixture did not meet");
     assert!(
-        worst >= reach - 1,
-        "the walker came {worst} raw units from its friend at tick {worst_tick}, inside the {reach} their footprints \
-         need - friends passed through each other"
+        reach - meeting <= longest_step,
+        "MEASURED the meeting swallowed {} raw of the {reach} reach, more than the {longest_step} raw step the walker was \
+         already taking at that moment: he was not walking past a friend, he was driven into one",
+        reach - meeting
+    );
+    assert!(
+        deepest_after >= meeting,
+        "MEASURED the walker went {after} raw units deep after the meeting, against {met} at it: the encounter's deepest \
+         point is not its first contact, so friends passed through each other",
+        after = deepest_after,
+        met = meeting
     );
 }

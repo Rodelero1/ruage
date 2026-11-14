@@ -322,22 +322,26 @@ impl World {
         //    `EntityId` is a monotonic spawn counter, so this is "the older unit wins every contested tile" - the owner
         //    accepted that cost with the decision.
         //
-        //    Both sides of a pair run this rule and agree: the lower id tells the higher to pause and then proceeds, the
-        //    higher id pauses itself. The winner's answer is whatever the rest of this function decides - a repath round
-        //    the man, a bounded step while he is at rest, or a stop - so the rule adds no step of its own and a pair
-        //    never overlaps: D131's reach still holds.
-        if a_unit {
-            if other.0 > id.0 {
-                // Right of way: the other man is the one who stands, and this body goes on being answered below.
-                pass.pauses.push(other);
-            } else {
-                // The higher id: told to pause. It keeps its route - no waypoint is spent and no repath is asked for -
-                // and stands this tick out. Already-paused bodies never reach here (the pass skips them), which is the
-                // original's "one float": a fresh collision sets the timer, a running timer is never re-rolled.
-                pass.pauses.push(id);
-                return (stop.0, stop.1, StepDecision::Paused);
-            }
+        //    Only the **lower** id acts here: it tells the higher one to pause and then goes on to be answered by the rest
+        //    of this function. The higher id does **not** pause itself - it walks on to the same rest of the function,
+        //    which is where its own answer lives (a re-plan round the man, a step into a body at rest, or a stop) - because
+        //    a body that pauses itself never asks for a route, and against a man who never moves that is a freeze for ever
+        //    (measured 2026-11-14, `vision::an_enemy_is_only_visible_while_somebody_watches`). D131's reach no longer holds
+        //    as a bound: D210 withdrew the clamp, and what ends an encounter is the pause and the *past* test.
+        if a_unit && other.0 > id.0 {
+            // Right of way: the other man is the one who stands, and this body goes on being answered below.
+            pass.pauses.push(other);
         }
+        // **The loser does not pause himself** (D210, corrected 2026-11-14). The original's block only ever calls
+        // `setPause` on **the other** unit (`cmp eax,esi / jle` - "pause only when other > self"); the mover that
+        // loses the comparison simply goes on to the rest of the block, which is where its own answer lives. Our first
+        // version paused *itself* and returned, so it never asked for a route: measured on
+        // `vision::an_enemy_is_only_visible_while_somebody_watches`, a scout stood `Paused` at (614150, 614150) from
+        // tick 50 to tick 550 against a man with no order, because the body that won the tie-break never moved, so the
+        // collision was still there every tick and the loser was stood up again for ever.
+        //
+        // A body paused *by the other's* turn still stands its ticks out - `move_bodies` checks `pass.pauses` before
+        // the body's own step, and `pause_remaining` carries it across ticks - so the drawn 0.25-1.50 s is unchanged.
         // 5. Refuse, and say why. A body the route already planned around is *past*; anything else is worth a repath,
         //    unless the unit is already on its goal's ring, where a repath only buys searches (D98a).
         if let Some((goal_tile, _)) = goal {
