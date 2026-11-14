@@ -37,3 +37,31 @@ Two ways forward, and they cost differently:
 Measured on this branch (`--seed 7 --ticks 48000`, release): `entities=158 players=2 hash=c2ed74016ee533ea repaths=508
 made_room=0 repaths_body=174 repaths_ground=334`, against `main`'s `entities=160 hash=c3b10f4b09e17a43 repaths=324
 made_room=147 repaths_body=83 repaths_ground=241`.
+
+
+## The 18 failures this branch carries (gate `d209e`, private target dir)
+
+- a_body_on_the_line_is_counted_as_a_body
+- a_broken_file_in_a_present_pack_fails_the_fixture
+- a_content_pack_with_our_own_resources_loads_and_spends
+- a_depleted_node_stops_yielding
+- a_man_who_cannot_get_his_square_takes_the_next_tree
+- a_mate_who_is_stopped_becomes_solid
+- a_partial_load_comes_home_when_the_node_runs_out
+- a_present_but_broken_marker_fails_rather_than_skipping
+- a_repath_route_is_pulled_like_a_planned_one
+- a_unit_rallied_to_its_own_building_stays_inside
+- a_villager_rallied_onto_stone_gathers_stone_not_the_wood_around_it
+- a_villager_walks_around_a_forest_wall_and_never_enters_it
+- an_enemy_body_on_the_line_changes_the_decision
+- an_enemy_is_only_visible_while_somebody_watches
+- the_higher_id_pauses_for_a_quarter_to_one_and_a_half_seconds_and_keeps_its_route
+- three_gatherers_on_one_bush_do_not_pile_up
+- two_units_jammed_on_the_same_tile_neither_stands_for_ever
+- two_villagers_on_one_node_cannot_take_more_than_it_holds
+
+
+Two of these (`a_broken_file_in_a_present_pack_fails_the_fixture`,
+`a_present_but_broken_marker_fails_rather_than_skipping`) are this worktree's **symlinked** `config/gamedata`, not the code.
+The rest need triage on a checkout whose pack is real - `gather` is 21/21 in isolation, so at least part of this list is the
+same environment effect leaking into fixtures that load the pack.
