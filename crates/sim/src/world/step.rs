@@ -54,7 +54,6 @@ impl World {
         // closes is solid for them.
         self.step_gates();
         self.move_bodies(work.deltas)?;
-        self.push_the_standing();
         self.finish_blocked_orders();
         // **Settle onto the work** (D169): a worker that has arrived walks the last third of a tile onto the point where its
         // body and the node's touch. It is a placement, not a walk, because the movement rules only call a route finished on a
@@ -895,153 +894,6 @@ impl World {
         }
     }
 
-    /// **A body with nothing to do is nudged out of a walker's way** (D200), but only after the walker has been refused for
-    /// `STALLED_TICKS` in a row. The engine's written rule until now is the opposite - *"the body it went round did not
-    /// move"*, asserted by three evasion tests and by the sheep being sheared - and that rule is right for every case where a
-    /// route exists. What it cannot cover is a body on the walker's **own tile**: there is no tile to plan round, so the
-    /// route runs through it and the step is refused for ever (measured: `WaitBlocked` for 400,000 ticks, the trebuchet
-    /// fixture 46 s against `main`'s 5.86 s).
-    ///
-    /// The shape is 0 A.D.'s, `CCmpUnitMotion_System.cpp`: a *static* body is displaced less than a walking one, damped, and
-    /// never far. Ours is a twentieth of a tile along the dominant axis, onto free ground, if no third body is there.
-    fn push_the_standing(&mut self) {
-        let step = (self.scale / 20).max(1);
-        /// A man who has been refused long enough for the body in his way to be moved: who, where, the pair's reach, and the
-        /// point he is trying to get to.
-        struct Stuck(EntityId, (Fixed, Fixed), i64, (Fixed, Fixed));
-        let stuck: Vec<Stuck> = self
-            .stalled
-            .iter()
-            .filter(|(_, waited)| **waited >= Self::STALLED_TICKS)
-            .filter_map(|(id, _)| {
-                let entity = self.find(*id)?;
-                if entity.kind != EntityKind::Unit {
-                    return None;
-                }
-                // **A man refused a square at a resource never shoves anybody** (D204). Displacement is not the answer
-                // to a crowd at a resource - the owner's words - so the man who cannot stand his square does not push the
-                // man who holds it: he looks at the next tile of the same resource (the gather arm's `square_refused`
-                // count), and waits when there is none. The body-side gate below is the same rule seen from the other
-                // side; this one keeps a worker at a node from being the shover in the first place.
-                if self.square_refused.contains_key(id) {
-                    return None;
-                }
-                // **A jammed man may have no waypoint left** - the builder whose route is spent, the man whose order is
-                // simply held - so the direction comes from his task's goal when the route is empty. Requiring a waypoint is
-                // why the builder/walker deadlock was never nudged: the builder had none.
-                let next = match self
-                    .paths
-                    .get(id)
-                    .and_then(|route| route.points.first().copied())
-                {
-                    Some(point) => point,
-                    None => self.tile_centre(self.goal_of(entity)?.0),
-                };
-                Some(Stuck(
-                    *id,
-                    entity.position,
-                    self.reach_between(*id, *id).raw(),
-                    next,
-                ))
-            })
-            .collect();
-        for Stuck(id, here, reach, next) in stuck {
-            let window = reach + reach / 20;
-            let mut push: Option<(EntityId, (Fixed, Fixed))> = None;
-            for entity in self.entities() {
-                if entity.id == id || entity.kind != EntityKind::Unit {
-                    continue;
-                }
-                let (dx, dy) = (
-                    entity.position.0.raw() - here.0.raw(),
-                    entity.position.1.raw() - here.1.raw(),
-                );
-                if dx * dx + dy * dy > window * window {
-                    continue;
-                }
-                // **On the walker's own tile, or on the tile of his next waypoint.** The first is the case the planner
-                // cannot express; the second is the one it *tried* to solve and failed - a body standing on the very
-                // waypoint the route was planned through, which no re-plan around it can fix while it stays there.
-                // Measured: a loaded carrier at `(11.850,21.139)` stepping at `(12.000,21.000)` for 400,000 ticks, ten
-                // units in his hands, the bank stuck at 790 of 900.
-                let body_tile = self.tile_of(entity.position);
-                if body_tile != self.tile_of(here) && body_tile != self.tile_of(next) {
-                    continue;
-                }
-                // **Nothing is nudged that somebody is working.** A sheep being sheared, a mine nobody can move: a body
-                // that a gather order names is a target, not an obstacle.
-                let worked = self.entities().iter().any(|other| {
-                    matches!(
-                        other.task,
-                        Task::Gather { node, .. } | Task::Return { node, .. } if node == entity.id
-                    ) || matches!(other.task, Task::Attack { target, .. } if target == entity.id)
-                });
-                if worked {
-                    continue;
-                }
-                // **A man working a resource, or walking to one, is never moved off his square** (D204). The owner played
-                // the D200 merge and said so: *"I don't like villagers pushing other villagers"*. A displaced man is a
-                // man whose gather order is silently set back by a nudge he never asked for - the nudge moves him a
-                // twentieth of a tile and the settle then walks him back, so the two rules take turns; measured on the
-                // crowded-tree fixture, a body of the crowd was shoved **0.15** tiles off its square by a man who could
-                // not get one of his own. The answer to that man is the *second* half of D204 - he looks at the next tile
-                // of the same resource (the gather arm's `square_refused` count) - which is why he is skipped here too.
-                let gathering = matches!(entity.task, Task::Gather { .. });
-                if gathering {
-                    continue;
-                }
-                // **A jam of two ordered men resolves the same way** (D200). A builder and a walker can block each other on
-                // one tile for ever: neither is "a body with nothing to do", so neither was nudged, and the bounded give-way
-                // step is zero at nought distance - measured, a house site stuck at 1 hp for 2,000 ticks with the two men
-                // sharing the tile. A man who has been refused for the same forty ticks is one who is not getting on with
-                // his order, and he may be moved aside. A **posted** worker (one holding a place) is still left alone.
-                let busy = self
-                    .paths
-                    .get(&entity.id)
-                    .is_some_and(|route| !route.points.is_empty());
-                let posted = self.gather_place.contains_key(&entity.id);
-                let jammed =
-                    self.stalled.get(&entity.id).copied().unwrap_or(0) >= Self::STALLED_TICKS;
-                if posted || (busy && !jammed) {
-                    continue;
-                }
-                let away = if dx.abs() >= dy.abs() {
-                    (if dx >= 0 { step } else { -step }, 0)
-                } else {
-                    (0, if dy >= 0 { step } else { -step })
-                };
-                let to = (
-                    Fixed::from_raw(entity.position.0.raw() + away.0),
-                    Fixed::from_raw(entity.position.1.raw() + away.1),
-                );
-                push = Some((entity.id, to));
-                break;
-            }
-            let Some((other, to)) = push else { continue };
-            let (x, y) = self.tile_of_raw(to);
-            let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
-                continue;
-            };
-            if !self.is_free_ground(x, y) {
-                continue;
-            }
-            let crowded = self.entities().iter().any(|entity| {
-                entity.kind == EntityKind::Unit
-                    && entity.id != other
-                    && entity.id != id
-                    && (entity.position.0.raw() - to.0.raw()).pow(2)
-                        + (entity.position.1.raw() - to.1.raw()).pow(2)
-                        < reach * reach
-            });
-            if crowded {
-                continue;
-            }
-            if let Some(entity) = self.entities.iter_mut().find(|entity| entity.id == other) {
-                entity.position = to;
-            }
-        }
-    }
-
     /// **An order that a standing body makes impossible is finished where the man stands** (D200). A `Move` onto a tile a
     /// friend holds can never complete: the walker stops at the pair's reach, `reaches` is never true, and the order stays
     /// live for ever (measured: still `Move` after 600 ticks, 1.011 tiles out). After the same forty refused ticks the nudge
@@ -1219,10 +1071,16 @@ impl World {
         // The occupancy grid is only worth building on a tick where something moves; an idle world pays
         // one `any` over the delta list, which is empty of movement in the common case (D52).
         // Who has a step to take this tick: a body with nothing to do cannot move aside for anybody, which is the
-        // difference between waiting a tick and waiting for ever (rules 4 and 8 in `collide`).
+        // difference between waiting a tick and waiting for ever (rules 6 in `collide`). **A paused body is not moving**
+        // (D205): it stands its tick out, so to everybody else it is a body at rest.
         let moving: BTreeSet<EntityId> = deltas
             .iter()
             .filter(|(_, _, dx, dy)| *dx != Fixed::ZERO || *dy != Fixed::ZERO)
+            .filter(|(index, _, _, _)| {
+                self.entities
+                    .get(*index)
+                    .is_none_or(|entity| entity.pause_remaining == 0)
+            })
             .map(|(_, id, _, _)| *id)
             .collect();
         let bodies = self.body_tiles();
@@ -1230,25 +1088,35 @@ impl World {
             bodies: &bodies,
             moving: &moving,
             repaths: Vec::new(),
-            made_room: Vec::new(),
-            refused: Vec::new(),
+            pauses: Vec::new(),
         };
         for (index, id, dx, dy) in deltas {
+            // **A body told to pause stands this tick out and keeps its path** (D205). The check is on the entity's own
+            // timer *and* on this tick's list, because the lower id runs first: it pauses the higher one before the higher
+            // one's own turn, and that man must not take the step he had already computed. Nothing is spent - the body is
+            // not put in `reached`, so no waypoint is popped - which is the original's `path+0x28` and nothing else.
+            let paused = self
+                .entities
+                .get(index)
+                .is_some_and(|entity| entity.pause_remaining > 0)
+                || pass.pauses.contains(&id);
+            if paused {
+                if let Some(entity) = self.entities.get_mut(index) {
+                    entity.pause_remaining = entity.pause_remaining.saturating_sub(1);
+                }
+                self.record_step(index, id, crate::StepDecision::Paused);
+                continue;
+            }
             let (dx, dy, why) = self.collide(&mut pass, index, id, dx, dy);
             self.record_step(index, id, why);
             // **Count the waits** (D200): a body refused by another body on this tick has been refused for one more tick
             // than before; anything else clears the count. `last_step` cannot answer this - it is only recorded when
             // `trace_steps` is on, which is why the first nudge pass saw an empty list on every real run.
             match why {
-                // **Every refusal counts, including a give-way that could not move** (D200). `WaitBlocked` is a body on the
-                // path, `WaitOwnTile` a body sharing the tile, and `GiveWayOwnTile` with a **zero step** is the same jam seen
-                // from the other man: at nought distance the give-way bound leaves no step at all, so counting decisions
-                // alone let one side look busy while both stood still - measured, a builder and a walker for 2,000 ticks.
-                crate::StepDecision::WaitBlocked
-                | crate::StepDecision::WaitOwnTile
-                | crate::StepDecision::WaitGround
-                | crate::StepDecision::GiveWayOwnTile
-                | crate::StepDecision::GiveWay
+                // **Every refusal by ground or by a body counts** (D200). A pause is deliberately **not** counted (D205):
+                // it is not the engine failing to move a man, it is the rule working, and counting it would feed
+                // `finish_blocked_orders` after forty ticks and finish an order the pause was about to unblock.
+                crate::StepDecision::WaitBlocked | crate::StepDecision::WaitGround
                     if dx == Fixed::ZERO && dy == Fixed::ZERO =>
                 {
                     let waited = self
@@ -1306,15 +1174,30 @@ impl World {
             self.stamp_entity(id);
         }
 
-        // Bodies in the way of this tick's steps are decided in the pass and applied after it, because a repath plans a
-        // route and the entity list must stay still while it is walked (the same shape as shots).
-        //
-        // A route that made room has spent its one nudge; the next body in the way is answered by a repath.
-        for id in pass.made_room {
-            if let Some(route) = self.paths.get_mut(&id) {
-                route.gave_way = true;
+        // **The loser of a collision is paused** (D205), after the pass because the draw comes from the seeded stream and
+        // the pass only reads the world. The same body can be named twice - the lower id pauses the higher, and the
+        // higher pauses itself - so the first write is the only one that counts, which is also the original's single
+        // float: a fresh collision sets the timer, a running timer is never re-rolled.
+        let mut drawn: BTreeSet<EntityId> = BTreeSet::new();
+        for id in pass.pauses {
+            if !drawn.insert(id) {
+                continue;
             }
-            self.made_room_count += 1;
+            let Some(index) = self.entities.iter().position(|entity| entity.id == id) else {
+                continue;
+            };
+            let entity = &mut self.entities[index];
+            if entity.kind != EntityKind::Unit || entity.pause_remaining > 0 {
+                continue;
+            }
+            // `rand()*1.25/32767 + 0.25` seconds, drawn from **our** seeded stream: the original's own `rand()` wrapper
+            // logs *"not considered sync safe"*, so a faithful copy draws from a stream a replay can reproduce.
+            let roll = self.sim_rng.next_u32();
+            let millis = crate::PAUSE_MIN_MS + i64::from(roll % crate::PAUSE_SPREAD_MS);
+            let ticks = (millis * i64::from(self.tick_rate_hz) / 1_000).max(1);
+            let ticks = u16::try_from(ticks).unwrap_or(u16::MAX);
+            // One tick of the pause is the tick the collision was found on, which this body has already stood out.
+            entity.pause_remaining = ticks.saturating_sub(1);
         }
 
         // Re-plan around the bodies that were in the way, now that the movement pass has finished with the entity
@@ -1351,9 +1234,6 @@ impl World {
                     // it makes the search leave the tile it starts in, which produced a nine-waypoint route backwards.
                     .filter(|tile| *tile != start)
                     .collect();
-                // A nudge already spent is spent for the order, not for the plan: a repath must not hand the unit a
-                // second one.
-                let gave_way = self.paths.get(&id).is_some_and(|route| route.gave_way);
                 // **The old route's last point is the goal**, so the repath aims where the order pointed rather than at the
                 // centre of a tile; the geometry then answers the whole question, avoiding the bodies by `avoid` (D98a).
                 let aim = self
@@ -1383,7 +1263,6 @@ impl World {
                             Route {
                                 points,
                                 avoiding,
-                                gave_way,
                                 stalls,
                             },
                         );

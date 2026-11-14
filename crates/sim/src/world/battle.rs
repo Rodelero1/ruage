@@ -439,6 +439,7 @@ impl World {
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
         self.insert(Entity {
             last_step: StepDecision::Idle,
+            pause_remaining: 0,
             id,
             player,
             kind: EntityKind::Projectile,

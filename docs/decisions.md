@@ -5179,6 +5179,36 @@ resumes; the lower id gets through. (2) The owner's screenshot: a loaded carrier
 their destinations. (3) The acceptance match still banks food (`crates/sim/tests/acceptance_economy.rs`). Until (1)-(3) are
 green on a branch this decision is **built, not landed**, and `docs/next-step.md` carries it as step 1.
 
+#### D205 addendum - built on `d205-pause`, measured, and **not landable as written**
+
+*2026-11-14. Branch `d205-pause`, from `bb467dd`; one commit; `main` untouched. Fixtures
+`crates/sim/tests/right_of_way.rs`, record `docs/reviews/2026-11-14-d205-pause.md`.*
+
+The rule is in: the lower id proceeds, the higher id is paused for `250 + roll % 1251` milliseconds (0.25-1.50 s) drawn
+from `sim_rng`, keeps its waypoint list, and `make_room`, `give_way`, `GiveWayOwnTile`, `WaitOwnTile`, `Route::gave_way`,
+`Passing::{made_room, refused}` and `push_the_standing` are gone. **The pause itself measures exactly as the decision
+says** - a 5-30 tick stand whose length is the drawn duration, the waypoint list unchanged across it, the lower id moving
+during it - and **the pair still does not get past each other**:
+
+1. two bodies stop at **8000 raw units, exactly the two 0.2 radii**, where `bound_to_reach` permits no step and
+   `blocker_at` already calls the distance clear, so **the winner's step is zero** and it is `WaitBlocked` from the first
+   collision to the end of the run;
+2. the winner's escape is the **repath**, and the repath is a set of *tiles*: in one tile it cannot express the blocker
+   (the start tile is dropped from the avoid set by design) and in adjacent tiles the detour's first waypoint is on the
+   far corner, because the mover's own disc already overlaps the avoided tile's expansion by 400 raw units.
+
+**Measured cost, `--seed 7 --ticks 48000 --report 400`, release:** food `45 / 49 / 268 / 120 / 660 / 450` -> `10` at every
+point, wood `80 / 96 / 135 / 75 / 395 / 185` -> `100` flat, units `20 / 31 / 35 / 44 / 46 / 48` -> `13` flat, summary
+`hash=c3b10f4b09e17a43 repaths=324` -> `hash=b76a67ad6d7915d2 repaths=16 made_room=0`, and the script refuses a rule
+**1,195** times for food. `cargo test -p ruage-sim --test acceptance_economy` is red; **33 tests in 21 binaries** are red.
+The like-for-like tick is 6.9-7.3 us against 6.5-6.8: the pause costs about 2-8%.
+
+**So the decision's own claim - "a pause is bounded by a countdown, so the pair can never stand for ever" - is false on
+this engine**, and it is false for a reason that is not about the pause: it assumes the winner's re-plan can route round a
+*body*, and ours routes round tiles. That is the next step (`docs/next-step.md` 1). The two alternatives are a lateral step
+for the winner (the slide D205 removes) or a step through a paused body (D189's pass-through, which D200 withdrew) - both
+need the owner's word, and neither is taken here.
+
 ### D206 - speed is constant; formations are the only speed adjustment, and they are later
 
 **What it says (owner, 2026-11-14).** *"units do not accelerate and decelerate under normal conditions. Maintenance of the

@@ -357,6 +357,13 @@ impl World {
             fnv_bytes(&mut hash, &entity.position.1.raw().to_le_bytes());
             fnv_bytes(&mut hash, &entity.velocity.0.raw().to_le_bytes());
             fnv_bytes(&mut hash, &entity.velocity.1.raw().to_le_bytes());
+            // **A pause is state** (D205): it decides which tick a man may move again, so two runs that disagree about it
+            // walk different trajectories from the next tick. Written only when non-zero, so a world where nobody has
+            // collided yet hashes exactly as it did before pauses existed.
+            if entity.pause_remaining != 0 {
+                fnv_bytes(&mut hash, b"pause");
+                fnv_bytes(&mut hash, &entity.pause_remaining.to_le_bytes());
+            }
             fnv_bytes(&mut hash, &entity.hp.to_le_bytes());
         }
         hash

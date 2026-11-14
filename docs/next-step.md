@@ -1,53 +1,45 @@
-# OPEN - D204 is on `main`; its carrier half is parked on `d204-carriers` (measured), next is register row 2
+# OPEN - D205's pause is built on branch `d205-pause` and is NOT landable: the winner has no way past the man it pauses
 
-**State, 2026-11-14.** **D204** is built and green: a man who cannot get his square at a node **takes the next tile of the
-same resource column**, and no body with a gather order is displaced by anybody. `push_the_standing` still nudges a body
-with **no work at all** - a bystander in a doorway, a soldier in a corridor - which is the decision's own scope.
+**State, 2026-11-14.** D205's rule is **implemented and measured** on branch `d205-pause` (from `bb467dd`), and it **cannot
+land as specified**. The tie-break is faithful to the binary - lower entity id has right of way, the higher id pauses a
+uniform 0.25-1.50 s from the seeded stream and keeps its route - and the three improvisations it replaces (the give-way
+mutex, the axis/perpendicular slide, `push_the_standing`'s nudge) are gone. The consequence is measured, not debated:
+**the winner's bounded step is exactly zero at the pair's reach and its re-plan is tile-based, so the pair stands while the
+loser is paused.** The acceptance match freezes at 400 s - wood 100, food 10, units 13, buildings 6 at every report point to
+2400 s, against `main`'s 48 units and food `45 / 49 / 268 / 120 / 660 / 450` - and **33 tests in 21 binaries are red**,
+including `acceptance_economy`. Record: `docs/reviews/2026-11-14-d205-pause.md`.
 
-**Measured, `--seed 7 --ticks 48000 --report 400`:** food `45 / 49 / 268 / 120 / 660 / 450`, wood `80 / 96 / 135 / 75 /
-395 / 185`, units `20 / 31 / 35 / 44 / 46 / 48`; summary `entities=160 players=2 hash=c3b10f4b09e17a43 repaths=324
-made_room=147 repaths_body=83 repaths_ground=241`. Against `main` before D204 (`7d00be8`): food `4 / 14 / 484 / 594 / 1226
-/ 1396`, wood 1215, units 37, `entities=143 players=2 hash=2d93236ebb16961b repaths=373 made_room=140`. **Eleven more
-units and a smaller bank** - the match spends rather than banks - and the early game is the improvement: **45 food at 400 s
-against 4**. Wall time 61.3 s -> 30.3 s; the like-for-like tick `7.4-8.4 us -> 6.5-6.8 us`. Gate: 185 binaries, 843 passed,
+**Do not merge it and do not delete it.** The branch is the evidence for the next step, and its three fixtures
+(`crates/sim/tests/right_of_way.rs`) are the acceptance for whatever fixes the gap: the pause length and the kept waypoint
+list already pass there; what fails is that the pair never gets past each other.
+
+**D204 remains the state of `main`** (`bb467dd`): food `45 / 49 / 268 / 120 / 660 / 450`, wood `80 / 96 / 135 / 75 / 395 /
+185`, units `20 / 31 / 35 / 44 / 46 / 48`, summary `entities=160 players=2 hash=c3b10f4b09e17a43 repaths=324 made_room=147
+repaths_body=83 repaths_ground=241`, acceptance wall 30.3 s, like-for-like tick 6.5-6.8 us. Gate: 185 binaries, 843 passed,
 0 failed, 21 ignored, fmt and clippy clean.
-
-**What the nudge was doing, measured before the change:** 310 displacements over the acceptance run - **232 builders, 76
-loaded carriers, 2 idle, 0 gatherers**. The resource case was never a shove: it was **45,359 refusals of a square**, over 18
-distinct villagers, one refused on **1,782 consecutive ticks**. Both halves are in
-`crates/sim/tests/no_pushing.rs`; the record, with the gate that was written first and withdrawn, is
-`docs/reviews/2026-11-14-d204-no-pushing.md`. **Re-measured on `main` 2026-11-14: 161 displacements, 0 of them
-carriers** - the carriers were the pre-D204 match, and step 1 below says what that did to the slice.
-
-**The one cost, stated plainly.** The enemy is **not** eliminated by 40:00 (its town centre stands and `players=2` means
-"the enemy still stands"). That is unchanged from the D200 merge and is a pacing question, not a stall.
-
-**Where the pushing actually is now, measured on this tree** (a probe over the acceptance run printing the task of every
-body `push_the_standing` moved): **161 displacements - 147 `Build`, 12 `Attack`, 2 `Idle`, 0 `Gather`, 0 `Return`**. So no
-carrier and no gatherer is being shoved any more; what is left is **a builder shoved off his site** and **a soldier shoved
-in a fight**, and both of them have nowhere else to go by construction. That is a design question for the owner, not the
-carrier slice: the carrier half is parked because it would be dead code (`docs/reviews/2026-11-14-d204-carriers.md`).
 
 ## The plan, in order. Do not start a step while the previous one is red.
 
-### 1. The carrier half of D204 - **parked, measured** *(not to be repeated as written)*
+### 1. A re-plan that can route round a **body**, not a tile *(next - the only step that unblocks D205)*
 
-Attempted on branch `d204-carriers` (`46cec66`), no production change, and **the observable did not bite**. The slice was
-to extend the gate in `push_the_standing` to `Task::Gather | Task::Return`, watched red through `World::made_room()`;
-`made_room` counts the *walker's own* make-room step (`movement.rs:400` -> `step.rs:1317`, C1b), not the standing body's
-displacement, so the seven-villager fixture reads **7 on `main` and 7 with the gate extended**, and the acceptance run is
-identical both ways (`hash=c3b10f4b09e17a43 made_room=147`, 30.2 s).
+The blocker is a disc (`blocker_at`, radius-summed); the plan is a tile set (`short_range` and `find_path_avoiding` both
+take `&BTreeSet<(u16,u16)>`). Two consequences, both measured on `d205-pause`:
 
-**And the 76 carriers are not in this match any more.** Printing the task of every body `push_the_standing` moved:
-`46cec66` moves **161** (147 `Build`, 12 `Attack`, 2 `Idle`, **0 `Return`**); `7d00be8` (pre-D204) reproduces the recorded
-**310** (232 / **76** / 2). Every `Return` candidate the run considers - **22,253** of them - is already skipped by
-`posted || (busy && !jammed)`. Record: `docs/reviews/2026-11-14-d204-carriers.md`; fixture kept at
-`crates/sim/tests/carrier_no_pushing.rs`, `#[ignore]`d.
+- **Same tile**: the avoid set cannot express the blocker, because the plan drops the mover's own start tile as an obstacle
+  ("an avoid set that holds it makes the search leave the tile it starts in"). The re-plan returns the straight line it
+  already had, and the mover is `WaitBlocked` from tick 70 to tick 2,500 of a 2,500-tick run.
+- **Adjacent tile**: the re-plan does produce a detour, and it does not help: the mover's own disc already overlaps the
+  avoided tile's expansion by 400 raw units, so the graph's first waypoint is the **far** corner -
+  `[(264000,156000), (290000,170000)]` for a man at `(236400,170000)` - and the step toward it is still blocked. Two men
+  stop at **8000 raw = exactly the two 0.2 radii**, where `bound_to_reach` permits no step at all.
 
-**Reopens only with a `Return` carrier who is jammed and holds no gather place** - no fixture found one - and then
-watched by **position**, not by `made_room`.
+**Done when** `crates/sim/tests/right_of_way.rs` is green on a branch that keeps the give-way, the slide and the nudge out:
+head-on (test 1), the owner's carrier-and-gatherer picture (test 2), and two men jammed on one tile (test 3). The two cheaper
+alternatives are recorded in the review and need the owner's word, because both bring back something a decision removed:
+a lateral step for the winner only (D205's slide), or a step through a body it has just paused (D189's pass-through, which
+D200 withdrew and `collision.rs::a_walker_never_ends_a_tick_inside_a_friend` forbids).
 
-### 2. Register row 2 - damage *(next)*
+### 2. Register row 2 - damage
 
 `0x744d60` has five call sites (`0x6bb100`, `0x741a30` x2, `0x744ff0`, `0x745060`); `docs/behaviour-diff.md` records what
 each reads (multiplier 1.0 everywhere, the wrapper sums) and that the per-entry drop stands. Open: which call site is
@@ -55,31 +47,34 @@ combat's path, and whether the game drops each sub-1 class entry or floors the t
 Two seconds a query with craft-anything, then reading the owned function.
 **Done when:** row 2 is ruled `same` or `different` with the address, and a `different` becomes a test-first fix.
 
-### 2. `World::from_state` and the tool-side converter (B shape) - `--load`
+### 3. `World::from_state` and the tool-side converter (B shape) - `--load`
 
 A versioned world description the engine builds from, produced by a GPL tool now and by a reader inside the engine later. The
 18 saves in the install become a differential oracle: run 1,200 ticks from `brit7`, compare with `brit8`.
 **Done when:** `ruage-headless --load <save>` runs and the converter's output describes a *world*, not a transcript.
 
-### 3. The importer into `tools/` and a bootstrap step
+### 4. The importer into `tools/` and a bootstrap step
 
 One repository, GPL-3.0 directory with its own licence file, invoked once at install time.
 **Done when:** a clean clone with only `Age2HD/` present builds and produces `config/gamedata/`.
 
-### 4. Content (D201): names by three lists, prose rewritten, campaigns ours only
+### 5. Content (D201): names by three lists, prose rewritten, campaigns ours only
 
-### 5. Publish cleanup: quote-and-cite the five docs, licence plumbing, CI gates, README
+### 6. Publish cleanup: quote-and-cite the five docs, licence plumbing, CI gates, README
 
-### 6. The gather capacity, restated as a question the saves can answer
+### 7. The gather capacity, restated as a question the saves can answer
 
 The game shows seven to eight bodies at **0.66** on a node's touching envelope; our ring hands out places at 0.66 first and
 0.40 when the ring refuses. Both are now exercised by the acceptance run, so the difference is visible; what is not settled
 is whether a **ninth** man should stand outside and wait (the crowd policy this work shipped) or walk to another node - and
-D204 has now made "walk to another node" the engine's answer wherever the man was refused a square, which may be what the
-saves were showing all along.
+D204 has made "walk to another node" the engine's answer wherever the man was refused a square, which may be what the saves
+were showing all along.
 
 ## Needs the owner - and only this
 
+- **which way past a paused body is allowed**: a body-aware re-plan (no decision is undone; this is step 1), a lateral step
+  for the winner only (the slide comes back), or a step through a paused body (the pass-through comes back). Nothing lands
+  on `main` until this is answered;
 - the **A vs B** publishing answer (does `--load` live in a published engine, and is the engine public yet) -
   `docs/licensing.md`, "B now, A later";
 - **whether "the enemy is eliminated inside 40 minutes" is a requirement.** With friends solid it is a pacing question,
@@ -106,9 +101,11 @@ The acceptance command that matters (release, 40 minutes of game time):
 
 `--dump` writes `kind,player,id,unit,slot,x,y,amount,hp,carry,path,task`. **`world.trace_steps()` is the instrument for a
 stuck body, not `Entity::last_step`**: that field is only recorded when tracing is on, so reading it on a normal run returns
-the value from seeding and reads as `Idle`. `crates/sim/tests/acceptance_economy.rs` runs the acceptance world itself and is
-the guard that would have caught this regression; keep it green. Probes on a `Task` arm are env-gated and removed in the
-same session - `no_float` catches a leftover `as f64` in production code.
+the value from seeding and reads as `Idle`. `World::route_points(id)` - added by D205's branch - returns the waypoint list a
+stalled body is still holding, which is what says whether a re-plan produced a detour or gave up.
+`crates/sim/tests/acceptance_economy.rs` runs the acceptance world itself and is the guard that would have caught this
+regression; keep it green. Probes on a `Task` arm are env-gated and removed in the same session - `no_float` catches a
+leftover `as f64` in production code.
 
 craft-anything's CLI is `/opt/data/tools/craft-anything/bin/craft-anything-cli`; the MCP entry is registered **deep**
 (`mcp --all-tools --deep`, 323 tools, `connect_timeout` 180) and its `PATH` must carry the JDK 21 `bin` and both Ghidra 12.2

@@ -153,7 +153,7 @@ impl World {
         true
     }
 
-    /// One step against the bodies in the way (D98a, C).
+    /// One step against the bodies in the way (D98a, C, D205).
     ///
     /// The original queries collisions **at the new position with the unit's radius**, and this is that query: a body
     /// blocks a disc of `radius[0]`, summed for the pair, or one whole tile when the content gives neither a radius.
@@ -165,19 +165,28 @@ impl World {
     /// 1. **clear** - take the step;
     /// 2. the blocker is the **order's target**, or stands on the ground an **exclusive** order asked for - refuse and
     ///    say nothing: the arrival rules finish the order from here, and a repath cannot put a unit anywhere better
-    ///    than the tile it is already on (D52, D98a);
+    ///    than the tile it is already on (D52, D98a, D200);
     /// 3. the mover is **already inside** the blocker's footprint - take the step, or a pair a spawn put inside each
     ///    other can never separate;
-    /// 4. the blocker stands on the **mover's own tile** and is itself moving - wait: the plan cannot route around a
-    ///    tile it starts in, and the body ahead will move on;
-    /// 5. one axis alone is clear - **slide** along it;
-    /// 6. **make room**, once per route: half the way plus a quarter tile to one side, terrain-checked (C1b);
-    /// 7. otherwise refuse and classify: a body the route already avoids is *past* and costs no repath (or a blocked
-    ///    unit would re-plan every tick), anything else is non-past and earns one;
-    /// 8. the blocker is **at rest** - take the step and let the repath route round it: a body that is not going
-    ///    anywhere will not move aside, and waiting on it is waiting for ever;
-    /// 9. otherwise **wait**, unless the blocker refused a step at this unit on the same tick - a mutual block gives way
-    ///    in entity order, so a jam is never permanent.
+    /// 4. a **unit** in the way is answered by the original's tie-break: the **higher id is told to pause** for a
+    ///    uniform 0.25-1.50 s and keeps its path, while the lower id proceeds (D205); the paused body returns before the
+    ///    repath, so its waypoint list is untouched;
+    /// 5. refuse and classify: a body the route already avoids is *past* and costs no repath (or a blocked unit would
+    ///    re-plan every tick), anything else is non-past and earns one;
+    /// 6. the blocker is **at rest** - take the step, bounded by the pair's reach, and let the repath route round it: a
+    ///    body that is not going anywhere will not move aside, and waiting on it is waiting for ever;
+    /// 7. otherwise **wait**.
+    ///
+    /// **What D205 withdrew, and what killed it.** Rules that used to sit here: a give-way mutex (`wait_or_give_way`,
+    /// rule 9 and its own-tile twin), an axis and perpendicular **slide** round a body (rule 5 and the own-tile slide),
+    /// and a **make-room** nudge (rule 6) - and, beside this pass, `push_the_standing`'s displacement (D200). All four
+    /// were answers to "two men want the same ground", invented here because the original's answer had not been read
+    /// yet. The give-way could not move a pair at one body apart at all (the bound inside `give` is zero there, measured
+    /// 2026-11-13: five of seven villagers `WaitOwnTile` for a whole match, the acceptance bank at **0 food**), the
+    /// slide moved a man off his own line to make room for somebody else's, and the nudge moved standing men a twentieth
+    /// of a tile (measured 2026-11-14: **161** displacements in the acceptance run, 147 of them builders at their own
+    /// sites). The original pauses the loser instead - bounded by a countdown, so the pair cannot stand for ever -
+    /// and `docs/movement-in-the-binary.md` has the four instructions that say so.
     pub(crate) fn collide(
         &self,
         pass: &mut Passing<'_>,
@@ -203,7 +212,8 @@ impl World {
         let goal = self.goal_of(entity);
         let goal_tile = goal.map(|(tile, _)| tile);
         // **Ground first.** A step that lands on blocked ground, or cuts the corner of one, is not a step - the mover
-        // slides along the axis that is clear, which is how it gets round a building instead of through it.
+        // slides along the axis that is clear, which is how it gets round a building instead of through it. This is the
+        // **terrain** slide and it stays (D205 withdraws the slide round a *body*, not the one round a wall).
         let entering = self.entering.contains_key(&id);
         if !self.step_is_walkable(here, (dx, dy), goal_tile, radius, entering) {
             for (sx, sy) in [(dx, Fixed::ZERO), (Fixed::ZERO, dy)] {
@@ -243,9 +253,7 @@ impl World {
         // game"*). The original's collision block compares the collided unit's **id** with the order's target and nothing
         // else - no player, team or alliance test anywhere in it, and the query passes an owner sentinel rather than the
         // unit's player (`docs/movement-in-the-binary.md`, read 2026-11-13). So a friend is a non-past collision exactly
-        // like an enemy: it blocks, and the answer to it is a repath. **D189's "your own units are not walls" is
-        // withdrawn** - it was chosen to make a crowd deliverable, not because the game does it, and it is why a walker
-        // could pass through a friend for 300 ticks (measured: 0.307 tiles at tick 79, `collision.rs`).
+        // like an enemy: it blocks, and the answer to it is a repath.
         let a_unit = self
             .find(other)
             .is_some_and(|other| other.kind == EntityKind::Unit);
@@ -292,121 +300,30 @@ impl World {
         if gap_x * gap_x + gap_y * gap_y < reach * reach {
             return (dx, dy, StepDecision::TakeOverlapping);
         }
-        // **Whose ground is it** (D131 A): the reach is a bar between **two players' units**, because that is the pass the
-        // owner remembers being a problem (*"narrow passes with 2 units passing in opposing directions"*). Two of your own
-        // villagers brushing past each other is how AoE2 moves a crowd - the deck's own page 9 says *"formations allow for
-        // some friendly overlap"* - and bounding those as well measured a match that no longer resolved: 164 entities
-        // against 141, both players alive at 1,800 s where the baseline had eliminated one, refusals 574 -> 1,021.
-        // **Your own units are walls** (D200, revising D189/D192). This was the exemption that let two of your villagers
-        // walk through each other; the owner's rule - and the original's, which cannot tell friend from foe - is that a
-        // body blocks whoever it belongs to, and the mover slides, gives way or repaths round it. The crowd-delivery
-        // problem D189 was solving is the settle's job (reserved places, D186) and is measured separately, not bought by
-        // letting bodies overlap.
-        let give = |step: (Fixed, Fixed), why: StepDecision| {
-            let delta = self.bound_to_reach(here, other_at, step, reach);
-            (delta.0, delta.1, why)
-        };
-        // 4. A body standing on the **mover's own tile** is not something a plan can route around: the search would have
-        //     to leave the tile it starts in, and what it found was a nine-waypoint route that walked backwards. The unit
-        //     waits instead - which is what a follower does while the body ahead of it moves on. **Only while it moves**:
-        //     a body at rest will not get out of the way, and waiting on it is waiting for ever.
-        if self.tile_of_raw(other_at) == self.tile_of_raw(here) && pass.moving.contains(&other) {
-            if self.wait_or_give_way(id, other, &mut pass.refused) {
-                let delta = give((dx, dy), StepDecision::GiveWayOwnTile);
-                if delta.0 != Fixed::ZERO || delta.1 != Fixed::ZERO {
-                    return delta;
-                }
-            }
-            // **A body on the mover's own tile can still be walked around, sideways** (measured: seven villagers on two
-            // tiles at one node, five of them `WaitOwnTile` for forty game-minutes, the acceptance bank at **0 food** - the
-            // give-way bound is zero at one body apart and the rule returns before the repath, so nothing ever moves). A
-            // plan cannot leave the tile it starts in; a *slide* can, and a sideways step increases the separation the
-            // bound is protecting. Axis first, then the perpendicular, so two runs choose the same step.
-            for (sx, sy) in [
-                (dx.raw(), 0i64),
-                (0, dy.raw()),
-                (-dy.raw(), dx.raw()),
-                (dy.raw(), -dx.raw()),
-            ] {
-                if sx == 0 && sy == 0 {
-                    continue;
-                }
-                let (nx, ny) = (here.0.raw() + sx, here.1.raw() + sy);
-                let (gx, gy) = (other_at.0.raw() - nx, other_at.1.raw() - ny);
-                if gx * gx + gy * gy < reach * reach {
-                    continue;
-                }
-                let slide = (Fixed::from_raw(nx), Fixed::from_raw(ny));
-                if self.blocker_at(pass.bodies, id, radius, slide).is_none() {
-                    return (
-                        Fixed::from_raw(sx),
-                        Fixed::from_raw(sy),
-                        StepDecision::Slide,
-                    );
-                }
-            }
-            return (stop.0, stop.1, StepDecision::WaitOwnTile);
-        }
-        // 5. One axis alone, in a fixed order so two runs slide the same way.
-        for (sx, sy) in [(dx.raw(), 0i64), (0, dy.raw())] {
-            if sx == 0 && sy == 0 {
-                continue;
-            }
-            let slide = (
-                Fixed::from_raw(here.0.raw() + sx),
-                Fixed::from_raw(here.1.raw() + sy),
-            );
-            if self.blocker_at(pass.bodies, id, radius, slide).is_none() {
-                return (
-                    Fixed::from_raw(sx),
-                    Fixed::from_raw(sy),
-                    StepDecision::Slide,
-                );
+        // 4. **A unit in the way: the original's tie-break** (D205). Byte for byte (`0x8a80ed`-`0x8a8141`):
+        //    `call [vtable+0x2b4]` on both units - the object handle - `cmp eax,esi / jle`, and only when *other > self*
+        //    does the other get `setPause(rand*1.25/32767+0.25)`. `+0x2b0` writes **the path's pause timer and nothing
+        //    else**, so the loser keeps its path, spends no waypoint and stands still until the timer runs out. Our
+        //    `EntityId` is a monotonic spawn counter, so this is "the older unit wins every contested tile" - the owner
+        //    accepted that cost with the decision.
+        //
+        //    Both sides of a pair run this rule and agree: the lower id tells the higher to pause and then proceeds, the
+        //    higher id pauses itself. The winner's answer is whatever the rest of this function decides - a repath round
+        //    the man, a bounded step while he is at rest, or a stop - so the rule adds no step of its own and a pair
+        //    never overlaps: D131's reach still holds.
+        if a_unit {
+            if other.0 > id.0 {
+                // Right of way: the other man is the one who stands, and this body goes on being answered below.
+                pass.pauses.push(other);
+            } else {
+                // The higher id: told to pause. It keeps its route - no waypoint is spent and no repath is asked for -
+                // and stands this tick out. Already-paused bodies never reach here (the pass skips them), which is the
+                // original's "one float": a fresh collision sets the timer, a running timer is never re-rolled.
+                pass.pauses.push(id);
+                return (stop.0, stop.1, StepDecision::Paused);
             }
         }
-        // 6. Make room: **once per route**. A nudge is a way past one obstruction, not a way of life - uncapped, every
-        //    crowded unit steps aside for every other and a base turns into a mosh pit that never arrives (measured:
-        //    89 wood / 20 food / 50 gold at 1,600 s against 729 / 792 / 370).
-        let gave_way = self.paths.get(&id).is_some_and(|route| route.gave_way);
-        if !gave_way {
-            let quarter = self.scale / 4;
-            let length = dx.raw().abs().max(dy.raw().abs()).max(1);
-            for turn in [1i64, -1i64] {
-                let (rx, ry) = if turn > 0 {
-                    (-dy.raw(), dx.raw())
-                } else {
-                    (dy.raw(), -dx.raw())
-                };
-                let (nx, ny) = (
-                    dx.raw() / 2 + rx * quarter / length,
-                    dy.raw() / 2 + ry * quarter / length,
-                );
-                let aside = (
-                    Fixed::from_raw(here.0.raw() + nx),
-                    Fixed::from_raw(here.1.raw() + ny),
-                );
-                // Terrain: a nudge may stay on the ground the body already holds (a body can stand on a node's tile),
-                // but it may not step onto blocked ground to get out of somebody's way.
-                let (x, y) = self.tile_of_raw(aside);
-                if (x, y) != self.tile_of_raw(here) {
-                    let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
-                        continue;
-                    };
-                    if !self.is_free_ground(x, y) {
-                        continue;
-                    }
-                }
-                if self.blocker_at(pass.bodies, id, radius, aside).is_none() {
-                    pass.made_room.push(id);
-                    return (
-                        Fixed::from_raw(nx),
-                        Fixed::from_raw(ny),
-                        StepDecision::MakeRoom,
-                    );
-                }
-            }
-        }
-        // 7. Refuse, and say why. A body the route already planned around is *past*; anything else is worth a repath,
+        // 5. Refuse, and say why. A body the route already planned around is *past*; anything else is worth a repath,
         //    unless the unit is already on its goal's ring, where a repath only buys searches (D98a).
         if let Some((goal_tile, _)) = goal {
             let tile = self.tile_of_raw(here);
@@ -424,7 +341,7 @@ impl World {
                 });
             }
         }
-        // 8. A body **at rest** cannot move aside, so waiting on it is waiting for ever (measured: a gatherer frozen from
+        // 6. A body **at rest** cannot move aside, so waiting on it is waiting for ever (measured: a gatherer frozen from
         //    tick 40,000 to 400,000 beside an idle friend). The step is taken and the repath above routes round it from
         //    the next tick - the overlap is at most one footprint, and it resolves; a frozen unit never does.
         if !pass.moving.contains(&other) {
@@ -434,31 +351,27 @@ impl World {
             // tiles where two 0.2 radii need `0.4`. The bound applies to any unit, friend or not; nodes and buildings keep
             // the exemption, which is the case it was written for.
             if a_unit {
-                let delta = give((dx, dy), StepDecision::TakeAtRest);
+                // **A step may not end inside the pair's reach** (D131 A, the owner's call 2026-11-06: *"I think A
+                // should be it"*). Halving rather than arithmetic: the constraint is a circle round the other body, so
+                // the largest fitting step is found by trying the step and then 1/2, 1/4, ... of it - five integer
+                // probes at worst, all in fixed point and no sqrt.
+                let delta = self.bound_to_reach(here, other_at, (dx, dy), reach);
                 if delta.0 != Fixed::ZERO || delta.1 != Fixed::ZERO {
-                    return delta;
+                    return (delta.0, delta.1, StepDecision::TakeAtRest);
                 }
-                // **A body at rest inside the reach leaves no step at all** (D200). Returning it would freeze the mover
-                // beside a man who is never going to move - the exact failure D192 traced (2,000 ticks, 1.011 tiles out,
-                // house at hp 1) - so the pair resolves it the way rule 9 does: one refuses, the other gives way.
-                if self.wait_or_give_way(id, other, &mut pass.refused) {
-                    return give((dx, dy), StepDecision::GiveWay);
-                }
+                // **A body at rest inside the reach leaves no step at all**, and this body has right of way (rule 4), so
+                // it has nothing left to try: it stands where it is and the other man's pause is what will move the pair.
                 return (stop.0, stop.1, StepDecision::WaitBlocked);
             }
             // **The bound does not apply to a body at rest** (measured: seven gather and rally tests failed when it did).
             // A resource node carries no radius, so `reach` falls back to a whole tile - and a villager must be able to
             // stand beside a tree to chop it, which the bound forbade: it stopped 5 tiles out, on the boundary circle of a
-            // node it was walking to. The rule D131 is about is two bodies that both want the ground (rules 4 and 9), not
-            // a mover against something that will never yield.
+            // node it was walking to. The rule D131 is about is two bodies that both want the ground, not a mover against
+            // something that will never yield.
             return (dx, dy, StepDecision::TakeAtRest);
         }
-        // 9. Otherwise wait - unless the blocker refused a step at this unit on the same tick, in which case one of the
-        //    two has to give way or the pair is jammed. The give-way step is **bounded by the reach** (D131 A): a jam is
-        //    never permanent, and a pair never overlaps.
-        if self.wait_or_give_way(id, other, &mut pass.refused) {
-            return give((dx, dy), StepDecision::GiveWay);
-        }
+        // 7. Anything else: stand still. The blocker is moving, so the pair has an answer next tick - and if it is this
+        //    body that lost the tie-break, rule 4 has already paused it.
         (stop.0, stop.1, StepDecision::WaitBlocked)
     }
 
@@ -492,28 +405,6 @@ impl World {
             }
         }
         (Fixed::ZERO, Fixed::ZERO)
-    }
-
-    /// Stand still for a body in the way - unless that body refused a step at **this** one on the same tick, in which
-    /// case this one gives way and takes its step.
-    ///
-    /// Entity order decides which of a pair gives way (the entity list is sorted by id), and a jam neither unit can
-    /// resolve is never permanent: measured on the one-wood-tree fixture, two villagers side by side in one tile waited
-    /// for each other from tick 15 to tick 2,000.
-    fn wait_or_give_way(
-        &self,
-        id: EntityId,
-        other: EntityId,
-        refused: &mut Vec<(EntityId, EntityId)>,
-    ) -> bool {
-        if refused
-            .iter()
-            .any(|(unit, body)| *unit == other && *body == id)
-        {
-            return true;
-        }
-        refused.push((id, other));
-        false
     }
 
     /// The entity an order is trying to reach, when the order has one. `Move` has none - its goal is a place, and that
