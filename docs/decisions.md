@@ -5938,3 +5938,41 @@ trigger.
 **Basis.** `crates/sim/src/lib.rs` `gather_reach` (`search_radius`, then `sight + LOOK_AROUND_TILES`), `nodes_of_slot`;
 `crates/sim/src/world/shares.rs:198`; `SiteOccupied` from the withdrawn fixture; the four measurements above.
 Review: `docs/reviews/2026-11-15-d225-search-and-fallback.md`.
+
+### D226 - a farm's replacement is queued or automatic at a mill, and the setting is the player's
+
+**What it says.** A spent plot can be replaced in two ways, and both are **pressed at a mill**:
+
+- **The queue** (HD/AoC): `Command::Reseed { building, count }` commits the farm's own dat price per entry out of the stockpile
+  when it is queued, exactly as the original does. When a plot runs out, one entry is spent and the replacement rises.
+- **Automatic reseeding** (a Definitive Edition feature, built here on the owner's instruction): `Command::AutoReseed { building, on }`
+  costs nothing to switch, and the price is taken **on the tick the plot runs out**.
+
+**The state is the player's, and that is the owner's correction** (2026-11-15: *"auto-reseed button and queue are shared across
+mills, enabling auto-reseed on one mill enables it on every other, too. It is just global setting villagers will follow regardless
+of the distance to mill"*). So `reseed: BTreeMap<player, u32>` and `auto_reseed: BTreeSet<player>` - never keyed by building. A mill
+answers one question only: *may this player press it here*. The fixture presses the toggle at a mill in the far corner and reseeds a
+plot next to the town centre, so the property is asserted rather than assumed.
+
+**What it required, and one defect it exposed.**
+
+- **A paid site.** `check_build` prices a site from the stockpile; a queued entry has already paid and the automatic case pays at the
+  husk, so `check_build_paid` / `start_paid_site` run every check **except** the price. Nothing else was relaxed: availability, the
+  site's ground and the walk all still apply, because a paid site that cannot be raised is a bug and not a purchase.
+- **Who does it.** The replacement is handed to the nearest villager of that player free to take a build order (not garrisoned, not
+  already walking to a site) - the man who was working the plot, in practice, because he is standing on it.
+- **A husk was not walkable ground, though the engine's own doc said it was.** Raising the replacement was refused with
+  `SiteBlocked`: the walk layer keeps a building's tiles blocked until it is *removed*, and a husk lives on for `husk_seconds`. The
+  husk now releases its footprint when it is marked, which makes the doc true for movement as well as for building. Proved by
+  mutation: putting the block back fails both reseed fixtures.
+
+**What it costs.** One `BTreeMap`/`BTreeSet` lookup per husked plot (not per tick), two commands, and a price query that walks the
+farm's cost list - all off the per-tick path. Both pieces are **in the state hash**, because a run that lost either replaces plots
+the other run leaves to seed, and that is a divergence with no other symptom.
+
+**Not done, and why.** No panel or button exists (there is no renderer): the commands are the interface, and the mill's role is what
+a panel would ask. A script can drive both today; that is how the fixture proves them.
+
+**Basis.** `crates/sim/tests/reseed.rs` (4 fixtures: queue pays 60 and replaces on the same tile; the toggle is the player's and pays
+at the husk; nothing happens without either; only a finished mill accepts either), two mutations, and the owner's two rulings of
+2026-11-15. Review: `docs/reviews/2026-11-15-d226-reseed.md`.

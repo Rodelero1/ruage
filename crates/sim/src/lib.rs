@@ -643,6 +643,19 @@ pub enum Command {
         villager: EntityId,
         site: EntityId,
     },
+    /// **Queue a replacement farm at a mill** (D226). One entry pays the farm's own dat price out of the stockpile now, and the
+    /// next plot that runs out is replaced from the queue. The building is only the button: the queue belongs to its **owner** and
+    /// is shared with every other mill that player has, per the owner's correction of 2026-11-15.
+    Reseed {
+        building: EntityId,
+        count: u32,
+    },
+    /// **Switch automatic reseeding on or off** (D226). Definitive Edition's feature, not HD's; a player setting, written by any
+    /// of that player's mills, and followed by villagers wherever they are.
+    AutoReseed {
+        building: EntityId,
+        on: bool,
+    },
     /// Research a tech at a building. Price, duration, where it may happen and what it applies all
     /// come from the tech and effect tables - a replay carries the id, never the numbers.
     Research {
@@ -1232,6 +1245,13 @@ pub struct World {
     /// builder arrives, the crowd shifts, and the frozen answer must expire. Measured: one parked villager held a 6x6 site
     /// at progress 0 for 2,000 ticks against an unchanging `resuming` entry.
     aside_retry: BTreeMap<EntityId, u64>,
+    /// **Replacement farms this player has paid for, one entry each** (D226). A mill is only where the button lives: the owner's
+    /// correction is that the queue and the toggle are shared across every mill a player owns, so this is keyed by player and
+    /// not by building. The wood is committed when the entry is made, as the original does.
+    reseed: BTreeMap<u8, u32>,
+    /// **Players whose farms replace themselves** (D226). A Definitive Edition feature that this project chose to have anyway;
+    /// HD/AoC has only the queue above. Like the queue it is the player's setting, not the mill's.
+    auto_reseed: BTreeSet<u8>,
     /// Stance and post, by unit. Only units whose stance is not the default have an entry, so an
     /// aggressive world - which is every world that does not ask - carries nothing for this (D48).
     stances: BTreeMap<EntityId, (Stance, (Fixed, Fixed))>,
@@ -1492,6 +1512,8 @@ impl World {
             rallies: BTreeMap::new(),
             patrols: BTreeMap::new(),
             resuming: BTreeMap::new(),
+            reseed: BTreeMap::new(),
+            auto_reseed: BTreeSet::new(),
             aside_retry: BTreeMap::new(),
             stances: BTreeMap::new(),
             refusal: None,
@@ -2640,15 +2662,40 @@ impl World {
         unit_id: u32,
         at: (u16, u16),
     ) -> Result<(), SimError> {
+        self.raise_site(villager, unit_id, at, false)
+    }
+
+    /// **Raise a site whose price is already settled** (D226): a queued reseed was paid at the mill and an automatic one at the
+    /// tick the plot ran out, so the stockpile is not asked again - but every other check still runs.
+    pub(crate) fn start_paid_site(
+        &mut self,
+        villager: EntityId,
+        unit_id: u32,
+        at: (u16, u16),
+    ) -> Result<(), SimError> {
+        self.raise_site(villager, unit_id, at, true)
+    }
+
+    fn raise_site(
+        &mut self,
+        villager: EntityId,
+        unit_id: u32,
+        at: (u16, u16),
+        paid: bool,
+    ) -> Result<(), SimError> {
         let BuildPlan {
             total_ticks,
             max_hp,
             costs,
             player,
-        } = self.check_build(villager, unit_id, at)?;
+        } = if paid {
+            self.check_build_paid(villager, unit_id, at)?
+        } else {
+            self.check_build(villager, unit_id, at)?
+        };
 
         // Paid only after every check passed, so a refused order spends nothing.
-        for cost in &costs {
+        for cost in costs.iter().take(if paid { 0 } else { usize::MAX }) {
             let slot = self.cost_slot(cost)?;
             let index = usize::from(player).wrapping_sub(1);
             let Some(row) = self.stock.get_mut(index) else {
@@ -3883,6 +3930,81 @@ impl World {
     /// every fourth tick, like the spent-node pass beside it: a husk is a second-scale thing and this is not the tick loop's
     /// hot path. **Nothing here frees a tile** - a farm's footprint is a floor and a husk blocks nothing, which is what the
     /// owner asked for ("it obstructs nothing as if it was not there"); the entity that goes is a drawing.
+    /// **Replace the plots that have just run out** (D226). The owner's correction is the design: the queue and the toggle are
+    /// the **player's**, shared across every mill it owns, so this reads a player key and never asks which mill is near.
+    ///
+    /// The price is charged **after** the site is raised: a plot with nowhere to stand is a site that cannot exist, and paying for
+    /// it would take wood for nothing.
+    fn reseed_spent(&mut self, spent: &[EntityId]) {
+        for id in spent {
+            let Some((player, Some(unit), position)) = self
+                .find(*id)
+                .map(|entity| (entity.player, entity.unit, entity.position))
+            else {
+                continue;
+            };
+            let Some(farm) = self.role_unit("farm") else {
+                continue;
+            };
+            let family = |id: u32| self.units.as_ref().map_or(id, |units| units.root(id));
+            if family(unit) != family(farm) {
+                continue;
+            }
+            let queued = self.reseed.get(&player).copied().unwrap_or(0) > 0;
+            let price = self.farm_price().unwrap_or_default();
+            let affordable = price
+                .iter()
+                .all(|(slot, amount)| self.stock(player, *slot) >= *amount);
+            let auto = self.auto_reseed.contains(&player) && affordable;
+            if !queued && !auto {
+                continue;
+            }
+            let Some(builder) = self.reseed_builder(player, position) else {
+                continue;
+            };
+            let at = self.tile_of(position);
+            if self.start_paid_site(builder, unit, at).is_err() {
+                // A plot nobody can reach is not a purchase: leave the queue entry alone and try again when it is replaced by hand.
+                continue;
+            }
+            if queued {
+                if let Some(entry) = self.reseed.get_mut(&player) {
+                    *entry = entry.saturating_sub(1);
+                }
+            } else {
+                let index = usize::from(player).wrapping_sub(1);
+                for (slot, amount) in &price {
+                    if let Some(row) = self.stock.get_mut(index) {
+                        row[*slot] = row[*slot].saturating_sub(*amount);
+                    }
+                }
+            }
+        }
+    }
+
+    /// **Who reseeds it**: the nearest villager of `player` free to take a build order - not garrisoned, and not already walking to
+    /// another site. The man who was working the plot is almost always the answer, because he is standing on it.
+    fn reseed_builder(&self, player: u8, at: (Fixed, Fixed)) -> Option<EntityId> {
+        let villager = self.role_unit("villager")?;
+        let family = |id: u32| self.units.as_ref().map_or(id, |units| units.root(id));
+        self.entities
+            .iter()
+            .filter(|entity| {
+                entity.player == player
+                    && entity.kind == EntityKind::Unit
+                    && entity.unit.map(family) == Some(family(villager))
+                    && !matches!(entity.task, Task::Garrisoned { .. } | Task::Build { .. })
+            })
+            .min_by_key(|entity| {
+                let (dx, dy) = (
+                    entity.position.0.raw() - at.0.raw(),
+                    entity.position.1.raw() - at.1.raw(),
+                );
+                dx * dx + dy * dy
+            })
+            .map(|entity| entity.id)
+    }
+
     fn step_husks(&mut self) {
         if !self.tick.is_multiple_of(4) {
             return;
@@ -3900,9 +4022,21 @@ impl World {
                 })
                 .map(|entity| entity.id)
                 .collect();
-            for id in empty {
-                self.husks.insert(id, now);
+            for id in &empty {
+                self.husks.insert(*id, now);
+                // **A husk is walkable ground** - this function's own doc has said so, and the walk layer did not: a spent plot
+                // kept its tiles blocked until the husk was removed, so a replacement laid on the same ground was refused with
+                // `SiteBlocked` (measured raising one, D226). Unblocking here is also what makes the doc true for movement.
+                for (x, y) in self.footprint_area_of(*id) {
+                    if let Some(walk) = self.walk.as_mut() {
+                        walk.unblock(x, y);
+                    }
+                }
             }
+            // **A plot that has run out is the moment a replacement is paid for** (D226): the queue first (already paid), then the
+            // player's automatic toggle (paid now). The husk is still on the ground, and a new farm may be laid over it, so the
+            // replacement rises on the same footprint rather than beside it.
+            self.reseed_spent(&empty);
         }
         if self.husks.is_empty() || self.husk_ticks == 0 {
             return;
@@ -4011,6 +4145,8 @@ impl World {
             Command::Train { building, .. }
             | Command::Research { building, .. }
             | Command::Rally { building, .. }
+            | Command::Reseed { building, .. }
+            | Command::AutoReseed { building, .. }
             | Command::Ungarrison { building } => *building,
             Command::Spawn { id, .. } => *id,
         }

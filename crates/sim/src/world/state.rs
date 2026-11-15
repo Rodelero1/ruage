@@ -42,6 +42,17 @@ impl World {
                 );
             }
         }
+        // **A player's reseed queue and toggle are state** (D226): a run that lost either would replace plots the other run leaves
+        // to go to seed, which is a divergence with no other symptom. Hashed sorted by player, so map order cannot matter.
+        for (player, entries) in &self.reseed {
+            fnv_bytes(&mut hash, b"reseed-queue");
+            fnv_bytes(&mut hash, &[*player]);
+            fnv_bytes(&mut hash, &entries.to_le_bytes());
+        }
+        for player in &self.auto_reseed {
+            fnv_bytes(&mut hash, b"auto-reseed");
+            fnv_bytes(&mut hash, &[*player]);
+        }
         for (player, family) in &self.built {
             fnv_bytes(&mut hash, &[*player]);
             fnv_bytes(&mut hash, &family.to_le_bytes());

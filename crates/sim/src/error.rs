@@ -207,6 +207,11 @@ pub enum SimError {
     NotAFoundation {
         site: EntityId,
     },
+    /// **The button is not a mill of yours** (D226): a finished mill of the pressing player is the only building that may queue a
+    /// farm's replacement or switch automatic reseeding.
+    NotAMill {
+        id: EntityId,
+    },
     SiteOccupied {
         tile: (u16, u16),
     },
@@ -432,6 +437,9 @@ impl std::fmt::Display for SimError {
             SimError::NotAFoundation { site } => {
                 write!(f, "{site:?} is not an unfinished site of yours to join")
             }
+            SimError::NotAMill { id } => {
+                write!(f, "{id:?} is not a finished mill of yours")
+            }
             SimError::SiteOccupied { tile } => {
                 write!(f, "something already stands at {:?}", tile)
             }
@@ -561,6 +569,7 @@ impl SimError {
             | Self::TooManyResources { .. }
             | Self::NotEnough { .. }
             | Self::NotAFoundation { .. }
+            | Self::NotAMill { .. }
             | Self::SiteOccupied { .. }
             | Self::SiteBlocked { .. }
             | Self::SiteUnscouted { .. }

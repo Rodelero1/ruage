@@ -321,6 +321,28 @@ impl World {
         unit_id: u32,
         at: (u16, u16),
     ) -> Result<BuildPlan, SimError> {
+        self.check_build_inner(villager, unit_id, at, false)
+    }
+
+    /// **The same checks, minus the price** (D226): a reseed has already been paid for, either as a queued entry or by the
+    /// automatic toggle at the tick the plot ran out. Everything else - availability, the site's ground, the walk - still applies,
+    /// because a paid site that cannot be raised is a bug, not a purchase.
+    pub(crate) fn check_build_paid(
+        &self,
+        villager: EntityId,
+        unit_id: u32,
+        at: (u16, u16),
+    ) -> Result<BuildPlan, SimError> {
+        self.check_build_inner(villager, unit_id, at, true)
+    }
+
+    fn check_build_inner(
+        &self,
+        villager: EntityId,
+        unit_id: u32,
+        at: (u16, u16),
+        paid: bool,
+    ) -> Result<BuildPlan, SimError> {
         let units = self.units.as_ref().ok_or(SimError::NoTables)?;
         let stats = units
             .unit(unit_id)
@@ -365,16 +387,18 @@ impl World {
         {
             return Err(SimError::MissingBuilding { need: name.clone() });
         }
-        for cost in &stats.costs {
-            let slot = self.cost_slot(cost)?;
-            let need = u32::from(cost.amount);
-            let have = self.stock(worker.player, slot);
-            if have < need {
-                return Err(SimError::NotEnough {
-                    resource: self.slot_name(slot),
-                    need,
-                    have,
-                });
+        if !paid {
+            for cost in &stats.costs {
+                let slot = self.cost_slot(cost)?;
+                let need = u32::from(cost.amount);
+                let have = self.stock(worker.player, slot);
+                if have < need {
+                    return Err(SimError::NotEnough {
+                        resource: self.slot_name(slot),
+                        need,
+                        have,
+                    });
+                }
             }
         }
         if let Some(why) = self.site_refusal(worker.player, unit_id, at) {
@@ -393,5 +417,110 @@ impl World {
             costs: stats.costs.clone(),
             player: worker.player,
         })
+    }
+}
+
+/// **The player's farm-reseed settings** (D226): what may be read of the queue and the toggle without knowing how they are kept.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ReseedSetting {
+    /// Replacements already paid for, one farm each.
+    pub queued: u32,
+    /// Whether this player's plots replace themselves.
+    pub auto: bool,
+}
+
+impl World {
+    /// **The mill is a button, not the setting** (D226). A command names one of the player's finished mills so that "who may press
+    /// this" has an answer; the queue and the toggle it writes are the **player's**, shared across every mill that player owns -
+    /// the owner's correction of 2026-11-15.
+    pub(crate) fn check_mill(&self, building: EntityId) -> Result<u8, SimError> {
+        let entity = self
+            .find(building)
+            .ok_or(SimError::MissingEntity(building))?;
+        if entity.kind != EntityKind::Building || entity.construction.is_some() {
+            return Err(SimError::NotAMill { id: building });
+        }
+        let Some(mill) = self.role_unit("mill") else {
+            return Err(SimError::NotAMill { id: building });
+        };
+        // An age upgrade can replace a building's id (D6), so the family is what is compared, not the number.
+        let family = |unit: u32| self.units.as_ref().map_or(unit, |units| units.root(unit));
+        if entity.unit.map(family) != Some(family(mill)) {
+            return Err(SimError::NotAMill { id: building });
+        }
+        Ok(entity.player)
+    }
+
+    /// **A farm's own price, from the pack** (D226): one entry costs what raising a plot costs, and nothing in the engine names a
+    /// number for it.
+    pub(crate) fn farm_price(&self) -> Result<Vec<(usize, u32)>, SimError> {
+        let units = self.units.as_ref().ok_or(SimError::NoTables)?;
+        let farm = self
+            .role_unit("farm")
+            .ok_or(SimError::NotAMill { id: EntityId(0) })?;
+        let stats = units.unit(farm).ok_or(SimError::MissingUnit { id: farm })?;
+        let mut price = Vec::new();
+        for cost in &stats.costs {
+            price.push((self.cost_slot(cost)?, u32::from(cost.amount)));
+        }
+        Ok(price)
+    }
+
+    /// Does this player have the wood for `count` entries? Checked before anything is written, so a refused press spends nothing.
+    pub(crate) fn check_reseed_price(&self, player: u8, count: u32) -> Result<(), SimError> {
+        let count = count.max(1);
+        for (slot, amount) in self.farm_price()? {
+            let need = amount.saturating_mul(count);
+            let have = self.stock(player, slot);
+            if have < need {
+                return Err(SimError::NotEnough {
+                    resource: self.slot_name(slot),
+                    need,
+                    have,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// **Pay for the entries now** - the original commits wood to the queue - and remember them against the player.
+    pub(crate) fn start_reseed(&mut self, building: EntityId, count: u32) -> Result<(), SimError> {
+        let player = self.check_mill(building)?;
+        let count = count.max(1);
+        self.check_reseed_price(player, count)?;
+        let index = usize::from(player).wrapping_sub(1);
+        for (slot, amount) in self.farm_price()? {
+            let need = amount.saturating_mul(count);
+            let Some(row) = self.stock.get_mut(index) else {
+                return Err(SimError::PlayerOutOfRange { player });
+            };
+            row[slot] = row[slot].saturating_sub(need);
+        }
+        let entry = self.reseed.entry(player).or_insert(0);
+        *entry = entry.saturating_add(count);
+        Ok(())
+    }
+
+    /// Switch the player's automatic reseed. The building is only the button that was pressed.
+    pub(crate) fn start_auto_reseed(
+        &mut self,
+        building: EntityId,
+        on: bool,
+    ) -> Result<(), SimError> {
+        let player = self.check_mill(building)?;
+        if on {
+            self.auto_reseed.insert(player);
+        } else {
+            self.auto_reseed.remove(&player);
+        }
+        Ok(())
+    }
+
+    /// What this player's settings are, for tests and for a panel.
+    pub fn reseed_of(&self, player: u8) -> ReseedSetting {
+        ReseedSetting {
+            queued: self.reseed.get(&player).copied().unwrap_or(0),
+            auto: self.auto_reseed.contains(&player),
+        }
     }
 }

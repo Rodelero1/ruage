@@ -280,7 +280,9 @@ castle = 82         # CSTL, 4800 hp - available from the Castle Age (tech 137 ma
 trebuchet_packed = 331     # PTREB - available from the Imperial Age (tech 256 makes it)
 siege_workshop = 49 # SIWS, class 3, 1800 hp, 200 wood: the building that makes the siege line
 blacksmith = 103    # BLAC, class 3, 1800 hp, 150 wood: the Feudal Age prerequisite of the siege workshop
-mill = 68           # MILL, class 3, 600 hp, 100 wood: a Dark Age building (and the farm prerequisite)
+mill = 68           # MILL, class 3, 600 hp, 100 wood: a Dark Age building (and the farm prerequisite). Also the
+# **button** for a farm's replacement (D226) - the queue and the automatic toggle it switches are the PLAYER's setting,
+# shared across every mill that player owns (the owner's correction of 2026-11-15).
 mining_camp = 584   # MINE, class 3, 600 hp, 100 wood: a Dark Age building
 market = 84         # MRKT, class 3, 1800 hp, 175 wood: a Feudal Age building
 stable = 101        # STBL, class 3, 1500 hp, 175 wood: a Feudal Age building

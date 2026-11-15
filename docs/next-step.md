@@ -1,4 +1,4 @@
-# OPEN - the reseed queue and auto-reseed at the mill
+# OPEN - a builder's claimed place, if a stuck builder can be constructed at all
 
 **Where it stands, 2026-11-15.** Seven decisions, closing five debts and one carried regression from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
 range, in the importer and the engine - a sight tech had been moving a tower's *attack range*, and a sight upgrade marked no
@@ -26,30 +26,9 @@ remains is therefore the debt list, not a defect list.
 
 ## The open items, in the order I would take them
 
-1. **The reseed queue and auto-reseed, both at the mill only** (the owner, 2026-11-15: *"please implement queue and
-   auto-reseed, both are only in the mill"*, having been told that **auto-reseed is a Definitive Edition feature** and that HD/AoC
-   has only the manual queue). Both are features, not fixes: a command that queues a replacement (**60 wood committed at the mill
-   per entry**, as the game does), state for the queue and for the toggle, and the behaviour of a villager whose plot runs out -
-   he takes the next entry and reseeds the same ground, and stands idle when there is none and the toggle is off. Note the screen:
-   the dat's own resource for a farm's wood cost, not a constant in the engine. Gate: a fixture for the queue (wood drops, a farm
-   reappears on the same tiles) and one for the toggle (no wood, no reseed; toggle off, the villager goes idle).
-   **Anchors measured before starting** (so the next session does not re-find them): the mill is dat **68** (`name = "MILL"`,
-   `config/gamedata/units.toml:1843`) and has **no `[role]` yet**; a farm is role `farm = 50`, **60 wood** (`costs = [[1, 60]]`);
-   a spent plot already becomes a **husk** and is removed after `husk_ticks` (`step_husks`, `crates/sim/src/lib.rs:3886`,
-   `is_expired_farm_ref`); commands are validated in `world/orders.rs`'s `check_*` match (:57) and applied in the `match` at
-   :284; `start_build_site(builder, unit, at)` is the one path that raises a site, and `build_queue` already chains sites (D66),
-   so a reseed is "pay, then hand that man a farm site on the old footprint".
-   **The state is the PLAYER's, not the mill's** (the owner, 2026-11-15: *"auto-reseed button and queue are shared across
-   mills, enabling auto-reseed on one mill enables it on every other, too. It is just global setting villagers will follow
-   regardless of the distance to mill"*), so the mill is the **interface** only: `Command::Reseed { building, count }` and
-   `Command::AutoReseed { building, on }` validate that the building is a **finished mill of yours** and then write
-   `reseed: BTreeMap<u8, u32>` and `auto_reseed: BTreeSet<u8>` on the player. Both are simulation state and belong in the hash.
-   **Three blockers found while writing the fixture, each needing a decision-free fix first**: (a) `start_build_site` prices a
-   site from the stockpile, so a *paid* reseed needs a path that skips the price (the wood is taken when the entry is queued, or
-   when the toggle pays out); (b) a farm's food is set where a farm *finishes*, so a reseeded plot must go through that path or
-   it rises empty; (c) the replacement needs an owner - the man who was working the plot, else the nearest idle villager of that
-   player - and handing it to him is `build_queue`'s "next site" path (D66) rather than a new mechanism. The fixture was written
-   and is withdrawn until those three exist, because a test that cannot compile is not a plan.
+1. ~~**The reseed queue and auto-reseed at the mill**~~ - **DONE (D226)**: `Command::Reseed` and `Command::AutoReseed`, per-player
+   state, a paid-site path, and a husk that releases its ground. Four fixtures in `crates/sim/tests/reseed.rs`. What is left of it is
+   presentation only: there is no panel or button because there is no renderer.
 2. **A builder claims his place - measured-out, not built** (D225). The owner's rule is a free **space one diameter wide**,
    claimed by one worker, with a builder who finds none taking the next site in **his own queue** ("2 a"). The *claim* half has no
    reachable trigger in this model: own bodies are not walls to their own side (D189), a visible enemy on the footprint is refused

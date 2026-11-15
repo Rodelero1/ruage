@@ -57,6 +57,15 @@ impl World {
             Command::JoinBuild { villager, site } => {
                 self.check_join(*villager, *site)?;
             }
+            // **The button is a mill of yours, and the setting is yours** (D226). Checked here so a refused press spends
+            // nothing, exactly like every other order.
+            Command::Reseed { building, count } => {
+                let player = self.check_mill(*building)?;
+                self.check_reseed_price(player, *count)?;
+            }
+            Command::AutoReseed { building, .. } => {
+                self.check_mill(*building)?;
+            }
             // A line is judged by its **first** tile only, and the rest are skipped as they are tried (the owner's answer B:
             // an ineligible segment is not fatal). `start_build` already refuses a tile that cannot be built on, so the whole
             // drag fails only when its first tile does.
@@ -282,6 +291,8 @@ impl World {
             Command::Gather { villager, node } => self.start_gather(villager, node),
             Command::Build { villager, unit, at } => self.start_build(villager, unit, at),
             Command::JoinBuild { villager, site } => self.start_join(villager, site),
+            Command::Reseed { building, count } => self.start_reseed(building, count),
+            Command::AutoReseed { building, on } => self.start_auto_reseed(building, on),
             Command::BuildLine {
                 villager,
                 unit,
