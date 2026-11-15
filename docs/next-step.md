@@ -1,4 +1,4 @@
-# OPEN - the farm reseed queue and the bounded resource search, the two halves D215 made hot
+# OPEN - the builder's claimed place and his queue fallback, then the farm reseed queue
 
 **Where it stands, 2026-11-15.** Seven decisions, closing five debts and one carried regression from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
 range, in the importer and the engine - a sight tech had been moving a tower's *attack range*, and a sight upgrade marked no
@@ -20,8 +20,8 @@ economy's own rules. Do not start breadth, civs, or the renderer before items 1-
 
 1. **A builder claims his place, and takes the next site in his queue when there is none** (the owner, 2026-11-15: *"it is not
    about tiles, never was ... only about finding a free space one diameter width. Same for resource gathering, same for
-   construction"*, and *"2 a"* - the next site in **his own queue**). The stall itself is closed (D223: a failed step-aside
-   expires after 20 ticks, the 6×6 fixture is un-parked and green), so what is left is the *rule* rather than the fault: a place
+   construction"*, and *"2 a"* - the next site in **his own queue**). The stall itself is closed (D223: a step-aside that stops making progress is re-asked, the 6×6
+   fixture is un-parked and green), so what is left is the *rule* rather than the fault: a place
    is one continuous space one **diameter** wide, claimed by one worker, nearest first, re-laid when the ring refuses a man,
    released when something else moves him - the same machinery gathering uses (`gather_place`, `reserve_gather_place`,
    `maybe_respread`) with construction as a second kind of claim. Then: a builder with no place anywhere on the ring takes the
@@ -34,22 +34,9 @@ economy's own rules. Do not start breadth, civs, or the renderer before items 1-
    resource search at **LOS+5 tiles and 30 reach tests** (U22). D215 made this hot: a plot holds 175 instead of 250, so 43%
    more plots are laid per match and `repaths` went **380 -> 552**. Two slices, and the cap is the one that can change a
    match's outcome; measure `repaths` either way.
-2. **One arrival failure remains, `#[ignore]`d with a sharper diagnosis than it had** (off-tree, not a dependency):
-   `build::a_content_pack_with_our_own_resources_loads_and_spends` - a house on a 6x6 map never leaves its site state for
-   2,000 ticks. **Measured this session, and the cause is not the builder.** The builder does walk (it is at (4, 4) at t0,
-   (5, 4) by t30) and stands adjacent, correctly; what blocks the site is **another villager parked on the footprint**
-   (`site_is_clear` reports `standing [(EntityId(4), 1)]`, our own side). `step_aside` is called for it every tick and every
-   tick returns early, because it records the attempt in `resuming` **even when the search failed** - so a single failure is
-   remembered for the rest of the match. The first failure is real: the builder's standoff tile (5, 4) is the blocked
-   villager's only exit, and a body standing on the goal makes the walker's step illegal. **Two defects, one slice:** (a) a
-   failed step-aside must be *retried* (a retry deadline, not a permanent record - my first attempt at this used
-   `ASIDE_RETRY_TICKS = 20` and the retry did fire, which is how (b) became visible), and (b) the standoff search must not
-   hand the builder the only tile another unit can use to leave - either the builder waits, or the exit search excludes the
-   standoff. Reverted rather than landed: the retry alone left the fixture red, and an unproven change is not worth a commit.
-   The parked test's `#[ignore]` sentence now carries the measurement.
-4. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
+3. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
    with and without a stander on the route. D211's decision says so in its own words.
-5. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
+4. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
    reads yet. This is the interpreter slice the tree puts in Phase 1; it is *not* a prerequisite for items 1-3.
 
 ## Ruled out of the current stretch, with the reason written down
@@ -58,9 +45,8 @@ economy's own rules. Do not start breadth, civs, or the renderer before items 1-
   `docs/civ-bonuses.md` and seam **R6** in `docs/dependency-tree.md`, and the reason it is a design rather than a switch is
   measured there: **23 of the ~100 team-bonus modifiers name attributes no consumer reads** (`other:100`, `other:101`), two
   bonuses carry a **kind-102** row (a bonus that bars a tech), and kinds 3 and 6 have no reader anywhere. D219.
-- **The farm reseed queue** - a control feature (a new command, its own state, an AI policy), not a fix, and the owner has not
-  chosen between implementing it small, shipping only the search bound, or recording it out of v1. Do **not** start it on a
-  guess: the two arrival bugs below are independent of the answer and come first.
+- **The farm reseed queue** is item 2, not ruled out: D215 raised its price (`repaths` 380 -> 552) and the search cap is
+  the half that can change a match. It stays below the claim because the claim is the rule the owner has already given.
 
 ## Hazards a fresh session must not re-learn the hard way
 

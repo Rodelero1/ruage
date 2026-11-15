@@ -58,12 +58,12 @@ cheap live defects first.
 | S2 | Orders: `Move`, `WalkTo`, `AttackMove`, `Patrol`, `Stop`, `Stance` | **DONE** | S1 | `Command` in `crates/sim/src/lib.rs:544`; `tests/orders.rs`, `stances.rs` |
 | S3 | Gather: place/standoff/touching, per-node crowd, fill, share pass, retarget | **DONE-ish** | S1, F9 | `world/gather.rs`, `world/shares.rs`; 12 `tests/gather_*.rs` files. **Hole: T7 (unbounded search)** |
 | S4 | Return and drop sites, whole units + fraction in hand | **DONE-ish** | S3 | `world/sites.rs:427 nearest_drop_site`; `tests/dropoff.rs`, `whole_units.rs`. **Hole: T7** |
-| S5 | Build: placement, foundation as a drawing, overbuild/cancel/refund, join, wall line, farm husk | **DONE-ish** | S3, S4 | `world/build.rs`, `world/lines.rs`; `tests/foundations.rs`, `build_*.rs`, `walls.rs`. **Hole: T3 (construction-rate modifier never read)** |
+| S5 | Build: placement, foundation as a drawing, overbuild/cancel/refund, join, wall line, farm husk | **DONE-ish** | S3, S4 | `world/build.rs`, `world/lines.rs`; `tests/foundations.rs`, `build_*.rs`, `walls.rs`. **T3 PAID (D218: `rate_resource` 195 + the civ's tech-tree effect)**; **T4 PAID (D215: farm base is the civ row)** |
 | S6 | Production queue: units and techs in one queue, rally, garrison capacity | **DONE** | S5 | `world/train.rs`, `world/orders.rs`; `tests/production_queue.rs`, `rally.rs`; D157 |
 | S7 | Tech/effect interpreter: kinds 1, 2, 3, 4, 5, 6 | **DONE-ish** | F5 | `world/research.rs`; `tests/research.rs`, `modifiers.rs`. **Holes: T1, T2, T6, T9** |
 | S8 | Ages: order, requirements, advancing | **DONE-ish** | S7 | `tests/ages.rs`, `economy.toml [age]`. **Hole: T6 (kind 3 replace semantics, U10)** |
 | S9 | Population, houses, headroom | **DONE** | S6 | `tests/population.rs` |
-| S10 | Combat: damage formula, min range, reload, projectiles, ballistics, blast, blow order | **DONE-ish** | S7 | `world/battle.rs`; `tests/combat.rs`, `blast.rs`, `blow_order.rs`, `ballistics.rs`, `min_range.rs`. **Holes: T1 (range/LOS), T8 (register rows 2–12), T10 (elevation)** |
+| S10 | Combat: damage formula, min range, reload, projectiles, ballistics, blast, blow order | **DONE-ish** | S7 | `world/battle.rs`; `tests/combat.rs`, `blast.rs`, `blow_order.rs`, `ballistics.rs`, `min_range.rs`. **Holes: T8 (register rows 2–12)** - T1 PAID (D214: attribute 1 is sight, 12 is range), T10 PAID (D217: elevation is a term held at one) |
 | S11 | Vision: unseen / explored / visible, hashed, stamped on arrival and movement | **PART** | F6 | `tests/vision.rs`; D50a. **Hole: M1 (no occlusion — sight is a disc)** |
 | S12 | Garrison: enter, exit, capacity, eject at a damage fraction, dies with its shelter | **DONE** | S6, S10 | `world/garrison.rs`; `lib.rs:2186 garrison_eject_fraction`; `tests/garrison.rs` |
 | S13 | Animals: herdables convert by line of sight, hunting, corpse, carcass decay | **DONE** | S3 | `world/livestock.rs`; `tests/animals.rs`, `conversion.rs`, `carcass.rs`; D69/D70 |
