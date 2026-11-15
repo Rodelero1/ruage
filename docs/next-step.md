@@ -1,6 +1,6 @@
 # OPEN - the farm reseed queue and the bounded resource search, the two halves D215 made hot
 
-**Where it stands, 2026-11-15.** Five decisions, closing five debts from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
+**Where it stands, 2026-11-15.** Six decisions, closing five debts and one carried regression from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
 range, in the importer and the engine - a sight tech had been moving a tower's *attack range*, and a sight upgrade marked no
 new ground because exploration is stamped per move) and **D215** (a farm's base is the civ's own `resources[36]` = **175**,
 read instead of the authored 250; and the Chinese team bonus, +45 on the same resource, had never been applied at all).
@@ -11,7 +11,7 @@ proved by mutation; and **D218** reads the construction rate (dat resource 195) 
 builder is 30% faster, 500 builder-ticks become 385 - and corrects a **false debt**: the tree said a civ's tech bars do
 nothing, but `barred_by` reads kind-102 rows and `check_research` refuses with `TechBarred`, tested since D23. Reviews:
 `docs/reviews/2026-11-15-d214-attributes.md`, `-d215-farm-base.md`, `-d216-packed-attack.md`, `-d217-elevation.md`,
-`-d218-construction-rate.md`.
+`-d218-construction-rate.md`, `-d220-rally-inside.md`.
 
 The order below is the user's ruling of 2026-11-14 - **live wrong numbers first**, then the effect interpreter, then the
 economy's own rules. Do not start breadth, civs, or the renderer before items 1-2.
@@ -23,10 +23,13 @@ economy's own rules. Do not start breadth, civs, or the renderer before items 1-
    resource search at **LOS+5 tiles and 30 reach tests** (U22). D215 made this hot: a plot holds 175 instead of 250, so 43%
    more plots are laid per match and `repaths` went **380 -> 552**. Two slices, and the cap is the one that can change a
    match's outcome; measure `repaths` either way.
-2. **Two arrival failures remain, both `#[ignore]`d with their measurements** (off-tree bugs, not dependencies): a villager
-   rallied to its own town centre never garrisons (`inside = 0` after 600 ticks, passes on `e0312f9`, fails from
-   `e21b44d`), and a builder on a 6x6 map is asked for no step at all (`step = Idle` for 1,900 ticks, 0.47 tiles from its
-   waypoint, fails on old `main` too). Both are in the *arrival* family, not the collision one.
+2. **One arrival failure remains, `#[ignore]`d with its measurement** (off-tree, not a dependency): a builder on a 6x6 map is
+   asked for no step at all (`step = Idle` for 1,900 ticks, 0.47 tiles from its waypoint, fails on old `main` too). The other
+   arrival bug - a villager rallied to its own town centre never garrisoning - is **fixed** as D220: it was aimed at the
+   building's unwalkable anchor tile, orbited it for 100 ticks, and the arrival check then refused it as `TooFar` because it
+   was two tiles from the corner rather than one; a unit rallied inside is now born inside and the whole walk-to-the-door
+   machinery is deleted. Probe the 6×6 builder the same way: print its task, tile and route each tick, and ask whether the
+   site's 2x2 footprint leaves a standoff the standoff search cannot resolve.
 3. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
    with and without a stander on the route. D211's decision says so in its own words.
 4. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer

@@ -1217,7 +1217,6 @@ pub struct World {
     /// to. A garrison order is refused for a unit that is not at the door, so a rally to "inside" used to shelter only a
     /// unit that happened to be born touching the building and silently idled the rest - found when the owner's opening
     /// scout made the town centre's free tiles crowded enough for a finished villager to appear two tiles out.
-    entering: BTreeMap<EntityId, EntityId>,
     /// The far end of a patrol, by unit: the end it is *not* walking towards. A side table because a
     /// patrol is one order on a few units, while `Task` is walked for every entity on the map.
     patrols: BTreeMap<EntityId, (Fixed, Fixed)>,
@@ -1482,7 +1481,6 @@ impl World {
             team_by_player: [1, 2, 3, 4, 5, 6, 7, 8],
             teams_named: false,
             rallies: BTreeMap::new(),
-            entering: BTreeMap::new(),
             patrols: BTreeMap::new(),
             resuming: BTreeMap::new(),
             stances: BTreeMap::new(),

@@ -187,7 +187,6 @@ fn a_trained_unit_walks_to_the_rally_point() {
 /// villager trained at a town centre whose rally point is the town centre's own tile never reaches
 /// `Task::Garrisoned` (measured `inside = 0` after 600 ticks). That is the arrival half of the collision work, not the
 /// collision itself; the probe and the next steps are in `docs/next-step.md`.
-#[ignore = "regression carried by this branch: the trained villager never garrisons (inside = 0); passes on main e0312f9, fails at e21b44d and with D211 removed; probe in docs/next-step.md"]
 #[test]
 fn a_unit_rallied_to_its_own_building_stays_inside() {
     let Some(fx) = fixture() else { return };
@@ -378,6 +377,8 @@ fn a_villager_rallied_onto_stone_gathers_stone_not_the_wood_around_it() {
 
 /// A map with one grass tile at (4,4) walled in by forest on all eight sides. Nothing can walk in, so a
 /// rally there is an instruction to stand at the ring's edge.
+// The pocket is **not inside the town centre's footprint**: a 4x4 building anchored at (1, 1) covers (1..4, 1..4), and a
+// rally onto any covered tile is "stay inside" (D220), so a pocket at (4, 4) would have been the building, not the wood.
 const FOREST_POCKET: &str = r#"
 schema = 1
 [map]
@@ -387,18 +388,18 @@ terrain = [
   "GGGGGGGGG",
   "GGGGGGGGG",
   "GGGGGGGGG",
-  "GGGFFFGGG",
-  "GGGFGFGGG",
-  "GGGFFFGGG",
   "GGGGGGGGG",
   "GGGGGGGGG",
+  "GGFFFGGGG",
+  "GGFGFGGGG",
+  "GGFFFGGGG",
   "GGGGGGGGG",
 ]
 [[map.resource]]
 kind = "wood"
 amount = 400
 hp = 20
-tiles = [[3, 3], [4, 3], [5, 3], [3, 4], [5, 4], [3, 5], [4, 5], [5, 5]]
+tiles = [[2, 5], [3, 5], [4, 5], [2, 6], [4, 6], [2, 7], [3, 7], [4, 7]]
 [[map.town_center]]
 player = 1
 x = 1
@@ -415,7 +416,7 @@ fn a_rally_into_a_forest_pocket_goes_as_close_as_it_can() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded_on(&fx, FOREST_POCKET);
     let centre = town_center(&world);
-    let pocket = (4, 4);
+    let pocket = (3, 6);
     world
         .submit_checked(Command::Rally {
             building: centre,
@@ -450,4 +451,43 @@ fn a_rally_into_a_forest_pocket_goes_as_close_as_it_can() {
         gap, 2,
         "it stopped one ring outside the trees: {tile:?} against {pocket:?}"
     );
+}
+
+/// **Any tile of the building's footprint is the building** (D220). The click that means "stay home" lands on whichever
+/// tile of the town centre's 4x4 the player hit, not only the corner it is anchored at: the order normalises a rally whose
+/// point falls **inside the footprint** to `RallyPoint::Inside`. Before this, only the anchor tile was recognised, so a rally
+/// onto the building two tiles east of its corner became a plain walk to a tile the footprint covers - a destination no unit
+/// can stand on.
+#[test]
+fn a_rally_onto_another_tile_of_the_building_is_the_building() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let centre = town_center(&world);
+    let (x, y) = tile_of(&world, centre);
+    // A tile the town centre's own footprint covers but does not start at: the centre is 4x4 from (x, y).
+    let inside_but_not_the_corner = (x + 1, y + 1);
+
+    world
+        .submit_checked(Command::Rally {
+            building: centre,
+            point: Some(inside_but_not_the_corner),
+        })
+        .expect("a tile of the building is a legal rally");
+    world.step().expect("step");
+    world
+        .submit_checked(Command::Train {
+            building: centre,
+            unit: VILLAGER,
+        })
+        .expect("train a villager");
+    for _ in 0..900 {
+        world.step().expect("step");
+    }
+
+    let inside = world
+        .entities()
+        .iter()
+        .filter(|e| e.task == (Task::Garrisoned { building: centre }))
+        .count();
+    assert_eq!(inside, 1, "the villager trained at it went inside");
 }

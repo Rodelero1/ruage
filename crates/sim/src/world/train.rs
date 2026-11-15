@@ -284,30 +284,26 @@ impl World {
             let rally = self.rallies.get(&building).copied();
             match rally {
                 Some(RallyPoint::Inside) => {
-                    // Only a building that can hold units can keep one, and only while there is room.
-                    let room = self
+                    // **Born inside** (D220). A unit rallied to the building itself never walks: it exists because this
+                    // building has just made it, so "is it at the door" is not a question about it - D38's rule that a unit
+                    // which has walked out can never come back is about a unit that has *left*. Only a building that can hold
+                    // units can keep one, and only while there is room.
+                    let capacity = self
                         .find(building)
                         .and_then(|entity| entity.unit)
                         .and_then(|unit| self.units.as_ref().and_then(|units| units.unit(unit)))
-                        .is_some_and(|stats| stats.garrison > 0);
-                    if room && self.check_garrison(id, building).is_ok() {
-                        if let Some(entity) = self.find_mut(id) {
-                            entity.task = Task::Garrisoned { building };
-                        }
-                    } else if room {
-                        // **Too far to walk straight in.** A garrison order is refused for a unit that is not at the door,
-                        // so the finished unit walks to the building and enters on arrival (see `entering`). Without this a
-                        // rally to "inside" did nothing at all whenever the spawn tile was not touching the building.
-                        let goal = self
-                            .find(building)
-                            .map(|entity| self.tile_of(entity.position))
-                            .map(|door| self.tile(door));
-                        if let Some(to) = goal {
-                            if let Some(entity) = self.find_mut(id) {
-                                entity.task = Task::Move { to };
-                            }
-                            self.entering.insert(id, building);
-                        }
+                        .map_or(0, |stats| u32::from(stats.garrison));
+                    let inside = u32::try_from(
+                        self.entities
+                            .iter()
+                            .filter(|entity| entity.task == (Task::Garrisoned { building }))
+                            .count(),
+                    )
+                    .unwrap_or(u32::MAX);
+                    if capacity > inside
+                        && let Some(entity) = self.find_mut(id)
+                    {
+                        entity.task = Task::Garrisoned { building };
                     }
                 }
                 Some(RallyPoint::Tile(x, y)) => {

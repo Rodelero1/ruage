@@ -749,18 +749,6 @@ impl World {
     fn resume_idle(&mut self, finished: Vec<EntityId>) {
         let mut resumed: Vec<EntityId> = Vec::new();
         for id in finished {
-            // A unit that arrived at the door of the building it was rallied into goes in, if the building still has room
-            // for it - the walk was the garrison order's first half.
-            if let Some(building) = self.entering.remove(&id) {
-                if self.check_garrison(id, building).is_ok() {
-                    if let Some(entity) = self.find_mut(id) {
-                        entity.task = Task::Garrisoned { building };
-                    }
-                    continue;
-                }
-                self.stand_down(id);
-                continue;
-            }
             if self.resuming.contains_key(&id) {
                 // The fight ended and the unit still has a place to be: attack-move's whole point.
                 resumed.push(id);

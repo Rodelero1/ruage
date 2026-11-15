@@ -5749,3 +5749,41 @@ because breadth is what multiplies the call sites it replaces.
 **Basis.** A probe over `config/gamedata/civs.toml` and `effects.toml` (counts in `docs/civ-bonuses.md`); the five consumer
 sites (`barred_by`, `civ_barred_unit`, `modifiers_for`, `farm_food_bonus`, `construction_rate`); D214's finding that the
 attribute *string* is the interface, which is what makes a resolved table worth writing before breadth.
+
+### D220 - a unit rallied to its own building is born inside, and "the building" is its whole footprint
+
+**What it says.** A unit rallied to its own building **never walks**: it exists because that building has just made it, so the
+door question does not apply to it. D38's rule - a unit that has walked out can never come back - is about a unit that has
+*left*, and garrisoning a freshly trained one is the half of D38 that rally points were meant to deliver. Two supporting rules
+make it consistent:
+
+- **Any tile of the footprint is the building.** The click that says "keep them home" lands on whichever tile of a 4x4 the
+  player hit, so `Command::Rally` normalises a point **inside the footprint** to `RallyPoint::Inside` rather than comparing it
+  to the anchor tile the building happens to start at.
+- **Distance is measured to the footprint, not the anchor.** `check_garrison` refused a unit standing at the middle of a wall
+  as `TooFar` because that tile is two away from the corner the building is anchored at - the same anchor-versus-footprint
+  confusion in a second place.
+
+**What was wrong, measured.** A villager trained at a town centre whose rally was the centre's own tile was aimed at the
+centre's **anchor tile** (16, 16), which is inside the footprint and unwalkable: it orbited - (14, 16) then (13, 16), (14, 15),
+(15, 15) - for a hundred ticks and never arrived. Aiming at a free tile beside the building instead stalled it for the
+thirty-five ticks the blocked-order rule waits, because a **scout standing at (15, 16)** refused the diagonal step and the walk
+had no planned route around it; the order then finished two tiles short and the arrival check refused the unit as `TooFar`.
+`inside = 0` after 600 ticks, which is what the parked fixture had been saying since `e21b44d`.
+
+**What it builds.**
+
+- The born-inside rule in the training path: capacity and room are checked, and the unit's task becomes `Garrisoned` outright.
+- Footprint normalisation in the rally order, and footprint distance in `check_garrison`.
+- **The deletion of the walk-to-the-door machinery**: `World.entering`, its special case in `step_is_walkable` (a zero radius
+  for a unit on its way in), and the arrival block in `resume_idle`. Five sites that existed only to make a unit walk into a
+  building it was born in. Dead machinery in a hot function is a cost every reader pays.
+
+**What it costs.** Less work than before: no route, no walking, no `entering` lookup on the movement path. The distance rule
+became one pass over a building's footprint (a 4x4 at most) on a garrison *order*, not on a tick. The acceptance match is
+unchanged in kind - the script trains units with no rally - and the two arrival fixtures are the evidence for this one.
+
+**Basis.** The parked fixture `rally::a_unit_rallied_to_its_own_building_stays_inside` (red since `e21b44d`), a per-tick probe
+of the trained villager's task and tile, and the new `rally::a_rally_onto_another_tile_of_the_building_is_the_building`. D38 for
+the production-versus-shelter split, D39 for "rallying to the building means staying inside". Review:
+`docs/reviews/2026-11-15-d220-rally-inside.md`.

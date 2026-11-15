@@ -100,7 +100,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <header><h1>Decisions</h1>
 <p class="lede">Every rule the corpus states, what it rests on, and what it has not decided yet. Generated from <code>docs/decisions.md</code> and the U-register; nothing on this page is typed by hand, so a wrong label means the classifier is wrong and can be seen to be wrong.</p>
 <ul class="coverage" id="coverage">
-<li data-k="decisions"><b>225</b> decisions</li>
+<li data-k="decisions"><b>226</b> decisions</li>
 <li data-k="amended"><b>12</b> amended</li>
 <li data-k="corrected"><b>4</b> corrected</li>
 <li data-k="superseded"><b>7</b> superseded</li>
@@ -2199,7 +2199,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </div>
 </details>
 <details class="group" id="area-production-queues" data-area="Production &amp; queues" data-unfinished="3" data-undecided="0" open>
-<summary><span class="range">Production &amp; queues</span> <span class="gcount">8 decisions · 3 unfinished · 3 with no stated basis</span></summary>
+<summary><span class="range">Production &amp; queues</span> <span class="gcount">9 decisions · 3 unfinished · 3 with no stated basis</span></summary>
 <div class="kind" data-kind="unfinished"><h4>Not finished</h4><ul class="gaps">
 <li data-decision="D38"><a class="id" href="#d-D38">D38</a> One half of the rule is not modelled yet, and is named: a freshly trained unit can be kept inside its production building by rallying to the building itself. This engine has no rally points at all - a trained unit always appears on the neighbouring tile - so today a barracks holds nobody. That is the correct behaviour for a production building under this rule, and the other half arrives with rally</li>
 <li data-decision="D40"><a class="id" href="#d-D40">D40</a> What is still not reported: a rally that cannot be reached at all leaves the unit where it appeared, and nothing tells the player. That is D39&#x27;s gap, narrowed but not closed.</li>
@@ -2347,6 +2347,29 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <button class="verdict" data-verdict="question" data-id="D157">question</button>
 <button class="verdict" data-verdict="wrong" data-id="D157">wrong</button>
 <input class="note" data-note="D157" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D220" data-id="D220" data-origins="measured decision" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D220</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-15</span>
+<h3>a unit rallied to its own building is born inside, and &quot;the building&quot; is its whole footprint</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>- Any tile of the footprint is the building. The click that says &quot;keep them home&quot; lands on whichever tile of a 4x4 the player hit, so Command::Rally normalises a point inside the footprint to RallyPoint::Inside rather than comparing it to t</li>
+<li>What was wrong, measured. A villager trained at a town centre whose rally was the centre&#x27;s own tile was aimed at the centre&#x27;s anchor tile (16, 16), which is inside the footprint and unwalkable: it orbited - (14, 16) then (13, 16), (14, 15),</li>
+<li>Basis. The parked fixture rally::a_unit_rallied_to_its_own_building_stays_inside (red since e21b44d), a per-tick probe of the trained villager&#x27;s task and tile, and the new rally::a_rally_onto_another_tile_of_the_building_is_the_building.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>D38&#x27;s rule - a unit that has walked out can never come back - is about a unit that has left, and garrisoning a freshly trained one is the half of D38 that rally points were meant to deliver.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D220">
+<button class="verdict" data-verdict="agree" data-id="D220">agree</button>
+<button class="verdict" data-verdict="question" data-id="D220">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D220">wrong</button>
+<input class="note" data-note="D220" placeholder="note (saved with the verdict)">
 </div>
 </article>
 </div>
@@ -4951,7 +4974,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </ul>
 </section>
 <section id="health"><h2>How this page knows</h2>
-<p>Parsed 225 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
+<p>Parsed 226 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
 <p>A basis is recorded only from a phrase in the decision itself, and the phrase is shown beside the label. <b>No stated basis</b> is the reliable category: it needs no pattern to be right. <b>Unresolved language</b> is a reading list, not a verdict - the quoted sentence is there to be judged.</p>
 <p>The scan for broken references reads <code>docs/</code>, <code>crates/</code>, <code>config/</code>, <code>SPEC.md</code> and <code>README.md</code>. <code>tools/</code> is excluded: its fixtures name ids that are meant not to exist.</p>
 <p class="empty">Every decision heading was placed.</p>

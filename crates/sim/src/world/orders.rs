@@ -296,11 +296,13 @@ impl World {
                         self.rallies.remove(&building);
                     }
                     Some(tile) => {
-                        // A rally on the building's own tile means "stay inside". It is the same tile
-                        // the player would click on the building, so no second command is needed.
+                        // **A rally on any tile the building occupies means "stay inside"** (D220). The click that says
+                        // "keep them home" lands on whichever tile of a 4x4 the player hit, so the test is the
+                        // **footprint**, not the single tile the building is anchored at: a rally two tiles east of the
+                        // anchor used to become a plain walk to a tile the footprint covers, which no unit can stand on.
                         let inside = self
                             .find(building)
-                            .map(|entity| self.tile_of(entity.position) == tile)
+                            .map(|entity| self.footprint_area(entity).contains(&tile))
                             .unwrap_or(false);
                         let rally = if inside {
                             RallyPoint::Inside

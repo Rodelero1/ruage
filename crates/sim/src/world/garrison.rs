@@ -77,18 +77,29 @@ impl World {
                 capacity,
             });
         }
-        // Standing on the building's tile or beside it is close enough. A unit across the map is not
-        // teleported in: move it first.
+        // **Standing on the building, or beside any tile it occupies, is close enough** (D220). The test used to measure
+        // from the building's *anchor* tile, which for a 4x4 town centre is a corner: a unit standing at the middle of a
+        // wall is two tiles from that corner and was refused `TooFar`, so a rally to "inside" walked a villager to the
+        // doorstep and left him standing there (measured: at (15, 17) against an anchor at (16, 16), refused). Distance to
+        // the **footprint** is the rule that matches what a player sees.
         let scale = self.scale;
         let here = (
             u16::try_from(source.position.0.raw() / scale).unwrap_or(0),
             u16::try_from(source.position.1.raw() / scale).unwrap_or(0),
         );
-        let there = (
-            u16::try_from(shelter.position.0.raw() / scale).unwrap_or(0),
-            u16::try_from(shelter.position.1.raw() / scale).unwrap_or(0),
-        );
-        if here.0.abs_diff(there.0) > 1 || here.1.abs_diff(there.1) > 1 {
+        let area = self.footprint_area(shelter);
+        let nearest = if area.is_empty() {
+            let there = (
+                u16::try_from(shelter.position.0.raw() / scale).unwrap_or(0),
+                u16::try_from(shelter.position.1.raw() / scale).unwrap_or(0),
+            );
+            Some(there.0.abs_diff(here.0).max(there.1.abs_diff(here.1)))
+        } else {
+            area.iter()
+                .map(|(x, y)| x.abs_diff(here.0).max(y.abs_diff(here.1)))
+                .min()
+        };
+        if nearest.is_none_or(|gap| gap > 1) {
             return Err(SimError::TooFar { id: unit });
         }
         Ok(())
