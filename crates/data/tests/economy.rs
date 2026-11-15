@@ -75,7 +75,10 @@ fn the_real_economy_toml_loads_and_resolves_its_rates() {
         8_000
     );
     assert!(!economy.farm.use_villager_rate);
-    assert_eq!(economy.farm.food_per_farm, 250);
+    // **175, and it is only a fallback** (T4/D215): the game keeps the base in each civ's own resource row (index 36), which
+    // the engine reads; this value answers a pack whose players have no civ. It was 250 - the Horse Collar figure - for
+    // months, which made every plot 75 too big.
+    assert_eq!(economy.farm.food_per_farm, 175);
     assert_eq!(economy.population.cap_default, 200);
     assert_eq!(economy.population.house_population, 5);
 

@@ -45,7 +45,11 @@ use_villager_rate = false
 free_farm_radius = 12
 
 [farm.depletion]
-food_per_farm = 250
+# **The fallback base, for a pack with no civ row.** The game keeps this number per civ (dat resource 36: 175 for every
+# playable civ, 0 for Gaia) and the engine reads it there - so this value only answers a world whose players have no civ,
+# which is every hand-written pack in the tests. It said 250 for months, which is the *Horse Collar* figure: every plot in
+# every game held 75 too much and every upgrade compounded it (325 where the game holds 250).
+food_per_farm = 175
 # **How long an empty farm stays as a husk** (the owner, 2026-11-04: *"vanishing takes some time, husk first ... Husk is
 # effect only and only serves the player who can left click villager, right click on the husk and villager starts planting new
 # farm. It obstructs nothing as if it was not there"*). A husk blocks nothing, holds nothing and cannot be worked; it exists to

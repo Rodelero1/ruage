@@ -821,7 +821,13 @@ fn horse_collar_gives_an_existing_farm_more_food() {
     let mut world = seeded_rich(&fx);
     let farm = a_finished_farm(&mut world);
     let base = amount_of(&world, farm).raw();
-    assert_eq!(base, 250 * world.scale(), "content says 250 per farm");
+    // **175, the civ's own row** (T4): the dat's per-civ resource 36 is 175 for every playable civ, and the three farm
+    // techs add to it. 250 was the *Horse Collar* figure, authored here as the base.
+    assert_eq!(
+        base,
+        175 * world.scale(),
+        "a dark-age farm holds the civ row's 175"
+    );
 
     grant_feudal(&mut world, 1);
     research(&mut world, HORSE_COLLAR);
@@ -842,8 +848,8 @@ fn a_farm_built_after_the_upgrade_holds_the_new_total() {
     let farm = a_finished_farm(&mut world);
     assert_eq!(
         amount_of(&world, farm).raw(),
-        325 * world.scale(),
-        "250 base plus Horse Collar's 75"
+        250 * world.scale(),
+        "175 base plus Horse Collar's 75"
     );
 }
 
@@ -981,9 +987,10 @@ fn eat_from(world: &mut World, farm: EntityId, units: i64) {
             node: farm,
         })
         .expect("the plot can be worked");
+    let started = world.entity(farm).map(|e| e.amount.raw()).unwrap_or(0) / scale;
     for _ in 0..20_000 {
         let left = world.entity(farm).map(|e| e.amount.raw()).unwrap_or(0) / scale;
-        if left <= 250 - units {
+        if left <= started - units {
             break;
         }
         world.step().expect("stepping");
@@ -998,25 +1005,25 @@ fn an_upgrade_gives_a_half_eaten_farm_half_the_extra() {
     let farm = a_finished_farm(&mut world);
     assert_eq!(
         amount_of(&world, farm).raw(),
-        250 * world.scale(),
-        "250 to start"
+        175 * world.scale(),
+        "175 to start: the civ row's base, not Horse Collar's 250"
     );
 
-    // Eat half of it: 125 left of 250.
-    eat_from(&mut world, farm, 125);
+    // Eat half of it: 87 left of 175.
+    eat_from(&mut world, farm, 88);
     assert_eq!(
         amount_of(&world, farm).raw(),
-        125 * world.scale(),
+        87 * world.scale(),
         "half eaten"
     );
 
     grant_feudal(&mut world, 1);
     research(&mut world, HORSE_COLLAR);
 
-    // Horse Collar is +75 on a full plot; a half plot gets half of it, rounded down (37).
+    // Horse Collar is +75 on a full plot; a half plot gets its share, 75 x 87 / 175 = 37.28, rounded down.
     assert_eq!(
         amount_of(&world, farm).raw(),
-        (125 + 37) * world.scale(),
+        (87 + 37) * world.scale(),
         "a half-eaten farm gains half the upgrade"
     );
 }
@@ -1106,5 +1113,48 @@ fn can_work_asks_for_somewhere_to_stand() {
     assert!(
         !world.can_work(villager, ringed),
         "a node with no free neighbour is not workable, whatever a path to its tile says"
+    );
+}
+
+/// A world whose player 1 is `civ`, so a per-civ number can be observed. Same table order as the rest of the suite:
+/// seed, stockpile, research, then the civ row (the team bonus is an effect, so the effects table comes first).
+fn seeded_as_civ(fx: &Fixture, civ: &str) -> World {
+    let mut economy = fx.economy.clone();
+    economy.start.civs = vec![civ.to_owned()];
+    economy.start.stock = [("food".to_owned(), 500), ("wood".to_owned(), 500)]
+        .into_iter()
+        .collect();
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    world
+        .seed_from(&fx.map, &economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    let techs =
+        ruage_data::load_techs_file(&repo("config/gamedata/techs.toml")).expect("techs.toml");
+    let effects =
+        ruage_data::load_effects_file(&repo("config/gamedata/effects.toml")).expect("effects.toml");
+    world
+        .load_research(&techs, &effects)
+        .expect("research tables");
+    let civs = ruage_data::load_civs_file(&repo("config/gamedata/civs.toml")).expect("civs.toml");
+    world.load_civs(&civs).expect("the civ table");
+    world.grant_tech(1, 216).expect("farming is available");
+    world
+}
+
+/// **The base is the civ's own row, so the Chinese bonus lands on it** (T4, D215): 175 + 45 = 220, which is the number
+/// the community table gives for a Chinese farm. A base authored in content cannot answer this - it would give every civ
+/// the same plot, which is what 250 did.
+#[test]
+fn a_chinese_farm_holds_220_from_the_civ_row_and_the_team_bonus() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded_as_civ(&fx, "Chinese");
+    let farm = a_finished_farm(&mut world);
+    assert_eq!(
+        amount_of(&world, farm).raw(),
+        220 * world.scale(),
+        "175 from the Chinese row plus the team bonus's 45"
     );
 }

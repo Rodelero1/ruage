@@ -3444,14 +3444,34 @@ impl World {
         provided
     }
 
-    /// How much food a new farm plot of this player's is worth: what content gives a farm, plus what
-    /// the player's techs have added to the dat's farm food resource.
+    /// How much food a new farm plot of this player's is worth: the civ's own base, plus what the player's techs and
+    /// team bonus have added to the dat's farm food resource.
     fn farm_food_total(&self, player: u8) -> i64 {
-        let base = self
-            .economy
-            .as_ref()
-            .map_or(0, |economy| i64::from(economy.farm.food_per_farm));
-        base + self.farm_food_bonus(player)
+        self.farm_food_base(player) + self.farm_food_bonus(player)
+    }
+
+    /// **The base food a plot of this player's holds** (T4, D215): the civ's own row, indexed by the id content names in
+    /// `[farm] food_resource`. The dat gives every playable civ **175** there and 0 to Gaia; the Horse Collar figure of 250
+    /// had been authored in content *as the base*, so every plot in every game held 75 too much and each upgrade
+    /// compounded it (325 with Horse Collar where the game holds 250).
+    ///
+    /// Content's `food_per_farm` is the fallback for a pack with no civ row - the hand-written packs in tests, and a mod
+    /// that has none - so the number is read where the game keeps it and a fallback exists rather than a hole.
+    pub(crate) fn farm_food_base(&self, player: u8) -> i64 {
+        let Some(economy) = self.economy.as_ref() else {
+            return 0;
+        };
+        if let Some(resource) = economy.farm.food_resource {
+            let from_civ = self.civ_by_player[usize::from(player).min(MAX_PLAYERS - 1)]
+                .and_then(|id| self.civs.as_ref()?.by_id(id))
+                .and_then(|civ| civ.resources.get(usize::try_from(resource).ok()?))
+                .copied()
+                .filter(|value| *value > 0.0);
+            if let Some(value) = from_civ {
+                return value.round() as i64;
+            }
+        }
+        i64::from(economy.farm.food_per_farm)
     }
 
     /// The farm food a player's researched techs have added, in whole food.
@@ -3469,7 +3489,7 @@ impl World {
         let Some(researched) = self.researched.get(&player) else {
             return 0;
         };
-        researched
+        let from_research: i64 = researched
             .iter()
             .filter_map(|tech| techs.get(*tech))
             .filter_map(|tech| tech.effect_id)
@@ -3477,7 +3497,19 @@ impl World {
             .flat_map(|effect| &effect.resource_modifiers)
             .filter(|modifier| modifier.resource == resource && modifier.mode == 1)
             .map(|modifier| modifier.value.round() as i64)
-            .sum()
+            .sum();
+        // **The civ's team bonus is not researched, and it is part of the same line** (T4): the Chinese bonus is a
+        // resource-36 `add` of 45, which is why their farm holds 220 where a Briton's holds 175. Missing this left every
+        // Chinese plot at the plain base, and it is the one place the farm line and the civ identity meet.
+        let slot = usize::from(player).min(MAX_PLAYERS - 1);
+        let from_team: i64 = self.bonus_effects[slot]
+            .iter()
+            .filter_map(|effect| effects.get(*effect))
+            .flat_map(|effect| &effect.resource_modifiers)
+            .filter(|modifier| modifier.resource == resource && modifier.mode == 1)
+            .map(|modifier| modifier.value.round() as i64)
+            .sum();
+        from_research + from_team
     }
 
     pub(crate) fn work_position(

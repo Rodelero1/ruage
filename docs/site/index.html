@@ -100,7 +100,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <header><h1>Decisions</h1>
 <p class="lede">Every rule the corpus states, what it rests on, and what it has not decided yet. Generated from <code>docs/decisions.md</code> and the U-register; nothing on this page is typed by hand, so a wrong label means the classifier is wrong and can be seen to be wrong.</p>
 <ul class="coverage" id="coverage">
-<li data-k="decisions"><b>220</b> decisions</li>
+<li data-k="decisions"><b>221</b> decisions</li>
 <li data-k="amended"><b>12</b> amended</li>
 <li data-k="corrected"><b>4</b> corrected</li>
 <li data-k="superseded"><b>7</b> superseded</li>
@@ -1140,7 +1140,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </div>
 </details>
 <details class="group" id="area-economy" data-area="Economy" data-unfinished="1" data-undecided="4" open>
-<summary><span class="range">Economy</span> <span class="gcount">27 decisions · 4 undecided · 1 unfinished · 2 superseded · 2 with no stated basis</span></summary>
+<summary><span class="range">Economy</span> <span class="gcount">28 decisions · 4 undecided · 1 unfinished · 2 superseded · 2 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U14</span> resource_in codes for gathering tasks. Read from dat.unit_data.tasks (see below): 0 food, 1 wood, 2 stone, 3 gold are confirmed by the variant that carries them; 15, 16, 17 and 56 are pseudo-resources whose meanings are inferred but not proven — VMHUN uses 15, VMFOR and VMFAR use 16, VMFIS uses 17, VMMIN also lists 56.</li>
 <li><span class="id">U20</span> How much food does a farm hold, and where does the number come from? The base is 175 — resource 36, the same in every playable civ&#x27;s row — and the three farm techs are kind-1 adds to that line: Horse Collar [1, 36, 1, -1, 75], Heavy Plow +125, Crop Rotation +175, the Chinese team bonus +45. 175 + 75 = 250, the published figure we had taken as the base.</li>
@@ -1725,6 +1725,32 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <button class="verdict" data-verdict="question" data-id="D199">question</button>
 <button class="verdict" data-verdict="wrong" data-id="D199">wrong</button>
 <input class="note" data-note="D199" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D215" data-id="D215" data-origins="dat measured published" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D215</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-15</span>
+<h3>a farm holds the civ row&#x27;s 175, and the civ&#x27;s team bonus is part of that line</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-dat">dat</span></summary><ul>
+<li>What it says. The base food a plot holds is per civ, in the dat&#x27;s resource row: resources[36] is 175 for every playable civ and 0 for Gaia, and the three farm techs are kind-1 adds to that same line - Horse Collar +75, Heavy Plow +125, Crop</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>What was wrong, measured. Content had authored 250 as the base - the Horse Collar figure, not the base - so a dark-age farm held 250 (measured 5,000,000 raw against an expected 3,500,000) and a Horse Collar farm held 325 where the game hold</li>
+<li>Worse, the Chinese team bonus was not applied at all: farm_food_bonus walked the researched techs and never the civ&#x27;s bonus_effects, so a Chinese plot held 250 where the published figure is 220 - measured by the new test failing on exactly </li>
+<li>Basis. A probe over all 32 civs of empires2_x2_p1.dat: resources[36] == 175.0 everywhere and 0 for Gaia, resources[84] == 3 and [88] == 700 agreeing with docs/mechanics/README.md&#x27;s U8 answer; the four resource-36 modifiers (14/+75, 13/+125,</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-published">published</span></summary><ul>
+<li>Worse, the Chinese team bonus was not applied at all: farm_food_bonus walked the researched techs and never the civ&#x27;s bonus_effects, so a Chinese plot held 250 where the published figure is 220 - measured by the new test failing on exactly </li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D215">
+<button class="verdict" data-verdict="agree" data-id="D215">agree</button>
+<button class="verdict" data-verdict="question" data-id="D215">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D215">wrong</button>
+<input class="note" data-note="D215" placeholder="note (saved with the verdict)">
 </div>
 </article>
 </div>
@@ -4749,6 +4775,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-09-decision-index.md:175</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:174</code> `D82`, `D115`, `D122b`, `D124`, `D125b`, `D126`, `D136`, `D192`). D192 is the parked standoff and belongs to a branch; the rest are</li>
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
+<li><span class="id">D115</span> <code>docs/reviews/2026-11-15-prior-art-watch.md:51</code> (`D115` at `SPEC.md:661` → `:662`, and its neighbours) because `7e052a5`, which last touched `SPEC.md`, did not re-render</li>
 <li><span class="id">D122b</span> <code>SPEC.md:662</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
 <li><span class="id">D122b</span> <code>SPEC.md:726</code> | 2026-11-05 | v1.91 - **the adversarial review of the panel and the farm (D122b).** Owner: *&quot;Please do complete adversarial review on performance and stability</li>
 <li><span class="id">D122b</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
@@ -4830,7 +4857,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </ul>
 </section>
 <section id="health"><h2>How this page knows</h2>
-<p>Parsed 220 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
+<p>Parsed 221 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
 <p>A basis is recorded only from a phrase in the decision itself, and the phrase is shown beside the label. <b>No stated basis</b> is the reliable category: it needs no pattern to be right. <b>Unresolved language</b> is a reading list, not a verdict - the quoted sentence is there to be judged.</p>
 <p>The scan for broken references reads <code>docs/</code>, <code>crates/</code>, <code>config/</code>, <code>SPEC.md</code> and <code>README.md</code>. <code>tools/</code> is excluded: its fixtures name ids that are meant not to exist.</p>
 <p class="empty">Every decision heading was placed.</p>

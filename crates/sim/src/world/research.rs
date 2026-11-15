@@ -315,11 +315,7 @@ impl World {
             // **Proportionally** (the owner's rule, 2026-10-30): a plot that is half eaten gains half of what the tech
             // adds. A farm is a budget, not a tank that is refilled - the extra food belongs to the *plot*, and what the
             // villager has already taken is gone.
-            let was_total = self
-                .economy
-                .as_ref()
-                .map_or(0, |economy| i64::from(economy.farm.food_per_farm))
-                + food_before;
+            let was_total = self.farm_food_base(player) + food_before;
             self.grow_plots(player, added, was_total);
         }
         Ok(())

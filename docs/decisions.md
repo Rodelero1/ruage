@@ -5575,3 +5575,40 @@ change was my own measurement error - the tooling that writes these documents wa
 `crates/data/src/techs.rs` `from_id`; `battle.rs:96` (the `range` consumer that was receiving sight modifiers); the four raw
 `los` reads (`lib.rs:3155`, `seed.rs:146`, `memory.rs:250`, `report.rs:128`) that the dependency tree lists as T1.
 Review: `docs/reviews/2026-11-15-d214-attributes.md`.
+
+### D215 - a farm holds the civ row's 175, and the civ's team bonus is part of that line
+
+**What it says.** The base food a plot holds is **per civ**, in the dat's resource row: `resources[36]` is **175** for every
+playable civ and 0 for Gaia, and the three farm techs are kind-1 *adds* to that same line - Horse Collar +75, Heavy Plow
++125, Crop Rotation +175 - with the Chinese team bonus another `add` of 45. So the base is 175, Horse Collar makes 250, and
+a Chinese farm holds 220. Content names which resource id that is (`[farm] food_resource = 36`) and the engine reads the
+row; `food_per_farm` stays only as the fallback for a pack whose players have no civ.
+
+**What was wrong, measured.** Content had authored **250** as the base - the *Horse Collar* figure, not the base - so a
+dark-age farm held 250 (measured `5,000,000` raw against an expected 3,500,000) and a Horse Collar farm held **325 where the
+game holds 250** (6,500,000 against 5,000,000). Worse, the Chinese team bonus was **not applied at all**: `farm_food_bonus`
+walked the researched techs and never the civ's `bonus_effects`, so a Chinese plot held 250 where the published figure is
+220 - measured by the new test failing on exactly that number before the fix.
+
+**What it builds.**
+
+- `World::farm_food_base(player)`: the civ's `resources[food_resource]`, rounded and required positive, and the content
+  constant only when the player has no civ row. Reading it there deletes the duplicated game constant that had drifted.
+- `farm_food_bonus(player)` now sums **two** sources with the same filter: the researched techs' resource-36 `add`s and the
+  civ's team-bonus effects. A civ bonus is not researched and belongs to the same line, and skipping it was the defect the
+  Chinese test found.
+- The upgrade's proportional share uses the same base (`was_total = farm_food_base + food_before`), so a half-eaten plot of a
+  Chinese farm takes its share of a 220 budget rather than of a constant.
+- Content: `food_per_farm = 175` with the provenance written where the number lives, and the comment naming it as the
+  fallback rather than the truth.
+
+**What it costs.** No per-tick work: the civ row is read when a plot is marked out, not when one is worked. The acceptance
+match does change, and that is the point - `repaths` **380 -> 552** (+45%) because a plot holds 75 less food and a villager
+reseeds about 43% more often, with the match still won (`players=1`, hash `4640552242d6b45b` where it was
+`42212c8e852b62be`). Wall-clock numbers from that day are not quoted: the box was at load 4.77 on 2 CPUs and two runs of one
+binary differed by 25%. That reseed cost is why the reseed queue (T6) is worth more after this decision than before it.
+
+**Basis.** A probe over all 32 civs of `empires2_x2_p1.dat`: `resources[36] == 175.0` everywhere and 0 for Gaia, `resources[84] == 3`
+and `[88] == 700` agreeing with `docs/mechanics/README.md`'s U8 answer; the four resource-36 modifiers (14/+75, 13/+125,
+12/+175, 402/+45) from `effects.toml`; U20 in `docs/mechanics/README.md` for the claim itself. Review:
+`docs/reviews/2026-11-15-d215-farm-base.md`.

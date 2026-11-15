@@ -123,8 +123,11 @@ Horse Collar `[1, 36, 1, -1, 75]`, Heavy Plow +125, Crop Rotation +175, the Chin
 the published figure we had taken for the base. Two independent sources read it the same way: the UGC guide's resource
 table names 36 "farm food amount — default 175, Chinese 220, what horse collar etc. modify", and `Zaydme/openaok` takes
 a farm's food from its owner's resource 36 at the moment the farm is laid, which is why a farm tech reaches only farms
-laid after it. **Our `economy.toml` still has `food_per_farm = 250` as the base and `Sim::farm_food_total` adds the techs
-on top of it, so a Horse Collar farm holds 325** where the game holds 250 — that is U20 in `README.md`.
+laid after it. **Taken 2026-11-15 (D215)**: `World::farm_food_base` reads the player's own `resources[36]` — 175 for every
+playable civ, 0 for Gaia — and `food_per_farm` in `economy.toml` is now only the fallback for a pack with no civ row (it
+said 250, the Horse Collar figure, until then, so every plot held 75 too much: a Horse Collar farm held 325 where the game
+holds 250). The same change found that the Chinese team bonus's +45 had never been applied at all: `farm_food_bonus` walked
+the researched techs and never the civ's bonus effects, so a Chinese plot held the plain base instead of 220.
 
 Whether decay interacts with farm food is **unknown**. So is one behaviour: openaok says a farmer works *standing on* the
 plot, taking a unit of food per spot and stepping to another spot between units, gathering while it walks; ours stands
