@@ -18,16 +18,17 @@ economy's own rules. Do not start breadth, civs, or the renderer before items 1-
 
 ## The open items, in the order I would take them
 
-1. **A building spot is a claimed space, and a builder with none moves to his next site** (the owner, 2026-11-15: *"it is not
+1. **A builder claims his place, and takes the next site in his queue when there is none** (the owner, 2026-11-15: *"it is not
    about tiles, never was ... only about finding a free space one diameter width. Same for resource gathering, same for
-   construction"*, and *"2 a"* - the next site in **his own queue**). This is the slice that closes the stalled 6×6 site, and the
-   design is the gatherer's: a place is one continuous space one **diameter** wide, claimed by one worker, nearest first, re-laid
-   when the ring refuses a man, released when something else moves him. What is missing today: construction claims nothing (so a
-   builder's spot and a parked villager's exit are fought over as if they were terrain), a **failed** step-aside is recorded in
-   `resuming` and never retried (measured: the same blocker every tick for 2,000 ticks), and there is no "next site" fallback.
-   Worker speed is already fixed for this (D222: `(n + 2)/3`), and the farm must keep working the way it does now - villagers
-   walk *around* the plot, the one exception, because a farm is walked on. Gate: the parked 6×6 fixture
-   (`build::a_content_pack_with_our_own_resources_loads_and_spends`) plus a fixture for the queue fallback.
+   construction"*, and *"2 a"* - the next site in **his own queue**). The stall itself is closed (D223: a failed step-aside
+   expires after 20 ticks, the 6×6 fixture is un-parked and green), so what is left is the *rule* rather than the fault: a place
+   is one continuous space one **diameter** wide, claimed by one worker, nearest first, re-laid when the ring refuses a man,
+   released when something else moves him - the same machinery gathering uses (`gather_place`, `reserve_gather_place`,
+   `maybe_respread`) with construction as a second kind of claim. Then: a builder with no place anywhere on the ring takes the
+   next site from `build_queue`, and idles only when the queue is empty. A `tile_is_wanted` check for the step-aside's own
+   choice of tile was written and removed as unproven (D223) - it belongs back only with a fixture that fails without it. Farms
+   stay the exception: villagers walk *around* the plot. Gate: a fixture for the claim (two builders, one place each) and one for
+   the queue fallback.
 2. **No farm reseed queue, and the resource search is unbounded.** `grep reseed crates` -> 0: a spent plot is a husk until a
    player replaces it, and a villager whose plot ran dry walks the *whole map* for the next node, where the game caps a
    resource search at **LOS+5 tiles and 30 reach tests** (U22). D215 made this hot: a plot holds 175 instead of 250, so 43%

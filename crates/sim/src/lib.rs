@@ -1227,6 +1227,11 @@ pub struct World {
     /// The walk a fight interrupted, by unit. Restored when the fight ends, which is the whole point
     /// of attack-move: an order that survives contact (D47).
     resuming: BTreeMap<EntityId, Task>,
+    /// **When to try a failed step-aside again** (D223): a man with nowhere to go is remembered in `resuming` so the
+    /// search is not repeated every tick, but "nowhere" is a statement about the bodies standing there *this* tick - the
+    /// builder arrives, the crowd shifts, and the frozen answer must expire. Measured: one parked villager held a 6x6 site
+    /// at progress 0 for 2,000 ticks against an unchanging `resuming` entry.
+    aside_retry: BTreeMap<EntityId, u64>,
     /// Stance and post, by unit. Only units whose stance is not the default have an entry, so an
     /// aggressive world - which is every world that does not ask - carries nothing for this (D48).
     stances: BTreeMap<EntityId, (Stance, (Fixed, Fixed))>,
@@ -1487,6 +1492,7 @@ impl World {
             rallies: BTreeMap::new(),
             patrols: BTreeMap::new(),
             resuming: BTreeMap::new(),
+            aside_retry: BTreeMap::new(),
             stances: BTreeMap::new(),
             refusal: None,
             leash: BTreeMap::new(),

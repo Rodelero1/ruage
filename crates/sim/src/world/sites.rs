@@ -6,6 +6,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use ruage_fixed::Fixed;
 
 use crate::{Entity, EntityId, EntityKind, Route, SimError, Task, Walk, World};
+
+/// How long a *failed* step-aside is remembered before the search is asked again (D223). Long enough that a stuck man costs
+/// no path search a tick, short enough that a builder's arrival gets an answer within a second.
+const ASIDE_RETRY_TICKS: u64 = 20;
 impl World {
     /// The tile a world position sits on.
     /// What stops a site of `unit` at `at` being raised for `player`, if anything.
@@ -163,8 +167,32 @@ impl World {
     pub(crate) fn step_aside(&mut self, id: EntityId, tiles: &[(u16, u16)]) {
         // **Already stepping aside.** The task is the walk and the interrupted order is in `resuming`; re-planning it every
         // tick would be a path search a tick, which is the shape that took an acceptance run from 16 s to 180 s.
+        //
+        // **But the answer expires** (D223). `resuming` was written whether the search found somewhere to go or not, so a
+        // villager with nowhere to stand was asked once and never again: measured on the 6x6 fixture, that villager held the
+        // site at `progress_ticks = 0` from t2000 to t2900 while `site_is_clear` asked it to leave every tick. Twenty ticks
+        // later the bodies have moved (the builder arrives, the crowd shifts) and the question has a different answer, so a
+        // *failed* attempt is retried; a successful one still costs nothing until the walk ends.
+        // **A step-aside is re-asked only when it has stopped making progress** (D223). Two failure modes wear the same
+        // face: the search finds nowhere to go, and the walk is shot but cannot complete (a body standing on the only route,
+        // which is exactly the 6x6 fixture - the man was sent to a tile the builder then took). The question is therefore not
+        // "did the search fail" but "has he moved lately": the deadline is a rolling twenty ticks, and when it comes due the
+        // search runs again only if the man has not moved in all twenty. A man walking out normally slides the deadline and is
+        // never re-planned, which is the one-route-per-step-aside property this early return exists for.
         if self.resuming.contains_key(&id) {
-            return;
+            let next = self.tick.saturating_add(ASIDE_RETRY_TICKS);
+            // First sight of him: the walk has only just been ordered, so the deadline is set and the question waits.
+            let due = *self.aside_retry.entry(id).or_insert(next);
+            if self.tick < due {
+                return;
+            }
+            let idle_for = self.find(id).map_or(u64::MAX, |entity| {
+                self.tick.saturating_sub(entity.last_moved)
+            });
+            self.aside_retry.insert(id, next);
+            if idle_for < ASIDE_RETRY_TICKS {
+                return;
+            }
         }
         let Some(entity) = self.find(id) else { return };
         let (from, task) = (entity.position, entity.task);
@@ -184,11 +212,15 @@ impl World {
             // (the shape D135 exists for). It is `Idle` for everything but a gather or a hunt, so arriving anywhere later
             // simply stands it down.
             self.resuming.insert(id, resumable);
+            self.aside_retry
+                .insert(id, self.tick.saturating_add(ASIDE_RETRY_TICKS));
             return;
         };
         let goal = self.tile_centre(to);
         let Ok(route) = self.plan_path(from, goal, 0) else {
             self.resuming.insert(id, resumable);
+            self.aside_retry
+                .insert(id, self.tick.saturating_add(ASIDE_RETRY_TICKS));
             return;
         };
         // The marker is also how this unit is known to be **already stepping aside**: `step_aside` returns early when it

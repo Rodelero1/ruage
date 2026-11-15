@@ -5826,3 +5826,44 @@ site per tick, in place of one addition per builder.
 **Basis.** The three sources above; `crates/sim/tests/build.rs` `a_second_builder_is_worth_a_third_of_the_first`; the existing
 `total_ticks` semantics, which the change deliberately leaves alone so every stored number in a save keeps its meaning. Review:
 `docs/reviews/2026-11-15-d222-builder-rate.md`.
+
+### D223 - a step-aside that stops making progress is asked again, and a building spot is still not a claimed place
+
+**What it says.** Two things, one landed and one measured and *not* landed.
+
+**Landed.** A step-aside is **re-asked only when it has stopped making progress**: a rolling twenty-tick deadline in a new
+`World::aside_retry`, which on expiry asks `exit_tile` again **if the man has not moved in those twenty ticks**, and slides
+otherwise. The fault it fixes is a frozen answer: `step_aside` records the man in `resuming` and the early return on that map
+meant the question was asked once. Two failure modes wore the same face - the search finding nowhere to go, and the walk being
+shot but unable to complete because a body stood on the route - and only one of them was even recorded. Measured on the 6×6
+fixture, `progress_ticks` stood at **0** from t2000 to t2900 while the man on the footprint was asked to leave every tick and
+`exit_tile` never ran again.
+
+The shape matters as much as the fix, and the trail is worth keeping because two wrong shapes were measured first:
+
+- **A deadline that defaulted to `0`** re-planned walk-outs *every tick*: the 6×6 fixture went green, but
+  `foundation_model::a_worker_steps_aside_and_goes_back_to_its_gathering` went red - one rule bought by breaking another.
+- **Treating "no deadline" as "in flight, never retry"** restored that test and lost the fixture, because the stalled man's
+  *first* attempt had succeeded. The question is not how the attempt ended but whether the man is still moving.
+- **A deadline written only on the failure paths** never took effect at all: with no entry, `due` was computed as
+  `tick + 20`, the early return fired before the insert, and the entry was never stored - visible only when printed (`t2000`:
+  `in flight, due 2020`, again, for two thousand ticks).
+
+The parked fixture `build::a_content_pack_with_our_own_resources_loads_and_spends` is **un-parked and green**, and fix is
+mutation-proved: restoring the unconditional early return turns it red at `left: None, right: Some(550)`.
+
+**Not landed, and why.** The owner's rule for finding a spot is that it is not about tiles at all - *"only about finding a free
+space one diameter width. Same for resource gathering, same for construction"* - claimed by one worker, with a builder who finds
+no place moving to **the next site in his own queue** and idling only when he has none. Two pieces of that were written and
+**removed**, each after the mutation that should have proved it did not:
+
+- a `tile_is_wanted` check (a step-aside must not be sent into a space another body is walking to) - deleting it leaves the 6×6
+  fixture green, so the retry is doing the work and the check is unproven;
+- nothing else of the claim exists yet: a builder owns no place, the ring is not enumerated for him, and a builder with no place
+  waits rather than moving to his next site.
+
+Unproven code that *looks* like the owner's rule is worse than the rule written down, so the rule is written down:
+`docs/next-step.md` carries the claim and the queue fallback as the head item, with the measurements above.
+
+**Basis.** `crates/sim/tests/build.rs` (the un-parked fixture), the two mutations recorded above, and the owner's rulings of
+2026-11-15 quoted in `docs/next-step.md`. Review: `docs/reviews/2026-11-15-d223-step-aside-retry.md`.
