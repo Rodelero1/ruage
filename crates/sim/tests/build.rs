@@ -862,7 +862,7 @@ y = 5
 ///
 /// It is parked rather than fixed because it is not this slice's: the same run fails on the branch point, and the branch
 /// lands four decisions about collisions, none of which touches standoffs or `Build`.
-#[ignore = "open defect on main: a builder with a live route is asked for no step (step=Idle) and never finishes; see docs/next-step.md"]
+#[ignore = "open defect: a villager parked on the site blocks it for ever - `site_is_clear` asks it to leave once a tick while the builder's standoff tile is its only exit, so it never moves (measured t2000..t2900); probe in docs/next-step.md"]
 #[test]
 fn a_content_pack_with_our_own_resources_loads_and_spends() {
     let Some(fx) = fixture() else { return };

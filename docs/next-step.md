@@ -23,13 +23,19 @@ economy's own rules. Do not start breadth, civs, or the renderer before items 1-
    resource search at **LOS+5 tiles and 30 reach tests** (U22). D215 made this hot: a plot holds 175 instead of 250, so 43%
    more plots are laid per match and `repaths` went **380 -> 552**. Two slices, and the cap is the one that can change a
    match's outcome; measure `repaths` either way.
-2. **One arrival failure remains, `#[ignore]`d with its measurement** (off-tree, not a dependency): a builder on a 6x6 map is
-   asked for no step at all (`step = Idle` for 1,900 ticks, 0.47 tiles from its waypoint, fails on old `main` too). The other
-   arrival bug - a villager rallied to its own town centre never garrisoning - is **fixed** as D220: it was aimed at the
-   building's unwalkable anchor tile, orbited it for 100 ticks, and the arrival check then refused it as `TooFar` because it
-   was two tiles from the corner rather than one; a unit rallied inside is now born inside and the whole walk-to-the-door
-   machinery is deleted. Probe the 6×6 builder the same way: print its task, tile and route each tick, and ask whether the
-   site's 2x2 footprint leaves a standoff the standoff search cannot resolve.
+2. **One arrival failure remains, `#[ignore]`d with a sharper diagnosis than it had** (off-tree, not a dependency):
+   `build::a_content_pack_with_our_own_resources_loads_and_spends` - a house on a 6x6 map never leaves its site state for
+   2,000 ticks. **Measured this session, and the cause is not the builder.** The builder does walk (it is at (4, 4) at t0,
+   (5, 4) by t30) and stands adjacent, correctly; what blocks the site is **another villager parked on the footprint**
+   (`site_is_clear` reports `standing [(EntityId(4), 1)]`, our own side). `step_aside` is called for it every tick and every
+   tick returns early, because it records the attempt in `resuming` **even when the search failed** - so a single failure is
+   remembered for the rest of the match. The first failure is real: the builder's standoff tile (5, 4) is the blocked
+   villager's only exit, and a body standing on the goal makes the walker's step illegal. **Two defects, one slice:** (a) a
+   failed step-aside must be *retried* (a retry deadline, not a permanent record - my first attempt at this used
+   `ASIDE_RETRY_TICKS = 20` and the retry did fire, which is how (b) became visible), and (b) the standoff search must not
+   hand the builder the only tile another unit can use to leave - either the builder waits, or the exit search excludes the
+   standoff. Reverted rather than landed: the retry alone left the fixture red, and an unproven change is not worth a commit.
+   The parked test's `#[ignore]` sentence now carries the measurement.
 3. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
    with and without a stander on the route. D211's decision says so in its own words.
 4. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
