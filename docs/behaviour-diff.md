@@ -53,7 +53,7 @@ countable — "N of M ruled" — without pretending to have surveyed 15,766 func
 | # | Rule | ruage | original | verdict | evidence |
 |---|---|---|---|---|---|
 | 1 | dat version gate | importer writes what it read; loader accepts it | **exact string equality against `VER 5.7`** at `0x9db348`, one branch at `0x72d4fc` in `FUN_0072d1a0` | **same** (semantics now known; no numeric parse, no tolerance) | `5ba445c`, `docs/re-toolchain.md` |
-| 2 | damage: armour subtraction, bonus classes, minimum-1 clamp, order | `crates/sim::damage_between` — per class `max(0, atk - armour)`, summed, then the **total** floored at `combat.toml`'s `minimum = 1` | **candidate located, not ruled.** `FUN_00744d60` (0x744d60) reads **three `(class, amount)` pairs** from a unit record (`+0x18c/+0x18e`, `+0x192/+0x194`, `+0x198/+0x19a`), subtracts the target's per-class armour from a float table (`+0x3c`), folds any positive leftover into **class 3**, and then **drops every entry whose amount fell below 1** (sets its class to `-1`) — a *per-entry* drop, not a total floor. `FUN_00745060` calls it at multiplier 1.0 and returns the **sum** of the three. What is not yet known is whether the damage path uses this function or has its own arithmetic: the plausible callers are `FUN_00741a30` (6.7 KB) and `FUN_006bb100` (30 KB) | **unknown-static** (with a shape difference worth chasing: per-entry drop vs total floor) | this file, 2026-11-01 |
+| 2 | damage: armour subtraction, bonus classes, minimum-1 clamp, order | `crates/sim::damage_between` - per class `max(0, atk - armour)`, summed, then the **total** floored at `combat.toml`'s `minimum = 1` | **arithmetic read directly, floor not located (D227).** `sub_744d60` fills **three** `(class, amount)` slots from the attacker's record (`+0x18c/+0x18e`, `+0x192/+0x194`, `+0x198/+0x19a`), scales each amount by the multiplier at `[ebp+0x28]`, subtracts the target's **float** armour table at `this+0x3c` **indexed by class**, folds any positive leftover into **class 3** when a slot is class 3 or empty, and marks a slot `-1` when what is left is `<= 0`. `sub_745060` sets the multiplier to **1.0**, calls it and returns the **sum of the three** - with **no clamp**, and it is a **virtual method** (`address_taken = 5`, direct callers 0), so the 1-damage floor is at a vtable call site and is not in either function | **same arithmetic, floor unproven** (D227) | this file, 2026-11-01 and 2026-11-15 |
 | 3 | the per-tick unit update: speed integration, attack reload, gather tick, in what order | `World::step` | not yet located | **needs-oracle** for the effect, **unknown-static** for the order | question 2 |
 | 4 | age-up timing at a kind-102 gate | `advance`/effect interpreter | not yet located | **needs-oracle** | question 3, U10 |
 | 5 | decay: does an unattended building vanish, and at what rate | `[decay] rate_from = "dat"`, `resource_decay_rate` semantics unverified | not yet located | **needs-oracle** — and the game answers it from two saves 5 minutes apart | `docs/next-step.md`, D85's review |
@@ -64,6 +64,22 @@ countable — "N of M ruled" — without pretending to have surveyed 15,766 func
 | 10 | vision radius and fog memory | `explored` grids | not yet located | **unknown-static** | — |
 | 11 | population cap and house arithmetic | D31/D34 | not yet located | **unknown-static** | — |
 | 12 | match end (conquest: a razed town centre with villagers alive is not a win) | D59b/D78 | not yet located | **unknown-static** | — |
+
+**Row 2's arithmetic, read directly (2026-11-15).** `sub_744d60` and its 1.0 accessor `sub_745060` were decompiled rather than summarised, and five things are
+now facts rather than readings: the attacker record carries **exactly three** `(class, amount)` slots at `+0x18c/+0x18e`, `+0x192/+0x194`, `+0x198/+0x19a`; each
+amount is scaled by the multiplier at `[ebp+0x28]` and **truncated**; armour is a **float table at `this+0x3c` indexed by class**; a positive leftover is **folded
+into class 3** when a slot is class 3 or empty; and a slot whose remainder is `<= 0` is marked `-1`, i.e. **dropped per entry**. What the accessor does **not**
+do is clamp: it sets the multiplier to `1.0`, calls the arithmetic and returns `slot1 + slot2 + slot3`. The accessor is a **virtual method** - its address is
+taken five times and it has no direct callers - so the 1-damage floor sits at an indirect call site and stays unproven.
+
+Against `damage_between`, that gives three statements and one gap:
+
+- **Same sum.** Dropping a non-positive term and clamping it at zero are the same arithmetic, so the total matches for whole-number inputs.
+- **Different attribution, not different total.** The original moves a leftover into **class 3**; we leave it on the class it came from. Only the sum is read
+  by the accessor, so this cannot change damage today - it would only matter to a rule that reads a per-class amount.
+- **Armour is a float in the original and an integer in ours.** A fractional armour modifier is representable there and not here; no shipped modifier is
+  fractional today, so this is a latent difference rather than a live one.
+- **The floor is the open question**: `minimum = 1` is ours, and the original's clamp has not been found.
 
 **The count: 1 of 12 ruled.** That is the honest state, and it is a better answer than "we compared them" — the eleven open
 rows are a to-do list with a definition of done each.

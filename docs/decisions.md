@@ -5976,3 +5976,34 @@ a panel would ask. A script can drive both today; that is how the fixture proves
 **Basis.** `crates/sim/tests/reseed.rs` (4 fixtures: queue pays 60 and replaces on the same tile; the toggle is the player's and pays
 at the husk; nothing happens without either; only a finished mill accepts either), two mutations, and the owner's two rulings of
 2026-11-15. Review: `docs/reviews/2026-11-15-d226-reseed.md`.
+
+### D227 - the damage register's row 2, read directly: the same sum, and a floor that is not in the function
+
+**What it says.** The register's damage row was `unknown-static` with one "shape difference worth chasing" - per-entry drop versus total floor. The two functions
+have now been **decompiled rather than summarised**, and the shape difference is **resolved in our favour** for the sum and **relocated** for the floor.
+
+**The arithmetic, as read** (`sub_744d60`, and `sub_745060` which is the 1.0 accessor):
+
+- the attacker's record carries **exactly three** `(class, amount)` slots - `+0x18c/+0x18e`, `+0x192/+0x194`, `+0x198/+0x19a`;
+- each amount is **scaled by the multiplier at `[ebp+0x28]` and truncated**;
+- armour is a **float table at `this+0x3c`, indexed by class** - not the integer short our pack carries;
+- a positive leftover is **folded into class 3** when a slot is class 3 or empty (`-1`);
+- a slot whose remainder ends `<= 0` is marked `-1`, i.e. **dropped per entry**;
+- `sub_745060` sets the multiplier to **1.0**, calls it, and returns **slot1 + slot2 + slot3** - with **no clamp**.
+
+**So the "shape difference" is not one.** Dropping a non-positive term and clamping it at zero are the same arithmetic, and the accessor sums the three exactly
+as `damage_between` sums the pack's entries. What *does* differ is **attribution** (the original moves a leftover into class 3; we leave it where it came from),
+which cannot change the total because only the sum is read, and **the type of armour** (a float table there, an integer here - latent, since no shipped modifier
+is fractional).
+
+**The floor stays open, and now with a reason.** `minimum = 1` is ours. It is **not** in either function, and `sub_745060` is a **virtual method** - its address is
+taken five times and it has zero direct callers - so the clamp, if it exists, is applied at an indirect call site that a static reading cannot reach in one step.
+The row therefore moves from "candidate located, not ruled" to **"same arithmetic, floor unproven"**, and the next step is the vtable's users (or a dynamic trace),
+not another function hunt.
+
+**Why this is worth a decision rather than a note.** The register exists to stop a session from "fixing" arithmetic that is already right: a reader who saw
+"per-entry drop" in the row could have rewritten `damage_between` into a per-entry drop and changed nothing but attribution - while the one genuinely unproven
+number, the floor, stayed unexamined.
+
+**Basis.** `sub_744d60` and `sub_745060` in `AoK HD.exe` (sha256 `cbd10d81...`), read with the clean-room decompiler through the active-target session;
+`docs/behaviour-diff.md` row 2; `crates/sim/src/lib.rs:219` `damage_between`. Review: `docs/reviews/2026-11-15-d227-damage-row.md`.
