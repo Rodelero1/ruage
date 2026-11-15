@@ -329,6 +329,17 @@ impl World {
             .find(villager)
             .ok_or(SimError::MissingEntity(villager))?;
 
+        // **The player's construction rate divides the builder-ticks** (D218): a house is 25 s of builder-ticks, so a 1.3x
+        // builder needs ceil(500 / 1.3) = 385 rather than 385.0. Rounded up, because the rate is a *rate*: 384 ticks at 1.3
+        // reach 499.2 builder-ticks of the 500 the site needs.
+        let rate = self.construction_rate(worker.player);
+        let total = if rate.raw() > 0 && rate.raw() != self.scale {
+            let needed = i64::from(total) * self.scale;
+            let scaled = (needed + rate.raw() - 1) / rate.raw();
+            u32::try_from(scaled).unwrap_or(total)
+        } else {
+            total
+        };
         // Availability outranks the price: "you cannot have this yet" is the answer, not "you are poor".
         if let Some(civ) = self.civ_barred_unit(worker.player, unit_id) {
             return Err(SimError::UnitBarred { unit: unit_id, civ });

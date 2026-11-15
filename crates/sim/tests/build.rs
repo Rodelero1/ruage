@@ -1017,3 +1017,89 @@ fn a_starting_stockpile_naming_a_resource_the_pack_lacks_is_refused() {
         .to_string();
     assert!(err.contains("timber"), "the refusal names it: {err}");
 }
+
+/// A world whose player 1 is `civ`, with the tables a build order needs. `seeded` deliberately loads no civ, so the
+/// content's own rate stands; this one does, and the civ row is where a construction rate lives.
+fn seeded_as_civ(fx: &Fixture, civ: &str) -> World {
+    let mut economy = fx.economy.clone();
+    economy.start.civs = vec![civ.to_owned()];
+    let mut world = World::new(&fx.settings, 7).expect("world");
+    world
+        .seed_from(&fx.map, &economy, &fx.units)
+        .expect("seeding");
+    world
+        .load_resources(&fx.resources)
+        .expect("the pack fits the stockpile");
+    let techs =
+        ruage_data::load_techs_file(&repo("config/gamedata/techs.toml")).expect("techs.toml");
+    let effects =
+        ruage_data::load_effects_file(&repo("config/gamedata/effects.toml")).expect("effects.toml");
+    world
+        .load_research(&techs, &effects)
+        .expect("research tables");
+    let civs = ruage_data::load_civs_file(&repo("config/gamedata/civs.toml")).expect("civs.toml");
+    world.load_civs(&civs).expect("the civ table");
+    world
+}
+
+/// What a house's foundation says it needs, in builder-ticks: laid by a real order, so the number comes through the same
+/// path a player's does.
+fn house_foundation(world: &mut World, civ: &str) -> u32 {
+    let _ = civ;
+    let villager = first_villager(world);
+    let node = nearest_tree(world, villager);
+    bank_wood(world, 25, node);
+    let site = free_tile_near(world, villager, 70);
+    world
+        .submit_checked(Command::Build {
+            villager,
+            unit: 70,
+            at: site,
+        })
+        .expect("the build order must be accepted");
+    world.step().expect("the order lands");
+    world
+        .entities()
+        .iter()
+        .find(|e| e.kind == EntityKind::Building && e.unit == Some(70) && e.construction.is_some())
+        .and_then(|e| e.construction)
+        .expect("the foundation exists")
+        .total_ticks
+}
+
+fn nearest_tree(world: &World, from: EntityId) -> EntityId {
+    let here = world.position(from).expect("position");
+    world
+        .entities()
+        .iter()
+        .filter(|e| matches!(e.kind, EntityKind::Resource(s) if s == slot("wood")))
+        .min_by_key(|e| {
+            let dx = e.position.0.raw() - here.0.raw();
+            let dy = e.position.1.raw() - here.1.raw();
+            (dx * dx + dy * dy, e.id.0)
+        })
+        .expect("a tree")
+        .id
+}
+
+/// **A Spanish builder is 30% faster, because the civ's tech-tree effect sets resource 195 to 1.3** (D218). The rate is not
+/// in the civ's own row - every civ's `resources[195]` is **0**, which means "not stated", so the base is **1.0** and not
+/// zero - and it is not a researched tech either: it is a kind-1 `set` inside the Spanish tech-tree effect (446), the same
+/// effect whose kind-102 rows are the civ's barred techs. Measured in builder-ticks on a real foundation: a house takes
+/// 25 s x 20 Hz = **500** for a Briton and **ceil(500 / 1.3) = 385** for a Spaniard.
+#[test]
+fn a_spanish_builder_needs_385_ticks_where_a_british_one_needs_500() {
+    let Some(fx) = fixture() else { return };
+    let mut british = seeded_as_civ(&fx, "British");
+    let mut spanish = seeded_as_civ(&fx, "Spanish");
+    assert_eq!(
+        house_foundation(&mut british, "British"),
+        500,
+        "a house takes its create time: 25 s at 20 Hz"
+    );
+    assert_eq!(
+        house_foundation(&mut spanish, "Spanish"),
+        385,
+        "the Spanish tech-tree effect sets resource 195 to 1.3, so 500 / 1.3 = 384.6 rounds up to 385"
+    );
+}

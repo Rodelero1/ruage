@@ -1,37 +1,36 @@
-# OPEN - the civ's tech-tree effect: the construction rate and the tech bars are the same unapplied effect
+# OPEN - the farm reseed queue and the bounded resource search, the two halves D215 made hot
 
-**Where it stands, 2026-11-15.** Four decisions, closing four debts from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
+**Where it stands, 2026-11-15.** Five decisions, closing five debts from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
 range, in the importer and the engine - a sight tech had been moving a tower's *attack range*, and a sight upgrade marked no
 new ground because exploration is stamped per move) and **D215** (a farm's base is the civ's own `resources[36]` = **175**,
 read instead of the authored 250; and the Chinese team bonus, +45 on the same resource, had never been applied at all).
 D215's price is fidelity, not frames: `repaths` **380 -> 552** in the acceptance match because a plot holds 75 less food,
 which is why the reseed queue below matters more than it did; **D216** refuses any packed attack value that no reading
 explains instead of shipping it as silence; and **D217** makes the elevation term a real site held at 1.0 with two tests
-proved by mutation. Reviews: `docs/reviews/2026-11-15-d214-attributes.md`, `-d215-farm-base.md`, `-d216-packed-attack.md`,
-`-d217-elevation.md`.
+proved by mutation; and **D218** reads the construction rate (dat resource 195) from the civ's tech-tree effect - a Spanish
+builder is 30% faster, 500 builder-ticks become 385 - and corrects a **false debt**: the tree said a civ's tech bars do
+nothing, but `barred_by` reads kind-102 rows and `check_research` refuses with `TechBarred`, tested since D23. Reviews:
+`docs/reviews/2026-11-15-d214-attributes.md`, `-d215-farm-base.md`, `-d216-packed-attack.md`, `-d217-elevation.md`,
+`-d218-construction-rate.md`.
 
 The order below is the user's ruling of 2026-11-14 - **live wrong numbers first**, then the effect interpreter, then the
 economy's own rules. Do not start breadth, civs, or the renderer before items 1-2.
 
 ## The open items, in the order I would take them
 
-1. **The civ's tech-tree effect is loaded and only its unit bars are consumed.** Measured, and it is one dependency wearing
-   two debt names: the Spanish builder bonus is a **kind-1 `set` of resource 195 to 1.3** inside the civ's *tech-tree* effect
-   (Spanish `tech_tree_effect = 446`, whose `resource_modifiers` are `[{resource: 195, mode: 0, value: 1.3}]`), and the same
-   effect carries the civ's **kind-102 tech bars** (`[102, -1, -1, -1, 433.0]` ...). Today `civ_barred_unit` consumes only the
-   kind-2 rows, so a Spanish builder works at British speed and a civ's barred techs still appear. **Resource 195 is 0.0 in
-   every civ's row**, so the base is "unset" and must default to **1.0**, not 0 - a 0 multiplier would freeze every site.
-   Slice: apply the tech-tree effect's resource rows (195 -> construction rate) and its kind-102 rows (tech bars), with a test
-   that a Spanish villager finishes a house in the ticks an English one takes divided by 1.3, and one that a barred tech is
-   refused at order time. The kind-101 rows (tech cost) are the effect interpreter's, later.
-2. **No farm reseed queue, and the resource search is unbounded.** `grep reseed crates` -> 0; the game caps a resource search
-   at **LOS+5 tiles and 30 reach tests** (U22). D215 made the reseed path hot: 43% more plots are laid per match.
-3. **Two arrival failures remain, both `#[ignore]`d with their measurements** (off-tree bugs, not dependencies): a villager
+1. **No farm reseed queue, and the resource search is unbounded.** `grep reseed crates` -> 0: a spent plot is a husk until a
+   player replaces it, and a villager whose plot ran dry walks the *whole map* for the next node, where the game caps a
+   resource search at **LOS+5 tiles and 30 reach tests** (U22). D215 made this hot: a plot holds 175 instead of 250, so 43%
+   more plots are laid per match and `repaths` went **380 -> 552**. Two slices, and the cap is the one that can change a
+   match's outcome; measure `repaths` either way.
+2. **Two arrival failures remain, both `#[ignore]`d with their measurements** (off-tree bugs, not dependencies): a villager
    rallied to its own town centre never garrisons (`inside = 0` after 600 ticks, passes on `e0312f9`, fails from
    `e21b44d`), and a builder on a 6x6 map is asked for no step at all (`step = Idle` for 1,900 ticks, 0.47 tiles from its
    waypoint, fails on old `main` too). Both are in the *arrival* family, not the collision one.
-4. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
+3. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
    with and without a stander on the route. D211's decision says so in its own words.
+4. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
+   reads yet. This is the interpreter slice the tree puts in Phase 1; it is *not* a prerequisite for items 1-3.
 
 ## Hazards a fresh session must not re-learn the hard way
 

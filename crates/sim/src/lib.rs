@@ -4380,6 +4380,64 @@ impl World {
         self.civ_by_player.get(index).copied().flatten()
     }
 
+    /// **A player's construction rate** (D218): the dat's resource 195, which no civ's own row states (every row holds **0**)
+    /// and which the Spanish tech-tree effect *sets* to **1.3**. Three rules, each from the data: the base is **1.0** whatever
+    /// the row says, because 0 there means "not stated" and a 0 multiplier would freeze every site; the value arrives as a
+    /// kind-1 command whose `b` is 0 for a set and 1 for an add; and it is read from the player's researched effects **and**
+    /// the civ's tech-tree effect, which is not researched at all - it is who the player is.
+    pub(crate) fn construction_rate(&self, player: u8) -> Fixed {
+        let one = Fixed::from_raw(self.scale);
+        let (Some(economy), Some(effects)) = (self.economy.as_ref(), self.effects.as_ref()) else {
+            return one;
+        };
+        let Some(resource) = economy.build.rate_resource else {
+            return one;
+        };
+        let Ok(resource) = i16::try_from(resource) else {
+            return one;
+        };
+        let mut rate = one;
+        let mut stated = false;
+        // The tech-tree effect first, then the researched techs in id order: a `set` overwrites, an `add` accumulates, and
+        // the last statement wins - the same rule every other modifier follows.
+        let mut commands: Vec<&ruage_data::EffectCommand> = Vec::new();
+        if let Some(effect) = self
+            .civ_of(player)
+            .and_then(|id| self.civs.as_ref()?.by_id(id))
+            .and_then(|civ| civ.tech_tree_effect)
+            .and_then(|id| effects.get(id))
+        {
+            commands.extend(effect.commands.iter());
+        }
+        if let Some(techs) = self.techs.as_ref() {
+            for tech in self.researched(player) {
+                if let Some(effect) = techs
+                    .get(*tech)
+                    .and_then(|tech| tech.effect_id)
+                    .and_then(|id| effects.get(id))
+                {
+                    commands.extend(effect.commands.iter());
+                }
+            }
+        }
+        for command in commands {
+            if command.kind != 1 || command.a != resource {
+                continue;
+            }
+            let Ok(value) = command.value.resolve(self.scale, "build.rate") else {
+                continue;
+            };
+            if command.b == 0 {
+                rate = value;
+            } else if command.b == 1 {
+                // Fixed has no `Add`: the addition is in raw units, which is exact.
+                rate = Fixed::from_raw(rate.raw() + value.raw());
+            }
+            stated = true;
+        }
+        if stated && rate.raw() > 0 { rate } else { one }
+    }
+
     /// Is this tech on the player's civilisation's restriction list? Returns the civ's name, so a
     /// refusal can say *whose* rule it is.
     fn barred_by(&self, player: u8, tech: u32) -> Option<String> {

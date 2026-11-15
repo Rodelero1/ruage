@@ -5682,3 +5682,42 @@ with a unit on a hill would settle it. Recorded in `combat.toml` where the numbe
 **Basis.** `config/combat.toml`'s `[elevation]` block and its provenance line; `crates/data/src/combat.rs`'s existing
 refusal for a non-positive multiplier; `crates/sim/src/lib.rs`'s `damage_between`, which sums per class and floors at the
 minimum, with the elevation multiply one step outside it. Review: `docs/reviews/2026-11-15-d217-elevation.md`.
+
+### D218 - the construction rate is a civ effect's resource-195 row, and a tree debt whose evidence was a word
+
+**What it says.** A player's construction rate is dat **resource 195**, read from the same place the farm base comes from: the
+civ's own row leaves it at **0** - "not stated", so the base is **1.0**, and a 0 multiplier must never reach a site or nothing
+would ever finish - and the **Spanish** bonus is a kind-1 `set` of **1.3** inside the civ's *tech-tree* effect (Spanish
+`tech_tree_effect = 446`, whose `resource_modifiers` are `[{resource: 195, mode: 0, value: 1.3}]`). The rate divides the
+builder-ticks a site needs, rounded **up**: a house is 25 s x 20 Hz = **500** for a Briton and `ceil(500 / 1.3)` = **385** for a
+Spaniard, because 384 ticks at 1.3 reach 499.2 of the 500 the site needs.
+
+**What was wrong, measured.** `grep -rn '\b195\b' crates` was empty, so the rate applied to nothing: a Spanish villager built at
+British speed. The new fixture orders a real house for each civ and reads the foundation's own `total_ticks` - **500** for
+Britain, **500** for Spain before the change, **385** after.
+
+**What it builds.**
+
+- Content names the resource (`[build] rate_resource = 195`) rather than the engine knowing it, exactly as `[farm]
+  food_resource` does for the farm line.
+- `World::construction_rate(player)` reads the player's researched effects **and** the civ's tech-tree effect, which is not
+  researched at all - it is who the player is - and applies kind-1 rows with mode 0 as a `set` and mode 1 as an `add`, last
+  statement winning, the rule every other modifier follows. It answers 1.0 whenever no row states the resource, so a pack with
+  no civ keeps its own numbers.
+- `check_build` divides the total and rounds up, one place, so a site's number is the only thing that changed.
+
+**A correction this slice forced, and it matters more than the rate.** The dependency tree lists "`DisableTech` is parsed and
+never consulted - a civ's tech-tree bars do nothing" as a debt, and that was reported to the owner as one of the five sharpest
+items. **It is false.** `World::barred_by` reads the kind-102 rows of the same tech-tree effect and `check_research` refuses
+with `SimError::TechBarred` before it looks at prerequisites, and `crates/sim/tests/research.rs`'s
+`a_barred_tech_is_refused_by_the_civilisation` has pinned that since D23. The debt's evidence was a `grep` for the word
+`DisableTech`, which this code never uses; the mechanism is called `barred_by`. So the row's *premise* was wrong and only its
+kind-1 half - this decision - was real. The tree and `next-step.md` are corrected with the citation.
+
+**What it costs.** One pass over one effect's commands and the researched effects' commands, **per build order** - not per
+tick, not per builder-tick. The acceptance match is byte-identical (`hash=beb6c66f58e4045c`, `entities=154`, `repaths=277` at
+24,000 ticks) because its players are not Spanish, so the number is held by the fixture rather than by the match.
+
+**Basis.** The Spanish row and effect 446 via a probe of `empires2_x2_p1.dat` (`resources[195] == 0.0` for all 32 civs,
+`tech_tree_effect = 446`, `resource_modifiers = [{resource: 195, mode: 0, value: 1.3}]`); `docs/mechanics/README.md`'s U19/U8
+answers; `SimError::TechBarred` and `barred_by` for the correction. Review: `docs/reviews/2026-11-15-d218-construction-rate.md`.

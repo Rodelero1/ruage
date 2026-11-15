@@ -108,6 +108,11 @@ repair   = 156   # VMREP 12.5   the repair task, likewise not a gather rate
 # and using it as a gather rate would make every villager gather 2.5x too fast.
 
 [build]
+# **The dat resource that carries a player's construction rate** (D218). Resource 195 is 0 in every civ's own row, which
+# means "not stated", and the Spanish bonus is a `set 195 = 1.3` inside the civ's *tech-tree* effect - the same effect whose
+# kind-102 rows are the civ's barred techs. So a Spanish builder is 30% faster and the base rate is 1.0. Leave it out and no
+# civ's construction rate applies, which is what this pack did until the effect's kind-1 rows were read at all.
+rate_resource = 195
 # **How near an existing drop site makes another pointless**, in tiles. 5 is not our number: the reference implementation
 # (OpenAoK, MIT) encodes the original AI's own rule as `kCovered = 5` - "a drop site already this near a forest, mine or
 # forage makes another there pointless" - and its camp may be at most `sn-camp-max-distance` = 25 from home. We keep the 5

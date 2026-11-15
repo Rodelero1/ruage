@@ -269,6 +269,10 @@ impl Train {
 #[derive(Debug, Clone)]
 pub struct Build {
     pub repair_hp_per_second: MaybeFixed,
+    /// **The dat resource that carries a player's construction rate**, if the pack names one. Every civ's own row holds 0
+    /// ("not stated") and the Spanish bonus is a `set` of **1.3** inside the civ's tech-tree effect, which is why a Spanish
+    /// builder is 30% faster. `Option`, because a pack may name no such resource and then the base is 1.0.
+    pub rate_resource: Option<u32>,
     /// **How near an existing drop site makes another pointless**, in tiles: the reference implementation's `kCovered` is 5
     /// (its own AI's rule: "a drop site already this near a forest, mine or forage makes another there pointless"). Content
     /// so a pack with bigger maps or cheaper camps can say otherwise.
@@ -564,6 +568,8 @@ struct RawBuild {
     repair_hp_per_second: f64,
     /// Defaulted to 5 - the reference implementation's own `kCovered` - so a pack that says nothing still gets the game's
     /// spacing rather than no spacing at all.
+    #[serde(default)]
+    rate_resource: Option<u32>,
     #[serde(default = "default_drop_site_spacing")]
     drop_site_spacing: u32,
     /// Roles that must not be built where a drop site already serves the resource. Empty by default: no spacing rule.
@@ -1015,6 +1021,7 @@ pub fn load_economy_str(text: &str, path: &str) -> Result<Economy, ConfigError> 
         },
         build: Build {
             repair_hp_per_second: MaybeFixed::from_f64(raw.build.repair_hp_per_second),
+            rate_resource: raw.build.rate_resource,
             drop_site_spacing: raw.build.drop_site_spacing,
             spaced_roles: raw.build.spaced_roles,
             farm: raw.build.farm.clone(),
