@@ -31,6 +31,64 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-15 — genie ports the action list's install protocol, and two mechanics our install names that we do not model
+
+**`librematch/genie`, 27 commits (`62831fa8` → `18d3698f`), 13-14 Nov, 154 files, +10,179/−2,762.** One subject, applied
+to every action the port installs: **slot 0x808** (`World::set_only_action`) — delete the head, construct the new action,
+start it, keep the head — which this batch routes the MoveTo (`movement/move_to/install.rs`, new, with 249 lines of
+tests), the Enter (`garrison/install.rs`, moved out of `enter.rs`), the unload's Transport, the work command's Attack, the
+unit AI's attack, the default task's start, and both actions below through. **Two actions it had not ported before:
+`TRIBE_Action_Housing`** (`construction/housing/`, action type 0x7b) **and `TRIBE_Action_Pack`** (`construction/pack/`,
+0x7c) — a trebuchet (class 54) packs into its packed master (class 51) with a timer that runs up to the pack time, a stop
+that keeps the share done, and a transform that swaps the master and clears the list. **And the idle update**
+(`objects/idle_update.rs`, `FUN_140a784a0`): every action below the head runs a body each tick that keeps its target and
+second target current, so a list's queued work is not frozen behind the head. Plus `attack/restart.rs` →
+`head_start.rs` (the Attack's start at the head, slot 0x28 with 1 from the add and 0 from a deletion), the Hunt's slot 9
+walking to a point with no target, and clippy 1.100's lints.
+
+**The names are in our own install, so both mechanics are 5.7's, not DE's.** `strings -a "Age2HD/AoK HD.exe"` carries
+`TRIBE_Action_Housing`, `TRIBE_Action_Pack` and `TRIBE_Action_Unpack` (their `.?AV…@@` RTTI names), `housing-headroom`,
+`amount-building-housing-rate`, `packed-trebuchet-class`, `unpacked-trebuchet-class` and `housing.wav`. The same dump holds
+189 `amount-*` attribute names, which is a name list and not an id table: `amount-building-housing-rate` is the dump's
+53rd while the port calls it attribute 62 — the strings date a mechanic, they do not number it.
+
+**Housing, as the port states it:** a housing costs 50 wood out of the owner's attributes at its start, and gives it back
+in its stop (every state) and in its destructor (while it is at work); at work its timer starts at attribute 62 and runs
+down by the building's work rate each update, floored at half for a damaged building; when it runs out the building
+**holds 5 headroom on itself** (`+0x310`) and **adds 5 to its owner's attribute 4**. So the ceiling is a stored counter fed
+by a timed action, and the building is what holds its share — where `Sim::population_cap` derives it instead, summing
+finished buildings (`crates/sim/src/lib.rs:2909`) against content's `house_population = 5`
+(`config/economy.toml:320`), so a house's five arrive on the tick its construction flag clears and nothing holds them. The
+port's own fixture then spoils the tidy reading: its house master is given `work_rate: WorkRate::new(0.5)` with the
+comment **"the `.dat`'s is 0, which no update would run down"**, and our HD row agrees (`HOUS`, `units.toml:1897`,
+`work_rate = 0.0`). Which routine grants the five, and whether there is a delay after the build finishes, is therefore
+unread in both builds — U24, and the oracle answers it cheaper than any port would. The 50 is not a house's price either
+(HD's house is `costs = [[1, 25]]`).
+
+**The trebuchet is a live defect here, not a divergence.** We train `trebuchet_packed` = 331 from the castle
+(`config/economy.toml:202,271`); 331 (`units.toml:8890`, class 51) carries `attacks = []` and `speed = 0.8`, while the
+unpacked `TREBU` 42 (`units.toml:1144`, class 54) carries 250 vs buildings and `speed = 0.0`. Nothing in `crates/` turns
+one into the other — no Pack, no Unpack, no master transform — so a trebuchet in this engine walks and can never fire.
+Filed as T18. DE's own pack time is "the train time of its first train location", which in our data would be 50 s for
+either id: that number cannot be HD's (a trebuchet packs in seconds), and the parser exposes class 54 and no pack-time
+field at all, so HD's pack time is a fresh unknown behind the same mask as U15's build time.
+
+**U18 and U22 both stand, pinned by sha rather than by absence from a lossy file list.** `world/step.rs` (`b7153ee2`),
+`world/schedule.rs` (`e27a9958`), `gathering/gather_search.rs` (`754c7d20`) and `gathering/closest_resource.rs`
+(`2161462d`) are byte-identical at both shas across all 27 commits. What the batch *does* add is a strengthening inside one
+object: every install of an action in this port is now a delete-and-start at the head of the list, so an action installed
+during a unit's step begins in that same step — the live sequence is established across the whole action vocabulary, and
+the order *between* objects is still DE's and still unread.
+
+**Never copy.** genie is AGPL-3.0. `construction/housing/unit.rs` is the hazard shape again: ~200 lines that read as
+"just the work rate with a damage floor and one add", a port of `FUN_140ac2a10`; `construction/pack/unit.rs` is the same
+for `FUN_140ad69d0`. Both are small functions. Derive from HD's exe and a behavioural test, or write the rule from our own
+statement of it; do not translate the files.
+
+**Two of my own errors, reported.** (1) I read `HousingTuning::cost = 50` as a house's price and went looking for a
+50-wood house in 5.7; the house is 25 wood, so the constant belongs to whatever the install site charges, not to `HOUS`.
+(2) I briefly read the `amount-*` strings dump as an id table; it is not one, at position 53 against id 62.
+
 ## 2026-11-14 — genie's action deletions and the gate U22 was missing; two fixes in openage; openaok packages
 
 **`librematch/genie`, 42 commits (`f2d321e6` → `62831fa8`), 11-13 Nov, 208 files, ~12,700 lines added.**
