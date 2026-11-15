@@ -5612,3 +5612,39 @@ binary differed by 25%. That reseed cost is why the reseed queue (T6) is worth m
 and `[88] == 700` agreeing with `docs/mechanics/README.md`'s U8 answer; the four resource-36 modifiers (14/+75, 13/+125,
 12/+175, 402/+45) from `effects.toml`; U20 in `docs/mechanics/README.md` for the claim itself. Review:
 `docs/reviews/2026-11-15-d215-farm-base.md`.
+
+### D216 - a packed attack value no reading explains is refused by name, not carried as silence
+
+**What it says.** Attack and armour changes pack `class * 256 + amount` into a positive word - Forging's 1025 is class 4, +1 -
+and the importer decodes those. **Thirty-one** modifiers in the dat's effect table fit no reading: **twelve** carry a
+negative word (five distinct: -1025, -770, -769, -226, -136) and the other **nineteen** are positive words whose amount lands
+on 100, 120 or 225 with classes 4, 11, 16 and 34. The two candidate readings of Shinkichon's -226 are not the same game:
+truncating division (what `Zaydme/openaok` implements) gives class 0, amount **-226**, and floor division gives class -1,
+amount **+30** - and Shinkichon is published as **+1 range** for the mangonel line, which we already decode from the same
+effect. A rule that would subtract 226 from any unit holding attack class 0 is worse than no rule.
+
+**So the rule is refusal, at generation time.** `UNEXPLAINED_PACKED` in `ruage-tools` lists all thirty-one by effect, kind,
+unit, class, attribute and value; a command that fits no reading and is *not* in the table raises `UnpackedAttack`, naming the
+effect and the value. The listed ones still ship as `unpacked:<attribute>`, which the engine ignores - deliberately, because
+the pack should show the gap rather than hide it, and because a regeneration that loses or renumbers one must be visible.
+
+**What it builds.**
+
+- The importer's refusal, with a test that both accepts a listed command and refuses an unlisted one by name (the message
+  carries the effect id and the raw value).
+- `crates/data/tests/techs.rs`: the shipped pack carries exactly those thirty-one, in exactly those nine effects (80, 81, 82,
+  89, 217, 375, 378, 396, 506), twelve of them negative. A regeneration that changes the set fails the suite.
+- The regenerated pack is **byte-identical** to the one before the change apart from its timestamp, so the guard costs a
+  player nothing.
+
+**What it costs.** Nothing at runtime - the pack does not change - and one exception at generation, which is the point.
+
+**What is still open, and where to look.** The arithmetic that *would* decode these is in the exe's kind-4/5 handler, not in
+the dat. The starting points are recorded: classes 4, 11, 16 and 34; amounts 100, 120 and 225; the pairs (4196, 1124, 8804)
+sharing amount 100 and (4321, 8929) sharing 225 in effects 378 and 396; and `aok.asm` for the instruction that divides by 256.
+Until one of those is read, no number is invented.
+
+**Basis.** A full enumeration of `config/gamedata/effects.toml` for `attribute = "unpacked:*"` (31 rows, 9 effects, 12
+negative); `Zaydme/openaok` `src/ecs/Effects.cpp` `ModifyClassList` (truncating `d_int / 256`); `Attribute::attack_from_packed`'s
+own `0..=65_535` guard, which already refuses a negative word; Forging's `[4, -1, 6, 9, 1025.0]` as the positive control.
+Review: `docs/reviews/2026-11-15-d216-packed-attack.md`.

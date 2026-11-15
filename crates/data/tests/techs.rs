@@ -516,3 +516,48 @@ fn the_project_effects_carry_decoded_attack_modifiers() {
     assert_eq!(hp.value, 1.1);
     assert_eq!(hp.unit_class, 3, "buildings");
 }
+
+/// **Thirty-one packed attack values that no reading explains, in nine effects** (T9, D216). Attack and armour pack
+/// `class * 256 + amount` into a positive word, and the importer decodes those; these do not fit - seven are negative
+/// words (five distinct: -1025, -770, -769, -226, -136) and the rest have amounts of 100, 120 or 225 that no reading in `openaok`, the
+/// published tables or our own four consumers explains. They are carried as `unpacked:` (the engine ignores them) and
+/// `UNEXPLAINED_PACKED` in `ruage-tools` refuses any *new* one at generation time. This pins what the pack contains, so a
+/// regeneration that adds, loses or renumbers one fails here instead of shipping as a silence.
+#[test]
+fn thirty_one_packed_attack_values_are_carried_unexplained() {
+    let effects = effects();
+    let mut found = std::collections::BTreeMap::new();
+    let mut negatives = 0usize;
+    for (id, effect) in &effects.effects {
+        for modifier in &effect.modifiers {
+            if modifier.attribute.starts_with("unpacked:") {
+                *found.entry(*id).or_insert(0usize) += 1;
+                if modifier.value < 0.0 {
+                    negatives += 1;
+                }
+            }
+        }
+    }
+    let expected: std::collections::BTreeMap<u32, usize> = [
+        (80u32, 2usize),
+        (81, 2),
+        (82, 2),
+        (89, 2),
+        (217, 3),
+        (375, 6),
+        (378, 2),
+        (396, 9),
+        (506, 3),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(
+        found, expected,
+        "the set of effects with an undecodable attack value"
+    );
+    assert_eq!(
+        negatives, 12,
+        "twelve of the thirty-one carry a negative word (five distinct: -136, -226, -769, -770, -1025), and the -226 in \
+         Shinkichon (506) is one of them"
+    );
+}
