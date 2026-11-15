@@ -33,6 +33,12 @@ remains is therefore the debt list, not a defect list.
    he takes the next entry and reseeds the same ground, and stands idle when there is none and the toggle is off. Note the screen:
    the dat's own resource for a farm's wood cost, not a constant in the engine. Gate: a fixture for the queue (wood drops, a farm
    reappears on the same tiles) and one for the toggle (no wood, no reseed; toggle off, the villager goes idle).
+   **Anchors measured before starting** (so the next session does not re-find them): the mill is dat **68** (`name = "MILL"`,
+   `config/gamedata/units.toml:1843`) and has **no `[role]` yet**; a farm is role `farm = 50`, **60 wood** (`costs = [[1, 60]]`);
+   a spent plot already becomes a **husk** and is removed after `husk_ticks` (`step_husks`, `crates/sim/src/lib.rs:3886`,
+   `is_expired_farm_ref`); commands are validated in `world/orders.rs`'s `check_*` match (:57) and applied in the `match` at
+   :284; `start_build_site(builder, unit, at)` is the one path that raises a site, and `build_queue` already chains sites (D66),
+   so a reseed is "pay, then hand that man a farm site on the old footprint".
 2. **A builder claims his place - measured-out, not built** (D225). The owner's rule is a free **space one diameter wide**,
    claimed by one worker, with a builder who finds none taking the next site in **his own queue** ("2 a"). The *claim* half has no
    reachable trigger in this model: own bodies are not walls to their own side (D189), a visible enemy on the footprint is refused
