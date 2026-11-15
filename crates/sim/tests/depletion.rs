@@ -1,9 +1,9 @@
 //! What a tree leaves behind when its wood is gone - the owner's question (2026-10-29).
 //!
 //! In the game a tree is an obstacle while it stands, and the tile it stood on is **walkable once it is chopped**: the
-//! forest edge recedes and villagers can walk through the gap. This file states both rules, and the first one is parked
-//! with `#[ignore]` because the engine does not do it yet - which is the point of writing it down: a parked test that is
-//! *run* says exactly how far off we are (`cargo test -- --ignored`).
+//! forest edge recedes and villagers can walk through the gap. Both rules are stated here and **both pass** - the doc used to
+//! say the first was parked with `#[ignore]`, which it was not, and no test in this file carried the attribute (found by the
+//! D224 audit, which ran the parked set instead of trusting it).
 
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, World};

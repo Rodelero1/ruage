@@ -18,7 +18,8 @@
 //! step is reached (22,253 candidate considerations over the acceptance run, all skipped). The record is
 //! `docs/reviews/2026-11-14-d204-carriers.md`.
 //!
-//! Kept as the fixture the next attempt starts from, `#[ignore]`d so the suite is not left red.
+//! **Re-measured green on 2026-11-15** (D224): parked by D204 because `made_room` was counting the walker's own step;
+//! run with `--include-ignored` it passes, so it is un-parked and stays as a rule rather than a fixture to start from.
 
 use std::path::PathBuf;
 
@@ -152,7 +153,6 @@ fn a_crowd_filling_and_carrying_home() -> Option<(World, Vec<EntityId>)> {
 /// which is red on `main` at 7 for a reason that has nothing to do with pushing, and stays red once the gate is
 /// extended (see this file's header). Run it with `--ignored` to see the measurement.
 #[test]
-#[ignore = "parked: made_room counts the walker's own make-room step, not push_the_standing (see docs/reviews/2026-11-14-d204-carriers.md)"]
 fn a_crowd_carrying_home_is_never_pushed() {
     let Some((mut world, crew)) = a_crowd_filling_and_carrying_home() else {
         return;

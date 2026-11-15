@@ -16,6 +16,14 @@ nothing, but `barred_by` reads kind-102 rows and `check_research` refuses with `
 The order below is the user's ruling of 2026-11-14 - **live wrong numbers first**, then the effect interpreter, then the
 economy's own rules. Do not start breadth, civs, or the renderer before items 1-2.
 
+## There are no live defects - audited, not assumed (D224)
+
+Every parked test that does not take minutes was **run** on 2026-11-15 (`cargo test -- --include-ignored`): all green. The
+four items an earlier gap report called live were `depletion` (no test carried the attribute - the doc did), `retarget`
+(D98a, green), `carrier_no_pushing` (D204, green) and `gather_contact` (D181, where the *fixture* measured to a tile's centre
+and a corner contact is 0.93 from it by geometry - the engine was right). All four are closed or corrected in D224. What
+remains is therefore the debt list, not a defect list.
+
 ## The open items, in the order I would take them
 
 1. **A builder claims his place, and takes the next site in his queue when there is none** (the owner, 2026-11-15: *"it is not

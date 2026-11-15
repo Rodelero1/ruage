@@ -5867,3 +5867,38 @@ Unproven code that *looks* like the owner's rule is worse than the rule written 
 
 **Basis.** `crates/sim/tests/build.rs` (the un-parked fixture), the two mutations recorded above, and the owner's rulings of
 2026-11-15 quoted in `docs/next-step.md`. Review: `docs/reviews/2026-11-15-d223-step-aside-retry.md`.
+
+### D224 - the parked set was audited, not trusted: three of the four "live defects" are not defects
+
+**What it says.** The four items the gap report called live were checked by **running** them (`cargo test -- --include-ignored`)
+rather than by reading their `#[ignore]` sentences. Three were not defects at all, and the fourth was a fixture measuring the
+wrong geometry:
+
+- **`depletion.rs`** - no test in the file carries `#[ignore]`. Both rules (a standing tree blocks its tile, a chopped one leaves
+  no obstacle) pass, and always did; the *module doc* claimed the first was "parked with `#[ignore]`". Corrected.
+- **`retarget.rs` (D98a)** - green: the forager finishes the bush, walks to the adjacent farm, and the food column rises. The
+  parked sentence named node 103 as the wrong choice and never said which change was missing. Un-parked; the audit did **not**
+  bisect which change fixed it, and the note says so instead of claiming one.
+- **`carrier_no_pushing.rs` (D204)** - green: the crowd carrying home is not pushed. Un-parked.
+- **`gather_contact.rs` (D181)** - **the engine was right and the fixture's yardstick was wrong.** "Touching" is measured against
+  the node's **tile square** - `distance_to_tile <= body + a fiftieth of a tile`, i.e. 0.22 for a villager of 0.2 - so a body
+  whose circle is against the tile's **corner** sits `sqrt(2) x 0.72` = **0.93** from the tile's centre. D181's measurement,
+  "took while 0.92 tiles from the bush", is that corner contact to the hundredth, judged by a **radial** yardstick. The fixture
+  now measures the tile (`ruage_sim::tiles::distance_to_tile`), passes, and **bites**: widen the gate to any adjacent tile and it
+  reports the take at **0.47** tiles off the tile. No production line changed.
+
+A sweep of every parked test that does not take minutes followed, all green: `boom_probe` 1, `collision_probe` 2 (378 s),
+`settle_probe` 1, `sheep_probe` 1, `short_probe` 1, `pathing` 6, `movement_worth` 2 (349 s), `acceptance_economy` 3 (94 s). The
+`perf` and `stability` probes are measurement-only and were not part of it.
+
+**Why this matters more than the four items.** The tree had been carrying a **false work queue**: a session reading
+`docs/next-step.md` would have spent four slices rediscovering that three defects are gone and one was a measurement error, and
+each of those slices would have "fixed" working code. `#[ignore]` is a *claim about the past*; only running it says anything
+about the present.
+
+**What it costs.** Nothing in the simulation: one test file corrected, three un-parked. What it buys is the queue below the
+queue - the real debts (`T7`, `T14`, `T2`, `T6`, `T8`, `T11`-`T16`, and the `M`/`P` rows) are now the only live items, and
+`docs/next-step.md` says so.
+
+**Basis.** The sweep (`d224-parked.txt` in the scratch dir), the two mutations on `gather_contact`, and the gate.
+Review: `docs/reviews/2026-11-15-d224-parked-audit.md`.

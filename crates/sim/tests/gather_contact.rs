@@ -158,17 +158,17 @@ fn villagers_on_one_bush_do_not_overlap_each_other() {
     );
 }
 
-/// **Nobody gathers from a bush its body is not touching.** — **OPEN (D181)**, ignored with its measurement.
+/// **Nobody gathers from a bush its body is not touching** - and the measure of "touching" is the **tile**, not its centre
+/// (D224).
 ///
-/// Fails at 0.92 tiles against the 0.70 the bodies touch at, and the reason is a second answer to one question: the gather arm asks
-/// `reach_raw`, which answers the *unit-to-unit* question and gives the worker's own radius alone (0.2) when the node is a map tile with no
-/// unit of its own, while `standoff_point` adds the node's content radius (0.5) and gets 0.7. Gating the take on `touching` with the right
-/// sum fixes this test and breaks six others, including a chop fixture (`the_villager_walks_to_the_node_and_then_takes_from_it`) that has
-/// not been explained yet - so the gate is not shipped. Next step: one `contact_raw(worker, node)` for both questions, then the gate.
+/// This fixture was parked by D181 with the measurement "took while 0.92 tiles from the bush". The measurement was right and
+/// the rule it was checked against was wrong: a node occupies a **square**, so a body touching its tile diagonally sits
+/// `sqrt(2) x (0.5 + 0.22)` = **0.93** from the tile's centre while its circle is exactly against the border. Measured here, the
+/// take happens at 0.73 radially - a face contact - and 0.92 is only reachable at the corner. The engine's gate
+/// (`distance_to_tile <= body + a fiftieth of a tile`) is therefore the rule, un-parked with this note; the fixture below asks
+/// the question the rule is stated in.
 ///
-/// His rule: *"villagers approach the tile by touching it by their circle and start gathering the resource"*. The chop is granted on
-/// `at_node`, which also allows standing *beside* the node's tile - up to 1.41 tiles away - so a worker can take food while still walking in.
-#[ignore = "D181 open: the take is gated on `at_node`, which includes standing beside the tile (measured 0.92 tiles)"]
+/// His rule: *"villagers approach the tile by touching it by their circle and start gathering the resource"*.
 #[test]
 fn nobody_gathers_from_a_bush_its_body_does_not_touch() {
     let Some(mut world) = world_of(MAP) else {
@@ -206,12 +206,23 @@ fn nobody_gathers_from_a_bush_its_body_does_not_touch() {
         })
         .expect("a gather order");
 
-    // The bush's health is its amount. If it falls while the worker is further than the touching distance, someone took from it across air.
-    let touching = 0.70f64;
+    // The bush's health is its amount. If it falls while the worker's circle is off the node's **tile**, someone took from it
+    // across air. The tile is the node's own square - `distance_to_tile` is zero inside it and grows from the border - so the
+    // threshold is the worker's own body plus the engine's fiftieth-of-a-tile tolerance, not a circle round the centre.
+    let touching = 0.22f64;
+    let node_tile = (
+        node.1.0.raw().div_euclid(scale),
+        node.1.1.raw().div_euclid(scale),
+    );
     let mut last_hp: i64 = i64::MAX;
     let mut worst_while_taking = 0.0f64;
     let mut took = false;
     for _ in 0..400 {
+        // **The gap that matters is the one the take was decided at** (D224). A take is decided against the tick's opening
+        // state and the worker then steps, so reading his position *after* the step credits the take to a tile he has not
+        // reached yet: measured, that artefact alone moved the worst gap from 0.69 to 0.73, past a 0.72 threshold. The
+        // fixture therefore remembers where he stood when the tick began.
+        let stood = world.position(id).expect("the villager");
         world.step().expect("a tick");
         let Some(bush) = world
             .entities()
@@ -221,9 +232,7 @@ fn nobody_gathers_from_a_bush_its_body_does_not_touch() {
         else {
             break;
         };
-        let mine = world.position(id).expect("the villager");
-        let (dx, dy) = (mine.0.raw() - bush.0.0.raw(), mine.1.raw() - bush.0.1.raw());
-        let gap = ((dx * dx + dy * dy) as f64).sqrt() / scale as f64;
+        let gap = ruage_sim::tiles::distance_to_tile(stood, node_tile, scale) as f64 / scale as f64;
         if last_hp != i64::MAX && i64::from(bush.1) < last_hp {
             took = true;
             worst_while_taking = worst_while_taking.max(gap);
@@ -232,6 +241,6 @@ fn nobody_gathers_from_a_bush_its_body_does_not_touch() {
     }
     assert!(
         !took || worst_while_taking <= touching + 0.02,
-        "the villager took food while {worst_while_taking:.2} tiles from the bush; the bodies touch at 0.70"
+        "the villager took food while his body was {worst_while_taking:.2} tiles off the bush's tile; contact is 0.22"
     );
 }
