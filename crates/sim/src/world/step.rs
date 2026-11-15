@@ -26,40 +26,30 @@ impl World {
 
         let mut work = self.decide()?;
 
-        self.reserve_places(std::mem::take(&mut work.places));
-        for node in std::mem::take(&mut work.respreads) {
-            self.maybe_respread(node);
+        // **The queue** (T12 stage 2, D229): `BaseWorld::update` walks the players array from index 0 - Gaia, then
+        // 1-8 - and steps each player's objects inside that player's own turn, so a man killed by an earlier player's
+        // blow does nothing later in the tick, and a man whose turn came first has already done his work. Ours applies
+        // each player's share of the tick's work as one turn, in that order.
+        let mut queue = work.bucket(self);
+        for turn in 0..TURNS {
+            let work_for_this_turn = std::mem::take(&mut queue.turns[turn]);
+            // **No "empty turn" shortcut** (tried and withdrawn, D230): a turn of empty lists is *not* nothing to do -
+            // `shepherd` resumes a gather on a corpse from `self.slaughter`, which is world state and not one of the lists,
+            // so skipping the empty turns stopped a villager gathering the sheep he had just killed. Two animal fixtures
+            // said so; the saving was 2.5 percentage points of a tick and not worth a second place the rule can live.
+            self.apply_turn(work_for_this_turn, &mut work);
         }
-        // **Before the re-tasks** (D204): a man the ring has refused for long enough is sent to another node this same
-        // tick, so the count that decides it and the order that answers it are read from the same state.
-        self.count_refused_squares(std::mem::take(&mut work.square_refusals));
 
-        self.resume_fights(work.engaging, work.turning, work.homing);
-
-        self.grant_takes(work.chops, work.takes);
-        self.send_hunters(work.hunts);
-        self.retask_workers(work.retasks);
-        self.apply_switches(work.switches);
-        self.shepherd(work.herds);
-        self.deposit_loads(work.deposits);
-        self.finish_construction(work.builders);
-        self.land_blows(
-            work.strikes,
-            &mut work.blows,
-            &mut work.shots,
-            &mut work.ejected,
-        );
         self.step_production()?;
-        self.resume_idle(work.finished);
         // **Before the movement pass** (D154): a gate that opens this tick is walkable for this tick's steps; a gate that
         // closes is solid for them.
         self.step_gates();
-        self.move_bodies(work.deltas)?;
+        self.move_bodies(std::mem::take(&mut work.deltas))?;
         self.finish_blocked_orders();
         // **Settle onto the work** (D169): a worker that has arrived walks the last third of a tile onto the point where its
         // body and the node's touch. It is a placement, not a walk, because the movement rules only call a route finished on a
         // tile centre - a route ending 0.7 of a tile out is a route a worker never finishes.
-        self.settle_workers(work.settles);
+        self.settle_workers(std::mem::take(&mut work.settles));
 
         self.fly_shots(
             work.shots,
@@ -77,6 +67,42 @@ impl World {
         // `sighting(..).1 == tick()` means "watched right now" and the age of a belief is `tick() - at`.
         self.observe();
         Ok(())
+    }
+
+    /// **One player's turn**: the work `decide` collected for this player's objects, applied in the order one object's
+    /// own update would do it - places, then the fight, then the harvest, the re-tasks, the switch, the herd, the
+    /// delivery, the site, the blow, and the return to what a finished fighter was doing.
+    ///
+    /// `work` is here for the three accumulators that are not one player's - the blows, the shots and the garrisons that
+    /// must be thrown out - which the later phases read.
+    fn apply_turn(&mut self, mut turn: TurnWork, work: &mut TickWork) {
+        // The split ran before any turn; by the time this one comes, an earlier player's blow may have killed one of
+        // its actors - and the original's walk would not find him either, because he was destroyed in his own turn.
+        turn.keep_the_standing(self);
+        self.reserve_places(turn.places);
+        for node in turn.respreads {
+            self.maybe_respread(node);
+        }
+        // **Before the re-tasks** (D204): a man the ring has refused for long enough is sent to another node this same
+        // tick, so the count that decides it and the order that answers it are read from the same state.
+        self.count_refused_squares(turn.square_refusals);
+
+        self.resume_fights(turn.engaging, turn.turning, turn.homing);
+
+        self.grant_takes(turn.chops, turn.takes);
+        self.send_hunters(turn.hunts);
+        self.retask_workers(turn.retasks);
+        self.apply_switches(turn.switches);
+        self.shepherd(turn.herds);
+        self.deposit_loads(turn.deposits);
+        self.finish_construction(turn.builders);
+        self.land_blows(
+            turn.strikes,
+            &mut work.blows,
+            &mut work.shots,
+            &mut work.ejected,
+        );
+        self.resume_idle(turn.finished);
     }
     /// **Take the queued orders and apply them**, refusing rather than failing the match.
     fn drain_orders(&mut self) {
@@ -2391,6 +2417,21 @@ impl World {
             .binary_search_by_key(&id, |entity| entity.id)
             .map_or((u8::MAX, id.0), |at| (self.entities[at].player, id.0))
     }
+
+    /// **Which turn an object acts in** (T12 stage 2): its owner's index - Gaia at 0, then the players - or `None` when no
+    /// turn will find it, which is an object that is gone or one whose health has already run out. A resource node is not
+    /// a special case: it has `hp = 0` by construction and it still lays its gather ring, so "dead" is "no health and not
+    /// a node" rather than a bare health test.
+    fn turn_slot(&self, id: EntityId) -> Option<usize> {
+        let at = self
+            .entities
+            .binary_search_by_key(&id, |entity| entity.id)
+            .ok()?;
+        let entity = self.entities.get(at)?;
+        let acts = entity.hp > 0 || matches!(entity.kind, EntityKind::Resource(_));
+        let slot = usize::from(entity.player);
+        (acts && slot < TURNS).then_some(slot)
+    }
 }
 
 /// **What one tick decided to do, before anything is applied** (D146): the vectors `decide` fills and the phases consume.
@@ -2427,4 +2468,114 @@ struct TickWork {
     /// node, `None` is a man who has a square - or has just been sent to another one - so his count goes. Carried here
     /// because `decide` reads the world and never writes it; `count_refused_squares` folds these in after the loop.
     square_refusals: Vec<(EntityId, Option<(EntityId, u32)>)>,
+}
+
+/// **How many turns a tick has** (T12 stage 2): Gaia at index 0, then the eight players `BaseWorld::update` walks.
+const TURNS: usize = MAX_PLAYERS + 1;
+
+/// **One player's share of the tick's work**: what `decide` decided for that player's objects, in the order one object's
+/// own update does it.
+#[derive(Default)]
+struct TurnWork {
+    places: Vec<(EntityId, EntityId, (Fixed, Fixed))>,
+    respreads: Vec<EntityId>,
+    square_refusals: Vec<(EntityId, Option<(EntityId, u32)>)>,
+    engaging: Vec<(EntityId, EntityId)>,
+    turning: Vec<EntityId>,
+    homing: Vec<EntityId>,
+    chops: Vec<EntityId>,
+    takes: Vec<(EntityId, i64, Fixed)>,
+    hunts: Vec<(EntityId, EntityId)>,
+    retasks: Vec<(EntityId, EntityId)>,
+    switches: Vec<(EntityId, Task)>,
+    herds: Vec<(EntityId, EntityId)>,
+    deposits: Vec<EntityId>,
+    builders: Vec<(EntityId, EntityId)>,
+    strikes: Vec<(EntityId, EntityId)>,
+    finished: Vec<EntityId>,
+}
+
+/// **The tick's work, split into turns** (T12 stage 2), built once per tick so the split costs one pass over each list
+/// rather than one pass per player per list.
+#[derive(Default)]
+struct Queue {
+    turns: Vec<TurnWork>,
+}
+
+impl TickWork {
+    /// **Split the work into one turn per player.** An item whose actor this play is not - another player's object, or one
+    /// whose health ran out earlier in the tick - is **dropped**, which is the rule the original gets for free by walking
+    /// a player's objects only and destroying a dead one in its own turn.
+    fn bucket(&mut self, world: &World) -> Queue {
+        let mut queue = Queue {
+            turns: (0..TURNS).map(|_| TurnWork::default()).collect(),
+        };
+        // Two shapes: a list of ids, and a list of tuples whose first element is the actor.
+        macro_rules! bucket {
+            ($field:ident) => {
+                for item in self.$field.drain(..) {
+                    if let Some(slot) = world.turn_slot(item) {
+                        queue.turns[slot].$field.push(item);
+                    }
+                }
+            };
+            ($field:ident, $at:tt) => {
+                for item in self.$field.drain(..) {
+                    if let Some(slot) = world.turn_slot(item.$at) {
+                        queue.turns[slot].$field.push(item);
+                    }
+                }
+            };
+        }
+        bucket!(places, 0);
+        bucket!(respreads);
+        bucket!(square_refusals, 0);
+        bucket!(engaging, 0);
+        bucket!(turning);
+        bucket!(homing);
+        bucket!(chops);
+        bucket!(takes, 0);
+        bucket!(hunts, 0);
+        bucket!(retasks, 0);
+        bucket!(switches, 0);
+        bucket!(herds, 0);
+        bucket!(deposits);
+        bucket!(builders, 0);
+        bucket!(strikes, 0);
+        bucket!(finished);
+        queue
+    }
+}
+
+impl TurnWork {
+    /// **Drop what this turn will not find.** The bucket pass ran before any turn began, so it could only judge health at
+    /// the tick's opening; an earlier player's blow may have killed one of this turn's actors since. The owner half cannot
+    /// change during a tick, so this is the health half and nothing else.
+    fn keep_the_standing(&mut self, world: &World) {
+        macro_rules! keep {
+            ($field:ident) => {
+                self.$field.retain(|item| world.turn_slot(*item).is_some());
+            };
+            ($field:ident, $at:tt) => {
+                self.$field
+                    .retain(|item| world.turn_slot(item.$at).is_some());
+            };
+        }
+        keep!(places, 0);
+        keep!(respreads);
+        keep!(square_refusals, 0);
+        keep!(engaging, 0);
+        keep!(turning);
+        keep!(homing);
+        keep!(chops);
+        keep!(takes, 0);
+        keep!(hunts, 0);
+        keep!(retasks, 0);
+        keep!(switches, 0);
+        keep!(herds, 0);
+        keep!(deposits);
+        keep!(builders, 0);
+        keep!(strikes, 0);
+        keep!(finished);
+    }
 }

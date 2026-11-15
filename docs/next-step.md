@@ -39,6 +39,30 @@ string `"baseworld update"`, the `aoeworld-at-%08d.txt` status log it writes, an
   wrapped at the player count, and `+0x100` is `pturn` - the field `docs/save-format.md` reads out of the save header. That
   is **T16**'s axis, read for free here; it is not this slice.
 
+## Stage 2: the players take turns (2026-11-15, late)
+
+**Landed after stage 1.** `Sim::step` now splits the tick's work into **one turn per player** - Gaia at index 0, then
+1-8 - and applies each player's share as a unit: places, the fight, the harvest, the re-tasks, the switch, the herd, the
+delivery, the site, the blow, the return. So a man killed by an **earlier** player's blow does nothing for the rest of the
+tick, and a man whose turn came **first** has already worked when the blow lands. Two fixtures in
+`crates/sim/tests/turn_order.rs` are the pair: the same build, players swapped, and opposite progress on the site.
+
+The split is one pass per tick (`TickWork::bucket`), not one per player per list, and every item whose actor is dead is
+dropped **twice** - at the split, and again when its turn comes (`TurnWork::keep_the_standing`), because the split can only
+judge health at the tick's opening while an earlier turn may kill in between. Removing either half reddens a fixture.
+
+**What it costs, and the match it changes.** Forced into a single turn, the same match is bit-identical to `main`
+(`beb6c66f58e4045c`, 154 entities, 277 repaths) and runs at **20.71 s against 19.76 s** for 24,000 ticks - **+4.8%** for the
+mechanism. Live, the match **diverges** - `cb1f6a83a119a2a3`, 152 entities, `repaths=256` - and takes 22.64 s
+(**+13.3%**), of which the loop is the 4.8% and the rest is the different match; a phase probe inside a live match is owed
+to separate them. **An empty-turn skip was tried and withdrawn**: `shepherd` resumes a gather on a corpse from
+`self.slaughter`, which is state and not one of the turn's lists, so the skip stopped a villager working the sheep he had
+just killed and two animal fixtures caught it.
+
+**What is still not the queue:** inside one player's turn the objects are still simultaneous (their work is applied phase
+by phase, not object by object), and `decide` still reads the state the tick opened with - so a decision cannot see what an
+earlier object did. Movement, production, arrows, world timers and the death sweep remain global phases after the turns.
+
 ## The slice T12 takes, and what it deliberately is not
 
 Our tick **decides** every entity against the state the tick opened with (`decide`, `&self`) and then **applies** the

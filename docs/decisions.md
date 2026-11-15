@@ -6095,3 +6095,52 @@ rule's evidence is the fixtures.
 `crates/sim/src/world/step.rs` (`turn_key`, the sort at the end of `decide`, the two gates in `step_production`);
 `crates/sim/tests/tick_order.rs`; `docs/behaviour-diff.md` row 3 (now **read** for the order *between* objects);
 `docs/mechanics/determinism.md`; `docs/next-step.md` T12. Review: `docs/reviews/2026-11-15-d229-tick-order.md`.
+
+### D230 - the players take turns: each player's work is a turn, and a dead man's turn does nothing (2026-11-15)
+
+**What it says.** T12's second stage. `Sim::step` no longer applies the tick's work as one pass over everything: it splits
+that work into **one turn per player** - Gaia at index 0, then players 1-8, the order `BaseWorld::update` walks (D229) - and
+applies each player's share as a unit, in the order one object's own update would do it (places, the fight, the harvest, the
+re-tasks, the switch, the herd, the delivery, the site, the blow, the return to what a finished fighter was doing).
+
+**What that buys, and it is not bookkeeping.** A man killed by an **earlier** player's blow does nothing for the rest of
+the tick: his harvest is not taken, his stone is not laid, his load is not delivered. A man whose turn came **first** has
+already done all of that when a later player's blow lands. Both halves are pinned by the same fixture with the players
+swapped (`crates/sim/tests/turn_order.rs`): the identical build, and progress on the site reads `+1` when the builder's
+player is lower and `+0` when it is higher.
+
+**The mechanism, and where the gate has to live.** `TickWork::bucket` splits sixteen lists in **one pass per tick** rather
+than one pass per player per list, and an item whose actor is another player's or already dead at the tick's opening is
+dropped there. That is not enough on its own - the split runs before any turn, and an earlier turn may kill in between - so
+`TurnWork::keep_the_standing` re-checks health when the turn comes. **Removing either half reddens a fixture**: with the
+re-check gone the higher player's builder lays his stone out of a corpse; with the turn order reversed both tests flip,
+which is what makes them a pair rather than one rule stated twice. A third mutation - running the turns backwards - flips
+both, and is the one that shows the *order* is the rule and not the splitting.
+
+**What it costs, measured on the same match.** The mechanism is behaviour-preserving when collapsed: built with every
+object forced into turn 0, the split becomes one pass and the acceptance match is **bit-identical** to `main`
+(`beb6c66f58e4045c`, 154 entities, 277 repaths), so the A/B compares identical work - **20.71 s against 19.76 s** over
+24,000 ticks, **+4.8%** for the split, the nine-turn loop and the liveness checks. (Built to check the same thing, the
+ignored idle-world probe read 650 -> 672 us/tick at 2,128 entities, +3.4%.)
+
+**An optimisation was tried and withdrawn, and the reason matters.** Skipping a turn whose sixteen lists are empty halved
+that to +2.0% - and broke two animal fixtures, because **an empty turn is not nothing to do**: `shepherd` resumes a gather on
+a corpse from `self.slaughter`, which is world state and not one of the lists, so the skipped turn never restarted the
+villager on the sheep he had just killed. The saving was 2.5 percentage points of a tick and the cost was a second place the
+rule could live, so it is out (D230's review records the failing run).
+
+**The real match diverges, and that is the behaviour change on the record.** With the turns live, the same 24,000-tick
+acceptance run reads `hash=cb1f6a83a119a2a3`, 152 entities, `repaths=256` (`repaths_body` 68 -> 49) - the match plays out
+differently from `beb6c66f58e4045c` / 154 / 277, which is what an order change is supposed to do. It also takes **22.64 s
+against 19.98 s** (+13.3%, three interleaved pairs, spreads 0.2% and 2.2%): **the loop is the ~+4.8% measured above and the
+rest is a different match**, not a slower tick, and attributing it further needs a phase probe in a live match, which is
+owed and named rather than guessed.
+
+**What is still not the queue.** Inside one player's turn the objects are still simultaneous - their work is applied phase
+by phase, not object by object - and `decide` still reads the state the tick opened with, so no decision can see what an
+earlier object of the same player did. Movement, production, arrows, world timers and the death sweep remain global phases
+after all the turns. That is the **inner** loop, and it is where T12 finishes.
+
+**Basis.** `FUN_00738720` (`0x738720`), D229; `crates/sim/src/world/step.rs` (`step`, `apply_turn`, `TickWork::bucket`,
+`TurnWork::keep_the_standing`, `World::turn_slot`); `crates/sim/tests/turn_order.rs`; `docs/next-step.md`, T12 stage 2.
+Review: `docs/reviews/2026-11-15-d230-turns.md`.
