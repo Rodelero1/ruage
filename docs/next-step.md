@@ -9,7 +9,7 @@ pack moved 40 modifiers to `line_of_sight` and 26 to `range`. Reviews: `docs/rev
 `2026-11-14-d211-shoulders.md`, `2026-11-15-d213-last-moved.md`.
 
 The rest of the debt list is unchanged and is the order below: it is the user's ruling of 2026-11-14 - **live wrong numbers
-first**, then the effect interpreter, then the economy's own rules. Do not start breadth, civs, or the renderer before §1-§4.
+first**, then the effect interpreter, then the economy's own rules. Do not start breadth, civs, or the renderer before items 1-6.
 
 ## The open items, in the order I would take them
 
@@ -18,20 +18,25 @@ first**, then the effect interpreter, then the economy's own rules. Do not start
    food building every player makes. Fix is data plus the fixtures that were written against 250 (grep `250` in
    `crates/sim/tests/gather.rs` and `acceptance_*`); expect acceptance hashes to move, and say so in the review rather than
    "restating" a hash quietly.
-2. **The construction rate (resource 195) is never read.** `grep -rn '\b195\b' crates` is empty, so build times ignore the
+2. **T9 - negative packed attack values (U17) are carried and cannot be applied as read.** Six kind-4/5 commands carry
+   -136 / -226, so two effects (Non-Research, Shinkichon) land a wrong number or none. Either decode the packing or refuse
+   the effect **by name**: a refusal that stops is better than a wrong number that ships (the tree's own rule for this row).
+3. **T10 - elevation is loaded and unused, and there is no chance-to-hit roll.** The published damage formula needs
+   elevation, the pack has no heights, so the term is pinned to zero and `config/combat.toml:56` says `PROVENANCE: unknown`.
+   Either an elevation field or a stated zero with a test that says so; today it is only a sentence.
+4. **The construction rate (resource 195) is never read.** `grep -rn '\b195\b' crates` is empty, so build times ignore the
    per-civ rate and Spanish build at British speed. The mechanism exists for gather rates already (the variant's work rate);
    this is the same shape on `Building`'s construction task, and it needs a test that a 1.2x civ finishes in 5/6 the ticks.
-3. **`DisableTech` is parsed and never consulted** (`grep -rn DisableTech crates/sim` -> 0). A civ's **tech-tree bars do
+5. **`DisableTech` is parsed and never consulted** (`grep -rn DisableTech crates/sim` -> 0). A civ's **tech-tree bars do
    nothing**; only unit bars (kind 2) work. The data is in the pack; the check belongs where a research order is validated,
    beside the age and building prerequisites.
-4. **No farm reseed queue, and the resource search is unbounded.** `grep reseed crates` -> 0; the game caps a resource search
+6. **No farm reseed queue, and the resource search is unbounded.** `grep reseed crates` -> 0; the game caps a resource search
    at **LOS+5 tiles and 30 reach tests** (U22), and ours can walk the whole map. Two separate slices; the cap is the one that
    can change a match's outcome.
-5. **Two arrival failures remain, both `#[ignore]`d with their measurements** (off-tree bugs, not dependencies - they do not
-   block §1-§4): a villager rallied to its own town centre never garrisons (`inside = 0` after 600 ticks, passes on `e0312f9`,
+7. **Two arrival failures remain, both `#[ignore]`d with their measurements** (off-tree bugs, not dependencies - they do not block items 1-6): a villager rallied to its own town centre never garrisons (`inside = 0` after 600 ticks, passes on `e0312f9`,
    fails from `e21b44d`), and a builder on a 6x6 map is asked for no step at all (`step = Idle` for 1,900 ticks, 0.47 tiles
    from its waypoint, fails on old `main` too). Both are in the *arrival* family, not the collision one.
-6. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
+8. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
    with and without a stander on the route. D211's decision says so in its own words.
 
 ## Hazards a fresh session must not re-learn the hard way
