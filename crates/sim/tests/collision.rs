@@ -210,7 +210,6 @@ fn a_walker_never_ends_a_tick_inside_a_friend() {
     let mut world = seeded(&fx);
     let spearman = fx.economy.role["spearman"];
     let speed = walk_speed(&world, &fx, spearman);
-    let stander = place(&mut world, 1, 9_710, spearman, (24, 20), Fixed::ZERO);
     let walker = place(&mut world, 1, 9_711, spearman, (20, 20), speed);
 
     world
@@ -219,6 +218,15 @@ fn a_walker_never_ends_a_tick_inside_a_friend() {
             to: (26, 20),
         })
         .expect("move");
+    world.step().expect("the order lands");
+    // **The friend arrives on the lane after the route exists** (restated 2026-11-15). A body that has not moved is an
+    // obstacle to the search that meets it (D210b), and with `last_moved` finally stamped only on a real step (D213) that
+    // includes a body seeded at tick 0 - so a stander in place *before* the order is simply planned around and the pair
+    // never meet: measured, "the walker never came within the reach". The encounter has to be forced for this fixture to
+    // measure anything, so the friend is placed once the walker is under way; the rule being tested is what happens when
+    // they *do* meet.
+    let stander = place(&mut world, 1, 9_710, spearman, (24, 20), Fixed::ZERO);
+    world.step().expect("the friend lands");
 
     let reach = world.reach_between(walker, stander).raw();
     // **Restated 2026-11-14 to D210's outcome: one step of overlap at the meeting, nothing deeper after it.** The old

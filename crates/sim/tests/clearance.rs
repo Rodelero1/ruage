@@ -331,3 +331,110 @@ fn a_walker_starting_inside_a_body_steps_away_before_going_round() {
     );
     assert_eq!(points.last().copied(), Some(to), "and it must still arrive");
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// **A stander is an obstacle to the search that meets it** (D210b). The original inserts an object into its per-search
+// rectangle list when it is not ignored and **its velocity is zero** (`FUN_007f9d80`) - so a man who has stopped is
+// ground, and a man who is walking is not. The engine's `stander_*` sets read `Entity::last_moved`, and the first version
+// of the stamp wrote it on every tick for every body, so *no body that had ever moved* was a stander: measured, a man who
+// stopped in front of a walker was walked into at 7728 raw against an 8000 reach, and the plan that should have gone round
+// him was never built.
+// ---------------------------------------------------------------------------------------------------------------
+
+/// **A man who stopped before the route was planned is routed round, not walked into.** He has *moved* (so the
+/// never-moved sentinel does not cover him) and then stopped, which is exactly the case `last_moved` is stamped wrongly
+/// for today.
+#[test]
+fn a_man_who_stopped_before_the_route_was_planned_is_routed_round() {
+    let Some(mut world) = common::fresh() else {
+        return;
+    };
+    let Some((x, y)) = open_row(&world, 10) else {
+        return;
+    };
+    let walker = next_id(&world);
+    let stopper = EntityId(walker.0 + 1);
+    spawn_villager(&mut world, walker, x, y);
+    spawn_villager(&mut world, stopper, x + 4, y);
+    world.step().expect("the spawns land");
+
+    // The stopper walks away from the walker and then stops, so he ends up on the walker's lane with a history of having
+    // moved. Two ticks after the stop are given: "did not move on the last tick" has to be true of him.
+    world.submit(Command::Move {
+        unit: stopper,
+        to: (x + 6, y),
+    });
+    for _ in 0..80 {
+        world.step().expect("step");
+    }
+    world.submit(Command::Stop { unit: stopper });
+    world.step().expect("the stop lands");
+    world
+        .step()
+        .expect("one more, so the stopped man has not moved on the last tick");
+
+    // Now the walker is sent past him, and the route is planned from a world in which he is standing still.
+    world.submit(Command::Move {
+        unit: walker,
+        to: (x + 9, y),
+    });
+    let reach = world.reach_between(walker, stopper).raw();
+    let mut closest = i64::MAX;
+    for _ in 0..1_200 {
+        world.step().expect("step");
+        closest = closest.min(gap(&world, walker, stopper));
+    }
+    assert!(
+        (tile_of(&world, walker).0 - i64::from(x + 9)).abs() <= 1,
+        "the walker has to arrive: he is at {:?}, sent to ({}, {})",
+        tile_of(&world, walker),
+        x + 9,
+        y
+    );
+    assert!(
+        closest >= reach * reach,
+        "MEASURED the walker came {} raw from a man who had stopped before the route was planned, inside the {} raw their \
+         footprints need: the stopped man was not a stander to the plan, so it answered with a line through him",
+        closest.max(0).isqrt(),
+        reach
+    );
+}
+
+/// **A man who is walking is not ground.** The other half of the rule, and the one that keeps a busy base from planning
+/// round everything that moves: a body that moved on the last tick must not lengthen another body's route.
+#[test]
+fn a_man_who_is_still_walking_is_not_an_obstacle_to_the_plan() {
+    let Some(mut world) = common::fresh() else {
+        return;
+    };
+    let Some((x, y)) = open_row(&world, 10) else {
+        return;
+    };
+    let walker = next_id(&world);
+    let mover = EntityId(walker.0 + 1);
+    spawn_villager(&mut world, walker, x, y);
+    spawn_villager(&mut world, mover, x + 4, y);
+    world.step().expect("the spawns land");
+
+    // The other man is under way along the lane when the walker's route is planned.
+    world.submit(Command::Move {
+        unit: mover,
+        to: (x + 8, y),
+    });
+    for _ in 0..10 {
+        world.step().expect("step");
+    }
+    world.submit(Command::Move {
+        unit: walker,
+        to: (x + 9, y),
+    });
+    world.step().expect("the order lands");
+    let route = world.route_points(walker);
+    assert_eq!(
+        route.len(),
+        1,
+        "MEASURED the plan for a man walking down an open lane took {} waypoints ({route:?}): a body that moved on the \
+         last tick is not an obstacle to the search",
+        route.len()
+    );
+}

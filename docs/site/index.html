@@ -100,7 +100,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <header><h1>Decisions</h1>
 <p class="lede">Every rule the corpus states, what it rests on, and what it has not decided yet. Generated from <code>docs/decisions.md</code> and the U-register; nothing on this page is typed by hand, so a wrong label means the classifier is wrong and can be seen to be wrong.</p>
 <ul class="coverage" id="coverage">
-<li data-k="decisions"><b>218</b> decisions</li>
+<li data-k="decisions"><b>219</b> decisions</li>
 <li data-k="amended"><b>12</b> amended</li>
 <li data-k="corrected"><b>4</b> corrected</li>
 <li data-k="superseded"><b>7</b> superseded</li>
@@ -479,7 +479,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </div>
 </details>
 <details class="group" id="area-pathfinding-movement" data-area="Pathfinding &amp; movement" data-unfinished="0" data-undecided="2" open>
-<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">32 decisions · 2 undecided · 3 with no stated basis</span></summary>
+<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">33 decisions · 2 undecided · 3 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U5</span> Are unit speeds in tiles/second, and what is the tile size in world units? Speed 1.35 (knight) is consistent with tiles/s.</li>
 <li><span class="id">U7</span> What pathing algorithm does the game use (A, flow field, something else), and what are its cost weights?</li>
@@ -1088,7 +1088,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
 <li>clearance (axis) and 0.765 x clearance (diagonal) - a regular octagon&#x27;s circumradius is 1/cos(22.5 deg) times its edge distance, rounded out by a fifth of a per-cent so no edge cuts the circle in integer arithmetic; - the straight-line shor</li>
 <li>Two defects found in the mechanism as first committed, both by measurement rather than by reading:</li>
-<li>Basis. The DE talk&#x27;s method (shrink the units to points, expand the obstacles, be careful with the start and the end, docs/pathfinding-from-the-talk.md); FUN_007f9d80 for the per-search body list; measurement in docs/reviews/2026-11-14-d211</li>
+<li>The added work per plan - eight nodes per body, a disc test per edge, O(n^2) in nodes - is real and still unmeasured per plan: crates/sim/tests/perf.rs at a fixed entity count is the measurement owed for it.</li>
 </ul></details>
 </div>
 <div class="verdicts" data-for="D211">
@@ -1115,6 +1115,26 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <button class="verdict" data-verdict="question" data-id="D212">question</button>
 <button class="verdict" data-verdict="wrong" data-id="D212">wrong</button>
 <input class="note" data-note="D212" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D213" data-id="D213" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D213</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-14</span>
+<h3>`last_moved` is the tick a body last *moved*, or the tick it came into being</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The defect, measured. move_bodies wrote last_moved = now at both of its write sites unconditionally, so every body in the tick&#x27;s delta list was stamped - including an Idle one and one standing its pause out.</li>
+<li>Measured on clearance::a_man_who_stopped_before_the_route_was_planned_is_routed_round: 7686 raw against an 8000 reach, the plan a straight line through the man.</li>
+<li>Three fixtures were restated because the rule now works: the encounter they measured was avoided rather than forced, so the stander is placed after the route exists (collision::a_walker_never_ends_a_tick_inside_a_friend), and two others sim</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D213">
+<button class="verdict" data-verdict="agree" data-id="D213">agree</button>
+<button class="verdict" data-verdict="question" data-id="D213">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D213">wrong</button>
+<input class="note" data-note="D213" placeholder="note (saved with the verdict)">
 </div>
 </article>
 </div>
@@ -4787,7 +4807,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </ul>
 </section>
 <section id="health"><h2>How this page knows</h2>
-<p>Parsed 218 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
+<p>Parsed 219 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
 <p>A basis is recorded only from a phrase in the decision itself, and the phrase is shown beside the label. <b>No stated basis</b> is the reliable category: it needs no pattern to be right. <b>Unresolved language</b> is a reading list, not a verdict - the quoted sentence is there to be judged.</p>
 <p>The scan for broken references reads <code>docs/</code>, <code>crates/</code>, <code>config/</code>, <code>SPEC.md</code> and <code>README.md</code>. <code>tools/</code> is excluded: its fixtures name ids that are meant not to exist.</p>
 <p class="empty">Every decision heading was placed.</p>

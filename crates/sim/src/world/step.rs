@@ -1175,7 +1175,6 @@ impl World {
                 );
                 let entity = self.find_mut(id).expect("just found");
                 entity.position = moved;
-                entity.last_moved = now;
                 reached.push((id, moved));
                 continue;
             }
@@ -1190,10 +1189,19 @@ impl World {
                 .1
                 .checked_add(dy)
                 .map_err(|_| SimError::Overflow(id))?;
-            entity.last_moved = now;
             reached.push((id, entity.position));
         }
+        // **`last_moved` is stamped here and nowhere else, for bodies that actually moved** (D213). Both write sites in
+        // the loop above were unconditional, so a body that took a `(0, 0)` step - an idle one, or one that stood its
+        // pause out - was stamped on every tick, and two rules that read the field could not fire: the *past* test
+        // (`created >= moved` is never true when `moved` is always the current tick) and the stander sets (a man who had
+        // ever moved was never a stander to a plan). Measured before this: a walker ordered past a man who had stopped
+        // came **7686 raw** from him against an 8000 reach, because the plan had answered with a straight line through
+        // him (`clearance::a_man_who_stopped_before_the_route_was_planned_is_routed_round`).
         for id in movers {
+            if let Some(entity) = self.find_mut(id) {
+                entity.last_moved = now;
+            }
             self.stamp_entity(id);
         }
 

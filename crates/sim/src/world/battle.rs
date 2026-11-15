@@ -437,10 +437,11 @@ impl World {
             blast,
         } = shot;
         let id = EntityId(self.entities.iter().map(|e| e.id.0).max().unwrap_or(0) + 1);
+        let born = self.tick;
         self.insert(Entity {
             last_step: StepDecision::Idle,
             pause_remaining: 0,
-            last_moved: 0,
+            last_moved: born,
             id,
             player,
             kind: EntityKind::Projectile,

@@ -5460,9 +5460,15 @@ withdrawn. This is the same statement in the search instead of in `collide`.
   in the avoid set and a whole-tile rectangle existed to bend round - so the sub-tile claim was never exercised. It is now,
   by two tests that call `short_range_clear` directly with a hand-built `Walk` and no world under them.
 
-**What it costs.** PERF-PLACEHOLDER. The added work per plan is eight nodes per standing body and a disc test per edge; the
-graph stays `O(n^2)` in nodes, so the stander set that D210b would enable multiplies node count by nine per body - the reason
-D210b's timing has to be taken together with this one.
+**What it costs, and what was never isolated.** D211 landed in the same step as the correction to D210's tie-break (a loser
+that paused itself stood for ever), so the acceptance run it first produced - 42,378 / 43,049 ms against `main`'s
+30,970 / 30,757 ms, `repaths_body 83 -> 446` - is **both changes at once** and cannot be charged to this decision alone.
+That was reported as such rather than dressed up. What can be said now, with D213 in (the stander set finally fed), is
+that the search's own cost is not what dominates: the same match runs at `main`'s wall-clock (42,283 / 42,322 ms against
+42,596 / 41,896 ms) with `repaths` **380 against 765** and `repaths_body` **121 against 446**, because a plan routes round a
+standing man instead of colliding with him and re-planning. The added work per plan - eight nodes per body, a disc test per
+edge, `O(n^2)` in nodes - is real and still unmeasured per plan: `crates/sim/tests/perf.rs` at a fixed entity count is the
+measurement owed for it.
 
 **Basis.** The DE talk's method (*shrink the units to points, expand the obstacles, be careful with the start and the end*,
 `docs/pathfinding-from-the-talk.md`); `FUN_007f9d80` for the per-search body list; measurement in
@@ -5485,3 +5491,41 @@ every disc the start is inside - the same rule the graph's first edges use (`ste
 
 **Basis.** `FUN_007fb220` and the direction table at `0x9e252c` (read 2026-11-14); the talk's "be careful about the start and
 end points"; measurement in `docs/reviews/2026-11-14-d211-clearance.md`.
+
+### D213 - `last_moved` is the tick a body last *moved*, or the tick it came into being
+
+**What it says.** The original keeps a per-unit `+0x134 lastMoveTime` and compares it with the tick a search returned
+(`path+0x10`) to decide whether a collider is **past** - "he has not moved since I planned round this, so my route already
+accounts for him" (D210). Two of our rules read that one field: the *past* test, and the stander sets that make a body at
+rest an obstacle to the search that meets it (D210b). The original's own search inserts an object when its **velocity is
+zero** (`FUN_007f9d80`), which is the same fact seen from the other side.
+
+**The defect, measured.** `move_bodies` wrote `last_moved = now` at **both** of its write sites unconditionally, so every
+body in the tick's delta list was stamped - including an `Idle` one and one standing its pause out. A stopped villager's
+`last_moved` advanced on every tick it stood still. Both readers were therefore dead: `created >= moved` can only hold for
+a route planned the same tick, so nothing was ever past; and the stander sets answered "nobody", so the only body a plan
+treated as ground was the one a re-plan named explicitly. Measured on
+`clearance::a_man_who_stopped_before_the_route_was_planned_is_routed_round`: **7686 raw** against an 8000 reach, the plan a
+straight line through the man.
+
+**What it builds.** One choke point - the `movers` loop, which already holds the bodies whose decided step was non-zero -
+stamps the field, and nothing else does. Every construction site (`seed`, `Command::Spawn`, training, a foundation, a
+projectile) initialises it to `self.tick`, because the *second* half of the bug is that a body which has never moved keeps
+`0`, and `created >= 0` is true of every route: a body spawned **after** a walker planned looked past, and the walker walked
+through a man who did not exist when he planned. Three fixtures caught that within a minute of the first fix
+(`evasion`, `step_decision`, `repath_reasons`, each reporting "the scene never met the body").
+
+**What it changes.** The two rules become live, so a route now plans *round* a man who is standing rather than through him,
+and a collider older than the route is dropped. Three fixtures were restated because the rule now works: the encounter they
+measured was avoided rather than forced, so the stander is placed after the route exists
+(`collision::a_walker_never_ends_a_tick_inside_a_friend`), and two others simply stopped seeing a "past" body.
+
+**What it costs.** Nothing measurable, and the searches it was feared to multiply are *gone*: interleaved A/B on the
+acceptance match (`--seed 7 --ticks 48000`, release), `main` 42,596 / 41,896 ms against 42,283 / 42,322 ms - **the same
+wall-clock** - while `repaths` fall **765 -> 380** and `repaths_body` **446 -> 121 (-73%)**, because a plan now routes round
+a standing man instead of walking into him and re-planning afterwards. The match is still won (the enemy town centre razed at
+1,919.2 s against 1,857.2 s, with 144 entities against 133). D210b's 2.3x was measured with this field broken: the stander set
+was fed nothing, so the search failed more often and every failure ran the whole-route fallback.
+
+**Basis.** `+0x134` and `path+0x10` (`docs/movement-in-the-binary.md`, read 2026-11-14); `FUN_007f9d80` for the per-search
+body list; the field's own doc comment, which the code contradicted. Review: `docs/reviews/2026-11-15-d213-last-moved.md`.

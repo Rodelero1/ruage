@@ -173,10 +173,9 @@ fn a_crowd_round_one_tree() -> Option<Crowd> {
 /// **A man who cannot get his square takes the next tree of the same column.** He is sent at a tree whose every
 /// square is taken; the tree of the same column five tiles east has room. Standing beside the first one for the rest
 /// of the match - which is what `main` does - is the defect D204 names.
-/// **Parked, and named as a regression this branch carries.** It passes on `main` (`e0312f9`) and fails from `e21b44d`
-/// onwards, with or without D211's search change. What it shows: a villager sent to a second tree - because the first
-/// square was refused - ends in `Task::Return` at `(11.378, 6.947)` and never arrives anywhere, for 2,000 ticks.
-#[ignore = "regression carried by this branch: the man refused a square is stuck in Return at (11.378,6.947); passes on main e0312f9, fails at e21b44d and with D211 removed; probe in docs/next-step.md"]
+/// **Un-parked 2026-11-15: D213 fixed it.** The man was stuck in `Task::Return` at `(11.378, 6.947)` for 2,000 ticks after
+/// his first square was refused, because the stop at his drop site was not a stander to his own plan - `last_moved` was
+/// stamped on every tick, so the plan walked him into a body and then asked for a route it could not build.
 #[test]
 fn a_man_who_cannot_get_his_square_takes_the_next_tree() {
     let Some(mut crowd) = a_crowd_round_one_tree() else {

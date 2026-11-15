@@ -226,10 +226,11 @@ impl World {
                 } else {
                     Vec::new()
                 };
+                let born = self.tick;
                 let inserted = self.insert(Entity {
                     last_step: StepDecision::Idle,
                     pause_remaining: 0,
-                    last_moved: 0,
+                    last_moved: born,
                     id,
                     player,
                     kind,

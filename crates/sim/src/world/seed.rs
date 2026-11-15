@@ -305,10 +305,11 @@ impl World {
         for centre in centres {
             let here = (centre.x, centre.y);
             used.insert(here);
+            let born = self.tick;
             self.insert(Entity {
                 last_step: StepDecision::Idle,
                 pause_remaining: 0,
-                last_moved: 0,
+                last_moved: born,
                 id: EntityId(next_id),
                 player: centre.player,
                 kind: EntityKind::Building,
@@ -334,10 +335,11 @@ impl World {
                     player: centre.player,
                 })?;
                 used.insert(spot);
+                let born = self.tick;
                 self.insert(Entity {
                     last_step: StepDecision::Idle,
                     pause_remaining: 0,
-                    last_moved: 0,
+                    last_moved: born,
                     id: EntityId(next_id),
                     player: centre.player,
                     kind: EntityKind::Unit,
@@ -363,10 +365,11 @@ impl World {
                         player: centre.player,
                     })?;
                     used.insert(spot);
+                    let born = self.tick;
                     self.insert(Entity {
                         last_step: StepDecision::Idle,
                         pause_remaining: 0,
-                        last_moved: 0,
+                        last_moved: born,
                         id: EntityId(next_id),
                         player: centre.player,
                         kind: EntityKind::Unit,
@@ -392,10 +395,11 @@ impl World {
         // live in state because gathering spends it. Map order, not sorted, so two runs agree
         // for the same file.
         for node in &map.resources {
+            let born = self.tick;
             self.insert(Entity {
                 last_step: StepDecision::Idle,
                 pause_remaining: 0,
-                last_moved: 0,
+                last_moved: born,
                 id: EntityId(next_id),
                 player: 0,
                 kind: EntityKind::Resource(node.slot),
