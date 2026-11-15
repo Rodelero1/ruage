@@ -75,6 +75,13 @@ impl World {
         let attacks = self.adjusted(source.player, attacker_stats, "attack");
         let armours = self.adjusted(victim.player, victim_stats, "armour");
         let damage = damage_between(&attacks, &armours, &rules);
+        // **The elevation term, applied and neutral** (T10, D217). The published formula multiplies the per-class total by
+        // 1.25 from higher ground and 0.75 from lower, and `combat.toml` carries both - but the map format has no heights,
+        // so the factor is one and this multiply is exact. It exists so the term has a site in the damage path rather than
+        // a comment, and so the day a scenario elevation layer lands nothing in the formula has to be found again.
+        let factor = self.elevation_factor(0, 0);
+        let damage =
+            i32::try_from(i64::from(damage) * factor.raw() / self.scale).unwrap_or(i32::MAX);
         let reload_ticks = attacker_stats
             .reload
             .resolve(self.scale, "reload")
@@ -349,6 +356,21 @@ impl World {
             min_range,
         };
         landed
+    }
+
+    /// **The elevation multiplier for one hit** (T10, D217): 1.25 when the attacker stands higher, 0.75 when lower, one
+    /// otherwise. Both heights are always **0** today because nothing in the pack or the map carries a height - the dat has
+    /// none, and our map format has three terrain *types* (grass, dirt, forest floor), which are ground, not elevation. The
+    /// scenario format has an elevation layer, so the day that is imported this is the function that changes.
+    pub(crate) fn elevation_factor(&self, attacker_height: i32, target_height: i32) -> Fixed {
+        let one = Fixed::from_raw(self.scale);
+        if attacker_height > target_height {
+            return self.elevation_above.unwrap_or(one);
+        }
+        if attacker_height < target_height {
+            return self.elevation_below.unwrap_or(one);
+        }
+        one
     }
 
     /// What a blow is worth against *this* victim. A **herdable is livestock, not an opponent**: a butcher's strike -

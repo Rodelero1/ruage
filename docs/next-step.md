@@ -1,43 +1,36 @@
-# OPEN - T9: five kind-4/5 values are negative, and their packing is not decoded
+# OPEN - the civ's tech-tree effect: the construction rate and the tech bars are the same unapplied effect
 
-**Where it stands, 2026-11-15.** Three debts from the dependency tree are paid: **D214** (attribute 1 is line of sight, 12 is
+**Where it stands, 2026-11-15.** Four decisions, closing four debts from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
 range, in the importer and the engine - a sight tech had been moving a tower's *attack range*, and a sight upgrade marked no
 new ground because exploration is stamped per move) and **D215** (a farm's base is the civ's own `resources[36]` = **175**,
 read instead of the authored 250; and the Chinese team bonus, +45 on the same resource, had never been applied at all).
 D215's price is fidelity, not frames: `repaths` **380 -> 552** in the acceptance match because a plot holds 75 less food,
-which is why item 5 below matters more than it did. Reviews: `docs/reviews/2026-11-15-d214-attributes.md`,
-`docs/reviews/2026-11-15-d215-farm-base.md`.
+which is why the reseed queue below matters more than it did; **D216** refuses any packed attack value that no reading
+explains instead of shipping it as silence; and **D217** makes the elevation term a real site held at 1.0 with two tests
+proved by mutation. Reviews: `docs/reviews/2026-11-15-d214-attributes.md`, `-d215-farm-base.md`, `-d216-packed-attack.md`,
+`-d217-elevation.md`.
 
 The order below is the user's ruling of 2026-11-14 - **live wrong numbers first**, then the effect interpreter, then the
-economy's own rules. Do not start breadth, civs, or the renderer before items 1-5.
+economy's own rules. Do not start breadth, civs, or the renderer before items 1-2.
 
 ## The open items, in the order I would take them
 
-1. **T9 - negative kind-4/5 values (U17).** Measured, so the next session starts from the data rather than the name: the pack's
-   command tuple is `[type, unit, unit_class, attribute, value]`, and for kind 4/5 a **positive** value is the packed word
-   `class * 256 + amount` - Forging's `[4, -1, 6, 9, 1025.0]` is class 6, attack class **4**, +1, and the importer decodes it
-   correctly. Six commands carry a **negative** word instead, and the importer emits `unpacked:8` / `unpacked:9`, which the
-   engine silently ignores: effect **217** (`[5, -1, 13, 9, -136.0]`, classes 13/54/22), effect **506** (Shinkichon, tech 445,
-   `[4, 280, -1, 9, -226.0]`, mangonel/onager/siege onager), and effects **80/81/82** (`[4, 1120, -1, 8, -1025.0]`).
-   **The open question is the sign convention**, and the two candidate readings of -226 are not the same game: floor division
-   gives (class -1, amount 30) and truncation gives (class 0, amount -226), and neither is obviously Shinkichon's. Probe
-   `Zaydme/openaok` and `genie`'s effect application first, then the exe; **refuse the effect by name** if no reading is
-   defensible - a refusal that stops is better than a wrong number that ships.
-2. **T10 - elevation is loaded and unused, and there is no chance-to-hit roll.** The published damage formula needs elevation,
-   the pack has no heights, so the term is pinned to zero and `config/combat.toml:56` says `PROVENANCE: unknown`. Either an
-   elevation field or a stated zero with a test that says so; today it is only a sentence.
-3. **The construction rate (resource 195) is never read** - and the probe has a surprise in it: **every civ's `resources[195]`
-   is 0.0 in this dat**, so reading it may change nothing at all. Decide that first (a probe over the 32 rows), then either
-   wire the multiplier or record that HD carries no per-civ construction rate and close the debt as a measurement.
-4. **`DisableTech` is parsed and never consulted** (`grep -rn DisableTech crates/sim` -> 0). A civ's **tech-tree bars do
-   nothing**; only unit bars (kind 2) work. This is T2's kind-102 path and lands with the effect interpreter, not before it.
-5. **No farm reseed queue, and the resource search is unbounded.** `grep reseed crates` -> 0; the game caps a resource search
+1. **The civ's tech-tree effect is loaded and only its unit bars are consumed.** Measured, and it is one dependency wearing
+   two debt names: the Spanish builder bonus is a **kind-1 `set` of resource 195 to 1.3** inside the civ's *tech-tree* effect
+   (Spanish `tech_tree_effect = 446`, whose `resource_modifiers` are `[{resource: 195, mode: 0, value: 1.3}]`), and the same
+   effect carries the civ's **kind-102 tech bars** (`[102, -1, -1, -1, 433.0]` ...). Today `civ_barred_unit` consumes only the
+   kind-2 rows, so a Spanish builder works at British speed and a civ's barred techs still appear. **Resource 195 is 0.0 in
+   every civ's row**, so the base is "unset" and must default to **1.0**, not 0 - a 0 multiplier would freeze every site.
+   Slice: apply the tech-tree effect's resource rows (195 -> construction rate) and its kind-102 rows (tech bars), with a test
+   that a Spanish villager finishes a house in the ticks an English one takes divided by 1.3, and one that a barred tech is
+   refused at order time. The kind-101 rows (tech cost) are the effect interpreter's, later.
+2. **No farm reseed queue, and the resource search is unbounded.** `grep reseed crates` -> 0; the game caps a resource search
    at **LOS+5 tiles and 30 reach tests** (U22). D215 made the reseed path hot: 43% more plots are laid per match.
-6. **Two arrival failures remain, both `#[ignore]`d with their measurements** (off-tree bugs, not dependencies - they do not
-   block items 1-5): a villager rallied to its own town centre never garrisons (`inside = 0` after 600 ticks, passes on
-   `e0312f9`, fails from `e21b44d`), and a builder on a 6x6 map is asked for no step at all (`step = Idle` for 1,900 ticks,
-   0.47 tiles from its waypoint, fails on old `main` too). Both are in the *arrival* family, not the collision one.
-7. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
+3. **Two arrival failures remain, both `#[ignore]`d with their measurements** (off-tree bugs, not dependencies): a villager
+   rallied to its own town centre never garrisons (`inside = 0` after 600 ticks, passes on `e0312f9`, fails from
+   `e21b44d`), and a builder on a 6x6 map is asked for no step at all (`step = Idle` for 1,900 ticks, 0.47 tiles from its
+   waypoint, fails on old `main` too). Both are in the *arrival* family, not the collision one.
+4. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
    with and without a stander on the route. D211's decision says so in its own words.
 
 ## Hazards a fresh session must not re-learn the hard way

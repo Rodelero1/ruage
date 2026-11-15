@@ -5648,3 +5648,37 @@ Until one of those is read, no number is invented.
 negative); `Zaydme/openaok` `src/ecs/Effects.cpp` `ModifyClassList` (truncating `d_int / 256`); `Attribute::attack_from_packed`'s
 own `0..=65_535` guard, which already refuses a negative word; Forging's `[4, -1, 6, 9, 1025.0]` as the positive control.
 Review: `docs/reviews/2026-11-15-d216-packed-attack.md`.
+
+### D217 - elevation is a term that is held at one, with a site and a test, because nothing carries a height
+
+**What it says.** The published damage formula multiplies the per-class total by **1.25** when the attacker stands higher and
+**0.75** when lower, and `combat.toml` carries both numbers. **Nothing in our data carries a height**: the dat has no such
+field, and our map format has three terrain *types* - grass, dirt, forest floor - which are ground, not elevation. So the
+term is applied at exactly one place and answers **one**: `World::elevation_factor(attacker_height, target_height)`, called
+from the single damage site with two zeros, multiplying a hit by a factor of exactly one.
+
+**Why not delete it.** Because the numbers would come back without a home. Deleting the pair removes the day-one question
+"where does elevation go?", and the next session re-derives 1.25/0.75 from a published table it may get wrong. Held this way,
+turning elevation on is: give the call site two heights (the scenario format has an elevation layer) and nothing else changes.
+
+**What it builds.**
+
+- The two multipliers are stored when `combat.toml` loads (`elevation_above` / `elevation_below`, `Option<Fixed>` because a
+  hand-written test pack may leave them unset) rather than re-read per hit.
+- `elevation_factor` is the only consumer, and the damage site multiplies by it. With a factor of one the multiply is exact -
+  no rounding, which is asserted rather than assumed.
+- A test that a spear's **4** against a villager stays four where 1.25 would make it five, and that the content still says
+  1.25: the assertion fails the day someone applies the multiplier without a height underfoot. Proved by mutation (forcing the
+  above-ground branch fails it with 5 against 4).
+- A test that a **zero, a negative or an infinity** multiplier is refused at load with a message naming the key - the guard
+  existed and nothing proved it. Proved by mutation (removing the guard makes the test fail).
+
+**What it costs.** One integer multiply and one division per blow by a factor that is exactly the scale, so the value is
+unchanged; the stored pair is two `Option<Fixed>` fields. No per-tick cost.
+
+**What is still open.** Whether 5.7's multipliers *are* 1.25/0.75 (U4's residual): the pair is published for AoC, and a 5.7 save
+with a unit on a hill would settle it. Recorded in `combat.toml` where the numbers live.
+
+**Basis.** `config/combat.toml`'s `[elevation]` block and its provenance line; `crates/data/src/combat.rs`'s existing
+refusal for a non-positive multiplier; `crates/sim/src/lib.rs`'s `damage_between`, which sums per class and floors at the
+minimum, with the elevation multiply one step outside it. Review: `docs/reviews/2026-11-15-d217-elevation.md`.

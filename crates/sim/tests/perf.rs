@@ -312,3 +312,31 @@ fn what_a_match_loads_and_installs_costs() {
         start.elapsed().as_secs_f64() / f64::from(reps) * 1e6
     );
 }
+
+/// A measurement, not a rule: what the elevation term costs per hit (D217). The factor is exactly one, so the value cannot
+/// change - this is only the price of the multiply and the divide that hold the term's site. Times a plain `damage * k / k`
+/// on the same operands, so the figure is the arithmetic and not the call.
+#[test]
+#[ignore = "measurement, not a rule"]
+fn the_elevation_multiply_per_hit() {
+    let scale = 20_000i64; // the engine scale
+    let damages = [1i64, 4, 7, 20, 40];
+    let reps = 1_000_000u32;
+    let per = |f: &dyn Fn(i64) -> i64| -> f64 {
+        let start = std::time::Instant::now();
+        let mut sink = 0i64;
+        for _ in 0..reps {
+            for damage in damages {
+                sink += std::hint::black_box(f(damage));
+            }
+        }
+        std::hint::black_box(sink);
+        start.elapsed().as_secs_f64() / (f64::from(reps) * damages.len() as f64) * 1e9
+    };
+    let scaled = per(&|damage| damage * scale / scale);
+    let bare = per(&|damage| damage);
+    println!(
+        "elevation multiply per hit: {scaled:.3} ns against {bare:.3} ns for the bare sum (+{:.3} ns)",
+        scaled - bare
+    );
+}

@@ -1007,6 +1007,11 @@ pub struct World {
     damage_rules: Option<DamageRules>,
     /// How fast a shot flies, resolved once at load: zero means the pack shoots instantly.
     combat_projectile_speed: Option<Fixed>,
+    /// **The elevation multipliers from `combat.toml`** (T10, D217), held so the damage term has one site. They are
+    /// consulted only when the two heights differ, and both heights are **0** today: the dat carries no heights and our map
+    /// format has terrain types, not elevation. `Option` because a hand-written test pack may leave them unset.
+    elevation_above: Option<Fixed>,
+    elevation_below: Option<Fixed>,
     /// The same speed as a per-tick step, because the tick loop must not divide.
     projectile_step: i64,
     /// How far off the mark a shot lands when its accuracy roll fails, in engine units. Zero means every
@@ -1542,6 +1547,8 @@ impl World {
             walk: None,
             damage_rules: None,
             combat_projectile_speed: None,
+            elevation_above: None,
+            elevation_below: None,
             projectile_step: 0,
             accuracy_scatter: 0,
             garrison_eject_at: Fixed::ZERO,
@@ -2270,6 +2277,16 @@ impl World {
             minimum,
             missing_armour,
         });
+        self.elevation_above = combat
+            .elevation
+            .attacker_above
+            .resolve(self.scale, "elevation.attacker_above")
+            .ok();
+        self.elevation_below = combat
+            .elevation
+            .attacker_below
+            .resolve(self.scale, "elevation.attacker_below")
+            .ok();
         self.combat_projectile_speed = combat
             .projectile_speed
             .resolve(self.scale, "combat.projectile_speed")

@@ -50,6 +50,10 @@ bonus_resist_default = 0.0
 attacker_above = 1.25
 attacker_below = 0.75
 # PROVENANCE: published. 5.7-specific values unverified — the residual of U4.
+# **Held, not applied** (T10, D217): the term has one site in the damage path (`World::elevation_factor`) and it is called
+# with two heights that are always 0, because the dat carries none and our map format has three terrain *types* (grass, dirt,
+# forest floor) rather than elevation. The scenario format has an elevation layer, so importing it is what would turn these
+# numbers on. A zero, a negative or an infinity here is refused at load.
 
 [attack_timing]
 damage_at_animation_fraction = 0.5

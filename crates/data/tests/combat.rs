@@ -75,3 +75,28 @@ fn an_unknown_key_is_refused() {
         .to_string();
     assert!(err.contains("creep"), "got: {err}");
 }
+
+/// **A multiplier that is not a multiplier is refused** (T10, D217). The elevation pair is loaded and held at one today, so
+/// nothing exercises it - but a `0.0` would zero every hit and a negative would invert damage, and the loader already refuses
+/// both with a message that names the key. Nothing proved that until now.
+#[test]
+fn a_non_positive_or_infinite_elevation_multiplier_is_refused() {
+    for (key, bad) in [
+        ("attacker_above = 0.0", "attacker_above"),
+        ("attacker_below = -0.5", "attacker_below"),
+        ("attacker_above = inf", "attacker_above"),
+    ] {
+        let text = if key.starts_with("attacker_above") {
+            GOOD.replace("attacker_above = 1.25", key)
+        } else {
+            GOOD.replace("attacker_below = 0.75", key)
+        };
+        let error = load_combat_str(&text, "combat.toml")
+            .expect_err("a multiplier of zero, a negative or an infinity is not a multiplier");
+        let message = error.to_string();
+        assert!(
+            message.contains("elevation.") && message.contains(bad),
+            "the refusal must name the key and the value: {message}"
+        );
+    }
+}

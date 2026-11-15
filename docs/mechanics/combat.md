@@ -181,7 +181,10 @@ tiles from where it started.
 
 ## Deliberate limits in this slice
 
-- **No elevation** — no terrain heights to apply it to.
+- **No elevation** — no terrain heights to apply it to. The term is *held* rather than deleted (D217): `combat.toml` carries
+  the 1.25/0.75 pair, `World::elevation_factor` is the one site that would apply it, and it is called with two heights that are
+  always 0. The dat has no heights; our map format has terrain types, not elevation; the scenario format has an elevation
+  layer, so importing a scenario is what turns this on.
 - **No projectiles** — ranged units need a projectile model and travel time.
 - **Damage lands at the start of the swing**, not at the 50% animation point `combat.toml`
   describes, because the animation length is not in the data we have.

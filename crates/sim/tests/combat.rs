@@ -681,3 +681,40 @@ fn a_reissued_attack_keeps_the_reload_it_has_run() {
         "two blows by tick 80, not three: a re-order must not reset the swing"
     );
 }
+
+/// **The elevation term is applied, and it is exactly one** (T10, D217). The published formula multiplies a hit by **1.25**
+/// from higher ground and **0.75** from lower, and `combat.toml` carries both numbers - but the map format has no heights,
+/// so the term resolves at one site and answers one. A spear's **4** damage against a villager stays four, where 1.25 would
+/// have made it five; the content still says 1.25, which is the point of a term that is held rather than deleted.
+#[test]
+fn a_hit_is_not_scaled_by_elevation_because_the_map_carries_no_heights() {
+    let Some(fx) = fixture() else { return };
+    let (mut world, spearman, villager) = duel(&fx);
+    world
+        .submit_checked(Command::Attack {
+            attacker: spearman,
+            target: villager,
+        })
+        .expect("the attack order must be accepted");
+
+    let mut dealt = None;
+    for _ in 0..(2 * world.tick_rate_hz() * 4) {
+        world.step().expect("step");
+        let hp = world.entity(villager).expect("villager").hp;
+        if hp < 25 {
+            dealt = Some(25 - hp);
+            break;
+        }
+    }
+    let dealt = dealt.expect("the blow lands");
+    assert_eq!(
+        dealt, 4,
+        "a spearman's class-4 attack of four against a villager's zero class-4 armour, unscaled"
+    );
+    // 4 x 1.25 would be 5, and 1.25 is exactly what the content holds: the term is *held*, not applied. This is the
+    // assertion that fails the day someone applies the multiplier without a height for the terrain underfoot.
+    assert_ne!(
+        dealt, 5,
+        "the content's 1.25 must not be applied to a flat map"
+    );
+}
