@@ -5721,3 +5721,31 @@ tick, not per builder-tick. The acceptance match is byte-identical (`hash=beb6c6
 **Basis.** The Spanish row and effect 446 via a probe of `empires2_x2_p1.dat` (`resources[195] == 0.0` for all 32 civs,
 `tech_tree_effect = 446`, `resource_modifiers = [{resource: 195, mode: 0, value: 1.3}]`); `docs/mechanics/README.md`'s U19/U8
 answers; `SimError::TechBarred` and `barred_by` for the correction. Review: `docs/reviews/2026-11-15-d218-construction-rate.md`.
+
+### D219 - civ and team bonuses are a seam with a written design, not v1 work
+
+**The ruling (the owner, 2026-11-15).** *"Team bonuses and other civilisation bonuses can wait. Let's just have the design ready
+for it to be implemented in the future."*
+
+**Why it is the right call, measured.** Of the **31** civs with a team-bonus effect, the modifiers name `line_of_sight` 24
+times, `gather_rate` 17, **`other:101` 16**, `population` 12, `attack` 11, **`other:23` 8**, **`other:100` 7**, `minimum_range` 3
+and `range` 2. So **23 of the ~100 team-bonus modifiers land on an attribute nothing in the engine reads**, and `other:23`
+another eight - "apply team bonuses" is not one switch, it is a table two thirds of which is still unnamed. Two of the bonuses
+also carry a **kind-102 row** (a bonus that *bars* a tech), which the current mental model does not cover, and kinds **3** and
+**6** appear in this data with no reader anywhere.
+
+**What was written instead of code.** `docs/civ-bonuses.md`, and a sixth seam in `docs/dependency-tree.md` §7b (**R6**): one
+resolved `BonusTable` per player - resources, attributes keyed by the enum rather than by string, barred techs, barred units,
+granted units - rebuilt on the two events that can change it (a tech landing, the civ being set), with the five consumers that
+walk those three tables today becoming five readers of one table. The proof is stated as a test: a fixture **pack** with a
+synthetic civ whose team bonus increments resource 36 and names `line_of_sight`, and the existing consumers answering 265 on a
+farm and a wider tower sight **with no new engine word**.
+
+**What this decision does *not* do.** It invents no numbers, names no attribute, and implements nothing: the five walks stay
+exactly as they are, and the two team-bonus resource rows that matter today (36 for the farm line) keep working through
+`farm_food_bonus` as D215 left them. R6 is placed in Phase 3b beside R1-R5 - after the determinism work, before civ breadth,
+because breadth is what multiplies the call sites it replaces.
+
+**Basis.** A probe over `config/gamedata/civs.toml` and `effects.toml` (counts in `docs/civ-bonuses.md`); the five consumer
+sites (`barred_by`, `civ_barred_unit`, `modifiers_for`, `farm_food_bonus`, `construction_rate`); D214's finding that the
+attribute *string* is the interface, which is what makes a resolved table worth writing before breadth.

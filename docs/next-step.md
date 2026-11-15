@@ -32,6 +32,16 @@ economy's own rules. Do not start breadth, civs, or the renderer before items 1-
 4. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
    reads yet. This is the interpreter slice the tree puts in Phase 1; it is *not* a prerequisite for items 1-3.
 
+## Ruled out of the current stretch, with the reason written down
+
+- **Civ and team bonuses** (the owner, 2026-11-15: *"can wait ... just have the design ready"*). The design is
+  `docs/civ-bonuses.md` and seam **R6** in `docs/dependency-tree.md`, and the reason it is a design rather than a switch is
+  measured there: **23 of the ~100 team-bonus modifiers name attributes no consumer reads** (`other:100`, `other:101`), two
+  bonuses carry a **kind-102** row (a bonus that bars a tech), and kinds 3 and 6 have no reader anywhere. D219.
+- **The farm reseed queue** - a control feature (a new command, its own state, an AI policy), not a fix, and the owner has not
+  chosen between implementing it small, shipping only the search bound, or recording it out of v1. Do **not** start it on a
+  guess: the two arrival bugs below are independent of the answer and come first.
+
 ## Hazards a fresh session must not re-learn the hard way
 
 - **A missing pack passes every world test silently.** `config/gamedata/` is gitignored, so a fresh worktree has none, and

@@ -229,6 +229,7 @@ small enough to land in one pass. None of them puts a game's word in `crates/` (
 | **R3** | **The random protocol: a roll draws from a stream, and the streams are reseeded every tick** | two PCG32 streams, `sim` and `map`, chosen at load and **never reseeded** (`docs/decisions.md` D9). The original has **11 WELL512a streams that all take the frame seed at the start of every tick** (`genie:math/rng.rs`, `genie:docs/ENGINE_SYSTEMS.md` "Determinism") — so a draw in one tick cannot reach the next, and a replay cannot depend on how many rolls happened earlier. **T15** | the same seed gives the same sequence; a match that never rolls leaves the state hash identical; and a roll added on tick *n* does not move a draw made on tick *n+1* — the property the original's protocol exists for |
 | **R4** | **Victory is a table the engine evaluates, not a function** | `MatchOutcome` is conquest, derived from the seat roster | `[[victory]]` in content, with kinds the engine can evaluate from state (seats, relics, a building standing); the conquest rule re-expressed in it, and **the acceptance hash does not move** |
 | **R5** | **A price is state, not a field** | the stockpile is a fixed-width row per player; nothing moves | prices as a hashed vector derived from content and updated by a rule; a world with no market hashes exactly as today |
+| **R6** | **One resolved bonus table per player** (the owner's 2026-11-15 ruling: civ and team bonuses wait, the design is ready) | **five** consumers walk three effect tables and each re-decides which effects belong to a player: `barred_by` (kind 102), `civ_barred_unit` (kind 2), `modifiers_for` (kind 0/4/5, matched by attribute **string**), `farm_food_bonus` (resource 36) and `construction_rate` (resource 195) | a fixture **pack** with a synthetic civ whose team bonus increments resource 36 and names `line_of_sight`, and a test that the existing consumers answer **265** on a farm and a wider tower sight - with no new engine word. Design and the measured data: `docs/civ-bonuses.md` |
 
 **Where they go:** after **Phase 3** (they touch the state hash and the RNG, which Phase 3 settles) and **before Phase 5**
 (breadth multiplies the call sites each seam has to change). **R1 is the expensive one** and the only one on a hot path —
@@ -294,7 +295,8 @@ must be recorded as one.
 
 ### Phase 3b — the seams for the mechanics that are deferred but must not be blocked (§7b)
 15. **R3** (**T15**'s eleven-stream protocol, then a roll) and **R4** (victory as a content table) first, then **R5** (a price is state), then
-    **R2** (an order that is an ability), then **R1** (a body's domain).
+    **R2** (an order that is an ability), then **R6** (one resolved bonus table - the civ/team-bonus seam, whose design is written
+    and whose *numbers* are still the data's), then **R1** (a body's domain).
 
 *Why this order inside the phase:* R3 and R4 move the state hash, so they go first while the acceptance hash is still the
 instrument; R1 is a hot-path refactor and goes last, with a before/after tick measurement and a byte-identical hash as its
