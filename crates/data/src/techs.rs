@@ -71,11 +71,16 @@ pub struct EffectCommand {
 }
 
 /// The values an effect can change, as far as the techs that use them show. The ids come from the
-/// data: 0 is hit points (Loom adds 15, Masonry multiplies by 1.1), 1 is range (Fletching adds 1),
-/// 8 is armour and 9 is attack.
+/// data: 0 is hit points (Loom adds 15, Masonry multiplies by 1.1), **1 is line of sight** (Town
+/// Watch adds 4 to buildings and towers), **12 is range** (Fletching adds 1), 8 is armour and 9 is
+/// attack. The two were the other way round here and in the importer until T1b/D214, which is how a
+/// sight upgrade came to move a tower's attack range.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Attribute {
     HitPoints,
+    /// Attribute 1: how far the unit sees.
+    LineOfSight,
+    /// Attribute 12: how far it shoots.
     Range,
     Armour,
     /// Attack is **packed**: the value is `class * 256 + amount`, so Forging's 1025 is class 4
@@ -93,8 +98,9 @@ impl Attribute {
     pub fn from_id(id: i16) -> Option<Self> {
         Some(match id {
             0 => Attribute::HitPoints,
-            1 => Attribute::Range,
+            1 => Attribute::LineOfSight,
             8 => Attribute::Armour,
+            12 => Attribute::Range,
             9 => Attribute::Attack {
                 class: 0,
                 amount: 0,

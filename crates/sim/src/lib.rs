@@ -1068,6 +1068,11 @@ pub struct World {
     /// from `civ_by_player`, so it is not hashed separately. The data writes a team bonus with the same
     /// command shapes as a tech's effect - the Slavs' is twelve kind-0 population sets (D41).
     bonus_effects: [Vec<u32>; MAX_PLAYERS],
+    /// **The line-of-sight modifiers each player has in force** (T1b, D214), kept per player instead of gathered per
+    /// question. `sight_of` runs for every body that moved, every tick, and asking `modifiers_for` there meant a table
+    /// lookup per researched tech per body: measured, that was **+7.2% of a 24,000-tick acceptance run**. Rebuilt when a
+    /// tech lands and when the civ bonuses are set; derived from those two, so it is not state and not hashed.
+    sight_modifiers: [Vec<ruage_data::Modifier>; MAX_PLAYERS],
     /// Units that some tech *makes available* (kind-2 rows with a positive flag). Derived from the
     /// effects table at load: content, not state, so it is not hashed.
     gated_units: BTreeSet<u32>,
@@ -1468,6 +1473,7 @@ impl World {
             civs: None,
             civ_by_player: [None; MAX_PLAYERS],
             bonus_effects: std::array::from_fn(|_| Vec::new()),
+            sight_modifiers: std::array::from_fn(|_| Vec::new()),
             team_by_player: [1, 2, 3, 4, 5, 6, 7, 8],
             teams_named: false,
             rallies: BTreeMap::new(),
@@ -3240,15 +3246,15 @@ impl World {
             .iter()
             .filter(|entity| entity.player == player && entity.kind == EntityKind::Unit)
             .any(|entity| {
-                let los = entity
-                    .unit
-                    .and_then(|unit| units.unit(units.root(unit)))
-                    .and_then(|stats| stats.los.resolve(self.scale, "los").ok())
-                    .unwrap_or(Fixed::ZERO);
+                // **The same sight the fog uses** (T1b, D214): `effective_los` applies the owner's line-of-sight
+                // modifiers, so a watch-tower tech moves this radius exactly as it moves the fog's.
+                let Some(stats) = entity.unit.and_then(|unit| units.unit(units.root(unit))) else {
+                    return false;
+                };
                 let here = self.tile_of(entity.position);
                 let dx = i64::from(here.0.abs_diff(tile.0));
                 let dy = i64::from(here.1.abs_diff(tile.1));
-                let reach = los.raw() / self.scale;
+                let reach = self.effective_los(player, stats) / self.scale;
                 let reach = reach.max(0);
                 // A disc, like the vision layer: squared distance against squared radius.
                 dx * dx + dy * dy <= reach * reach
@@ -4215,6 +4221,11 @@ impl World {
             if let Some(bonus) = civs.by_id(id).and_then(|civ| civ.team_bonus_effect) {
                 self.bonus_effects[index].push(bonus);
             }
+        }
+        // The team bonuses are part of the sight a player has from the first tick, so the cache is rebuilt here as well
+        // as on every research (T1b).
+        for index in 0..MAX_PLAYERS {
+            self.refresh_sight_modifiers(u8::try_from(index + 1).unwrap_or(1));
         }
         self.civs = Some(civs.clone());
         Ok(())

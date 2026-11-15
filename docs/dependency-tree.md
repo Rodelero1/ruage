@@ -80,7 +80,8 @@ are ordered by what they unblock, not by size.
 
 | id | Debt | Why it is a dependency, not a nit | Evidence (grep it) | Unblocks |
 |---|---|---|---|---|
-| **T1** | **Attribute 1 is line of sight, 12 is range — and the names come from the importer** | Town Watch/Town Patrol move a tower's **attack range** 8 → 12 where the game moves its *sight*, and Greek Fire (effect 518, attribute 12) is inert because the pack calls 12 `other:12`. Two repos: the name table is `ruage-tools` `ATTRIBUTE_NAMES` (`1: "range"`, no 12), the classifier is `crates/data/src/techs.rs:96`, and no sight modifier is consumed anywhere. | `ruage-tools/genconfig/records.py:125`, `crates/data/src/techs.rs:96`, raw `los` at `lib.rs:3155`, `seed.rs:146`, `memory.rs:250`, `report.rs:128` (U21) | S10, S11, S16, M2, and every tower/archer upgrade |
+| **T1** | **PAID (D214) — attribute 1 is line of sight, 12 is range, in the pack and in the engine** | Was: Town Watch/Town Patrol moved a tower's **attack range** 8 → 12 where the game moves its *sight*, and Greek Fire (effect 518, attribute 12) was inert because the pack called 12 `other:12`. Closed 2026-11-15 in two repos: `ruage-tools@5995511` (`1: "line_of_sight"`, `12: "range"`, two red-first tests) and the engine (`Attribute::LineOfSight`/`Range`, one `effective_los` consumer at every raw `los` read, a panel that shows effective range and sight, and `restamp_player`, because exploration is stamped per *move* and a tower never moves). Measured: tower `los` 1000 → 1400, range 800 unchanged; the pack moved 40 modifiers to `line_of_sight` and 26 to `range`. | `tests/modifiers.rs` `town_watch_widens_a_building_s_sight_and_leaves_its_range_alone`; `crates/sim/src/world/research.rs` `effective_los`; `state.rs` `restamp_player` (D214) | S10, S11, S16, M2 |
+| **T1-sight** | **Seen, not yet consumed by the AI's memory of a *player's* ground** | The fog consumes the sight modifiers now (T1). What is still raw: `seed.rs`'s per-unit sight table (livestock flee radii) — keyed by unit id, not by player, and it is the *animal's* sight. Left raw on purpose and recorded in D214. | `crates/sim/src/world/seed.rs:146` | nothing yet |
 | **T2** | **Four effect kinds are still unread: 0, 101 (tech cost), 102 (disable tech), 103 (tech time)** | 97 tech-cost and 25 tech-time commands apply nothing today; a cheaper-tech bonus or a civ's barred tech silently does nothing. `DisableTech` is *parsed* and never consulted. | `crates/data/src/techs.rs:131 DisableTech`, `:501 kind 101`; `grep -rn DisableTech crates/sim` → **0** (U2) | S7, S8, S16, M2 |
 | **T3** | **`build` counts builder-ticks and never reads construction rate (resource 195)** | Spanish barracks finish in the same ticks as a British one; the dat's 1.3 is loaded and unused. Also the civ's kind-1 *sets* are not applied at match start. | `grep -rn '\b195\b' crates --include='*.rs'` → no hit (U19) | S5, S16, M2 |
 | **T4** | **Farm food base is 250 in `economy.toml`; the dat's base is 175** | A Horse Collar farm holds 325 where the game holds 250; a Chinese one 295 against 220. The number is authored, not read from the pack's per-civ resource 36. | `config/economy.toml` `[farm.depletion] food_per_farm = 250`; asserted at `crates/data/tests/economy.rs:78` (U20) | Economy fidelity, S16, M2 |
@@ -243,12 +244,12 @@ phase's last item green and pushed.** Every item here is named by its id, so `to
 table defines and no phase names — the check this list exists for.
 
 ### Phase 0 — the live wrong numbers (no owner input needed)
-1. **T1a** — the attribute names, **in the importer**: `ruage-tools/genconfig/records.py`'s `ATTRIBUTE_NAMES` has
+1. **T1a** — *done, D214* — the attribute names, **in the importer**: `ruage-tools/genconfig/records.py`'s `ATTRIBUTE_NAMES` has
    `1: "range"` and no `12`, so the pack names 177 range modifiers from attribute 1 and attribute 12 becomes `other:12`.
    Two dict entries (`1: "line_of_sight"`, `12: "range"`), its own pytest, a regenerated `config/gamedata/`, and the two
    facts it must keep (Fletching is +1 range; Town Watch is +4 line of sight for classes 3 and 52). **A second
    repository** (D12) — which is why T1 looked like a one-line change and is not.
-2. **T1b** — the engine half: `Attribute::from_id` (`crates/data/src/techs.rs:96`) gains `LineOfSight` and `Range` in the
+2. **T1b** — *done, D214* — the engine half: `Attribute::from_id` (`crates/data/src/techs.rs:96`) gains `LineOfSight` and `Range` in the
    right slots, and **vision consumes a line-of-sight modifier** — `los` is read raw at four sites (`lib.rs:3155`,
    `seed.rs:146`, `memory.rs:250`, `report.rs:128`), so a +4 sight tech is inert unless this lands with T1a. Range
    modifiers *are* consumed (`battle.rs:96`), which is exactly why attribute-1 modifiers reach combat's range today.

@@ -442,6 +442,23 @@ impl World {
         }
     }
 
+    /// **Re-stamp one player's entities** (T1b, D214). Exploration is stamped per *move*, and a building is stamped when
+    /// it is placed - so a sight upgrade would otherwise never mark the ground its owner can now see: measured, a watch
+    /// tower with Town Watch (+4 sight) still could not see a tile twelve tiles away, because that tile had never been
+    /// explored and `vision` refuses to call unexplored ground visible. Called when a tech lands, which is once per
+    /// research and idempotent for the techs that change no sight.
+    pub(crate) fn restamp_player(&mut self, player: u8) {
+        let ids: Vec<EntityId> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.player == player)
+            .map(|entity| entity.id)
+            .collect();
+        for id in ids {
+            self.stamp_entity(id);
+        }
+    }
+
     /// Stamp every entity that is already in the world. Seeding and tests that hand-place entities use
     /// this; the tick never does, because it stamps the entities that moved as it moves them.
     pub(crate) fn stamp_all(&mut self) {

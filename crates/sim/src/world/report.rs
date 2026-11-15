@@ -3,7 +3,7 @@
 //! Split out of `lib.rs` under D145, verbatim.
 use ruage_data::Effects;
 
-use crate::{CardItem, CardTarget, EntityId, EntityKind, SimError, UnitStats, World};
+use crate::{CardItem, CardTarget, EntityId, EntityKind, SimError, UnitStats, World, scale_fixed};
 impl World {
     #[must_use]
     pub fn card(&self, player: u8, entity: EntityId) -> Vec<CardItem> {
@@ -118,14 +118,27 @@ impl World {
                 Err(_) => 0,
             }
         };
+        // **Range and line of sight are effective too** (T1b, D214): an upgrade that moves either must move the card,
+        // or the panel disagrees with the simulation. Attack and armour already went through `adjusted`; these two go
+        // through the same modifier list by name, which is why the pack's attribute names are the interface.
+        let effective = |value: ruage_data::MaybeFixed, key: &str| -> i32 {
+            match value.resolve(self.scale, key) {
+                Ok(base) => hundredths(
+                    scale_fixed(base, self.scale, &self.modifiers_for(player, unit, key))
+                        .raw()
+                        .max(0),
+                ),
+                Err(_) => 0,
+            }
+        };
         Some(UnitStats {
             max_hp: self.max_hp(player, unit_id).ok()?,
             attack: of_class(&attacks, 3).max(of_class(&attacks, 4)) * 100,
             armour_melee: of_class(&armours, 4) * 100,
             armour_pierce: of_class(&armours, 3) * 100,
-            range: fractional(unit.range, "range"),
+            range: effective(unit.range, "range"),
             speed: fractional(unit.speed, "speed"),
-            los: fractional(unit.los, "los"),
+            los: effective(unit.los, "line_of_sight"),
             work_rate: fractional(unit.work_rate, "work_rate"),
             carry: i32::from(unit.carry),
         })

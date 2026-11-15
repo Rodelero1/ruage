@@ -5529,3 +5529,49 @@ was fed nothing, so the search failed more often and every failure ran the whole
 
 **Basis.** `+0x134` and `path+0x10` (`docs/movement-in-the-binary.md`, read 2026-11-14); `FUN_007f9d80` for the per-search
 body list; the field's own doc comment, which the code contradicted. Review: `docs/reviews/2026-11-15-d213-last-moved.md`.
+
+### D214 - attribute 1 is line of sight and 12 is attack range, and the pack's names are the interface
+
+**What it says (from the dat and its own effect table).** A kind-0 command names an attribute: **1 is line of sight** -
+Town Watch and Town Patrol add 4 to it for unit classes 3 (buildings) and 52 (towers) - and **12 is attack range** -
+Fletching's line adds 1, Greek Fire adds 1 to the fire galleys (units 529, 532, 1103). The importer's `ATTRIBUTE_NAMES` had
+`1: "range"` and **no 12 at all**, and the engine's `Attribute::from_id` classified 1 as `Range`. So the pack told the
+simulation that a sight upgrade was a range upgrade, and that every range upgrade was an attribute nobody had named.
+
+**What was wrong, measured.** A watch tower (unit 79, class 52) has range 8 tiles and sight 10. With the old names, Town
+Watch moved its **attack range** 8 -> 12 and left its sight at 10; Greek Fire's `other:12` matched nothing, so a fire galley
+gained nothing. The new fixture states both before it fixes anything: `stats_of(1, TOWER).los == 1_000` and an enemy twelve
+tiles away is out of sight.
+
+**What it builds.**
+
+- **The importer** (`ruage-tools@5995511`): `1: "line_of_sight"`, `12: "range"`, its naming comment, and two tests - one
+  pinning both attributes through `effect_record`, one refusing two ids that share a name, because **the names are the
+  engine's interface**: the simulation matches modifiers by string (`modifiers_for(player, unit, "range")`), so a rename is
+  a behaviour change and a duplicate is two attributes collapsing into one consumer. The regenerated pack (not committed,
+  D8) changes 40 modifiers from `range` to `line_of_sight` and 26 from `other:12` to `range`, and nothing else in the four
+  files.
+- **The classifier** (`crates/data/src/techs.rs`): `Attribute::LineOfSight` for 1, `Range` for 12.
+- **One sight consumer** (`World::effective_los`, in `research.rs` beside `modifiers_for`): base `los`, then every modifier
+  its owner has researched plus the civ's team bonus, floored at zero. The fog (`memory::sight_of`), blind placement
+  (`unit_sees`) and the panel (`stats_of`) all ask it - three call sites that had each resolved `los` raw.
+- **The panel now tells the truth**: `stats_of` said "Effective, not base" in its own doc comment while handing back the
+  table's range and sight untouched. Both go through the modifier list now, as attack and armour already did.
+
+**A second defect this uncovered.** Exploration is stamped per **move** (`stamp_entity`), and a building is stamped once,
+when it is placed. A sight upgrade therefore marked **no new ground** - the fog answered *unseen* for a tile the tower could
+now watch, because `vision` refuses to call unexplored ground visible. The new test failed on exactly that assertion after
+the sight itself was correct. `World::restamp_player` re-stamps a player's entities when a tech lands: once per research,
+idempotent for the techs that carry no sight at all.
+
+**What it costs.** Nothing measurable after one correction that is worth recording: the first cut of the sight consumer
+asked `modifiers_for` inside `sight_of`, which runs for every body that moved, every tick, and that scan was **+7.2%** of a
+24,000-tick acceptance run (20,535 ms against 22,015 ms, three interleaved pairs). The modifiers are now gathered once per
+player into `sight_modifiers`, rebuilt in `finish_research` and when the civ bonuses are set: **+0.6%**, inside the reference
+side's own 1.0% spread. The acceptance hash is unchanged at both 24,000 and 48,000 ticks. The +35% first reported for this
+change was my own measurement error - the tooling that writes these documents was running during the tree's half of the A/B.
+
+**Basis.** `ruage-tools/genconfig/records.py`'s `ATTRIBUTE_NAMES` and effect 8's own modifiers in the regenerated pack;
+`crates/data/src/techs.rs` `from_id`; `battle.rs:96` (the `range` consumer that was receiving sight modifiers); the four raw
+`los` reads (`lib.rs:3155`, `seed.rs:146`, `memory.rs:250`, `report.rs:128`) that the dependency tree lists as T1.
+Review: `docs/reviews/2026-11-15-d214-attributes.md`.

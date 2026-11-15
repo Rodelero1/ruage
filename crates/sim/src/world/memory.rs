@@ -247,10 +247,9 @@ impl World {
         let Some(record) = units.unit(unit) else {
             return 0;
         };
-        let Ok(los) = record.los.resolve(self.scale, "los") else {
-            return 0;
-        };
-        let raw = los.raw();
+        // **Effective sight** (T1b, D214): a sight upgrade moves this radius, which is the whole point of Town Watch and
+        // Town Patrol. Attribute 1 is line of sight; `effective_los` applies the owner's modifiers and floors at zero.
+        let raw = self.effective_los(entity.player, record);
         if raw <= 0 {
             return 0;
         }

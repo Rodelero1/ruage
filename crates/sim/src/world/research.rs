@@ -303,6 +303,10 @@ impl World {
         let food_before = self.farm_food_bonus(player);
         self.apply_tech(player, tech)?;
         self.grant_availability(player)?;
+        // A tech can widen what its owner sees (T1b), and exploration is stamped per move: without this, Town Watch's
+        // +4 sight on a tower marks no new ground until the tower moves - which a tower never does.
+        self.refresh_sight_modifiers(player);
+        self.restamp_player(player);
         // Farm upgrades are the one effect that changes ground already worked: the plot's food is a
         // budget, so what the tech adds goes onto every plot this player has that still has food in
         // it. A spent plot stays spent - its food is eaten, and an upgrade does not bring it back.
@@ -456,5 +460,74 @@ impl World {
             entity.speed = speed;
         }
         Ok(())
+    }
+}
+
+impl World {
+    /// **A unit's line of sight after every modifier its owner has** (T1b, D214), in engine units.
+    ///
+    /// Attribute 1 is line of sight - the dat's number - and the pack now names it `line_of_sight`, so this is the same
+    /// string-keyed mechanism combat uses for `range`: base from the table, then everything the player has researched,
+    /// then the civ's own team bonus. A unit with no sight gains none from a tech that adds to it, and a negative
+    /// result is floored at zero rather than handed to a distance test as a negative radius.
+    pub(crate) fn effective_los(&self, player: u8, unit: &Unit) -> i64 {
+        let Ok(base) = unit.los.resolve(self.scale, "los") else {
+            return 0;
+        };
+        if base.raw() <= 0 {
+            return 0;
+        }
+        // The common case is a player with no sight tech at all, and it must cost nothing: one branch and no allocation.
+        let slot = usize::from(player).min(MAX_PLAYERS - 1);
+        let known = &self.sight_modifiers[slot];
+        if known.is_empty() {
+            return base.raw();
+        }
+        let chosen: Vec<&ruage_data::Modifier> = known
+            .iter()
+            .filter(|modifier| {
+                modifier.unit < 0 || u32::try_from(modifier.unit).ok() == Some(unit.id)
+            })
+            .filter(|modifier| modifier.unit_class < 0 || modifier.unit_class == unit.class)
+            .collect();
+        scale_fixed(base, self.scale, &chosen).raw().max(0)
+    }
+
+    /// **Gather one player's line-of-sight modifiers into the cache** (T1b, D214). Called when a tech lands and when the
+    /// civ bonuses are set - the only two things that can add one - so the per-tick sight question never touches the
+    /// effect tables. Same selection rule as `modifiers_for`: every researched tech's effect, plus the civ's team bonus.
+    pub(crate) fn refresh_sight_modifiers(&mut self, player: u8) {
+        let slot = usize::from(player).min(MAX_PLAYERS - 1);
+        let mut list = Vec::new();
+        if let (Some(techs), Some(effects)) = (self.techs.as_ref(), self.effects.as_ref()) {
+            for tech_id in self.researched(player) {
+                let Some(effect_id) = techs.get(*tech_id).and_then(|tech| tech.effect_id) else {
+                    continue;
+                };
+                let Some(effect) = effects.get(effect_id) else {
+                    continue;
+                };
+                list.extend(
+                    effect
+                        .modifiers
+                        .iter()
+                        .filter(|modifier| modifier.attribute == "line_of_sight")
+                        .cloned(),
+                );
+            }
+            for effect_id in &self.bonus_effects[slot] {
+                let Some(effect) = effects.get(*effect_id) else {
+                    continue;
+                };
+                list.extend(
+                    effect
+                        .modifiers
+                        .iter()
+                        .filter(|modifier| modifier.attribute == "line_of_sight")
+                        .cloned(),
+                );
+            }
+        }
+        self.sight_modifiers[slot] = list;
     }
 }

@@ -46,6 +46,14 @@ const TOWN_CENTRE: u32 = 109;
 const CASTLE: u32 = 209;
 const VILLAGER: u32 = 83;
 const HOUSE: u32 = 70;
+/// The watch tower (WCTW): class 52, range 8 tiles, line of sight 10 - the unit Town Watch is famous for.
+const TOWER: u32 = 79;
+/// **Town Watch**: effect 8, `+4 line_of_sight` for unit classes 3 (buildings) and 52 (towers), researched at the
+/// town centre. Its attack range must not move, which is what this file's sight test is for (T1b, D214).
+const TOWN_WATCH: u32 = 8;
+/// **Town Patrol**: effect 280, another `+4 line_of_sight` for the same two classes. The pair is what proves the sight
+/// list is rebuilt on the *second* research and not only the first.
+const TOWN_PATROL: u32 = 280;
 
 struct Fixture {
     settings: Settings,
@@ -151,7 +159,7 @@ fn place(world: &mut World, player: u8, id: u32, unit: u32, tile: (i64, i64), hp
     let scale = world.scale();
     let id = EntityId(id);
     let kind = match unit {
-        SMITH | TOWN_CENTRE | CASTLE | 12 | HOUSE => EntityKind::Building,
+        SMITH | TOWN_CENTRE | CASTLE | HOUSE | TOWER | 12 => EntityKind::Building,
         _ => EntityKind::Unit,
     };
     world
@@ -646,5 +654,111 @@ fn villagers_still_bank_after_the_town_center_is_upgraded() {
     assert!(
         world.stock(1, slot("wood")) > 0,
         "a villager banks wood at an upgraded town centre"
+    );
+}
+
+/// **Town Watch moves sight, and only sight** (T1b, D214). The dat's attribute 1 is *line of sight* and 12 is
+/// *attack range*; the pack had the names the other way round, so this upgrade moved a watch tower's **attack range**
+/// 8 -> 12 while its sight stayed at 10 - a live wrong number in a shipped upgrade, and the reason Greek Fire's +1
+/// range matched nothing. Two claims, and the second is the one that was wrong: the sight grows by four tiles, and the
+/// range does not move.
+#[test]
+fn town_watch_widens_a_building_s_sight_and_leaves_its_range_alone() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let tc = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.unit == Some(TOWN_CENTRE))
+        .expect("the seeded town centre")
+        .id;
+    // Town Watch is a Feudal Age tech (`missing: 101, role: feudal_age`), and the age rewrites the town centre's id
+    // (109 -> 71), so the id is taken before the grant and the research still names the same building.
+    feudal(&mut world);
+
+    // A tower at (20, 20) and an enemy twelve tiles east of it: beyond the ten tiles it can see, and nowhere near
+    // another of player 1's units.
+    // The tower is the eye, not the subject: every number below is `stats_of(1, TOWER)` or the fog, which is where the
+    // sight techs have to show. Only its position matters here, and that is the enemy's twelve tiles away from it.
+    let _tower = place(&mut world, 1, 9_600, TOWER, (20, 20), 1_000);
+    let enemy = place(&mut world, 2, 9_601, VILLAGER, (32, 20), 25);
+    assert_eq!(
+        world.stats_of(1, TOWER).expect("stats").los,
+        1_000,
+        "PRECONDITION: a watch tower's sight is 10 tiles before any tech"
+    );
+    assert!(
+        !world.visible_to(1, enemy),
+        "PRECONDITION: an enemy twelve tiles from a watch tower is outside its ten tiles of sight"
+    );
+
+    research(&mut world, 1, tc, TOWN_WATCH, 30);
+    // The fog is rebuilt as a pass inside the tick, so the tick that finishes the research does not yet carry its sight.
+    world.step().expect("the fog refreshes");
+
+    let before = world.stats_of(1, TOWER).expect("stats");
+    assert_eq!(
+        before.los, 1_400,
+        "Town Watch is +4 line of sight for a tower (hundredths of a tile); it is {}",
+        before.los
+    );
+    assert_eq!(
+        before.range, 800,
+        "Town Watch must leave attack range at the tower's own 8 tiles; it is {}",
+        before.range
+    );
+    assert!(
+        world.visible_to(1, enemy),
+        "the four extra tiles of sight do not reach an enemy twelve tiles away"
+    );
+}
+
+/// **A second sight tech stacks on the first** (T1b, D214). `effective_los` reads a per-player list that is rebuilt when a
+/// tech lands; a list filled on the first research and never refreshed would answer 14 tiles for ever, so this asserts the
+/// *second* +4 through the fog, which is the path that reads the list - `stats_of` goes through `modifiers_for` and would
+/// not notice. Town Watch takes a tower to 14, Town Patrol to 18; an enemy sixteen tiles away sees the difference.
+#[test]
+fn town_patrol_stacks_its_four_tiles_on_town_watches() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let tc = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.unit == Some(TOWN_CENTRE))
+        .expect("the seeded town centre")
+        .id;
+    feudal(&mut world);
+    world.grant_tech(1, 102).expect("seeding the Castle Age");
+
+    let _tower = place(&mut world, 1, 9_610, TOWER, (20, 20), 1_000);
+    let enemy = place(&mut world, 2, 9_611, VILLAGER, (36, 20), 25);
+    assert!(
+        !world.visible_to(1, enemy),
+        "PRECONDITION: sixteen tiles is outside a watch tower's ten"
+    );
+
+    research(&mut world, 1, tc, TOWN_WATCH, 30);
+    world.step().expect("the fog refreshes");
+    assert_eq!(world.stats_of(1, TOWER).expect("stats").los, 1_400);
+    assert!(
+        !world.visible_to(1, enemy),
+        "fourteen tiles of sight must not reach sixteen"
+    );
+
+    // Town Patrol costs 300 food and the bank holds 125, so it is *granted* rather than bought: the sight list is rebuilt
+    // in `finish_research`, which is the one place both the queue and a grant land, and this is the half of the pair that
+    // says so. The first test covers the bought path.
+    world
+        .grant_tech(1, TOWN_PATROL)
+        .expect("seeding Town Patrol");
+    world.step().expect("the fog refreshes");
+    assert_eq!(
+        world.stats_of(1, TOWER).expect("stats").los,
+        1_800,
+        "Town Patrol's four tiles stack on Town Watch's"
+    );
+    assert!(
+        world.visible_to(1, enemy),
+        "eighteen tiles of sight still do not reach an enemy sixteen tiles away - the sight list is stale"
     );
 }
