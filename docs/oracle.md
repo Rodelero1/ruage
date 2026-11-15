@@ -177,6 +177,14 @@ reading (59.2 measured, not a suspiciously exact 60). HD at 20 turns/s would the
 reads the cadence ratio against DE, whose rate is itself inferred. A decompiled constant remains
 the only direct answer.
 
+**A third corroboration, from the editor's own text (found 2026-11-15).** The scenario editor's trigger
+timers count in **ticks, at 20 per second** - the community answer for "why did my 180 fire at once"
+is *"the timer should be set at 3600, as each second counts as 20 ticks"*. That is a *player-facing*
+unit the game itself defines, not a number a designer typed into the dat, so it rules out 10 Hz for
+the same reason the reload grain does, from a different direction. It is still not the constant:
+a wiki-grade sentence about the editor is weaker evidence than an engine value, and this file
+keeps the distinction between the two.
+
 **What the recordings do settle:** they are the trajectory oracle step 2b wanted. `ORDER`, `MOVE`,
 `BUILD`, `RESEARCH`, `QUEUE` actions carry millisecond timestamps, so the slice can be compared
 against real games — arrival times, build completions, gather cadence — without a live Windows
