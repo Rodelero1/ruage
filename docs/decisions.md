@@ -5902,3 +5902,39 @@ queue - the real debts (`T7`, `T14`, `T2`, `T6`, `T8`, `T11`-`T16`, and the `M`/
 
 **Basis.** The sweep (`d224-parked.txt` in the scratch dir), the two mutations on `gather_contact`, and the gate.
 Review: `docs/reviews/2026-11-15-d224-parked-audit.md`.
+
+### D225 - two more debts were already paid, and the builder's queue fallback has no reachable trigger
+
+**What it says.** The two items above the reseed queue in the debt list were checked against the code, and neither is missing.
+One has a real fork in it, which is why this decision stops there.
+
+**The resource search is bounded, by the original's own number.** `T7` said "a villager whose plot ran dry walks the whole map".
+`World::gather_reach` answers with the **unit's dat `search_radius`** when content carries one - the field the original itself
+searches within - and falls back to **sight + 5 tiles** otherwise (`LOOK_AROUND_TILES = 5`), which is precisely the "LOS + 5"
+the debt note attributed to the game as something we lacked. `nodes_of_slot` applies that bound (`reach`), and both callers pass
+it: the share pass from the worker's **base** (D149) and the scenario language from the worker. What does not exist is the
+note's second half - **at most 30 reach tests per search** - and that is a *guard*, not a rule: with a reach of four to seven
+tiles the candidate set is a handful of nodes. Recorded as a guard, not scheduled.
+
+**The builder's queue fallback has nowhere to fire.** The owner's rule is that a builder who finds no place looks for another
+building to build - **"2 a"**, the next site in **his own queue**. Implementing it needs a state that can *be* stuck, and in this
+model there is none:
+
+- **Own bodies are not walls to their own side** (D189), so a ring of villagers cannot deny a builder a place; he stands on top
+  of a friend and works.
+- **A visible enemy on the footprint is refused at placement** (`SiteOccupied`, measured while writing the fixture), so that
+  site never exists to be stuck at.
+- **An unreachable site is refused before the wood is spent**, so "no path" is a refusal, not a stall.
+- **A blind placement over an enemy is the one construction that could freeze** - allowed in fog by D58, and `site_is_clear`
+  will refuse for ever once the enemy is visible, because the step-aside only moves our own units - but `settle_blind_sites`
+  cancels a blind site only when it overlaps an enemy **building**, not a unit, so whether that case exists at all needs its
+  own measurement before a fix is written for it.
+
+So the fallback is **not implemented**, and the reason is not effort: a mechanism with no reachable trigger cannot be
+mutation-proved, and this branch has twice refused to land code that a mutation cannot distinguish from nothing (D223's
+`tile_is_wanted`, D217's comment). The queue itself already advances **on completion** (D66), which is the half that has a
+trigger.
+
+**Basis.** `crates/sim/src/lib.rs` `gather_reach` (`search_radius`, then `sight + LOOK_AROUND_TILES`), `nodes_of_slot`;
+`crates/sim/src/world/shares.rs:198`; `SiteOccupied` from the withdrawn fixture; the four measurements above.
+Review: `docs/reviews/2026-11-15-d225-search-and-fallback.md`.

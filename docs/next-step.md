@@ -1,4 +1,4 @@
-# OPEN - the builder's claimed place and his queue fallback, then the farm reseed queue
+# OPEN - the reseed queue and auto-reseed at the mill
 
 **Where it stands, 2026-11-15.** Seven decisions, closing five debts and one carried regression from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
 range, in the importer and the engine - a sight tech had been moving a tower's *attack range*, and a sight upgrade marked no
@@ -26,25 +26,30 @@ remains is therefore the debt list, not a defect list.
 
 ## The open items, in the order I would take them
 
-1. **A builder claims his place, and takes the next site in his queue when there is none** (the owner, 2026-11-15: *"it is not
-   about tiles, never was ... only about finding a free space one diameter width. Same for resource gathering, same for
-   construction"*, and *"2 a"* - the next site in **his own queue**). The stall itself is closed (D223: a step-aside that stops making progress is re-asked, the 6×6
-   fixture is un-parked and green), so what is left is the *rule* rather than the fault: a place
-   is one continuous space one **diameter** wide, claimed by one worker, nearest first, re-laid when the ring refuses a man,
-   released when something else moves him - the same machinery gathering uses (`gather_place`, `reserve_gather_place`,
-   `maybe_respread`) with construction as a second kind of claim. Then: a builder with no place anywhere on the ring takes the
-   next site from `build_queue`, and idles only when the queue is empty. A `tile_is_wanted` check for the step-aside's own
-   choice of tile was written and removed as unproven (D223) - it belongs back only with a fixture that fails without it. Farms
-   stay the exception: villagers walk *around* the plot. Gate: a fixture for the claim (two builders, one place each) and one for
-   the queue fallback.
-2. **No farm reseed queue, and the resource search is unbounded.** `grep reseed crates` -> 0: a spent plot is a husk until a
+1. **The reseed queue and auto-reseed, both at the mill only** (the owner, 2026-11-15: *"please implement queue and
+   auto-reseed, both are only in the mill"*, having been told that **auto-reseed is a Definitive Edition feature** and that HD/AoC
+   has only the manual queue). Both are features, not fixes: a command that queues a replacement (**60 wood committed at the mill
+   per entry**, as the game does), state for the queue and for the toggle, and the behaviour of a villager whose plot runs out -
+   he takes the next entry and reseeds the same ground, and stands idle when there is none and the toggle is off. Note the screen:
+   the dat's own resource for a farm's wood cost, not a constant in the engine. Gate: a fixture for the queue (wood drops, a farm
+   reappears on the same tiles) and one for the toggle (no wood, no reseed; toggle off, the villager goes idle).
+2. **A builder claims his place - measured-out, not built** (D225). The owner's rule is a free **space one diameter wide**,
+   claimed by one worker, with a builder who finds none taking the next site in **his own queue** ("2 a"). The *claim* half has no
+   reachable trigger in this model: own bodies are not walls to their own side (D189), a visible enemy on the footprint is refused
+   at placement (`SiteOccupied`), an unreachable site is refused before the wood is spent, and the only construction that could
+   freeze - a blind placement in fog over an enemy **unit** - is not known to freeze at all, because `settle_blind_sites` cancels
+   only on an enemy building. Before any code: measure whether that last case stalls. If it does, the fallback has its fixture.
+3. **The search cap, if it is ever wanted** (D225): the bound exists (`gather_reach`: the dat's `search_radius`, else sight + 5
+   tiles); what does not exist is the note's "at most 30 reach tests", a guard whose candidate set is a handful, so it was not
+   written.
+ `grep reseed crates` -> 0: a spent plot is a husk until a
    player replaces it, and a villager whose plot ran dry walks the *whole map* for the next node, where the game caps a
    resource search at **LOS+5 tiles and 30 reach tests** (U22). D215 made this hot: a plot holds 175 instead of 250, so 43%
    more plots are laid per match and `repaths` went **380 -> 552**. Two slices, and the cap is the one that can change a
    match's outcome; measure `repaths` either way.
-3. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
+4. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
    with and without a stander on the route. D211's decision says so in its own words.
-4. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
+5. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
    reads yet. This is the interpreter slice the tree puts in Phase 1; it is *not* a prerequisite for items 1-3.
 
 ## Ruled out of the current stretch, with the reason written down
