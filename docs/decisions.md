@@ -6007,3 +6007,35 @@ number, the floor, stayed unexamined.
 
 **Basis.** `sub_744d60` and `sub_745060` in `AoK HD.exe` (sha256 `cbd10d81...`), read with the clean-room decompiler through the active-target session;
 `docs/behaviour-diff.md` row 2; `crates/sim/src/lib.rs:219` `damage_between`. Review: `docs/reviews/2026-11-15-d227-damage-row.md`.
+
+### D228 - the minimum-1 rule is once per attack, and three sources say so
+
+**What it says.** The one number D227 left open - whether the original applies the 1-damage floor **once per attack** or **once per damage slot** - is settled by
+published sources, and it is once per attack, on the total, **after every multiplier**. That is what `damage_between` already does.
+
+**The three sources**, each read on 2026-11-15:
+
+- the **Armor class (Age of Empires II)** page, step 6: `Damage = max(1, Damage4)`, with the note that the minimum is applied **after all attack multipliers**, and
+  step 4 having already summed over every armour class;
+- the **Attack** page: `Damage = max(1, k_ele x SUM_i max(0, Atk_i - Arm_i))` - the `max` is around the whole sum, which is the same statement in one line;
+- the **Age of Empires II (2013) combat guide**, i.e. this project's own edition: `(attack - armour) + (bonus - bonus reduction) = final damage`, with three
+  arithmetic notes - each difference can never be `< 0`, and "the final **sum** ... can never be `< 1`".
+
+**What the binary adds.** `sub_744d60` drops a slot whose remainder ends `<= 0` and `sub_745060` returns the sum of the three with **no clamp** (D227), so the clamp
+lives in the caller - and "once, on the sum" is exactly the shape all three sources describe. The per-slot reading, which would have made a fully-stopped attack
+land for **3**, is excluded.
+
+**Three latent differences, recorded and not fixed**, each because it cannot arise in this pack today:
+
+- **Negative class damage.** The published step 2 is `max(min(0, Atk_i), Atk_i - Arm_i)`, so a negative attack keeps its negative value instead of clamping at zero.
+  D216 refuses every packed attack value no reading explains, so no negative attack reaches `damage_between`; `max(0, ...)` is identical for every value we ship.
+- **Bonus-damage resistance** (`k_res`, "usually 0") is unmodelled. No 5.7 effect names such a modifier today.
+- **The floor's place in the order.** Ours floors inside `damage_between` and *then* multiplies by `elevation_factor`; the original floors **after**. It cannot show
+  while every height is zero (D217), and it is written down so the elevation slice does not have to rediscover it.
+
+**Why it matters beyond row 2.** This is the first row of the binary register ruled on the strength of *published* arithmetic rather than a located instruction - and
+the register says so, in its own words, with the binary evidence beside it. That is a legitimate close for a project that follows the original generally: the rule
+is stated, the sources are named, and the one thing static reading could not reach is described rather than hidden.
+
+**Basis.** `docs/behaviour-diff.md` row 2 (now **`same`**; the register reads **2 of 12**); `sub_744d60` and `sub_745060` (D227); `crates/sim/src/lib.rs:219`
+`damage_between`; `crates/sim/tests/combat.rs:184` `no_attack_never_floors_below_the_minimum`. Review: `docs/reviews/2026-11-15-d228-minimum-rule.md`.

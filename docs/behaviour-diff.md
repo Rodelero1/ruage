@@ -53,7 +53,7 @@ countable — "N of M ruled" — without pretending to have surveyed 15,766 func
 | # | Rule | ruage | original | verdict | evidence |
 |---|---|---|---|---|---|
 | 1 | dat version gate | importer writes what it read; loader accepts it | **exact string equality against `VER 5.7`** at `0x9db348`, one branch at `0x72d4fc` in `FUN_0072d1a0` | **same** (semantics now known; no numeric parse, no tolerance) | `5ba445c`, `docs/re-toolchain.md` |
-| 2 | damage: armour subtraction, bonus classes, minimum-1 clamp, order | `crates/sim::damage_between` - per class `max(0, atk - armour)`, summed, then the **total** floored at `combat.toml`'s `minimum = 1` | **arithmetic read directly, floor not located (D227).** `sub_744d60` fills **three** `(class, amount)` slots from the attacker's record (`+0x18c/+0x18e`, `+0x192/+0x194`, `+0x198/+0x19a`), scales each amount by the multiplier at `[ebp+0x28]`, subtracts the target's **float** armour table at `this+0x3c` **indexed by class**, folds any positive leftover into **class 3** when a slot is class 3 or empty, and marks a slot `-1` when what is left is `<= 0`. `sub_745060` sets the multiplier to **1.0**, calls it and returns the **sum of the three** - with **no clamp**, and it is a **virtual method** (`address_taken = 5`, direct callers 0), so the 1-damage floor is at a vtable call site and is not in either function | **same arithmetic, floor unproven** (D227) | this file, 2026-11-01 and 2026-11-15 |
+| 2 | damage: armour subtraction, bonus classes, minimum-1 clamp, order | `crates/sim::damage_between` - per class `max(0, atk - armour)`, summed, then the **total** floored at `combat.toml`'s `minimum = 1` | **`max(1, sum)` once per attack** - corroborated three ways: the Armor class page's Step 6 (`Damage = max(1, Damage4)`, applied **after all multipliers**, the sum taken over every armour class), the Attack page's `Damage = max(1, k_ele x SUM_i max(0, Atk_i - Arm_i))`, and the **HD 2013** combat guide's three notes (each difference can never be `< 0`, and "the final **sum** ... can never be `< 1`"). The binary agrees where it can: `sub_744d60` drops a per-slot remainder `<= 0` and `sub_745060` returns the sum with no clamp, so the clamp is the caller's - which is the shape every source describes | **same** (three sources; the per-slot-clamp reading is excluded) | D227, D228, this file |
 | 3 | the per-tick unit update: speed integration, attack reload, gather tick, in what order | `World::step` | not yet located | **needs-oracle** for the effect, **unknown-static** for the order | question 2 |
 | 4 | age-up timing at a kind-102 gate | `advance`/effect interpreter | not yet located | **needs-oracle** | question 3, U10 |
 | 5 | decay: does an unattended building vanish, and at what rate | `[decay] rate_from = "dat"`, `resource_decay_rate` semantics unverified | not yet located | **needs-oracle** — and the game answers it from two saves 5 minutes apart | `docs/next-step.md`, D85's review |
@@ -81,7 +81,23 @@ Against `damage_between`, that gives three statements and one gap:
   fractional today, so this is a latent difference rather than a live one.
 - **The floor is the open question**: `minimum = 1` is ours, and the original's clamp has not been found.
 
-**The count: 1 of 12 ruled.** That is the honest state, and it is a better answer than "we compared them" — the eleven open
+**Row 2 ruled `same` (2026-11-15, D228).** Three independent sources put the minimum **once per attack, on the total, after every multiplier**: the Armor class
+page's step 6, the Attack page's formula, and - the decisive one for this project - the **Age of Empires II (2013) combat guide**, which states it as three
+arithmetic notes on exactly this edition. The binary does not contradict them: `sub_744d60` drops a slot whose remainder is `<= 0` and `sub_745060` sums the three
+with no clamp, so the clamp is the caller's, and "once on the sum" is what the caller must be doing.
+
+Three latent differences are recorded rather than fixed, each because it cannot arise in this pack today:
+
+- **A negative class damage is possible in the original and impossible here.** The published step 2 is `max(min(0, Atk_i), Atk_i - Arm_i)`: a *negative* attack keeps
+  its (negative) value instead of clamping at zero. Our pack carries no negative attack that any reading explains - D216 refuses them by name - so the branch
+  cannot be reached, and `max(0, ...)` is the same arithmetic for every value we ship.
+- **Bonus-damage resistance** (`k_res`, a multiplier on incoming bonus damage, "usually 0") is not modelled. Nothing in the 5.7 effect table names such a modifier;
+  when one does, this row gains a term.
+- **The floor is after the multipliers in the original and before one of ours.** `damage_between` applies `minimum` and *then* the blow is multiplied by
+  `elevation_factor`; the published formula is `max(1, k_ele x SUM)`. It cannot show today because every height is zero (D217 keeps the term at 1.0), and it is
+  written here so that the slice which makes elevation real does not have to rediscover it.
+
+**The count: 2 of 12 ruled.** That is the honest state, and it is a better answer than "we compared them" — the eleven open
 rows are a to-do list with a definition of done each.
 
 **Row 2, first half ruled (2026-11-13, craft-anything).** `native-function-callers-list 0x744d60` in **2 s** gives **5 call
