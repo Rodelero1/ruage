@@ -6039,3 +6039,59 @@ is stated, the sources are named, and the one thing static reading could not rea
 
 **Basis.** `docs/behaviour-diff.md` row 2 (now **`same`**; the register reads **2 of 12**); `sub_744d60` and `sub_745060` (D227); `crates/sim/src/lib.rs:219`
 `damage_between`; `crates/sim/tests/combat.rs:184` `no_attack_never_floors_below_the_minimum`. Review: `docs/reviews/2026-11-15-d228-minimum-rule.md`.
+
+### D229 - the tick's order is the original's: players in index order, objects in slot order (2026-11-15)
+
+**What it says.** T12's order half is no longer a reading from a port - 5.7's own `BaseWorld::update` was located and read,
+and the engine now follows it in the one place the engine *is* a sequence:
+
+1. **The ordered blow pass runs `(player, id)`**, not entity id: Gaia (player 0) first, then players 1-8, and inside a
+   player the id, which is creation order and therefore the slot order. Before this the pass ran in entity-id order, which
+   agreed with the original only while the ids happened to follow the players - and disagreed about **which of two mutually
+   lethal men dies** the moment they did not.
+2. **A building at or below zero health when the blow pass ends finishes nothing**: production and research skip it. The
+   original destroys a dead object in its own turn, so a ruin never hands over the recruit - or the tech - it had one tick
+   left on.
+
+**What the binary says, and where.** `FUN_00738720` at `0x738720` is `BaseWorld::update`, named three ways by the file
+itself: the profiler string `"baseworld update"`, the `aoeworld-at-%08d.txt` status log it writes, and its assertions'
+path `...\aoc\source\game\baseworld.cpp` (lines `0xb6b`, `0xc7e`, `0xcb7`). It walks the players array at
+`+0x184..+0x188` (8-byte stride) **from index 0 upward** - Gaia, then 1-8 - and inside a player's turn walks that player's
+object list (head `+0x48`, node `next` `+0x5c`, node owner `+0x60`), skipping nodes owned by anyone else. Per object there
+is **one virtual call that decides removal** (`+0xa0` answering 0 unlinks the node and calls vtable slot 0, the class's
+destructor) and **otherwise one virtual call that runs the object's own update** (`+0x84`). Neither method can be named -
+both are virtual and the binary carries no symbols - but the shape is *sweep, else step*, and because the destruction is
+inline **in the victim's own turn**, a unit killed by an earlier-ordered object is gone before any later object runs. The
+players are bracketed by `+0x130` before the walk and `+0x68` after it, with `+0x134` for the players already visited, then
+three more per-player loops gated on `FUN_00727810()`.
+
+**The turn, read for free.** The index at `+0x100` - `pturn`, the field `docs/save-format.md` reads out of the save header -
+is advanced by one at the end of every update and wrapped at the player count. That is **T16**'s axis, corroborating the
+`Turn` step the DE port lists after the players, and it is not this slice.
+
+**What this slice is not, stated rather than discovered.** `decide` still reads the tick's opening state, so the order
+honoured is the order of **effects**, not of decisions: a take applied before the blow pass still happens for a man who will
+die in it, movement deltas are applied in id order, and an object's update is not merged with its neighbour's. (2) is right
+for every victim whose killer's turn came first - which the ordered blow pass now guarantees - and stricter than the
+original for a victim whose own slot came first. The per-object loop is what remains of T12.
+
+**The measurement, and it is the honest one.** The acceptance match is **unchanged**: `hash=beb6c66f58e4045c` at 24,000
+ticks and `4640552242d6b45b` at 48,000, both sides, with `entities=154 repaths=277 made_room=0` and `148 / 552` - because in
+that scenario every strike already lists the lower player first, so the sort is reached and is a no-op. Interleaved A/B on
+that match (three pairs, 24,000 ticks, nothing else running): HEAD **20.03 s** median against **20.08 s** - **+0.29%**,
+inside the A side's own 19.70-20.32 s spread. So: no behaviour change to record for the match, no re-baselining, and the
+rule's evidence is the fixtures.
+
+**The three fixtures**, in `crates/sim/tests/tick_order.rs`, and each proved to bite by removing its own line:
+
+- `the_lower_player_acts_first_whatever_the_ids` - player 2's man carries the lower id and both are at one hit point: id
+  order kills player 1's man, the tick's order kills player 2's. **Red before the change.**
+- `a_building_destroyed_this_tick_finishes_nothing` - a barracks one tick from finishing a militia, killed by the lower
+  player's man: the recruit appeared out of the ruin before the gate (`left: 1, right: 0`).
+- `a_building_destroyed_this_tick_finishes_no_research` - the same for a town centre's Loom. **Proved by mutation rather
+  than red-first**, because the gate was written before this fixture: removing the researchers' gate reddens it.
+
+**Basis.** `FUN_00738720` (`0x738720`) in `AoK HD.exe`, read from the exported corpus `/opt/data/tools/rea/pseudo-aokhd`;
+`crates/sim/src/world/step.rs` (`turn_key`, the sort at the end of `decide`, the two gates in `step_production`);
+`crates/sim/tests/tick_order.rs`; `docs/behaviour-diff.md` row 3 (now **read** for the order *between* objects);
+`docs/mechanics/determinism.md`; `docs/next-step.md` T12. Review: `docs/reviews/2026-11-15-d229-tick-order.md`.

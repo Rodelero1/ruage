@@ -152,6 +152,40 @@ after `Groups` and before `NewTiles`, with vision once at the very end. Two cons
 motion is computed from the state the `Groups` step saw, before any object of that player moves; and the victory check
 sees the whole tick's damage, both of which our single ordered-by-id pass gets for free by being simultaneous.
 
+## HD 5.7's own tick, read (2026-11-15)
+
+The paragraph above said HD's order "has not been read, and the corpus is where it would be (`BaseWorld::update`...)". It
+has now been read, and the DE reading above turns out to be the same shape in the one thing it was asked about.
+
+`FUN_00738720` at `0x738720` is `BaseWorld::update`: the profiler string `"baseworld update"`, the `aoeworld-at-%08d.txt`
+status log it writes, and its assertions' path `...\aoc\source\game\baseworld.cpp` (lines `0xb6b`, `0xc7e`, `0xcb7`). In
+order:
+
+1. **Players in index order.** The outer loop walks the array at `+0x184 .. +0x188` (8-byte stride) from index 0 upward -
+   Gaia first, then players 1-8 - and skips a player whose list is empty.
+2. **That player's objects, one at a time.** For each player it walks an object list (head `+0x48`, node `next` `+0x5c`,
+   node owner `+0x60`) and skips nodes owned by anybody else. Per object: **one virtual call decides removal** (`+0xa0`
+   answering 0 unlinks the node and calls vtable slot 0, the class's destructor) and **otherwise one virtual call runs the
+   object's own update** (`+0x84`). The methods cannot be named - both are virtual and the binary has no symbols - but the
+   shape is *sweep, else step*.
+3. **Death is applied in the victim's own turn**, not in a pass after the tick. That is the mechanism behind U18's answer:
+   a unit killed by an earlier-ordered object is destroyed before any later object runs, so it does not swing, step,
+   gather or finish anything for the rest of that tick.
+4. **Per-player bracket**: `+0x130` before the object walk, `+0x68` after it, `+0x134` for each player already visited;
+   then three more per-player loops gated on `FUN_00727810()`.
+5. **The turn is real, and it is `pturn`.** The index at `+0x100` is advanced by one at the end of the update and wrapped
+   at the player count - and `+0x100` is `pturn`, the field `docs/save-format.md` reads out of the save header. This is the
+   **`Turn`** step the DE schedule above lists *after* the players, found independently in 5.7. It is T16's axis.
+
+What is still not read: the order **inside** one object's update. The DE port's `world/after_step.rs` names one (the step,
+faith regeneration, charge refill, passive abilities, the powerup clamp, a building's production and the changed tiles),
+and 5.7's own sequence inside `+0x84` has not been read at that granularity.
+
+What it changes for us: `crates/sim` still decides every entity against the tick's opening state, so the *order between
+objects* is what this settles. T12's first slice takes the part the two-pass shape can honestly carry - the ordered blow
+pass now runs `(player, id)` instead of by entity id, and a building dead at the end of that pass finishes no production
+or research - and the per-object loop is what is left. `docs/next-step.md`, T12; D229.
+
 ## The other way out of the simultaneous volley (2026-10-31)
 
 `Zaydme/openaok` proves a second answer to the same problem, and it is worth naming before anyone reopens the

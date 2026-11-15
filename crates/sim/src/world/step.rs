@@ -694,11 +694,18 @@ impl World {
             }
         }
         for id in trainers {
-            if self.find(id).is_some_and(|entity| {
-                capped[usize::from(entity.player)
-                    .wrapping_sub(1)
-                    .min(MAX_PLAYERS - 1)]
-            }) {
+            // **Dead is dead for the rest of the tick** (T12, U18): the original destroys a dead object in its own turn,
+            // so a building killed before its turn hands nothing over. Ours removes the dead in a sweep after every
+            // phase, so without this check a ruin delivers the recruit it had one tick left on. The owner is read here
+            // too, so this is one lookup where the old code spent two.
+            let Some(player) = self
+                .find(id)
+                .filter(|entity| entity.hp > 0)
+                .map(|entity| entity.player)
+            else {
+                continue;
+            };
+            if capped[usize::from(player).wrapping_sub(1).min(MAX_PLAYERS - 1)] {
                 continue;
             }
             let ready = match self.find_mut(id) {
@@ -725,6 +732,11 @@ impl World {
         }
         // Research: the same timer, and the effect lands when it reaches zero.
         for (id, player, tech) in researchers {
+            // The same gate as production, and the same reason (T12): a building killed before its turn finishes no
+            // research either.
+            if self.find(id).is_none_or(|entity| entity.hp <= 0) {
+                continue;
+            }
             let landed = match self.find_mut(id) {
                 Some(entity) => match entity.researching {
                     Some(mut job) => {
@@ -2361,7 +2373,23 @@ impl World {
             work.deltas.push((index, entity.id, dx, dy));
         }
 
+        // **The blow pass runs in the original's order, not the id's** (T12, U18). `BaseWorld::update` walks the players
+        // array from index 0 - Gaia, then 1-8 - and steps each player's objects in slot order, so the first blow between
+        // two players belongs to the lower player's man. Entity ids are creation order, which inside one player *is* the
+        // slot; what id order loses is the player, and with it which of two mutually lethal men dies.
+        work.strikes
+            .sort_by_key(|(attacker, _)| self.turn_key(*attacker));
+
         Ok(work)
+    }
+
+    /// **Where an entity's turn falls in the tick** (T12, U18): the players array by index - Gaia at 0, then 1-8 - and
+    /// each player's objects in slot order. An id that is not in the world sorts last, which keeps the key total without
+    /// inventing a place for it.
+    fn turn_key(&self, id: EntityId) -> (u8, u32) {
+        self.entities
+            .binary_search_by_key(&id, |entity| entity.id)
+            .map_or((u8::MAX, id.0), |at| (self.entities[at].player, id.0))
     }
 }
 

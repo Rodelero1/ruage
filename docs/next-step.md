@@ -1,6 +1,6 @@
-# OPEN - a builder's claimed place, if a stuck builder can be constructed at all
+# OPEN - T12: the tick's order, which the original's own binary has now given up
 
-**Where it stands, 2026-11-15.** Seven decisions, closing five debts and one carried regression from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
+**Where it stands, 2026-11-15 (evening).** Seven decisions, closing five debts and one carried regression from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
 range, in the importer and the engine - a sight tech had been moving a tower's *attack range*, and a sight upgrade marked no
 new ground because exploration is stamped per move) and **D215** (a farm's base is the civ's own `resources[36]` = **175**,
 read instead of the authored 250; and the Chinese team bonus, +45 on the same resource, had never been applied at all).
@@ -15,6 +15,60 @@ nothing, but `barred_by` reads kind-102 rows and `check_research` refuses with `
 
 The order below is the user's ruling of 2026-11-14 - **live wrong numbers first**, then the effect interpreter, then the
 economy's own rules. Do not start breadth, civs, or the renderer before items 1-2.
+
+## T12 - the original's intra-tick order, read from 5.7's own binary (2026-11-15)
+
+`BaseWorld::update` is **`FUN_00738720` at `0x738720`**, and it is named three ways by the file itself: its profiler
+string `"baseworld update"`, the `aoeworld-at-%08d.txt` status log it writes, and its assertions' own source path
+`...\aoc\source\game\baseworld.cpp` (lines `0xb6b`, `0xc7e`, `0xcb7`). What it does, in order:
+
+- **Players in index order.** The outer loop walks the array at **`+0x184 .. +0x188`** (8-byte stride; `FUN_0072b700` reads
+  the same pair as a count) from index 0 upward. Index 0 is Gaia, so the order is `Gaia, players 1-8`.
+- **Each player's objects, one at a time, inside that player's turn.** For a player whose list is non-empty it walks an
+  object list (head at `+0x48`, node `next` at `+0x5c`, node owner at `+0x60`) and skips every node whose owner is not the
+  player it is on. Per object there is **one virtual call that decides removal** (`+0xa0` returning 0 → unlink and destroy
+  through vtable slot 0, the class's own destructor) and **otherwise one virtual call that runs the object's own update**
+  (`+0x84`). Neither method can be named - both are virtual and the binary carries no symbols - but the shape is
+  *sweep, else step*, and the state one object leaves is what the next object reads.
+- **Death is applied inline, in the victim's own turn** - not in a pass after the tick, which is what our `sweep_dead` is.
+  So a unit killed by an earlier-ordered attacker is gone before any later object's turn: it does not swing, and it does not
+  step, gather or finish anything either.
+- **Per-player virtual bracket**: `+0x130` before the object walk, `+0x68` after it, `+0x134` once for the players already
+  visited; then three more per-player loops gated on `FUN_00727810()`.
+- **The turn is real and it is `pturn`.** At the end of the update the rotating index at **`+0x100`** is advanced by one and
+  wrapped at the player count, and `+0x100` is `pturn` - the field `docs/save-format.md` reads out of the save header. That
+  is **T16**'s axis, read for free here; it is not this slice.
+
+## The slice T12 takes, and what it deliberately is not
+
+Our tick **decides** every entity against the state the tick opened with (`decide`, `&self`) and then **applies** the
+collected work in a fixed phase order. A true per-object turn means deciding *and* applying inside one loop per object -
+a rewrite of `world/step.rs` (2,402 lines), not a slice that lands in one pass. So this slice takes the half the two-pass
+shape can honestly carry:
+
+1. **The apply order becomes the original's**: the ordered blow pass (D88) is sorted `(player, id)` instead of by entity
+   id - Gaia first, then players 1-8, and inside a player the id, which is creation order and therefore the slot order.
+   An id that is not in the world sorts last. This is the one place the engine already *is* a sequence, so this is where
+   the order is real rather than nominal.
+2. **A building destroyed when the blow pass ends finishes nothing**: production and research skip an entity at or below
+   zero health, so a barracks killed this tick does not hand over the unit it had one tick left on.
+
+**The price of the two-pass shape, stated rather than discovered:** (2) is right for every victim whose killer's turn came
+first - which is exactly the case the ordered blow pass now guarantees - and stricter than the original for a victim whose
+own slot came first. And the phases that run *before* the blows (gather takes, deposits, construction) still let a doomed
+entity act, because a take is applied before any blow lands.
+
+**Not in this slice, named:** movement deltas are still applied in id order; an object's update is not merged with its
+neighbour's; and the turn itself (T16) is unbuilt, so every player's objects are stepped every tick as the original does -
+but the original runs only *one* player's unit AI per tick, which is the axis `pturn` is for.
+
+**The gate on this slice, and what it actually measured.** The acceptance hash does **not** move:
+`beb6c66f58e4045c` at 24,000 ticks and `4640552242d6b45b` at 48,000, on both sides of the change, with
+`entities=154 repaths=277` at 24k and `148 / 552` at 48k. That is the honest result rather than the expected one: the sort
+is reached (removing it reddens `tick_order::the_lower_player_acts_first_whatever_the_ids`), but in that scenario every
+strike already lists the lower player first, so the order is a no-op there. The rule's evidence is therefore the fixtures
+in `crates/sim/tests/tick_order.rs`, not the hash - which also means no re-baselining and no behaviour change to record for
+the match.
 
 ## There are no live defects - audited, not assumed (D224)
 
