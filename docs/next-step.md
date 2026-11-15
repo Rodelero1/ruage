@@ -1,6 +1,6 @@
 # OPEN - the farm reseed queue and the bounded resource search, the two halves D215 made hot
 
-**Where it stands, 2026-11-15.** Six decisions, closing five debts and one carried regression from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
+**Where it stands, 2026-11-15.** Seven decisions, closing five debts and one carried regression from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
 range, in the importer and the engine - a sight tech had been moving a tower's *attack range*, and a sight upgrade marked no
 new ground because exploration is stamped per move) and **D215** (a farm's base is the civ's own `resources[36]` = **175**,
 read instead of the authored 250; and the Chinese team bonus, +45 on the same resource, had never been applied at all).
@@ -11,14 +11,24 @@ proved by mutation; and **D218** reads the construction rate (dat resource 195) 
 builder is 30% faster, 500 builder-ticks become 385 - and corrects a **false debt**: the tree said a civ's tech bars do
 nothing, but `barred_by` reads kind-102 rows and `check_research` refuses with `TechBarred`, tested since D23. Reviews:
 `docs/reviews/2026-11-15-d214-attributes.md`, `-d215-farm-base.md`, `-d216-packed-attack.md`, `-d217-elevation.md`,
-`-d218-construction-rate.md`, `-d220-rally-inside.md`.
+`-d218-construction-rate.md`, `-d220-rally-inside.md`, `-d222-builder-rate.md`.
 
 The order below is the user's ruling of 2026-11-14 - **live wrong numbers first**, then the effect interpreter, then the
 economy's own rules. Do not start breadth, civs, or the renderer before items 1-2.
 
 ## The open items, in the order I would take them
 
-1. **No farm reseed queue, and the resource search is unbounded.** `grep reseed crates` -> 0: a spent plot is a husk until a
+1. **A building spot is a claimed space, and a builder with none moves to his next site** (the owner, 2026-11-15: *"it is not
+   about tiles, never was ... only about finding a free space one diameter width. Same for resource gathering, same for
+   construction"*, and *"2 a"* - the next site in **his own queue**). This is the slice that closes the stalled 6×6 site, and the
+   design is the gatherer's: a place is one continuous space one **diameter** wide, claimed by one worker, nearest first, re-laid
+   when the ring refuses a man, released when something else moves him. What is missing today: construction claims nothing (so a
+   builder's spot and a parked villager's exit are fought over as if they were terrain), a **failed** step-aside is recorded in
+   `resuming` and never retried (measured: the same blocker every tick for 2,000 ticks), and there is no "next site" fallback.
+   Worker speed is already fixed for this (D222: `(n + 2)/3`), and the farm must keep working the way it does now - villagers
+   walk *around* the plot, the one exception, because a farm is walked on. Gate: the parked 6×6 fixture
+   (`build::a_content_pack_with_our_own_resources_loads_and_spends`) plus a fixture for the queue fallback.
+2. **No farm reseed queue, and the resource search is unbounded.** `grep reseed crates` -> 0: a spent plot is a husk until a
    player replaces it, and a villager whose plot ran dry walks the *whole map* for the next node, where the game caps a
    resource search at **LOS+5 tiles and 30 reach tests** (U22). D215 made this hot: a plot holds 175 instead of 250, so 43%
    more plots are laid per match and `repaths` went **380 -> 552**. Two slices, and the cap is the one that can change a
@@ -36,9 +46,9 @@ economy's own rules. Do not start breadth, civs, or the renderer before items 1-
    hand the builder the only tile another unit can use to leave - either the builder waits, or the exit search excludes the
    standoff. Reverted rather than landed: the retry alone left the fixture red, and an unproven change is not worth a commit.
    The parked test's `#[ignore]` sentence now carries the measurement.
-3. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
+4. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
    with and without a stander on the route. D211's decision says so in its own words.
-4. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
+5. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
    reads yet. This is the interpreter slice the tree puts in Phase 1; it is *not* a prerequisite for items 1-3.
 
 ## Ruled out of the current stretch, with the reason written down

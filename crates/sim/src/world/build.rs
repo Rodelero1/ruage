@@ -253,7 +253,12 @@ impl World {
 
     /// One tick of work on a site. Returns true when this tick finished the building. HP is
     /// derived from progress rather than accumulated, so a mill's 17.14 HP/s cannot drift.
-    pub(crate) fn work_one_tick(&mut self, site: EntityId, builder: EntityId) -> bool {
+    pub(crate) fn work_one_tick(
+        &mut self,
+        site: EntityId,
+        builder: EntityId,
+        per_tick: u32,
+    ) -> bool {
         // **A dead site is not worked.** Cancelling a foundation that is under construction used to be undone by its own
         // builder: `Delete` set its health to zero, and the next builder-tick wrote `hp = max_hp * progress / total`
         // straight over it, so the site the player had just cancelled went on existing (found by
@@ -287,7 +292,13 @@ impl World {
         let Some(mut construction) = building.construction else {
             return false;
         };
-        construction.progress_ticks = construction.progress_ticks.saturating_add(1);
+        // **Thousandths, carried** (D222): `per_tick` is what this site's hands add in a tick - 3000 for one hand,
+        // 4000 for two - and the remainder under a whole builder-tick waits for the next one so the finish lands exactly
+        // where `total_ticks` says it does. One hand adds 3000, so nothing changes for a single builder.
+        construction.carry = construction.carry.saturating_add(per_tick);
+        let whole = construction.carry / 3000;
+        construction.carry %= 3000;
+        construction.progress_ticks = construction.progress_ticks.saturating_add(whole);
         let total = construction.total_ticks.max(1);
         let hp = if construction.progress_ticks >= total {
             construction.max_hp

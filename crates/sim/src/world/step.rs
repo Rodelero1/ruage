@@ -424,11 +424,23 @@ impl World {
 
     /// Construction advances one builder-tick per tick, so the finish lands exactly on `create_time x tick_rate`.
     fn finish_construction(&mut self, builders: Vec<(EntityId, EntityId)>) {
-        // Construction advances one builder-tick per tick of work, so the finish lands exactly on
-        // `create_time x tick_rate` even where HP per second is not a whole number (a mill is
-        // 600 HP over 35 s).
+        // **Hands are not linear, and the speed is counted per site, not per man** (D222). The game's own arithmetic -
+        // `time = 3t / (n + 2)` - means `n` hands add `(n + 2) / 3` builder-ticks a tick: one hand is 1.0, two are 1.333,
+        // three are 1.667, ten are 4.0, and no number of hands ever doubles the first one's rate. Counting per builder
+        // was exactly linear, so a second hand halved the build; the count is taken once per site so a man who joined
+        // late cannot be double-counted either.
+        let mut hands: std::collections::BTreeMap<EntityId, (usize, Vec<EntityId>)> =
+            std::collections::BTreeMap::new();
         for (builder, site) in builders {
-            if self.work_one_tick(site, builder) {
+            let entry = hands.entry(site).or_default();
+            entry.0 += 1;
+            entry.1.push(builder);
+        }
+        for (site, (count, builders)) in hands {
+            // Thousandths of a builder-tick per tick: one hand is 3000, each extra hand 1000.
+            let per_tick = 1000u32 * (u32::try_from(count).unwrap_or(u32::MAX).saturating_add(2));
+            let builder = builders.first().copied().unwrap_or(EntityId(0));
+            if self.work_one_tick(site, builder, per_tick) {
                 let finished = self
                     .find(site)
                     .map(|building| (building.player, building.unit));

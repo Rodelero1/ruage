@@ -5787,3 +5787,42 @@ unchanged in kind - the script trains units with no rally - and the two arrival 
 of the trained villager's task and tile, and the new `rally::a_rally_onto_another_tile_of_the_building_is_the_building`. D38 for
 the production-versus-shelter split, D39 for "rallying to the building means staying inside". Review:
 `docs/reviews/2026-11-15-d220-rally-inside.md`.
+
+### D222 - hands are not linear: n builders add (n + 2)/3 of one man's work
+
+**What it says.** Building speed with several hands follows the game's own arithmetic, **`time = 3t / (n + 2)`**: one hand
+works at 1.0, two hands at **4/3**, three at **5/3**, four at 2.0, ten at 4.0 - each extra hand is worth a third of the first,
+and no number of hands ever doubles it. The engine counted one builder-tick per builder per tick, which is exactly linear: a
+second villager halved a build, a third cut it to a third, and every measurement of "two builders are strange in this game"
+could be reproduced against our own engine.
+
+**Where the number comes from.** Three independent sources agree to the same formula - the Age of Empires wiki's Villager page
+("if t is the time required for one Villager and n the number of Villagers, the building time will be 3t/(n+2)"), Jineapple's
+Steam infosheet (`t(constr) = 3 × t(coded) ÷ (n + 2)`, with the same note that Treadmill Crane's +20% and the Spanish +30% act
+on the *rate*), and the forum/Reddit threads that work the numbers out. All three describe AoC/DE; 5.7 HD is the AoC engine
+with the HD dat, and the formula is what the fix implements **subject to the save-game check** recorded below rather than
+assumed.
+
+**What it builds.**
+
+- The speed is counted **per site, not per man**: `finish_construction` groups the ticks's builders by site and adds
+  `1000 × (n + 2)` thousandths of a builder-tick, so a man who joined late cannot be counted twice and a man who left stops
+  being counted at once.
+- `Construction::carry` holds the remainder under a whole builder-tick (always under 3000), so two hands add 1, 1, then 2
+  ticks and the finish still lands exactly on `total_ticks` - a house of 500 builder-ticks finishes on tick 375 with two hands
+  and 300 with three, and a single hand is unchanged to the tick (which is why D218's Spanish fixture still reads 385).
+- The fixture reads the **rate** over a 60-tick window with every hand already placed beside the site, not the finish time, so
+  a villager arriving late cannot flatter the number: **60 / 80 / 100** builder-ticks for one, two and three hands where a
+  linear engine reads 60 / 120 / 180.
+
+**What is not closed by this.** The site that never starts because a villager is parked on its footprint (the 6×6 fixture) is
+untouched: the owner's rule for it is that a building spot is found the way a gatherer's place is found - a free **space one
+diameter wide**, claimed by one worker, with the builder moving to the next site in his own queue when there is none - and that
+is a slice of its own, not a rider on this one. `docs/next-step.md` carries the measurements and the plan.
+
+**What it costs.** One grouping pass over the tick's builders (a handful of entries) and two integer divisions per working
+site per tick, in place of one addition per builder.
+
+**Basis.** The three sources above; `crates/sim/tests/build.rs` `a_second_builder_is_worth_a_third_of_the_first`; the existing
+`total_ticks` semantics, which the change deliberately leaves alone so every stored number in a save keeps its meaning. Review:
+`docs/reviews/2026-11-15-d222-builder-rate.md`.

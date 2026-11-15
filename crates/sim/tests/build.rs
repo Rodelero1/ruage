@@ -1103,3 +1103,105 @@ fn a_spanish_builder_needs_385_ticks_where_a_british_one_needs_500() {
         "the Spanish tech-tree effect sets resource 195 to 1.3, so 500 / 1.3 = 384.6 rounds up to 385"
     );
 }
+
+/// **A second builder is worth a third of the first** (D222). The game's own arithmetic, from three independent sources
+/// (the wiki's Villager page, Jineapple's infosheet and the forum threads that worked it out): `time = 3t / (n + 2)`, so a
+/// house that takes **500** builder-ticks alone takes **375** with two builders and **300** with three - never 250 and never
+/// 167. Our engine added one builder-tick per builder per tick, i.e. exactly linear, and the fixture below reads the
+/// *rate* rather than the finish time so a villager arriving late cannot flatter it: every hand is placed beside the site
+/// before the order, and the measurement is the progress added over 300 ticks once work has started.
+#[test]
+fn a_second_builder_is_worth_a_third_of_the_first() {
+    let Some(fx) = fixture() else { return };
+    for hands in 1..=3usize {
+        let mut world = seeded(&fx);
+        let site = (20, 20);
+        // Hands in place before the order: each stands on a free tile beside the site's 2x2, so none of them walks.
+        let mut builders = Vec::new();
+        // All three on the site's west side, each touching the 2x2 footprint, so nobody walks during the measurement.
+        for (index, tile) in [(19, 19), (19, 20), (19, 21)]
+            .into_iter()
+            .enumerate()
+            .take(hands)
+        {
+            let id = EntityId(9_500 + index as u32);
+            world
+                .submit_checked(Command::Spawn {
+                    id,
+                    player: 1,
+                    kind: EntityKind::Unit,
+                    unit: Some(83),
+                    position: (
+                        ruage_fixed::Fixed::from_raw(i64::from(tile.0) * world.scale()),
+                        ruage_fixed::Fixed::from_raw(i64::from(tile.1) * world.scale()),
+                    ),
+                    speed: ruage_fixed::Fixed::ZERO,
+                    hp: 25,
+                    amount: 0,
+                })
+                .expect("a builder in place");
+            builders.push(id);
+        }
+        // Spawns are queued like every other command, so the hands exist on the next tick.
+        world.step().expect("the builders arrive");
+        // Wood for the house, handed straight to the bank: this fixture is about the rate, not about gathering.
+        let tree = nearest_tree(&world, builders[0]);
+        bank_wood(&mut world, 25 * hands as u32, tree);
+
+        world
+            .submit_checked(Command::Build {
+                villager: builders[0],
+                unit: 70,
+                at: site,
+            })
+            .expect("one builder starts the site");
+        world.step().expect("the order lands");
+        let foundation = world
+            .entities()
+            .iter()
+            .find(|e| {
+                e.kind == EntityKind::Building && e.unit == Some(70) && e.construction.is_some()
+            })
+            .expect("the foundation exists")
+            .id;
+        for extra in builders.iter().skip(1) {
+            world
+                .submit_checked(Command::JoinBuild {
+                    villager: *extra,
+                    site: foundation,
+                })
+                .expect("a second pair of hands");
+        }
+
+        // Wait for work to start, then measure what 100 ticks of it add.
+        let mut before = None;
+        for _ in 0..600 {
+            world.step().expect("step");
+            let progress = world
+                .entity(foundation)
+                .and_then(|e| e.construction)
+                .map_or(0, |c| c.progress_ticks);
+            if progress > 2 {
+                before = Some(progress);
+                break;
+            }
+        }
+        let before = before.expect("work starts");
+        for _ in 0..60 {
+            world.step().expect("step");
+        }
+        let after = world
+            .entity(foundation)
+            .and_then(|e| e.construction)
+            .map_or(0, |c| c.progress_ticks);
+        let gained = after - before;
+        // n hands add (n + 2)/3 of a builder-tick per tick, so 60 ticks add 20 x (n + 2) builder-ticks: 60 alone,
+        // 80 with two, 100 with three. A linear engine reads 60, 120, 180 - and finishes the house long before the
+        // window closes on its third hand, which is the second thing this measurement catches.
+        let expected = 20 * (hands as u32 + 2);
+        assert_eq!(
+            gained, expected,
+            "{hands} builder(s): 60 ticks must add {expected} builder-ticks, not {gained}"
+        );
+    }
+}

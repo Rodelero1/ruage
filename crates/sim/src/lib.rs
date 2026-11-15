@@ -472,6 +472,10 @@ struct BuildPlan {
 pub struct Construction {
     /// Builder-ticks contributed so far. Counts only while somebody is actually working.
     pub progress_ticks: u32,
+    /// **Thousandths of a builder-tick carried between ticks** (D222), always under 3000. Hands do not add whole ticks:
+    /// the game's own rate is `(n + 2) / 3` builder-ticks a tick for `n` hands, so two hands add 1.333 a tick and the
+    /// thirds have to go somewhere. Kept as state because a replay must reproduce them.
+    pub carry: u32,
     /// Builder-ticks needed: `create_time x tick_rate`.
     pub total_ticks: u32,
     /// The finished hit points, so progress can be turned into HP for display and combat.
@@ -2683,6 +2687,7 @@ impl World {
             training: None,
             construction: Some(Construction {
                 progress_ticks: 0,
+                carry: 0,
                 total_ticks,
                 max_hp,
             }),
