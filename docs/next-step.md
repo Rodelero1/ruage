@@ -99,6 +99,15 @@ remains is therefore the debt list, not a defect list.
 5. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
    reads yet. This is the interpreter slice the tree puts in Phase 1; it is *not* a prerequisite for items 1-3.
 
+## A standing requirement on shape: a civilisation is config (D233, 2026-11-16)
+
+*"I would like team bonuses and civ bonuses moddable in the future to be able to easily add a civ by adding/changing
+config."* The bonuses stay deferred (D219); what this settles is the shape, and one half of it is enforced in the loader
+already: the **attribute vocabulary is closed** (13 names the engine acts on, 16 the data carries unread) and a modifier
+naming anything else is **refused at load, by name** - so a mod's civ cannot load and silently do nothing. The other half is
+the **R6 seam** (`docs/civ-bonuses.md`): one resolved table per player, because five consumers already walk three effect
+tables and a sixth is another place a new civ can be half-applied. Read that before adding any bonus consumer.
+
 ## Ruled out of the current stretch, with the reason written down
 
 - **Civ and team bonuses** (the owner, 2026-11-15: *"can wait ... just have the design ready"*). The design is

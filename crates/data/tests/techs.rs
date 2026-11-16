@@ -561,3 +561,75 @@ fn thirty_one_packed_attack_values_are_carried_unexplained() {
          Shinkichon (506) is one of them"
     );
 }
+
+/// **A modifier's attribute name is a closed vocabulary, and a stranger is refused by name** (D233). The engine matches
+/// modifiers by string, so an attribute nobody reads is a silent no-op - which for a **mod** is the worst failure there is:
+/// a civ added in config looks right and does nothing. Adding a civ has to be a config change, and a config change that
+/// cannot work has to say so at load.
+#[test]
+fn an_attribute_name_the_pack_vocabulary_does_not_carry_is_refused() {
+    let bad = r#"
+schema = 1
+kind = "effects"
+
+[[effect]]
+id = 7
+name = "a bonus nobody can read"
+commands = []
+modifiers = [{ op = "add", attribute = "attackk", attribute_class = -1, unit = -1, unit_class = -1, value = 1.0 }]
+"#;
+    let err = load_effects_str(bad, "effects.toml")
+        .expect_err("a misspelt attribute must not load")
+        .to_string();
+    assert!(
+        err.contains("attackk"),
+        "the error names the attribute: {err}"
+    );
+    assert!(
+        err.contains("effect[7]"),
+        "the error names the effect: {err}"
+    );
+}
+
+/// **An invented `other:` id is refused too.** Those names are the *recorded* gaps - the attributes the data carries and the
+/// engine does not read yet - so the list is closed the way D216 closed the packed-attack list: a new one is a change to the
+/// vocabulary, not a silent no-op that reads as a working bonus.
+#[test]
+fn an_invented_other_attribute_is_refused() {
+    let bad = r#"
+schema = 1
+kind = "effects"
+
+[[effect]]
+id = 9
+name = "an id no reading explains"
+commands = []
+modifiers = [{ op = "add", attribute = "other:7", attribute_class = -1, unit = -1, unit_class = -1, value = 1.0 }]
+"#;
+    let err = load_effects_str(bad, "effects.toml")
+        .expect_err("other:7 is not in the vocabulary")
+        .to_string();
+    assert!(
+        err.contains("other:7"),
+        "the error names the attribute: {err}"
+    );
+}
+
+/// **And the shipped pack passes the closed vocabulary**, which is the half that keeps the rule honest: the list is the
+/// pack's own, not a guess about it.
+#[test]
+fn every_attribute_in_the_shipped_pack_is_in_the_vocabulary() {
+    let effects = effects();
+    let mut names = std::collections::BTreeSet::new();
+    for effect in effects.effects.values() {
+        for modifier in &effect.modifiers {
+            names.insert(modifier.attribute.clone());
+        }
+    }
+    assert_eq!(
+        names.len(),
+        29,
+        "the pack carries 29 distinct attribute names; got {}: {names:?}",
+        names.len()
+    );
+}

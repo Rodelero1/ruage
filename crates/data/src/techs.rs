@@ -363,10 +363,29 @@ pub fn load_effects_str(text: &str, path: &str) -> Result<Effects, ConfigError> 
                     });
                 }
             };
-            if raw.attribute.trim().is_empty() {
+            let attribute = raw.attribute.trim().to_owned();
+            if attribute.is_empty() {
                 return Err(ConfigError::Invalid {
                     key: format!("effect[{}].modifiers.attribute", effect.id),
                     detail: "a modifier needs an attribute".to_owned(),
+                });
+            }
+            // **A closed vocabulary, refused by name** (D233): the engine matches modifiers by this string, so a name
+            // nothing reads is a silent no-op - a civ added in config would look right and do nothing. Content that needs
+            // a new attribute needs a consumer first, and this refusal is what makes that visible at load.
+            if !knows_attribute(&attribute) {
+                return Err(ConfigError::Invalid {
+                    key: format!("effect[{}].modifiers.attribute", effect.id),
+                    detail: format!(
+                        "{attribute:?} is not in the pack's attribute vocabulary - the engine matches modifiers by name, \
+                         so an unknown one would silently do nothing. Known: {}",
+                        NAMED_ATTRIBUTES
+                            .iter()
+                            .chain(UNREAD_ATTRIBUTES.iter())
+                            .copied()
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
                 });
             }
             if !raw.value.is_finite() {
@@ -377,7 +396,7 @@ pub fn load_effects_str(text: &str, path: &str) -> Result<Effects, ConfigError> 
             }
             modifiers.push(Modifier {
                 op,
-                attribute: raw.attribute.trim().to_owned(),
+                attribute,
                 attribute_class: raw.attribute_class,
                 unit: raw.unit,
                 unit_class: raw.unit_class,
@@ -489,6 +508,54 @@ pub fn load_techs_file(path: &std::path::Path) -> Result<Techs, ConfigError> {
         detail: err.to_string(),
     })?;
     load_techs_str(&text, &path.display().to_string())
+}
+
+/// **The attribute names the engine acts on** (D233). A modifier is matched by its attribute *string* -
+/// `modifiers_for(player, unit, "range")` - so this list is the interface between content and code, and a name here is a
+/// promise that something reads it.
+pub const NAMED_ATTRIBUTES: &[&str] = &[
+    "accuracy",
+    "armour",
+    "attack",
+    "ballistics",
+    "carry",
+    "extra_projectiles",
+    "gather_rate",
+    "hit_points",
+    "line_of_sight",
+    "minimum_range",
+    "population",
+    "range",
+    "speed",
+];
+
+/// **The attribute names the data carries and nothing reads yet**, recorded as they are - `other:<id>` and `unpacked:<id>` -
+/// the way D216 recorded the packed attack values no reading explains. They are in the vocabulary because the shipped pack
+/// carries them; a **new** one is a change to this list, not a config that quietly does nothing.
+pub const UNREAD_ATTRIBUTES: &[&str] = &[
+    "other:2",
+    "other:10",
+    "other:17",
+    "other:22",
+    "other:23",
+    "other:100",
+    "other:101",
+    "other:103",
+    "other:104",
+    "other:105",
+    "other:106",
+    "other:107",
+    "other:108",
+    "other:109",
+    "unpacked:8",
+    "unpacked:9",
+];
+
+/// **Is this an attribute the pack may name?** The two lists above are the whole vocabulary, and it is **closed** on
+/// purpose: a misspelt name or an invented `other:` id would otherwise load and do nothing, which is the worst failure a
+/// mod can have - a civ added in config that looks right and does nothing (D233).
+pub fn knows_attribute(name: &str) -> bool {
+    NAMED_ATTRIBUTES.contains(&name) || UNREAD_ATTRIBUTES.contains(&name)
 }
 
 impl Effects {

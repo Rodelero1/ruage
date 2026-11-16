@@ -6204,3 +6204,40 @@ whether or not the AI split is ever built. That is the one piece of T16 that a l
 **Basis.** `FUN_00738720`, `FUN_00735960`, `FUN_0072d0b0` in `AoK HD.exe`; the genie port at `62831fa`, `world/schedule.rs`,
 `unit_ai/unit.rs`, `world/load/world/mod.rs`; `docs/mechanics/determinism.md`. Review:
 `docs/reviews/2026-11-16-d232-turn-read.md`. No simulation code changed.
+
+### D233 - a civilisation is config, and the attribute vocabulary is closed so a config that cannot work says so (2026-11-16)
+
+**The requirement, the owner's words (2026-11-16):** *"I would like team bonuses and civ bonuses moddable in the future to be
+able to easily add a civ by adding/changing config."* That is a constraint on the **shape** of the work, not a request to
+build the bonuses now - D219's deferral stands - and it settles three things that were open:
+
+1. **A civ is a row plus effects, never a name in `crates/`.** No engine code may know "British", nor that there are 31; a
+   mod adds a civ by adding a `[[civ]]` row and the effect rows it points at. The engine's vocabulary for a bonus is a
+   *capability* (`attack`, `line_of_sight`, `population`), and content chooses which civs get which.
+2. **Every bonus has to land in every consumer, or the mod is a lie.** This is what the R6 seam (`docs/civ-bonuses.md`) is
+   for: five consumers already walk three effect tables today, and a sixth would be another place a new bonus can be
+   half-applied. The seam's rule stands - one resolved table per player, consumers read it - and the requirement raises its
+   priority, because "add a civ by config" is false while a bonus can silently reach four consumers out of five.
+3. **A config that cannot work must be refused at load, by name.** This is the piece that was missing, and it is landed
+   here.
+
+**What landed: the attribute vocabulary is closed.** `crates/data/src/techs.rs` now carries the pack's whole vocabulary in
+two lists - **13 names the engine acts on** and **16 the data carries and nothing reads yet** (`other:<id>`,
+`unpacked:<id>`), recorded the way D216 recorded the packed attack values. A modifier naming anything else is refused at
+load with the effect id and the name:
+
+> `effect[7].modifiers.attribute: "attackk" is not in the pack's attribute vocabulary - the engine matches modifiers by
+> name, so an unknown one would silently do nothing.`
+
+**Why a refusal and not a warning.** Today a misspelt attribute - or an invented `other:7` - loads fine and matches nothing,
+so a mod's civ would look right and do nothing, and the only symptom is a player who cannot tell whether their bonus is
+missing or their civ is wrong. The refusal turns that into a load error that names the attribute and the effect. The list is
+the **pack's own** vocabulary, pinned by a test that counts the 29 distinct names it carries, so the refusal cannot drift
+away from the data.
+
+**Cost.** None per tick: the check runs once per modifier at load (798 effects, ~1,300 modifiers) and nothing is stored.
+Two new data tests are red on the old code (`attackk`, `other:7`) and green here, and the shipped pack loads unchanged.
+
+**Basis.** `crates/data/src/techs.rs` (`NAMED_ATTRIBUTES`, `UNREAD_ATTRIBUTES`, `knows_attribute`, the refusal in the
+modifier loader); `crates/data/tests/techs.rs` (three fixtures); the 29-name census of `config/gamedata/effects.toml`;
+`docs/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d233-moddable-civs.md`.

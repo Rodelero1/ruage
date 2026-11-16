@@ -6,6 +6,15 @@ shape, with the numbers read from the data and nothing implemented on top of the
 effect tables stays as it is; what it should look like when the bonuses are built is written down here, along with the test that
 would prove the seam.
 
+**Added 2026-11-16, the owner's requirement (D233):** *"I would like team bonuses and civ bonuses moddable in the future to
+be able to easily add a civ by adding/changing config."* That does not un-defer the bonuses - it fixes their **shape**: a civ
+is a row plus the effects it points at, never a name in `crates/`, and every bonus has to reach every consumer through one
+table (this file's seam), because a bonus that lands in four walks out of five is a mod that looks right and does nothing.
+The first half of that is now enforced where a config *can* be wrong: the pack's **attribute vocabulary is closed**
+(`crates/data/src/techs.rs`: 13 names the engine acts on, 16 the data carries and nothing reads yet), and a modifier naming
+anything else is refused at load with its effect id and the name. The remaining gap is the seam itself: five consumers,
+three tables, and a sixth would be another place a new civ's bonus can be half-applied.
+
 ## What the data actually carries (measured 2026-11-15)
 
 `config/gamedata/civs.toml`: **32 civ rows, 31 with a `team_bonus_effect`** (Gaia has none). Each civ also has a
