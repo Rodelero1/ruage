@@ -6772,3 +6772,31 @@ rule 3's timing can move without a pile.
 **Kept from the attempts**: the geometry - a carrier stalls **4,155 raw** from the wall against a **4,000** radius (a step is
 758), so "half a diameter" is true with exactly one step of slack, in the engine and in the fixture. Review:
 `docs/reviews/2026-11-16-d245-four-body-rules.md`.
+
+### D246 - the reply is short, the code is simple, and both say why where the reader needs it (2026-11-16)
+
+**What it says.** Two standing instructions from the owner:
+
+1. **The reply is quick to read.** Answer first, then the evidence; short paragraphs and short lists; no preamble, no
+   restating the request, no "great question". A number, a path or a quoted command instead of a mood.
+2. **The code is written for the next reader.** The simple thing that works, not the general thing that might - add the
+   abstraction when the third caller appears. Readability and maintainability are requirements, not polish, and comments
+   explain **what a thing is for and why it is shaped that way** (the invariant, the trap, the measurement behind a
+   constant), never what the line does.
+
+Both are in `AGENTS.md`, in the file every session in this tree loads before it writes anything.
+
+**Why.** The owner's words, 2026-11-16: *"Provide easy to understand quick to read text output, avoid AI slop and wall of
+text"* and *"focus on simplicity, readability of the code and maintainability, avoid overengineering, most of the cases
+have simple solution. put in the code comments providing good explanation of functionality"*. Both failures cost him the
+same thing - the time spent separating the answer from the prose around it, or reading a general mechanism where a
+function would do.
+
+**What it does not mean.** *Short* is not thin: a rule still carries its measurement and a review still names what was
+attacked. *Simple* is not naive: the fixed-point, determinism and layering rules stay exactly as strict; what goes is the
+abstraction with one implementation and one caller, and the clever line that needs a paragraph to defend.
+
+**Commits us to.** A reply that opens with the answer and stops when the answer is done; comments that carry purpose and
+provenance rather than narration; and naming the case where the simple version is not enough instead of building the
+framework in advance.
+

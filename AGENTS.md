@@ -68,6 +68,21 @@ session commit here. The rules below exist because that has already gone wrong o
 "docs: what learning from a GPL project does and does not permit" that contained someone else's feature
 code.
 
+## How the work reads, and how the code is written (D246)
+
+**The reply is for a person in a hurry.** Answer first, then the evidence. Short paragraphs, short lists, no preamble and
+no restating the request. One idea per sentence. A table only when the comparison is the point. Say the number, name the
+file, quote the command; say plainly what is unknown instead of padding it. If a reply needs headings to be followable,
+it is too long.
+
+**The code is written for the next reader.** The simple thing that works, not the general thing that might. Prefer a named
+function over a trait, a `match` over a callback, an explicit field over a generic parameter; add the abstraction when the
+third caller appears, not the first. Readability and maintainability are requirements here, not polish - this tree has more
+than one writer and no test rewards cleverness. **Comment what a thing is for and why it is shaped that way** - the
+invariant it holds, the trap it avoids, the measurement behind a constant - not what the line does; the comments already in
+the tree carry byte offsets, decision ids and measured numbers, and that is the standard. When a simpler design exists, say
+so before building the complicated one.
+
 ## Committing
 
 - **Stage files by name.** `git add path/to/file ...`, never `git add -A`, `git add .` or `git commit -a`.
