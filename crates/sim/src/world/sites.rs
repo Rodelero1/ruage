@@ -305,6 +305,17 @@ impl World {
         }
     }
 
+    /// **The middle of a footprint**, as a point. A farm's builder stands here (D250): it is the one place inside a plot
+    /// that is clear of every edge whatever the plot's size, and it is where the game's villager seeds the field.
+    pub(crate) fn footprint_centre(&self, id: EntityId) -> Option<(Fixed, Fixed)> {
+        let (ax, ay, wide, tall) = self.footprint_rect(id)?;
+        let scale = self.scale;
+        Some((
+            Fixed::from_raw(i64::from(ax) * scale + i64::from(wide) * scale / 2),
+            Fixed::from_raw(i64::from(ay) * scale + i64::from(tall) * scale / 2),
+        ))
+    }
+
     /// **A building's footprint as a rectangle**: anchor tile and size, which is what a builder's "am I on it?" question
     /// needs. `footprint_area` answers with the tiles themselves, which allocates; a builder asks this every tick.
     pub(crate) fn footprint_rect(&self, id: EntityId) -> Option<(u16, u16, u16, u16)> {

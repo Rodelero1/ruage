@@ -132,6 +132,62 @@ fn an_unaffordable_item_stays_on_the_card() {
     );
 }
 
+/// **The technology the owner named: Imperial Age must not show in the Dark Age** (D250, 2026-11-16: *"If technology that is
+/// not available at current age (for example Imperial Age in Dark Age) shows -> FAIL"*).
+///
+/// The card is where a technology "shows", so this asks the town centre's own card - the building every age is researched
+/// at. The rule asserted is the game's: only the **next** age is offered, so Dark Age offers Feudal and nothing later, and
+/// the Imperial Age appears once the Castle Age is reached. A greyed button whose refusal is about money stays (that is
+/// `an_unaffordable_item_stays_on_the_card`); an age two steps away is not a choice at all.
+#[test]
+fn a_dark_age_town_centre_does_not_offer_the_imperial_age() {
+    let Some(mut world) = fresh() else { return };
+    let centre = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Building)
+        .map(|entity| entity.id)
+        .expect("a town centre");
+    let imperial = world
+        .tech_role("imperial_age")
+        .expect("the pack names its imperial age");
+    let name = world
+        .tech_role_name(imperial)
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("tech {imperial}"));
+
+    let dark = names(&world, centre);
+    assert!(
+        !dark.iter().any(|offered| offered == &name),
+        "a Dark Age town centre offers the {name}: {dark:?}"
+    );
+    // The **next** age is still offered, greyed if it must be: the rule hides later ages, not the one in reach.
+    let feudal = world
+        .tech_role("feudal_age")
+        .expect("the pack names its feudal age");
+    let feudal_name = world
+        .tech_role_name(feudal)
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("tech {feudal}"));
+    assert!(
+        dark.iter().any(|offered| offered == &feudal_name),
+        "a Dark Age town centre does not offer the {feudal_name}, the age it can reach: {dark:?}"
+    );
+
+    // Reach the Castle Age the honest way for this fixture: the two ages granted, as the neighbouring test does.
+    world.grant_tech(1, feudal).expect("the Feudal Age");
+    let castle = world
+        .tech_role("castle_age")
+        .expect("the pack names its castle age");
+    world.grant_tech(1, castle).expect("the Castle Age");
+
+    let late = names(&world, centre);
+    assert!(
+        late.iter().any(|offered| offered == &name),
+        "a Castle Age town centre does not offer the {name}, which is the age it can now reach: {late:?}"
+    );
+}
+
 /// **A unit is named by its own role, not by a later tier of its family** (the owner's report, 2026-11-04: *"player trains
 /// champions in dark age and has hussar instead of scout cavalry"*).
 ///

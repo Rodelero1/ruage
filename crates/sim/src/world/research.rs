@@ -73,25 +73,12 @@ impl World {
                 tech,
             });
         }
-        // An age needs buildings of the current age (D65). Checked before the price so the player is told
-        // what is actually missing, and counted on finished buildings: a foundation is not an age.
-        if let Some((need, families, singles)) = self.age_needs.get(&tech) {
-            let singles_met = !singles.is_empty()
-                && self.entities.iter().any(|other| {
-                    other.player == entity.player
-                        && other.kind == EntityKind::Building
-                        && other.hp > 0
-                        && other.construction.is_none()
-                        && other.unit.is_some_and(|unit| {
-                            let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
-                            singles.contains(&family)
-                        })
-                });
-            let have = self.standing_buildings(entity.player, families);
-            if !singles_met && have < *need {
-                return Err(SimError::AgeNeedsBuildings { need: *need, have });
-            }
-        }
+        // **An age two steps away is not a choice, so the previous age is asked about first** (D250). The owner's rule
+        // is that a technology the current age does not allow must not show, and "Imperial Age" in the Dark Age used to
+        // show on the town centre's card because this gate answered *"you need two castle buildings"* - true, useless,
+        // and not an age gate, so the card drew the button. The prerequisite answer (*"the Castle Age is missing"*) is
+        // the same fact one level up, and it is the one `is_age_gate` recognises as the age talking.
+        //
         // A civ's tech tree lists what it *cannot* have, and that outranks "not ready yet": the
         // British list carries the Hussar, the Eagle line and the Paladin, while no civ's list carries
         // Loom or an age - so these are restrictions, not permissions (see crates/data/src/civs.rs).
@@ -118,6 +105,26 @@ impl World {
                 missing,
                 role: self.tech_role_name(missing).map(str::to_owned),
             });
+        }
+        // An age needs buildings of the current age (D65). Asked once the age before it is settled, and before the price
+        // so the player is told what is actually missing; counted on finished buildings, because a foundation is not an
+        // age.
+        if let Some((need, families, singles)) = self.age_needs.get(&tech) {
+            let singles_met = !singles.is_empty()
+                && self.entities.iter().any(|other| {
+                    other.player == entity.player
+                        && other.kind == EntityKind::Building
+                        && other.hp > 0
+                        && other.construction.is_none()
+                        && other.unit.is_some_and(|unit| {
+                            let family = self.units.as_ref().map_or(unit, |units| units.root(unit));
+                            singles.contains(&family)
+                        })
+                });
+            let have = self.standing_buildings(entity.player, families);
+            if !singles_met && have < *need {
+                return Err(SimError::AgeNeedsBuildings { need: *need, have });
+            }
         }
         let effects = self.effects.as_ref().ok_or(SimError::NoTables)?;
         if let Some(effect_id) = stats.effect_id

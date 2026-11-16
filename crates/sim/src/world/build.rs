@@ -196,6 +196,29 @@ impl World {
             return true;
         }
         let tiles = self.footprint_area_of(site);
+        // **A body is a disc, and the gate used to count tiles** (D250). A man standing beside the footprint with his
+        // circle across its edge is inside the wall the first stroke is about to raise, and the site waited for nobody
+        // because his *tile* was outside it: measured as a spawned body 0.1 tiles from the edge, caught inside the wall
+        // on the tick the tiles blocked. D183 §5 promises no unit is ever inside a solid footprint; this half of the
+        // gate is what keeps the promise - the tile test alone does not.
+        let rect = self.footprint_rect(site);
+        let overlaps = |other: &crate::Entity| {
+            let (Some((ax, ay, wide, tall)), true) = (rect, other.kind == EntityKind::Unit) else {
+                return false;
+            };
+            let scale = self.scale;
+            let (left, top) = (i64::from(ax) * scale, i64::from(ay) * scale);
+            let (right, bottom) = (
+                left + i64::from(wide) * scale,
+                top + i64::from(tall) * scale,
+            );
+            let (x, y) = (other.position.0.raw(), other.position.1.raw());
+            let (ox, oy) = (
+                (left - x).max(x - right).max(0),
+                (top - y).max(y - bottom).max(0),
+            );
+            (ox * ox + oy * oy).isqrt() < self.body_radius_of(other.id)
+        };
         let standing: Vec<(EntityId, u8)> = self
             .entities
             .iter()
@@ -204,7 +227,7 @@ impl World {
                     && other.hp > 0
                     && !matches!(other.task, Task::Garrisoned { .. })
             })
-            .filter(|other| tiles.contains(&self.tile_of(other.position)))
+            .filter(|other| tiles.contains(&self.tile_of(other.position)) || overlaps(other))
             .map(|other| (other.id, other.player))
             .collect();
         if standing.is_empty() {
