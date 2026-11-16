@@ -487,3 +487,102 @@ fn arrivals(fx: &Fixture, civ: &str, barracks: bool) -> usize {
 }
 
 const BARRACKS: u32 = 12;
+
+/// **The ceiling is read at the spawn, not once at the tick's opening** (D231). Two barracks finish a soldier on the same
+/// tick with exactly one population slot left: one soldier arrives and the other is **held**, because the first spawn spent
+/// the slot. A ceiling computed once per tick, before any of them spawn, is a fact about the past by the time the second
+/// building asks - and the player ends the tick over their cap.
+#[test]
+fn the_ceiling_is_read_at_the_spawn() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let cap = world.population_cap(1);
+    let before = world.population(1);
+    assert_eq!(
+        cap - before,
+        1,
+        "the fixture needs exactly one free slot: population {before}, cap {cap}"
+    );
+
+    // Two finished barracks, standing on ground the town centre's yard is not using.
+    let role = world.role_unit("barracks").expect("a barracks role");
+    let militia = world.role_unit("militia").expect("a militia role");
+    let mut halls = Vec::new();
+    for n in 0..2u32 {
+        let at = a_free_tile(&world, role);
+        let id = EntityId(9_000 + n);
+        world
+            .submit_checked(Command::Spawn {
+                id,
+                player: 1,
+                kind: EntityKind::Building,
+                unit: Some(role),
+                position: (
+                    ruage_fixed::Fixed::from_raw(i64::from(at.0) * world.scale()),
+                    ruage_fixed::Fixed::from_raw(i64::from(at.1) * world.scale()),
+                ),
+                speed: ruage_fixed::Fixed::ZERO,
+                hp: 1_200,
+                amount: 0,
+            })
+            .expect("a barracks");
+        world.step().expect("the barracks stands");
+        halls.push(id);
+    }
+
+    // Ordered in the same tick and on the same unit, so both clocks reach zero together.
+    for hall in &halls {
+        world
+            .submit_checked(Command::Train {
+                building: *hall,
+                unit: militia,
+            })
+            .expect("the queue takes the order");
+    }
+    // The orders land on the next step; only then is there a job to read.
+    world.step().expect("the orders land");
+    let mut ticks = 0;
+    loop {
+        let left: Vec<Option<u32>> = halls
+            .iter()
+            .map(|hall| {
+                world
+                    .entity(*hall)
+                    .and_then(|e| e.training)
+                    .map(|job| job.remaining_ticks)
+            })
+            .collect();
+        if left.iter().all(|remaining| *remaining == Some(1)) {
+            break;
+        }
+        assert!(
+            left.iter().all(|remaining| remaining.is_some()),
+            "both barracks have a job, so the fixture measures something: {left:?}"
+        );
+        world.step().expect("step");
+        ticks += 1;
+        assert!(ticks < 10_000, "the jobs never reached their last tick");
+    }
+
+    world.step().expect("both jobs finish on this tick");
+
+    assert_eq!(
+        world.population(1),
+        cap,
+        "one soldier filled the last slot and the second was held: population {} against a cap of {cap}",
+        world.population(1)
+    );
+    let soldiers = world
+        .entities()
+        .iter()
+        .filter(|entity| entity.player == 1 && entity.unit == Some(militia))
+        .count();
+    assert_eq!(soldiers, 1, "exactly one of the two arrived");
+
+    // And the held job is still held, not lost: a slot that frees up lets it in.
+    let held = halls
+        .iter()
+        .filter(|hall| world.entity(**hall).and_then(|e| e.training).is_some())
+        .count();
+    assert_eq!(held, 1, "the second barracks still has its job");
+}

@@ -754,6 +754,13 @@ impl World {
             };
             if ready {
                 self.spawn_from_building(id);
+                // **The ceiling is read at the spawn, not once a tick** (D231). It is a fact about the world, and the
+                // world changes as this phase's buildings finish: two barracks with one slot left must not both deliver,
+                // which is what a `capped` computed before the first of them spawned did (measured: population 6 against
+                // a cap of 5). Recomputed only when a job actually completes, so the cost is a scan per unit trained
+                // rather than per building per tick.
+                capped[usize::from(player).wrapping_sub(1).min(MAX_PLAYERS - 1)] =
+                    self.population(player) >= self.population_cap(player);
             }
         }
         // Research: the same timer, and the effect lands when it reaches zero.

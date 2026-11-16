@@ -16,83 +16,36 @@ nothing, but `barred_by` reads kind-102 rows and `check_research` refuses with `
 The order below is the user's ruling of 2026-11-14 - **live wrong numbers first**, then the effect interpreter, then the
 economy's own rules. Do not start breadth, civs, or the renderer before items 1-2.
 
-## T12 - the original's intra-tick order, read from 5.7's own binary (2026-11-15)
+## Where T12 stands: two stages landed, and the inner loop priced (2026-11-16)
 
-`BaseWorld::update` is **`FUN_00738720` at `0x738720`**, and it is named three ways by the file itself: its profiler
-string `"baseworld update"`, the `aoeworld-at-%08d.txt` status log it writes, and its assertions' own source path
-`...\aoc\source\game\baseworld.cpp` (lines `0xb6b`, `0xc7e`, `0xcb7`). What it does, in order:
+**The original's order is read, and two stages of it are in the engine.**
 
-- **Players in index order.** The outer loop walks the array at **`+0x184 .. +0x188`** (8-byte stride; `FUN_0072b700` reads
-  the same pair as a count) from index 0 upward. Index 0 is Gaia, so the order is `Gaia, players 1-8`.
-- **Each player's objects, one at a time, inside that player's turn.** For a player whose list is non-empty it walks an
-  object list (head at `+0x48`, node `next` at `+0x5c`, node owner at `+0x60`) and skips every node whose owner is not the
-  player it is on. Per object there is **one virtual call that decides removal** (`+0xa0` returning 0 → unlink and destroy
-  through vtable slot 0, the class's own destructor) and **otherwise one virtual call that runs the object's own update**
-  (`+0x84`). Neither method can be named - both are virtual and the binary carries no symbols - but the shape is
-  *sweep, else step*, and the state one object leaves is what the next object reads.
-- **Death is applied inline, in the victim's own turn** - not in a pass after the tick, which is what our `sweep_dead` is.
-  So a unit killed by an earlier-ordered attacker is gone before any later object's turn: it does not swing, and it does not
-  step, gather or finish anything either.
-- **Per-player virtual bracket**: `+0x130` before the object walk, `+0x68` after it, `+0x134` once for the players already
-  visited; then three more per-player loops gated on `FUN_00727810()`.
-- **The turn is real and it is `pturn`.** At the end of the update the rotating index at **`+0x100`** is advanced by one and
-  wrapped at the player count, and `+0x100` is `pturn` - the field `docs/save-format.md` reads out of the save header. That
-  is **T16**'s axis, read for free here; it is not this slice.
+- **The binary** (`FUN_00738720`, `0x738720`): `BaseWorld::update` walks the players array at `+0x184..+0x188` from index 0
+  up - Gaia, then 1-8 - and inside a player's turn walks that player's object list one object at a time (*sweep, else step*:
+  `+0xa0` decides removal, `+0x84` runs the update), so death is applied **in the victim's own turn**. It also advances
+  `pturn` at `+0x100`, which is T16's axis. Full write-up in **D229** and `docs/mechanics/determinism.md`.
+- **Stage 1 (D229)**: the ordered blow pass sorts `(player, id)`, and a building dead when that pass ends finishes no
+  production or research.
+- **Stage 2 (D230)**: `Sim::step` splits the tick's work into **one turn per player** and applies each player's share as a
+  unit, so a man killed by an earlier player's blow does nothing for the rest of the tick and a man whose turn came first has
+  already worked. Two fixtures, `crates/sim/tests/turn_order.rs`, same build with the players swapped.
 
-## Stage 2: the players take turns (2026-11-15, late)
+**Stage 3 - the inner loop - is priced, not started.** It means deciding *and* applying one object at a time inside a
+player's turn, and what it would still buy after the two stages is narrower than it looks. The quantities a decision reads
+that an earlier object of the same player can change in the same tick are: node amounts (already clamped at apply time in
+`grant_takes`, so the sum matches), ring reservations and places (already applied in order), `spent_nodes` (a retask that
+sees the opening amount lags **one tick**), free ground for a spawn (`free_spot_near` already runs at apply time), and the
+**population ceiling** - which was the one real defect in the list, fixed as **D231**: the ceiling was read once at the
+tick's opening, so two barracks finishing with one slot left both delivered (measured: population 6 against a cap of 5; the
+fixture is `population::the_ceiling_is_read_at_the_spawn`).
 
-**Landed after stage 1.** `Sim::step` now splits the tick's work into **one turn per player** - Gaia at index 0, then
-1-8 - and applies each player's share as a unit: places, the fight, the harvest, the re-tasks, the switch, the herd, the
-delivery, the site, the blow, the return. So a man killed by an **earlier** player's blow does nothing for the rest of the
-tick, and a man whose turn came **first** has already worked when the blow lands. Two fixtures in
-`crates/sim/tests/turn_order.rs` are the pair: the same build, players swapped, and opposite progress on the site.
-
-The split is one pass per tick (`TickWork::bucket`), not one per player per list, and every item whose actor is dead is
-dropped **twice** - at the split, and again when its turn comes (`TurnWork::keep_the_standing`), because the split can only
-judge health at the tick's opening while an earlier turn may kill in between. Removing either half reddens a fixture.
-
-**What it costs, and the match it changes.** Forced into a single turn, the same match is bit-identical to `main`
-(`beb6c66f58e4045c`, 154 entities, 277 repaths) and runs at **20.71 s against 19.76 s** for 24,000 ticks - **+4.8%** for the
-mechanism. Live, the match **diverges** - `cb1f6a83a119a2a3`, 152 entities, `repaths=256` - and takes 22.64 s
-(**+13.3%**), of which the loop is the 4.8% and the rest is the different match; a phase probe inside a live match is owed
-to separate them. **An empty-turn skip was tried and withdrawn**: `shepherd` resumes a gather on a corpse from
-`self.slaughter`, which is state and not one of the turn's lists, so the skip stopped a villager working the sheep he had
-just killed and two animal fixtures caught it.
-
-**What is still not the queue:** inside one player's turn the objects are still simultaneous (their work is applied phase
-by phase, not object by object), and `decide` still reads the state the tick opened with - so a decision cannot see what an
-earlier object did. Movement, production, arrows, world timers and the death sweep remain global phases after the turns.
-
-## The slice T12 takes, and what it deliberately is not
-
-Our tick **decides** every entity against the state the tick opened with (`decide`, `&self`) and then **applies** the
-collected work in a fixed phase order. A true per-object turn means deciding *and* applying inside one loop per object -
-a rewrite of `world/step.rs` (2,402 lines), not a slice that lands in one pass. So this slice takes the half the two-pass
-shape can honestly carry:
-
-1. **The apply order becomes the original's**: the ordered blow pass (D88) is sorted `(player, id)` instead of by entity
-   id - Gaia first, then players 1-8, and inside a player the id, which is creation order and therefore the slot order.
-   An id that is not in the world sorts last. This is the one place the engine already *is* a sequence, so this is where
-   the order is real rather than nominal.
-2. **A building destroyed when the blow pass ends finishes nothing**: production and research skip an entity at or below
-   zero health, so a barracks killed this tick does not hand over the unit it had one tick left on.
-
-**The price of the two-pass shape, stated rather than discovered:** (2) is right for every victim whose killer's turn came
-first - which is exactly the case the ordered blow pass now guarantees - and stricter than the original for a victim whose
-own slot came first. And the phases that run *before* the blows (gather takes, deposits, construction) still let a doomed
-entity act, because a take is applied before any blow lands.
-
-**Not in this slice, named:** movement deltas are still applied in id order; an object's update is not merged with its
-neighbour's; and the turn itself (T16) is unbuilt, so every player's objects are stepped every tick as the original does -
-but the original runs only *one* player's unit AI per tick, which is the axis `pturn` is for.
-
-**The gate on this slice, and what it actually measured.** The acceptance hash does **not** move:
-`beb6c66f58e4045c` at 24,000 ticks and `4640552242d6b45b` at 48,000, on both sides of the change, with
-`entities=154 repaths=277` at 24k and `148 / 552` at 48k. That is the honest result rather than the expected one: the sort
-is reached (removing it reddens `tick_order::the_lower_player_acts_first_whatever_the_ids`), but in that scenario every
-strike already lists the lower player first, so the order is a no-op there. The rule's evidence is therefore the fixtures
-in `crates/sim/tests/tick_order.rs`, not the hash - which also means no re-baselining and no behaviour change to record for
-the match.
+The price of the rest is a `decide`-per-object rewrite: `decide` is one 700-line `&self` pass over the whole entity list,
+the walk would have to be keyed by id rather than index (a unit born mid-tick shifts every index after it - the hazard
+`references/performance.md` names), and construction's per-site hand count and movement's collision set are aggregates that
+cannot be per object at all. Against that, every remaining case is a **one-tick latency on a quantity that is already
+clamped**, and none of them has a match-visible outcome. **Recommendation: take T16 (the turn) before stage 3** - the tree
+sequences it first anyway, its evidence is in hand from the same function, and it is the axis that decides *whether* an
+object's update runs at all.
 
 ## There are no live defects - audited, not assumed (D224)
 

@@ -6144,3 +6144,32 @@ after all the turns. That is the **inner** loop, and it is where T12 finishes.
 **Basis.** `FUN_00738720` (`0x738720`), D229; `crates/sim/src/world/step.rs` (`step`, `apply_turn`, `TickWork::bucket`,
 `TurnWork::keep_the_standing`, `World::turn_slot`); `crates/sim/tests/turn_order.rs`; `docs/next-step.md`, T12 stage 2.
 Review: `docs/reviews/2026-11-15-d230-turns.md`.
+
+### D231 - the population ceiling is read at the spawn, not once a tick (2026-11-16)
+
+**What it says.** `step_production` computed each player's `capped` flag **once, before any building in that phase had
+finished a job**, and then used it for every trainer in the phase. Two barracks with one population slot left therefore both
+delivered: measured, **population 6 against a cap of 5** (`population::the_ceiling_is_read_at_the_spawn`, red before the
+change). The flag is now recomputed **when a job actually completes**, which is the moment the world changes and the only
+moment the answer can differ.
+
+**Why it belongs to T12 and not to the population code.** The ceiling is a quantity a **decision reads** and another object
+of the same tick can change. That is exactly the class stage 3 - the inner loop - exists to fix: the original asks it in the
+object's own turn, after everything earlier in the tick has happened, and we asked it once, against the tick's opening
+state. Of all the quantities in that class (enumerated in `docs/next-step.md`), this was the only one with a visible
+outcome: node amounts are already clamped at apply time, places are applied in order, `free_spot_near` already runs at
+apply time, and a retask that reads a node's opening amount lags one tick and nothing more.
+
+**What it costs.** Nothing measurable, because it is not on the per-tick path: `population()` and `population_cap()` are both
+linear scans, so the recompute happens **once per unit trained** instead of once per building per tick - a strict reduction
+in the number of times either is called when a player has more than one trainer. Confirmed on the acceptance match: the
+same run is **bit-identical** (`cb1f6a83a119a2a3`, 152 entities, 256 repaths), because that scenario never finishes two
+jobs on one tick with a single slot left; the fixture is the evidence, and the mutation (deleting the refresh) is the same
+red run.
+
+**The held job is held, not lost.** The second barracks keeps its job and pops it when a slot frees - the D34 pause
+semantics, unchanged - and the fixture asserts that too, so "one soldier arrived" cannot be satisfied by dropping the other.
+
+**Basis.** `crates/sim/src/world/step.rs`, the trainers loop in `step_production`; `crates/sim/tests/population.rs`
+(`the_ceiling_is_read_at_the_spawn`); the red run measured 6 against a cap of 5. Review:
+`docs/reviews/2026-11-16-d231-ceiling.md`.
