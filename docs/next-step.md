@@ -17,25 +17,36 @@ than a sample, each **green with no `#[ignore]` when this step lands**:
 
 1. A unit's circle never crosses a tile holding a **resource that is not depleted**, except by the one raw unit of integer
    rounding. Prior implementation: the D176 mover rule (`World::clearance_at`, `lib.rs:3872`; `body_clearance`,
-   `lib.rs:3915`), which refuses a step whose landing has `clearance < 0`; pinned by `body_clearance.rs` (2 tests) and
-   `collision.rs`. It measures clearance against the **whole walk grid**, so a resource tile and a house wall are the same
-   question there - which is why the new fixtures name the tile's owner and say which kind of thing was crossed.
+   `lib.rs:3915`), which refuses a step whose landing has `clearance < 0`, pinned by `body_clearance.rs` and `collision.rs`.
+   It measures clearance against the whole walk grid, so a node and a house wall are one question there - which is why the
+   new fixtures name the tile's owner and the kind of thing crossed.
 2. A unit's circle never crosses a **building** - finished or **under construction** - with the exceptions asked for: a farm
    (an all-walkable floor, `sites.rs:429` `solid_tiles`) and the walkable part of a town centre (a mask, same function). The
    exception is not coded into the test: the test asks the engine's own `tile_walkable` which of a footprint's tiles block,
    so a floor has nothing to cross.
-3. A villager **builds a farm from inside its plot**, at least `radius` inside every edge. Prior implementation is the
-   opposite and is deliberate: `Task::Build` (`step.rs:1922`) works only when **not** `inside` the footprint, and
-   `raise_site` (`lib.rs:2692`) plans the builder's route to `approach_footprint` (`sites.rs:~340`) - a tile *outside* it -
-   because the empty-site gate is written for walls, not for a floor. Farms bypass the empty-site gate (`build.rs:188`
-   `site_is_clear`) precisely because they are walked over, so the standoff is the one part of D183 §3/§7 that does not fit a
-   farm. This is the step's one production change.
+3. A villager **builds a farm from inside its plot**, at least `radius` inside every edge. Prior implementation was the
+   opposite and deliberate: `Task::Build` (`step.rs:1922`) worked only when **not** `inside` the footprint and `raise_site`
+   aimed at `approach_footprint` - written for walls, not for a floor; farms bypass the empty-site gate (`build.rs:188`)
+   because they are walked over, so the standoff was the one part of D183 §3/§7 that did not fit. The expected production
+   change; the other three came out of the fixtures.
 4. A technology the current age does not allow **is not on the card**. Prior implementation: `World::card` (`report.rs:12`)
    hides anything whose refusal `is_age_gate` (`lib.rs:4868`) calls the age talking; pinned by `card_age.rs`, but only at
    **unit** level (a Dark Age barracks offers no spearman) - the owner's example, an **Imperial Age tech in the Dark Age**, has
    no fixture.
 
-**Next: R1 continues after this** - the pathing register in `docs/behaviour-diff.md` (30 rows, 19 ruled).
+**Done and measured** (D250): all four green and unskipped (`invariants` 7 passed / 0 ignored, `card_age` 4 / 0), and they
+found four defects - three of them one mistake, a rule asked about the **tile** a body's centre sits in rather than the body:
+a builder began a house 0.02 tiles outside its footprint and walled in 0.18 of his own circle; the site-clear gate counted
+tiles, so a body at the footprint's edge was caught inside the wall at tick 25; a farm was built from outside its plot
+(-0.02); and a Dark Age town centre offered feudal, castle *and* imperial because the age's building requirement answered
+before its prerequisites. Acceptance match, two interleaved runs each: **67.6 / 68.2 s -> 28.4 / 28.5 s**, `154 -> 137`
+entities, `1540 -> 710` repaths - because **the match is now won** at 2,381 s where the control is undecided at 48,000.
+
+**Open for the owner, not decidable here**: the queue's floor is **entities >= 155**; the control reads 154 with no win, this
+step 137 *with* one (a decided match carries less). Either the floor is about a contest and needs its own fixture, or the win
+is the better outcome and the floor wants restating.
+
+**Next: R1 continues** - the pathing register in `docs/behaviour-diff.md` (30 rows, 19 ruled).
 
 ## The four body rules hold - R1 next (D248, 2026-11-17)
 

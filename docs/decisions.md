@@ -6952,6 +6952,16 @@ of the rules turned out to be broken once the test asked about the **body** inst
 (builder); restoring the tile-only site-clear gate reddens it at **0.1 tiles** (bystander, tick 25); the farm standoff
 reddens rule 7 at **-0.02 tiles**; the old check order reddens rule 8 on the fixture above.
 
+**Measured on the acceptance match** (release, seed 7, 48,000 ticks, one worktree and two binaries, two interleaved runs of
+each state): before **67.6 s and 68.2 s**, `entities=154 players=2 hash=95ea803822c1b341 repaths=1540` (body 236, ground
+1,304); after **28.4 s and 28.5 s**, `entities=137 players=1 hash=ac2e785d9f551b55 repaths=710` (body 439, ground 271). The
+difference is **the win**: the match is now decided at **2,381 s** (*"the match is over: no further orders are accepted"*, no
+enemy town centre left) where the control is undecided at 48,000, so the entity drop is the loser's base being gone rather
+than an economy starving - and the cost of the three body/card fixes is nil, proved by a bisect in which they leave the match
+bit-identical and the farm rule alone reproduces the whole delta. **Open for the owner**: the queue's floor is entities at or
+above **155** and both states read below it (154 with no win, 137 with one), so either the floor describes a contested match
+and needs its own fixture, or the win is the better outcome and the floor wants restating.
+
 **Commits us to.** No `#[ignore]` on any of these eight fixtures; a new rule arrives with its source and its sentence; a rule
 the engine does not keep is **named as a finding on the engine** (D249's rule) rather than parked in an ignored test; and any
 claim of the shape "a body may never be inside X" is answered about the **body**, never about the tile its centre is in -
