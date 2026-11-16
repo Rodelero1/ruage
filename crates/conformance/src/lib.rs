@@ -21,10 +21,11 @@ use ruage_sim::Walk;
 pub const SCALE: i64 = 20_000;
 /// A villager's body - the dat's `radius[0]`, one fifth of a tile.
 pub const RADIUS: i64 = 4_000;
-/// The engine's tile-step costs (`crates/sim/src/path.rs`), repeated here so a cost claim is checked against the number it
-/// claims rather than against whatever the engine happens to do.
-pub const CARDINAL: u32 = 10;
-pub const DIAGONAL: u32 = 14;
+/// The engine's tile-step costs (`crates/sim/src/path.rs`, D249), repeated here so a cost claim is checked against the
+/// number it claims rather than against whatever the engine happens to do. **The original's model**: 16 a cardinal step,
+/// 23 a diagonal (its octile table's `16 x sqrt2`, rounded).
+pub const CARDINAL: u32 = 16;
+pub const DIAGONAL: u32 = 23;
 
 /// An empty map of the given size: grass, no resources, no town centres.
 pub fn open_map(width: u16, height: u16) -> Map {

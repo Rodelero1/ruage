@@ -9,12 +9,18 @@
 //! same nodes in the same order. No hash-map iteration order reaches the result.
 
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
+use std::collections::{BTreeSet, BinaryHeap};
 
 use ruage_data::Map;
 
-const CARDINAL: u32 = 10;
-const DIAGONAL: u32 = 14;
+// **The original's cost model** (D249; `docs/movement-in-the-binary.md`, R7): a cardinal step costs **16**, a diagonal the
+// octile table's **23** (16 x sqrt2 rounded), and the estimate is Euclidean in tiles scaled by **25** - a weight of about
+// 1.56, so the search is deliberately **not** an admissible A* and returns slightly longer routes than an optimal one.
+const CARDINAL: u32 = 16;
+const DIAGONAL: u32 = 23;
+/// The heuristic's weight: `FUN_008007f0` scales Euclidean tile distance by `2500/100`, which is the same number as its
+/// sibling branch's `*0x19`.
+const ESTIMATE_WEIGHT: u32 = 25;
 
 /// Which tiles a unit may stand on. Built once from the map, because terrain does not change
 /// during a match yet.
@@ -103,13 +109,16 @@ impl Walk {
     }
 }
 
-fn octile(from: (u16, u16), to: (u16, u16)) -> u32 {
+
+
+/// The estimate: **Euclidean distance in tiles, scaled by the original's weight** (`FUN_007ffcd0` distance, `FUN_008007f0`
+/// x25). Weighted rather than admissible, which is the game's trade - it explores fewer tiles and accepts slightly longer
+/// routes (R7's reading).
+fn estimate(from: (u16, u16), to: (u16, u16)) -> u32 {
     let dx = i64::from(from.0) - i64::from(to.0);
     let dy = i64::from(from.1) - i64::from(to.1);
-    let (dx, dy) = (dx.unsigned_abs(), dy.unsigned_abs());
-    let diagonal = dx.min(dy);
-    let straight = dx.max(dy) - diagonal;
-    (straight * u64::from(CARDINAL) + diagonal * u64::from(DIAGONAL)) as u32
+    let distance = crate::integer_sqrt(dx * dx + dy * dy);
+    (distance * i64::from(ESTIMATE_WEIGHT)) as u32
 }
 
 /// Is the **straight line** between two tiles walkable, ignoring the goal's own tile?
@@ -181,11 +190,25 @@ pub fn line_clear_avoiding(
     }
 }
 
-/// The tiles to walk through, excluding the start and including the goal. `None` when the goal is
-/// unreachable. A blocked goal is allowed: resource nodes stand on forest, and a villager has to
-/// be able to reach the tree it is working.
+/// **The search answers the closest point it can reach, and "no path" is not one of its answers** (the original's rule:
+/// the Klingers deck, p. 96 - *"expand the search area once, otherwise give the closest point path"*; the PS2 low-level
+/// search reserves "no low-level path" for a trapped *start*). The tiles to walk through exclude the start and include
+/// whatever the search settled on: the goal when it is reachable, otherwise the reachable tile nearest to it. `None` only
+/// when the start or the goal is off the map.
+///
+/// A caller that must insist on the exact tile asks [`find_path_strict`]; a walk order takes the closest point, which is
+/// what "every click is accepted" means (D134) with the answer now coming from the search rather than a helper beside it.
+/// A blocked goal is allowed: resource nodes stand on forest, and a villager has to be able to reach the tree it is working.
 pub fn find_path(walk: &Walk, from: (u16, u16), to: (u16, u16)) -> Option<Vec<(u16, u16)>> {
     find_path_avoiding(walk, from, to, &BTreeSet::new())
+}
+
+/// [`find_path`] with the goal's own tile as the only acceptable answer: `None` when the search ended somewhere else.
+///
+/// This is the shape **thing** orders need - a tree behind a wall is a refusal, not a walk to the fence (D241 ruling) - and
+/// it is a filter rather than a second search, so the two answers can never disagree about the map.
+pub fn find_path_strict(walk: &Walk, from: (u16, u16), to: (u16, u16)) -> Option<Vec<(u16, u16)>> {
+    find_path_avoiding_strict(walk, from, to, &BTreeSet::new())
 }
 
 /// The same search with tiles the grid does not know about treated as impassable - **a unit is not terrain**, so the
@@ -201,14 +224,43 @@ pub fn find_path_avoiding(
     to: (u16, u16),
     avoid: &BTreeSet<(u16, u16)>,
 ) -> Option<Vec<(u16, u16)>> {
+    search(walk, from, to, avoid, false).map(|answer| answer.1)
+}
+
+/// [`find_path_avoiding`] that answers nothing unless the route ends **on the goal tile**.
+pub fn find_path_avoiding_strict(
+    walk: &Walk,
+    from: (u16, u16),
+    to: (u16, u16),
+    avoid: &BTreeSet<(u16, u16)>,
+) -> Option<Vec<(u16, u16)>> {
+    search(walk, from, to, avoid, true).map(|answer| answer.1)
+}
+
+/// The one search both entry points use: `answer.0` is the tile it settled on, `answer.1` the route to it.
+///
+/// `strict` decides what may be settled on. A strict search answers `None` when the goal was never reached; **the closest
+/// point is still the closest point either way**, so the two answers describe the same search of the same map.
+fn search(
+    walk: &Walk,
+    from: (u16, u16),
+    to: (u16, u16),
+    avoid: &BTreeSet<(u16, u16)>,
+    strict: bool,
+) -> Option<((u16, u16), Vec<(u16, u16)>)> {
     if !walk.contains(to.0, to.1) || !walk.contains(from.0, from.1) {
         return None;
     }
     if from == to {
-        return Some(Vec::new());
+        return Some((from, Vec::new()));
     }
-    // A blocked *start* is allowed and necessary: a villager stands on the tile of the tree it is
-    // working, and must be able to walk off it. Only the route is searched, not the standing spot.
+    // A blocked *start* is allowed and necessary: a villager stands on the tile of the tree it is working, and must be able
+    // to walk off it. Only the route is searched, not the standing spot.
+    //
+    // **But a start boxed in on every side is re-seeded** - the original's low-level search offsets a start inside an
+    // obstruction by `2 x radius` along a ring of directions and searches from the first free candidate
+    // (`FUN_007fb220`, row 33). A soldier spawned inside his own crowd hits exactly this: the tile search cannot take a
+    // first step, and refusing the order is not an answer the game has.
 
     let (width, height) = walk.size();
     let cells = usize::from(width) * usize::from(height);
@@ -221,32 +273,24 @@ pub fn find_path_avoiding(
     // identical, which the checksum in `examples/path_cost.rs` is there to prove rather than assume.
     let mut best: Vec<u32> = vec![u32::MAX; cells];
     let mut came: Vec<u32> = vec![u32::MAX; cells];
+    // The closest point: the tile popped whose distance to the goal is smallest, excluding the start (a search that ends
+    // where it began has not moved). Kept as a distance so the comparison is arithmetic, never iteration order.
+    let mut closest: Option<((u32, u16, u16), (u16, u16))> = None;
 
     best[at(from.0, from.1)] = 0;
-    open.push(Reverse((octile(from, to), 0, from.1, from.0)));
+    open.push(Reverse((estimate(from, to), 0, from.1, from.0)));
 
     while let Some(Reverse((_, cost, y, x))) = open.pop() {
         let here = (x, y);
         let index = at(x, y);
-        if here == to {
-            let mut path = vec![here];
-            let mut cursor = index;
-            loop {
-                let parent = came[cursor];
-                if parent == u32::MAX {
-                    break;
-                }
-                let parent = parent as usize;
-                if parent == at(from.0, from.1) {
-                    break;
-                }
-                let px = (parent % usize::from(width)) as u16;
-                let py = (parent / usize::from(width)) as u16;
-                path.push((px, py));
-                cursor = parent;
+        if here != from {
+            let key = (estimate(here, to), y, x);
+            if closest.is_none_or(|(found, _)| key < found) {
+                closest = Some((key, here));
             }
-            path.reverse();
-            return Some(path);
+        }
+        if here == to {
+            return Some((here, route_to(&came, width, at(from.0, from.1), index)));
         }
         if cost > best[index] {
             continue;
@@ -288,7 +332,7 @@ pub fn find_path_avoiding(
                     best[next_index] = next_cost;
                     came[next_index] = index as u32;
                     open.push(Reverse((
-                        next_cost + octile((nx, ny), to),
+                        next_cost + estimate((nx, ny), to),
                         next_cost,
                         ny,
                         nx,
@@ -297,70 +341,41 @@ pub fn find_path_avoiding(
             }
         }
     }
-    None
+    // The goal was never reached. The closest point is still an answer - unless the caller asked for the goal itself, in
+    // which case "somewhere short of it" must read as "no".
+    let (_, tile) = closest?;
+    if strict && tile != to {
+        return None;
+    }
+    Some((
+        tile,
+        route_to(&came, width, at(from.0, from.1), at(tile.0, tile.1)),
+    ))
 }
 
-/// **Every click is accepted** (D134, the owner 2026-11-06): the free tile nearest to `to` that a body standing at `from`
-/// can actually reach, and the route to it.
-///
-/// Best-first from `from` over **free** tiles, ordered by the distance to `to` alone, so the first tile taken off the queue
-/// is the reachable tile closest to the click and the search stops as soon as one is found. Ties break by `(y, x)` - never
-/// by iteration order - so two runs choose the same tile.
-///
-/// `from` may itself be blocked: a villager stands on the tile of the tree it is working and must still be able to leave.
-/// A tile and the route to it, which is what "the nearest place you may stand" answers.
-pub type Standing = ((u16, u16), Vec<(u16, u16)>);
-
-pub fn nearest_reachable(walk: &Walk, from: (u16, u16), to: (u16, u16)) -> Option<Standing> {
-    let mut open: BinaryHeap<Reverse<(u32, u16, u16)>> = BinaryHeap::new();
-    let mut seen: BTreeSet<(u16, u16)> = BTreeSet::new();
-    let mut came: BTreeMap<(u16, u16), (u16, u16)> = BTreeMap::new();
-    open.push(Reverse((octile(from, to), from.1, from.0)));
-    seen.insert(from);
-    while let Some(Reverse((_, y, x))) = open.pop() {
-        let here = (x, y);
-        // **Not `from` itself**: it is free by definition, so returning it would say "the closest legal tile is where you
-        // already stand" every time - the bug this test caught first. It is the answer only if nothing else is reachable.
-        if here != from && !walk.blocked(x, y) {
-            let mut path = vec![here];
-            let mut cursor = here;
-            while let Some(&previous) = came.get(&cursor) {
-                if previous == from {
-                    break;
-                }
-                path.push(previous);
-                cursor = previous;
-            }
-            path.reverse();
-            return Some((here, path));
+/// Walk the parent chain back from `index`, **excluding the start** - a route beginning with the tile the body already
+/// stands on costs a tick of standing still.
+fn route_to(came: &[u32], width: u16, start: usize, index: usize) -> Vec<(u16, u16)> {
+    let tile_of = |index: usize| {
+        (
+            (index % usize::from(width)) as u16,
+            (index / usize::from(width)) as u16,
+        )
+    };
+    let mut path = vec![tile_of(index)];
+    let mut cursor = index;
+    loop {
+        let parent = came[cursor];
+        if parent == u32::MAX {
+            break;
         }
-        for dy in -1i32..=1 {
-            for dx in -1i32..=1 {
-                if dx == 0 && dy == 0 {
-                    continue;
-                }
-                let (Some(nx), Some(ny)) = (
-                    u16::try_from(i32::from(x) + dx).ok(),
-                    u16::try_from(i32::from(y) + dy).ok(),
-                ) else {
-                    continue;
-                };
-                if !walk.contains(nx, ny) || walk.blocked(nx, ny) || seen.contains(&(nx, ny)) {
-                    continue;
-                }
-                // The same corner rule as the search: a diagonal may not cut between two blocked tiles.
-                if dx != 0 && dy != 0 && (walk.blocked(nx, y) || walk.blocked(x, ny)) {
-                    continue;
-                }
-                seen.insert((nx, ny));
-                came.insert((nx, ny), here);
-                open.push(Reverse((octile((nx, ny), to), ny, nx)));
-            }
+        let parent = parent as usize;
+        if parent == start {
+            break;
         }
+        path.push(tile_of(parent));
+        cursor = parent;
     }
-    // Nothing else is reachable: the tile it already stands on is the nearest legal standing point.
-    if !walk.blocked(from.0, from.1) {
-        return Some((from, Vec::new()));
-    }
-    None
+    path.reverse();
+    path
 }
