@@ -31,6 +31,79 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-16 — the trebuchet's transform is in our own dat, and the Housing action is not what houses do
+
+**Two projects were due. `SFTtech/openage` moved two commits (`5f042b9c` → `e3080121`): `OrderedSet.intersection_update`
+with an `OrderedSet` or a dict argument (`openage/util/ordered_set.py`, +10/−6, merge #1831) and one line of
+`copying.md`. A util bug fix — nothing on the asset pipeline (D18), the engine/content boundary (D17), the time model or
+the platform, and nothing to report beyond this sentence.**
+
+**`librematch/genie` `18d3698f` → `6eb73570`, 13 commits on 15 Nov, 97 files, +5,761/−1,066 (AGPL-3.0, read only).** The
+Unpack (`TRIBE_Action_Unpack`, type 0x7d) is ported whole: a class-51 unit walks to its target or its point
+(`set_state(11)`, a quiet `MoveTo`) until it is within its range, then unpacks **where it stands** and works; the Pack is
+installed from the trebuchet's work order (`UNIT_ORDER` slot 0x7e8, on a target out of its reach, or with none for a
+computer's) and from the unit AI's move (slot 0x340, which installs a Pack with no target and **answers 0** so the AI keeps
+the order it gave); the work command's Housing (`FUN_140aca4b0` case 0x7b) is ported; Build and Repair are constructed
+before the install's deletion and started after it, and one without a target waits for work (`set_state(3)`) instead of
+walking.
+
+**T18's "fresh unknown" was my own error last run, and our dat answers it.** Last run recorded that the pack time "would be
+50 s" and that `GenieDatParser` "exposes no pack field at all". Both are wrong, and the check is cheap — `GenieDatParser`
+over our own `empires2_x2_p1.dat`, 0.62 s to parse:
+
+| unit | `transform_unit_id` | first train location | `task_info.work_rate` |
+|---|---|---|---|
+| 42 `TREBU` (class 54) | **331** | 50 s, castle 82 | **4.5** |
+| 331 `PTREB` (class 51) | **42** | 50 s, castle 82 | 4.5 |
+| 479 `PMANG` (class 51) | 280 | 50 s, no location | 1.0 |
+
+`transform_unit_id` is an `i16` of the building part from 5.7 (`GenieDatParser`
+`sections/civilization/type_info/building_info.py:30`, between `head_unit_id` and `transform_sound_id`) — the same field a
+gate uses, which is why it reads as "gate" on a first look at the structure. Our importer does not carry it
+(`grep -rn 'transform' ruage-tools/genconfig` → 0 rows), so `config/gamedata/units.toml`'s 42 and 331 rows have the cost,
+the HP and the attacks but no link, which is exactly why T18 read the relation as engine knowledge.
+
+**The 50 is a budget, not a duration.** genie's timer runs *up* toward it by the unit's own work rate times the step's
+seconds (`construction/pack/unit.rs`, `Unit::building_work`: `(work_rate_powerup + master.action_part().work_rate) *
+dt.seconds()`), so a pack or unpack of a trebuchet is **50 / 4.5 = 11.1 s** — and our `TREBU` row already carries both
+numbers (`train_time = 50`, `work_rate = 4.5`, `config/gamedata/units.toml:1144`). The stop keeps the share done as a
+percentage of the budget (`+0x88a` on the action object, `PackProgress`, written by `FUN_14106fa60`), which is why an
+interrupted pack resumes where it stopped instead of restarting.
+
+**The route in is data, and it is asymmetric.** Scanning `dat.unit_data.tasks` (1,402 slots, **1,943 tasks**, 7 ms) finds
+**five tasks of action type 0x7d (Unpack)** — on 331, 479 (`PMANG`), 729 (`HGOSP`), 730 (`HBNBP`) and 735, the packed
+trebuchet's dead unit — and **no 0x7c (Pack) task at all**. So packed→unpacked is a *task* the task path installs (the port's
+`unpack-install-sites`), and unpacked→packed is the work order and the AI's move. The 0x7d task on 331 is the live hook our engine lacks; nothing has to
+be invented for it.
+
+**U24: the Housing action is not how a house's five arrive, in either build.** Two attacks, both landing:
+
+1. **No unit in our dat carries a 0x7b task** — 0 of those 1,943 — and genie's own commit `2620ee22` says the same of
+   DE's build 158041: *"No master of build 158041's .dat holds a task of type 0x7b"*, its tests taking "a stand-in master
+   273 of the house's kind and class". The work command installs a Housing only from such a task (`FUN_140aca4b0` case
+   0x7b), so that path is dead in both builds, and the class's presence in HD's exe (last run's finding) is a class, not a
+   mechanism.
+2. **Its numbers cannot finish on a house.** `set_state(6)` starts the timer at the owner's attribute 62
+   (`cAttributeBuildingHouseRate`; **20** at index 62 of the 211-value `resources` row of every playable civ in our dat) and
+   subtracts `task_info.work_rate` × dt each update. Our `HOUS` rows (70, 463, 464, 465) are `work_rate` 0.0 — probed from
+   the dat, not just read from the TOML — so the timer would stand at 20 forever. The port's own fixture work rate of 0.5
+   was papering over precisely this.
+
+What survives is the timing question and it is unchanged: whether the ceiling moves on the construction flag's tick. The
+oracle test as written still settles it, and there is now a second thing for it to look at: index **65** of the civ row is
+**5.0** for every playable civ (index 63 is 32000, index 64 is 0), which is the right shape for the per-house headroom and a
+cap — unverified, and not to be treated as content until a recording says so.
+
+**U18 and U22 stand, sha-pinned again.** `world/step.rs` (`b7153ee2`), `world/schedule.rs` (`e27a9958`),
+`gathering/gather_search.rs` (`754c7d20`) and `gathering/closest_resource.rs` (`2161462d`) are the same blobs at both shas
+across all 13 commits, so the order between objects and the resource-search contract are untouched.
+
+**Licence.** genie is AGPL-3.0. The three files this batch adds or rewrites most — `construction/unpack/unit.rs` (458
+lines), `construction/pack/install.rs` (237), `construction/pack/unit.rs` (492) — are the hazard shape again: they read as
+"walk, then transform" and "count a timer down", and every routine in them is a named DE address. Nothing crosses. The
+facts above are our own dat's fields and two arithmetic results, which is the difference between reading for a fact and
+reading for a shape.
+
 ## 2026-11-16 — villagers, overlap and pushing: what three implementations and the game's own rule say
 
 **The question.** The owner's ruling of 2026-11-16 - *"villagers push each other. What may never happen. Villager has to
