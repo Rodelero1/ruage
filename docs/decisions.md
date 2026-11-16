@@ -6712,3 +6712,33 @@ first place (D200/D202). Neither is guessed at here.
 
 **Basis.** `crates/sim/tests/invariants.rs`; `crates/sim/src/world/gather.rs` (the delivery range), `crates/sim/src/world/step.rs`
 (the settle). Review: `docs/reviews/2026-11-16-d243-invariants.md`.
+
+### D244 - both red invariants were fixed, measured, and reverted: each fix starves the match (2026-11-16)
+
+The owner, after D243: *"I don't want those tests to be ignored. What needs to be done to make it passing?"* Both were built. Both
+were measured. **Neither lands yet**, and the reason is the same in both cases: the invariant is right, the mechanism that has to
+keep it is shared with the thing that keeps the economy alive.
+
+**Rule 3 - a load leaves within half a diameter of the drop site.** Fixed the way it reads: the delivery test became
+`footprint_gap(position, drop) <= body_radius` - the gap between the carrier's centre and the building's footprint rectangle,
+against his own radius - replacing three loose clauses (tile adjacency by index, the **pair's reach** 0.4 against the anchor, and
+`touches_footprint`'s whole tile of slack). The rule holds: the fixture goes green. The **match collapses**: entities
+**155 -> 136** and `repaths` **497 -> 28**, i.e. carriers stop satisfying the test at all and nobody delivers. So the rectangular
+footprint's **anchor** is the open question: `Entity::position` for a building, and `footprint_of`'s tiles, do not agree with the
+wall the bodies actually stand at, and the fix is only as good as that geometry. That is the next read, and it is a read, not a
+guess.
+
+**Rule 4 - a working man does not move.** Fixed the way it reads: `settling` requires `progress == 0`, so a villager who has taken
+his first bite from the tree stays put. The invariant fixture goes green - and `gather_motion::three_gatherers_on_one_bush_do_not_
+pile_up` goes red, because the settle is what places men round a node in the first place (D200/D202): with it gated, three men on
+one bush pile up again. So the settle is doing two jobs - **arranging** the ring and **nudging a working man** - and the fix has
+to separate them rather than switch one off.
+
+**What that leaves.** All four fixtures stand exactly as D243 landed them: two green, two `#[ignore]`d with their measured
+violation in the ignore message, and both ignores now carry the *fix-that-fails* measurement as well, so the next attempt starts
+from the numbers instead of the idea. The two open reads are named: the building footprint's anchor (rule 3) and the settle's two
+jobs (rule 4).
+
+**Basis.** `crates/sim/src/lib.rs` (`footprint_gap`, written and reverted this session), `crates/sim/src/world/step.rs` (the
+delivery test and `settling`), `crates/sim/tests/invariants.rs`, `crates/sim/tests/gather_motion.rs`. Review:
+`docs/reviews/2026-11-16-d244-invariants-green.md`.
