@@ -157,8 +157,21 @@ fn a_crowd_carrying_home_is_never_pushed() {
     let Some((mut world, crew)) = a_crowd_filling_and_carrying_home() else {
         return;
     };
-    for _ in 0..4_000 {
+    // **The precondition is reached, not assumed at a fixed tick** (D248). Four thousand ticks was enough while a gatherer
+    // walked straight at his node; with the seat dealt properly he takes a few ticks longer to fill his first load, so the
+    // fixture waits for the state it is about - somebody on his way home - and gives up loudly if it never comes.
+    let mut waited = 0u32;
+    while waited < 20_000 {
         world.step().expect("a tick");
+        waited += 1;
+        let returning = crew.iter().any(|id| {
+            world
+                .entity(*id)
+                .is_some_and(|entity| matches!(entity.task, Task::Return { .. }))
+        });
+        if returning {
+            break;
+        }
     }
     // **Every body in the fixture holds a gather or return order**, or it is not the crowd D204 is about.
     let mut gathering = 0;
@@ -174,7 +187,7 @@ fn a_crowd_carrying_home_is_never_pushed() {
     }
     assert!(
         returning > 0,
-        "PRECONDITION nobody is carrying a load at tick 4,000: {gathering} still gathering"
+        "PRECONDITION nobody carried a load home in 20,000 ticks: {gathering} still gathering"
     );
     assert_eq!(
         world.made_room(),

@@ -954,9 +954,34 @@ impl World {
         if places.is_empty() || workers.is_empty() {
             return;
         }
+        // **A man at work keeps his place** (D246, the owner: *"villager is never to be nudged to leave place he is working
+        // at"*). The re-lay used to hand out *every* place again, nearest-first, so a newcomer's arrival could move a man who
+        // was already taking from the node - the `SEATMOVE` line of D238. A seat held by a worker with progress is therefore
+        // **frozen**: it is taken out of the pool (nobody else may have it) and its holder is not re-seated. Men who have not
+        // started still get the nearest free place, which is what makes room for a newcomer without disturbing anybody.
+        let working: Vec<EntityId> = workers
+            .iter()
+            .copied()
+            .filter(|id| {
+                self.entities
+                    .get(id.0 as usize)
+                    .is_some_and(|entity| matches!(entity.task, Task::Gather { progress, .. } if progress.raw() > 0))
+            })
+            .collect();
+        for id in &working {
+            if let Some(place) = self.gather_place.get(id).map(|(_, at)| *at) {
+                let point = (Fixed::from_raw(place.0), Fixed::from_raw(place.1));
+                if let Some(index) = places
+                    .iter()
+                    .position(|at| at.0 == point.0 && at.1 == point.1)
+                {
+                    places.remove(index);
+                }
+            }
+        }
         // **Nearest place first**, one per man: the packing is greedy, which keeps the assignment stable between re-lays.
         let mut assigned = 0usize;
-        for id in workers {
+        for id in workers.iter().copied().filter(|id| !working.contains(id)) {
             let Some(at) = self.position(id) else {
                 continue;
             };
@@ -969,6 +994,16 @@ impl World {
             }
             if let Some((_, index)) = best {
                 let point = places.remove(index);
+                // **Two men are never given places closer than one diameter** (D246). The ring is generated per tile, so
+                // candidate places from neighbouring tiles can sit **0.2** apart - and the old code handed them out anyway,
+                // which is why the ring needed a per-tick band correction to push men out of each other (D200/D202, and the
+                // owner's rule 4 that a working man must not move). Enforcing the separation here means the places are right
+                // when they are handed out, and nobody has to be nudged afterwards.
+                places.retain(|at| {
+                    let dx = at.0.raw() - point.0.raw();
+                    let dy = at.1.raw() - point.1.raw();
+                    dx * dx + dy * dy >= packed * packed
+                });
                 self.reserve_gather_place(id, node, point);
                 assigned += 1;
             }
@@ -1364,7 +1399,11 @@ impl World {
                     Some(points) => {
                         // A ground stall spends one of the route's two re-plans; a body repath leaves the count alone.
                         let stalls = if body.is_none() {
-                            self.paths.get(&id).map_or(0, |route| route.stalls) + 1
+                            // **Saturating**: with the clock re-arming the budget (D248) this counter keeps climbing past 255.
+                            self.paths
+                                .get(&id)
+                                .map_or(0, |route| route.stalls)
+                                .saturating_add(1)
                         } else {
                             self.paths.get(&id).map_or(0, |route| route.stalls)
                         };
@@ -1881,7 +1920,9 @@ impl World {
                     }
                 }
                 Task::Build { site } => {
-                    let Some((target, site_unit)) = self.find(site).map(|s| (s.position, s.unit))
+                    let Some((target, site_unit, farm)) = self
+                        .find(site)
+                        .map(|s| (s.position, s.unit, self.is_farm_role(s)))
                     else {
                         work.finished.push(entity.id);
                         continue;
@@ -1924,11 +1965,51 @@ impl World {
                     let reach = self.reach_raw(entity.unit, site_unit);
                     let (gap_x, gap_y) =
                         (i64::from(gap.0) * self.scale, i64::from(gap.1) * self.scale);
-                    // **Never from inside the footprint**, however close it is: the reach term is measured from the
-                    // nearest footprint tile, which is zero for a builder standing on the site.
-                    let adjacent = !inside
-                        && ((gap.0 <= 1 && gap.1 <= 1)
-                            || gap_x * gap_x + gap_y * gap_y <= reach * reach);
+                    // **The builder is a body, not a tile** (D250). Two questions, both about his own circle:
+                    //
+                    // * `inset` - how far his centre is **inside** the footprint (negative outside it), which is what
+                    //   "at least half a diameter inside the farm plot" means;
+                    // * `apart` - how far his centre is **outside** it, which is what "clear of the wall" means.
+                    //
+                    // The tile rule that used to decide this let a builder start a house from **0.02 tiles** outside its
+                    // footprint; the first stroke then made those tiles block with his own body **0.18** inside them,
+                    // which is the crossing the owner's rule forbids (measured, D250).
+                    let radius = self.body_radius_of(entity.id);
+                    let room = rect.map(|(ax, ay, wide, tall)| {
+                        let scale = self.scale;
+                        let (left, top) = (i64::from(ax) * scale, i64::from(ay) * scale);
+                        let (right, bottom) = (
+                            left + i64::from(wide) * scale,
+                            top + i64::from(tall) * scale,
+                        );
+                        let (x, y) = (entity.position.0.raw(), entity.position.1.raw());
+                        let inset = (x - left).min(right - x).min(y - top).min(bottom - y);
+                        let (ox, oy) = (
+                            (left - x).max(x - right).max(0),
+                            (top - y).max(y - bottom).max(0),
+                        );
+                        (inset, (ox * ox + oy * oy).isqrt())
+                    });
+                    // **A farm is built from inside, every other building from outside** (D250, D183 §3 and §7). A farm
+                    // is a floor whose site-clear gate does not apply, so nothing is held up by its builder standing on
+                    // it, and the game's builder seeds the plot under his own feet.
+                    // **Never from inside the footprint** otherwise, however close it is: the reach term is measured from
+                    // the nearest footprint tile, which is zero for a builder standing on the site - and a body whose
+                    // circle overlaps the edge is not clear of the wall the first stroke is about to raise.
+                    let adjacent = match (farm, room) {
+                        (true, Some((inset, _))) => inset >= radius,
+                        (false, Some((_, apart))) => {
+                            !inside
+                                && apart >= radius
+                                && ((gap.0 <= 1 && gap.1 <= 1)
+                                    || gap_x * gap_x + gap_y * gap_y <= reach * reach)
+                        }
+                        (_, None) => {
+                            !inside
+                                && ((gap.0 <= 1 && gap.1 <= 1)
+                                    || gap_x * gap_x + gap_y * gap_y <= reach * reach)
+                        }
+                    };
                     if adjacent {
                         work.builders.push((entity.id, site));
                         (Fixed::ZERO, Fixed::ZERO)
@@ -1939,7 +2020,17 @@ impl World {
                                 detail: err.to_string(),
                             }
                         })?;
-                        let next = if inside {
+                        let next = if farm {
+                            // **The plot's middle**: a farm's builder belongs inside it, so his aim is the centre of the
+                            // plot rather than a way out of it (D250).
+                            match rect {
+                                Some((ax, ay, wide, tall)) => self.tile_centre((
+                                    ax.saturating_add(wide / 2),
+                                    ay.saturating_add(tall / 2),
+                                )),
+                                None => target,
+                            }
+                        } else if inside {
                             // **The shortest way out**, one tile past the nearest edge. A builder left standing on the
                             // site would never start it, and the route it walked is spent, so this has to be a place
                             // rather than a waypoint.
@@ -1974,18 +2065,26 @@ impl World {
                     // and each with one waypoint left that they never took.
                     let here = self.tile_of(entity.position);
                     let there = self.tile_of(target);
-                    // Touching by tile, or by footprint (C2): a queue of villagers handing in at one town centre is
-                    // stacked 0.4 tiles deep, and the ones at the back are inside the ring but not on a tile centre.
-                    let (gap_x, gap_y) = (
-                        target.0.raw() - entity.position.0.raw(),
-                        target.1.raw() - entity.position.1.raw(),
-                    );
-                    let reach = self.reach_raw(entity.unit, drop_unit);
-                    let touching = (here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1)
-                        || gap_x * gap_x + gap_y * gap_y <= reach * reach
-                        // **Or standing on the building's ground.** A carrier walked into the yard by `approach_tile`
-                        // was two tiles from the anchor and never banked, which cost a third of the economy.
-                        || self.touches_footprint(entity.position, drop);
+                    // **A load leaves at the wall** (D246, the owner's rule 3). The test used to be three loose clauses -
+                    // tile adjacency by index, the *pair's* reach (0.4) against the building's **anchor point**, and
+                    // `touches_footprint`'s whole tile of slack - and between them a carrier banked a load **0.281 tiles**
+                    // from the town centre. It is now the distance to the **footprint** against his own radius, with **one
+                    // step of slack**: the disc is refused the step that would put it inside the wall, so the closest he can
+                    // stop is one step short of touching - measured, **4,155 raw** against a **4,000** radius, a step being
+                    // **758**. "At the wall" is within the radius plus his own step.
+                    let radius = self.body_radius_of(entity.id);
+                    let gap = self.footprint_gap(entity.position, drop);
+                    let _ = (here, there, drop_unit);
+                    // **The wall, or as close as the ground allows** (D246). A carrier whose route is exhausted and who is
+                    // within half a tile of the footprint banks there: a crowd at one building, or a yard whose neighbour
+                    // tiles are built over, leaves him no wall to stand at - measured, a carrier that never banked at all in
+                    // 400,000 ticks (`research::two_players_can_be_different_civilisations`, 890 of 900). Anything further
+                    // out than that is refused, which is what the old tile-adjacency test let through at 0.281 tiles.
+                    let at_the_wall = gap.is_some_and(|gap| gap <= radius + delta.raw());
+                    let as_close_as_the_ground = gap
+                        .is_some_and(|gap| gap <= radius + self.scale / 4)
+                        && self.next_waypoint(entity.id).is_none();
+                    let touching = at_the_wall || as_close_as_the_ground;
                     if touching {
                         work.deposits.push(entity.id);
                         (Fixed::ZERO, Fixed::ZERO)
@@ -1994,9 +2093,12 @@ impl World {
                         // is blocked ground, so stepping at it is refused for ever: measured, a loaded carrier at
                         // `(11.85, 21.14)` in `Return` for **400,000 ticks** with ten units in his hands, the bank stuck at
                         // 790 of 900. `approach_tile` is the walkable tile beside the footprint - it exists for exactly this.
+                        // **The last stretch is walked to the wall, not to a tile centre** (D246). A tile centre beside a
+                        // footprint is half a tile from it, so a carrier aiming at one can never come within his own radius -
+                        // measured, one carrier never banked at all in 400,000 ticks (`research::
+                        // two_players_can_be_different_civilisations`, the bank stuck at 890 of 900).
                         let next = self.next_waypoint(entity.id).unwrap_or_else(|| {
-                            self.approach_tile(here, drop)
-                                .map(|tile| self.tile_centre(tile))
+                            self.wall_point(entity.position, drop, radius)
                                 .unwrap_or(target)
                         });
                         let (dx, dy) = step_towards(entity.position, next, delta.raw());
@@ -2116,9 +2218,31 @@ impl World {
                         );
                         px * px + py * py > 0
                     });
+                    // **A man who is already taking from the node does not move** (D246, the owner's rule 4). With his place
+                    // frozen by the re-lay above, the settle has nothing left to arrange for him: the band correction was
+                    // what stepped him **0.011 tiles** at tick 11 in `invariants`, and what made a working man give up his
+                    // seat in D238. Arrangement (`off_place`) stays for men who have not started, which is what keeps the
+                    // ring.
+                    // **A man on his own place does not move; a man off it still walks to it** (D246, the owner: *"villager is
+                    // never to be nudged to leave place he is working at"*). "Working" is not the test - a villager's progress
+                    // starts as soon as he is within reach, so gating on it froze men **0.297 tiles** from their own place with a
+                    // neighbour where both were taking from the same bush. The test is **where he stands**: on the place he
+                    // holds, nothing moves him; off it, walking onto it is what separates him from the crowd.
+                    // **A man at work is not nudged** (D246, the owner: *"villager is never to be nudged to leave place he is
+                    // working at"*), and he is not nudged *at* either: while he is taking from the node the settle only walks
+                    // him to a place he is **more than a step away from** - a mis-seat, not the **0.011-tile** drift the
+                    // fixture caught at tick 11. A man who has not started is arranged as before, which is what keeps the ring.
+                    // A twentieth of a tile is a fifth of a villager's step: close enough to call "on his place", which is
+                    // what the 0.011-tile drift measured at tick 11 is.
+                    let near_enough = self.scale / 20;
+                    let on_own_place = owned_place.is_some_and(|place| {
+                        (place.0.raw() - entity.position.0.raw()).abs() <= near_enough
+                            && (place.1.raw() - entity.position.1.raw()).abs() <= near_enough
+                    });
                     let settling = ring_open
                         && near_node
-                        && (ring_squared < near_ring || ring_squared > far_ring || off_place);
+                        && !on_own_place
+                        && (off_place || ring_squared < near_ring || ring_squared > far_ring);
                     // **The walk to the ring and the walk to the node must not both be taken.** The `else` branch below steps
                     // toward the node's own tile; the settle steps *away* from it, so a worker with both ran on the spot -
                     // measured, a woodcutter frozen at 0.984 tiles with the tree's 20 hit points untouched for 15 s.
@@ -2297,6 +2421,13 @@ impl World {
                     } else if settling_now {
                         // The settle owns this tick's step (see above).
                         (Fixed::ZERO, Fixed::ZERO)
+                    } else if matches!(entity.task, Task::Gather { progress, .. } if progress.raw() > 0)
+                    {
+                        // **A man already taking from the node does not walk at it** (D246, the owner's rule 4). This is the
+                        // last step the fixture caught: he was in reach, taking wood, and still spent the tick walking
+                        // **0.011 tiles** toward the node - `settling` was false because he stood on his own place, so the
+                        // step fell through to here.
+                        (Fixed::ZERO, Fixed::ZERO)
                     } else {
                         let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
                             SimError::Displacement {
@@ -2304,7 +2435,22 @@ impl World {
                                 detail: err.to_string(),
                             }
                         })?;
-                        let next = self.next_waypoint(entity.id).unwrap_or(target);
+                        // **With no waypoint, walk to his own place, not at the node** (D248). The node's tile is blocked
+                        // ground and `step_towards` at it is refused for ever: measured, a woodcutter froze on a tile
+                        // boundary (x = 24.5) with `progress 0` and 8,000,000 in his node, the bank stuck at 890 of 900 after
+                        // 400,000 ticks. The place is walkable ground next to the node, which is where he is going anyway.
+                        // **The node's own tile is never the aim** (D248). It is blocked ground, so a route that ends on it
+                        // sends the man at a wall for ever: measured, a woodcutter pressed against the tree's tile with
+                        // **clearance 528** and his own place 0.03 tiles away, re-planning 5,214 times in 400,000 ticks and
+                        // never moving. His place is walkable ground beside the node, which is where the order points.
+                        let place = self.gather_place_of(entity.id, node);
+                        let next = match self.next_waypoint(entity.id) {
+                            Some(point) if self.tile_of(point) == self.tile_of(target) => {
+                                place.unwrap_or(point)
+                            }
+                            Some(point) => point,
+                            None => place.unwrap_or(target),
+                        };
                         let (dx, dy) = step_towards(entity.position, next, delta.raw());
                         (Fixed::from_raw(dx), Fixed::from_raw(dy))
                     }

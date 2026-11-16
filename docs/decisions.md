@@ -6874,3 +6874,85 @@ answer and cite D134's rule as the one we do not meet.
 
 **Commits us to.** Never adding an `#[ignore]` to this set; adding a rule only with its source; and presenting a collision as
 a decision with its evidence rather than as a parked test.
+
+### D248 - the four body rules hold, and the seat is the reason they did not (2026-11-17)
+
+The owner's four invariants are **green and unskipped** (`crates/sim/tests/invariants.rs`: 4 passed, 0 ignored), by five changes
+that belong together:
+
+1. **Places are dealt at least one diameter apart** (`maybe_respread`). The ring is generated per tile, so candidates from
+   neighbouring tiles sat **0.2** apart and were handed out anyway; the per-tick band correction existed to push men out of each
+   other afterwards. With the separation enforced at the deal, the places are right when they are given.
+2. **A working man's place is frozen** (`maybe_respread`). The re-lay re-seated *every* worker nearest-first, so a newcomer could
+   move a man already taking from the node - D238's `SEATMOVE`, and the owner's *"villager is never to be nudged to leave place he
+   is working at"*.
+3. **A man on his own place is not stepped** (the settle, `on_own_place` within a twentieth of a tile). This is rule 4; the
+   fixture caught a **0.011-tile** step at tick 11 while he was taking wood.
+4. **A man already taking does not walk at the node either.** `settling` was false because he stood on his place, so the tick fell
+   through to the walk branch and moved him **0.011** toward the node.
+5. **A load banks at the wall.** The delivery test is `footprint_gap(position, drop) <= radius + one step`, and the fallback aim
+   is `World::wall_point` - the footprint grown by the radius - because a tile centre beside a footprint is **half a tile** from
+   it, so a carrier aiming at one can never come within his own radius.
+
+**The defect the first four exposed, which is the real find.** With the settle no longer nudging a man already on his place,
+nothing re-examined a worker's route: a woodcutter stood at `(24.5, 12.2)` for **400,000 ticks**, `progress 0`, **clearance 528**,
+his own place **0.03 tiles** away, and a waypoint **0.73 tiles** away that the collision rule refused every tick - the bank stuck
+at **890 of 900** (`research::two_players_can_be_different_civilizations`, 128 s against 38 s at HEAD). The cause is the aim, not
+the budget: the route ended on the **node's own blocked tile**, so he pressed at a wall for ever. **A gatherer never aims at the
+node's tile**: when the next waypoint is on it, the aim is his own place, which is walkable ground beside the node. The test is
+back to **22 s**. A time-armed re-plan budget (`REPLAN_EVERY`, because `Route::stalls` is per *route* and can never re-arm) was
+built first and **removed**: 5,214 re-paths in that fixture and the bank still stuck at 890, and it took the acceptance match from
+~500 to **10,323** re-paths. Measuring it is why it is not in the tree.
+
+**Mutation proof, both directions**: the old tile-adjacency delivery test reddens rule 3 at **0.321 tiles**; removing the
+on-own-place gate reddens rule 4 at **0.011 tiles**.
+
+**Not claimed**: the acceptance re-path count is higher than D237's 497 and no interleaved wall-time pair was taken, so no
+percentage is claimed here. Review: `docs/reviews/2026-11-17-d248-seats-and-walls.md` (and the patch it carried, now applied).
+
+### D250 - the owner's second four rules, and the four defects they found (2026-11-16)
+
+*The owner, 2026-11-16: **"Please add unit tests never to be skipped or ignored: If villager or any other unit circle crosses
+tile (approaches closer than 1/2 diameter) with resource that has not been depleted yet (mine, bush, tree...) -> FAIL. If
+villager or any other unit circle crosses tile ... with building under the construction (except farm) or finished building
+(except farm and walkable part of town center) -> FAIL. If villager constructs farm while not inside it (at least 1/2
+diameter inside farm plot) -> FAIL. If technology that is not available at current age (for example Imperial Age in Dark Age)
+shows -> FAIL."***
+
+Four fixtures, none `#[ignore]`d, in the file the first four live in plus the card's own file: rule 5 and 6 in
+`crates/sim/tests/invariants.rs` over the same 2,000-tick economy (**every tick**, every unit, every live node and every
+footprint), rule 7 over a farm being raised, rule 8 in `crates/sim/tests/card_age.rs` where the towers of cards are actually
+built. Two of the four held on the engine as it stood (**5** the resource tile, and **6**'s finished-building half) - and four
+of the rules turned out to be broken once the test asked about the **body** instead of the tile.
+
+1. **A builder started a house from 0.02 tiles outside its footprint** (rule 6). `Task::Build` asked whether his **tile**
+   touched the footprint, so a man still walking past was "adjacent" the moment his centre crossed into a neighbouring
+   tile; the first stroke then made those tiles solid with his own circle **0.18 tiles inside** them - the crossing the rule
+   forbids, caused by the builder himself. Fixed: the work test is the body's clearance from the footprint (`apart >= radius`,
+   Euclidean, integer), not tile adjacency.
+2. **The site-clear gate counted unit tiles, so a body at the edge was walled in** (rule 6, D183 §5's promise). A body
+   spawned 0.1 tiles from the footprint's edge has its tile outside the site, so the gate said "clear" and the first stroke
+   landed on it: **tick 25, 0.1 tiles inside the wall**. Fixed: `site_is_clear` counts a unit whose **circle** overlaps the
+   footprint, and tells its own side to step aside; the stroke waits for the body, not for the tile.
+3. **A farm was built from outside its plot** (rule 7). D183 §3's "a builder works from outside the site" is about a site
+   whose first stroke raises a wall; a farm is a floor with no site-clear gate at all (D183 §7), so nothing was being held up
+   and the standoff was pure loss - measured **-0.02 tiles**: the farmer 0.02 outside the plot's edge with construction
+   already progressing. Fixed: a farm's build order aims at the plot's **centre** (`World::footprint_centre`) and the site
+   counts as work when his **whole circle** is inside it (`inset >= radius`), which is the owner's "at least 1/2 diameter
+   inside farm plot".
+4. **Imperial Age showed on a Dark Age town centre's card** (rule 8). `check_research` asked the age's **building**
+   requirement before its **prerequisites**, so a Dark Age player asking for the Imperial Age was told *"you need two
+   castle/siege-workshop buildings"* - true, unactionable, and not what `is_age_gate` recognises as the age talking, so
+   `card` drew the button. Measured on the fixture: `["villager", "loom", "feudal_age", "castle_age", "imperial_age"]`.
+   Fixed: prerequisites are asked first, so the answer is *"the Castle Age is missing"* - an age gate, and the item is
+   hidden. The **next** age keeps its greyed button (D243's rule that a refusal the player can act on stays), which the
+   fixture asserts in the same test.
+
+**Mutation proofs**, each the direction that matters: restoring the tile-adjacency work test reddens rule 6 at **0.02 tiles**
+(builder); restoring the tile-only site-clear gate reddens it at **0.1 tiles** (bystander, tick 25); the farm standoff
+reddens rule 7 at **-0.02 tiles**; the old check order reddens rule 8 on the fixture above.
+
+**Commits us to.** No `#[ignore]` on any of these eight fixtures; a new rule arrives with its source and its sentence; a rule
+the engine does not keep is **named as a finding on the engine** (D249's rule) rather than parked in an ignored test; and any
+claim of the shape "a body may never be inside X" is answered about the **body**, never about the tile its centre is in -
+three of the four defects above were the same mistake made in three places.

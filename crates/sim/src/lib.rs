@@ -2790,7 +2790,14 @@ impl World {
         // **Outside the whole footprint** (D183 §3): a ghost is walkable, so the anchor's own neighbours are no longer
         // reliably outside it, and a builder standing on his own site would be waiting for himself to leave.
         let footprint = self.footprint_area_of(id);
-        let route = match self.approach_footprint(from, &footprint) {
+        // **A farm's builder walks in, not round** (D250): the plot is a floor with no site-clear gate (D183 §7), so the
+        // place to seed it is its own middle - the standoff a walled building needs is a wall a farm does not have.
+        let stand = if self.find(id).is_some_and(|site| self.is_farm_role(site)) {
+            self.footprint_centre(id)
+        } else {
+            self.approach_footprint(from, &footprint)
+        };
+        let route = match stand {
             Some(stand) => self.plan_path_for(villager, from, stand)?,
             None => self.plan_path_for(villager, from, position)?,
         };
@@ -3826,6 +3833,12 @@ impl World {
 
     /// **The place this man already owns**, if its ground is still ground. `is_free_ground` is deliberately not asked: it answers
     /// "may a body stand here", and the body asking is the man himself.
+    /// Probe helper: the place this man holds at `node`, if any.
+    #[must_use]
+    pub fn gather_place_public(&self, worker: EntityId, node: EntityId) -> Option<(Fixed, Fixed)> {
+        self.gather_place_of(worker, node)
+    }
+
     pub(crate) fn gather_place_of(
         &self,
         worker: EntityId,
@@ -4256,6 +4269,49 @@ impl World {
     /// walked carriers into the yard and then refused to bank them there - the economy lost a third of its size and the
     /// acceptance match stopped being won (measured: 176 entities won at HEAD, 127 entities drawn with the approach
     /// alone).
+    /// **The point where a body of `radius` touches this building's wall**, nearest to `from`: the footprint grown by
+    /// the radius, clamped. A tile centre beside a footprint is **half a tile** from the wall, so a carrier aiming at one
+    /// can never come within his own radius of it (D246).
+    #[must_use]
+    pub fn wall_point(
+        &self,
+        from: (Fixed, Fixed),
+        building: EntityId,
+        radius: i64,
+    ) -> Option<(Fixed, Fixed)> {
+        let entity = self.find(building)?;
+        let (width, height) = self.footprint_of(entity.unit?)?;
+        let scale = self.scale;
+        let (left, top) = (entity.position.0.raw(), entity.position.1.raw());
+        let (right, bottom) = (
+            left + i64::from(width) * scale,
+            top + i64::from(height) * scale,
+        );
+        let x = from.0.raw().clamp(left - radius, right + radius);
+        let y = from.1.raw().clamp(top - radius, bottom + radius);
+        Some((Fixed::from_raw(x), Fixed::from_raw(y)))
+    }
+
+    /// **The gap between a body's centre and a building's footprint**, in raw units, zero when the centre is inside it
+    /// (D246). The delivery test was three loose clauses - tile adjacency by index, the *pair's* reach against the
+    /// building's **anchor point**, and `touches_footprint`'s whole tile of slack - and between them a carrier banked a load
+    /// **0.281 tiles** from the town centre. This measures the wall itself.
+    #[must_use]
+    pub fn footprint_gap(&self, position: (Fixed, Fixed), building: EntityId) -> Option<i64> {
+        let entity = self.find(building)?;
+        let (width, height) = self.footprint_of(entity.unit?)?;
+        let scale = self.scale;
+        let (left, top) = (entity.position.0.raw(), entity.position.1.raw());
+        let (right, bottom) = (
+            left + i64::from(width) * scale,
+            top + i64::from(height) * scale,
+        );
+        let (x, y) = (position.0.raw(), position.1.raw());
+        let dx = (left - x).max(x - right).max(0);
+        let dy = (top - y).max(y - bottom).max(0);
+        Some(dx.max(dy))
+    }
+
     #[must_use]
     pub fn touches_footprint(&self, position: (Fixed, Fixed), building: EntityId) -> bool {
         let Some(entity) = self.find(building) else {
