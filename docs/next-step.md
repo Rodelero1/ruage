@@ -61,17 +61,30 @@ remains is therefore the debt list, not a defect list.
 5. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
    reads yet. This is the interpreter slice the tree puts in Phase 1; it is *not* a prerequisite for items 1-3.
 
-## Landed: villagers are solid, and D236's "missing mechanism" was a guard (D237, 2026-11-16)
+## Landed: villagers are solid (D237, 2026-11-16)
 
-The owner's rule is in: a villager ordered with others is no longer a path-ignore mate (`stamp_group` forms mates among
-**soldiers** only), and a body in the way can be planned round **inside the goal's tile** - the clause that refused it was
-written for ground and is fatal for the one case a gatherer lives in. Measured: entities **149 -> 155**, `repaths` **432 -> 497**,
-wall **+2.7%**, hash `8cf433ad4e0205f4` (the behaviour changed on purpose). `eight_villagers_ordered_to_one_tile_never_walk_
-through_each_other` is green and off `#[ignore]`.
+A villager ordered with others is no longer a path-ignore mate (`stamp_group` = soldiers only) and a body in the way can be
+planned round **inside the goal's tile** - the clause that refused it was written for ground and is fatal for gatherers.
+Measured: entities **149 -> 155**, `repaths` **432 -> 497**, wall **+2.7%**, hash `8cf433ad4e0205f4`.
 
-**What that leaves open, in this area:** the gather ring's seats are 0.66 apart against a 0.40 standoff, so the ink a crowd makes
-is still wider than the original's; and `STALLED_TICKS` (40 = two seconds) is the wait before a blocked man re-tasks. Neither is
-touched - one variable per slice - and both are now cheap to try, because a blocked crowd routes instead of standing.
+## Now: a seated man is not "past", then the seat shuffle (D238, 2026-11-16)
+
+The owner's *"villager still pushes another villager"* is the **seat shuffle**: a gather place is released when any body comes
+within reach, so a neighbour walking to his own square makes a seated man abandon his and walk to another (measured: 0.52 tiles,
+tick 756). Removing the shuffle is blocked, and the block is measured - all three attempts produced
+`three_gatherers_on_one_bush_do_not_pile_up` at **0.204** tiles, i.e. villagers walking through each other's squares:
+
+1. **A seated body must not be "past"** (`world/movement.rs`, the D210 clause). A route planned after a man stopped treats him as
+   old news and steps through him - and a gatherer who has taken his square never moves, so he is past to every route planned
+   after he sat. What ends an encounter then is the pause, exactly as the original's collision epilogue says.
+2. **Then "already inside is not an obstruction"** must not let a body go *deeper*: the D236 experiment's separation pass was
+   the right shape, applied to deepening only.
+3. **Then** the seat-release test can ask "is it staying", and `overlap::a_passer_by_does_not_move_the_seated_gatherers` (ignored
+   today) comes off ignore.
+4. If the crowd still closes up, pass the **held seats** into `standoff_point` (the `taken` list) so a newcomer cannot choose a
+   square another man holds - written and measured in D238, and it did not help alone, so it belongs after 1 and 2.
+
+**Gate**: entities at or above **155** and `repaths` near **380** at 48,000 ticks, with no fixture under 0.204-and-worse.
 
 ## Now: P1b - the converter, once the save's world section is read (2026-11-16, D235)
 

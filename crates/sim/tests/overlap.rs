@@ -250,3 +250,111 @@ fn a_newcomer_does_not_move_the_working_gatherers() {
         );
     }
 }
+
+/// **A man walking past must not move the men who are seated** (D238). This is the owner's report of 2026-11-16, after D237:
+/// *"villager still pushes another villager"*. Nothing writes another body's position, so what a player sees as a push is a
+/// seated man who **gives up his square** - and a walker passes inside the reach of every square he goes by, which is why the
+/// measurement is taken **while he is still walking**. Once he stops, his place in the ring is a standing body's and a
+/// re-choice is the ring working (a man parked on your square is not a man walking past).
+/// **Ignored: the seat shuffle is load-bearing** (D238). The fixture is red on today's engine - at tick 756, worker 9901 gives
+/// up a seat it was working and re-reserves one **0.52 tiles** away, because two neighbours (`Gather` on the same node, still
+/// walking to their own squares) pass within reach of it. That is the owner's *"villager still pushes another villager"*: no
+/// position is written, a seated man gives up his square and walks to another, which reads as a shove.
+///
+/// Three fixes were tried and measured, and each failed for a *different* reason rather than by guesswork:
+/// * **ignore bodies with a route** (a walker is going somewhere): the acceptance match fell to **126 entities** and
+///   `gather_motion::three_gatherers_on_one_bush_do_not_pile_up` reported villagers **0.204** tiles apart, because the churn
+///   was what kept them apart;
+/// * **ignore only bodies that are not ring members**: 154 entities and **380** repaths (better than 497), but the same 0.204
+///   overlap - a ring member in transit still churns his neighbours' seats;
+/// * **held seats excluded from new choices + release only for a body at rest**: the honest version of the rule, and the same
+///   0.204, which locates the remaining overlap in the **collision** rules rather than the seats (D210's "past" clause and
+///   "a body already inside is not an obstruction"), not in this filter.
+///
+/// So the shuffle cannot be removed before villagers stop walking through each other's squares, and that is the next slice:
+/// `docs/next-step.md` carries the order and the numbers.
+#[test]
+#[ignore = "D238: the seat churn is load-bearing until walk-through is fixed; see docs/next-step.md"]
+fn a_passer_by_does_not_move_the_seated_gatherers() {
+    let Some(pack) = pack() else { return };
+    let mut world = a_world(&pack);
+    let node = world
+        .entities()
+        .iter()
+        .find(|entity| matches!(entity.kind, EntityKind::Resource(_)))
+        .map(|entity| entity.id)
+        .expect("a resource node");
+    let tile = world.resource_tiles(node)[0];
+
+    let mut gatherers = Vec::new();
+    for nth in 0..3u32 {
+        let id = a_villager(&mut world, 9_900 + nth, (28 + i64::from(nth), 28));
+        world
+            .submit_checked(Command::Gather { villager: id, node })
+            .expect("a gather order");
+        gatherers.push(id);
+    }
+    for _ in 0..500 {
+        world.step().expect("a tick");
+    }
+    let seated: Vec<(EntityId, (i64, i64))> = world
+        .gather_places()
+        .into_iter()
+        .filter(|(worker, _)| gatherers.contains(worker))
+        .collect();
+    assert!(
+        !seated.is_empty(),
+        "no gatherer was seated beside the node before the passer-by; the fixture measures nothing"
+    );
+
+    // A fourth man walks **through** the ring: from one side of the node to the other.
+    let walker = a_villager(
+        &mut world,
+        9_910,
+        (i64::from(tile.0) - 3, i64::from(tile.1)),
+    );
+    world
+        .submit_checked(Command::Move {
+            unit: walker,
+            to: (tile.0 + 3, tile.1),
+        })
+        .expect("a walk order");
+
+    let mut walking_ticks = 0u32;
+    let mut was_at = world.position(walker);
+    for _ in 0..300 {
+        world.step().expect("a tick");
+        // **"Walking" is "his position changed"**: `velocity` is not maintained in this engine (battle reads motion off
+        // the movement itself), so a fixture that asked it measured zero movement on a man crossing the map.
+        let now_at = world.position(walker);
+        let moving = was_at != now_at;
+        was_at = now_at;
+        if !moving {
+            continue;
+        }
+        walking_ticks += 1;
+        let now: Vec<(EntityId, (i64, i64))> = world
+            .gather_places()
+            .into_iter()
+            .filter(|(worker, _)| gatherers.contains(worker))
+            .collect();
+        for (worker, place) in &seated {
+            let held = now
+                .iter()
+                .find(|(id, _)| id == worker)
+                .map(|(_, place)| *place);
+            assert_eq!(
+                held,
+                Some(*place),
+                "villager {} was moved off its square at tick {} while a man was walking past the ring (was {place:?}, \
+                 now {held:?})",
+                worker.0,
+                world.tick()
+            );
+        }
+    }
+    assert!(
+        walking_ticks > 10,
+        "the passer-by never crossed the ring: {walking_ticks} ticks of walking"
+    );
+}

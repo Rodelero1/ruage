@@ -6454,3 +6454,45 @@ group at all. Both now spawn **spearmen** - the units the rule is actually about
 **Basis.** `crates/sim/src/world/step.rs` (`stamp_group`), `crates/sim/src/world/movement.rs` (the near-goal clause), the pencil
 in `world/pathing` (`short_range_clear`, discs), `crates/sim/tests/overlap.rs`, `docs/movement-in-the-binary.md` (the path-ignore
 list), `docs/prior-art.md` (the formations page). Review: `docs/reviews/2026-11-16-d237-villagers-solid.md`.
+
+### D238 - "villagers still push": it is the seat shuffle, and the shuffle is load-bearing (2026-11-16, nothing landed but the reading)
+
+**The report, one line after D237 shipped.** *"In the latest version villager still pushes another villager."* Nothing in the
+engine writes another body's position - `push_the_standing` was deleted by D207/D208/D210 and `made_room` reads 0 - so what a
+player sees is a **seated man giving up his square**: the gather place is a reservation, and it is released whenever a body comes
+within reach of it, after which the man chooses another and walks there. The owner's "pushed" is that walk.
+
+**Measured, not inferred.** A fixture (`crates/sim/tests/overlap.rs::a_passer_by_does_not_move_the_seated_gatherers`) seats three
+gatherers on a node, settles them for 500 ticks, then walks a fourth man through the ring. Instrumenting `reserve_gather_place`
+gives the defect in one line:
+
+> `SEATMOVE tick=756 worker=9901 old=(421103,276154) new=(410625,276000) near=[ 11:Idle, 9900:Gather{node:11}, 9902:Gather{node:11} ]`
+
+i.e. worker 9901 abandons a seat he was working and takes another **0.52 tiles away**, and the only bodies near it are his two
+neighbours, both `Gather` on the same node and both still **walking to their own squares**. A ring member in transit is inside
+the reach of every square he passes, and the seat-release test asks only "is a body within reach", not "is it staying".
+
+**Three fixes were built and measured; each failed for a different, recorded reason.**
+1. **Ignore any body that has a route** (a walker is going somewhere): the acceptance match collapsed - entities **155 → 126**,
+   and `gather_motion::three_gatherers_on_one_bush_do_not_pile_up` reported villagers **0.204** tiles apart.
+2. **Ignore only bodies that are not ring members** (gather/return on this node): entities **154**, `repaths` **380** (better
+   than D237's 497) - and the same **0.204** overlap.
+3. **Exclude seats another man already holds from a new choice, and release a seat only for a body at rest** - the honest
+   version of the rule - and the same **0.204**.
+
+**What the three failures say.** The seat churn is **load-bearing**: it is what keeps bodies apart, because the collision rules
+still let a man walk through another's square in this scenario. D237 removed the crowd's *mate* exemption, but two clauses remain
+that permit a body to be crossed: the **"past"** rule (D210: a collider that has not moved since the route was planned is
+dropped - and a seated gatherer never moves, so he is past to every route planned after he sat) and **"a body already inside is
+not an obstruction"**. Until those are answered, releasing seats on a walker is the only thing preventing the 0.204 pile - which
+is the very pile the owner originally reported.
+
+**What is left in the tree.** The fixture above, `#[ignore]`d with the reason and the three measurements, and no behaviour
+change: the tree is D237's. The next slice, in order: (1) a **seated body is not "past"** - a route planned after a man stopped
+must still go round him; (2) then the seat-release test can ask "is it staying" without the crowd closing up; (3) then this
+fixture comes off ignore. The gate is the acceptance match at 48,000 ticks - entities at or above **155** and `repaths` near
+**380** - not a test count.
+
+**Basis.** `crates/sim/tests/overlap.rs` (the fixture and its measurement); `crates/sim/src/world/step.rs` (`owned_place`'s
+staleness filter, `standoff_point`'s `taken`); `crates/sim/src/world/movement.rs` (the "past" clause and the inside rule);
+`docs/movement-in-the-binary.md`. Review: `docs/reviews/2026-11-16-d238-seat-shuffle.md`.
