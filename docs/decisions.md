@@ -6642,3 +6642,35 @@ overlap; the old assertion would now be the old rule speaking.
 **Basis.** `docs/behaviour-diff.md` rows 24, 25, 32; `crates/sim/src/world/step.rs` (the refusal count, the retarget, the nudge),
 `crates/sim/src/world/gather.rs` (`nearest_like_free`, `gather_reach`), `crates/sim/src/world/orders.rs:52`. Review:
 `docs/reviews/2026-11-16-d241-rulings.md`.
+
+### D242 - R1 measured: both halves of the game's answer cost the match more than they buy (2026-11-16, nothing landed)
+
+D239 adopted the game's pathing answers wholesale; `docs/next-step.md` turned every divergent row into a slice (R1-R9). R1 was
+the first: **row 29** (a body at rest that is not past is walked through) and **row 30** (the re-plan folds the bodies it has
+already met into the search's obstacle tiles). Both halves were built and measured separately, and **both were reverted**.
+
+**Half 1 - the step through a body at rest (`TakeAtRest`).** Deleting the arm works: a walker sent past a stopped friend, who
+moved *after* the route was planned (so he is genuinely not past), comes no closer than the pair's reach - measured 8,000 raw in
+8,000, against 7,200 before. But it **deadlocks two soldiers in a lane**: `group_overlap::two_units_ordered_apart_are_not_a_group_
+and_the_loser_pauses` stands at *"both have to arrive: a at (5,1), b at (5,2) after 2002 ticks"*, and
+`a_mate_who_is_stopped_becomes_solid` never meets at all. The game resolves exactly this with the **past** rule: the paused man
+stops moving, the other's re-plan is stamped later, and the stopped man becomes past - and that chain does not complete in this
+engine. The arm therefore stays, and `crates/sim/tests/replan.rs::a_stopped_friend_is_not_walked_through` is `#[ignore]`d as the
+specification for the slice that completes it.
+
+**Half 2 - the search stops receiving the avoid set.** Also built, also reverted: **entities 155 -> 143** and `repaths`
+**380 -> 649** at 48,000 ticks. The reason is in the same reading that motivated the change: the original's search *does*
+insert a standing object into its per-search rectangle list (`FUN_007f9d80`), and the bodies it does not re-insert are the ones
+the classifier has answered for. In this engine the pencil (`stander_bodies`) supplies the first and `route.avoiding` supplied
+the second; remove the second and every re-plan meets the same men again - a 71% increase in re-paths and twelve fewer entities
+alive at the end.
+
+**What that says about the queue.** R1's two rows are not two small deletions; each is a deletion *plus* the mechanism that
+makes the game's rule pay for itself (the past-rule chain; a search that re-reads standers instead of remembering them). The
+queue's gate - **entities at or above 155, `repaths` near 380** - is what caught it, exactly as `docs/next-step.md` intended.
+R2-R9 are unchanged and unblocked; R1 is split in the queue into **R1a** (the past-rule chain, which unblocks the arm) and
+**R1b** (the avoid set, which needs the stander re-read first).
+
+**Basis.** `crates/sim/src/world/movement.rs` (rule 6, the arm), `crates/sim/src/world/step.rs` (the re-plan's `obstacles`),
+`crates/sim/tests/replan.rs` (the ignored fixture), `crates/sim/tests/group_overlap.rs` (the deadlock, measured),
+`docs/behaviour-diff.md` rows 29-30. Review: `docs/reviews/2026-11-16-d242-r1-measured.md`.

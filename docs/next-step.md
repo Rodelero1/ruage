@@ -16,11 +16,14 @@ Each slice ships test-first, with its measurement in a review under `docs/review
 48,000 ticks**: entities at or above **155**, `repaths` near **380**, plus the slice's own fixture. A hash moves whenever behaviour
 moves; say so rather than treating it as a defect.
 
-1. **R1 - the step through a body at rest, and the re-plan's obstacle set** (rows 29, 30). Delete `collide`'s rule 6
-   (`TakeAtRest`): an idle friend who is not past is a non-past collision, answered by a re-path and the pause. Stop folding
-   `route.avoiding` into the search's **obstacle tiles** (`step.rs:1325`); the classifier keeps the set, the search loses it.
-   *Fixture*: a walker ordered past a friend who stopped **before** the route was planned (`clearance::`'s existing one), and a
-   walker whose route has met three bodies in a row - assert his second re-plan is not longer than the first by tiles.
+1. **R1a - the past-rule chain, then the step through a body at rest** (rows 29, 30; **measured and split, D242**). Both
+   halves were built and reverted: deleting `TakeAtRest` fixes the encounter (8,000 raw in an 8,000 reach against 7,200) but
+   **deadlocks two soldiers in a lane** - `group_overlap`'s head-on pair stands for 2,002 ticks - because the chain the game
+   uses to end a stand (paused man stops moving, the other's re-plan is stamped later, the stopped man becomes **past**) does
+   not complete here. **R1b** (the re-plan's obstacle set) is worse still: entities **155 -> 143**, `repaths` **497 -> 649**,
+   because `route.avoiding` was the only memory of the men already met; the game has a second memory we lack (its search
+   re-inserts standing objects, `FUN_007f9d80`). Order: complete the past chain, then delete the arm, then re-measure the avoid
+   set. The specification fixture is `crates/sim/tests/replan.rs::a_stopped_friend_is_not_walked_through`, `#[ignore]`d.
 2. **R2 - the pause is re-drawn, and a paused mate is not a mate** (rows 18, 20). `setPause` has no "already paused" guard, so a
    fresh collision draws again; and the mate exemption is re-tested on motion, not on the route's existence.
    *Fixture*: the head-on pair, asserting the **first** pause is inside 0.25-1.50 s, the waypoint list is unchanged across it, and
