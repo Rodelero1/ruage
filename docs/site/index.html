@@ -100,7 +100,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <header><h1>Decisions</h1>
 <p class="lede">Every rule the corpus states, what it rests on, and what it has not decided yet. Generated from <code>docs/decisions.md</code> and the U-register; nothing on this page is typed by hand, so a wrong label means the classifier is wrong and can be seen to be wrong.</p>
 <ul class="coverage" id="coverage">
-<li data-k="decisions"><b>246</b> decisions</li>
+<li data-k="decisions"><b>247</b> decisions</li>
 <li data-k="amended"><b>12</b> amended</li>
 <li data-k="corrected"><b>4</b> corrected</li>
 <li data-k="superseded"><b>8</b> superseded</li>
@@ -545,7 +545,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </div>
 </details>
 <details class="group" id="area-pathfinding-movement" data-area="Pathfinding &amp; movement" data-unfinished="0" data-undecided="2" open>
-<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">37 decisions · 2 undecided · 2 superseded · 3 with no stated basis</span></summary>
+<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">38 decisions · 2 undecided · 2 superseded · 3 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U5</span> Are unit speeds in tiles/second, and what is the tile size in world units? Speed 1.35 (knight) is consistent with tiles/s.</li>
 <li><span class="id">U7</span> What pathing algorithm does the game use (A, flow field, something else), and what are its cost weights?</li>
@@ -1047,6 +1047,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <h3>no pushing: a man who cannot get his square looks for another tile of the same resource</h3></div>
 <div class="basis">
 <details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>&gt; Withdrawn in part by D239 (2026-11-16), corrected by D241 the same day: the idle-body nudge is gone, the re-target is not. &gt; A newcomer with no square goes to the nearest free node of the same kind within reach or waits (both as built, st</li>
 <li>This is also the owner&#x27;s rule from D182, now applied on the contested path as well as at order time: &quot;try another nearest resource of the same kind&quot;.</li>
 <li>Why it matters here. The nudge was the only thing that let a crowd of seven on one bush move at all after D200, and the acceptance match&#x27;s food economy depended on it; with displacement gone, the crowd policy has to be re-targeting, which i</li>
 </ul></details>
@@ -1286,7 +1287,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <h3>The game is the source of truth on pathing: every divergence adopted, and two rules of ours deleted (owner, 2026-11-16)</h3></div>
 <div class="basis">
 <details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
-<li>erence, not a read - his sentence of 2026-11-16 plus no displacement anywhere in the original - so the slice confirms it before it ships, and D238&#x27;s &quot;a seated body must not be past&quot; is withdrawn: under the game&#x27;s own past test a man who has</li>
+<li>A man with no seat (rows 24, 25), as the owner ruled it on 2026-11-16 and corrected the same day: the node&#x27;s ring is not re-laid (D238 measured that shuffle at 0.52 tiles, SEATMOVE), and a man who cannot get a square looks for another bush </li>
 </ul></details>
 </div>
 <details class="unresolved"><summary>unresolved language</summary><ul>
@@ -1298,6 +1299,28 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <button class="verdict" data-verdict="question" data-id="D239">question</button>
 <button class="verdict" data-verdict="wrong" data-id="D239">wrong</button>
 <input class="note" data-note="D239" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D241" data-id="D241" data-origins="owner measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D241</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-16</span>
+<h3>Four pathing rulings the game cannot settle, and one of them was already built (owner, 2026-11-16)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>A thing that cannot be reached. Two cases, in the owner&#x27;s words: a tree behind a wall - the man tries to find a path, and failing that &quot;will approach the tree as much as he can and idle&quot;; a tree behind other trees - he approaches as close t</li>
+<li>It is not - the re-target is the owner&#x27;s rule and is what the code does; only the displacement goes.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>A consequence worth stating before it is measured: with the past rule standing (ruling 1), the 0.204-tile pile D238 caught is no longer a defect - it is what the game does when a route is planned through a man who has stopped.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D241">
+<button class="verdict" data-verdict="agree" data-id="D241">agree</button>
+<button class="verdict" data-verdict="question" data-id="D241">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D241">wrong</button>
+<input class="note" data-note="D241" placeholder="note (saved with the verdict)">
 </div>
 </article>
 </div>
@@ -5454,7 +5477,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </ul>
 </section>
 <section id="health"><h2>How this page knows</h2>
-<p>Parsed 246 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
+<p>Parsed 247 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
 <p>A basis is recorded only from a phrase in the decision itself, and the phrase is shown beside the label. <b>No stated basis</b> is the reliable category: it needs no pattern to be right. <b>Unresolved language</b> is a reading list, not a verdict - the quoted sentence is there to be judged.</p>
 <p>The scan for broken references reads <code>docs/</code>, <code>crates/</code>, <code>config/</code>, <code>SPEC.md</code> and <code>README.md</code>. <code>tools/</code> is excluded: its fixtures name ids that are meant not to exist.</p>
 <p class="empty">Every decision heading was placed.</p>

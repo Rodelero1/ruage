@@ -1,6 +1,6 @@
 # OPEN - R1: adopt the game's pathing answers, starting with the step through a body at rest
 
-**The ruling is in (D239, 2026-11-16).** The owner, over the movement rows of `docs/behaviour-diff.md`: *"Resolve the questions by
+**The rulings are in (D239 and D241, 2026-11-16).** The owner, over the movement rows of `docs/behaviour-diff.md`: *"Resolve the questions by
 adopting from the game. That is the source of truth."* The register is now **30 rows, 19 ruled**; rows 13-30 are pathing and
 obstacle avoidance - **18 rows, 17 ruled: 6 same, 11 different, 1 unknown-static** - and **every divergent row becomes a slice**,
 with two exceptions that need a read first (R7). Where the game's side is unread, the read comes before the code; nothing is
@@ -25,13 +25,15 @@ moves; say so rather than treating it as a defect.
    fresh collision draws again; and the mate exemption is re-tested on motion, not on the route's existence.
    *Fixture*: the head-on pair, asserting the **first** pause is inside 0.25-1.50 s, the waypoint list is unchanged across it, and
    **both arrive** - never "longest continuous stand", which measures the end of the match.
-3. **R3 - the seat book is authoritative** (rows 24, 25). `maybe_respread` retires and D204's next-node re-target retires; a
-   newcomer with no free square keeps circling the same node. **The mechanism is an inference, not a read** - the first act is a
-   test that pins what the game looks like (his sentence: a newcomer "will be walking around until he finds a spot"), not a
-   guess at the internals. D238's "a seated body must not be past" is **withdrawn**: under the game's own past test a stopped man
-   *is* past, and the seats are what keep bodies apart.
-   *Gate*: the D238 fixture's 0.204 never appears, `overlap::a_passer_by_does_not_move_the_seated_gatherers` comes off ignore, and
-   entities do not fall below 155.
+3. **R3 - the incumbents' squares** (rows 24, 25; D241). `maybe_respread` retires, and the idle-body nudge with it. The
+   newcomer's half is **already built** and is the owner's rule verbatim - the nearest free node of the same kind within
+   `gather_reach`, else wait (`step.rs:2178-2212`) - so this slice is one deletion, one guard, and one **restated fixture**.
+   **The fixture must assert what he objects to** (a seated man does not move), not that no two bodies ever overlap: with the
+   past rule standing (D241 ruling 1) a route planned through a stopped man *is* walked through, and the 0.204-tile pile D238
+   caught is the game's behaviour rather than a defect.
+   *Gate*: `overlap::a_passer_by_does_not_move_the_seated_gatherers` off ignore with incumbents moving no more than one step;
+   entities at or above 155.
+
 4. **R4 - an unreachable waypoint is substituted** (row 26). `mConsecutiveSubstituteCount`: *"we have a count of %d, faking it"*.
    `finish_blocked_orders` retires in its favour. *Read first*: the counter's own semantics beyond the log line (how many counts,
    what "faking" does to the waypoint index) - `FUN_008a4360`.
@@ -53,6 +55,14 @@ moves; say so rather than treating it as a defect.
    stands in, but only outward, and that is a stand-in rather than the rule. And the order's path vocabulary is narrower: forced
    waypoint, teleport-to-waypoint, per-path hit (patrol we have, D47). *Fixture*: a body spawned inside a stander reaches its goal
    with its first waypoint off the disc; a forced waypoint is passed without a re-plan.
+
+9. **R9 - a thing that cannot be reached** (row 32; D241 ruling 3). Today the order is refused at `orders.rs:52`. The owner's
+   rule: **accept it**, walk as close as the ground allows, and **idle** when a wall is what blocks the way; when the obstruction
+   is other resource - a tree behind trees - prefer a reachable node of the same kind within `gather_reach` and work that. The
+   helper exists (`nearest_like_free`), the trigger does not. *Fixture*: a tree ringed by a house is approached to the closest
+   standable tile and the man idles there; a tree ringed by trees sends him to the nearest reachable tree with a gather task.
+   **Villagers are solid and formations are deferred** (D241 ruling 2): the same-tick mate stand-in for soldiers stays, documented
+   in `stamp_group` as a stand-in for a formation that does not exist yet.
 
 **Still open, and it needs an artefact rather than work:** row 23, the exclusive goal. **Forty units ordered to one tile**, one
 recording. No read decides it and no decision should stand in for it.

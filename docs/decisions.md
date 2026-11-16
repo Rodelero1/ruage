@@ -5127,8 +5127,10 @@ number alone.
 
 ### D204 - no pushing: a man who cannot get his square looks for another tile of the same resource
 
-> **Withdrawn in part by D239 (2026-11-16).** The next-node re-target and the idle-body nudge are gone: a newcomer with no
-> free square keeps circling the same node, and a resting body is never displaced for any task. The no-pushing rule stands.
+> **Withdrawn in part by D239 (2026-11-16), corrected by D241 the same day: the idle-body nudge is gone, the re-target is not.**
+> A newcomer with no square goes to the **nearest free node of the same kind within reach** or waits (both as built, `step.rs`
+> `count_refused_squares` + `nearest_like_free`), which is the owner's rule verbatim; a resting body is never displaced, for any
+> task. The no-pushing rule stands.
 
 **What it says.** The owner, 2026-11-13, playing the D200 merge: *"I don't like villagers pushing other villagers. I want
 instead to look for another free place at next tile with same resource instead of fighting over the place at the same
@@ -6532,13 +6534,15 @@ first** - the tree does not get a guess in the game's name.
    with no "already paused" guard; ours stands the first draw.
 4. **A paused mate stops being a mate** (row 20, corrected). The exemption is re-tested every tick on `isMoving`
    (`[vtbl+0x2a0]`); ours ends it when the route is dropped, and a paused man keeps his route.
-5. **A man with no seat keeps walking** (rows 24, 25). The node's ring is not re-laid (`maybe_respread` retires) and a refused man
-   is not re-targeted to the next node of the column (D204's second half). The **seat book is authoritative**: a newcomer with no
-   free square keeps circling *this* node until one frees. *The mechanism is an inference, not a read* - his sentence of
-   2026-11-16 plus no displacement anywhere in the original - so the slice confirms it before it ships, and **D238's "a seated
-   body must not be past" is withdrawn**: under the game's own past test a man who has stopped *is* past and is walked through.
-   The original keeps bodies apart with the **seats**, not with the collision, which is why the seat churn measured as
-   load-bearing was a symptom of our routing at an occupied square.
+5. **A man with no seat** (rows 24, 25), **as the owner ruled it on 2026-11-16 and corrected the same day**: the node's ring
+   is not re-laid (D238 measured that shuffle at 0.52 tiles, `SEATMOVE`), and a man who cannot get a square looks for **another
+   bush nearby** - within `gather_reach`, the worker's line of sight plus five tiles (D149) - and **waits** when there is none.
+   That is D204 as built, and the owner's own words are its statement: *"if there is no other bush nearby, then worker waits for
+   free spot, if there is another bush nearby, he will go work there."* **What retires is only the idle-body nudge.** *This
+   paragraph first said the newcomer "keeps circling this node", which was my reading of his earlier sentence and was wrong*; the
+   correction is his, made in the same conversation, and the row now says `same` for the re-target and `different` for the nudge.
+   **D238's "a seated body must not be past" stands withdrawn**: under the game's own past test a stopped man *is* past and is
+   walked through, and the original keeps bodies apart with the **seats**, not with the collision.
 6. **An unreachable waypoint is substituted, not waited on** (row 26): `mConsecutiveSubstituteCount` - *"we have a count of %d,
    faking it"*. `finish_blocked_orders` (the order dies where the man stands after forty refused ticks) retires in its favour.
 7. **Passage is the body's** (row 21): **supersedes D117**. The ground a body may cross is the ground grown by its radius; the tile
@@ -6602,3 +6606,39 @@ probe per decision (does the symbol it names still exist), which is a tool of it
 
 **Basis.** `tools/decisions.py` (`check_shrink`, `SUPERSEDES`), `tools/test_decisions.py`, `docs/decision-areas.toml`,
 `docs/decisions.md` (D200a, D204, D238, D127, D135). Review: `docs/reviews/2026-11-16-d240-retirement.md`.
+
+### D241 - Four pathing rulings the game cannot settle, and one of them was already built (owner, 2026-11-16)
+
+The owner, answering the forks that the original's behaviour leaves open:
+
+1. **A stopped man is walked through** - *"follow game"*. So D210's **past** rule stands for every body, D238's step 1 stays
+   withdrawn, and an idle friend is not a wall to a route planned after he stopped. The consequence is deliberate and named:
+   two bodies can be seen overlapping where one is routed through a man who has stopped, and what the game does about it is the
+   **pause**, not a shove.
+2. **Formations are deferred; villagers are solid.** *"unit formation is to be implemented later"* - so the mate exemption keeps
+   its same-tick stand-in for **soldiers**, and is documented as a stand-in rather than as the rule; a formation kind is a later
+   slice behind `stamp_group`. For **villagers** the game's rule is already ours: villagers join no formation, so they are solid
+   to each other (D237).
+3. **A thing that cannot be reached.** Two cases, in the owner's words: a tree behind a **wall** - the man tries to find a path,
+   and failing that *"will approach the tree as much as he can and idle"*; a tree behind **other trees** - he approaches as close
+   to the tree he was sent to as he can *"and start working on the nearest tree"*. Today the order is **refused at order time**
+   (`orders.rs:52`), so this is a slice: accept it, plan to the nearest reachable point, and when the target is a resource node
+   prefer a reachable node of the same kind within `gather_reach` - the same helper the no-seat rule already uses, at a different
+   trigger.
+4. **A crowd at a bush** - *"if there is no other bush nearby, then worker waits for free spot, if there is another bush nearby,
+   he will go work there."* **Already built**: after forty refused ticks `count_refused_squares` asks `nearest_like_free` and
+   re-targets, or stands the man down to wait (`step.rs:2178-2212`). What remains is the **incumbent** half only - no re-lay
+   (`maybe_respread`) and no nudge.
+
+**What this corrects, and it is my error:** D239 and the D204 withdrawal marker said the next-node re-target was retired. It is
+not - the re-target **is** the owner's rule and **is** what the code does; only the displacement goes. Register rows 24 and 32
+are amended to say so, and row 24 now reads `same` for the re-target and `different` for the nudge.
+
+**A consequence worth stating before it is measured:** with the past rule standing (ruling 1), the **0.204-tile pile** D238 caught
+is no longer a defect - it is what the game does when a route is planned through a man who has stopped. The fixture that pins this
+must therefore assert what the owner actually objects to (**nobody is shoved off his square**), not that no two bodies ever
+overlap; the old assertion would now be the old rule speaking.
+
+**Basis.** `docs/behaviour-diff.md` rows 24, 25, 32; `crates/sim/src/world/step.rs` (the refusal count, the retarget, the nudge),
+`crates/sim/src/world/gather.rs` (`nearest_like_free`, `gather_reach`), `crates/sim/src/world/orders.rs:52`. Review:
+`docs/reviews/2026-11-16-d241-rulings.md`.
