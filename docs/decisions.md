@@ -6173,3 +6173,34 @@ semantics, unchanged - and the fixture asserts that too, so "one soldier arrived
 **Basis.** `crates/sim/src/world/step.rs`, the trainers loop in `step_production`; `crates/sim/tests/population.rs`
 (`the_ceiling_is_read_at_the_spawn`); the red run measured 6 against a cap of 5. Review:
 `docs/reviews/2026-11-16-d231-ceiling.md`.
+
+### D232 - T16 read: the turn is a per-player clock, not another update order (2026-11-16)
+
+**What it says.** `pturn` is not an ordering of updates - our tick already has one, and D230 built the player rotation for it.
+It is a **clock**. Read in three places that agree, 5.7 now included:
+
+- **In our binary**, `BaseWorld::update` (`FUN_00738720`, `0x738720`) adds the update's elapsed milliseconds into
+  `this[player + 0x41]` - `+0x104 + 4 x player` - for every player, and at the end zeroes the word of the player whose turn it
+  is, advances `pturn` (`+0x100`) and wraps it at the player count. `FUN_00735960` (`baseworld.cpp:0x24b`) is the reset that
+  clears `+0x100` and exactly **nine** words `+0x104..+0x124` (Gaia plus eight players), and `FUN_0072d0b0` is the one-line
+  getter `*(u32 *)(this + 0x104 + 4 x player)`.
+- **In the DE port** (`librematch/genie` at `62831fa`), `WorldStep::Turn` is the same two lines (`schedule.rs:274`) and the
+  turn is *used* at `PlayerStep::Objects` (`:323`): the turn player's objects get `Some(their accumulated clock)`, everyone else
+  `None`. `unit_ai` names the two cases: on the owner's turn the **full update**, otherwise "its check between turns"
+  (`unit_ai/unit.rs`).
+- **In the save**, `pturn` and `player_time_delta[player_id]` are world-header fields (`world/load/world/mod.rs:77`), so the
+  turn is persisted state.
+
+**What it decides for us.** The turn cannot be built as a scheduling change: it needs a **per-player clock** (we have a fixed
+tick and no accumulators) and a **two-tier unit AI** - a full update on the player's turn, a cheap check otherwise - which this
+engine does not have and which is a *game-behaviour decision* (how fast the computer player reacts, and with what time budget),
+not something a reading can settle. Inventing it on the strength of "the original has a turn" would be exactly the guess this
+project refuses, so the step stops at the reading: `docs/mechanics/determinism.md` carries it, the tree's T16 row now says what
+it is, and `docs/next-step.md` prices the build.
+
+**What is owed regardless.** `pturn` and the nine-word array are **saved state**, so `P1` (`World::from_state`) needs them
+whether or not the AI split is ever built. That is the one piece of T16 that a later slice can land without a behaviour ruling.
+
+**Basis.** `FUN_00738720`, `FUN_00735960`, `FUN_0072d0b0` in `AoK HD.exe`; the genie port at `62831fa`, `world/schedule.rs`,
+`unit_ai/unit.rs`, `world/load/world/mod.rs`; `docs/mechanics/determinism.md`. Review:
+`docs/reviews/2026-11-16-d232-turn-read.md`. No simulation code changed.

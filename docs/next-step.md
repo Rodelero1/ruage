@@ -1,4 +1,4 @@
-# OPEN - T12: the tick's order, which the original's own binary has now given up
+# OPEN - T16: the turn is a per-player clock, and the AI split it gates does not exist
 
 **Where it stands, 2026-11-15 (evening).** Seven decisions, closing five debts and one carried regression from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
 range, in the importer and the engine - a sight tech had been moving a tower's *attack range*, and a sight upgrade marked no
@@ -15,6 +15,26 @@ nothing, but `barred_by` reads kind-102 rows and `check_research` refuses with `
 
 The order below is the user's ruling of 2026-11-14 - **live wrong numbers first**, then the effect interpreter, then the
 economy's own rules. Do not start breadth, civs, or the renderer before items 1-2.
+
+## T16 - read, and what the build costs (2026-11-16, D232)
+
+**The reading, in one paragraph.** `pturn` (`+0x100`) rotates over the players each update; the nine-word array
+`+0x104..+0x124` accumulates the update's milliseconds per player and is **zeroed for the player whose turn it is**
+(`BaseWorld::update` = `FUN_00738720`; the reset `FUN_00735960` clears both; `FUN_0072d0b0` reads one). The DE port shows what it
+is *for* (`world/schedule.rs:274` and `:323`): the turn player's objects are updated with the time accumulated since their own
+last turn and get the **full unit-AI update**, and everyone else gets a **between-turns check**. So the turn is a **clock**, not
+another order of updates - and it is **saved state**: `player_turn` and `player_time_delta[player_id]` are world-header fields
+in the save the port loads.
+
+**Why it is not built.** Two of its three pieces do not exist here: there is no per-player clock (the simulation runs on a fixed
+tick) and there is no two-tier unit AI (`decide` runs every entity fully, every tick, so there is no "between turns" half to run
+in the other eight). Building the second is a **game-behaviour decision** - how fast a computer player reacts and with what time
+budget - not something the reading settles, and guessing it would be the invention this project refuses.
+
+**What is owed regardless, and is the natural next slice.** The **saved fields**: `pturn` and the nine per-player clocks are in
+the save header, so `P1` (`World::from_state`, `--load`) needs them whether or not the AI split is ever built. Carrying them as
+hashed state now is a two-field change with a save-format test, and it makes the turn's *rotation* testable (advance, wrap,
+zero-on-turn) without inventing an AI.
 
 ## Where T12 stands: two stages landed, and the inner loop priced (2026-11-16)
 

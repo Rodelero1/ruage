@@ -186,6 +186,46 @@ objects* is what this settles. T12's first slice takes the part the two-pass sha
 pass now runs `(player, id)` instead of by entity id, and a building dead at the end of that pass finishes no production
 or research - and the per-object loop is what is left. `docs/next-step.md`, T12; D229.
 
+## The turn, read (2026-11-16)
+
+T16 asked what 5.7 does with `pturn`. It is read, in three places, and the three agree.
+
+**In our own binary.** `BaseWorld::update` (`FUN_00738720`, `0x738720`) accumulates the update's elapsed milliseconds,
+**per player**, in the word at `+0x104 + 4 x player` - the loop's body does
+`this[player + 0x41] += this[0x1b]` for every player it walks. At the end of the update it **zeroes the word belonging to
+the player whose turn it is** (`this[pturn + 0x41] = 0`), advances `pturn` (`+0x100`) by one and wraps it at the player
+count. Two neighbours name the fields for us: `FUN_00735960` (`0x735960`, `baseworld.cpp:0x24b`) is the reset that clears
+`+0x100` **and exactly nine words `+0x104 .. +0x124`** - Gaia plus eight players - and `FUN_0072d0b0` (`0x72d0b0`) is a
+one-line getter, `*(u32 *)(this + 0x104 + 4 x player)`.
+
+**In the DE port, which reproduces 158041 bit-for-bit.** `WorldStep::Turn` (`world/schedule.rs:274`) is the same two lines -
+`*clock_mut(player_turn) = ZERO; player_turn = (player_turn + 1) % players` - and `PlayerStep::Objects`
+(`schedule.rs:323`) is where the turn is **used**:
+
+```rust
+let turn = if player_id == self.player_turn { Some(*self.clock_mut(player_id)?) } else { None };
+self.update_objects(player_id, (run.dt, turn))?;
+```
+
+So the turn player's objects are updated with **the time accumulated since their own last turn**, and every other player's
+objects with `None`. `unit_ai` says what the two cases are (`unit_ai/unit.rs`, the `ai_run` doc): on the owner's turn the
+**full update**, otherwise **"its check between turns"**. `pturn` and `player_time_delta[player_id]` are also fields of the
+save's world header (`world/load/world/mod.rs:77`), so the turn is **persisted state**, not a runtime detail.
+
+**What that means for us, and why the turn is not built.** The turn is not an order of updates - our tick already has one,
+and D230 built the player rotation for it. It is a **clock**: one player's objects per tick get the full unit-AI update,
+carrying the elapsed time since that player's last turn, and the rest get a cheap between-turns check. Two things our engine
+does not have, and one thing it must not lose:
+
+1. **No per-player clock.** Our simulation time is a fixed tick; there is no per-player accumulator to zero and hand out.
+2. **No two-tier unit AI.** `decide` runs every entity fully, every tick, and there is no "between turns" half to run in
+   the other eight ticks - inventing one is a game-behaviour decision (how fast the computer player reacts), not a reading.
+3. **It is saved state.** The save loader (`P1`, `World::from_state`) will need `pturn` and the nine-word array, so the
+   fields are owed by P1 whichever slice builds the AI.
+
+**Basis.** `FUN_00738720`, `FUN_00735960`, `FUN_0072d0b0` in `AoK HD.exe`; `librematch/genie` at `62831fa`
+(`world/schedule.rs`, `unit_ai/unit.rs`, `world/load/world/mod.rs`). `docs/next-step.md`, T16; D232.
+
 ## The other way out of the simultaneous volley (2026-10-31)
 
 `Zaydme/openaok` proves a second answer to the same problem, and it is worth naming before anyone reopens the
