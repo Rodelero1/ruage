@@ -299,3 +299,31 @@ is no branch anywhere in the block that moves the other body.
   `[+0xF4]` unless slot `+0x154` answers 6 or 7; `0x428c50` is not in the corpus). That decides whether the original would
   exempt a **box-selected crowd of villagers** ordered by a player - which is exactly what our window sends - or only a
   military formation, which is all the FE quote ever claimed.
+
+## The cost model settled (2026-11-16): the heuristic is deliberately inadmissible
+
+The open item in "What is still unread" was a contradiction: *"x25 against a 16-per-step cost is not admissible, so either those
+four arguments are not tiles or 16 is not the per-step cost."* **Neither was wrong - the assumption was.** Three functions, read
+in the corpus:
+
+- **`FUN_007ffc80`** is the **octile cost**: `table[min] + (max - min) * 0x10` - 16 per cardinal step, with the diagonal share
+  looked up in `DAT_00afd2a0` (runtime storage, computed at load).
+- **`FUN_007ffcd0`** is the plain **Euclidean distance**: `sqrt(dx*dx + dy*dy)` on the same arguments, returned as a float,
+  truncated by the caller. Its arguments are tile coordinates - the same pair that indexes the best-cost array at
+  `(x*0x1e0 + y)*4`, with `0x1e0` = 480, the maximum map dimension.
+- **`FUN_008007f0`** (the search) computes `h = (int)euclid * 2500 / 100`, and when `FUN_0074e020() == 1` it computes
+  `h = (int)euclid * 0x19` instead. **2500/100 *is* 0x19**: both are **25**, in hundredths and in whole units.
+
+So 16 is the step cost and 25 is the **heuristic weight**, and `25 > 16..22.6` - the octile cost of one tile of Euclidean
+distance - means **h overestimates the remaining cost**. The original's search is therefore **weighted A\* / best-first with a
+weight of about 1.56**, trading path optimality for speed. That is a decision in the original, not a contradiction in its
+constants, and it explains why the pair looked impossible to port: it is impossible to port *as an admissible A\** because it
+never was one.
+
+**What this changes for us.** Row 13 of the register is not "10/14 against 16 plus a table" - it is "an admissible octile A\*
+against a weighted one that returns slightly longer routes on purpose". Adopting it changes route *shape* everywhere, which is a
+behaviour change worth its own measurement rather than a constant swap, and it is no longer blocked on an arithmetic puzzle.
+
+**Still unread, and named:** the quantity `local_46c` that the loop compares against `h` before breaking (`h < local_46c`, plus a
+hard **20,000**), which is the termination rule and the part a replay would depend on; and the tie-break among equal `f`, which
+needs the frontier order rather than the arithmetic.

@@ -70,10 +70,14 @@ moves; say so rather than treating it as a defect.
 6. **R6 - the caps go, and the price is measured** (row 22). Remove `MAX_GROUND_REPLANS = 2` and `MAX_REPATHS_PER_TICK = 4`; the
    game has no counter. The 3.5-against-0.3 ms/tick figure predates the sub-tile pencil, so it is re-measured here. A regression is
    a finding for the owner, not a licence to reinstate the caps.
-7. **R7 - two reads before two ports** (rows 13, 27). **The cost model and the frontier**: settle the 2500/100 estimate against a
-   16-per-step cost - one of them is wrong, and neither is ported until it is - then adopt 16 with the octile table and the
-   generation-stamp array rather than a heap, because equal-cost ordering shapes the route. **The two-level path**: read
-   `AddFuturePath`'s parent derivation, then build it.
+7. **R7 - the cost model is settled, the port is not** (rows 13, 27). The read is done (2026-11-16,
+   `docs/movement-in-the-binary.md`, "The cost model settled"): **16** is the per-cardinal step cost (`FUN_007ffc80`, an octile
+   table plus 16 per step) and **25** is the *heuristic weight* (`FUN_008007f0`: `euclid*2500/100`, or `euclid*0x19` - the same
+   number twice), so the original's search is **weighted best-first at about 1.56**, not an admissible A\*. The puzzle was my
+   assumption; nothing in the game was inconsistent. What is left before the port: the quantity `local_46c` the loop breaks on
+   (`h < local_46c`, with a hard **20,000**) and the equal-`f` tie-break, which needs the frontier order. Then the generation-stamp
+   array instead of a heap, then row 27's `AddFuturePath` parent derivation. **A weighted search returns slightly longer routes
+   everywhere**, so it is one slice with its own measurement, not a constant swap.
 
 8. **R8 - the start re-seed, and the path vocabulary** (rows 33, 36, from the sibling thread of 2026-11-16). When the mover
    begins **inside** a body the original offsets the start by **2 x radius** along a fixed direction ring and re-seeds the search,
