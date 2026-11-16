@@ -1,179 +1,77 @@
-# OPEN - T16: the turn is a per-player clock, and the AI split it gates does not exist
+# OPEN - R1: adopt the game's pathing answers, starting with the step through a body at rest
 
-**Where it stands, 2026-11-15 (evening).** Seven decisions, closing five debts and one carried regression from the dependency tree: **D214** (attribute 1 is line of sight, 12 is
-range, in the importer and the engine - a sight tech had been moving a tower's *attack range*, and a sight upgrade marked no
-new ground because exploration is stamped per move) and **D215** (a farm's base is the civ's own `resources[36]` = **175**,
-read instead of the authored 250; and the Chinese team bonus, +45 on the same resource, had never been applied at all).
-D215's price is fidelity, not frames: `repaths` **380 -> 552** in the acceptance match because a plot holds 75 less food,
-which is why the reseed queue below matters more than it did; **D216** refuses any packed attack value that no reading
-explains instead of shipping it as silence; and **D217** makes the elevation term a real site held at 1.0 with two tests
-proved by mutation; and **D218** reads the construction rate (dat resource 195) from the civ's tech-tree effect - a Spanish
-builder is 30% faster, 500 builder-ticks become 385 - and corrects a **false debt**: the tree said a civ's tech bars do
-nothing, but `barred_by` reads kind-102 rows and `check_research` refuses with `TechBarred`, tested since D23. Reviews:
-`docs/reviews/2026-11-15-d214-attributes.md`, `-d215-farm-base.md`, `-d216-packed-attack.md`, `-d217-elevation.md`,
-`-d218-construction-rate.md`, `-d220-rally-inside.md`, `-d222-builder-rate.md`.
+**The ruling is in (D239, 2026-11-16).** The owner, over the movement rows of `docs/behaviour-diff.md`: *"Resolve the questions by
+adopting from the game. That is the source of truth."* The register is now **30 rows, 19 ruled**; rows 13-30 are pathing and
+obstacle avoidance - **18 rows, 17 ruled: 6 same, 11 different, 1 unknown-static** - and **every divergent row becomes a slice**,
+with two exceptions that need a read first (R7). Where the game's side is unread, the read comes before the code; nothing is
+guessed in the game's name. The register was corrected the same day (rows 18, 20, 21; two new rows 29 and 30) and its recount is
+the authority, not the morning's prose.
 
-The order below is the user's ruling of 2026-11-14 - **live wrong numbers first**, then the effect interpreter, then the
-economy's own rules. Do not start breadth, civs, or the renderer before items 1-2.
+**The previous open step (T16, and everything carried with it) is archived at `docs/history/next-step-2026-11-16-t16.md`.**
+Nothing in it is withdrawn; it is simply not this step.
 
-## T16 and T12 stage 3: both read, both priced, neither next (D229-D232)
+## The queue, in the order a player would see it
 
-**T16 is a clock, not an order.** `pturn` (`+0x100`) rotates each update and the nine-word array `+0x104..+0x124` accumulates
-per-player milliseconds, zeroed for the player whose turn it is (`FUN_00738720`, reset `FUN_00735960`, getter `FUN_0072d0b0`).
-The DE port uses it to give the turn player's objects the **full** update and everyone else a *between-turns check*, so building
-it needs a per-player clock and a two-tier unit AI - the second a game-behaviour decision, not a reading. The **saved fields**
-(`pturn`, the nine clocks) are owed by P1 either way.
+Each slice ships test-first, with its measurement in a review under `docs/reviews/`, and **the gate is the acceptance match at
+48,000 ticks**: entities at or above **155**, `repaths` near **380**, plus the slice's own fixture. A hash moves whenever behaviour
+moves; say so rather than treating it as a defect.
 
-**T12's order is in the engine (stages 1 and 2, D229/D230); stage 3 is priced and not worth it yet**: per-object decide-and-apply
-is a rewrite of a 700-line `&self` pass, keyed by id (a newborn shifts indices), with construction's hand count and movement's
-collision set as aggregates that cannot be per object - and every remaining case is a **one-tick latency on a quantity already
-clamped** (`grant_takes`, `free_spot_near`), with the one real defect (the population ceiling, `D231`) already fixed.
+1. **R1 - the step through a body at rest, and the re-plan's obstacle set** (rows 29, 30). Delete `collide`'s rule 6
+   (`TakeAtRest`): an idle friend who is not past is a non-past collision, answered by a re-path and the pause. Stop folding
+   `route.avoiding` into the search's **obstacle tiles** (`step.rs:1325`); the classifier keeps the set, the search loses it.
+   *Fixture*: a walker ordered past a friend who stopped **before** the route was planned (`clearance::`'s existing one), and a
+   walker whose route has met three bodies in a row - assert his second re-plan is not longer than the first by tiles.
+2. **R2 - the pause is re-drawn, and a paused mate is not a mate** (rows 18, 20). `setPause` has no "already paused" guard, so a
+   fresh collision draws again; and the mate exemption is re-tested on motion, not on the route's existence.
+   *Fixture*: the head-on pair, asserting the **first** pause is inside 0.25-1.50 s, the waypoint list is unchanged across it, and
+   **both arrive** - never "longest continuous stand", which measures the end of the match.
+3. **R3 - the seat book is authoritative** (rows 24, 25). `maybe_respread` retires and D204's next-node re-target retires; a
+   newcomer with no free square keeps circling the same node. **The mechanism is an inference, not a read** - the first act is a
+   test that pins what the game looks like (his sentence: a newcomer "will be walking around until he finds a spot"), not a
+   guess at the internals. D238's "a seated body must not be past" is **withdrawn**: under the game's own past test a stopped man
+   *is* past, and the seats are what keep bodies apart.
+   *Gate*: the D238 fixture's 0.204 never appears, `overlap::a_passer_by_does_not_move_the_seated_gatherers` comes off ignore, and
+   entities do not fall below 155.
+4. **R4 - an unreachable waypoint is substituted** (row 26). `mConsecutiveSubstituteCount`: *"we have a count of %d, faking it"*.
+   `finish_blocked_orders` retires in its favour. *Read first*: the counter's own semantics beyond the log line (how many counts,
+   what "faking" does to the waypoint index) - `FUN_008a4360`.
+5. **R5 - passage is the body's** (row 21, **supersedes D117**). Grow the tile graph by the body's radius, as the step layer
+   already does (D176/D192). `a_big_unit_walks_through_a_one_tile_gap` **inverts**: a 0.5-radius unit has no passage. The trap is
+   measured: a clearance with any **margin** put every gather ring's places inside a neighbour's disc and reddened 18 tests
+   (D211) - the clearance is the pair's reach **exactly**.
+6. **R6 - the caps go, and the price is measured** (row 22). Remove `MAX_GROUND_REPLANS = 2` and `MAX_REPATHS_PER_TICK = 4`; the
+   game has no counter. The 3.5-against-0.3 ms/tick figure predates the sub-tile pencil, so it is re-measured here. A regression is
+   a finding for the owner, not a licence to reinstate the caps.
+7. **R7 - two reads before two ports** (rows 13, 27). **The cost model and the frontier**: settle the 2500/100 estimate against a
+   16-per-step cost - one of them is wrong, and neither is ported until it is - then adopt 16 with the octile table and the
+   generation-stamp array rather than a heap, because equal-cost ordering shapes the route. **The two-level path**: read
+   `AddFuturePath`'s parent derivation, then build it.
 
-## There are no live defects - audited, not assumed (D224)
+**Still open, and it needs an artefact rather than work:** row 23, the exclusive goal. **Forty units ordered to one tile**, one
+recording. No read decides it and no decision should stand in for it.
 
-Every parked test that does not take minutes was **run** on 2026-11-15 (`cargo test -- --include-ignored`): all green. The
-four items an earlier gap report called live were `depletion` (no test carried the attribute - the doc did), `retarget`
-(D98a, green), `carrier_no_pushing` (D204, green) and `gather_contact` (D181, where the *fixture* measured to a tile's centre
-and a corner contact is 0.93 from it by geometry - the engine was right). All four are closed or corrected in D224. What
-remains is therefore the debt list, not a defect list.
+## Carried, not dropped
 
-## The open items, in the order I would take them
+The full text of each is in the archive above; none of them is this step.
 
-1. ~~**The reseed queue and auto-reseed at the mill**~~ - **DONE (D226)**: `Command::Reseed` and `Command::AutoReseed`, per-player
-   state, a paid-site path, and a husk that releases its ground. Four fixtures in `crates/sim/tests/reseed.rs`. What is left of it is
-   presentation only: there is no panel or button because there is no renderer.
-2. **A builder claims his place - measured-out, not built** (D225). The owner's rule is a free **space one diameter wide**,
-   claimed by one worker, with a builder who finds none taking the next site in **his own queue** ("2 a"). The *claim* half has no
-   reachable trigger in this model: own bodies are not walls to their own side (D189), a visible enemy on the footprint is refused
-   at placement (`SiteOccupied`), an unreachable site is refused before the wood is spent, and the only construction that could
-   freeze - a blind placement in fog over an enemy **unit** - is not known to freeze at all, because `settle_blind_sites` cancels
-   only on an enemy building. Before any code: measure whether that last case stalls. If it does, the fallback has its fixture.
-3. **The search cap, if it is ever wanted** (D225): the bound exists (`gather_reach`: the dat's `search_radius`, else sight + 5
-   tiles); what does not exist is the note's "at most 30 reach tests", a guard whose candidate set is a handful, so it was not
-   written.
- `grep reseed crates` -> 0: a spent plot is a husk until a
-   player replaces it, and a villager whose plot ran dry walks the *whole map* for the next node, where the game caps a
-   resource search at **LOS+5 tiles and 30 reach tests** (U22). D215 made this hot: a plot holds 175 instead of 250, so 43%
-   more plots are laid per match and `repaths` went **380 -> 552**. Two slices, and the cap is the one that can change a
-   match's outcome; measure `repaths` either way.
-4. **The search's own cost, per plan, has never been isolated.** `crates/sim/tests/perf.rs` (ignored) at a fixed entity count,
-   with and without a stander on the route. D211's decision says so in its own words.
-5. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
-   reads yet. This is the interpreter slice the tree puts in Phase 1; it is *not* a prerequisite for items 1-3.
-
-## Landed: villagers are solid (D237, 2026-11-16)
-
-A villager ordered with others is no longer a path-ignore mate (`stamp_group` = soldiers only) and a body in the way can be
-planned round **inside the goal's tile** - the clause that refused it was written for ground and is fatal for gatherers.
-Measured: entities **149 -> 155**, `repaths` **432 -> 497**, wall **+2.7%**, hash `8cf433ad4e0205f4`.
-
-## Now: a seated man is not "past", then the seat shuffle (D238, 2026-11-16)
-
-The owner's *"villager still pushes another villager"* is the **seat shuffle**: a gather place is released when any body comes
-within reach, so a neighbour walking to his own square makes a seated man abandon his and walk to another (measured: 0.52 tiles,
-tick 756). Removing the shuffle is blocked, and the block is measured - all three attempts produced
-`three_gatherers_on_one_bush_do_not_pile_up` at **0.204** tiles, i.e. villagers walking through each other's squares:
-
-1. **A seated body must not be "past"** (`world/movement.rs`, the D210 clause). A route planned after a man stopped treats him as
-   old news and steps through him - and a gatherer who has taken his square never moves, so he is past to every route planned
-   after he sat. What ends an encounter then is the pause, exactly as the original's collision epilogue says.
-2. **Then "already inside is not an obstruction"** must not let a body go *deeper*: the D236 experiment's separation pass was
-   the right shape, applied to deepening only.
-3. **Then** the seat-release test can ask "is it staying", and `overlap::a_passer_by_does_not_move_the_seated_gatherers` (ignored
-   today) comes off ignore.
-4. If the crowd still closes up, pass the **held seats** into `standoff_point` (the `taken` list) so a newcomer cannot choose a
-   square another man holds - written and measured in D238, and it did not help alone, so it belongs after 1 and 2.
-
-**Gate**: entities at or above **155** and `repaths` near **380** at 48,000 ticks, with no fixture under 0.204-and-worse.
-
-## Now: P1b - the converter, once the save's world section is read (2026-11-16, D235)
-
-**Landed (P1a): the engine's half.** `World::state(&pack)` writes the world as MessagePack (59,108 bytes, 180 us) and
-`World::from_state(&pack, bytes)` reads it back (2,882 us), with the pack's tables installed from the pack's identity and the
-two derived caches rebuilt. The round trip is **hash-identical immediately and after 100 ticks**; a cut state and a foreign
-pack are both refused by name. `--state-out` in the harness writes one and reads it back through the engine.
-
-**What P1b needs, in order:**
-
-1. **Walk the save's sections 2-4** (`docs/save-format.md`): the scenario (`FUN_00545460`/`FUN_00567630`: civs, stockpiles,
-   ages, disabled techs), the map (`FUN_00836830`), and the world's object loop (`FUN_00730600`: `pturn`, `numPlayers`, the
-   objects). None of the three is walked today; the object records are only *found* per save (the 229-byte chains of
-   `float32 x, y`) and their other fields are unknown.
-2. **A `tools/` converter** that emits the state format above for the fields the save supplies, and says which it does not.
-3. **`--load`** in the harness, taking a **pack directory** (`--config <dir>`) rather than eight files, because a state names
-   the pack it was written under.
-4. **A version stamp** in the document before any converter ships: a state from a newer build currently loads and drops the
-   fields it does not know (`deny_unknown_fields` cannot be combined with `flatten`).
-
-**Then P2**: 1,200 ticks from `brit7` against `brit8`, which is the oracle that settles T4, T7, T11 and T12 by comparison rather
-than argument.
-
-## Landed: the master list (R6, D234, 2026-11-16)
-
-`World.bonus_tables` holds, per player, the rows the five consumers ask for - modifiers per attribute in application order,
-kind-1 resource rows **with their source**, and the tech-tree bars - rebuilt on the two events that can change it (a tech
-landing, the civ being set). All five consumers read it: `barred_by`, `civ_barred_unit`, `modifiers_for` (11 call sites),
-`farm_food_bonus`, `construction_rate`. The acceptance hash is unchanged (`cb1f6a83a119a2a3` at 24,000), which is the check
-that a refactor stayed one.
-
-**Two things it deliberately did not settle, both still open:**
-
-1. **What a bar inside a team bonus means.** Two of the pack's team bonuses carry a kind-102 row and the original's treatment
-   is unread. The table takes bars from the tech tree only - what `barred_by` has always read - because folding every source
-   answered the question by accident (and moved the acceptance hash to `051e29ec69087825`).
-2. **Resolution to numbers keyed on the `Attribute` enum.** The table caches rows, not a folded value, because the five
-   readers fold differently. That is the design's second half (`docs/civ-bonuses.md`, rule 2) and it now has one place to land.
-
-**Cost, measured, and it is not a win.** The seam is **+2.6%** on the acceptance match at 24,000 ticks (21.71 s before against
-22.28 s after; three interleaved pairs, oracles both built from source). Cloning every modifier per player and hashing a
-`String` attribute each lookup costs more than the walks it saves. **Next slice, and it is cheap:** index each **effect** by
-attribute once - the effect table is immutable for a match - and let a player's table hold **effect ids per source** instead
-of a copy of the rows. Measure it before claiming it.
-
-
-## A standing requirement on shape: a civilisation is config (D233, 2026-11-16)
-
-*"I would like team bonuses and civ bonuses moddable in the future to be able to easily add a civ by adding/changing
-config."* The bonuses stay deferred (D219); what this settles is the shape, and one half of it is enforced in the loader
-already: the **attribute vocabulary is closed** (13 names the engine acts on, 16 the data carries unread) and a modifier
-naming anything else is **refused at load, by name** - so a mod's civ cannot load and silently do nothing. The other half is
-the **R6 seam** (`docs/civ-bonuses.md`): one resolved table per player, because five consumers already walk three effect
-tables and a sixth is another place a new civ can be half-applied. Read that before adding any bonus consumer.
-
-## Ruled out of the current stretch, with the reason written down
-
-- **Civ and team bonuses** (the owner, 2026-11-15: *"can wait ... just have the design ready"*). The design is
-  `docs/civ-bonuses.md` and seam **R6** in `docs/dependency-tree.md`, and the reason it is a design rather than a switch is
-  measured there: **23 of the ~100 team-bonus modifiers name attributes no consumer reads** (`other:100`, `other:101`), two
-  bonuses carry a **kind-102** row (a bonus that bars a tech), and kinds 3 and 6 have no reader anywhere. D219.
-- **The farm reseed queue** is item 2, not ruled out: D215 raised its price (`repaths` 380 -> 552) and the search cap is
-  the half that can change a match. It stays below the claim because the claim is the rule the owner has already given.
+- **T16 / T12 stage 3** - the per-player clock (`pturn`, the nine accumulator words) and the two-tier unit AI; stage 3 is priced
+  and not worth it yet (D229-D232).
+- **P1b, the save converter** (D235): sections 2-4 of the save, a `tools/` converter, `--load`, and a version stamp. P1a landed.
+- **The effect interpreter's remaining kinds** (T2): 0 / 101 / 103.
+- **D225's two probes**: whether a blind placement over an enemy unit stalls the builder, and the search cap (LOS + 5 tiles, 30
+  reach tests) that only matters if the stall is real.
+- **R6's second half** (D234): index each effect by attribute once instead of cloning modifiers per player - the seam costs
+  +2.6% until it lands.
+- **Civ and team bonuses** stay deferred by ruling (D219); the design is `docs/civ-bonuses.md`.
 
 ## Hazards a fresh session must not re-learn the hard way
 
-- **A missing pack passes every world test silently.** `config/gamedata/` is gitignored, so a fresh worktree has none, and
-  every fixture does `let Some(mut world) = common::fresh() else { return; };`. A whole file reports `ok` without running an
-  assertion. **Copy** the four `.toml` files in; never symlink them (the pack-loader tests write into that directory).
-- **The pack is generated, and its names are the engine's interface.** `uv run python -m genconfig <dat> <config>` in
-  `ruage-tools`; the simulation matches modifiers by **string** (`modifiers_for(player, unit, "range")`), so a rename is a
-  behaviour change with no compiler to catch it. Attribute 1 is `line_of_sight`, 12 is `range` (D214).
-- **A per-civ number is in the civ row, not in content.** `resources[36]` is the farm base (D215); the same row carries `[84]`
-  starting villagers, `[88]` fish-trap food and `[195]` a construction rate that is 0 for every civ here. Content names the
-  index (`[farm] food_resource = 36`), and `food_per_farm` is only the fallback for a pack with no civ row.
-- **One `CARGO_TARGET_DIR` per checkout** - two worktrees sharing one swap test binaries under a running suite.
-- **A doc that promises a mechanism is not the mechanism.** "Eight shoulder points round every body" was in a review and a
-  comment for a day and did not exist. When a review claims a mechanism, `grep` for it.
-- **A number that is right does not mean the mechanism is.** D214's sight arithmetic was correct while the fog still could not
-  see the new ground (exploration is stamped per **move**); D215's base was right-able while the Chinese bonus applied to
-  nothing. Four times in this run of work the fix was the second one.
-- **A test whose route is planned *around* the body it means to collide with measures nothing.** With D210b/D213 live, a
-  fixture that places a stander **before** the order gets a route round him: four fixtures had to move the body *after* the
-  route exists (`collision`, `evasion`, `step_decision`, `repath_reasons`). The failure reads "the scene never met the body" -
-  if you see that, the fixture is stale, not the rule.
-- **A `#[must_use]` left over a deleted function** lands on whatever is inserted next to it: `put_route` inherited one from an
-  orphaned standoff doc block and `-D warnings` refused the tree. Read the diff around a structural edit.
-- **Timing on this box needs a quiet machine.** D214's first A/B read +35% and the truth was +7.2%: the document tooling was
-  running during the change's half. Three interleaved pairs, nothing else running, and a gap under the reference's own spread
-  is unresolved.
-- **`make plan-check` resolves `ruage-tools/...` against the checkout's parent**, so a worktree outside `/opt/data/workspace`
-  reports a good citation as missing. Check it in the workspace checkout.
+- **A missing pack passes every world test silently.** `config/gamedata/` is gitignored; copy the four `.toml` files in, never
+  symlink them.
+- **One `CARGO_TARGET_DIR` per checkout** - two worktrees sharing one swaps binaries under a running suite.
+- **A doc that promises a mechanism is not the mechanism.** "Eight shoulder points round every body" lived in a review for a day
+  and did not exist. When this file claims a mechanism, `grep` for it.
+- **A test whose route is planned *around* the body it means to collide with measures nothing.** With R1 deleting the accumulated
+  avoid set, four fixtures that currently move a body *after* the route exists must keep doing so - the failure reads "the scene
+  never met the body", and that is a stale fixture, not a broken rule.
+- **A number that is right does not mean the mechanism is.** Four times in the D214-D218 run the fix was the *second* thing.

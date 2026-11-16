@@ -69,17 +69,19 @@ countable — "N of M ruled" — without pretending to have surveyed 15,766 func
 | 15 | a friend is a wall: no owner test in collision | D200 | no player, team or alliance comparison anywhere in the block; the only id test is against the order's target | **same** | `docs/movement-in-the-binary.md` |
 | 16 | a collision with the order's target is arrival | `WaitTarget` | \"That's a target collision\" → \"That collision is with our target, so we're done\" (0x1251, 0x127d) | **same** | same file |
 | 17 | a non-past collision is answered by **re-planning**, not by waiting | `Repath { body }`, landed 2026-11-16 (D237) | \"We have %d non-past collisions and %d terrain collisions, repathing\" (0x128b); the avoid list is extended and the parent path installed | **same** (D98's \"wait and let pass\" was the divergence; it is gone) | D237, `docs/movement-in-the-binary.md` |
-| 18 | right of way: lower id proceeds, higher pauses; the pause keeps its path | `step.rs:1276-1298`: `rand()*1.25/32767 + 0.25` s from `sim_rng`, first write wins, `Entity::pause_remaining` in ticks | `[+0x2b4]` on both units, `cmp eax,esi / jle` → `setPause(rand*1.25/32767+0.25)` writing `path+0x28`; the paused unit keeps its waypoint list | **same** (D205) | `docs/movement-in-the-binary.md` |
+| 18 | right of way: lower id proceeds, higher pauses; the pause keeps its path | `step.rs:1276-1298`: `rand()*1.25/32767 + 0.25` s from `sim_rng`, `Entity::pause_remaining` in ticks - and **a running timer is never re-drawn** | `[+0x2b4]` on both units, `cmp eax,esi / jle` → `setPause(rand*1.25/32767+0.25)` writing `path+0x28` **unconditionally**; the paused unit keeps its waypoint list | **different in the re-roll** (corrected 2026-11-16; the tie-break and the kept path are same) - `setPause` has no "already paused" guard, so a fresh collision re-draws, and ours stands the original draw | `docs/movement-in-the-binary.md`, D239 |
 | 19 | a body that stopped before this route was planned is **past** | `is_past`: `route.created >= other.last_moved` (D210, D213) | `path+0x10` creation time against the other's `+0x134 lastMoveTime`; past entries are dropped with no pause, no repath, no bound | **same** | `docs/movement-in-the-binary.md` |
-| 20 | which bodies a mover plans through | soldiers ordered in the **same tick** become mates (`stamp_group`, D237); villagers never | the route's **path-ignore list**: formation members, re-tested **each tick** on `isMoving`, plus the order's target; membership drops a collider outright (\"That's a path ignore unit\", 0x1242) | **different in trigger** (tick vs formation, and our \"mates\" is stamped once instead of re-tested) | `docs/movement-in-the-binary.md`, `docs/prior-art.md` |
-| 21 | passage is a property of the **ground**, never of the body | D117: a `trebuchet_packed` (radius 0.5) walks a one-tile gap | the query **grows by the body's radius**, and the short-range planner shrinks the body to a point and expands every obstruction by its radius (FE talk, steps 1-2) | **different** (the owner's choice; how much the filter's own growth closes is unread) | D117, `pathfinding-from-the-talk.md` |
-| 22 | a *ground* re-plan is capped at two per route | `MAX_GROUND_REPLANS` (D127, D135) | no such counter: every non-past collision re-plans | **different** (priced: uncapped, the acceptance ran 3.5 ms/tick against 0.3) | D127, D135 |
+| 20 | which bodies a mover plans through | soldiers ordered in the **same tick** become mates (`stamp_group`, D237); villagers never | the route's **path-ignore list**: formation members, re-tested **each tick** on `isMoving`, plus the order's target; membership drops a collider outright (\"That's a path ignore unit\", 0x1242) | **different in trigger and in the ending** (corrected 2026-11-16): the original re-tests `isMoving` every tick, so a **paused** mate is not exempt; ours ends the exemption only when the route is dropped, and a paused man keeps his route | `docs/movement-in-the-binary.md`, `docs/prior-art.md` |
+| 21 | passage is a property of the **ground**, never of the body | D117: a `trebuchet_packed` (radius 0.5) walks a one-tile gap | the query **grows by the body's radius**, and the short-range planner shrinks the body to a point and expands every obstruction by its radius (FE talk, steps 1-2) | **different, in the graph layer only** (corrected 2026-11-16; superseded by D239): our tile graph is per-tile and a radius never enters it, but `step_is_walkable` already grows the ground by the body's radius (D176/D192), so the step layer is the game's and the divergence is one layer, not two | D117, D239, `pathfinding-from-the-talk.md` |
+| 22 | a *ground* re-plan is capped at two per route | `MAX_GROUND_REPLANS` (D127, D135) | no such counter: every non-past collision re-plans | **different** (priced: uncapped, the acceptance ran 3.5 ms/tick against 0.3; adopted 2026-11-16, re-measured by D239) | D127, D135, D239 |
 | 23 | an **exclusive goal**: a `Move`'s last step stops short of an occupied tile | D52 | no such rule read; the collision answers at the new position | **unknown-static** (the visible outcome is similar) | D52 |
-| 24 | a contested work square | D204: the man takes the **next node of the same column**; the nudge survives for a body with no work | **no displacement anywhere**; the owner's statement of 2026-11-16: a newcomer \"will be walking around until he finds a spot for him\" | **different** | D204, owner 2026-11-16 |
-| 25 | a node's ring when a man is refused | `maybe_respread` re-seats **every** man on the node, at most once per 20 ticks (D200) | incumbents keep their squares; the newcomer walks until a square frees | **different** (the D238 blocker) | D238, owner 2026-11-16 |
-| 26 | a waypoint that cannot be reached in two updates is **substituted** | none | `mConsecutiveSubstituteCount`: \"We won't reach our waypoint either this or the next update, but we have a count of %d, faking it\" (move_obj.cpp:0x1203) | **different** (mechanism missing) | `FUN_008a4360` |
-| 27 | path structure | one A\* level (`plan_path`) plus the `short_range_clear` pencil | two levels with a parent: `AddFuturePath` builds a high-level path when handed a low-level one; \"We don't have a parent path, so we're stopping\" (0x12a3) | **different structure** | `docs/movement-in-the-binary.md` |
+| 24 | a contested work square | D204: the man takes the **next node of the same column**; the nudge survives for a body with no work | **no displacement anywhere**; the owner's statement of 2026-11-16: a newcomer \"will be walking around until he finds a spot for him\" | **different** (adopted, D239) | D204, owner 2026-11-16, D239 |
+| 25 | a node's ring when a man is refused | `maybe_respread` re-seats **every** man on the node, at most once per 20 ticks (D200) | incumbents keep their squares; the newcomer walks until a square frees | **different** (the D238 blocker; adopted, D239) | D238, owner 2026-11-16, D239 |
+| 26 | a waypoint that cannot be reached in two updates is **substituted** | none | `mConsecutiveSubstituteCount`: \"We won't reach our waypoint either this or the next update, but we have a count of %d, faking it\" (move_obj.cpp:0x1203) | **different** (mechanism missing; adopted, D239) | `FUN_008a4360`, D239 |
+| 27 | path structure | one A\* level (`plan_path`) plus the `short_range_clear` pencil | two levels with a parent: `AddFuturePath` builds a high-level path when handed a low-level one; \"We don't have a parent path, so we're stopping\" (0x12a3) | **different structure** (adopted, with a read in front: D239) | `docs/movement-in-the-binary.md`, D239 |
 | 28 | standoff between a worker and the node | **0.70** at an edge, **0.94** at a corner (D169, D199) | **measured** on the owner's saves: bodies at 0.641 / 0.702 x3 / 0.935 x3 round a tree, mine and bush | **same** (the strongest class - measured off the game, not read) | D199 |
+| 29 | a body **at rest** that is not past | `collide` rule 6: `TakeAtRest` - the step is taken **through** him, unbounded, after a repath has been asked for | no such arm: the epilogue has four - target / non-past repath / pause / `"Don't know what to do about my collision(s)"` - and an idle friend who is not past is a **non-past collision** | **different** (found 2026-11-16 while ruling the batch; adopted, D239) | `crates/sim/src/world/movement.rs`, `docs/movement-in-the-binary.md` |
+| 30 | what a re-plan plans around | the bodies met are turned into **obstacle tiles** for the search (`step.rs:1325`) and kept for the life of the route, so each re-plan avoids a growing set of tiles | the ignore list is written **after** the search and read **only by the classifier**; the search's obstacle set is standers and the mover's mates, and the body it met is a **disc** | **different** (found 2026-11-16; adopted, D239) | `crates/sim/src/world/step.rs`, `docs/movement-in-the-binary.md` |
 
 **Row 2's arithmetic, read directly (2026-11-15).** `sub_744d60` and its 1.0 accessor `sub_745060` were decompiled rather than summarised, and five things are
 now facts rather than readings: the attacker record carries **exactly three** `(class, amount)` slots at `+0x18c/+0x18e`, `+0x192/+0x194`, `+0x198/+0x19a`; each
@@ -228,7 +230,7 @@ slot addresses - and read which class the combat code holds.
 
 ## The movement rows, ruled (2026-11-16)
 
-**The count: 28 rows, 18 ruled.** Rows 1 and 2 were ruled before today; rows **13-28** are all pathfinding or obstacle
+**The count as first written, and corrected by the recount at the end of this file: 28 rows, 18 ruled.** Rows 1 and 2 were ruled before today; rows **13-28** are all pathfinding or obstacle
 avoidance, added for the owner's question of 2026-11-16 (*"review all my decisions on pathfinding and obstacle avoidance,
 compare them with gathered information and list where my decisions diverged"*) and **every one of the sixteen carries a
 verdict**: **7 same, 8 different, 1 unknown-static**, each citing either the corpus, a first-party talk, or a save.
@@ -266,3 +268,35 @@ body is *past* (D210/D213); the collision query is at the new position with the 
 rule of ours that has **no counterpart** in the original and is also **not** a divergence: the original answers at the new
 position, so its crowd behaviour and ours could still agree in effect. It stays `unknown-static` until a recording of forty
 units ordered to one tile is measured - and that recording is cheap, because it needs no AI and no economy.
+
+## Corrected the same day, and adopted (D239, 2026-11-16)
+
+**The recount, taken from the table and not from the prose above: 30 rows, 19 ruled. Rows 13-30 are pathfinding or obstacle
+avoidance - 18 rows, of which 17 carry a verdict: 6 same, 11 different, 1 unknown-static.** The morning's figures (7 / 8 / 1
+across sixteen) were three corrections and two missing rows away from the table:
+
+- **Row 18 was wrong to be `same`.** `setPause` (`0x8aa6d0`) writes `path->pause` **unconditionally**; `step.rs` refuses the
+  draw while `pause_remaining > 0`, and the comment beside it claimed "a running timer is never re-rolled", which the read does
+  not support. A fresh collision re-draws in the game; ours stands the first draw. The tie-break and the kept waypoint list are
+  still `same`.
+- **Row 20 was half wrong.** `is_mate` needs *both* routes to still list each other, so a mate who arrives stops being exempt
+  the same tick, and `stander_tiles` already drops a body that moved within a tick. What is missing is the **paused** mate: he
+  keeps his route, so we still walk over him where the game's `isMoving` re-test has ended the exemption.
+- **Row 21 named no layer.** D117's "a radius never enters it" is true of the **tile graph**; `step_is_walkable` already grows
+  the ground by the body's radius (D176/D192). The divergence is one layer deep, not two.
+- **Row 29 (new): a body at rest that is not past is walked through.** `collide` rule 6 takes the step (`TakeAtRest`), unbounded,
+  after a repath has been asked for - so the route round him is installed *after* he has been stepped through. The original's
+  epilogue has four arms and this is not one of them: an idle friend who is not past is a non-past collision.
+- **Row 30 (new): our re-plan plans around what it met.** The avoided bodies are turned into **obstacle tiles** for the search
+  (`step.rs:1325`) and kept for the life of the route, so every re-plan plans round a growing set. In the original the ignore
+  list is written *after* the search and read **only by the classifier**; the body that was met is a **disc**, and the search's
+  own obstacle set is standers and the mover's mates.
+
+**The ruling that follows, and it needed no further question: every divergent row is adopted from the game (D239).** The owner,
+2026-11-16: *"Resolve the questions by adopting from the game. That is the source of truth."* So rows 18-22 and 24-30 become
+slices, in the order `docs/next-step.md` sets; rows 13 and 27 are adopted **with a read in front** - the estimate-versus-step-cost
+contradiction has to be settled before 16 and the octile table are ported, and `AddFuturePath`'s parent derivation before the
+two-level path is.
+
+**The one row that adoption cannot settle is row 23**, and it does not need the game's code, it needs **his recording**: forty
+units ordered to one tile. Nothing we can read answers it, and no decision should be taken in its place.

@@ -6496,3 +6496,54 @@ fixture comes off ignore. The gate is the acceptance match at 48,000 ticks - ent
 **Basis.** `crates/sim/tests/overlap.rs` (the fixture and its measurement); `crates/sim/src/world/step.rs` (`owned_place`'s
 staleness filter, `standoff_point`'s `taken`); `crates/sim/src/world/movement.rs` (the "past" clause and the inside rule);
 `docs/movement-in-the-binary.md`. Review: `docs/reviews/2026-11-16-d238-seat-shuffle.md`.
+
+### D239 - The game is the source of truth on pathing: every divergence adopted, and two rules of ours deleted (owner, 2026-11-16)
+
+The owner, over the movement rows of the register (`docs/behaviour-diff.md`): *"Resolve the questions by adopting from the game.
+That is the source of truth."* Every divergent row therefore becomes a slice, and **where the game's side is unread the read comes
+first** - the tree does not get a guess in the game's name.
+
+**Adopted as read - the binary, the talk or his own saves answer:**
+
+1. **A body at rest is not walked through** (row 29). `collide` rule 6 (`TakeAtRest`) takes a step through an idle body after
+   asking for a repath, so the route round him is installed *after* he has been stepped through. The original's epilogue has four
+   arms - target / non-past re-path / pause / *"Don't know what to do about my collision(s)"* - and this is not one: an idle
+   friend who is not past is a non-past collision. Rule 6 goes.
+2. **A re-plan does not plan round what it met, and does not accumulate** (row 30). We fold `route.avoiding` into the search as
+   **obstacle tiles** (`step.rs:1325`) and keep every body ever met for the life of the route; the game writes its ignore list
+   *after* the search and reads it **only in the classifier**. The search loses the set; the classifier keeps it.
+3. **The pause is re-drawn on a fresh collision** (row 18, corrected from `same`). `setPause` (`0x8aa6d0`) writes the path's timer
+   with no "already paused" guard; ours stands the first draw.
+4. **A paused mate stops being a mate** (row 20, corrected). The exemption is re-tested every tick on `isMoving`
+   (`[vtbl+0x2a0]`); ours ends it when the route is dropped, and a paused man keeps his route.
+5. **A man with no seat keeps walking** (rows 24, 25). The node's ring is not re-laid (`maybe_respread` retires) and a refused man
+   is not re-targeted to the next node of the column (D204's second half). The **seat book is authoritative**: a newcomer with no
+   free square keeps circling *this* node until one frees. *The mechanism is an inference, not a read* - his sentence of
+   2026-11-16 plus no displacement anywhere in the original - so the slice confirms it before it ships, and **D238's "a seated
+   body must not be past" is withdrawn**: under the game's own past test a man who has stopped *is* past and is walked through.
+   The original keeps bodies apart with the **seats**, not with the collision, which is why the seat churn measured as
+   load-bearing was a symptom of our routing at an occupied square.
+6. **An unreachable waypoint is substituted, not waited on** (row 26): `mConsecutiveSubstituteCount` - *"we have a count of %d,
+   faking it"*. `finish_blocked_orders` (the order dies where the man stands after forty refused ticks) retires in its favour.
+7. **Passage is the body's** (row 21): **supersedes D117**. The ground a body may cross is the ground grown by its radius; the tile
+   graph grows too, and a 0.5-radius unit has no passage in a one-tile gap. The step layer already did this (D176/D192), so the
+   change is one layer and the test that inverts is `a_big_unit_walks_through_a_one_tile_gap`.
+
+**Adopted, with a read in front of it - neither may be ported on a guess:**
+
+8. **The cost model and the frontier** (row 13): 16 per cardinal step and a load-time octile table rather than 10/14 with a
+   product; and the per-tile best-cost array with a generation stamp rather than a heap, because equal-cost ordering is what a
+   route's shape depends on. **Blocked on the number that does not fit**: the estimate reads 2500/100 per unit against a
+   16-per-step cost, which is not admissible in tile units, so either those arguments are not tiles or 16 is not the step cost.
+9. **Two levels with a parent** (row 27): a high-level path built when the low-level one fails, and *"we don't have a parent path,
+   so we're stopping"*. Blocked on reading `AddFuturePath`'s derivation.
+
+**Nothing is ruled out of adoption.** Row 22's two caps (`MAX_GROUND_REPLANS = 2`, `MAX_REPATHS_PER_TICK = 4`) go with the rest,
+and the **3.5-against-0.3 ms/tick** price that justified them was taken before the sub-tile pencil existed, so the slice
+**re-measures** and puts the number in its review. A regression found there is a finding for the owner; it is not a licence to
+reinstate a rule the game does not have.
+
+**What adoption cannot settle:** row 23, the exclusive goal - no read decides it and no decision should stand in for the recording
+of **forty units ordered to one tile**, which is the cheapest artefact in the register.
+
+**Order and gates**: `docs/next-step.md`. Review: `docs/reviews/2026-11-16-d239-adopt-the-game.md`.
