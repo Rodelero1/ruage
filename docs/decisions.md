@@ -6742,3 +6742,33 @@ jobs (rule 4).
 **Basis.** `crates/sim/src/lib.rs` (`footprint_gap`, written and reverted this session), `crates/sim/src/world/step.rs` (the
 delivery test and `settling`), `crates/sim/tests/invariants.rs`, `crates/sim/tests/gather_motion.rs`. Review:
 `docs/reviews/2026-11-16-d244-invariants-green.md`.
+
+### D245 - the original's four body rules, read; and the seat shuffle is what gates three of them (2026-11-16)
+
+Asked how the original meets the owner's four rules and for them to be implemented, each was read against evidence:
+
+- **Rule 1 (one diameter)** - the original writes no position on contact: the move is refused and the walker re-routes
+  (`MovementSystem`'s epilogue; openaok `Navigation::Move`). Ours already does this (`made_room=0`).
+- **Rule 2 (half a diameter from the source)** - arrival is a distance to the object's **box** plus the job's range (openaok
+  `ApproachGround`), which for a villager and a one-tile tree is `0.5 + radius` = the 0.70/0.935 stands measured from the owner's
+  saves (D192/D199). Ours measures 0.200, the radius.
+- **Rule 3 (half a diameter from the drop site)** - the same box test against the building. Fixed as
+  `footprint_gap(...) <= radius + one step`, and the fixture passes - **not landed**, because of rule 1.
+- **Rule 4 (no movement while gathering)** - the original gives a man his place once and has no move order to give him while the
+  gather runs. Ours steps him every tick.
+
+**Why rule 3 cannot land yet.** It re-times every delivery, and `gather_motion::three_gatherers_on_one_bush_do_not_pile_up` goes
+red at **0.236** (bodies touch at 0.400). Two explanations were tested and one is ruled out: narrowing D210's "a collider that has
+not moved is past" so a working gatherer is not past left the number **unchanged at 0.236** - not a passer-by, a **seated pair
+drifting**, which is the seat shuffle D238 diagnosed. A third variant, aiming the carrier's last stretch at a sub-tile wall point,
+is worse: a pair came **0.325** apart and a body ended **0.145 tiles inside** a blocked tile. All reverted; `crates/` is D243's.
+
+**The finding, and it is the point of this decision.** D236, D238 and D245 all land on one mechanism: the ring round a node is
+*maintained* by stepping men who are already working, so every attempt to stop the stepping also stops the arrangement and the ring
+piles. The design that follows from the owner's four rules is: **a node hands out a place, the man keeps it until he leaves, and a
+man with no place waits outside the ring and keeps 0.400 from every body.** Then rules 1, 3 and 4 stop fighting each other, and
+rule 3's timing can move without a pile.
+
+**Kept from the attempts**: the geometry - a carrier stalls **4,155 raw** from the wall against a **4,000** radius (a step is
+758), so "half a diameter" is true with exactly one step of slack, in the engine and in the fixture. Review:
+`docs/reviews/2026-11-16-d245-four-body-rules.md`.

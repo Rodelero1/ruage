@@ -10,20 +10,29 @@ the authority, not the morning's prose.
 **The previous open step (T16, and everything carried with it) is archived at `docs/history/next-step-2026-11-16-t16.md`.**
 Nothing in it is withdrawn; it is simply not this step.
 
-## Now, and cheapest first: the two red invariants (D243, 2026-11-16)
+## Now: the seat, once (D245) - the one mechanism that gates rules 1, 3 and 4
 
-The owner asked for four body rules as tests. Two hold (`villagers_never_come_closer_than_one_diameter`,
-`a_gathering_villager_stands_within_half_a_diameter_of_the_node`); two are red, with the numbers in their ignore messages:
+The owner asked how the original meets his four body rules and for them to be implemented. All four were read (D245), rule 3 was
+built and it **passes its own fixture** - `invariants`: 3 passed, 1 ignored - but it cannot land, because it re-times every
+delivery and `gather_motion::three_gatherers_on_one_bush_do_not_pile_up` then goes **red at 0.236** (bodies touch at 0.400).
 
-1. **A load leaves a man 0.281 tiles from the drop building** (rule 3). The delivery range is the pair's **reach** (0.4), not the
-   body's radius, so a carrier hands the wood over a quarter of a tile short of the wall. Fix: the arrival test at a drop-off uses
-   the body's radius. It moves every delivery in every match, so it is measured on the acceptance match like R1 was.
-2. **A gathering man takes a 0.011-tile settle step** (rule 4). The seat settle keeps nudging a man who is already within reach of
-   his tree and already taking from it. Fix: no settle once `progress > 0`. The settle is what places men round a node
-   (D200/D202), so this needs its own measurement too.
+**Three attempts now name the same defect.** D236 (path-ignore mates, put-back-on-sink), D238 (three seat fixes) and D245 (delivery
+timing, `is_past` narrowing, wall aim) all end at it: the ring round a node is **maintained by stepping men who are already
+working**, so removing the stepping removes the arrangement and the ring piles at 0.204-0.236. D245 also *rules out* the passer-by
+explanation: excluding a working gatherer from D210's "not moved is past" left the number unchanged at 0.236, so it is two
+**seated** men drifting.
 
-`cargo test -p ruage-sim --test invariants -- --ignored` is how either is shown fixed.
+**The change**: a node hands out a **place**; the man keeps it until he leaves (node empty, full hands, new order); a man with no
+place **waits outside the ring**, at a distance that keeps **0.400** from every body, and does not displace anyone. Then:
 
+- rule 4 (no movement while gathering) is a property of the placement, not of a per-tick correction;
+- rule 1 (never closer than a diameter) is a property of the ring and the waiting spot;
+- rule 3 can finally land - `footprint_gap(position, drop) <= body_radius + one step`, measured **4,155 raw** against a **4,000**
+  radius on the reverted build, with acceptance 157 entities and 649 re-paths.
+
+Red-first fixtures that must bite: `three_gatherers_on_one_bush_do_not_pile_up` (already red under rule 3's fix - use it as the
+mutation proof), `invariants` rules 1, 3 and 4, `overlap::a_passer_by_does_not_move_the_seated_gatherers` (ignored since D238),
+`gather_motion`, `gather_ring`, `gather_standoff`.
 ## The queue, in the order a player would see it
 
 Each slice ships test-first, with its measurement in a review under `docs/reviews/`, and **the gate is the acceptance match at
