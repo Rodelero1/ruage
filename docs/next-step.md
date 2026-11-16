@@ -10,29 +10,52 @@ the authority, not the morning's prose.
 **The previous open step (T16, and everything carried with it) is archived at `docs/history/next-step-2026-11-16-t16.md`.**
 Nothing in it is withdrawn; it is simply not this step.
 
-## Now: the seat, once (D245) - the one mechanism that gates rules 1, 3 and 4
+## Now: the owner's second four rules, as unskippable fixtures (D250, 2026-11-16)
 
-The owner asked how the original meets his four body rules and for them to be implemented. All four were read (D245), rule 3 was
-built and it **passes its own fixture** - `invariants`: 3 passed, 1 ignored - but it cannot land, because it re-times every
-delivery and `gather_motion::three_gatherers_on_one_bush_do_not_pile_up` then goes **red at 0.236** (bodies touch at 0.400).
+The owner, 2026-11-16: *"Please add unit tests never to be skipped or ignored."* Four rules, each a per-tick assertion rather
+than a sample, each **green with no `#[ignore]` when this step lands**:
 
-**Three attempts now name the same defect.** D236 (path-ignore mates, put-back-on-sink), D238 (three seat fixes) and D245 (delivery
-timing, `is_past` narrowing, wall aim) all end at it: the ring round a node is **maintained by stepping men who are already
-working**, so removing the stepping removes the arrangement and the ring piles at 0.204-0.236. D245 also *rules out* the passer-by
-explanation: excluding a working gatherer from D210's "not moved is past" left the number unchanged at 0.236, so it is two
-**seated** men drifting.
+1. A unit's circle never crosses a tile holding a **resource that is not depleted**, except by the one raw unit of integer
+   rounding. Prior implementation: the D176 mover rule (`World::clearance_at`, `lib.rs:3872`; `body_clearance`,
+   `lib.rs:3915`), which refuses a step whose landing has `clearance < 0`; pinned by `body_clearance.rs` (2 tests) and
+   `collision.rs`. It measures clearance against the **whole walk grid**, so a resource tile and a house wall are the same
+   question there - which is why the new fixtures name the tile's owner and say which kind of thing was crossed.
+2. A unit's circle never crosses a **building** - finished or **under construction** - with the exceptions asked for: a farm
+   (an all-walkable floor, `sites.rs:429` `solid_tiles`) and the walkable part of a town centre (a mask, same function). The
+   exception is not coded into the test: the test asks the engine's own `tile_walkable` which of a footprint's tiles block,
+   so a floor has nothing to cross.
+3. A villager **builds a farm from inside its plot**, at least `radius` inside every edge. Prior implementation is the
+   opposite and is deliberate: `Task::Build` (`step.rs:1922`) works only when **not** `inside` the footprint, and
+   `raise_site` (`lib.rs:2692`) plans the builder's route to `approach_footprint` (`sites.rs:~340`) - a tile *outside* it -
+   because the empty-site gate is written for walls, not for a floor. Farms bypass the empty-site gate (`build.rs:188`
+   `site_is_clear`) precisely because they are walked over, so the standoff is the one part of D183 §3/§7 that does not fit a
+   farm. This is the step's one production change.
+4. A technology the current age does not allow **is not on the card**. Prior implementation: `World::card` (`report.rs:12`)
+   hides anything whose refusal `is_age_gate` (`lib.rs:4868`) calls the age talking; pinned by `card_age.rs`, but only at
+   **unit** level (a Dark Age barracks offers no spearman) - the owner's example, an **Imperial Age tech in the Dark Age**, has
+   no fixture.
 
-**The change**: a node hands out a **place**; the man keeps it until he leaves (node empty, full hands, new order); a man with no
-place **waits outside the ring**, at a distance that keeps **0.400** from every body, and does not displace anyone. Then:
+**Next: R1 continues after this** - the pathing register in `docs/behaviour-diff.md` (30 rows, 19 ruled).
 
-- rule 4 (no movement while gathering) is a property of the placement, not of a per-tick correction;
-- rule 1 (never closer than a diameter) is a property of the ring and the waiting spot;
-- rule 3 can finally land - `footprint_gap(position, drop) <= body_radius + one step`, measured **4,155 raw** against a **4,000**
-  radius on the reverted build, with acceptance 157 entities and 649 re-paths.
+## The four body rules hold - R1 next (D248, 2026-11-17)
 
-Red-first fixtures that must bite: `three_gatherers_on_one_bush_do_not_pile_up` (already red under rule 3's fix - use it as the
-mutation proof), `invariants` rules 1, 3 and 4, `overlap::a_passer_by_does_not_move_the_seated_gatherers` (ignored since D238),
-`gather_motion`, `gather_ring`, `gather_standoff`.
+The owner's four invariants are **green and unskipped** (`crates/sim/tests/invariants.rs`, 4 passed / 0 ignored), and the
+mechanism is the seat: places are dealt **at least one diameter apart**, a working man's place is **frozen**, a man on his own
+place is **never stepped**, a man already taking **does not walk** at the node, and a load **banks at the wall**
+(`footprint_gap <= radius + one step`, aimed at `World::wall_point`). The defect that surfaced under them is recorded too: a
+gatherer never aims at the **node's own blocked tile** - that froze a woodcutter for 400,000 ticks.
+
+**Next: R1 continues** - the pathing register in `docs/behaviour-diff.md` (30 rows, 19 ruled) with `docs/next-step.md`'s archived
+history at `docs/history/next-step-2026-11-16-t16.md`. Cheapest first, and each row red-first:
+
+1. **R1a - the step through a body at rest** (D239's ruling): already partly in via D237/D248; the remaining rows are the
+   formation and pause details.
+2. **R1b - the diagonal**: `straight_line`, `corner_gap`, `head_on` and `pass_through` carry the fixtures.
+3. Then the two rows that need a **read** before code (R7): `pturn` at `+0x100` (T16) and the cost model, half of which landed
+   in `6ec1ee8`.
+
+**Open and named**: the acceptance match's re-path count is ~500 with D248's aim (10,323 with the removed budget); no interleaved
+wall-time pair has been taken since D237's +2.7%, so no percentage is claimed either way.
 ## The queue, in the order a player would see it
 
 Each slice ships test-first, with its measurement in a review under `docs/reviews/`, and **the gate is the acceptance match at
@@ -94,7 +117,14 @@ moves; say so rather than treating it as a defect.
    **Villagers are solid and formations are deferred** (D241 ruling 2): the same-tick mate stand-in for soldiers stays, documented
    in `stamp_group` as a stand-in for a formation that does not exist yet.
 
-10. **R10 - the nearest standing tile is the tile nearest the click** (D249, U25 (d), found by the conformance set).
+10. **R10 - FOLLOW THE GAME, PARKED on one fixture** (D249, U25 a/b/c). Ruled 2026-11-16: adopt the closest-point answer and
+    the game's cost model. Both are **built on `wip/follow-the-game`** and the conformance set goes **32 green, 1 red** (only
+    the hierarchy, U25 c); it is not landed because `army_walk::a_crowd_walking_through_a_gap_stays_on_free_ground` refuses a
+    soldier boxed in by 18 of his own mates at submit. The prerequisite is the two mechanisms already in the register: the
+    search excludes **moving** mates (row 30) and a start inside an obstruction is **re-seeded** (row 33). Numbers and the
+    instrumented comparison: `docs/reviews/2026-11-16-follow-the-game-parked.md`.
+
+    *Superseded text, kept because it is the defect the set found:*
     `nearest_reachable` answers **one step from the start**: on empty ground from (1,1) toward (10,10) it returns (2,2), because
     every tile its frontier pushes is already free, so the first pop is a neighbour of the start. `crates/conformance/tests/findings.rs`
     is the red fixture; the fix was **written and measured, then reverted** - sweeping the reachable region answers (25,19) for
