@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 
 use ruage_conformance::{octile, route_cost, walk};
-use ruage_sim::{find_path, find_path_avoiding, line_clear_avoiding, nearest_reachable};
+use ruage_sim::{find_path, find_path_avoiding, find_path_strict, line_clear_avoiding};
 
 /// RULE: a tile the caller names is an obstacle for that search only, and the search routes round it.
 ///
@@ -101,14 +101,13 @@ fn the_goal_may_be_in_the_avoid_set() {
     );
 }
 
-/// RULE: when the goal is walled in, the search answers nothing rather than a route through the wall.
+/// RULE: when the goal is walled in, the search answers **the closest point it can reach** - not a route through the wall,
+/// and not a refusal (the original's rule; D249).
 ///
-/// Source: `func_001D35C0` returns 0 when its frontier empties; the PS2 low-level search answers 3 for "no low-level path"
-/// when every start direction is blocked. Our `find_path` answers `None`. The engine's accepted-click answer is the layer
-/// above (`nearest_reachable`, D134) - the divergence that the original answers a *closest point* from the search itself is
-/// in `divergences.rs`, not here.
+/// Source: the Klingers deck, p. 96 - *"expand the search area once, otherwise give the closest point path"* - and the PS2
+/// low-level search, whose "no low-level path" is reserved for a *start* boxed in on every side.
 #[test]
-fn a_walled_in_goal_has_no_route() {
+fn a_walled_in_goal_is_answered_with_the_closest_point() {
     let walk = walk(12, 12, &[]);
     let mut blocked = Vec::new();
     for dx in -1i32..=1 {
@@ -126,20 +125,55 @@ fn a_walled_in_goal_has_no_route() {
         }
         walk
     };
-    assert!(
-        find_path(&walk, (1, 1), (6, 6)).is_none(),
-        "the search found a route into a sealed tile"
+    let route = find_path(&walk, (1, 1), (6, 6)).expect("the closest point is an answer");
+    let tile = *route.last().expect("a route has an end");
+    assert_ne!(
+        tile,
+        (6, 6),
+        "the search walked into a sealed tile: {route:?}"
+    );
+    // The ring round the seal is at Chebyshev distance 2, and the closest point is on it: the answer is the closest the
+    // ground allows, not one step from the start.
+    assert_eq!(
+        tile.0.abs_diff(6).max(tile.1.abs_diff(6)),
+        2,
+        "the answer {tile:?} is not on the ring at 2 round the seal"
     );
 }
 
-/// RULE: an unreachable click is answered with a **standing** tile and the route to it - never a blocked tile, never a
-/// refusal.
+/// RULE: a caller that must insist on the exact tile asks for it, and gets `None` - the strict answer is the closest
+/// point's, filtered.
 ///
-/// Source: D134 (the owner: *"every click is accepted"*), `path.rs:303-312`. The *closeness* half of that contract is a
-/// finding against this engine, not a rule it keeps - `findings.rs` carries the measurement. What this test pins is the half
-/// that does hold, so a change that starts answering a blocked tile is caught.
+/// Source: our own shape, not the game's: thing orders refuse a tree behind a wall (D241 ruling), and the strict search is
+/// how they keep that while the planner still answers the closest point. It is a filter over the same search, so the two
+/// can never disagree about the map.
 #[test]
-fn a_sealed_click_is_answered_with_a_standing_tile() {
+fn the_strict_search_refuses_a_walled_in_goal() {
+    let mut walk = walk(12, 12, &[]);
+    for dx in -1i32..=1 {
+        for dy in -1i32..=1 {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            walk.block((6 + dx) as u16, (6 + dy) as u16);
+        }
+    }
+    assert!(
+        find_path_strict(&walk, (1, 1), (6, 6)).is_none(),
+        "the strict search answered a route to a sealed tile"
+    );
+    assert!(
+        find_path_strict(&walk, (1, 1), (4, 4)).is_some(),
+        "the strict search refused an open tile"
+    );
+}
+
+/// RULE: the closest point the search settles on is a tile a body may **stand** on, and the same one every run.
+///
+/// Source: D134 (the owner: *"every click is accepted"*), now answered by the search itself (D249). A blocked tile as the
+/// answer would be an order nobody can complete; a choice that varies between runs would break the replay.
+#[test]
+fn the_closest_point_is_a_standing_tile_and_is_the_same_every_run() {
     let mut walk = walk(12, 12, &[]);
     for dx in -1i32..=1 {
         for dy in -1i32..=1 {
@@ -150,19 +184,14 @@ fn a_sealed_click_is_answered_with_a_standing_tile() {
         }
     }
     walk.block(6, 6);
-    let (tile, route) = nearest_reachable(&walk, (1, 1), (6, 6)).expect("there is free ground");
+    let route = find_path(&walk, (1, 1), (6, 6)).expect("there is free ground");
+    let tile = *route.last().expect("a route has an end");
     assert!(
         !walk.blocked(tile.0, tile.1),
         "the answer is a blocked tile"
     );
-    assert_eq!(
-        route.last(),
-        Some(&tile),
-        "the route does not end on the answer"
-    );
-    // A second call answers the same tile: the tie-break is `(y, x)`, never iteration order.
-    let (second, _) = nearest_reachable(&walk, (1, 1), (6, 6)).expect("the same ground");
-    assert_eq!(tile, second);
+    let again = find_path(&walk, (1, 1), (6, 6)).expect("the same ground");
+    assert_eq!(route, again, "the closest point changed between two runs");
 }
 
 /// RULE: the answer is a tile with a **route** to it - the route's last point is the answer, and every step is adjacent.
@@ -178,9 +207,9 @@ fn the_nearest_standing_answer_comes_with_a_route_to_it() {
         }
     }
     let walk = walk(20, 20, &blocked);
-    let (tile, route) = nearest_reachable(&walk, (1, 1), (8, 8)).expect("the woods have an edge");
+    let route = find_path(&walk, (1, 1), (8, 8)).expect("the woods have an edge");
+    let tile = *route.last().expect("a route has an end");
     assert!(!walk.blocked(tile.0, tile.1));
-    assert_eq!(route.last(), Some(&tile));
     let mut here = (1u16, 1u16);
     for step in &route {
         let dx = i64::from(step.0) - i64::from(here.0);

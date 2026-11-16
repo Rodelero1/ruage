@@ -1,51 +1,38 @@
-//! **Defects this set found. No test here is `#[ignore]`d.**
+//! **The defect this set found, and the rule that replaced it. No test here is `#[ignore]`d.**
 //!
-//! These are not differences from the original - `divergences.rs` holds those. These are places where **our own** stated rule
-//! and our code disagreed, found by writing the rule down as a test. A red test here is a defect; it stays red until the
-//! defect is fixed, because an ignored test is a decision nobody re-reads.
+//! The two tests below were written against `nearest_reachable`, a helper beside the search that answered **one step from
+//! the start** instead of the tile nearest the click. The owner's ruling was to follow the game (D249), and the game's
+//! planner answers the closest reachable point itself - so the helper is deleted, the rule lives in `find_path`, and these
+//! tests now check the search.
 //!
 //! ```sh
 //! cargo test --manifest-path crates/conformance/Cargo.toml --test findings
 //! ```
 
 use ruage_conformance::walk;
-use ruage_sim::nearest_reachable;
+use ruage_sim::find_path;
 
-/// RULE: the tile answered for an unreachable click is the one **nearest the click**, not the first free tile the search
-/// happens to reach.
+/// RULE: an unreachable click is answered by **the reachable tile nearest the click**, not by the first free tile the
+/// search happens to reach.
 ///
-/// Its own doc comment (`path.rs:303-312`) and D134's *"nearest legal standing point"* both say so. Measured 2026-11-16: on
-/// empty ground, from (1,1) toward (10,10), the answer is **(2,2)** - the queue is popped best-first by distance to the
-/// click, but every tile it pushes is already free, so the **first** pop is a neighbour of the start and it returns before
-/// the wavefront has moved.
-///
-///    open ground, from (1,1) to (10,10)  -> (2,2), one step
-///    3x3 wood, from (1,1) to its middle -> (2,2), one step
-///    3x3 wood, from (1,7) to its middle -> (2,6), one step
-///
-/// **A fix exists and is not landed** (D249): sweeping the reachable region answers the right tile, and costs the acceptance
-/// match - **155 entities and a win at `45b5bd2` against 125 and no win**, because the script's two unreachable clicks send a
-/// villager six tiles instead of one. The fix is a fork for the owner, not a defect to land quietly.
-///
-/// Why the world suite did not see it: `click_into_the_woods.rs` spawns the villager **one tile** from the wood (1,4 against a
-/// wood at x = 3), so "a legal tile within one tile of the block" was satisfied by the bug's own answer.
+/// Source: the Klingers deck, p. 96 (*"otherwise give the closest point path"*); D134's *"nearest legal standing point"*.
+/// The defect it replaces: a helper that returned one step from the start, so from (1,1) toward (10,10) it answered (2,2).
 #[test]
-fn the_nearest_standing_tile_is_the_one_nearest_the_click() {
+fn the_closest_point_is_the_tile_nearest_the_click() {
     let walk = walk(20, 20, &[]);
-    // Open ground and a free far click: the nearest tile to the click is the click itself.
-    let (tile, route) = nearest_reachable(&walk, (1, 1), (10, 10)).expect("open ground");
+    // Open ground and a free click: the nearest reachable tile to the click is the click.
+    let route = find_path(&walk, (1, 1), (10, 10)).expect("open ground is always a path");
     assert_eq!(
-        tile,
-        (10, 10),
-        "the answer was {tile:?} (route {} steps) instead of the click: the search stops at the start's best neighbour",
-        route.len()
+        route.last(),
+        Some(&(10, 10)),
+        "the route stopped short: {route:?}"
     );
 }
 
-/// RULE: the same rule through the case a player actually causes - a click into a wood, from a distance.
+/// RULE: the same rule through the case a player causes - a click into a wood, from a distance.
 ///
-/// A 3x3 wood at x, y in 6..9 on a 16x16 map, a walker at (1,1): the nearest free tile to the middle (7,7) is a tile of the
-/// wood's ring at 5..=9. Measured answer: **(2,2)** - five tiles short, on the wrong side of the map.
+/// A 3x3 wood at x, y in 6..9 on a 16x16 map, a walker at (1,1): the nearest reachable tile to the middle (7,7) is a tile of
+/// the wood's ring at 5..=9. The helper this replaces answered **(2,2)** - five tiles short, beside the walker's feet.
 #[test]
 fn a_distant_click_into_a_wood_lands_on_the_woods_edge() {
     let mut blocked = Vec::new();
@@ -55,12 +42,16 @@ fn a_distant_click_into_a_wood_lands_on_the_woods_edge() {
         }
     }
     let walk = walk(16, 16, &blocked);
-    let (tile, _) = nearest_reachable(&walk, (1, 1), (7, 7)).expect("the wood has an edge");
-    // The ring round the wood: x or y within (5..=9), and not the wood itself.
+    let route = find_path(&walk, (1, 1), (7, 7)).expect("the wood has an edge");
+    let tile = *route.last().expect("a route has an end");
     let on_the_edge = (5..=9).contains(&tile.0) && (5..=9).contains(&tile.1);
     assert!(
         on_the_edge,
         "the answer {tile:?} is not on the wood's edge: the walker was ordered to a tile {} from it",
         tile.0.abs_diff(7).max(tile.1.abs_diff(7))
+    );
+    assert!(
+        route.len() > 1,
+        "a distant click into a wood must walk somewhere: {route:?}"
     );
 }

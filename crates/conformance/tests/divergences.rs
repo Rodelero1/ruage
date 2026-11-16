@@ -14,34 +14,6 @@
 use ruage_conformance::{SCALE, at, route_cost, walk};
 use ruage_sim::{find_path, short_range};
 
-/// RULE (original): the search answers the **closest point it can reach**, and "no path" is not an answer a mover can use.
-///
-/// Source: the Klingers deck, slide 96 - *"What if our convex hulls escape our search area? Expand search area once.
-/// Otherwise give the closest point path"* - and the PS2 low-level search's own "no low-level path" is reserved for the start
-/// being trapped, not for an unreachable goal.
-///
-/// Ours answers `None`, and the caller compensates with `nearest_reachable` (D134). The difference is real at this layer: a
-/// planner that answers nothing hands the mover nothing, and the mover standing still with a live order is the classic
-/// stuck unit. **Decision owed (D249, U25):** keep the layering (row 32's ruling covers walk orders; *thing* orders refuse by
-/// design) or teach the search to answer the closest point itself.
-#[test]
-fn the_original_answers_the_closest_point_not_no_path() {
-    let mut walk = walk(12, 12, &[]);
-    for dx in -1i32..=1 {
-        for dy in -1i32..=1 {
-            if dx == 0 && dy == 0 {
-                continue;
-            }
-            walk.block((6 + dx) as u16, (6 + dy) as u16);
-        }
-    }
-    let answer = find_path(&walk, (1, 1), (6, 6));
-    assert!(
-        answer.is_some(),
-        "the search answered None for a walled-in goal; the original answers the closest reachable point"
-    );
-}
-
 /// RULE (original): a tile step costs **16**, so ten straight tiles cost 160.
 ///
 /// Source: `FUN_007ffd10` (HD 5.7; `docs/movement-in-the-binary.md`), whose octile form is `table[min] + 16 * (max - min)`.

@@ -31,7 +31,8 @@ pub mod tiles;
 mod world;
 pub use metrics::Metrics;
 pub use path::{
-    Walk, find_path, find_path_avoiding, line_clear, line_clear_avoiding, nearest_reachable,
+    Walk, find_path, find_path_avoiding, find_path_avoiding_strict, find_path_strict, line_clear,
+    line_clear_avoiding,
 };
 use ruage_fixed::Fixed;
 pub use short::{short_range, short_range_clear};
@@ -2144,11 +2145,35 @@ impl World {
         tiles
     }
 
+    /// A plan that must end **on the goal tile** - thing orders (D241) and every caller that reads "no path" as a refusal.
     pub(crate) fn plan_path(
         &self,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
         radius: i64,
+    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
+        self.plan_path_mode(from, to, radius, false)
+    }
+
+    /// A plan that may end **at the closest reachable tile**: the original's rule for a mover (deck p. 96), and what a
+    /// walk or attack-move order means by "every click is accepted" (D134). The route's last point is where the body will
+    /// stand, so a caller takes its destination from there rather than planning a second time - the double plan is what
+    /// made an accepted click refusable (`army_walk`, 2026-11-16).
+    fn plan_path_closest(
+        &self,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+        radius: i64,
+    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
+        self.plan_path_mode(from, to, radius, true)
+    }
+
+    fn plan_path_mode(
+        &self,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+        radius: i64,
+        closest: bool,
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
         let (start, goal) = (self.tile_of(from), self.tile_of(to));
@@ -2174,13 +2199,26 @@ impl World {
         // worked, and "come as close as you can" is what an order on a wall means.
         let steps = if start == goal || line_clear(walk, start, goal) {
             vec![goal]
-        } else {
+        } else if closest {
             find_path_avoiding(walk, start, goal, &standers).ok_or(SimError::NoPath {
                 from: start,
                 to: goal,
             })?
+        } else {
+            find_path_avoiding_strict(walk, start, goal, &standers).ok_or(SimError::NoPath {
+                from: start,
+                to: goal,
+            })?
         };
-        Ok(self.corners(walk, start, steps, to))
+        // **Where the body will actually stand**: the goal's click point when the route ends on its tile, and the settled
+        // tile's centre when the ground stopped it short.
+        let end = steps.last().copied().unwrap_or(goal);
+        let finish = if end == goal {
+            to
+        } else {
+            self.tile_centre(end)
+        };
+        Ok(self.corners(walk, start, steps, finish))
     }
 
     /// The route a **body** would walk: the same plan, with its own footprint as the clearance.
@@ -2378,8 +2416,9 @@ impl World {
         if !self.on_map(tx, ty) {
             return Err(SimError::OffMap { tile: (tx, ty) });
         }
-        self.plan_path_for(unit, entity.position, to)?;
-        Ok(to)
+        let radius = self.body_radius(entity.unit);
+        let route = self.plan_path_closest(entity.position, to, radius)?;
+        Ok(route.last().copied().unwrap_or(to))
     }
 
     fn check_order(&self, unit: EntityId, to: (u16, u16)) -> Result<(Fixed, Fixed), SimError> {
@@ -2409,26 +2448,12 @@ impl World {
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
     ) -> Result<(Fixed, Fixed), SimError> {
-        match self.plan_path_for(unit, from, to) {
-            Ok(_) => Ok(to),
-            Err(SimError::NoPath { .. }) => {
-                let Some(walk) = self.walk.as_ref() else {
-                    return Err(SimError::NoPath {
-                        from: self.tile_of(from),
-                        to: self.tile_of(to),
-                    });
-                };
-                let (start, goal) = (self.tile_of(from), self.tile_of(to));
-                let (tile, _) = nearest_reachable(walk, start, goal).ok_or(SimError::NoPath {
-                    from: start,
-                    to: goal,
-                })?;
-                let stand = self.tile_centre(tile);
-                self.plan_path_for(unit, from, stand)?;
-                Ok(stand)
-            }
-            Err(other) => Err(other),
-        }
+        // **One plan, and its end is the place** (D249): the search answers the reachable tile nearest the click, so the
+        // order walks where the ground allows instead of a helper picking a tile and the route being planned a second time
+        // - that second plan could fail on a tile the first had already accepted.
+        let radius = self.body_radius(self.find(unit).and_then(|entity| entity.unit));
+        let route = self.plan_path_closest(from, to, radius)?;
+        Ok(route.last().copied().unwrap_or(to))
     }
 
     /// The stance an order will meet once the queue has landed.

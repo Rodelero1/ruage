@@ -78,7 +78,7 @@ fn a_route_never_beats_the_octile_bound() {
 #[test]
 fn a_wall_is_paid_for_at_its_gap() {
     // A full column at x = 8 with one gap at y = 3. From (4,4) to (12,4) the shortest route is 4 across and 1 up, twice:
-    // 1 diagonal (14) + 3 cardinal (30) each way = 2 * 44 = 88. Cutting the corner at the gap costs nothing extra, because
+    // 1 diagonal (23) + 3 cardinal (48) each way = 2 * 71 = 142. Cutting the corner at the gap costs nothing extra, because
     // the gap tile is the only filled tile in the column and its neighbours are open.
     let mut blocked = Vec::new();
     for y in 0..12u16 {
@@ -90,8 +90,8 @@ fn a_wall_is_paid_for_at_its_gap() {
     let route = find_path(&walk, (4, 4), (12, 4)).expect("the gap is a passage");
     assert_eq!(
         route_cost((4, 4), &route),
-        88,
-        "the route through the gap costs {} rather than the analytic 88: {route:?}",
+        142,
+        "the route through the gap costs {} rather than the analytic 142: {route:?}",
         route_cost((4, 4), &route)
     );
     assert!(
