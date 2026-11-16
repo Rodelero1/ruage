@@ -64,6 +64,22 @@ countable — "N of M ruled" — without pretending to have surveyed 15,766 func
 | 10 | vision radius and fog memory | `explored` grids | not yet located | **unknown-static** | — |
 | 11 | population cap and house arithmetic | D31/D34 | not yet located | **unknown-static** | — |
 | 12 | match end (conquest: a razed town centre with villagers alive is not a win) | D59b/D78 | not yet located | **unknown-static** | — |
+| 13 | path step cost and the octile estimate | `path.rs:16-17` **`CARDINAL = 10`, `DIAGONAL = 14`**, summed as `straight*10 + diagonal*14` (`:112`, `:284`) | **16 per cardinal step**; the diagonal is a load-time table at `0xafd2a0`, used as `table[min] + 16*(max-min)` with `min` capped at 479 (`FUN_007ffd10`) | **different** (constants, and a table rather than a product; ratio 1.40 against 1.41-1.44) | `docs/movement-in-the-binary.md` |
+| 14 | a collision is queried **at the new position, with the unit's radius** | `world/movement.rs::collide` tests the candidate point against `body_radius` | `FUN_00840440` over the object system, radius = the unit's own radius field times a multiplier, mask `0x19`, player sentinel `0xfffffffe` | **same** | `docs/movement-in-the-binary.md` (2026-11-13) |
+| 15 | a friend is a wall: no owner test in collision | D200 | no player, team or alliance comparison anywhere in the block; the only id test is against the order's target | **same** | `docs/movement-in-the-binary.md` |
+| 16 | a collision with the order's target is arrival | `WaitTarget` | \"That's a target collision\" → \"That collision is with our target, so we're done\" (0x1251, 0x127d) | **same** | same file |
+| 17 | a non-past collision is answered by **re-planning**, not by waiting | `Repath { body }`, landed 2026-11-16 (D237) | \"We have %d non-past collisions and %d terrain collisions, repathing\" (0x128b); the avoid list is extended and the parent path installed | **same** (D98's \"wait and let pass\" was the divergence; it is gone) | D237, `docs/movement-in-the-binary.md` |
+| 18 | right of way: lower id proceeds, higher pauses; the pause keeps its path | `step.rs:1276-1298`: `rand()*1.25/32767 + 0.25` s from `sim_rng`, first write wins, `Entity::pause_remaining` in ticks | `[+0x2b4]` on both units, `cmp eax,esi / jle` → `setPause(rand*1.25/32767+0.25)` writing `path+0x28`; the paused unit keeps its waypoint list | **same** (D205) | `docs/movement-in-the-binary.md` |
+| 19 | a body that stopped before this route was planned is **past** | `is_past`: `route.created >= other.last_moved` (D210, D213) | `path+0x10` creation time against the other's `+0x134 lastMoveTime`; past entries are dropped with no pause, no repath, no bound | **same** | `docs/movement-in-the-binary.md` |
+| 20 | which bodies a mover plans through | soldiers ordered in the **same tick** become mates (`stamp_group`, D237); villagers never | the route's **path-ignore list**: formation members, re-tested **each tick** on `isMoving`, plus the order's target; membership drops a collider outright (\"That's a path ignore unit\", 0x1242) | **different in trigger** (tick vs formation, and our \"mates\" is stamped once instead of re-tested) | `docs/movement-in-the-binary.md`, `docs/prior-art.md` |
+| 21 | passage is a property of the **ground**, never of the body | D117: a `trebuchet_packed` (radius 0.5) walks a one-tile gap | the query **grows by the body's radius**, and the short-range planner shrinks the body to a point and expands every obstruction by its radius (FE talk, steps 1-2) | **different** (the owner's choice; how much the filter's own growth closes is unread) | D117, `pathfinding-from-the-talk.md` |
+| 22 | a *ground* re-plan is capped at two per route | `MAX_GROUND_REPLANS` (D127, D135) | no such counter: every non-past collision re-plans | **different** (priced: uncapped, the acceptance ran 3.5 ms/tick against 0.3) | D127, D135 |
+| 23 | an **exclusive goal**: a `Move`'s last step stops short of an occupied tile | D52 | no such rule read; the collision answers at the new position | **unknown-static** (the visible outcome is similar) | D52 |
+| 24 | a contested work square | D204: the man takes the **next node of the same column**; the nudge survives for a body with no work | **no displacement anywhere**; the owner's statement of 2026-11-16: a newcomer \"will be walking around until he finds a spot for him\" | **different** | D204, owner 2026-11-16 |
+| 25 | a node's ring when a man is refused | `maybe_respread` re-seats **every** man on the node, at most once per 20 ticks (D200) | incumbents keep their squares; the newcomer walks until a square frees | **different** (the D238 blocker) | D238, owner 2026-11-16 |
+| 26 | a waypoint that cannot be reached in two updates is **substituted** | none | `mConsecutiveSubstituteCount`: \"We won't reach our waypoint either this or the next update, but we have a count of %d, faking it\" (move_obj.cpp:0x1203) | **different** (mechanism missing) | `FUN_008a4360` |
+| 27 | path structure | one A\* level (`plan_path`) plus the `short_range_clear` pencil | two levels with a parent: `AddFuturePath` builds a high-level path when handed a low-level one; \"We don't have a parent path, so we're stopping\" (0x12a3) | **different structure** | `docs/movement-in-the-binary.md` |
+| 28 | standoff between a worker and the node | **0.70** at an edge, **0.94** at a corner (D169, D199) | **measured** on the owner's saves: bodies at 0.641 / 0.702 x3 / 0.935 x3 round a tree, mine and bush | **same** (the strongest class - measured off the game, not read) | D199 |
 
 **Row 2's arithmetic, read directly (2026-11-15).** `sub_744d60` and its 1.0 accessor `sub_745060` were decompiled rather than summarised, and five things are
 now facts rather than readings: the attacker record carries **exactly three** `(class, amount)` slots at `+0x18c/+0x18e`, `+0x192/+0x194`, `+0x198/+0x19a`; each
@@ -209,3 +225,44 @@ little-endian literal:
 So "which of the five call sites is combat's" becomes a **class** question, not a call-site question: the damage wrapper is reached
 through a vtable, and the next instrument is to resolve those five slots to their owning class constructors - `native-xrefs` on the
 slot addresses - and read which class the combat code holds.
+
+## The movement rows, ruled (2026-11-16)
+
+**The count: 28 rows, 18 ruled.** Rows 1 and 2 were ruled before today; rows **13-28** are all pathfinding or obstacle
+avoidance, added for the owner's question of 2026-11-16 (*"review all my decisions on pathfinding and obstacle avoidance,
+compare them with gathered information and list where my decisions diverged"*) and **every one of the sixteen carries a
+verdict**: **7 same, 8 different, 1 unknown-static**, each citing either the corpus, a first-party talk, or a save.
+
+**Same, and it is the larger half**: no pushing anywhere; a friend is a wall (D200); the target collision is arrival; a non-past
+collision is answered by re-planning (D237, which removed D98's "wait and let pass"); right of way is the lower id and the
+loser pauses 0.25-1.50 s from a seeded stream (D205, and `step.rs:1276-1298` implements the original's own formula); a stopped
+body is *past* (D210/D213); the collision query is at the new position with the unit's radius; and the worker-to-node standoff
+(D169/D199) is **measured off the owner's saves**, which is the strongest evidence any row in this file has.
+
+**The eight divergent rows, in the order they cost the player something** (the last item bundles three mechanism gaps):
+
+1. **Line 20 - which bodies a mover plans through.** Ours is "ordered in the same tick, stamped once"; the original's is
+   "formation members, re-tested each tick on `isMoving`". D237 fixed the villager half of this; the *re-test* is still
+   missing, so a mate that stops mid-route stays a mate for ours and stops being one for the game.
+2. **Line 25 - the ring re-lay.** `maybe_respread` re-seats every man on a node when one is refused. The original does not:
+   the owner, 2026-11-16 - *"In case there are several men around the bush, 1 other man joining them will be walking around
+   until he finds a spot for him."* This is the live defect D238 measured (a seated man abandoning his square, `SEATMOVE`), and
+   it is the one row where a single sentence of the owner's outranks everything we have read.
+3. **Line 24 - a contested work square.** D204 sends the man to the **next node of the same column**; the owner's statement is
+   that he keeps **walking around the same bush** until a square frees. Also: the nudge that D204 kept for a body with no work
+   has no counterpart in the original - a body at rest is never displaced, for any task.
+4. **Line 21 - passage is the ground, never the body (D117).** The game grows the query by the body's radius and shrinks the
+   body to a point, expanding every obstruction by that radius; D117 says a 0.5-radius unit walks a one-tile gap. This is the
+   owner's own rule and it is deliberate, so the row is a *record*, not a defect - but it is a real difference and it is the
+   one that would show on a chokepoint map.
+5. **Line 22 - the two-re-plan cap (D127/D135).** The original re-plans on every non-past collision and has no counter. Ours
+   caps ground re-plans at two because uncapped it ran **3.5 ms a tick against 0.3**. Bounded scope, priced and recorded.
+6. **Lines 13, 26, 27 - three mechanisms the original has and we do not**: cost 16 with a table rather than 10/14 with a
+   product (a ratio difference, no behavioural cost today), the waypoint substitution counter (`mConsecutiveSubstituteCount`,
+   "faking it"), and the two-level path with a parent. The middle one is the cheapest to copy and the most likely to fix a
+   stall nobody can explain.
+
+**The one row that should be read before it is believed differently:** line 23, the exclusive goal. It is the only movement
+rule of ours that has **no counterpart** in the original and is also **not** a divergence: the original answers at the new
+position, so its crowd behaviour and ours could still agree in effect. It stays `unknown-static` until a recording of forty
+units ordered to one tile is measured - and that recording is cheap, because it needs no AI and no economy.
