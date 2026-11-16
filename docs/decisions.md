@@ -6411,3 +6411,46 @@ crowd deadlocks into the same failure D205 measured. The fix is a slice of its o
 world/movement.rs` (`blocker_at`, the mate and "past" clauses), `docs/movement-in-the-binary.md` (the path-ignore list),
 `docs/prior-art.md` (openaok, genie, openage, the formations page), and the two acceptance runs above. Review:
 `docs/reviews/2026-11-16-d236-overlap-and-reroute.md`.
+
+### D237 - villagers are solid, and the fix was a guard nobody had looked at (2026-11-16)
+
+**What D236 got wrong, first.** D236 concluded the narrowing was blocked on "a route that goes round a body (D210b's remaining
+half)". The route already exists: on a body collision the mover asks for a `Repath { body }`, and the replan builds discs for the
+men in the way and calls `short_range_clear` over them - the **pencil** (D211) that bends a route round a disc. What refused the
+request was one condition: `if !near_goal && ...`, written for *ground* (a search beside the goal buys nothing, D98a) and fatal
+for *bodies*, because a gatherer's whole life is spent within one tile of his goal. A blocked villager could not ask for a route
+at all; he stood for `STALLED_TICKS` (two seconds) and, with the mates exemption still in place, his crowd never noticed. Narrow
+the exemption and every blocked man stands in the last tile for ever - which is the starvation D236 measured (149 entities to
+139, `repaths` 432 to 1,401) and blamed on a missing mechanism.
+
+**What landed, two changes.**
+1. **`stamp_group` forms mates among soldiers only** (D207's scope narrowed): the original's path-ignore list filters a
+   *formation's* members, and Forgotten Empires' own documentation puts villagers, trade carts and fishing ships in no formation
+   (*"each of them takes their own path"*). A villager ordered with others is now solid to them.
+2. **A body in the way may be planned round inside the goal's own tile** (`(!near_goal || a_unit)`): the near-goal guard keeps
+   its ground half and loses its body half, bounded exactly as before - one search per man per wait (`stalled.remove`), and
+   `MAX_REPATHS_PER_TICK`.
+
+**Measured, acceptance match, seed 7, 48,000 ticks, release, both binaries built from source and interleaved:**
+
+| | entities | `repaths` (body / ground) | hash | wall |
+|---|---|---|---|---|
+| HEAD | 149 | 432 (90 / 342) | `2f1ab0ae663e2506` | 36.82 s, 37.97 s |
+| this | **155** | 497 (139 / 358) | `8cf433ad4e0205f4` | 38.36 s, 38.45 s |
+
+**+2.7%** on the same scenario (median 37.39 s against 38.41 s, two interleaved pairs) and **+15%** on body repaths - and six
+more entities alive at 48,000 ticks than before, i.e. the crowd routes instead of deadlocking. The hash moves because the
+behaviour changed, which is the point of the slice and not a defect.
+
+**What it fixes.** A box-selected crowd of villagers no longer walks over itself: `crates/sim/tests/overlap.rs`'s
+`eight_villagers_ordered_to_one_tile_never_walk_through_each_other` was red on the old engine (0.346 tiles apart at tick 101,
+deeper than its 0.372 first contact) and is green now, back off `#[ignore]`. The rule it asserts is the game's, not a stricter
+invention: an encounter may reach contact and may never get deeper.
+
+**Fixtures restated, because two of them were about to become vacuous.** `crates/sim/tests/group_overlap.rs` pinned the group
+rule with **villagers** in two fixtures; with villagers never being mates they would still have passed, by never forming a
+group at all. Both now spawn **spearmen** - the units the rule is actually about - through a shared `spawn_unit` helper.
+
+**Basis.** `crates/sim/src/world/step.rs` (`stamp_group`), `crates/sim/src/world/movement.rs` (the near-goal clause), the pencil
+in `world/pathing` (`short_range_clear`, discs), `crates/sim/tests/overlap.rs`, `docs/movement-in-the-binary.md` (the path-ignore
+list), `docs/prior-art.md` (the formations page). Review: `docs/reviews/2026-11-16-d237-villagers-solid.md`.

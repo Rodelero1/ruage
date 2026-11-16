@@ -120,16 +120,37 @@ impl World {
         self.stamp_group();
     }
 
-    /// **Form the tick's group** (D207). Every unit ordered to move in this tick is a mate of every other one ordered with
-    /// it; a lone order leaves its unit with no mates, which is what makes "walk, then stop" different from "walk together".
+    /// **Form the tick's group** (D207, narrowed by D237). A **soldier** ordered to move in this tick is a mate of every other
+    /// soldier ordered with it: that is the original's path-ignore list, which filters a *formation's* members, and a moving
+    /// formation walks over itself. **A villager is never a mate** - Forgotten Empires' own documentation puts villagers, trade
+    /// carts and fishing ships in no formation (*"each of them takes their own path"*), and the owner's rule of 2026-11-16 is
+    /// that a villager reroutes and never walks through another. Without this, a box-select and a right-click turn a
+    /// selection of villagers into a crowd that passes through itself (measured 0.269 tiles apart where the standoff is 0.400).
     fn stamp_group(&mut self) {
         if self.ordered_now.is_empty() {
             return;
         }
         let group = std::mem::take(&mut self.ordered_now);
         for &id in &group {
-            let mates: BTreeSet<EntityId> =
-                group.iter().copied().filter(|other| *other != id).collect();
+            let mates: BTreeSet<EntityId> = if self
+                .find(id)
+                .and_then(|entity| entity.unit)
+                .is_some_and(|unit| self.is_military(unit))
+            {
+                group
+                    .iter()
+                    .copied()
+                    .filter(|other| {
+                        *other != id
+                            && self
+                                .find(*other)
+                                .and_then(|entity| entity.unit)
+                                .is_some_and(|unit| self.is_military(unit))
+                    })
+                    .collect()
+            } else {
+                BTreeSet::new()
+            };
             if let Some(route) = self.paths.get_mut(&id) {
                 route.mates = mates;
             }

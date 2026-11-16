@@ -348,7 +348,12 @@ impl World {
                 .paths
                 .get(&id)
                 .is_some_and(|route| route.avoiding.contains(&other));
-            if !near_goal && !known && pass.repaths.len() < MAX_REPATHS_PER_TICK {
+            // **Near the goal is no longer a reason to stand still when the thing in the way is a body** (D237). The guard
+            // was written for ground (a repath beside the goal buys nothing but searches, D98a), and it is exactly where a
+            // gatherer lives: a man one tile from the tree that a friend blocks inside that last tile could not ask for a
+            // route at all, so narrowing the mates rule starved the match - 149 entities to 139, `repaths` 432 to 1,401.
+            // The pencil bends round a *disc*, so a body in the last tile is the one case where a near-goal search pays.
+            if (!near_goal || a_unit) && !known && pass.repaths.len() < MAX_REPATHS_PER_TICK {
                 pass.repaths.push(Repath {
                     unit: id,
                     body: Some(other),

@@ -116,7 +116,6 @@ fn closest_pair(world: &World, ids: &[EntityId]) -> f64 {
 /// So the narrowing is **blocked on a body-aware replan** (D210b's remaining half), and this fixture is the specification
 /// that slice has to satisfy. `docs/next-step.md` carries the numbers and the order.
 #[test]
-#[ignore = "D236: blocked on body-aware replanning; see docs/next-step.md and the review"]
 fn eight_villagers_ordered_to_one_tile_never_walk_through_each_other() {
     let Some(pack) = pack() else { return };
     let mut world = a_world(&pack);

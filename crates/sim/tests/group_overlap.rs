@@ -27,6 +27,12 @@ fn next_id(world: &World) -> EntityId {
 /// two spawns in one tick cannot collide on the counter.
 fn spawn_villager(world: &mut World, id: EntityId, x: u16, y: u16) {
     let unit = world.start_villager_unit().expect("a villager role");
+    spawn_unit(world, id, unit, x, y);
+}
+
+/// A unit of any role, placed the same way. The group rule is about **soldiers** (D237): the original's path-ignore list
+/// filters a formation's members, and villagers are in no formation.
+fn spawn_unit(world: &mut World, id: EntityId, unit: u32, x: u16, y: u16) {
     let scale = world.scale();
     world
         .submit_checked(Command::Spawn {
@@ -108,9 +114,16 @@ fn run(world: &mut World, a: EntityId, b: EntityId, ticks: u32) -> Run {
     }
 }
 
-/// **Two units ordered in the same tick walk over each other** (D207). The original lets a moving group overlap - "military
-/// units moving in groups can go over each other" - and a group that cannot overlap cannot get past itself in a doorway.
-/// The measurable form: at some tick the pair is closer than the reach that a solo walker is held to, and both arrive.
+/// **Two *soldiers* ordered in the same tick walk over each other** (D207, narrowed by D237). The original lets a moving
+/// group overlap - *"military units moving in groups can go over each other"* - and a group that cannot overlap cannot get
+/// past itself in a doorway. The measurable form: at some tick the pair is closer than the reach that a solo walker is held
+/// to, and both arrive.
+///
+/// **The subject was a pair of villagers until D237.** The exemption is the original's path-ignore list, which filters a
+/// *formation's* members, and the owner's rule of 2026-11-16 - backed by Forgotten Empires' own documentation, *"villagers,
+/// trade carts and fishing ships will not be part of any formation ... each of them takes their own path"* - is that a
+/// villager never walks through another. The villager case lives in `crates/sim/tests/overlap.rs`, where it asserts the
+/// opposite; this fixture pins the rule for the units it is actually about.
 #[test]
 fn a_group_ordered_together_walks_over_each_other() {
     let Some(mut world) = common::fresh() else {
@@ -121,8 +134,9 @@ fn a_group_ordered_together_walks_over_each_other() {
     };
     let a = next_id(&world);
     let b = EntityId(a.0 + 1);
-    spawn_villager(&mut world, a, x, y);
-    spawn_villager(&mut world, b, x + 6, y);
+    let spearman = world.role_unit("spearman").expect("a spearman role");
+    spawn_unit(&mut world, a, spearman, x, y);
+    spawn_unit(&mut world, b, spearman, x + 6, y);
     world.step().expect("the spawns land");
 
     // **One tick, two orders**: that is the group, as far as this engine can express one today.
@@ -231,8 +245,11 @@ fn a_mate_who_is_stopped_becomes_solid() {
     };
     let a = next_id(&world);
     let b = EntityId(a.0 + 1);
-    spawn_villager(&mut world, a, x, y);
-    spawn_villager(&mut world, b, x + 6, y);
+    // **Soldiers, because the rule is about a formation** (D237): with villagers never being mates, a villager pair would
+    // satisfy this fixture without ever forming the group it is meant to dissolve.
+    let spearman = world.role_unit("spearman").expect("a spearman role");
+    spawn_unit(&mut world, a, spearman, x, y);
+    spawn_unit(&mut world, b, spearman, x + 6, y);
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
