@@ -62,6 +62,14 @@ found by accident while doing something else.
 
 ## The seam (R6): one resolved table per player, and consumers ask it
 
+> **Built, in its first half, as D234 (2026-11-16).** `World.bonus_tables` exists and the five consumers read it: the rows a
+> player has, per attribute, plus the kind-1 resource rows with their source, plus the tech-tree bars. **What is not built is
+> the resolution to numbers** - the table caches rows, because the five consumers fold them differently and one resolved value
+> would have meant one fold for five readers (a behaviour change, not a refactor). So rule 2 below (keying on the `Attribute`
+> enum instead of a string) is still owed, and it now has one place to land in. Rule 1's "one list of effects per player" is
+> what exists; the third source distinction (the tech tree's modifiers, which `modifiers_for` has never read) is preserved
+> rather than merged, on purpose.
+
 **The shape:**
 
 ```text

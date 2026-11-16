@@ -7,7 +7,7 @@ use ruage_fixed::Fixed;
 
 use crate::{
     EntityId, EntityKind, Job, MAX_PLAYERS, Research, ResearchPlan, SimError, World, add_to_class,
-    collect_modifiers, multiply_class, scale_fixed, scaled_health,
+    applies_to, multiply_class, scale_fixed, scaled_health,
 };
 
 impl World {
@@ -198,30 +198,20 @@ impl World {
         Ok(())
     }
 
-    /// Every modifier of `attribute` that applies to `unit`, from the techs `player` has researched.
+    /// Every modifier of `attribute` that applies to `unit`, from the player's **table** (R6, D234) - the researched techs
+    /// in id order, then the civ's team bonus, which applies without being researched because it is a property of who the
+    /// player is. The rows are cached; the match against this unit is not, because it depends on the unit.
     pub(crate) fn modifiers_for(
         &self,
         player: u8,
         unit: &Unit,
         attribute: &str,
     ) -> Vec<&ruage_data::Modifier> {
-        let Some(effects) = self.effects.as_ref() else {
-            return Vec::new();
-        };
-        let mut chosen = Vec::new();
-        if let Some(techs) = self.techs.as_ref() {
-            for tech_id in self.researched(player) {
-                let Some(effect_id) = techs.get(*tech_id).and_then(|tech| tech.effect_id) else {
-                    continue;
-                };
-                collect_modifiers(effects, effect_id, unit, attribute, &mut chosen);
-            }
-        }
-        // A civ's team bonus applies without being researched: it is a property of who the player is.
-        for effect_id in &self.bonus_effects[usize::from(player).min(MAX_PLAYERS - 1)] {
-            collect_modifiers(effects, *effect_id, unit, attribute, &mut chosen);
-        }
-        chosen
+        self.bonuses(player)
+            .modifiers(attribute)
+            .iter()
+            .filter(|modifier| applies_to(modifier, unit))
+            .collect()
     }
 
     /// A unit's attacks or armours after every modifier its owner has researched.
@@ -372,6 +362,11 @@ impl World {
             .collect();
 
         self.researched.entry(player).or_default().insert(tech);
+        // **The table hears about the tech before anything reads it** (R6, D234). `max_hp` two lines below asks for the
+        // player's hit-point modifiers, and a table rebuilt at the *end* of the research answers with the list the player
+        // had before the tech - Loom's +15 went missing exactly that way, caught by `modifiers::loom_raises_every_villagers_
+        // health_immediately` and three siblings.
+        self.rebuild_bonuses(player);
 
         // Health and speed are state, so every unit the player already has gains them at once.
         for (id, unit_id, old_max) in before {

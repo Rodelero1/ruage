@@ -17,6 +17,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use crate::world::bonuses::Source;
 use ruage_data::{
     CommandApply, Cost, CostResource, Economy, Effects, Map, Policy, Resources, Sim as Settings,
     Unit, Units,
@@ -1090,6 +1091,10 @@ pub struct World {
     /// from `civ_by_player`, so it is not hashed separately. The data writes a team bonus with the same
     /// command shapes as a tech's effect - the Slavs' is twelve kind-0 population sets (D41).
     bonus_effects: [Vec<u32>; MAX_PLAYERS],
+    /// **One table per player** (R6, D234): the effects that belong to them, walked once on the two events that can
+    /// change it instead of once per question. Derived from `researched`, `civ_by_player` and `bonus_effects`, so it is
+    /// **not state and not hashed** - the same rule `bonus_effects` follows.
+    bonus_tables: [crate::world::bonuses::BonusTable; MAX_PLAYERS],
     /// **The line-of-sight modifiers each player has in force** (T1b, D214), kept per player instead of gathered per
     /// question. `sight_of` runs for every body that moved, every tick, and asking `modifiers_for` there meant a table
     /// lookup per researched tech per body: measured, that was **+7.2% of a 24,000-tick acceptance run**. Rebuilt when a
@@ -1392,28 +1397,16 @@ fn integer_sqrt(value: i64) -> i64 {
 /// A modifier matches on the unit id it names, on the unit's class, or on neither (-1 means
 /// "everything"). Free rather than a method so that both the researched-tech loop and the civ-bonus loop
 /// can share it without borrowing `self` twice.
-pub(crate) fn collect_modifiers<'a>(
-    effects: &'a ruage_data::Effects,
-    effect_id: u32,
-    unit: &Unit,
-    attribute: &str,
-    chosen: &mut Vec<&'a ruage_data::Modifier>,
-) {
-    let Some(effect) = effects.get(effect_id) else {
-        return;
-    };
-    for modifier in &effect.modifiers {
-        if modifier.attribute != attribute {
-            continue;
-        }
-        if modifier.unit >= 0 && u32::try_from(modifier.unit).ok() != Some(unit.id) {
-            continue;
-        }
-        if modifier.unit_class >= 0 && modifier.unit_class != unit.class {
-            continue;
-        }
-        chosen.push(modifier);
+/// **Does this cached row apply to this unit?** The match the walk used to do per effect, now per row: a modifier named for
+/// a unit applies only to that unit, one named for a class only to that class, and `-1` means "everything" (R6, D234).
+pub(crate) fn applies_to(modifier: &ruage_data::Modifier, unit: &Unit) -> bool {
+    if modifier.unit >= 0 && u32::try_from(modifier.unit).ok() != Some(unit.id) {
+        return false;
     }
+    if modifier.unit_class >= 0 && modifier.unit_class != unit.class {
+        return false;
+    }
+    true
 }
 
 /// What `standoff_point` found: a place to stand, or **no room on the ring** (D182) - the owner's *"if there is no space at half diameter from
@@ -1505,6 +1498,7 @@ impl World {
             effects: None,
             civs: None,
             civ_by_player: [None; MAX_PLAYERS],
+            bonus_tables: std::array::from_fn(|_| crate::world::bonuses::BonusTable::default()),
             bonus_effects: std::array::from_fn(|_| Vec::new()),
             sight_modifiers: std::array::from_fn(|_| Vec::new()),
             team_by_player: [1, 2, 3, 4, 5, 6, 7, 8],
@@ -3548,41 +3542,36 @@ impl World {
     }
 
     /// The farm food a player's researched techs have added, in whole food.
+    /// **The farm line's bonus for this player** (T4, D215), summed from the table (R6, D234): every kind-1 `add` naming the
+    /// farm's food resource, from the researched techs **and** the civ's team bonus - the Chinese bonus is +45 that nothing
+    /// researches, which is why their plot holds 220 where a Briton's holds 175. The civ's tech-tree effect is **not** read
+    /// here, exactly as before: the farm line has never come from the tree.
     fn farm_food_bonus(&self, player: u8) -> i64 {
-        let (Some(economy), Some(effects), Some(techs)) = (
-            self.economy.as_ref(),
-            self.effects.as_ref(),
-            self.techs.as_ref(),
-        ) else {
+        let Some(economy) = self.economy.as_ref() else {
             return 0;
         };
         let Some(resource) = economy.farm.food_resource else {
             return 0;
         };
-        let Some(researched) = self.researched.get(&player) else {
+        let Ok(resource) = i16::try_from(resource) else {
             return 0;
         };
-        let from_research: i64 = researched
+        // Each row is rounded on its own, as the fold always did - a fractional row rounds to the nearest whole food and
+        // the whole foods are summed, which is not the same as rounding the sum.
+        let scale = self.scale;
+        self.bonuses(player)
+            .resources()
             .iter()
-            .filter_map(|tech| techs.get(*tech))
-            .filter_map(|tech| tech.effect_id)
-            .filter_map(|effect| effects.get(effect))
-            .flat_map(|effect| &effect.resource_modifiers)
-            .filter(|modifier| modifier.resource == resource && modifier.mode == 1)
-            .map(|modifier| modifier.value.round() as i64)
-            .sum();
-        // **The civ's team bonus is not researched, and it is part of the same line** (T4): the Chinese bonus is a
-        // resource-36 `add` of 45, which is why their farm holds 220 where a Briton's holds 175. Missing this left every
-        // Chinese plot at the plain base, and it is the one place the farm line and the civ identity meet.
-        let slot = usize::from(player).min(MAX_PLAYERS - 1);
-        let from_team: i64 = self.bonus_effects[slot]
-            .iter()
-            .filter_map(|effect| effects.get(*effect))
-            .flat_map(|effect| &effect.resource_modifiers)
-            .filter(|modifier| modifier.resource == resource && modifier.mode == 1)
-            .map(|modifier| modifier.value.round() as i64)
-            .sum();
-        from_research + from_team
+            .filter(|row| row.source != Source::Tree && row.resource == resource && row.mode == 1)
+            .map(|row| {
+                let raw = row.value.raw();
+                if raw >= 0 {
+                    (raw + scale / 2) / scale
+                } else {
+                    (raw - scale / 2) / scale
+                }
+            })
+            .sum()
     }
 
     pub(crate) fn work_position(
@@ -4419,9 +4408,16 @@ impl World {
         // The team bonuses are part of the sight a player has from the first tick, so the cache is rebuilt here as well
         // as on every research (T1b).
         for index in 0..MAX_PLAYERS {
-            self.refresh_sight_modifiers(u8::try_from(index + 1).unwrap_or(1));
+            let player = u8::try_from(index + 1).unwrap_or(1);
+            self.refresh_sight_modifiers(player);
         }
         self.civs = Some(civs.clone());
+        // **After the civ table is stored, not before** (R6, D234): the tree effect is looked up through it, so a rebuild
+        // one line earlier finds no civ and caches a table with no tree rows - which is how the Spanish build rate went
+        // missing the first time this was written.
+        for index in 0..MAX_PLAYERS {
+            self.rebuild_bonuses(u8::try_from(index + 1).unwrap_or(1));
+        }
         Ok(())
     }
 
@@ -4459,15 +4455,9 @@ impl World {
     fn civ_barred_unit(&self, player: u8, unit: u32) -> Option<String> {
         let civs = self.civs.as_ref()?;
         let civ = civs.get(self.civ_of(player)?)?;
-        let effects = self.effects.as_ref()?;
-        let effect = effects.get(civ.tech_tree_effect?)?;
-        let barred = effect.commands.iter().any(|command| {
-            // Zero is the data's "take it away": one row in the whole table, the Huns' house.
-            command.kind == 2
-                && command.b == 0
-                && u32::try_from(command.a).is_ok_and(|id| id == unit)
-        });
-        barred.then(|| civ.name.clone())
+        self.bonuses(player)
+            .bars_unit(unit)
+            .then(|| civ.name.clone())
     }
 
     /// Apply the availability techs whose prerequisites the player now meets, and keep going while
@@ -4532,7 +4522,7 @@ impl World {
     /// the civ's tech-tree effect, which is not researched at all - it is who the player is.
     pub(crate) fn construction_rate(&self, player: u8) -> Fixed {
         let one = Fixed::from_raw(self.scale);
-        let (Some(economy), Some(effects)) = (self.economy.as_ref(), self.effects.as_ref()) else {
+        let (Some(economy), Some(_)) = (self.economy.as_ref(), self.effects.as_ref()) else {
             return one;
         };
         let Some(resource) = economy.build.rate_resource else {
@@ -4543,39 +4533,17 @@ impl World {
         };
         let mut rate = one;
         let mut stated = false;
-        // The tech-tree effect first, then the researched techs in id order: a `set` overwrites, an `add` accumulates, and
-        // the last statement wins - the same rule every other modifier follows.
-        let mut commands: Vec<&ruage_data::EffectCommand> = Vec::new();
-        if let Some(effect) = self
-            .civ_of(player)
-            .and_then(|id| self.civs.as_ref()?.by_id(id))
-            .and_then(|civ| civ.tech_tree_effect)
-            .and_then(|id| effects.get(id))
-        {
-            commands.extend(effect.commands.iter());
-        }
-        if let Some(techs) = self.techs.as_ref() {
-            for tech in self.researched(player) {
-                if let Some(effect) = techs
-                    .get(*tech)
-                    .and_then(|tech| tech.effect_id)
-                    .and_then(|id| effects.get(id))
-                {
-                    commands.extend(effect.commands.iter());
-                }
-            }
-        }
-        for command in commands {
-            if command.kind != 1 || command.a != resource {
+        // **The table's rows, in the order this consumer has always folded them** (R6, D234): the civ's tech-tree effect
+        // first, then the researched techs in id order - a `set` overwrites, an `add` accumulates, the last statement wins.
+        // The team bonus is not read here, before or after the table.
+        for row in self.bonuses(player).resources() {
+            if row.source == Source::Team || row.resource != resource {
                 continue;
             }
-            let Ok(value) = command.value.resolve(self.scale, "build.rate") else {
-                continue;
-            };
-            if command.b == 0 {
+            let value = row.value;
+            if row.mode == 0 {
                 rate = value;
-            } else if command.b == 1 {
-                // Fixed has no `Add`: the addition is in raw units, which is exact.
+            } else if row.mode == 1 {
                 rate = Fixed::from_raw(rate.raw() + value.raw());
             }
             stated = true;
@@ -4587,20 +4555,12 @@ impl World {
     /// refusal can say *whose* rule it is.
     fn barred_by(&self, player: u8, tech: u32) -> Option<String> {
         let civs = self.civs.as_ref()?;
-        let effects = self.effects.as_ref()?;
         let civ = civs.get(self.civ_of(player)?)?;
-        let effect = effects.get(civ.tech_tree_effect?)?;
-        // Kind 102 carries the barred id in `value` and leaves the four selectors at -1: the effect
-        // table says "this id is in the tree", with no state field to read a direction from, which is
-        // why the direction had to be settled from the data (see docs/decisions.md D23).
-        let barred = effect.commands.iter().any(|command| {
-            command.kind == 102
-                && command
-                    .value
-                    .resolve(self.scale, "effect.value")
-                    .is_ok_and(|value| value.raw() == i64::from(tech) * self.scale)
-        });
-        barred.then(|| civ.name.clone())
+        // The rows are the tech-tree effect's kind-102 commands, cached in the player's table (R6, D234); the direction of
+        // the row (a bar, not a grant) was settled from the data (D23).
+        self.bonuses(player)
+            .bars_tech(tech)
+            .then(|| civ.name.clone())
     }
 
     /// Give each player the resources content says a match opens with (`[start] stock`).

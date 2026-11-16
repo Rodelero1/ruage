@@ -99,6 +99,29 @@ remains is therefore the debt list, not a defect list.
 5. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
    reads yet. This is the interpreter slice the tree puts in Phase 1; it is *not* a prerequisite for items 1-3.
 
+## Landed: the master list (R6, D234, 2026-11-16)
+
+`World.bonus_tables` holds, per player, the rows the five consumers ask for - modifiers per attribute in application order,
+kind-1 resource rows **with their source**, and the tech-tree bars - rebuilt on the two events that can change it (a tech
+landing, the civ being set). All five consumers read it: `barred_by`, `civ_barred_unit`, `modifiers_for` (11 call sites),
+`farm_food_bonus`, `construction_rate`. The acceptance hash is unchanged (`cb1f6a83a119a2a3` at 24,000), which is the check
+that a refactor stayed one.
+
+**Two things it deliberately did not settle, both still open:**
+
+1. **What a bar inside a team bonus means.** Two of the pack's team bonuses carry a kind-102 row and the original's treatment
+   is unread. The table takes bars from the tech tree only - what `barred_by` has always read - because folding every source
+   answered the question by accident (and moved the acceptance hash to `051e29ec69087825`).
+2. **Resolution to numbers keyed on the `Attribute` enum.** The table caches rows, not a folded value, because the five
+   readers fold differently. That is the design's second half (`docs/civ-bonuses.md`, rule 2) and it now has one place to land.
+
+**Cost, measured, and it is not a win.** The seam is **+2.6%** on the acceptance match at 24,000 ticks (21.71 s before against
+22.28 s after; three interleaved pairs, oracles both built from source). Cloning every modifier per player and hashing a
+`String` attribute each lookup costs more than the walks it saves. **Next slice, and it is cheap:** index each **effect** by
+attribute once - the effect table is immutable for a match - and let a player's table hold **effect ids per source** instead
+of a copy of the rows. Measure it before claiming it.
+
+
 ## A standing requirement on shape: a civilisation is config (D233, 2026-11-16)
 
 *"I would like team bonuses and civ bonuses moddable in the future to be able to easily add a civ by adding/changing

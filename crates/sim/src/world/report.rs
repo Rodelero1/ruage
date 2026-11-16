@@ -3,7 +3,10 @@
 //! Split out of `lib.rs` under D145, verbatim.
 use ruage_data::Effects;
 
-use crate::{CardItem, CardTarget, EntityId, EntityKind, SimError, UnitStats, World, scale_fixed};
+use crate::{
+    CardItem, CardTarget, EntityId, EntityKind, MAX_PLAYERS, SimError, UnitStats, World,
+    scale_fixed,
+};
 impl World {
     #[must_use]
     pub fn card(&self, player: u8, entity: EntityId) -> Vec<CardItem> {
@@ -159,6 +162,11 @@ impl World {
         }
         self.techs = Some(techs.clone());
         self.effects = Some(effects.clone());
+        // **The table is rebuilt when its inputs change** (R6, D234): the effect table is what a table is made of, and a
+        // fixture that loads research after the civ would otherwise keep an empty one.
+        for player in 1..=u8::try_from(MAX_PLAYERS).unwrap_or(1) {
+            self.rebuild_bonuses(player);
+        }
 
         // What availability looks like in this pack: which units some tech can make available, and which
         // techs exist only to do that. Both are read once, from content.

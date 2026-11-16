@@ -6241,3 +6241,56 @@ Two new data tests are red on the old code (`attackk`, `other:7`) and green here
 **Basis.** `crates/data/src/techs.rs` (`NAMED_ATTRIBUTES`, `UNREAD_ATTRIBUTES`, `knows_attribute`, the refusal in the
 modifier loader); `crates/data/tests/techs.rs` (three fixtures); the 29-name census of `config/gamedata/effects.toml`;
 `docs/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d233-moddable-civs.md`.
+
+### D234 - one bonus table per player, so every consumer asks the same list (2026-11-16)
+
+**The problem, priced.** Five consumers each decided for themselves which effects belong to a player, over three effect
+tables: `barred_by` and `civ_barred_unit` read the civ's tech-tree effect (kinds 102 and 2, "may not have"), `modifiers_for`
+walked the researched techs and then the team bonus (kinds 0/4/5, matched by attribute **string**) and is called from **12
+sites**, some of them per entity per tick, and `farm_food_bonus` (farm line) and `construction_rate` (resource 195) each
+folded their own subset of resource rows. Two defects in this project's history were exactly this shape - the farm line and
+the builder speed were each "one resource row somebody forgot" - and D233's requirement ("add a civ by changing config")
+is false while a new bonus can land in four places out of five.
+
+**What landed.** `World.bonus_tables: [BonusTable; MAX_PLAYERS]` (`crates/sim/src/world/bonuses.rs`), one table per player,
+holding the **rows** the five consumers ask for - modifiers per attribute in application order, kind-1 resource rows
+carrying their source, and the tech-tree bars - built by **one** function that walks the three sources once, and rebuilt on
+the **two events that can change it**: a tech landing (`finish_research`) and the civ being set (`load_civs`). It is derived
+state, so it is not hashed, the same rule `bonus_effects` follows.
+
+**What is cached is rows, not a resolved number, and that is deliberate.** The three sources are read differently by design -
+`modifiers_for` never reads the tech tree, `construction_rate` reads it **before** the researched techs, `farm_food_bonus`
+never reads it at all - and the folds differ too (one sums the farm line, one takes set-then-add, one adds and multiplies per
+unit class). Caching a single resolved value would have meant choosing one fold for five consumers, which is a behaviour
+change, not a refactor. Caching the rows cannot change arithmetic by construction, and the acceptance hash is the check that
+it did not: `cb1f6a83a119a2a3`, bit-identical at 24,000 ticks.
+
+**Two defects found by the gates while building it, both mine.**
+1. **The rebuild ran one line too early.** `load_civs` set `bonus_effects`, rebuilt, and only then stored the civ table - so
+   the table found no civ, cached no tree rows, and the Spanish builder speed vanished. `build::a_spanish_builder_needs_385_
+   ticks_where_a_british_one_needs_500` went red. The rebuild now runs **after** the civ table is stored, with the reason
+   next to it.
+2. **The bars were folded from every source.** A kind-102 row sitting in a *team bonus* started barring a tech, which no
+   consumer has ever done and whose meaning in the original is **unverified** (`docs/civ-bonuses.md` records the two rows).
+   The test suite did not see it: entity count and repath counts were unchanged at 24,000 ticks. The **acceptance hash** did -
+   `051e29ec69087825` against `cb1f6a83a119a2a3`. The bars now come from the tech tree only, which is the source
+   `barred_by` has always read, and the question of what a team-bonus bar *should* do stays open rather than being answered
+   by a refactor.
+
+**What it deliberately does not settle.** The two team-bonus kind-102 rows (above); the tech tree's kind-4/5 modifiers, which
+`modifiers_for` has never read and which the table therefore does not offer (adding them would be a behaviour change dressed
+as a refactor); and resolved *numbers* keyed on the `Attribute` enum, which is the design's next step and now has one place to
+land in.
+
+**Cost, measured, and it is not what the design predicted.** On the acceptance match at 24,000 ticks (three interleaved
+pairs, oracle: the same binary built from `HEAD`): **21.71 s before against 22.28 s after, +2.6%** (pair spreads +3.0%, +1.1%,
++2.6%; baseline own spread 0.2%, the refactor's 1.7%). The design's premise - that folding five walks into one table is a
+speed win - is **wrong as built**: the table clones every modifier per player, so each `modifiers_for` call saves a walk over
+the effect tables and pays a hash of a `String` attribute plus worse locality, and the rebuild allocates on every research.
+The next slice is therefore named rather than guessed: the **effect table is immutable**, so the index from attribute to
+modifiers belongs to it, built once, and a player's table holds the **effect ids** per source instead of a copy of the rows.
+That should put the lookup below the old walk; it is not claimed until measured.
+
+**Basis.** `crates/sim/src/world/bonuses.rs` (`BonusTable`, `Source`, `ResourceRow`, `World::rebuild_bonuses`,
+`World::bonuses`); the five consumers in `lib.rs` and `world/research.rs`; `crates/sim/tests/bonuses.rs` (three fixtures, red
+on a once-only fill); `docs/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d234-bonus-table.md`.

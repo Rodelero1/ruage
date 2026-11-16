@@ -5,6 +5,7 @@
 //! Stage 1 only moves code; cutting `step` (1,566 lines) into named phases is stage 2.
 
 pub(crate) mod battle;
+pub(crate) mod bonuses;
 pub(crate) mod build;
 pub(crate) mod garrison;
 pub(crate) mod gates;
