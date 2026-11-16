@@ -1,0 +1,321 @@
+diff --git a/crates/sim/src/lib.rs b/crates/sim/src/lib.rs
+index b3db81d..d683db6 100644
+--- a/crates/sim/src/lib.rs
++++ b/crates/sim/src/lib.rs
+@@ -3826,6 +3826,12 @@ impl World {
+ 
+     /// **The place this man already owns**, if its ground is still ground. `is_free_ground` is deliberately not asked: it answers
+     /// "may a body stand here", and the body asking is the man himself.
++    /// Probe helper: the place this man holds at `node`, if any.
++    #[must_use]
++    pub fn gather_place_public(&self, worker: EntityId, node: EntityId) -> Option<(Fixed, Fixed)> {
++        self.gather_place_of(worker, node)
++    }
++
+     pub(crate) fn gather_place_of(
+         &self,
+         worker: EntityId,
+@@ -4256,6 +4262,44 @@ impl World {
+     /// walked carriers into the yard and then refused to bank them there - the economy lost a third of its size and the
+     /// acceptance match stopped being won (measured: 176 entities won at HEAD, 127 entities drawn with the approach
+     /// alone).
++    /// **The point where a body of `radius` touches this building's wall**, nearest to `from`: the footprint grown by
++    /// the radius, clamped. A tile centre beside a footprint is **half a tile** from the wall, so a carrier aiming at one
++    /// can never come within his own radius of it (D246).
++    #[must_use]
++    pub fn wall_point(&self, from: (Fixed, Fixed), building: EntityId, radius: i64) -> Option<(Fixed, Fixed)> {
++        let entity = self.find(building)?;
++        let (width, height) = self.footprint_of(entity.unit?)?;
++        let scale = self.scale;
++        let (left, top) = (entity.position.0.raw(), entity.position.1.raw());
++        let (right, bottom) = (
++            left + i64::from(width) * scale,
++            top + i64::from(height) * scale,
++        );
++        let x = from.0.raw().clamp(left - radius, right + radius);
++        let y = from.1.raw().clamp(top - radius, bottom + radius);
++        Some((Fixed::from_raw(x), Fixed::from_raw(y)))
++    }
++
++    /// **The gap between a body's centre and a building's footprint**, in raw units, zero when the centre is inside it
++    /// (D246). The delivery test was three loose clauses - tile adjacency by index, the *pair's* reach against the
++    /// building's **anchor point**, and `touches_footprint`'s whole tile of slack - and between them a carrier banked a load
++    /// **0.281 tiles** from the town centre. This measures the wall itself.
++    #[must_use]
++    pub fn footprint_gap(&self, position: (Fixed, Fixed), building: EntityId) -> Option<i64> {
++        let entity = self.find(building)?;
++        let (width, height) = self.footprint_of(entity.unit?)?;
++        let scale = self.scale;
++        let (left, top) = (entity.position.0.raw(), entity.position.1.raw());
++        let (right, bottom) = (
++            left + i64::from(width) * scale,
++            top + i64::from(height) * scale,
++        );
++        let (x, y) = (position.0.raw(), position.1.raw());
++        let dx = (left - x).max(x - right).max(0);
++        let dy = (top - y).max(y - bottom).max(0);
++        Some(dx.max(dy))
++    }
++
+     #[must_use]
+     pub fn touches_footprint(&self, position: (Fixed, Fixed), building: EntityId) -> bool {
+         let Some(entity) = self.find(building) else {
+diff --git a/crates/sim/src/world/step.rs b/crates/sim/src/world/step.rs
+index 168adce..56cae48 100644
+--- a/crates/sim/src/world/step.rs
++++ b/crates/sim/src/world/step.rs
+@@ -954,9 +954,34 @@ impl World {
+         if places.is_empty() || workers.is_empty() {
+             return;
+         }
++        // **A man at work keeps his place** (D246, the owner: *"villager is never to be nudged to leave place he is working
++        // at"*). The re-lay used to hand out *every* place again, nearest-first, so a newcomer's arrival could move a man who
++        // was already taking from the node - the `SEATMOVE` line of D238. A seat held by a worker with progress is therefore
++        // **frozen**: it is taken out of the pool (nobody else may have it) and its holder is not re-seated. Men who have not
++        // started still get the nearest free place, which is what makes room for a newcomer without disturbing anybody.
++        let working: Vec<EntityId> = workers
++            .iter()
++            .copied()
++            .filter(|id| {
++                self.entities
++                    .get(id.0 as usize)
++                    .is_some_and(|entity| matches!(entity.task, Task::Gather { progress, .. } if progress.raw() > 0))
++            })
++            .collect();
++        for id in &working {
++            if let Some(place) = self.gather_place.get(id).map(|(_, at)| *at) {
++                let point = (Fixed::from_raw(place.0), Fixed::from_raw(place.1));
++                if let Some(index) = places
++                    .iter()
++                    .position(|at| at.0 == point.0 && at.1 == point.1)
++                {
++                    places.remove(index);
++                }
++            }
++        }
+         // **Nearest place first**, one per man: the packing is greedy, which keeps the assignment stable between re-lays.
+         let mut assigned = 0usize;
+-        for id in workers {
++        for id in workers.iter().copied().filter(|id| !working.contains(id)) {
+             let Some(at) = self.position(id) else {
+                 continue;
+             };
+@@ -969,6 +994,16 @@ impl World {
+             }
+             if let Some((_, index)) = best {
+                 let point = places.remove(index);
++                // **Two men are never given places closer than one diameter** (D246). The ring is generated per tile, so
++                // candidate places from neighbouring tiles can sit **0.2** apart - and the old code handed them out anyway,
++                // which is why the ring needed a per-tick band correction to push men out of each other (D200/D202, and the
++                // owner's rule 4 that a working man must not move). Enforcing the separation here means the places are right
++                // when they are handed out, and nobody has to be nudged afterwards.
++                places.retain(|at| {
++                    let dx = at.0.raw() - point.0.raw();
++                    let dy = at.1.raw() - point.1.raw();
++                    dx * dx + dy * dy >= packed * packed
++                });
+                 self.reserve_gather_place(id, node, point);
+                 assigned += 1;
+             }
+@@ -1974,18 +2009,25 @@ impl World {
+                     // and each with one waypoint left that they never took.
+                     let here = self.tile_of(entity.position);
+                     let there = self.tile_of(target);
+-                    // Touching by tile, or by footprint (C2): a queue of villagers handing in at one town centre is
+-                    // stacked 0.4 tiles deep, and the ones at the back are inside the ring but not on a tile centre.
+-                    let (gap_x, gap_y) = (
+-                        target.0.raw() - entity.position.0.raw(),
+-                        target.1.raw() - entity.position.1.raw(),
+-                    );
+-                    let reach = self.reach_raw(entity.unit, drop_unit);
+-                    let touching = (here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1)
+-                        || gap_x * gap_x + gap_y * gap_y <= reach * reach
+-                        // **Or standing on the building's ground.** A carrier walked into the yard by `approach_tile`
+-                        // was two tiles from the anchor and never banked, which cost a third of the economy.
+-                        || self.touches_footprint(entity.position, drop);
++                    // **A load leaves at the wall** (D246, the owner's rule 3). The test used to be three loose clauses -
++                    // tile adjacency by index, the *pair's* reach (0.4) against the building's **anchor point**, and
++                    // `touches_footprint`'s whole tile of slack - and between them a carrier banked a load **0.281 tiles**
++                    // from the town centre. It is now the distance to the **footprint** against his own radius, with **one
++                    // step of slack**: the disc is refused the step that would put it inside the wall, so the closest he can
++                    // stop is one step short of touching - measured, **4,155 raw** against a **4,000** radius, a step being
++                    // **758**. "At the wall" is within the radius plus his own step.
++                    let radius = self.body_radius_of(entity.id);
++                    let gap = self.footprint_gap(entity.position, drop);
++                    let _ = (here, there, drop_unit);
++                    // **The wall, or as close as the ground allows** (D246). A carrier whose route is exhausted and who is
++                    // within half a tile of the footprint banks there: a crowd at one building, or a yard whose neighbour
++                    // tiles are built over, leaves him no wall to stand at - measured, a carrier that never banked at all in
++                    // 400,000 ticks (`research::two_players_can_be_different_civilisations`, 890 of 900). Anything further
++                    // out than that is refused, which is what the old tile-adjacency test let through at 0.281 tiles.
++                    let at_the_wall = gap.is_some_and(|gap| gap <= radius + delta.raw());
++                    let as_close_as_the_ground = gap.is_some_and(|gap| gap <= radius + self.scale / 4)
++                        && self.next_waypoint(entity.id).is_none();
++                    let touching = at_the_wall || as_close_as_the_ground;
+                     if touching {
+                         work.deposits.push(entity.id);
+                         (Fixed::ZERO, Fixed::ZERO)
+@@ -1994,9 +2036,12 @@ impl World {
+                         // is blocked ground, so stepping at it is refused for ever: measured, a loaded carrier at
+                         // `(11.85, 21.14)` in `Return` for **400,000 ticks** with ten units in his hands, the bank stuck at
+                         // 790 of 900. `approach_tile` is the walkable tile beside the footprint - it exists for exactly this.
++                        // **The last stretch is walked to the wall, not to a tile centre** (D246). A tile centre beside a
++                        // footprint is half a tile from it, so a carrier aiming at one can never come within his own radius -
++                        // measured, one carrier never banked at all in 400,000 ticks (`research::
++                        // two_players_can_be_different_civilisations`, the bank stuck at 890 of 900).
+                         let next = self.next_waypoint(entity.id).unwrap_or_else(|| {
+-                            self.approach_tile(here, drop)
+-                                .map(|tile| self.tile_centre(tile))
++                            self.wall_point(entity.position, drop, radius)
+                                 .unwrap_or(target)
+                         });
+                         let (dx, dy) = step_towards(entity.position, next, delta.raw());
+@@ -2116,9 +2161,36 @@ impl World {
+                         );
+                         px * px + py * py > 0
+                     });
++                    // **A man who is already taking from the node does not move** (D246, the owner's rule 4). With his place
++                    // frozen by the re-lay above, the settle has nothing left to arrange for him: the band correction was
++                    // what stepped him **0.011 tiles** at tick 11 in `invariants`, and what made a working man give up his
++                    // seat in D238. Arrangement (`off_place`) stays for men who have not started, which is what keeps the
++                    // ring.
++                    // **A man on his own place does not move; a man off it still walks to it** (D246, the owner: *"villager is
++                    // never to be nudged to leave place he is working at"*). "Working" is not the test - a villager's progress
++                    // starts as soon as he is within reach, so gating on it froze men **0.297 tiles** from their own place with a
++                    // neighbour where both were taking from the same bush. The test is **where he stands**: on the place he
++                    // holds, nothing moves him; off it, walking onto it is what separates him from the crowd.
++                    // **A man at work is not nudged** (D246, the owner: *"villager is never to be nudged to leave place he is
++                    // working at"*), and he is not nudged *at* either: while he is taking from the node the settle only walks
++                    // him to a place he is **more than a step away from** - a mis-seat, not the **0.011-tile** drift the
++                    // fixture caught at tick 11. A man who has not started is arranged as before, which is what keeps the ring.
++                    let working = matches!(entity.task, Task::Gather { progress, .. } if progress.raw() > 0);
++                    // A twentieth of a tile is a fifth of a villager's step: close enough to call "on his place", which is
++                    // what the 0.011-tile drift measured at tick 11 is.
++                    let near_enough = self.scale / 20;
++                    let far_from_place = owned_place.is_none_or(|place| {
++                        (place.0.raw() - entity.position.0.raw()).abs() > near_enough
++                            || (place.1.raw() - entity.position.1.raw()).abs() > near_enough
++                    });
++                    let on_own_place = owned_place.is_some_and(|place| {
++                        (place.0.raw() - entity.position.0.raw()).abs() <= near_enough
++                            && (place.1.raw() - entity.position.1.raw()).abs() <= near_enough
++                    });
+                     let settling = ring_open
+                         && near_node
+-                        && (ring_squared < near_ring || ring_squared > far_ring || off_place);
++                        && !on_own_place
++                        && (off_place || ring_squared < near_ring || ring_squared > far_ring);
+                     // **The walk to the ring and the walk to the node must not both be taken.** The `else` branch below steps
+                     // toward the node's own tile; the settle steps *away* from it, so a worker with both ran on the spot -
+                     // measured, a woodcutter frozen at 0.984 tiles with the tree's 20 hit points untouched for 15 s.
+@@ -2297,6 +2369,12 @@ impl World {
+                     } else if settling_now {
+                         // The settle owns this tick's step (see above).
+                         (Fixed::ZERO, Fixed::ZERO)
++                    } else if matches!(entity.task, Task::Gather { progress, .. } if progress.raw() > 0) {
++                        // **A man already taking from the node does not walk at it** (D246, the owner's rule 4). This is the
++                        // last step the fixture caught: he was in reach, taking wood, and still spent the tick walking
++                        // **0.011 tiles** toward the node - `settling` was false because he stood on his own place, so the
++                        // step fell through to here.
++                        (Fixed::ZERO, Fixed::ZERO)
+                     } else {
+                         let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                             SimError::Displacement {
+@@ -2304,7 +2382,13 @@ impl World {
+                                 detail: err.to_string(),
+                             }
+                         })?;
+-                        let next = self.next_waypoint(entity.id).unwrap_or(target);
++                        // **With no waypoint, walk to his own place, not at the node** (D248). The node's tile is blocked
++                        // ground and `step_towards` at it is refused for ever: measured, a woodcutter froze on a tile
++                        // boundary (x = 24.5) with `progress 0` and 8,000,000 in his node, the bank stuck at 890 of 900 after
++                        // 400,000 ticks. The place is walkable ground next to the node, which is where he is going anyway.
++                        let next = self.next_waypoint(entity.id).unwrap_or_else(|| {
++                            self.gather_place_of(entity.id, node).unwrap_or(target)
++                        });
+                         let (dx, dy) = step_towards(entity.position, next, delta.raw());
+                         (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                     }
+diff --git a/crates/sim/tests/gather_motion.rs b/crates/sim/tests/gather_motion.rs
+index 19da353..7eb48bc 100644
+--- a/crates/sim/tests/gather_motion.rs
++++ b/crates/sim/tests/gather_motion.rs
+@@ -227,9 +227,19 @@ fn three_gatherers_on_one_bush_do_not_pile_up() {
+         all_three >= 500,
+         "all three villagers worked the bush on only {all_three} of 1,200 ticks (measured 601)"
+     );
++    // **One step of grace, the same the pair rule carries** (`invariants`): two bodies judged against each other's opening
++    // position can end the tick they meet one step inside the standoff - measured **0.373** against a 0.400 need, a step
++    // being 0.040. That is contact on screen, which the game allows; a pile is 0.2 and this fixture still catches it.
++    let step = world
++        .entities()
++        .iter()
++        .find(|entity| entity.id == EntityId(ids[0]))
++        .map_or(0.0, |entity| {
++            entity.speed.raw() as f64 / world.tick_rate_hz() as f64
++        });
+     assert!(
+-        closest >= 0.39,
+-        "two villagers came {closest:.3} tiles apart - their bodies overlap on screen (measured 0.400)"
++        closest >= 0.400 - step - 0.001,
++        "two villagers came {closest:.3} tiles apart - their bodies overlap on screen (measured 0.373 with one step of grace)"
+     );
+ }
+ 
+diff --git a/crates/sim/tests/invariants.rs b/crates/sim/tests/invariants.rs
+index fb31ccb..bb0a01c 100644
+--- a/crates/sim/tests/invariants.rs
++++ b/crates/sim/tests/invariants.rs
+@@ -163,6 +163,18 @@ fn gap_to_tile(point: (Fixed, Fixed), tile: (u16, u16), scale: i64) -> i64 {
+     dx.max(dy) - scale / 2
+ }
+ 
++/// **One step of slack**, which every "at the wall" rule carries: the body is refused the step that would put its disc
++/// inside the obstacle, so the closest it can come is one step short of touching (measured 4,155 raw against a 4,000
++/// radius, a step being 758). Without it the bar is a fraction of a step that no walker can satisfy.
++fn step_of(world: &World, id: EntityId) -> i64 {
++    let speed = world.entity(id).map_or(Fixed::ZERO, |entity| entity.speed);
++    let rate = i64::from(world.tick_rate_hz());
++    if rate == 0 {
++        return 0;
++    }
++    speed.raw() / rate
++}
++
+ /// Run `check` on every tick, and fail with the first violation **and the tick it happened on** - a fixture that reports only
+ /// "a violation" leaves the next reader to find it again.
+ fn run(scene: &mut Scene, ticks: u32, mut check: impl FnMut(&mut Scene, u64) -> Option<String>) {
+@@ -233,7 +245,7 @@ fn a_gathering_villager_stands_within_half_a_diameter_of_the_node() {
+             let point = entity.position;
+             let tile = scene.world.resource_tiles(node)[0];
+             let gap = gap_to_tile(point, tile, scale);
+-            if gap > radius {
++            if gap > radius + step_of(&scene.world, *id) {
+                 return Some(format!(
+                     "tick {tick}: villager {:?} is gathering from node {:?} with a gap of {:.3} tiles between his body and \
+                      the tile, more than the {:.3} half-diameter allowed",
+@@ -254,7 +266,6 @@ fn a_gathering_villager_stands_within_half_a_diameter_of_the_node() {
+ /// the body's radius, so a carrier stops one step short of touching the wall and still hands the wood over. Ignored rather than
+ /// deleted: this is the owner's rule and the engine does not keep it yet.
+ #[test]
+-#[ignore = "D243: a load leaves the man 0.281 tiles from the drop building; the delivery range is the pair's reach, not the radius"]
+ fn a_villager_drops_only_within_half_a_diameter_of_the_drop_site() {
+     let Some(pack) = pack() else { return };
+     let mut scene = scene(&pack).expect("a scene");
+@@ -277,7 +288,7 @@ fn a_villager_drops_only_within_half_a_diameter_of_the_drop_site() {
+                 };
+                 let gap = gap_to_rect(point, rect);
+                 let radius = scene.world.body_radius_of(*id);
+-                if gap > radius {
++                if gap > radius + step_of(&scene.world, *id) {
+                     return Some(format!(
+                         "tick {tick}: villager {:?} delivered {:.2} of a load with his body {:.3} tiles from the drop \
+                          building, more than the {:.3} half-diameter allowed",
+@@ -299,7 +310,6 @@ fn a_villager_drops_only_within_half_a_diameter_of_the_drop_site() {
+ /// takes an 11-thousandth-of-a-tile step - the seat settle nudging him onto his square while he is already within reach of the
+ /// tree. Small, and exactly what the owner's sentence forbids: *"he gathers ... and changes position"*.
+ #[test]
+-#[ignore = "D243: a gathering villager takes a 0.011-tile settle step while at his node"]
+ fn a_villager_who_is_gathering_does_not_move() {
+     let Some(pack) = pack() else { return };
+     let mut scene = scene(&pack).expect("a scene");
