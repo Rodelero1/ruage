@@ -16,7 +16,12 @@ logged as a question (e.g. U11 farming).
 - No AoE2 source has ever been released. What exists: pre-release **binaries** (Hidden Palace: seven 1998-99 AoK builds), and
   a matching **decompilation** of AoC 1.0c / AoK 2.0a / the PS2 ELF (`samuelcaldas/age-of-empires-2-decomp`, no licence —
   all rights reserved). Read the decompilation for behaviour and cite the module; never copy its expression (see
-  `docs/licensing.md`), and note its addresses are AoC/PS2, not HD 5.7.
+  `docs/licensing.md`), and note its addresses are AoC/PS2, not HD 5.7. **Used 2026-11-16** for the pathing conformance set
+  (D247, `docs/pathfinding-conformance.md`): `src/zone/zone_spatial_pyramid_check_tile.cpp` (per-edge four-bit neighbour mask),
+  `zone_spatial_pyramid_eval_cost.cpp` (node = x, y, level, g, h, parent, dir; Euclidean `h`; a linked frontier, not a heap),
+  `zone_spatial_pyramid_find_path.cpp` (scratch obstacle grid, cleared per search) and `zone_spatial_pyramid_check_edge.cpp`
+  (levelled edges). Its C bodies are reconstructions of PS2 assembly - at least one loops `w` for both axes - so they are read
+  for **shape**, and a number is taken from HD's own binary instead.
 - **The 1999 postmortem and the official strategy guide** (Ensemble's Gamasutra postmortem, `pottinger.doc` from the GDC 2000
   archive, and *Age of Empires II: The Age of Kings — Official Strategies & Secrets*, Sybex 1999), read through
   `DylanCkawalec/AgeOfAgents/doc/reverse_engineering/game_mechanics/pathfinding.md`: AoE2 runs **three** pathfinders plus **two**

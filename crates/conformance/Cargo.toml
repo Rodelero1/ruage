@@ -1,0 +1,15 @@
+[package]
+name = "ruage-conformance"
+description = "Runs the engine's pathing against rules read out of the original's decompilation - a separate set, not part of the gate."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ruage-fixed = { path = "../fixed" }
+ruage-data = { path = "../data" }
+ruage-sim = { path = "../sim" }
+
+[lints]
+workspace = true

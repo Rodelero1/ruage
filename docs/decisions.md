@@ -6800,3 +6800,35 @@ abstraction with one implementation and one caller, and the clever line that nee
 provenance rather than narration; and naming the case where the simple version is not enough instead of building the
 framework in advance.
 
+
+### D247 - the original's pathing rules are a separate conformance set, not part of the gate (2026-11-16)
+
+**What it says.** `crates/conformance` asserts the pathfinding and obstacle-avoidance rules of the original against this
+engine's planners, as its own set with its own command (`make conformance`), and **not** in the pre-commit gate:
+
+- **One rule per test**, the source named in the test's doc comment - `samuelcaldas/age-of-empires-2-decomp`'s `src/zone/`
+  modules for the shape, HD's own sites (`FUN_007ffd10`, `FUN_007f9d80`, `FUN_007fb220`) for the numbers.
+- **A rule the game keeps and we do not is `#[ignore]`d with its reason and its decision**, never asserted green and never
+  left red in the gate - so `-- --ignored` prints the register of where we stand apart, and a later slice shows it closed.
+- **A defect it finds about our own code is `findings.rs`**, same treatment: red on purpose, filed with the number that
+  proves it, fixed in its own slice.
+
+**Why.** Asked on 2026-11-16 whether the original's pathing rules could be pinned as tests "for the project as extra set ran
+separately". The value is the register: D239 adopted the game's pathing wholesale and rows 13-33 of
+`docs/behaviour-diff.md` each owe a slice, so a set that states the game's rule and our answer in one place makes the queue
+checkable rather than remembered. It is out of the gate because a conformance test's job is to *disagree* when we diverge;
+putting disagreement into the gate either turns every commit red or teaches everyone to weaken the test.
+
+**Provenance and its limits.** The repo carries **no licence** (all rights reserved), so it is read for behaviour and cited
+by module - no expression is transcribed. Its addresses are AoC/PS2, not HD 5.7, so every number is pinned to HD's own site
+instead; and its C bodies are reconstructions of PS2 assembly (at least one loops `w` for both axes), so a claim enters the
+table only where the masks, the node layout or a first-party source agrees.
+
+**What it found on landing.** `nearest_reachable` answers **one step from the start**, not the tile nearest the click: on
+empty ground from (1,1) toward (10,10) the answer is (2,2), because every tile its frontier pushes is already free, so the
+first pop is a neighbour of the start. Its own doc comment and D134's "nearest legal standing point" claim the opposite, and
+`click_into_the_woods.rs` misses it by spawning the villager one tile from the wood. Filed as `findings.rs`; the fix owes its
+own slice and its own measurement.
+
+**Commits us to.** Keeping the set's findings and divergences visible rather than green; and adding a rule to
+`docs/pathfinding-conformance.md`'s table when one is read, with the module that settles it.

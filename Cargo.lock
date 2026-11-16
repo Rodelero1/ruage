@@ -1153,6 +1153,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ruage-conformance"
+version = "0.1.0"
+dependencies = [
+ "ruage-data",
+ "ruage-fixed",
+ "ruage-sim",
+]
+
+[[package]]
 name = "ruage-data"
 version = "0.1.0"
 dependencies = [

@@ -26,7 +26,7 @@ PACK = --config $(CONFIG)/sim.toml \
        --effects $(CONFIG)/gamedata/effects.toml \
        --civs $(CONFIG)/gamedata/civs.toml
 
-.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check next-step-check plan-check ai-review
+.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check next-step-check plan-check ai-review conformance
 
 help:
 	@echo "make build      - build everything, release"
@@ -34,6 +34,7 @@ help:
 	@echo "make headless   - run the acceptance match with no window (SEED=$(SEED), TICKS=$(TICKS))"
 	@echo "make batch      - the acceptance match across seeds (SEEDS=$(SEEDS))"
 	@echo "make test       - every test"
+	@echo "make conformance - the original's pathing rules against this engine (not in the gate)"
 	@echo "make check      - fmt + clippy + tests: the pre-commit gate"
 	@echo "make review     - the review gate: does the staged change carry its review?"
 	@echo "make ai-review  - the same change through the AI reviewer (OCR_ARGS=--commit HASH by default HEAD)"
@@ -67,6 +68,13 @@ require-data:
 
 test: require-data
 	$(CARGO) test --workspace
+
+# The conformance set (docs/pathfinding-conformance.md): the original's pathing rules asserted against our planners. It is a
+# separate set on purpose - a rule the game keeps and we do not must stay visible without turning the gate red, so the
+# differences are `#[ignore]`d with their decision and this target runs the green half only. `-- --ignored` prints the
+# register: 3 deliberate differences and 2 findings.
+conformance:
+	$(CARGO) test -p ruage-conformance
 
 # The decision index (D168): one browsable page over docs/decisions.md and the U-register. Committed, because the
 # corpus it renders is committed. `make decisions-check` parses and reports without writing.
