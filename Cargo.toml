@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/fixed", "crates/data", "crates/sim", "crates/script", "crates/harness", "crates/view", "crates/conformance"]
+members = ["crates/fixed", "crates/data", "crates/sim", "crates/script", "crates/harness", "crates/view"]
+# The conformance set is its own workspace (crates/conformance/Cargo.toml, D247): it asserts rules the engine does not keep
+# yet, so it must not be able to fail the gate. `make conformance` runs it.
+exclude = ["crates/conformance"]
 
 [workspace.package]
 version = "0.1.0"

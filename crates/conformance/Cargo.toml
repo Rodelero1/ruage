@@ -1,15 +1,20 @@
 [package]
 name = "ruage-conformance"
-description = "Runs the engine's pathing against rules read out of the original's decompilation - a separate set, not part of the gate."
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+description = "Runs the engine's pathing against rules read out of the original's decompilation - a separate set, never in the gate."
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Rodelero1/ruage"
+
+# **Its own workspace, on purpose** (D247): the set asserts rules the engine does not keep yet, so it must never be able to
+# turn the repository's gate red. `cargo test --workspace` at the root does not build it; `make conformance` does.
+[workspace]
 
 [dependencies]
 ruage-fixed = { path = "../fixed" }
 ruage-data = { path = "../data" }
 ruage-sim = { path = "../sim" }
 
-[lints]
-workspace = true
+[lints.clippy]
+# The same rule as the workspace: never iterate a hash container.
+iter_over_hash_type = "deny"

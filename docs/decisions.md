@@ -6832,3 +6832,45 @@ own slice and its own measurement.
 
 **Commits us to.** Keeping the set's findings and divergences visible rather than green; and adding a rule to
 `docs/pathfinding-conformance.md`'s table when one is read, with the module that settles it.
+
+### D249 - the conformance set ignores nothing: a red test is a rule we do not keep (2026-11-16)
+
+**What it says.** The owner, the day D247 landed: *"None of the conformance tests is to be ignored. If it collides with HD
+functionality, please tell me and let me decide with provided findings from the game."* So:
+
+- **No `#[ignore]` anywhere in `crates/conformance`.** A rule the game keeps and we do not is a test that **fails**, named in
+  the reply with its source. An ignored test is a decision nobody re-reads, and this set exists to stop exactly that.
+- **The set is its own workspace** (`crates/conformance/Cargo.toml` carries `[workspace]`, the root lists it in `exclude`), so
+  a red conformance test can never turn the repository's gate red: `cargo test --workspace` does not build it, and
+  `make conformance` does. That is what lets it be honest without holding the tree hostage.
+- **A collision is the owner's ruling, not ours** - filed as **U25** with the game's evidence, our answer, and the cost of
+  each option, so it cannot expire with the conversation.
+
+**State of the set at this commit: 28 green, 5 red.** The red five are three rules of the game we do not keep (U25 a, b, c)
+and one defect of ours, measured twice (U25 d).
+
+**The defect, and why it is not fixed.** `nearest_reachable` answers **one step from the start**, not the tile nearest the
+click: its queue is popped best-first by distance to the click, but every tile it pushes is already free, so the first pop is
+a neighbour of the start. From (1,1) toward (10,10) on empty ground it answers (2,2); a click into a wood six tiles away is
+answered beside the walker's feet. Its own doc comment and D134 claim the opposite, and `click_into_the_woods.rs` misses it by
+spawning the villager **one tile** from the wood, where the bug's answer satisfies "within one tile of the block".
+
+The fix was written and measured, and **reverted** because it costs the match:
+
+| build | entities | players | hash | repaths |
+|---|---|---|---|---|
+| HEAD `45b5bd2` | **155** | **1** (won) | `8cf433ad4e0205f4` | 497 |
+| HEAD + the sweep | **125** | 2 (not won) | `0f0a37dc86bf1002` | 451 |
+
+Both runs are the same worktree, same generated data, seed 7, 48,000 ticks, release, differing in **one file**. The cause is
+measured, not guessed: the acceptance script issues exactly **two** unreachable clicks, both `(26,13) -> (25,17)`, and the
+sweep sends the villager six tiles to `(25,19)` where the bug sent him one step - a diverted villager at 1,303 s is enough to
+lose the win. Cost of the corrected call: **143 us** on a 64x64 map and **1.1-3.2 ms** on a 200x200 (the box was shared while
+measuring), paid only on the fallback path - not the reason it was reverted; the match was.
+
+So the fix is a fork for the owner, not a defect to land quietly: adopt it and retune `config/acceptance.toml` (the script is
+ours; the game has no one-step answer), or keep the one-step behaviour and say so, in which case the two tests assert our
+answer and cite D134's rule as the one we do not meet.
+
+**Commits us to.** Never adding an `#[ignore]` to this set; adding a rule only with its source; and presenting a collision as
+a decision with its evidence rather than as a parked test.

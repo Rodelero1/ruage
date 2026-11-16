@@ -2,17 +2,21 @@
 
 **What it is.** `crates/conformance` asserts the pathfinding and obstacle-avoidance rules of **the original** against this
 engine's planners - one rule per test, the source of every rule named in the test's doc comment. It is a second set, run on
-its own, and it is **not** part of the pre-commit gate:
+its own:
 
 ```sh
-make conformance                              # the set: 28 rules, all green
-cargo test -p ruage-conformance -- --ignored   # the register: 3 deliberate differences + 2 findings, all red by design
+make conformance
 ```
 
-**Why it is not the gate.** A conformance test states what the *game* does. Where our engine deliberately does something
-else it must stay visible without turning every commit red, so the differences are `#[ignore]`d with their reason and their
-decision - `divergences.rs` (the game's rule, not ours) and `findings.rs` (our own rule, not delivered). Running
-`-- --ignored` prints the whole register, which is how a later slice shows it closed one.
+**Nothing in it is `#[ignore]`d** (D249, the owner: *"None of the conformance tests is to be ignored. If it collides with HD
+functionality, please tell me and let me decide with provided findings from the game."*). One test per rule, and the state of
+the set is the honest answer: **28 green, 5 red**. The red five are three rules of the game this engine does not keep (U25 a,
+b, c) and one defect of ours with its fix measured and held back (U25 d). A green run would be the claim *we keep all 33*.
+
+**Why the gate never sees it.** The crate is its own workspace (`crates/conformance/Cargo.toml` carries `[workspace]`, the root
+lists it in `exclude`), so a red conformance test cannot turn the repository's gate red - `cargo test --workspace` does not
+build it. That is what lets it be red without holding the tree hostage, and it is why the set must stay honest rather than be
+weakened into passing.
 
 ## Where the rules come from
 
@@ -58,35 +62,40 @@ Two limits, both load-bearing:
 | 16 | an avoided corner cannot be cut diagonally | same |
 | 17 | the goal may be in the avoid set (a target, not an obstacle) | same |
 | 18 | a walled-in goal has no route | same |
-| 19 | an unreachable click is answered with a **standing** tile and a route | same (not the nearest one - finding 1) |
+| 19 | an unreachable click is answered with a **standing** tile and a route | same - **but not the nearest one**: U25 (d) |
 | 20 | every segment keeps the body's radius clear of every blocked tile | same |
 | 21 | a wider body keeps a wider clearance | same |
 | 22 | a body too wide for a gap is refused, not squeezed | same |
 | 23 | a body's disc is kept clear **and not padded** | same (the exact clearance, D211) |
 | 24 | a start inside a body is re-seeded outward and still arrives | same (D212) |
 | 25 | a window beyond 40 tiles is declined, and says so | ours, by decision |
-| 26 | the original answers the **closest point**, ours answers `None` | **different** (row 32, D134's caller layer) |
-| 27 | the original's step cost is 16 with an octile table; ours is 10/14 | **different** (route shape agrees) |
-| 28 | the original has a levelled hierarchy for long walks; ours declines past 40 | **different** (not built) |
+| 26 | the original answers the **closest point**, ours answers `None` | **red** - U25 (a) |
+| 27 | the original's step cost is 16 with an octile table; ours is 10/14 | **red** - U25 (b) |
+| 28 | the original has a levelled hierarchy for long walks; ours declines past 40 | **red** - U25 (c) |
+| 29 | the tile answered for an unreachable click is the one nearest the click | **red** - U25 (d) |
 
-## The findings
+## The defect the set found, measured twice
 
-`findings.rs` holds two tests that state **our own** rule and fail on our code - they are not game differences, they are
-defects the set found by writing the rule down. Both are the same defect:
+`findings.rs` holds two tests that state **our own** rule, not one of the game's. Both found the same defect:
 
 > `nearest_reachable` answers **one step from the start**, not the tile nearest the click.
 
-Measured 2026-11-16: on empty ground, from (1,1) toward (10,10), the answer is **(2,2)** with a one-step route. The search
-pops its frontier best-first by distance to the click, but every tile pushed is already free, so the first pop is a
-neighbour of the start and the function returns before the wavefront has moved. Its own doc comment (`path.rs:303-312`)
-and D134's *"nearest legal standing point"* both claim the opposite.
+Measured: on empty ground, from (1,1) toward (10,10), the answer is **(2,2)** with a one-step route. The function pops its
+frontier best-first by distance to the click, but every tile it pushes is already free, so the first pop is a neighbour of the
+start and it returns before the wavefront has moved. Its own doc comment and D134's *"nearest legal standing point"* both
+claim the opposite.
 
 Why the world suite never saw it: `click_into_the_woods.rs` spawns the villager **one tile** from the wood, so "a legal tile
 within one tile of the block" is satisfied by the bug's own answer. The contract held for the case the fixture happened to
 build.
 
-Not fixed here: a behaviour change owes its own slice, its own failing test and its own measurement. `docs/next-step.md`
-carries it.
+**The fix was written, measured and reverted** (D249). Sweeping the reachable region answers the right tile - and costs the
+acceptance match: **155 entities and a win at `45b5bd2`, against 125 and no win**, same worktree, same data, seed 7, one file
+different. The cause is measured too: the script issues exactly two unreachable clicks, both `(26,13) -> (25,17)`, and the
+sweep walks the villager six tiles to `(25,19)` where the bug walked him one - a diverted villager at 1,303 s is enough to
+lose the win. The call itself is cheap (**143 us** on a 64x64 map, 1.1-3.2 ms on 200x200, fallback path only); the match is
+what refused it. Adopting the rule therefore means **retuning `config/acceptance.toml`**, which is ours to retune - the game
+has no one-step answer. That is the owner's call (U25 d).
 
 ## What it does not cover
 

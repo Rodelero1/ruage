@@ -94,12 +94,15 @@ moves; say so rather than treating it as a defect.
    **Villagers are solid and formations are deferred** (D241 ruling 2): the same-tick mate stand-in for soldiers stays, documented
    in `stamp_group` as a stand-in for a formation that does not exist yet.
 
-10. **R10 - the nearest standing tile is the tile nearest the click** (D247, found by the conformance set). `nearest_reachable`
-    answers **one step from the start**: on empty ground from (1,1) toward (10,10) it returns (2,2), because every tile its
-    frontier pushes is already free, so the first pop is a neighbour of the start. `crates/conformance/tests/findings.rs` is the
-    red fixture (`a_distant_click_into_a_wood_lands_on_the_woods_edge` is the player-visible one); the fix owes its own slice.
-    **The trap**: `click_into_the_woods.rs` passes today because it spawns the villager one tile from the wood, so "a legal
-    tile within one tile of the block" is satisfied by the bug - start the walker further away when rewriting it.
+10. **R10 - the nearest standing tile is the tile nearest the click** (D249, U25 (d), found by the conformance set).
+    `nearest_reachable` answers **one step from the start**: on empty ground from (1,1) toward (10,10) it returns (2,2), because
+    every tile its frontier pushes is already free, so the first pop is a neighbour of the start. `crates/conformance/tests/findings.rs`
+    is the red fixture; the fix was **written and measured, then reverted** - sweeping the reachable region answers (25,19) for
+    a target at (25,17) and costs the match: **155 entities and a win at `45b5bd2` against 125 and no win**, because the
+    acceptance script's two unreachable clicks divert a villager six tiles instead of one at 1,303 s. **The fork**: adopt the
+    rule and retune `config/acceptance.toml` (ours to retune; the game has no one-step answer), or keep the one-step answer and
+    say so. **The trap**: `click_into_the_woods.rs` passes today because it spawns the villager one tile from the wood - start
+    the walker further away when rewriting it.
 
 **Still open, and it needs an artefact rather than work:** row 23, the exclusive goal. **Forty units ordered to one tile**, one
 recording. No read decides it and no decision should stand in for it.

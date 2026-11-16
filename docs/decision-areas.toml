@@ -43,6 +43,7 @@ U21 = "Data & tooling"
 U22 = "Economy"
 U23 = "Data & tooling"
 U24 = "Economy"
+U25 = "Pathfinding & movement"
 
 [area]
 D1 = "Project process"
@@ -301,3 +302,4 @@ D244 = "Economy"
 D245 = "Economy"
 D246 = "Project process"
 D247 = "Pathfinding & movement"
+D248 = "Pathfinding & movement"

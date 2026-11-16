@@ -100,13 +100,13 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <header><h1>Decisions</h1>
 <p class="lede">Every rule the corpus states, what it rests on, and what it has not decided yet. Generated from <code>docs/decisions.md</code> and the U-register; nothing on this page is typed by hand, so a wrong label means the classifier is wrong and can be seen to be wrong.</p>
 <ul class="coverage" id="coverage">
-<li data-k="decisions"><b>253</b> decisions</li>
+<li data-k="decisions"><b>254</b> decisions</li>
 <li data-k="amended"><b>12</b> amended</li>
 <li data-k="corrected"><b>4</b> corrected</li>
 <li data-k="superseded"><b>8</b> superseded</li>
-<li data-k="uncited"><b>42</b> no stated basis</li>
+<li data-k="uncited"><b>43</b> no stated basis</li>
 <li data-k="gaps"><b>31</b> named gaps</li>
-<li data-k="undecided"><b>13</b> undecided questions</li>
+<li data-k="undecided"><b>14</b> undecided questions</li>
 <li data-k="dangling"><b>7</b> dangling references</li>
 <li data-k="unclassified"><b>0</b> unclassified</li>
 </ul>
@@ -544,11 +544,12 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </article>
 </div>
 </details>
-<details class="group" id="area-pathfinding-movement" data-area="Pathfinding &amp; movement" data-unfinished="0" data-undecided="2" open>
-<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">40 decisions · 2 undecided · 2 superseded · 3 with no stated basis</span></summary>
+<details class="group" id="area-pathfinding-movement" data-area="Pathfinding &amp; movement" data-unfinished="0" data-undecided="3" open>
+<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">41 decisions · 3 undecided · 2 superseded · 4 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U5</span> Are unit speeds in tiles/second, and what is the tile size in world units? Speed 1.35 (knight) is consistent with tiles/s.</li>
 <li><span class="id">U7</span> What pathing algorithm does the game use (A, flow field, something else), and what are its cost weights?</li>
+<li><span class="id">U25</span> Three pathing rules the original keeps and this engine does not - what does the owner want? crates/conformance asserts 33 rules read out of samuelcaldas/age-of-empires-2-decomp and HD&#x27;s own binary; 30 pass, and the three that fail are the three below. (a) The search answers None where the original answers the closest reachable point (deck slide 96: &quot;expand the search area once, otherwise give the </li>
 </ul></div>
 <div class="kind" data-kind="decisions">
 <article class="decision s-decided" id="d-D52" data-id="D52" data-origins="owner" data-unresolved="0" data-status="decided">
@@ -1359,6 +1360,20 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <button class="verdict" data-verdict="question" data-id="D247">question</button>
 <button class="verdict" data-verdict="wrong" data-id="D247">wrong</button>
 <input class="note" data-note="D247" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D248" data-id="D248" data-origins="none" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D248</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-16</span>
+<h3>the conformance set ignores nothing: a red test is a rule of the game we do not keep (2026-11-16)</h3></div>
+<div class="basis"><span class="tag tag-none">no stated basis</span></div>
+<div class="verdicts" data-for="D248">
+<button class="verdict" data-verdict="agree" data-id="D248">agree</button>
+<button class="verdict" data-verdict="question" data-id="D248">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D248">wrong</button>
+<input class="note" data-note="D248" placeholder="note (saved with the verdict)">
 </div>
 </article>
 </div>
@@ -5610,7 +5625,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </ul>
 </section>
 <section id="health"><h2>How this page knows</h2>
-<p>Parsed 253 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
+<p>Parsed 254 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
 <p>A basis is recorded only from a phrase in the decision itself, and the phrase is shown beside the label. <b>No stated basis</b> is the reliable category: it needs no pattern to be right. <b>Unresolved language</b> is a reading list, not a verdict - the quoted sentence is there to be judged.</p>
 <p>The scan for broken references reads <code>docs/</code>, <code>crates/</code>, <code>config/</code>, <code>SPEC.md</code> and <code>README.md</code>. <code>tools/</code> is excluded: its fixtures name ids that are meant not to exist.</p>
 <p class="empty">Every decision heading was placed.</p>

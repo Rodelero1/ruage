@@ -1,15 +1,15 @@
-//! **The places we stand apart, as tests that must fail.**
+//! **Rules of the original that this engine does not keep - asserted, never `#[ignore]`d.**
 //!
-//! Each test here asserts the **original's** rule, so it fails on this engine by construction. They are `#[ignore]`d so the
-//! suite is green, and running it with `-- --ignored` prints exactly this list:
+//! A red test here is not a broken build: it is a rule the game keeps and we do not, written down so the difference has a
+//! number and a source instead of a memory. A green run of this file is the claim *we keep all of them*.
 //!
 //! ```sh
-//! cargo test -p ruage-conformance -- --ignored
+//! cargo test --manifest-path crates/conformance/Cargo.toml --test divergences
 //! ```
 //!
-//! A test here is a *finding*, not a defect report: some of the differences are decisions (a bounded window, integer costs),
-//! others are open slices in `docs/behaviour-diff.md`. Each says which, so the list stays readable as a register rather than
-//! a to-do.
+//! Each test names the decision that put us here, and the ruling that would close it. Nothing in this file is fixed by
+//! weakening the assertion: it goes green when the engine changes, or when the owner rules that our answer is the one to
+//! keep - and then the test asserts the ruled answer and cites the game's as the rejected alternative.
 
 use ruage_conformance::{SCALE, at, route_cost, walk};
 use ruage_sim::{find_path, short_range};
@@ -22,9 +22,9 @@ use ruage_sim::{find_path, short_range};
 ///
 /// Ours answers `None`, and the caller compensates with `nearest_reachable` (D134). The difference is real at this layer: a
 /// planner that answers nothing hands the mover nothing, and the mover standing still with a live order is the classic
-/// stuck unit.
+/// stuck unit. **Decision owed (D249, U25):** keep the layering (row 32's ruling covers walk orders; *thing* orders refuse by
+/// design) or teach the search to answer the closest point itself.
 #[test]
-#[ignore = "diverges: our search answers None; closest-point is the caller's layer (D134). docs/behaviour-diff.md row 32"]
 fn the_original_answers_the_closest_point_not_no_path() {
     let mut walk = walk(12, 12, &[]);
     for dx in -1i32..=1 {
@@ -49,10 +49,10 @@ fn the_original_answers_the_closest_point_not_no_path() {
 /// are still `-1.0` sentinels (U5/U7, `path.rs:3-6`).
 ///
 /// The **ratio** is within 2% (pinned in `cost_model.rs`), so route shape agrees; the absolute numbers do not, and an
-/// acceptance hash that depends on a cost value would disagree with the original's. That is a known, deliberate difference,
-/// not a bug - fixed when the weights are measured.
+/// acceptance hash that depends on a cost value would disagree with the original's. **Decision owed (D249, U25):** adopt the
+/// game's 16 and octile table now (it changes tie-breaks and every hash) or wait until the movement weights are measured
+/// (U5/U7) and take all of them at once.
 #[test]
-#[ignore = "diverges: 10/14 instead of 16-with-octile-table; route shape agrees, absolute costs do not (path.rs:3-6)"]
 fn the_originals_step_cost_is_sixteen() {
     let walk = walk(20, 20, &[]);
     let route = find_path(&walk, (2, 10), (12, 10)).expect("open ground");
@@ -71,9 +71,9 @@ fn the_originals_step_cost_is_sixteen() {
 /// pyramid search; HD's mip-mapped route is the same family (`docs/sources.md`, the 1999 postmortem's three pathfinders).
 ///
 /// Ours declines a short-range window beyond 40 tiles (`short.rs:29-36`) and falls back to the tile chain, which is the
-/// bounded choice the owner priced (D211) - the long-route hierarchy is not built. Recorded as a slice, not a defect.
+/// bounded choice the owner priced (D211) - the long-route hierarchy is not built. **Decision owed (D249, U25):** build the
+/// levelled long route (a slice of its own) or keep the bound and the tile-corner fallback.
 #[test]
-#[ignore = "diverges: no hierarchical long route; short_range declines beyond 40 tiles (short.rs:29-36)"]
 fn the_original_solves_a_long_walk_in_its_hierarchy() {
     let walk = walk(64, 64, &[]);
     let route = short_range(

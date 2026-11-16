@@ -34,7 +34,7 @@ help:
 	@echo "make headless   - run the acceptance match with no window (SEED=$(SEED), TICKS=$(TICKS))"
 	@echo "make batch      - the acceptance match across seeds (SEEDS=$(SEEDS))"
 	@echo "make test       - every test"
-	@echo "make conformance - the original's pathing rules against this engine (not in the gate)"
+	@echo "make conformance - the original's pathing rules against this engine (own workspace, not in the gate)"
 	@echo "make check      - fmt + clippy + tests: the pre-commit gate"
 	@echo "make review     - the review gate: does the staged change carry its review?"
 	@echo "make ai-review  - the same change through the AI reviewer (OCR_ARGS=--commit HASH by default HEAD)"
@@ -69,12 +69,11 @@ require-data:
 test: require-data
 	$(CARGO) test --workspace
 
-# The conformance set (docs/pathfinding-conformance.md): the original's pathing rules asserted against our planners. It is a
-# separate set on purpose - a rule the game keeps and we do not must stay visible without turning the gate red, so the
-# differences are `#[ignore]`d with their decision and this target runs the green half only. `-- --ignored` prints the
-# register: 3 deliberate differences and 2 findings.
+# The conformance set (docs/pathfinding-conformance.md) - the original's pathing rules asserted against our planners. It is
+# its own workspace (D247) so it can never fail the gate: **no test in it is `#[ignore]`d**, and a red one is a rule of the
+# game this engine does not keep yet. `--target-dir` keeps it on the one build directory this tree allows.
 conformance:
-	$(CARGO) test -p ruage-conformance
+	$(CARGO) test --manifest-path crates/conformance/Cargo.toml --target-dir target
 
 # The decision index (D168): one browsable page over docs/decisions.md and the U-register. Committed, because the
 # corpus it renders is committed. `make decisions-check` parses and reports without writing.
