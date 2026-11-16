@@ -6295,6 +6295,35 @@ That should put the lookup below the old walk; it is not claimed until measured.
 `World::bonuses`); the five consumers in `lib.rs` and `world/research.rs`; `crates/sim/tests/bonuses.rs` (three fixtures, red
 on a once-only fill); `docs/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d234-bonus-table.md`.
 
+### D233 amendment (2026-11-17) - the `other:` half of the vocabulary was closed, and closing it broke the owner's build
+
+**What was wrong.** D233 closed the *whole* attribute vocabulary, the sixteen `other:<id>` / `unpacked:<id>` names included, so
+any pack carrying one that list did not happen to contain was refused at load. The owner's own machine is exactly that case:
+`make run` after a pull died with
+
+> `effects.toml: effect[192].modifiers.attribute: "other:12" is not in the pack's attribute vocabulary ...`
+
+His generator writes `other:12` on effect 192 (Fletching); the pack this was written against carries none. **`config/gamedata/`
+is generated per machine and is not in version control**, so a list of *the names one machine's generator produced* is not a
+vocabulary - it is a census of that machine, and the test that pinned it at "exactly 29 names" would have failed on his too.
+
+**The distinction that was missing.** A **named** attribute (`attack`, `line_of_sight`, ...) is a promise that the engine acts
+on it, so a misspelt one is a lie and is still refused - that half of D233 was right and is unchanged. An `other:<id>` is the
+data's own name for a row **nothing reads**; which ids appear depends on the dat and the generator, not on the engine, and a
+pack must not be refused for carrying a different selection of rows that do nothing. So the prefix is now **open**: any decimal
+id loads, and what is refused is a *shape* that cannot be an id (`other:`, `other:twelve`, `other:-1`, `other:1x`).
+
+**What it costs.** Less than the closed list: nothing is validated per tick, and the refusal for a misspelt name still fires
+(`an_attribute_name_the_pack_vocabulary_does_not_carry_is_refused` is unchanged and green). Three fixtures changed:
+`an_other_row_the_census_did_not_see_loads` (red on the closed rule, green now), `a_malformed_other_name_is_refused`, and the
+census test, which now asserts **"every name the pack carries is one the vocabulary can answer for"** instead of a count that
+only held on one machine.
+
+**Basis.** The owner's `make run` output (2026-11-17); `crates/data/src/techs.rs` (`knows_attribute`); `crates/data/tests/
+techs.rs`; the reproduction in this session: a copy of `effects.toml` with `other:12` on effect 192 refused before the change
+and runs after it (`tick=100 entities=128 players=2 hash=266bcdf711e7824d`). Review:
+`docs/reviews/2026-11-17-d233-other-vocabulary.md`.
+
 ### D235 - the world writes itself down, and a load is proved by ticking the same (2026-11-16, P1a)
 
 **What P1 needs and what this is.** `P1` (dependency-tree, Phase 4) is `World::from_state` plus a tool-side converter, in the

@@ -555,7 +555,22 @@ pub const UNREAD_ATTRIBUTES: &[&str] = &[
 /// purpose: a misspelt name or an invented `other:` id would otherwise load and do nothing, which is the worst failure a
 /// mod can have - a civ added in config that looks right and does nothing (D233).
 pub fn knows_attribute(name: &str) -> bool {
-    NAMED_ATTRIBUTES.contains(&name) || UNREAD_ATTRIBUTES.contains(&name)
+    if NAMED_ATTRIBUTES.contains(&name) {
+        return true;
+    }
+    // **The `other:` and `unpacked:` names are open, and closing them was a mistake** (the correction to D233, 2026-11-17).
+    // They are the data's own names for attributes **nothing reads**, so which ones appear depends on the dat and on the
+    // generator that wrote the pack - not on the engine. The first version listed the sixteen this tree happened to carry and
+    // refused the rest, which broke the owner's machine: his generator writes `other:12` on effect 192 and a correct tree
+    // would not start. What is refused is a **shape** that cannot be an id (`other:`, `other:twelve`, `other:-1`), because
+    // that is a name nobody can resolve, and a **named** attribute outside the list, because that is a promise the engine
+    // does not keep.
+    for prefix in ["other:", "unpacked:"] {
+        if let Some(id) = name.strip_prefix(prefix) {
+            return !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit());
+        }
+    }
+    false
 }
 
 impl Effects {

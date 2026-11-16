@@ -591,32 +591,63 @@ modifiers = [{ op = "add", attribute = "attackk", attribute_class = -1, unit = -
     );
 }
 
-/// **An invented `other:` id is refused too.** Those names are the *recorded* gaps - the attributes the data carries and the
-/// engine does not read yet - so the list is closed the way D216 closed the packed-attack list: a new one is a change to the
-/// vocabulary, not a silent no-op that reads as a working bonus.
+/// **An `other:` row the census did not see still loads** (the correction to D233, 2026-11-17).
+///
+/// The first version closed the whole vocabulary, `other:` ids included, and it **broke the owner's own machine**: the pack
+/// his generator produces carries `other:12` on effect 192 (Fletching) where the pack this was written against carries none,
+/// so a correct tree refused to start. The distinction that was missing: a **named** attribute is a promise the engine acts
+/// on it, so a misspelt one is a lie and is refused; an `other:<id>` is the data's own name for something **nothing reads**,
+/// and which ids appear depends on the dat and the generator, not on the engine. A pack must not be refused for carrying a
+/// different selection of rows that do nothing.
 #[test]
-fn an_invented_other_attribute_is_refused() {
-    let bad = r#"
+fn an_other_row_the_census_did_not_see_loads() {
+    let pack = r#"
 schema = 1
 kind = "effects"
 
 [[effect]]
-id = 9
-name = "an id no reading explains"
+id = 192
+name = "Fletching, as another build's generator writes it"
 commands = []
-modifiers = [{ op = "add", attribute = "other:7", attribute_class = -1, unit = -1, unit_class = -1, value = 1.0 }]
+modifiers = [{ op = "add", attribute = "other:12", attribute_class = -1, unit = -1, unit_class = -1, value = 1.0 }]
 "#;
-    let err = load_effects_str(bad, "effects.toml")
-        .expect_err("other:7 is not in the vocabulary")
-        .to_string();
-    assert!(
-        err.contains("other:7"),
-        "the error names the attribute: {err}"
+    let effects =
+        load_effects_str(pack, "effects.toml").expect("an unread attribute is data, not a lie");
+    assert_eq!(
+        effects.get(192).expect("effect 192").modifiers.len(),
+        1,
+        "the row is kept, so a later slice that reads it finds it"
     );
 }
 
-/// **And the shipped pack passes the closed vocabulary**, which is the half that keeps the rule honest: the list is the
-/// pack's own, not a guess about it.
+/// **A malformed `other:` name is still refused.** Opening the prefix does not mean opening the shape: `other:` and
+/// `other:twelve` are not ids, and a name the engine cannot even resolve to a number is a typo rather than a gap in the
+/// reading.
+#[test]
+fn a_malformed_other_name_is_refused() {
+    for name in ["other:", "other:twelve", "other:-1", "other:1x"] {
+        let pack = format!(
+            r#"
+schema = 1
+kind = "effects"
+
+[[effect]]
+id = 3
+name = "malformed"
+commands = []
+modifiers = [{{ op = "add", attribute = "{name}", attribute_class = -1, unit = -1, unit_class = -1, value = 1.0 }}]
+"#
+        );
+        let err = load_effects_str(&pack, "effects.toml")
+            .expect_err(&format!("{name} must not load"))
+            .to_string();
+        assert!(err.contains(name), "the refusal names {name}: {err}");
+    }
+}
+
+/// **And the pack this machine generated passes the vocabulary** - the invariant, not a count. The count was 29 when this
+/// was written and 30 on the owner's machine (D233's correction), which is exactly why the assertion is "every name in the
+/// pack is one the vocabulary can answer for" rather than a number that only holds on the machine that wrote it.
 #[test]
 fn every_attribute_in_the_shipped_pack_is_in_the_vocabulary() {
     let effects = effects();
@@ -626,10 +657,13 @@ fn every_attribute_in_the_shipped_pack_is_in_the_vocabulary() {
             names.insert(modifier.attribute.clone());
         }
     }
-    assert_eq!(
-        names.len(),
-        29,
-        "the pack carries 29 distinct attribute names; got {}: {names:?}",
+    let strangers: Vec<&String> = names
+        .iter()
+        .filter(|name| !ruage_data::knows_attribute(name))
+        .collect();
+    assert!(
+        strangers.is_empty(),
+        "the pack carries {} distinct attribute names and these are outside the vocabulary: {strangers:?}",
         names.len()
     );
 }
