@@ -249,3 +249,53 @@ ignore list.
 nothing on the movement path ever writes or compares against time. If ids are creation-assigned it is oldest-object-wins; if
 they are recycled slots or imported from a save it is arbitrary. *First come, first served* is **not** a rule anywhere in the
 binary, and "who stood here longer" cannot be asked of it at all.
+
+## The path ignore list, read (2026-11-16): the game never pushes, and a moving group does walk over itself
+
+Asked because the owner ruled on 2026-11-16 that villagers **must never push each other - a villager reroutes, he is never
+pushed away** - and because the engine's own answer has been three inventions (make-room, give-way, nudge) that were built,
+measured, withdrawn and replaced on suspicion rather than on a reading. The two strings the section above calls "the nearest
+thing to a claim" are the answer, and they now have their code.
+
+**1. The list is built in the search's entry point** (`FUN_008007f0`, pathsys.cpp; the array is `local_404`, cap 255) and holds
+three kinds of id: **self** (`param_5[2]`), the **order's target** (`local_45c + 8`), and then, in one of two ways:
+
+- with no group on the route (`param_5[0x21] == -1`): every entry of the route's **own array** (`param_5[0x1a]`, count
+  `param_5[0x1b]`) whose object answers **1** to slot `+0x150` **or** to `+0x2a0`. Slot `+0x2a0` is **`isMoving`**
+  (`0x8aa290`: true when the velocity vector at `+0x130` has non-zero length) - the same slot the collision log prints as
+  `isMoving=%d` (move_obj.cpp:0x123d), so the arithmetic and the identity check each other.
+- with a group (`param_5[0x21] != -1`): every id in the group object `FUN_0072cf10(id)` (`+0xd0` count, `+0xd8` array), no
+  per-member test at all.
+
+**2. It is a passability input.** `FUN_00801a20(x, y, ids, count)` returns **1** when *every* body on that tile is in the list:
+it walks the tile's object array (`+0x5a8c` rows, `0x11 + x*0x24` count, `0x18 + x*0x24` array), skips any object with zero
+extent (`0x3c`), scans the id list for the object's id at `+8`, and returns 1 the moment one is found - otherwise 0, blocked.
+So **a tile held only by path-ignore units is free ground to the plan**, which is how a group's route is planned *through* its
+own members.
+
+**3. It is a collision input too, and the collision answer is a skip.** In `FUN_008a4360`'s block, `FUN_007fe010(id)`
+(`0x7fe010`, membership in `[this+0x24]` of `[this+0x20]`) returning 1 logs **"      That's a path ignore unit"**
+(`.rdata:0x9ea438`, move_obj.cpp:**0x1242**) and the loop moves to the next entry: no pause, no repath, no non-past count, no
+bound. The second form, **"      That's a highest linked path ignore unit"** (`.rdata:0x9ea458`, line **0x124a**), is the same
+skip behind `FUN_007fdff0`.
+
+**4. The epilogue never writes a position.** Target collision (`DAT_00de1998 == 1` and the entry is the order's target) →
+"That collision is with our target, so we're done". Otherwise, if any non-past collision → "We have %d non-past collisions and
+%d terrain collisions, repathing", the parent path is installed, and the **higher-id** unit of each surviving pair is told
+`setPause(0.25-1.5 s)` (0x8a8107-0x8a8141). The one remaining arm is "    Don't know what to do about my collision(s)". There
+is no branch anywhere in the block that moves the other body.
+
+**What it settles, and what it does not.**
+
+- **Pushing does not exist in the original, for anybody.** Our make-room / give-way / nudge family was an invention, and the
+  owner's ruling of 2026-11-16 is not a divergence from the game - it *is* the game, which we had left.
+- **Walking over a moving group-mate is real and is the game's own rule** - the game's words for such a body are "path ignore
+  unit". D207 read it correctly, and the `isMoving` gate is the same fact the Forgotten Empires answer states from the other
+  side ("units give up their formation and therefore block each other when: stop / click enemy / attack-move").
+- **The exemption is route-local**: it is the *mover's* list. The same two units can overlap under one order and block under
+  the next, so "may never overlap" cannot be read as a global rule of the game.
+- **Unread, and the one thing a decision here needs**: what fills route `+0x1a`/`+0x1b` at order time (candidates: the
+  selection's other members, or a formation object), and what the byte `+0xF4` behind slot `+0x150` means (`0x8ae170` returns
+  `[+0xF4]` unless slot `+0x154` answers 6 or 7; `0x428c50` is not in the corpus). That decides whether the original would
+  exempt a **box-selected crowd of villagers** ordered by a player - which is exactly what our window sends - or only a
+  military formation, which is all the FE quote ever claimed.

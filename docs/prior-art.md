@@ -31,6 +31,81 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-16 — villagers, overlap and pushing: what three implementations and the game's own rule say
+
+**The question.** The owner's ruling of 2026-11-16 - *"villagers push each other. What may never happen. Villager has to
+reroute, never push the other villager away"* - plus D207's claim that the original's search drops **moving selection-mates**
+so a group may walk over itself. The binary half of the answer is in `docs/movement-in-the-binary.md` (the path ignore list,
+read the same day). This section is the second and third rungs: the neighbouring implementations, then published sources.
+
+**`Zaydme/openaok` (MIT; `95cb8a0`, read locally, nothing copied).** Every tick builds a per-tile `Traffic` index of
+`Body{entity, x, y, radius, moving}`; a route then collects a "standing" list, skipping self, the order's target, **every body
+whose `moving` flag is set**, and every member of the marching group (`src/ecs/Navigation.cpp:230`:
+`if (b.entity == entity || b.entity == target || b.moving || Marches(b.entity)) continue;`) - each survivor becomes a box the
+A\* may not touch. Standing bodies are hard obstacles; a crowd is a soft penalty (`kPastStanding = 40` per occupied tile, so
+the route goes round a small crowd and through a large one), and bodies on tiles the route crossed are marked past. The step
+is bent by `KeptApart`, but **on the walker's own candidate point only** - and it is a tolerance, not a clearance:
+
+```
+// How near two bodies may come, in parts of their radii together: a crowd
+// overlaps a little, never stands one over another.
+const Core::Fixed32 kKeepApart = Core::Fixed32(3) / Core::Fixed32(4);        src/ecs/systems/MovementSystem.cpp:127-129
+```
+
+Its own comment states the rule we are trying to recover: *"Units overlap a little as they do in the original: nobody standing
+is pushed, and a walker bends its own step off the bodies about it (KeptApart)"* (`MovementSystem.cpp:243-247`). **No
+cross-entity position write exists in `src/ecs`**; a blocked walker stops against the occupant or replans at most four times.
+
+**`librematch/genie` (AGPL-3.0; read only, facts recorded, no code crosses).** Models the shipped obstruction manager: a
+standing object with an obstruction record keeps a rectangle in the obstruction mesh, **refreshed while it is not moving and
+removed the instant it moves** (`pathing/mod.rs:343-360`, `if moving == MoveState::Moving { ... mesh.remove(shape_id) }`), so a
+standing unit is real geometry and a walking one is not in the mesh at all. On a hit, the walker either pauses the met unit -
+`self.pauses.push((id, hit_pause(allied, movement_tuning)))` (`movement/walk.rs:92`; an ally 0.1 s, anyone else 0.5 s) written
+straight into that unit's walked level (`objects/release.rs:209-223`, `level.pause_time = pause`) - or drops its own walked
+level so the parent re-plans. **The only field ever written into a met body is that pause timer.** The one path that orders a
+unit off its spot is `move_aside`, and it fires for a **building foundation placed over a unit**, not for villager convergence;
+`movement_tuning.pushed` (0.25) is an overlap threshold, not a push.
+
+**`SFTtech/openage`.** Does not answer it: the pathfinder's request carries grid, start, target and time and nothing about
+occupancy (`libopenage/pathfinding/path.h:17-26`), cost fields are terrain-only, and `Position::set_position` appends a keyframe
+to that entity's own curve (`libopenage/gamestate/component/internal/position.cpp:53-55`). Units are never obstacles to each
+other, so nothing is displaced and nothing is exempted - *not applicable*, not *solved*. Its **reverse-engineering notes** do
+answer the scope question, below.
+
+**`SiegeEngineers/genie-rs`.** Not answered by this code: data-format crates, no movement or collision module at all.
+
+**Published, and the two lines that decide the scope.** openage's formation notes
+(`doc/reverse_engineering/game_mechanics/formations.md`, verified verbatim 2026-11-16):
+
+- *"Units within the same formation don't collide with each other when the formation is established."* (line 206)
+- *"Villagers, trade carts and fishing ships will not be part of any formation. If they are moved, they don't abide Pottinger's
+  rules and will move to the target at their normal speed while each of them takes their own path."* (line 40)
+
+The AoE2 wiki's formation article says the same (*"Fishing Ships and Villagers do not form up in the formation"*,
+`ageofempires.fandom.com/wiki/Unit_formation`). The Forgotten Empires Meeting C++ 2025 talk states the rule we are copying -
+*"Units bump into others, stop and repath around. No pushing allowed. Formations allow for some friendly overlap"* (slide 9) -
+and says the pushy variant was tried in **Age of Mythology: Retold**, not retrofitted here (slide 11), while the official DE
+notes show where displacement *does* live: **"Collide & Correct"**, which moves a standing unit out of a mover's way, was
+switched off in 2023 for scattering units (`ageofempires.com/news/...hotfix-82587`), 2021's notes describe it moving livestock
+off a path, and DE only stopped villagers stacking in the same activity in **2025**
+(`.../update-153015`). Pushing is a **DE-era mechanism**, patched at, and not the classic lineage this project reproduces.
+
+**What it changes here.** D207 read the mechanism correctly and applied it too widely. The exemption is the **formation**
+(the mover's linked group), and villagers never join one; so in the original a box-selected crowd of villagers ordered to one
+point blocks and repaths like any other pair. Our window submits a `WalkTo` for **every** selected id in one tick
+(`crates/view/src/bin/window.rs:482-517`), which makes them all path-ignore units to each other - that is the overlap the owner
+is seeing, and it is ours, not the game's. The fix is a **narrowing**: mates only for a formation/group that content or the
+interface declares, none for villagers.
+
+**Still open.** What fills the route's linked array (`+0x1a`/`+0x1b`) in HD's own code - the openage reading says the formation,
+our binary read cannot name the writer, and neither can say whether HD's *group order* writes it for a villager-only selection.
+A recording of two villagers sent to one spot settles it; none exists yet. The `isMoving` gate on `+0x2a0` also means the
+exemption is evaluated **per tick**, so a stopped mate blocks and a walking one does not - D207's `Route.mates` is stamped at
+order time and never re-tested, which is a second, quieter divergence.
+
+**Licence.** genie is AGPL-3.0: read, quoted in fragments, nothing crosses. openaok is MIT, openage GPL-3.0 (its *docs* read
+for facts). No code from any of them was copied.
+
 ## 2026-11-15 — genie ports the action list's install protocol, and two mechanics our install names that we do not model
 
 **`librematch/genie`, 27 commits (`62831fa8` → `18d3698f`), 13-14 Nov, 154 files, +10,179/−2,762.** One subject, applied
