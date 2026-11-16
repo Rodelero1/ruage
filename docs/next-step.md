@@ -15,11 +15,9 @@ Nothing in it is withdrawn; it is simply not this step.
 The owner, 2026-11-16: *"Please add unit tests never to be skipped or ignored."* Four rules, each a per-tick assertion rather
 than a sample, each **green with no `#[ignore]` when this step lands**:
 
-1. A unit's circle never crosses a tile holding a **resource that is not depleted**, except by the one raw unit of integer
-   rounding. Prior implementation: the D176 mover rule (`World::clearance_at`, `lib.rs:3872`; `body_clearance`,
-   `lib.rs:3915`), which refuses a step whose landing has `clearance < 0`, pinned by `body_clearance.rs` and `collision.rs`.
-   It measures clearance against the whole walk grid, so a node and a house wall are one question there - which is why the
-   new fixtures name the tile's owner and the kind of thing crossed.
+1. A unit's circle never crosses a tile holding a **resource that is not depleted**. Prior implementation: the D176 mover
+   rule (`World::clearance_at`/`body_clearance`, `lib.rs:3872-3915`), pinned by `body_clearance.rs` and `collision.rs`; it
+   measures clearance against the whole walk grid, so a node and a wall are one question there.
 2. A unit's circle never crosses a **building** - finished or **under construction** - with the exceptions asked for: a farm
    (an all-walkable floor, `sites.rs:429` `solid_tiles`) and the walkable part of a town centre (a mask, same function). The
    exception is not coded into the test: the test asks the engine's own `tile_walkable` which of a footprint's tiles block,
@@ -30,9 +28,8 @@ than a sample, each **green with no `#[ignore]` when this step lands**:
    because they are walked over, so the standoff was the one part of D183 §3/§7 that did not fit. The expected production
    change; the other three came out of the fixtures.
 4. A technology the current age does not allow **is not on the card**. Prior implementation: `World::card` (`report.rs:12`)
-   hides anything whose refusal `is_age_gate` (`lib.rs:4868`) calls the age talking; pinned by `card_age.rs`, but only at
-   **unit** level (a Dark Age barracks offers no spearman) - the owner's example, an **Imperial Age tech in the Dark Age**, has
-   no fixture.
+   hides what `is_age_gate` (`lib.rs:4868`) calls the age talking, pinned at **unit** level only - the owner's example, an
+   Imperial tech in the Dark Age, had no fixture.
 
 **Done and measured** (D250): all four green and unskipped (`invariants` 7 passed / 0 ignored, `card_age` 4 / 0), and they
 found four defects - three of them one mistake, a rule asked about the **tile** a body's centre sits in rather than the body:
@@ -45,6 +42,11 @@ entities, `1540 -> 710` repaths - because **the match is now won** at 2,381 s wh
 **Open for the owner, not decidable here**: the queue's floor is **entities >= 155**; the control reads 154 with no win, this
 step 137 *with* one (a decided match carries less). Either the floor is about a contest and needs its own fixture, or the win
 is the better outcome and the floor wants restating.
+
+**Debts this step's review named but did not touch** (D248's live code, four findings with their reasons in
+`docs/reviews/2026-11-16-d250-body-rules.md`): frozen seats leaving the `places` pool before the diameter filter; the
+Chebyshev `footprint_gap` beside three Euclidean siblings; `wall_point` clamping without a walkability check;
+`gather_place_public` with no caller.
 
 **Next: R1 continues** - the pathing register in `docs/behaviour-diff.md` (30 rows, 19 ruled).
 

@@ -2022,14 +2022,11 @@ impl World {
                         })?;
                         let next = if farm {
                             // **The plot's middle**: a farm's builder belongs inside it, so his aim is the centre of the
-                            // plot rather than a way out of it (D250).
-                            match rect {
-                                Some((ax, ay, wide, tall)) => self.tile_centre((
-                                    ax.saturating_add(wide / 2),
-                                    ay.saturating_add(tall / 2),
-                                )),
-                                None => target,
-                            }
+                            // plot rather than a way out of it (D250). *The same* middle the build order routed him to
+                            // (`World::footprint_centre`): for an even-width plot a tile's centre and the plot's centre are
+                            // half a tile apart, and two definitions of "the middle" is one too many (found by the
+                            // adversarial review, D209).
+                            self.footprint_centre(site).unwrap_or(target)
                         } else if inside {
                             // **The shortest way out**, one tile past the nearest edge. A builder left standing on the
                             // site would never start it, and the route it walked is spent, so this has to be a place

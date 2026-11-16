@@ -281,11 +281,11 @@ fn a_gathering_villager_stands_within_half_a_diameter_of_the_node() {
     });
 }
 
-/// **3. A load leaves a man only while he is at the drop site.** Half a diameter from the building's own footprint.
-/// **Ignored: measured failing at 0.281 tiles** (tick 792 of the fixture's own run). The load leaves the man while his body is
-/// still a quarter of a tile outside the town centre's footprint - the engine's delivery range is the pair's *reach* (0.4), not
-/// the body's radius, so a carrier stops one step short of touching the wall and still hands the wood over. Ignored rather than
-/// deleted: this is the owner's rule and the engine does not keep it yet.
+/// **3. A load leaves a man only while he is at the drop site.** Half a diameter from the building's own footprint, plus the
+/// one step a discretised walker stops short by (`step_of`), which is the bar D248's fix met.
+/// **Was `#[ignore]`d and red**: measured failing at 0.281 tiles on tick 792, because the delivery range was the pair's *reach*
+/// (0.4) rather than the body's radius. Kept, then met by D248's `radius + one step` delivery test and the aim at
+/// `World::wall_point` - so this fixture is a **guard** now, not a gap.
 #[test]
 fn a_villager_drops_only_within_half_a_diameter_of_the_drop_site() {
     let Some(pack) = pack() else { return };
@@ -312,7 +312,7 @@ fn a_villager_drops_only_within_half_a_diameter_of_the_drop_site() {
                 if gap > radius + step_of(&scene.world, *id) {
                     return Some(format!(
                         "tick {tick}: villager {:?} delivered {:.2} of a load with his body {:.3} tiles from the drop \
-                         building, more than the {:.3} half-diameter allowed",
+                         building - past the {:.3} half-diameter, even allowing the one step a walker stops short by",
                         id.0,
                         before as f64 / scale as f64,
                         gap as f64 / scale as f64,
@@ -327,9 +327,9 @@ fn a_villager_drops_only_within_half_a_diameter_of_the_drop_site() {
 
 /// **4. A man who is working does not move.** At his node, wood still in it, room in his hands: his position must be the same
 /// on the next tick as it was on this one.
-/// **Ignored: measured failing at 0.011 tiles** (tick 11). A man at his node, with a hundred wood still in it and empty hands,
-/// takes an 11-thousandth-of-a-tile step - the seat settle nudging him onto his square while he is already within reach of the
-/// tree. Small, and exactly what the owner's sentence forbids: *"he gathers ... and changes position"*.
+/// **Was `#[ignore]`d and red**: measured failing at 0.011 tiles on tick 11 - the seat settle nudging a man onto his square
+/// while he was already within reach of the tree, which is exactly what *"he gathers ... and changes position"* forbids. Kept
+/// by D248's freeze of a working man's place and by not stepping a man who is on his own place; a **guard** now, not a gap.
 #[test]
 fn a_villager_who_is_gathering_does_not_move() {
     let Some(pack) = pack() else { return };
@@ -567,15 +567,17 @@ fn no_unit_crosses_a_building_either_finished_or_under_construction() {
     let mut solid_seen = false;
     run(&mut scene, 2_000, |scene, tick| {
         let scale = scene.world.scale();
-        let site = scene
-            .world
-            .entities()
-            .iter()
-            .find(|entity| {
-                entity.kind == EntityKind::Building && entity.position == scene.world.tile(at)
-            })
-            .map(|entity| (entity.id, entity.construction.is_some()));
-        if site.is_some_and(|(_, under)| under) {
+        // **Progress, not existence**: `raise_site` gives the foundation a `Construction` the moment the order lands
+        // (`lib.rs:2757`), so `construction.is_some()` is true before a single tile blocks - a guard built on it would pass
+        // for a site that never started, which is the failure it exists to catch (D116; found by the adversarial review).
+        let site = scene.world.entities().iter().find(|entity| {
+            entity.kind == EntityKind::Building && entity.position == scene.world.tile(at)
+        });
+        if site.is_some_and(|entity| {
+            entity
+                .construction
+                .is_some_and(|construction| construction.progress_ticks > 0)
+        }) {
             solid_seen = true;
         }
         for unit in scene
