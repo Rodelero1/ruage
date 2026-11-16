@@ -6674,3 +6674,41 @@ R2-R9 are unchanged and unblocked; R1 is split in the queue into **R1a** (the pa
 **Basis.** `crates/sim/src/world/movement.rs` (rule 6, the arm), `crates/sim/src/world/step.rs` (the re-plan's `obstacles`),
 `crates/sim/tests/replan.rs` (the ignored fixture), `crates/sim/tests/group_overlap.rs` (the deadlock, measured),
 `docs/behaviour-diff.md` rows 29-30. Review: `docs/reviews/2026-11-16-d242-r1-measured.md`.
+
+### D243 - the owner's four body invariants, measured: two hold, two do not (2026-11-16)
+
+**The ask, verbatim.** Four rules, each to be a test that **fails** when broken:
+
+1. *"If villagers approach each other closer than 1 diameter -> FAIL"*
+2. *"If villager gathers resource more than 1/2 diameter away from the source -> FAIL"*
+3. *"If villager drops resource when further from the drop site than 1/2 diameter -> FAIL"*
+4. *"If villager gathers from the resource, resource is not empty, villager is not at 100% carry capacity and changes position
+   -> FAIL"*
+
+**How they are measured** (`crates/sim/tests/invariants.rs`): one scene - four villagers on the four nearest wood nodes, each with
+a gather order, the town centre as the drop site, **2,000 ticks checked on every tick**, not sampled. "Diameter" is the body's
+own two radii (0.4 tiles for a villager, radius 0.2), and "half a diameter away from" is measured as the **gap between the body's
+centre and the edge of the tile or footprint** it stands against, which is what touching means for a square.
+
+| rule | result | measurement |
+|---|---|---|
+| 1. pair distance >= 1 diameter | **holds** | no pair closer than 0.400 over 2,000 ticks (the crowd case is `overlap::eight_villagers_...`, green since D237) |
+| 2. gathering within 1/2 diameter of the node | **holds** | only a man with `progress > 0` is judged - the first draft flagged a walker 0.371 tiles out, because the approach carries the same `Gather` task |
+| 3. dropping within 1/2 diameter of the drop site | **fails** | *"tick 792: villager 9001 delivered 10.00 of a load with his body 0.281 tiles from the drop building, more than the 0.200 half-diameter allowed"* |
+| 4. no movement while gathering, node not empty, hands not full | **fails** | *"tick 11: villager 9000 moved 0.011 tiles while gathering from node 11, which still holds 100.0 and his hands hold 0.0 of 10"* |
+
+**What each failure is.** (3) The delivery range is the pair's **reach** (0.4), not the body's radius, so a carrier stops a quarter
+of a tile short of the wall and still hands the wood over. (4) The **seat settle** keeps nudging a man onto his square while he is
+already inside the tree's reach and already taking from it - an 11-thousandth of a tile per step, but the owner's sentence has no
+size in it.
+
+**What landed.** The four fixtures, with 1 and 2 green and 3 and 4 `#[ignore]`d **carrying their measured violation in the ignore
+message**, and this table in the review. `cargo test -p ruage-sim --test invariants -- --ignored` runs the two that are red, which
+is how a later slice shows it fixed them rather than asserting it.
+
+**Why both fixes are slices rather than lines.** (3) changes when every delivery in the match happens, so it moves the acceptance
+hash and needs its own measurement; (4) removes a step from the settle path, and that path is what places men round a node in the
+first place (D200/D202). Neither is guessed at here.
+
+**Basis.** `crates/sim/tests/invariants.rs`; `crates/sim/src/world/gather.rs` (the delivery range), `crates/sim/src/world/step.rs`
+(the settle). Review: `docs/reviews/2026-11-16-d243-invariants.md`.

@@ -10,6 +10,20 @@ the authority, not the morning's prose.
 **The previous open step (T16, and everything carried with it) is archived at `docs/history/next-step-2026-11-16-t16.md`.**
 Nothing in it is withdrawn; it is simply not this step.
 
+## Now, and cheapest first: the two red invariants (D243, 2026-11-16)
+
+The owner asked for four body rules as tests. Two hold (`villagers_never_come_closer_than_one_diameter`,
+`a_gathering_villager_stands_within_half_a_diameter_of_the_node`); two are red, with the numbers in their ignore messages:
+
+1. **A load leaves a man 0.281 tiles from the drop building** (rule 3). The delivery range is the pair's **reach** (0.4), not the
+   body's radius, so a carrier hands the wood over a quarter of a tile short of the wall. Fix: the arrival test at a drop-off uses
+   the body's radius. It moves every delivery in every match, so it is measured on the acceptance match like R1 was.
+2. **A gathering man takes a 0.011-tile settle step** (rule 4). The seat settle keeps nudging a man who is already within reach of
+   his tree and already taking from it. Fix: no settle once `progress > 0`. The settle is what places men round a node
+   (D200/D202), so this needs its own measurement too.
+
+`cargo test -p ruage-sim --test invariants -- --ignored` is how either is shown fixed.
+
 ## The queue, in the order a player would see it
 
 Each slice ships test-first, with its measurement in a review under `docs/reviews/`, and **the gate is the acceptance match at
