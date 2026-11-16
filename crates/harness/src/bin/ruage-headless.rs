@@ -37,7 +37,7 @@ const USAGE: &str = "usage: ruage-headless --config <sim.toml> --map <map.toml> 
                      [--script <scenario.toml>] [--ticks <n>] [--report <seconds>] \
                      [--dump <entities.csv>] --seed <u64>";
 
-const KNOWN: [&str; 16] = [
+const KNOWN: [&str; 17] = [
     "--config",
     "--map",
     "--economy",
@@ -53,6 +53,7 @@ const KNOWN: [&str; 16] = [
     "--ticks",
     "--report",
     "--dump",
+    "--state-out",
     "--help",
 ];
 
@@ -239,6 +240,34 @@ fn run(args: &[String]) -> Result<(), String> {
         if report_every.is_some_and(|every| world.tick().is_multiple_of(every)) {
             report(&world);
         }
+    }
+
+    // **The world written down** (P1, D235): the state the engine loads, so a tool-side converter has a target and a
+    // running match has a snapshot. The pack is loaded from the `--config` file's own directory, because a state names the
+    // pack it was written under and a load refuses another.
+    if let Some(path) = parsed.get("--state-out") {
+        let config = parsed
+            .get("--config")
+            .ok_or("--state-out needs --config: the state names the pack it was written under")?;
+        let dir = Path::new(config)
+            .parent()
+            .ok_or("--config has no directory")?;
+        let pack = ruage_data::ContentPack::load(dir).map_err(|err| format!("{err}"))?;
+        let started = std::time::Instant::now();
+        let bytes = world.state(&pack).map_err(|err| format!("{err}"))?;
+        let write = started.elapsed();
+        std::fs::write(path, &bytes).map_err(|err| format!("state {path}: {err}"))?;
+        // Read back through the engine's own load: a file written and never read is not a state, and the load is the check
+        // that the write is complete.
+        let started = std::time::Instant::now();
+        ruage_sim::World::from_state(&pack, &bytes).map_err(|err| format!("{err}"))?;
+        let read = started.elapsed();
+        println!(
+            "state={path} bytes={} write_us={} read_us={}",
+            bytes.len(),
+            write.as_micros(),
+            read.as_micros()
+        );
     }
 
     // A picture of the world, for a person rather than a test: one line per entity, in tile coordinates, so the map can

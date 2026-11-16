@@ -20,6 +20,7 @@ pub(crate) mod research;
 pub(crate) mod seed;
 pub(crate) mod shares;
 pub(crate) mod sites;
+pub(crate) mod snapshot;
 pub(crate) mod state;
 pub(crate) mod step;
 pub(crate) mod train;

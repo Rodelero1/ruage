@@ -18,9 +18,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::{
-    Combat, ConfigError, Economy, Effects, Map, Resources, Sim, Techs, Units, load_combat_file,
-    load_economy_file, load_effects_file, load_map_file, load_resources_file, load_sim_file,
-    load_techs_file, load_units_file,
+    Civs, Combat, ConfigError, Economy, Effects, Map, Resources, Sim, Techs, Units, load_civs_file,
+    load_combat_file, load_economy_file, load_effects_file, load_map_file, load_resources_file,
+    load_sim_file, load_techs_file, load_units_file,
 };
 
 /// Every file a match reads. The order here is the order the hash is computed in, so adding a file
@@ -74,6 +74,9 @@ pub struct ContentPack {
     /// Research: the tech table and the effect commands it points at.
     pub techs: Techs,
     pub effects: Effects,
+    /// **The civilisation rows.** Hashed since D19, but not reachable through the pack until now - a load had to open the
+    /// file again, which is how a consumer and the handshake can disagree about what the pack is.
+    pub civs: Civs,
     /// FNV-1a over `(name, length, bytes)` for each file in `PACK_FILES` order.
     pub hash: u64,
     /// Which files went into the hash, so a handshake can explain a mismatch instead of saying
@@ -194,6 +197,7 @@ impl ContentPack {
             hash = fnv1a_update(hash, &parts[name].to_le_bytes());
         }
 
+        let civs = load_civs_file(&pack_path(dir, "civs.toml"))?;
         Ok(ContentPack {
             sim,
             economy,
@@ -203,6 +207,7 @@ impl ContentPack {
             resources,
             techs,
             effects,
+            civs,
             hash,
             parts,
             override_log,

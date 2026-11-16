@@ -93,7 +93,9 @@ pub const MAX_PLAYERS: usize = 8;
 pub const MAX_RESOURCES: usize = 8;
 
 /// Stable handle for an entity. Ordered, so iteration by id is just sorting.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
 pub struct EntityId(pub u32);
 
 /// How near an existing drop site makes another pointless, when content says nothing: the reference implementation's
@@ -136,7 +138,7 @@ type NearKey = ((u32, u16, u16), (u16, u16));
 
 /// A building is a place; a unit is a thing that moves. Splitting them now keeps "villagers
 /// gather into the town centre" from being a special case of "entities with zero speed".
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntityKind {
     Building,
     Unit,
@@ -150,7 +152,7 @@ pub enum EntityKind {
 }
 
 /// The subset of an entity the tick loop touches today. Fixed-point only (D9).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
     pub id: EntityId,
     /// 1 or 2. Zero is reserved for entities a test spawns with no owner.
@@ -197,7 +199,7 @@ pub struct Entity {
 }
 
 /// What a hit is worth. Comes from `combat.toml`; the per-unit numbers come from `units.toml`.
-#[derive(Debug, Clone, Copy)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
 pub struct DamageRules {
     /// A stopped attack still lands for this much.
     pub minimum: i32,
@@ -294,7 +296,7 @@ pub(crate) fn multiply_class(list: &mut [(i16, i16)], class: i16, factor: f64) {
 }
 
 /// A tech being researched: which one, and how long it has left.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Research {
     pub tech: u32,
     pub remaining_ticks: u32,
@@ -304,7 +306,7 @@ pub struct Research {
 }
 
 /// Where a building's finished units go.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RallyPoint {
     /// Walk to this tile and stop.
     Tile(u16, u16),
@@ -320,7 +322,7 @@ pub enum RallyPoint {
 ///
 /// `Unaffordable` is in `docs/ui.md`'s plan and is **not** here: the queue pays when the order is placed, so no code
 /// path can produce it today, and a variant no test can drive is a guess.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrainingPause {
     /// Nowhere to stand beside the building and no room inside it to shelter the recruit.
     NoRoom,
@@ -329,7 +331,7 @@ pub enum TrainingPause {
 /// How a match ended. A side is out when nothing that *counts* of theirs still stands - no unit, no
 /// building - where content names the families that do not count (walls, farms; D59). The town centre
 /// is not special: losing it is a setback, not a defeat, which is what the original game does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatchOutcome {
     Victory {
         winner: u8,
@@ -354,7 +356,7 @@ pub enum TileVision {
 /// This is a **memory**, not a view (D92): the count is what was there when it was seen, and the stamp does not move
 /// until something is seen again, so a rule can decide for itself how stale is too stale. Nothing reads the world's
 /// real state through it, which is what makes an unscouted army genuinely unknown rather than merely distant.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Sighting {
     pub count: u16,
     pub at: u64,
@@ -362,7 +364,7 @@ pub struct Sighting {
 
 /// How much of a fight a unit picks on its own. Aggressive is the default and is what every unit did
 /// before stances existed, so a pack that says nothing keeps the behaviour it had (D48).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Stance {
     /// Chase anything in reach, wherever it goes.
     #[default]
@@ -411,7 +413,7 @@ pub(crate) struct TrainPlan {
 
 /// A unit being produced. Progress counts ticks remaining rather than accumulated work, so the
 /// finish lands exactly on `create_time x tick_rate`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Training {
     pub unit: u32,
     pub remaining_ticks: u32,
@@ -426,7 +428,7 @@ pub struct Training {
 /// **One job in a building's queue** (D157): a unit to train, or a tech to research. Exactly one runs at a time and the rest
 /// wait in the order they were ordered - the owner's rule: *"Units and tech can be queued in the building, but they are
 /// performed one after another not in parallel."*
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub(crate) enum Job {
     Train(Training),
     Research { tech: u32 },
@@ -469,7 +471,7 @@ struct BuildPlan {
 }
 
 /// A building under construction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Construction {
     /// Builder-ticks contributed so far. Counts only while somebody is actually working.
     pub progress_ticks: u32,
@@ -485,8 +487,7 @@ pub struct Construction {
 
 /// Unit work in progress. A state machine small enough to hash and to explain: walking to a node
 /// and taking from it. Returning to a drop site is the next increment.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Task {
     #[default]
     Idle,
@@ -562,7 +563,7 @@ pub enum Task {
 ///
 /// **Not `Copy`** since D155: a wall drag carries its tiles, and a line of a hundred segments should be handed over once rather
 /// than copied on every pass. `Clone` stays.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     /// Take from a resource node. The rate, the capacity and the variant come from the tables,
     /// not from the command: a replay must not be able to name its own numbers.
@@ -700,7 +701,9 @@ pub use error::{ErrorClass, SimError};
 /// hours of printing from inside the function, twice in one week.
 ///
 /// Instrumentation, not state: nothing reads it in the tick and it is not hashed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
 pub enum StepDecision {
     /// Nothing was asked of this body.
     Idle,
@@ -767,6 +770,7 @@ impl std::error::Error for SimError {}
 ///
 /// Constants are from the reference implementation and are part of the algorithm's identity:
 /// changing them changes every replay, so they are not tunables.
+#[derive(serde::Serialize, serde::Deserialize)]
 struct Pcg32 {
     state: u64,
     inc: u64,
@@ -897,7 +901,7 @@ pub(crate) fn free_neighbour(
 /// it has a target of its own, and the same entry with `chasing` false means it is walking back to `home`.
 /// The origin is recorded at the *first* blow, so a blow landed on the way home resumes the chase from
 /// where it stands rather than inventing a new home.
-#[derive(Debug, Clone, Copy)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
 struct Leash {
     home: (Fixed, Fixed),
     /// The tick interest expires at. Each blow pushes it out; when it passes, the animal goes home.
@@ -908,7 +912,7 @@ struct Leash {
 /// A body's clock (items 4 and 6). `per_tick` is how much meat it loses a tick - zero for a body that was never
 /// butchered - and `expires` is the tick it leaves the map regardless, derived from the species' own meat and rot
 /// rate. Both numbers come from the pack, so a pack whose animals change changes the lifetime with them.
-#[derive(Debug, Clone, Copy)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
 pub(crate) struct Rot {
     per_tick: i64,
     expires: u64,
@@ -929,7 +933,7 @@ pub(crate) struct Repath {
     pub(crate) goal: (u16, u16),
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Default)]
 pub(crate) struct Route {
     /// Remaining waypoints, **as points**: the geometry's corners (D113), or the centres of the tiles a search returned when
     /// the geometry declined. The last point is the goal itself, so an order between tiles lands where it pointed (A).
@@ -1000,11 +1004,13 @@ pub struct UnitStats {
     pub carry: i32,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct World {
     pub(crate) tick: u64,
     pub(crate) tick_rate_hz: u32,
     pub(crate) scale: i64,
     max_entities: u32,
+    #[serde(skip, default = "default_command_apply")]
     command_apply: CommandApply,
     pub(crate) entities: Vec<Entity>,
     queue: Vec<Command>,
@@ -1013,7 +1019,9 @@ pub struct World {
     pub(crate) ordered_now: BTreeSet<EntityId>,
     /// Cloned at seed time so a command can be resolved without threading references through the
     /// tick loop. A replay carries ids, never numbers.
+    #[serde(skip)]
     pub(crate) units: Option<Units>,
+    #[serde(skip)]
     pub(crate) economy: Option<Economy>,
     /// Per player, per resource. Index is `player - 1`; player 0 has no stockpile and neither does
     /// anything above `MAX_PLAYERS`. The width is a constant because the row is an array, and the
@@ -1022,6 +1030,7 @@ pub struct World {
     /// Terrain, copied once at seed time. Static for a match.
     pub(crate) walk: Option<Walk>,
     /// Damage constants from `combat.toml`, set with `load_combat`.
+    #[serde(skip)]
     damage_rules: Option<DamageRules>,
     /// How fast a shot flies, resolved once at load: zero means the pack shoots instantly.
     combat_projectile_speed: Option<Fixed>,
@@ -1072,11 +1081,14 @@ pub struct World {
     made_room_count: u64,
     /// The tech and effect tables, when they have been loaded. A research order is resolved against
     /// them the way damage is resolved against `combat.toml`: once, at order time.
+    #[serde(skip)]
     techs: Option<ruage_data::Techs>,
+    #[serde(skip)]
     effects: Option<Effects>,
     /// The civilisations table and the civ this match is played as. The bar list is *derived* from the
     /// civ's tree effect whenever a research is ordered - it is content, so keeping a copy in state
     /// would be a second source of truth for the same fact.
+    #[serde(skip)]
     civs: Option<ruage_data::Civs>,
     /// Team id per player, resolved from `[start] teams` at seeding. Empty in content means every
     /// player is their own team, so a free-for-all needs no configuration.
@@ -1094,11 +1106,13 @@ pub struct World {
     /// **One table per player** (R6, D234): the effects that belong to them, walked once on the two events that can
     /// change it instead of once per question. Derived from `researched`, `civ_by_player` and `bonus_effects`, so it is
     /// **not state and not hashed** - the same rule `bonus_effects` follows.
+    #[serde(skip)]
     bonus_tables: [crate::world::bonuses::BonusTable; MAX_PLAYERS],
     /// **The line-of-sight modifiers each player has in force** (T1b, D214), kept per player instead of gathered per
     /// question. `sight_of` runs for every body that moved, every tick, and asking `modifiers_for` there meant a table
     /// lookup per researched tech per body: measured, that was **+7.2% of a 24,000-tick acceptance run**. Rebuilt when a
     /// tech lands and when the civ bonuses are set; derived from those two, so it is not state and not hashed.
+    #[serde(skip)]
     sight_modifiers: [Vec<ruage_data::Modifier>; MAX_PLAYERS],
     /// Units that some tech *makes available* (kind-2 rows with a positive flag). Derived from the
     /// effects table at load: content, not state, so it is not hashed.
@@ -1324,6 +1338,7 @@ pub struct World {
     /// The pack's resource table, when one has been loaded. Costs carry the reference pack's ids and
     /// nodes carry columns; `slot_for_dat_id` and `name` are the only places the two are related, so
     /// this is the field every cost and every gather order reads (D17).
+    #[serde(skip)]
     resources: Option<Resources>,
     /// Each resource's node half-extent in raw units, resolved at load from the pack's `radius` (D169).
     node_radii: Vec<i64>,
@@ -1397,6 +1412,13 @@ fn integer_sqrt(value: i64) -> i64 {
 /// A modifier matches on the unit id it names, on the unit's class, or on neither (-1 means
 /// "everything"). Free rather than a method so that both the researched-tech loop and the civ-bonus loop
 /// can share it without borrowing `self` twice.
+/// The ruler a load starts with before the pack's own replaces it (P1, D235): `World::from_state` sets `command_apply` from
+/// `sim.toml` two lines after deserialising, so this value is never used by a loaded world - it exists because `serde(skip)`
+/// needs a default and the pack's answer is not available while parsing.
+fn default_command_apply() -> ruage_data::CommandApply {
+    ruage_data::CommandApply::NextTick
+}
+
 /// **Does this cached row apply to this unit?** The match the walk used to do per effect, now per row: a modifier named for
 /// a unit applies only to that unit, one named for a class only to that class, and `-1` means "everything" (R6, D234).
 pub(crate) fn applies_to(modifier: &ruage_data::Modifier, unit: &Unit) -> bool {

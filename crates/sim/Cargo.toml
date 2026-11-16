@@ -10,6 +10,7 @@ repository.workspace = true
 ruage-fixed = { path = "../fixed" }
 ruage-data = { path = "../data" }
 serde = { version = "1", features = ["derive"] }
+rmp-serde = "1"
 toml = "0.8"
 
 [dev-dependencies]

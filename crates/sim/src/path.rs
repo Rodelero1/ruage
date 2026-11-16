@@ -18,6 +18,7 @@ const DIAGONAL: u32 = 14;
 
 /// Which tiles a unit may stand on. Built once from the map, because terrain does not change
 /// during a match yet.
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Walk {
     width: u16,
     height: u16,

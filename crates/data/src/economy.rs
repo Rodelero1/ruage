@@ -19,7 +19,7 @@ use crate::{ConfigError, MaybeFixed, SUPPORTED_SCHEMA};
 /// Rows run top-to-bottom and columns left-to-right from the building's **anchor tile**, which is the north corner of its
 /// diamond (D84), so a 4x4 Town Centre with `["##..", "##..", "....", "...."]` keeps its back core solid and its wings and
 /// courtyard walkable - the owner's diagram of the building, as data.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Footprint {
     pub width: usize,
     pub height: usize,

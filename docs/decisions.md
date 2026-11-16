@@ -6294,3 +6294,46 @@ That should put the lookup below the old walk; it is not claimed until measured.
 **Basis.** `crates/sim/src/world/bonuses.rs` (`BonusTable`, `Source`, `ResourceRow`, `World::rebuild_bonuses`,
 `World::bonuses`); the five consumers in `lib.rs` and `world/research.rs`; `crates/sim/tests/bonuses.rs` (three fixtures, red
 on a once-only fill); `docs/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d234-bonus-table.md`.
+
+### D235 - the world writes itself down, and a load is proved by ticking the same (2026-11-16, P1a)
+
+**What P1 needs and what this is.** `P1` (dependency-tree, Phase 4) is `World::from_state` plus a tool-side converter, in the
+**B shape** the owner ruled on 2026-11-14: the converter lives in `tools/`, so no reader of the game's save file ever enters
+`crates/`. The converter has nothing to convert *to* until the engine can write and read its own state, and **that** half is
+what landed here. The RE half - walking the save's sections 2-4 for civs, stockpiles and the object list, none of which is
+read yet (`docs/save-format.md`) - is not started and is not pretended to be.
+
+**The shape: `serde` on `World` itself, not a `WorldState` mirror.** A mirror is a second list of the world's 95-odd fields,
+and the second list is the one that goes stale - this project has paid for exactly that shape twice (the farm line and the
+builder speed, D234). With a derive, a field added to `World` is in the file the next time the crate compiles, and the
+round-trip fixture fails if the load does not restore it. What is **not** in the file: the pack's tables and rules
+(`techs`, `effects`, `civs`, `resources`, `units`, `economy`, `damage_rules`, `command_apply`) - those are the game's, not the
+match's, so a state carries the pack's **identity** and a load against another pack is refused by `PackMismatch`, naming both.
+The two derived caches (`bonus_tables`, `sight_modifiers`) are not written either: they are rebuilt on load, which is what
+makes a forgotten rebuild a test failure rather than a file that looks complete.
+
+**MessagePack, and why not JSON.** The state is keyed by numbers in a dozen places (`BTreeMap<EntityId, Route>`,
+`researched: BTreeMap<u8, BTreeSet<u32>>`). JSON insists map keys are strings and refuses to read them back, so JSON meant
+either a `#[serde(with)]` helper on every map - the second list again - or MessagePack, which keeps the **names** (it is
+self-describing) and reads integer keys. MessagePack won.
+
+**Three failures the fixture found while this was being built, all mine.** (1) `units` and `economy` are pack data and were
+skipped on the way out; not putting them back left the loaded world with no unit table, so every stat read as absent and the
+two worlds parted company at the first step. (2) The obvious way to restore the pack - call `load_civs` - **re-assigns** each
+player's civ from `economy.start.civs`, and the start state belongs to the match, not the pack, so a loaded world was given a
+different civ from the one its state named; the load now installs the civ *table* and rebuilds the two caches instead.
+(3) Serde's `skip` needs a `Default`, and `command_apply` has no sensible one - the pack's answer is not available while
+parsing - so it has a documented placeholder that `from_state` overwrites before the world is returned.
+
+**One hole closed on the way.** `civs.toml` has been in the pack's hash since D19, but `ContentPack` did not expose it: a
+consumer had to open the file again, which is how a load and a handshake can disagree about what the pack is. It is a field
+of `ContentPack` now.
+
+**What it costs.** Nothing on the tick: no line of the tick's code changed, and the acceptance hash is
+`cb1f6a83a119a2a3` on both sides at 24,000 ticks. The write and the read are off the tick path - measured below in the review -
+and the state is written only when something asks for it.
+
+**Basis.** `crates/sim/src/world/snapshot.rs` (`Written`/`Read`, `World::state`, `World::from_state`), the `serde` derives on
+`World` and its 24 field types, `crates/data/src/pack.rs` (`civs`), `crates/sim/tests/state.rs` (three fixtures: round trip
+identical at 0 and 100 ticks, a cut state refused, another pack refused by name). Review:
+`docs/reviews/2026-11-16-d235-state.md`.

@@ -11,7 +11,9 @@
 use core::fmt;
 
 /// A value stored as an integer number of `1 / scale` units.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, serde::Serialize, serde::Deserialize,
+)]
 pub struct Fixed(i64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]

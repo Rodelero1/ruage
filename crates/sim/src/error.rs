@@ -7,7 +7,7 @@ use std::fmt;
 
 use crate::{EntityId, MAX_PLAYERS, max_scale_for};
 
-#[derive(Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub enum SimError {
     TooManyEntities {
         max: u32,
@@ -33,6 +33,17 @@ pub enum SimError {
     Unresolved {
         id: u32,
         detail: String,
+    },
+    /// **The state could not be read** (P1, D235). Named, because the state is JSON: the message says which field, not which
+    /// byte offset, and an unknown field is an error rather than something to ignore.
+    BadState {
+        detail: String,
+    },
+    /// **The state was written under a different content pack** (P1, D235). The tables are the pack's, not the match's, so a
+    /// load against another pack would change what its units do while looking perfectly valid.
+    PackMismatch {
+        state: String,
+        pack: String,
     },
     /// No free tile near the town centre to place a starting villager.
     NoSpace {
@@ -269,6 +280,12 @@ pub enum SimError {
 impl std::fmt::Display for SimError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            SimError::BadState { detail } => write!(f, "the state could not be read: {detail}"),
+            SimError::PackMismatch { state, pack } => write!(
+                f,
+                "the state was written under pack {state}, this build runs {pack}; the tables are the pack's, not the \
+                 state's, so loading it would change what its units do"
+            ),
             SimError::TooManyEntities { max } => write!(
                 f,
                 "max_entities = {max} reached; refusing to spawn more (raise sim.max_entities)"
@@ -541,6 +558,9 @@ impl SimError {
     /// guarantee that stays true as the enum grows. `crates/sim/tests/error_class.rs` pins one variant of each class.
     pub fn class(&self) -> ErrorClass {
         match self {
+            // **Internal** - a state this build cannot read is not the player's mistake (P1, D235), and a pack mismatch is a
+            // build against the wrong content, which the player cannot fix by clicking differently.
+            Self::BadState { .. } | Self::PackMismatch { .. } => ErrorClass::Internal,
             // **Refused** - legal orders the world will not take.
             Self::NoPath { .. }
             | Self::NoSpace { .. }

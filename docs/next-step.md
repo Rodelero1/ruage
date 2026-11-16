@@ -16,56 +16,18 @@ nothing, but `barred_by` reads kind-102 rows and `check_research` refuses with `
 The order below is the user's ruling of 2026-11-14 - **live wrong numbers first**, then the effect interpreter, then the
 economy's own rules. Do not start breadth, civs, or the renderer before items 1-2.
 
-## T16 - read, and what the build costs (2026-11-16, D232)
+## T16 and T12 stage 3: both read, both priced, neither next (D229-D232)
 
-**The reading, in one paragraph.** `pturn` (`+0x100`) rotates over the players each update; the nine-word array
-`+0x104..+0x124` accumulates the update's milliseconds per player and is **zeroed for the player whose turn it is**
-(`BaseWorld::update` = `FUN_00738720`; the reset `FUN_00735960` clears both; `FUN_0072d0b0` reads one). The DE port shows what it
-is *for* (`world/schedule.rs:274` and `:323`): the turn player's objects are updated with the time accumulated since their own
-last turn and get the **full unit-AI update**, and everyone else gets a **between-turns check**. So the turn is a **clock**, not
-another order of updates - and it is **saved state**: `player_turn` and `player_time_delta[player_id]` are world-header fields
-in the save the port loads.
+**T16 is a clock, not an order.** `pturn` (`+0x100`) rotates each update and the nine-word array `+0x104..+0x124` accumulates
+per-player milliseconds, zeroed for the player whose turn it is (`FUN_00738720`, reset `FUN_00735960`, getter `FUN_0072d0b0`).
+The DE port uses it to give the turn player's objects the **full** update and everyone else a *between-turns check*, so building
+it needs a per-player clock and a two-tier unit AI - the second a game-behaviour decision, not a reading. The **saved fields**
+(`pturn`, the nine clocks) are owed by P1 either way.
 
-**Why it is not built.** Two of its three pieces do not exist here: there is no per-player clock (the simulation runs on a fixed
-tick) and there is no two-tier unit AI (`decide` runs every entity fully, every tick, so there is no "between turns" half to run
-in the other eight). Building the second is a **game-behaviour decision** - how fast a computer player reacts and with what time
-budget - not something the reading settles, and guessing it would be the invention this project refuses.
-
-**What is owed regardless, and is the natural next slice.** The **saved fields**: `pturn` and the nine per-player clocks are in
-the save header, so `P1` (`World::from_state`, `--load`) needs them whether or not the AI split is ever built. Carrying them as
-hashed state now is a two-field change with a save-format test, and it makes the turn's *rotation* testable (advance, wrap,
-zero-on-turn) without inventing an AI.
-
-## Where T12 stands: two stages landed, and the inner loop priced (2026-11-16)
-
-**The original's order is read, and two stages of it are in the engine.**
-
-- **The binary** (`FUN_00738720`, `0x738720`): `BaseWorld::update` walks the players array at `+0x184..+0x188` from index 0
-  up - Gaia, then 1-8 - and inside a player's turn walks that player's object list one object at a time (*sweep, else step*:
-  `+0xa0` decides removal, `+0x84` runs the update), so death is applied **in the victim's own turn**. It also advances
-  `pturn` at `+0x100`, which is T16's axis. Full write-up in **D229** and `docs/mechanics/determinism.md`.
-- **Stage 1 (D229)**: the ordered blow pass sorts `(player, id)`, and a building dead when that pass ends finishes no
-  production or research.
-- **Stage 2 (D230)**: `Sim::step` splits the tick's work into **one turn per player** and applies each player's share as a
-  unit, so a man killed by an earlier player's blow does nothing for the rest of the tick and a man whose turn came first has
-  already worked. Two fixtures, `crates/sim/tests/turn_order.rs`, same build with the players swapped.
-
-**Stage 3 - the inner loop - is priced, not started.** It means deciding *and* applying one object at a time inside a
-player's turn, and what it would still buy after the two stages is narrower than it looks. The quantities a decision reads
-that an earlier object of the same player can change in the same tick are: node amounts (already clamped at apply time in
-`grant_takes`, so the sum matches), ring reservations and places (already applied in order), `spent_nodes` (a retask that
-sees the opening amount lags **one tick**), free ground for a spawn (`free_spot_near` already runs at apply time), and the
-**population ceiling** - which was the one real defect in the list, fixed as **D231**: the ceiling was read once at the
-tick's opening, so two barracks finishing with one slot left both delivered (measured: population 6 against a cap of 5; the
-fixture is `population::the_ceiling_is_read_at_the_spawn`).
-
-The price of the rest is a `decide`-per-object rewrite: `decide` is one 700-line `&self` pass over the whole entity list,
-the walk would have to be keyed by id rather than index (a unit born mid-tick shifts every index after it - the hazard
-`references/performance.md` names), and construction's per-site hand count and movement's collision set are aggregates that
-cannot be per object at all. Against that, every remaining case is a **one-tick latency on a quantity that is already
-clamped**, and none of them has a match-visible outcome. **Recommendation: take T16 (the turn) before stage 3** - the tree
-sequences it first anyway, its evidence is in hand from the same function, and it is the axis that decides *whether* an
-object's update runs at all.
+**T12's order is in the engine (stages 1 and 2, D229/D230); stage 3 is priced and not worth it yet**: per-object decide-and-apply
+is a rewrite of a 700-line `&self` pass, keyed by id (a newborn shifts indices), with construction's hand count and movement's
+collision set as aggregates that cannot be per object - and every remaining case is a **one-tick latency on a quantity already
+clamped** (`grant_takes`, `free_spot_near`), with the one real defect (the population ceiling, `D231`) already fixed.
 
 ## There are no live defects - audited, not assumed (D224)
 
@@ -98,6 +60,28 @@ remains is therefore the debt list, not a defect list.
    with and without a stander on the route. D211's decision says so in its own words.
 5. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
    reads yet. This is the interpreter slice the tree puts in Phase 1; it is *not* a prerequisite for items 1-3.
+
+## Now: P1b - the converter, once the save's world section is read (2026-11-16, D235)
+
+**Landed (P1a): the engine's half.** `World::state(&pack)` writes the world as MessagePack (59,108 bytes, 180 us) and
+`World::from_state(&pack, bytes)` reads it back (2,882 us), with the pack's tables installed from the pack's identity and the
+two derived caches rebuilt. The round trip is **hash-identical immediately and after 100 ticks**; a cut state and a foreign
+pack are both refused by name. `--state-out` in the harness writes one and reads it back through the engine.
+
+**What P1b needs, in order:**
+
+1. **Walk the save's sections 2-4** (`docs/save-format.md`): the scenario (`FUN_00545460`/`FUN_00567630`: civs, stockpiles,
+   ages, disabled techs), the map (`FUN_00836830`), and the world's object loop (`FUN_00730600`: `pturn`, `numPlayers`, the
+   objects). None of the three is walked today; the object records are only *found* per save (the 229-byte chains of
+   `float32 x, y`) and their other fields are unknown.
+2. **A `tools/` converter** that emits the state format above for the fields the save supplies, and says which it does not.
+3. **`--load`** in the harness, taking a **pack directory** (`--config <dir>`) rather than eight files, because a state names
+   the pack it was written under.
+4. **A version stamp** in the document before any converter ships: a state from a newer build currently loads and drops the
+   fields it does not know (`deny_unknown_fields` cannot be combined with `flatten`).
+
+**Then P2**: 1,200 ticks from `brit7` against `brit8`, which is the oracle that settles T4, T7, T11 and T12 by comparison rather
+than argument.
 
 ## Landed: the master list (R6, D234, 2026-11-16)
 
