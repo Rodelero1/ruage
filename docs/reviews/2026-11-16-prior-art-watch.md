@@ -62,3 +62,10 @@ parallel to units, and the two are easy to confuse because `TaskInfo` exists on 
 section wrote a broken path (`ruage-tools/gengenconfig`); corrected to `ruage-tools/genconfig` before committing. (3) The
 section's first wording said the Unpack task is what "the work command" installs; the port's own README says the installs
 are `unpack-install-sites`', so the sentence now says the task path and does not name a factory it has not read.
+
+## AI review
+
+`make ai-review` on this commit returned **`skipped — 0 files, 0 comments, 0 tokens, 0 s`**: its exclusion list is
+`docs/**,build/**,target/**,config/gamedata/**,**/*.html`, so a docs-only commit is outside what the reviewer reads. No
+machine finding was available to accept or refuse, and saying so is more useful than implying one was folded in; the
+attacks above are mine, and the one that failed (last run's "no pack field") is reported there rather than dropped.
