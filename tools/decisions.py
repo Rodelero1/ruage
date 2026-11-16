@@ -147,11 +147,20 @@ CORRECTS = [
     re.compile(r"(?:review|re-reading|re-read) of (?:\*\*)?D(\d{1,4})([a-z]?)[^.]{0,160}?\bwrong\b"),
     re.compile(r"correcting\s+(?:the\s+)?earlier\s+(?:\*\*)?D(\d{1,4})([a-z]?)"),
 ]
+# **Two directions, and they are not the same sentence.** "X supersedes D9's clause" and "D9's clause is superseded"
+# both name the dead decision, and the speaker is the live one; "the clause is superseded **by** D10" names the live one
+# and the speaker is the dead one. Reading all three the same way marked **D10 itself** superseded by D9 - the page
+# called the live scale rule retired, which is the one claim here a reader would act on.
 SUPERSEDES = [
     re.compile(r"[Ss]upersedes?\s+(?:the\s+)?(?:\*\*)?D(\d{1,4})([a-z]?)"),
     re.compile(r"\bD(\d{1,4})([a-z]?)(?:'s)?\s+(?:clause\s+)?is superseded\b"),
-    re.compile(r"[Ss]uperseded by\s+(?:\*\*)?D(\d{1,4})([a-z]?)"),
 ]
+# **The passive form is not parsed, and that is the fix.** "…was superseded by D192" reads as a link only when its
+# *subject* is the decision; when the subject is a document ("SPEC v1.153's sentence was superseded by D192") the
+# speaker is a bystander, and the corpus marked D208 superseded by D192 for writing that sentence. Every real supersede
+# in this file states itself from the newer side - "supersedes D9's clause", "supersedes D70's movement" - which is also
+# the file's own convention, and that form has no such trap.
+SUPERSEDED_BY: list[re.Pattern[str]] = []
 
 @dataclass
 class Decision:
@@ -457,10 +466,17 @@ def parse_decisions(text: str) -> Corpus:
     for decision in corpus.decisions.values():
         for target in _ids(CORRECTS, f"{decision.title}\n{decision.text}"):
             if target != decision.id and target in corpus.decisions:
-                corpus.decisions[target].corrected_by.append(decision.id)
+                if decision.id not in corpus.decisions[target].corrected_by:
+                    corpus.decisions[target].corrected_by.append(decision.id)
         for target in _ids(SUPERSEDES, f"{decision.title}\n{decision.text}"):
             if target != decision.id and target in corpus.decisions:
-                corpus.decisions[target].superseded_by.append(decision.id)
+                dead = corpus.decisions[target]
+                if decision.id not in dead.superseded_by:
+                    dead.superseded_by.append(decision.id)
+        for source in _ids(SUPERSEDED_BY, f"{decision.title}\n{decision.text}"):
+            if source != decision.id and source in corpus.decisions:
+                if source not in decision.superseded_by:
+                    decision.superseded_by.append(source)
     return corpus
 
 

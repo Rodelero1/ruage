@@ -47,6 +47,13 @@ moves; say so rather than treating it as a defect.
    generation-stamp array rather than a heap, because equal-cost ordering shapes the route. **The two-level path**: read
    `AddFuturePath`'s parent derivation, then build it.
 
+8. **R8 - the start re-seed, and the path vocabulary** (rows 33, 36, from the sibling thread of 2026-11-16). When the mover
+   begins **inside** a body the original offsets the start by **2 x radius** along a fixed direction ring and re-seeds the search,
+   returning "no low-level path" only when every direction is blocked (`FUN_007fb220`); ours lets a route leave a disc it already
+   stands in, but only outward, and that is a stand-in rather than the rule. And the order's path vocabulary is narrower: forced
+   waypoint, teleport-to-waypoint, per-path hit (patrol we have, D47). *Fixture*: a body spawned inside a stander reaches its goal
+   with its first waypoint off the disc; a forced waypoint is passed without a re-plan.
+
 **Still open, and it needs an artefact rather than work:** row 23, the exclusive goal. **Forty units ordered to one tile**, one
 recording. No read decides it and no decision should stand in for it.
 

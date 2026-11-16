@@ -3125,6 +3125,9 @@ be centered on the center of the base of the unit." Answers: **selected units on
 
 ## D127 - A route whose ground goes stale is re-planned, at most twice
 
+> **Withdrawn by D239 (2026-11-16).** The cap of two is ours; the original counts nothing. The slice that removes it re-measures
+> the price (3.5 ms/tick uncapped against 0.3, taken before the sub-tile pencil) and reports the number.
+
 *2026-11-05. The owner: "I still see scout bumping into trees and getting stuck. Can we learn something from
 https://github.com/glouw/openempire?"*
 
@@ -3327,6 +3330,8 @@ cavalry will simply try to close to the point as close as it can without running
    the new trajectory walked into that state. With D135 landed the same match is **11.8 s** again, at a hash D134 fixed.
 
 ## D135 - A re-plan that fails spends one of the route's two attempts
+
+> **Withdrawn by D239 (2026-11-16)** with D127's cap: there is no attempt counter in the original to spend.
 
 *2026-11-06. Found by chasing the 17x tick that D134's acceptance match ran into: 3.5 ms a tick instead of 0.3 with the same
 31 units, tasks, path lengths and plan count.*
@@ -4919,7 +4924,11 @@ Review: `docs/reviews/2026-11-13-the-standoff-is-measured.md`.
 **Commits us to.** Any ring measurement quotes its band and its window, and a band that matches `0.5`, `1.0` or `1.414`
 exactly is a reason to suspect the tile stream rather than a body.
 
-### D200 - collisions are owner-blind; a friend is a wall, and the winner is not the match outcome
+### D200a - the first landing of owner-blind collisions: built, measured and parked on a branch
+
+> **Superseded by D200, then partly withdrawn by D239.** This is the attempt built on `d189-owner-blind` and parked on a
+> measurement, kept because its failure is the reason the landing took a different shape (the reach equals the place spacing).
+> The rule that stands is D200's; the nudge, the slide, the give-way and the seat re-lay it describes are all gone from the tree.
 
 **The ruling** (owner, 2026-11-13): *"Adopt original game behaviour. Don't make difference of friend or foe as in original
 game."* And, on what to do when fidelity costs the acceptance run: *"For now, we're just testing functionality... functionality
@@ -5083,7 +5092,7 @@ the narrow one: omission has to be deliberate.
 worth the evidence hunt before it, and a hunt that found nothing is part of the question rather than a reason to skip it.
 
 
-### D200 - friends are solid: the owner's rule, and the crowd it has to carry
+### D200 - friends are solid: the owner's rule, and the crowd it has to carry (supersedes D200a)
 
 **What it says.** A body blocks whoever it belongs to. The collision block in the original has no player, team or alliance
 test anywhere in it and its query passes an owner sentinel (`docs/movement-in-the-binary.md`), and the owner ruled on
@@ -5117,6 +5126,9 @@ future "the match no longer resolves" report quotes the **town centre's hp and t
 number alone.
 
 ### D204 - no pushing: a man who cannot get his square looks for another tile of the same resource
+
+> **Withdrawn in part by D239 (2026-11-16).** The next-node re-target and the idle-body nudge are gone: a newcomer with no
+> free square keeps circling the same node, and a resting body is never displaced for any task. The no-pushing rule stands.
 
 **What it says.** The owner, 2026-11-13, playing the D200 merge: *"I don't like villagers pushing other villagers. I want
 instead to look for another free place at next tile with same resource instead of fighting over the place at the same
@@ -6457,6 +6469,10 @@ list), `docs/prior-art.md` (the formations page). Review: `docs/reviews/2026-11-
 
 ### D238 - "villagers still push": it is the seat shuffle, and the shuffle is load-bearing (2026-11-16, nothing landed but the reading)
 
+> **Withdrawn in part by D239 (2026-11-16).** Step 1 - "a seated body must not be past" - is withdrawn: under the game's own
+> past test a stopped man *is* past and is walked through, and the original keeps bodies apart with the **seats**, not the
+> collision. The measurement (the shuffle at 0.52 tiles) stands as the record.
+
 **The report, one line after D237 shipped.** *"In the latest version villager still pushes another villager."* Nothing in the
 engine writes another body's position - `push_the_standing` was deleted by D207/D208/D210 and `made_room` reads 0 - so what a
 player sees is a **seated man giving up his square**: the gather place is a reservation, and it is released whenever a body comes
@@ -6538,6 +6554,12 @@ first** - the tree does not get a guess in the game's name.
 9. **Two levels with a parent** (row 27): a high-level path built when the low-level one fails, and *"we don't have a parent path,
    so we're stopping"*. Blocked on reading `AddFuturePath`'s derivation.
 
+**Added the same day by the sibling thread, and adopted on the same rule:** **33** the start is re-seeded when the mover
+stands inside a body (`FUN_007fb220`) - missing, with the pencil's outward-only edge as its stand-in; and **36** the order's
+path vocabulary (forced waypoint, teleport-to-waypoint, per-path hit) is narrower here. Rows 31, 34 and 35 read as `same`
+(D134's closest-standing-point, the pause enforced twice, the straight line before the search) and take no slice; row 32 - a
+*thing* whose route fails - stays `unknown-static` because the talk settles the search and not the task layer.
+
 **Nothing is ruled out of adoption.** Row 22's two caps (`MAX_GROUND_REPLANS = 2`, `MAX_REPATHS_PER_TICK = 4`) go with the rest,
 and the **3.5-against-0.3 ms/tick** price that justified them was taken before the sub-tile pencil existed, so the slice
 **re-measures** and puts the number in its review. A regression found there is a finding for the owner; it is not a licence to
@@ -6547,3 +6569,36 @@ reinstate a rule the game does not have.
 of **forty units ordered to one tile**, which is the cheapest artefact in the register.
 
 **Order and gates**: `docs/next-step.md`. Review: `docs/reviews/2026-11-16-d239-adopt-the-game.md`.
+
+### D240 - A decision is retired, never deleted - and a supersede link is read from one side only (owner, 2026-11-16)
+
+The owner: *"Can you clean superseded/obsolete decisions?"* The corpus is 245 decisions and 544 KB, and a session reading it
+cannot tell a live rule from one that a later decision killed unless it also reads the killer.
+
+**Deletion is not available, and that is checked rather than remembered.** `tools/decisions.py`'s `check_shrink` compares the
+corpus against `HEAD` and refuses a commit that lost an id - added after 2026-11-12, when the corpus fell from 187 decisions to
+one and `--check` stayed green because the area table was truncated with it. So a rule that is dead **keeps its id and its body**
+and gains a pointer at its head; nothing else is touched, because the body is the evidence for whatever replaced it.
+
+**What "clean" meant here, in three parts.**
+
+1. **A duplicate id was split.** Two full sections were headed **D200**: the attempt built on `d189-owner-blind` and parked on a
+   measurement, and the rule that actually shipped. The parser read the first as the decision and the second as an amendment, so
+   the *index* showed the parked one's title. The parked section is now **D200a** ("superseded by D200, then partly withdrawn by
+   D239"), and `D200` is the shipped rule - which is what every citation in `crates/` and `docs/` means by it.
+2. **The decisions D239 takes half of carry a withdrawal marker**, at the head, naming exactly what went: D204 (the next-node
+   re-target and the idle-body nudge), D238 (step 1, "a seated body must not be past"), D127 and D135 (the cap of two), D200a
+   (the nudge, the slide and the give-way).
+3. **The supersede links were being computed in the wrong direction, and two decisions were falsely dead.** The parser read
+   *"the clause is superseded by D10"* as "D10 is superseded by this decision", so **D10 - the live scale rule - was rendered
+   `superseded`**, and **D208** was marked dead by D192 for writing *"SPEC v1.153's sentence was superseded by D192"*, where the
+   subject is a document and the speaker is a bystander. Only the **forward** form is parsed now (*"X supersedes D9's clause"*),
+   which is also this file's own convention: a reversal adds a row, and the new row says what it replaces. Pinned by
+   `tools/test_decisions.py::SupersedeDirection`.
+
+**What this leaves open, named rather than implied:** a decision whose rule is gone from the tree but which **nothing supersedes**
+- a slice reverted by measurement (D141, D236) - has no marker class yet, and `check` cannot see it. Recognising that class needs a
+probe per decision (does the symbol it names still exist), which is a tool of its own and is not built.
+
+**Basis.** `tools/decisions.py` (`check_shrink`, `SUPERSEDES`), `tools/test_decisions.py`, `docs/decision-areas.toml`,
+`docs/decisions.md` (D200a, D204, D238, D127, D135). Review: `docs/reviews/2026-11-16-d240-retirement.md`.

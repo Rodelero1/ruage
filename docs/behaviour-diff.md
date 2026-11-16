@@ -82,6 +82,12 @@ countable — "N of M ruled" — without pretending to have surveyed 15,766 func
 | 28 | standoff between a worker and the node | **0.70** at an edge, **0.94** at a corner (D169, D199) | **measured** on the owner's saves: bodies at 0.641 / 0.702 x3 / 0.935 x3 round a tree, mine and bush | **same** (the strongest class - measured off the game, not read) | D199 |
 | 29 | a body **at rest** that is not past | `collide` rule 6: `TakeAtRest` - the step is taken **through** him, unbounded, after a repath has been asked for | no such arm: the epilogue has four - target / non-past repath / pause / `"Don't know what to do about my collision(s)"` - and an idle friend who is not past is a **non-past collision** | **different** (found 2026-11-16 while ruling the batch; adopted, D239) | `crates/sim/src/world/movement.rs`, `docs/movement-in-the-binary.md` |
 | 30 | what a re-plan plans around | the bodies met are turned into **obstacle tiles** for the search (`step.rs:1325`) and kept for the life of the route, so each re-plan avoids a growing set of tiles | the ignore list is written **after** the search and read **only by the classifier**; the search's obstacle set is standers and the mover's mates, and the body it met is a **disc** | **different** (found 2026-11-16; adopted, D239) | `crates/sim/src/world/step.rs`, `docs/movement-in-the-binary.md` |
+| 31 | a path is **never a failure** - a **walk** order | `walk_goal`: a blocked or unreachable place becomes `nearest_reachable` (D134), decided once when the order lands | *"expand the search area once, otherwise give the closest point path"* (the talk, p. 83); every click is accepted | **same** (D134) | `crates/sim/src/lib.rs:2395-2430`, `path.rs:314`, `pathfinding-from-the-talk.md` |
+| 32 | a path is never a failure - a **thing** order (gather/build/attack) | `SimError::NoPath` - a tree behind a wall is a refusal | the search returns a closest point; what the task layer does with it is **unread** | **unknown-static** | `lib.rs:2414`, the talk |
+| 33 | the start is **re-seeded** when the mover stands inside a body | none. `short_range_clear` lets a route leave a disc it already stands in, but only **outward** | `FUN_007fb220`: offset the start by **2 x radius** along a fixed direction ring (`DAT_009e252c`), re-seed, and return **3** ("no low-level path") only when every direction is blocked | **different** (mechanism missing; our outward-only edge is the stand-in) | `docs/movement-in-the-binary.md`, D239 |
+| 34 | the pause is enforced **twice**: the path's timer **and** a velocity cap | one mechanism: `pause_remaining` skips the step (`step.rs:1169-1192`), so the body does not move | `[+0x2b0]` writes `path+0x28`, and the velocity accessor returns 0.0 - the string `ret 0.0f due to pause reason` is in the exe (grep: 1) | **same in effect**; different in construction | exe string verified 2026-11-16; sibling session's read of `008a2a30` |
+| 35 | **straight line before any search** | `plan_path` asks `short_range_clear` first, which answers a straight line when the lane is clear | *"Looking for a STRAIGHT LINE path ... There are no non-target collisions there, so we can do the straight line path"* (move_obj.cpp:4079-4112; the string is in the exe, grep: 1) | **same** (ours is stricter: it also clears the terrain, not only non-target bodies) | exe string verified 2026-11-16, `lib.rs:2185-2200` |
+| 36 | the order's **path vocabulary**: forced waypoint, teleport-to-waypoint, per-path hit | none of the three; patrol and attack-move exist (D47), and a `Stop` clears the route | `ADDmove`'s fields include **patrol**, **linear**, **forcedWaypoint**, plus `TeleToWP` and `HitTarget` | **different** (vocabulary narrower) | sibling session's read, 2026-11-16 |
 
 **Row 2's arithmetic, read directly (2026-11-15).** `sub_744d60` and its 1.0 accessor `sub_745060` were decompiled rather than summarised, and five things are
 now facts rather than readings: the attacker record carries **exactly three** `(class, amount)` slots at `+0x18c/+0x18e`, `+0x192/+0x194`, `+0x198/+0x19a`; each
@@ -271,9 +277,9 @@ units ordered to one tile is measured - and that recording is cheap, because it 
 
 ## Corrected the same day, and adopted (D239, 2026-11-16)
 
-**The recount, taken from the table and not from the prose above: 30 rows, 19 ruled. Rows 13-30 are pathfinding or obstacle
-avoidance - 18 rows, of which 17 carry a verdict: 6 same, 11 different, 1 unknown-static.** The morning's figures (7 / 8 / 1
-across sixteen) were three corrections and two missing rows away from the table:
+**The recount, taken from the table and not from the prose above: 36 rows, 24 ruled. Rows 13-36 are pathfinding or obstacle
+avoidance - 24 rows, of which 22 carry a verdict: 9 same, 13 different, 2 unknown-static.** The morning's figures (7 / 8 / 1
+across sixteen) were, in the end, three corrections and six rows that had never been written down at all (29-30 and 31-36).
 
 - **Row 18 was wrong to be `same`.** `setPause` (`0x8aa6d0`) writes `path->pause` **unconditionally**; `step.rs` refuses the
   draw while `pause_remaining > 0`, and the comment beside it claimed "a running timer is never re-rolled", which the read does
@@ -300,3 +306,14 @@ two-level path is.
 
 **The one row that adoption cannot settle is row 23**, and it does not need the game's code, it needs **his recording**: forty
 units ordered to one tile. Nothing we can read answers it, and no decision should be taken in its place.
+
+**Row 31 and row 32 are one sentence split in two**, and the split is the finding: D134 already answers "come as close as you can"
+for a **place**, and the tree refuses outright for a **thing**. The talk's rule is about the search, so it settles the first and
+says nothing about the second - which is why one is `same` and the other stays `unknown-static` rather than becoming a defect.
+
+**Rows 31-36 came from the sibling thread** (`#age2hd`, 2026-11-16: *"What are you able to copy ... in area of pathfinding and
+obstacle avoidance?"*), and every one was re-checked against this tree before it was written down: 31 and 35 read the code, 34 and
+35 grepped the exe for their own strings (`due to pause reason`, `Looking for a STRAIGHT LINE path` - one hit each, 2026-11-16),
+and 33 and 36 carry a sibling session's read **labelled as not re-read here**. Two of that thread's items are deliberately **not**
+rows: the per-path **continue counter** (how many times a route has resumed) is instrumentation with no rule reading it, and DE's
+Collide & Correct is a **later build's** mechanism - both belong in the register only as "not copied, and why".

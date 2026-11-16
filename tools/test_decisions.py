@@ -614,6 +614,28 @@ class InlineDecisions(unittest.TestCase):
         self.assertEqual([], corpus.unclassified)
 
 
+class SupersedeDirection(unittest.TestCase):
+    """A sentence about a supersede points one way, and its subject may not be the decision that writes it.
+
+    Both forms live in prose - *"X supersedes D9's clause"* in the newer decision, *"the clause is superseded by D10"*
+    in the older one - and both were read as "the mentioned decision is the dead one". In the repository's own corpus
+    that marked **D10** superseded by D9 (the page called the live scale rule retired) and **D208** superseded by D192
+    for writing *"SPEC v1.153's sentence was superseded by D192"*. The forward form has no such trap, so it is the only
+    one parsed, and that is what these two tests pin.
+    """
+
+    def test_a_supersede_sentence_marks_the_mentioned_decision_and_not_the_speaker(self):
+        text = (
+            "## D1 - old\n\n**Decided.** The clause is superseded by D2.\n\n"
+            "## D2 - new\n\n**Decided.** Supersedes D1's clause, which was inverted.\n\n"
+            "## D3 - a note\n\n**Decided.** The SPEC's sentence was superseded by D1.\n"
+        )
+        corpus = parse(text)
+        self.assertEqual(["D2"], corpus.decisions["D1"].superseded_by)
+        self.assertEqual([], corpus.decisions["D2"].superseded_by)
+        self.assertEqual([], corpus.decisions["D3"].superseded_by)
+
+
 class DanglingIdsAreARatchet(unittest.TestCase):
     """An id the corpus references and never defines is a finding, and the corpus has seven of them (D115, D122b, D124, D125b, D126,
     D136, D190 - ids quoted from earlier prose or reserved and never written). They are recorded in `docs/dangling.toml` with the
