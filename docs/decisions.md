@@ -6366,3 +6366,48 @@ and the state is written only when something asks for it.
 `World` and its 24 field types, `crates/data/src/pack.rs` (`civs`), `crates/sim/tests/state.rs` (three fixtures: round trip
 identical at 0 and 100 ticks, a cut state refused, another pack refused by name). Review:
 `docs/reviews/2026-11-16-d235-state.md`.
+
+### D236 - villagers walk through each other, and both obvious fixes starve the match (2026-11-16, nothing landed but the specification)
+
+**The owner's report, and what is *not* the cause.** *"Villagers push each other. That may never happen. Villager has to reroute,
+never push the other villager away"* - seen in window mode. Displacement was already gone: `push_the_standing` was deleted by
+D207/D208/D210 and `made_room` is a dead counter that always reads 0. Two other mechanisms produce the same look, and one of
+them is the one he saw:
+
+1. **A group walks over itself (D207).** Every unit ordered to move in the same tick became a path-ignore "mate" of the others
+   and the collider was dropped outright. The window submits one walk per selected unit in one tick, so a box-select and a
+   right-click turn the selection into a crowd that passes through itself. The original has this exemption, but the list it
+   filters is the *formation's* members, and Forgotten Empires' own documentation puts villagers, trade carts and fishing ships
+   in no formation - *"each of them takes their own path"* (`docs/prior-art.md`, `docs/movement-in-the-binary.md`).
+2. **A node's ring is re-laid** when it refuses a man (D200), and the re-lay re-assigns every man on the node.
+
+**Both fixes were built and both were measured, and both were worse than the defect.**
+- **Narrow the exemption to soldiers** (villagers solid): the acceptance match **starved**. Seed 7, 48,000 ticks, release:
+  entities **149 → 139**, `repaths` **432 → 1,401** - and the split moves the *other* way, body **90 → 22** and ground
+  **342 → 1,379**: the men are no longer blocked by bodies, they are re-planning round the ground for ever - and five `gather`
+  fixtures went red. A villager crowd
+  that may not pass over itself has nothing to route round a body with: `STALLED_TICKS` is 40, i.e. two seconds of standing per
+  encounter, and forty men round a woodline spend the match standing.
+- **Keep the exemption and put a body back when it lands deeper than it started** (the original's pause-the-higher-id answer,
+  applied as a post-step separation pass): the same starvation and the same **1,401** repaths, because the gather ring's own
+  approaches are deeper than the standoff by construction - the ring seats men 0.66 apart and they pass within 0.2 of each other
+  on the way in.
+
+Both were reverted. The tree is back to `2f1ab0ae663e2506` at 48,000 ticks (149 entities, 432 repaths), which is the baseline.
+
+**What is left in the tree.** `crates/sim/tests/overlap.rs`: the **specification**, with the rule as the game states it - an
+encounter may reach contact and may never get deeper (`collision::a_walker_never_ends_a_tick_inside_a_friend` pins the pair's
+version of the same thing). `eight_villagers_ordered_to_one_tile_never_walk_through_each_other` is **red on today's engine** and
+is `#[ignore]`d with the reason; on the pre-fix tree it reports *"villagers (9700, 9702) got 0.346 tiles apart at tick 101,
+deeper than the 0.372 they first touched at"*, which is the defect in one line. The second fixture,
+`a_newcomer_does_not_move_the_working_gatherers`, is **green and mutation-proved**: a re-lay that wipes the seats reddens it
+(`villager 9800 lost the place it was working`), so the seats survive a re-lay today and that is now pinned.
+
+**Why nothing landed, in one sentence.** The owner's rule is right and the engine cannot yet obey it cheaply: making villagers
+solid needs a **body-aware replan** - a route that goes *round* a body, which is D210b's remaining half - and without it the
+crowd deadlocks into the same failure D205 measured. The fix is a slice of its own, not a flag.
+
+**Basis.** `crates/sim/src/world/step.rs` (`stamp_group`, `maybe_respawn`→`maybe_respread`, `move_bodies`), `crates/sim/src/
+world/movement.rs` (`blocker_at`, the mate and "past" clauses), `docs/movement-in-the-binary.md` (the path-ignore list),
+`docs/prior-art.md` (openaok, genie, openage, the formations page), and the two acceptance runs above. Review:
+`docs/reviews/2026-11-16-d236-overlap-and-reroute.md`.

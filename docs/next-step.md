@@ -61,6 +61,22 @@ remains is therefore the debt list, not a defect list.
 5. **The effect interpreter's remaining kinds** (T2): 0/101/103 - tech cost, tech time, set-attribute rows that no consumer
    reads yet. This is the interpreter slice the tree puts in Phase 1; it is *not* a prerequisite for items 1-3.
 
+## Blocked, with the numbers: villagers must reroute, not walk through (D236, 2026-11-16)
+
+The owner's rule - *"Villager has to reroute, never push the other villager away"* - is not built, and the reason is measured
+rather than unknown. Two implementations were tried and both starved the acceptance match (seed 7, 48,000 ticks, release):
+entities **149 -> 139**, `repaths` **432 -> 1,401**, five `gather` fixtures red. Both are reverted; the baseline hash stands.
+
+**What the next slice needs, in order:**
+1. **A route that goes round a body** (D210b's remaining half). This is the missing mechanism: `STALLED_TICKS` gives a blocked
+   man two seconds of standing before he replans, and forty men round a woodline spend the match standing. Nothing about the
+   seats, the standoff or the pause has to change if the replan can find a way past.
+2. **Then narrow the path-ignore exemption to soldiers** - one line in `stamp_group` - and let
+   `eight_villagers_ordered_to_one_tile_never_walk_through_each_other` (in `crates/sim/tests/overlap.rs`, `#[ignore]`d today)
+   come off ignore. It is already the specification: red on this engine with the pair and tick named.
+3. **The gate is the acceptance match**, not a test count: `entities` back to 149 and `repaths` near 432 at 48,000 ticks, with
+   the hash free to move because this is a behaviour change the owner asked for.
+
 ## Now: P1b - the converter, once the save's world section is read (2026-11-16, D235)
 
 **Landed (P1a): the engine's half.** `World::state(&pack)` writes the world as MessagePack (59,108 bytes, 180 us) and
