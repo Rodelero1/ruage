@@ -7137,8 +7137,15 @@ against a trunk or a wall face brushes the tile) and `a_villager_walking_beside_
 `body_clearance >= 0` on **every** tick. Refuse it and the sheep fixture fails. There is no single threshold that satisfies both,
 because both are honest about different things: **our blocked tile is a whole tile; the game's obstacle is an object with bounds.**
 
-**So the next slice is the model, not the mover**: a blocked tile has to know what stands in it and how much of the tile it fills -
-a tree's trunk is not the tile, a building's footprint is exactly its tiles - and then the step test has one measure that both
-fixtures can live with, and the slide has nothing left to hide. That is also what "no acceleration or deceleration" needs to be
-true everywhere rather than on open ground.
+**So the next slice is the model, not the mover**, and the binary and the decompilation say exactly what it is
+(`docs/movement-in-the-binary.md`, section of 2026-11-17): **ground is a per-tile test at a point** (`FUN_008aa480` - no radius
+anywhere in it), and **things are boxes with a `(radius_x, radius_y)` pair**, with the game's own distance function measuring to
+the box so that everything inside a footprint is distance zero
+(`compute_distance_sq`, `src/unit/unit_action_build_77a0.cpp`). Overlap is then `distance-to-box < radius`: a man at **half a
+diameter** from a tree touches nothing, and a body never enters a building's footprint - which is D176's guarantee, obtained the
+game's way rather than by growing tiles.
+
+That also corrects an option this project offered the owner: "strict, no part of the body may overlap a blocked tile" is **not**
+his rule and not the game's - it is D176 applied to the wrong question, the pathfinder's grown tile used at stepping time. His
+half-diameter rule *is* the game's rule.
 

@@ -400,3 +400,38 @@ So the slide is **ours**: D188 added it because a villager that could not slide 
 own answer to that situation - a repath, with the loser paused - is a pair our mover does not have in full. The decompilation has
 nothing to add: `src/unit/unit_action_collision.cpp` is 61 lines and walks a coordinate list for group children, with no
 movement geometry in it (`docs/prior-art.md`).
+
+## What may be stood on: a point test for ground, a box for things (2026-11-17)
+
+Asked by the owner - *"how come that villagers couldn't stand close enough to work tree properly if they approach the tile with
+tree to 1/2 diameter?"* - and the answer from the binary is that **they can, and our engine was the odd one**. Two functions:
+
+**The ground is tested at a point, with no radius.** `FUN_008aa480(x, y)` (`move_obj.cpp` 0x51d) bounds-checks the tile, reads the
+unit's terrain passability mask (`FUN_008427c0`), and asks whether the tile's bits, with that mask removed, are zero - i.e. *is this
+tile passable for this unit*. Only then does it run the object query. There is no growth of the tile by the body's radius anywhere
+in it, and the arguments are cast to `int` before use: they are tile indices.
+
+**Things are boxes with a radius pair, and everything inside the box is distance zero.** The decompilation carries the game's own
+distance function, `compute_distance_sq` in `src/unit/unit_action_build_77a0.cpp`:
+
+```c
+float radius_x = *(float *)((char *)entity_proto + 0x20);
+float radius_y = *(float *)((char *)entity_proto + 0x24);
+float delta_x = (dx <= radius_x) ? 0.0f : (dx - radius_x);
+float delta_y = (dy <= radius_y) ? 0.0f : (dy - radius_y);
+return (delta_x * delta_x) + (delta_y * delta_y);
+```
+
+So distance is measured **to the box**, not to the tile and not to the centre: a point anywhere inside a building's footprint is at
+distance 0, and a body's overlap is `distance < radius`. That is where "no body inside a wall" comes from in the original - the
+object query, not a grown tile - and it is also why a villager can stand at **half a diameter** from a tree: his centre is on the
+next free tile, his box-vs-box distance to the trunk is exactly the sum of the two radii, and zero overlap is the contact point.
+
+**What our engine does instead** (D176): it grows *every blocked tile* by the body's radius at stepping time. That is the
+pathfinder's trick - "shrink the unit to a point, expand every other obstruction" - applied to the wrong question. It is stricter
+than the game by construction, which is why a gatherer was refused a **164 raw (0.008 tile)** brush and stopped 267 ticks at
+`WaitGround`, and why the terrain slide was load-bearing: it was sneaking men past a test the original does not have.
+
+**The model to copy, then, is three lines**: ground = the tile under the point; things = their `(radius_x, radius_y)` box; overlap =
+distance-to-box `<` the mover's radius. No threshold, no brush allowance, and nothing to slide.
+

@@ -16,7 +16,10 @@ game. No sliding."* The fixtures say it in the observable form (one step a tick 
 **the model: a blocked tile must know what stands in it and how much of it it fills** - a trunk is not a tile, a footprint is.
 Then one measure serves both and the slide has nothing to hide. **Measured, it is narrow**: stepping by the tile grid alone took the
 no-slide suite from **14 red to 3** (one of the three the crowd fixture that already failed), so what is left is a rule for
-buildings (footprint exact), a tolerance for node trunks, and `a_newcomer_does_not_move_the_working_gatherers`.
+buildings (footprint exact), a tolerance for node trunks, and `a_newcomer_does_not_move_the_working_gatherers`. **And the binary
+says what the rule is**: ground is a point test at the tile (`FUN_008aa480`, no radius), things are boxes with `(radius_x,
+radius_y)`, and distance is measured to the box (`compute_distance_sq` in the decompilation) - so half a diameter from a tree
+touches nothing, and a body cannot enter a footprint. Three lines to copy, no threshold needed.
 
 **Waiting on the owner - the only open question.** The queue's floor is **entities >= 155**. The control reads **154** and never
 resolves; the D250 build reads **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is
