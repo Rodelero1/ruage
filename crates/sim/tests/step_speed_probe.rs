@@ -10,6 +10,12 @@
 //! * **over** - displacement > step + 1: faster than the unit's own speed.
 //!
 //! `--ignored --nocapture`, prints one table and asserts nothing.
+//!
+//! **What its numbers mean after D252.** The displacement here is the straight line between two ticks, so a *fold* - a corner
+//! walked through inside one tick - reads as a chord shorter than the step walked, and so does a placement (`settle_workers`
+//! moves a body onto its gather place by up to a step). Before D252 the partial bucket was the defect (0.11-0.95 of a step,
+//! each one a corner's landing); after it, the bucket is those two shapes. The **rule** is pinned on the honest measure - how
+//! much closer to the goal *along the route* the body got - in `crates/sim/tests/whole_steps.rs`.
 
 use std::collections::BTreeMap;
 

@@ -109,8 +109,6 @@ impl Walk {
     }
 }
 
-
-
 /// The estimate: **Euclidean distance in tiles, scaled by the original's weight** (`FUN_007ffcd0` distance, `FUN_008007f0`
 /// x25). Weighted rather than admissible, which is the game's trade - it explores fewer tiles and accepts slightly longer
 /// routes (R7's reading).

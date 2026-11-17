@@ -1,4 +1,4 @@
-# OPEN - R1 continues, and one question is waiting on the owner
+# OPEN - R1 continues, and two questions are waiting on the owner
 
 **Where things stand (2026-11-17).** The owner ruled that the game is the source of truth on pathing (D239) and answered the four
 forks it cannot settle (D241). Since then: **R1 measured and split** (D242 - both halves built, both reverted, the numbers below);
@@ -20,28 +20,26 @@ and keep the ~0.09-tile walk-through it hides. The numbers, and the two fixtures
 are in `docs/reviews/2026-11-17-r1a-at-rest.md`. Also named there: **one property is now unpinned** - "a man who is not past is
 never crossed" cannot be observed from outside the world without a route accessor, which is why the slice is parked.
 
-**Third question (2026-11-17): may a villager ever change speed?** The owner: *"villagers never slow down. They may stop or
-stop to repath but since they are never in the formations, there is no reason for them to change speed. So either they walk, or
-stand."* He asked for the game and the decomp to be read before anything is written, and for him to decide. Both reads are done:
+**Third question - answered by the owner and landed (2026-11-17, D251/D252).** May a villager ever change speed? The owner:
+*"villagers never slow down ... so either they walk, or stand"*, verified first and then ruled: **fixture and fix in one slice**.
 
-- **The game** (`docs/movement-in-the-binary.md`, "The maximum forward velocity, read"): `getMaxVelFwd` (`008a2a30`) returns the
-  unit's own dat speed, multiplied only by a motion-object factor (`[move+0x14]+0x6c`) when that is `> 0`, and **exactly 0.0 on
-  a pause**. No terrain factor, no ramp, no partial arm. The factor's writer is a virtual setter with no direct caller -
-  **unread** - and the only mechanism that needs one is the formation, where villagers are never members.
-- **The decomp cannot help**: it has no speed/velocity code at all (`docs/prior-art.md`, "not an oracle for movement speed").
-- **This engine** (`step_speed_probe`, 5 villagers, 4,000 ticks, `--ignored --nocapture`): **89.00% stand**, **10.93% walk a whole
-  step**, **0.07% (15 of 20,000 body-ticks) move 0.11-0.95 of a step**, none faster than a step. All fifteen are decided
-  `Take` - so not a slide, not a pause - and fourteen of them sit on one long `Move` where **`path_length` decrements on every
-  one**: a sub-step tick is a **waypoint's landing** ("take the whole gap when the remainder is within one step"), not a
-  collision and not a slow-down the mover asked for. The fifteenth is an idle settle at the goal.
-
-**The fork.** (a) Land the fixture `#[ignore]`d with that measurement as the specification, and make the movement slice that
-removes the landing clamp its un-ignoring - the D243/D248 pattern, same day, and it keeps `main` green. (b) Fixture and fix in
-one slice, which means changing the **landing and waypoint-spend** rule together (a spend is an equality today, so a step that
-passes through a waypoint instead of stopping on it stops consuming waypoints unless both change), and re-measuring arrival for
-every task that uses it. (c) Narrow the rule to "the speed setting never changes; a step is `speed/rate` or the remainder of a
-leg", which is his sentence without the sub-step ticks and costs nothing. **Recommendation: (a)**, because the landing clamp is
-load-bearing for arrival and its removal is a slice with its own measurement, not a one-liner.
+- **The game** (`docs/movement-in-the-binary.md`): `getMaxVelFwd` (`008a2a30`) returns the unit's own dat speed, multiplied only
+  by a motion-object factor (`[move+0x14]+0x6c`) when that is `> 0`, and **exactly 0.0 on a pause**. No terrain factor, no ramp,
+  no partial arm; the factor's writer is unread and only a formation needs one. **The decomp cannot help** - it has no
+  speed/velocity code at all (`docs/prior-art.md`).
+- **The defect**: 15 of 20,000 villager body-ticks moved 0.11-0.95 of a step, all decided `Take`, fourteen of them at a **route
+  transit** - the mover landed exactly on a corner and spent the rest of that tick's step on the gap.
+- **The fixture landed**: `crates/sim/tests/whole_steps.rs` - every walking tick covers one whole step *along the route* (or
+  stands), the last tick lands on the goal, and a walk costs the ticks its geometry owes. The walk test is `#[ignore]`d with its
+  number: **tick 158, 86 raw (0.107 of a step), 14 of 1,174 walking ticks**, and 14 extra ticks for the walk.
+- **The fix is parked, not landed** (`docs/reviews/2026-11-17-fold-the-step-parked.patch`): the corner fold makes the fixture green
+  and the acceptance match **bit-identical** (fold off 39.5 / 40.3 s, fold on 40.0 / 39.7 s,
+  `entities=138 players=1 hash=01a0fb771ee2e75b repaths=761`), but it **freezes a gatherer** in a 400,000-tick fixture -
+  `research::a_trebuchet_cannot_be_trained_before_the_imperial_age` banks **200 of 400** and stalls with **1 repath**, one body on
+  a four-point route at `progress 0` from tick 100,000 to 400,000, and the same binary passes in **7.7 s** with the fold off. The
+  mechanism is unread, so the slice is parked (D252) and the next attempt owes a per-tick trace of a frozen body first.
+- **The attempt before it**: spending corners *before* the step cuts them - a walker wedged against a forest edge for **68 ticks**,
+  sliding **1 raw unit** a tick.
 
 ## The queue, in the order a player would see it
 

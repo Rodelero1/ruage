@@ -6966,3 +6966,64 @@ and needs its own fixture, or the win is the better outcome and the floor wants 
 the engine does not keep is **named as a finding on the engine** (D249's rule) rather than parked in an ignored test; and any
 claim of the shape "a body may never be inside X" is answered about the **body**, never about the tile its centre is in -
 three of the four defects above were the same mistake made in three places.
+
+### D251 - the game's speed is the unit's own, and this engine's walk stutters at every corner (2026-11-17)
+
+*The owner: "villagers never slow down. They may stop or stop to repath but since they are never in the formations, there is no
+reason for them to change speed. So either they walk, or stand" - and, before anything was written, "verify from the original
+game and [the decomp] first. Then let me decide."*
+
+**The game.** `getMaxVelFwd` (`008a2a30`, move_obj.cpp 3,069-3,145) returns the unit's own dat speed (`unitdef+0xe4`), multiplied
+by **one** thing - a motion object's factor (`[move+0x14]+0x6c`) when that is `> 0.0` - and **exactly 0.0 on a pause**. No terrain
+factor, no ramp, no partial-speed arm. The factor's only writer is the virtual setter `0x7f4130`, which has no direct caller and
+is **unread**; the only mechanism that needs one is the formation (`FormationParams(..., breakAutoFormationsBySpeed=%d)`), where
+villagers are never members. Read in `docs/movement-in-the-binary.md`.
+
+**The decompilation cannot help**: `samuelcaldas/age-of-empires-2-decomp` has no speed, velocity, acceleration or max-velocity
+code at all - its unit movement and formation files are 16-47-line stubs, and the only "acceleration" in it is camera drag
+(`docs/prior-art.md`). Recorded so nobody searches it twice.
+
+**This engine, measured** (`crates/sim/tests/step_speed_probe.rs`, 5 villagers, 4,000 ticks): **89.00% stand, 10.93% walk a whole
+step, 0.07% - 15 of 20,000 body-ticks - moved between 0.11 and 0.95 of a step**, and every one was decided `Take`: not a slide,
+not a pause, not a refusal. Fourteen sat on one long `Move` where `path_length` decremented on each - a **corner's landing**: the
+mover aimed at the next route point and `step_towards` lands exactly on a point within one step, so the tick spent the gap
+(0.011 tiles) instead of a step. The fifteenth was an idle settle at the goal.
+
+**The fork put to him**, with costs: (a) land the fixture `#[ignore]`d as the specification; (b) fixture and fix together; (c)
+narrow the rule to the speed setting. **He chose (b)** - D252.
+
+### D252 - whole steps: the rule is pinned, the fix is parked on a measured freeze (2026-11-17)
+
+*The owner chose (b): the fixture and the fix in one slice. What landed is the fixture; what did not is the fix, and it is parked
+with its numbers rather than left in the tree.*
+
+**The rule, as a fixture.** `crates/sim/tests/whole_steps.rs`: on every tick a villager is walking, the distance he covers **along
+his route** is exactly one step, or zero (a refused step, a pause, a body in the way); the only short tick allowed is the last,
+which lands on the goal and may not overshoot it. Measured along the route and not as a straight line, because a corner walked
+*through* inside a tick makes the chord shorter than the path - the straight-line version of this test cannot tell a fold from a
+lost tick, which is why it took three attempts to write. The walk test is **`#[ignore]`d with its number in the message**; the
+short-walk arrival test is green.
+
+**The defect it pins.** The mover aims at the route's next point and `step_towards` lands exactly on a point within one step: right
+for the goal, wrong for a corner, which spends the gap (**0.011 tiles, 0.107 of a step**) and loses the rest of the tick. Measured
+by `step_speed_probe`: **15 of 20,000** villager body-ticks between 0.11 and 0.95 of a step, every one decided `Take`, fourteen at
+a transit on one `Move`.
+
+**The fix that is parked** (`docs/reviews/2026-11-17-fold-the-step-parked.patch`, two files): `World::fold_the_step` walks the rest
+of the step along the next leg, spending each corner as the fold begins, refused by ground (`clearance_at < 0`) or a body
+(`radius + other radius`), bounded to two legs, never past the goal, re-stamping sight after it moves. It **makes the fixture
+green** - 0 short ticks, and the walk takes the `ceil(route/step) + 1` ticks it owes - and the acceptance match is **bit-identical**
+(fold off **39.5 / 40.3 s**, fold on **40.0 / 39.7 s**, `entities=138 players=1 hash=01a0fb771ee2e75b repaths=761` both ways).
+Neither is enough, because it **freezes a gatherer**:
+`research::a_trebuchet_cannot_be_trained_before_the_imperial_age` banks **200 of 400** food and stalls for the rest of its
+**400,000** ticks with **1 repath**; a dump shows one body on a four-point route with `Gather { progress 0 }`, in the same position
+from tick 100,000 to 400,000, and the same binary passes that test in **7.7 s** with the fold disabled. The mechanism is unread,
+and a movement change whose consequence cannot be explained is parked, not landed.
+
+**The attempt before it, also in the patch's message**: spending corners *before* the step makes the aim the point beyond them,
+which **cuts** the corner - a walker wedged against a forest edge for **68 ticks**, `Slide` at **1 raw unit** a tick.
+
+**Commits us to.** The rule is the owner's and stays pinned: a walk is whole steps on the route's own measure, and a corner is
+walked through rather than landed on. The next attempt owes a per-tick trace of a frozen body - `last_step`, aim, clearance - before
+it touches the mover, because two designs have now failed in two different ways and the second one failed a fixture 400,000 ticks
+long.
