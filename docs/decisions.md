@@ -7149,3 +7149,30 @@ That also corrects an option this project offered the owner: "strict, no part of
 his rule and not the game's - it is D176 applied to the wrong question, the pathfinder's grown tile used at stepping time. His
 half-diameter rule *is* the game's rule.
 
+### D256 - copy the game: the step now asks the right question, and the route still asks the wrong one (2026-11-17)
+
+*The owner: **"Copy the game."** Done on the step side in one evening; the reason it cannot land is a second, different site, and
+it is named exactly.*
+
+**What was built.** `step_is_walkable` no longer grows every blocked tile by the body's radius (the pathfinder's trick, asked at
+stepping time). It asks the game's two questions instead: the **tile under the point** (already there - `free(landing)`), and
+**"does my disc overlap a building's footprint box?"** (`disc_touches_a_building`, box distance against `footprint_rect`, which is
+`compute_distance_sq`'s measure from the decompilation). The terrain slide is gone with it: a refused step is a repath or a stand.
+
+**What it fixed, measured**: the sheep family's refusal is no longer the coarse tile. Traced, the only refusal left on
+`the_villager_follows_the_sheep` is **269 ticks of `refuse building`** - the gatherer squeezing past the **town centre's
+footprint**, his disc overlapping it by a hair on a route that hugs the wall.
+
+**And that is the real second site**: `crates/sim/src/path.rs` has **no radius in it at all** - the search runs over free tiles,
+so a villager's 0.2-tile body plans a **point** route along the TC's edge and the mover then refuses the step the plan chose. The
+original does not do that: its search answers for *"the boundaries of where this unit's radii will go"*
+(`doIntelligentMovementUpdate`'s own string), i.e. the walkable area is shrunk by the unit's radius **before** the search.
+
+So "copy the game" is two halves and only one is done: **plan on ground a disc can occupy, and step with the box test.** The
+pathfinder slice is the other half, and it is the one with the crowd behind it - which is why it is not started at 02:00 with a
+reboot at 04:00.
+
+**Also refuted this evening, for the trail**: with the step test removed entirely (tile-grid only) the no-slide suite is **3 red**
+(one of them the crowd fixture that already fails); with the box test added back it is the same 3 plus the animals family's 3,
+all of them the TC-edge route above.
+
