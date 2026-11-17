@@ -106,7 +106,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li data-k="superseded"><b>8</b> superseded</li>
 <li data-k="uncited"><b>42</b> no stated basis</li>
 <li data-k="gaps"><b>31</b> named gaps</li>
-<li data-k="undecided"><b>14</b> undecided questions</li>
+<li data-k="undecided"><b>16</b> undecided questions</li>
 <li data-k="dangling"><b>7</b> dangling references</li>
 <li data-k="unclassified"><b>0</b> unclassified</li>
 </ul>
@@ -544,12 +544,13 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </article>
 </div>
 </details>
-<details class="group" id="area-pathfinding-movement" data-area="Pathfinding &amp; movement" data-unfinished="0" data-undecided="3" open>
-<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">42 decisions · 3 undecided · 2 superseded · 3 with no stated basis</span></summary>
+<details class="group" id="area-pathfinding-movement" data-area="Pathfinding &amp; movement" data-unfinished="0" data-undecided="4" open>
+<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">42 decisions · 4 undecided · 2 superseded · 3 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U5</span> Are unit speeds in tiles/second, and what is the tile size in world units? Speed 1.35 (knight) is consistent with tiles/s.</li>
 <li><span class="id">U7</span> What pathing algorithm does the game use (A, flow field, something else), and what are its cost weights?</li>
 <li><span class="id">U25</span> Three pathing rules the original keeps and this engine does not - what does the owner want? crates/conformance asserts 33 rules read out of samuelcaldas/age-of-empires-2-decomp and HD&#x27;s own binary; 30 pass, and the three that fail are the three below. (a) The search answers None where the original answers the closest reachable point (deck slide 96: &quot;expand the search area once, otherwise give the </li>
+<li><span class="id">U27</span> Formations: who is exempt from collision, and when? Row 30&#x27;s open half. The original&#x27;s search takes an ignore list - the route&#x27;s own linked array filtered by isMoving, or every member of a group with no per-member test (FUN_008007f0) - and Forgotten Empires&#x27; own docs put villagers, trade carts and fishing ships in no formation. Our stand-in is same-tick mates (D207), and D237 narrowed it to soldie</li>
 </ul></div>
 <div class="kind" data-kind="decisions">
 <article class="decision s-decided" id="d-D52" data-id="D52" data-origins="owner" data-unresolved="0" data-status="decided">
@@ -1409,13 +1410,14 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </article>
 </div>
 </details>
-<details class="group" id="area-economy" data-area="Economy" data-unfinished="3" data-undecided="4" open>
-<summary><span class="range">Economy</span> <span class="gcount">34 decisions · 4 undecided · 3 unfinished · 1 superseded · 2 with no stated basis</span></summary>
+<details class="group" id="area-economy" data-area="Economy" data-unfinished="3" data-undecided="5" open>
+<summary><span class="range">Economy</span> <span class="gcount">34 decisions · 5 undecided · 3 unfinished · 1 superseded · 2 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U14</span> resource_in codes for gathering tasks. Read from dat.unit_data.tasks (see below): 0 food, 1 wood, 2 stone, 3 gold are confirmed by the variant that carries them; 15, 16, 17 and 56 are pseudo-resources whose meanings are inferred but not proven — VMHUN uses 15, VMFOR and VMFAR use 16, VMFIS uses 17, VMMIN also lists 56.</li>
 <li><span class="id">U20</span> How much food does a farm hold, and where does the number come from? The base is 175 — resource 36, the same in every playable civ&#x27;s row — and the three farm techs are kind-1 adds to that line: Horse Collar [1, 36, 1, -1, 75], Heavy Plow +125, Crop Rotation +175, the Chinese team bonus +45. 175 + 75 = 250, the published figure we had taken as the base.</li>
 <li><span class="id">U22</span> How far, and how hard, does the game look for a resource? librematch/genie&#x27;s port of FUN_140c49760 (crates/engine/genie-core/src/gathering/gather_search.rs, lines 386-500) states the contract: a breadth-first walk from the unit&#x27;s tile over tiles the player has explored and the unit can stand on, out to the unit&#x27;s line of sight + 5 (distance counted 1.4 per diagonal step + 0.61, truncated), the que</li>
 <li><span class="id">U24</span> When does a house&#x27;s population arrive, and who holds it? HD&#x27;s own binary carries the action: TRIBE_Action_Housing (its .?AV…@@ RTTI name) beside housing-headroom, amount-building-housing-rate and housing.wav in Age2HD/AoK HD.exe&#x27;s strings, so the mechanic is 5.7&#x27;s and not a later build&#x27;s. librematch/genie&#x27;s port (construction/housing/) gives it shape: 50 wood paid from the owner&#x27;s attributes at th</li>
+<li><span class="id">U26</span> What does the trade route do, and when is it recomputed? src/trade/trade_action_pathing.cpp is the one readable non-zone module in samuelcaldas/age-of-empires-2-decomp that touches movement we have no code for. We have no trade at all: no trade cart, no market, no route. The rule cannot be tested because nothing can be called - the honest instrument is this row, not an ignored test (the owner&#x27;s no</li>
 </ul></div>
 <div class="kind" data-kind="unfinished"><h4>Not finished</h4><ul class="gaps">
 <li data-decision="D186"><a class="id" href="#d-D186">D186</a> What is not claimed. The radius is measured from six men and one source kind; the owner&#x27;s mines and bushes are in the same file but their front rows were not separated out, and a bush smaller than a tree might ring differently. The 0.084 spread is taken to be men not yet settled rather than three different radii. And the builder&#x27;s ring is not measured at all: no save with a site under construction</li>
@@ -5595,6 +5597,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-15-prior-art-watch.md:51</code> (`D115` at `SPEC.md:661` → `:662`, and its neighbours) because `7e052a5`, which last touched `SPEC.md`, did not re-render</li>
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:55</code> `decisions.py --check` **0 findings, 239 decisions, 13 open questions, 7 dangling ids** (D115, D122b, D124, D125b, D126,</li>
+<li><span class="id">D115</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:18</code> **256 decisions, 14 open questions, 42 with no stated basis, 7 dangling ids** (D115, D122b, D124, D125b, D126, D136,</li>
 <li><span class="id">D122b</span> <code>SPEC.md:692</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
 <li><span class="id">D122b</span> <code>SPEC.md:756</code> | 2026-11-05 | v1.91 - **the adversarial review of the panel and the farm (D122b).** Owner: *&quot;Please do complete adversarial review on performance and stability</li>
 <li><span class="id">D122b</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
@@ -5605,6 +5608,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D122b</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:174</code> `D82`, `D115`, `D122b`, `D124`, `D125b`, `D126`, `D136`, `D192`). D192 is the parked standoff and belongs to a branch; the rest are</li>
 <li><span class="id">D122b</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D122b</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:55</code> `decisions.py --check` **0 findings, 239 decisions, 13 open questions, 7 dangling ids** (D115, D122b, D124, D125b, D126,</li>
+<li><span class="id">D122b</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:18</code> **256 decisions, 14 open questions, 42 with no stated basis, 7 dangling ids** (D115, D122b, D124, D125b, D126, D136,</li>
 <li><span class="id">D124</span> <code>SPEC.md:692</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
 <li><span class="id">D124</span> <code>SPEC.md:754</code> | 2026-11-05 | v1.93 - **a husk is a farm crossed out (D124).** Owner: *&quot;As of now, husk can get the same pictogram as farm but crossed over.&quot;* A spent farm&#x27;s c</li>
 <li><span class="id">D124</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
@@ -5616,6 +5620,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D124</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:174</code> `D82`, `D115`, `D122b`, `D124`, `D125b`, `D126`, `D136`, `D192`). D192 is the parked standoff and belongs to a branch; the rest are</li>
 <li><span class="id">D124</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D124</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:55</code> `decisions.py --check` **0 findings, 239 decisions, 13 open questions, 7 dangling ids** (D115, D122b, D124, D125b, D126,</li>
+<li><span class="id">D124</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:18</code> **256 decisions, 14 open questions, 42 with no stated basis, 7 dangling ids** (D115, D122b, D124, D125b, D126, D136,</li>
 <li><span class="id">D125b</span> <code>SPEC.md:692</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
 <li><span class="id">D125b</span> <code>SPEC.md:752</code> | 2026-11-05 | v1.95 - **the ring is a curve, not a diamond (D125b).** Owner, on the rendered frame: *&quot;I see a diamond, not elipse in the example&quot;* - correct, a</li>
 <li><span class="id">D125b</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
@@ -5627,6 +5632,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D125b</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:174</code> `D82`, `D115`, `D122b`, `D124`, `D125b`, `D126`, `D136`, `D192`). D192 is the parked standoff and belongs to a branch; the rest are</li>
 <li><span class="id">D125b</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D125b</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:55</code> `decisions.py --check` **0 findings, 239 decisions, 13 open questions, 7 dangling ids** (D115, D122b, D124, D125b, D126,</li>
+<li><span class="id">D125b</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:18</code> **256 decisions, 14 open questions, 42 with no stated basis, 7 dangling ids** (D115, D122b, D124, D125b, D126, D136,</li>
 <li><span class="id">D126</span> <code>SPEC.md:692</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
 <li><span class="id">D126</span> <code>SPEC.md:751</code> | 2026-11-05 | v1.96 - **the minimap&#x27;s crossing lines were seams (D126).** Owner: *&quot;Minimap has 2 crossing lines artifact.&quot;* The minimap painted one diamond per</li>
 <li><span class="id">D126</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
@@ -5646,6 +5652,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D126</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D126</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:45</code> - **The ratchet is a ratchet, not a mute**: recording a gap requires a note, so the next session reads *why* D126 has no decision rather</li>
 <li><span class="id">D126</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:55</code> `decisions.py --check` **0 findings, 239 decisions, 13 open questions, 7 dangling ids** (D115, D122b, D124, D125b, D126,</li>
+<li><span class="id">D126</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:18</code> **256 decisions, 14 open questions, 42 with no stated basis, 7 dangling ids** (D115, D122b, D124, D125b, D126, D136,</li>
 <li><span class="id">D136</span> <code>SPEC.md:692</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
 <li><span class="id">D136</span> <code>SPEC.md:734</code> | 2026-11-07 | v1.113 - **`lib.rs` 8,731 -&gt; 4,106 (D145).** The owner: *&quot;Go ahead if it is still more than 5000 lines file.&quot;* Twelve more mechanical moves - `wo</li>
 <li><span class="id">D136</span> <code>SPEC.md:735</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
@@ -5673,12 +5680,14 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D136</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:174</code> `D82`, `D115`, `D122b`, `D124`, `D125b`, `D126`, `D136`, `D192`). D192 is the parked standoff and belongs to a branch; the rest are</li>
 <li><span class="id">D136</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D136</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:56</code> D136, D190) and **42 with no stated basis**. Neither set is this commit&#x27;s: both are read from `docs/decisions.md`, which</li>
+<li><span class="id">D136</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:18</code> **256 decisions, 14 open questions, 42 with no stated basis, 7 dangling ids** (D115, D122b, D124, D125b, D126, D136,</li>
 <li><span class="id">D190</span> <code>crates/sim/tests/corner_gap.rs:1</code> //! **Two blocks that touch at a corner stop a unit** (D190). The owner: *&quot;Block of forest is never walkable through. Ever. Even</li>
 <li><span class="id">D190</span> <code>docs/dangling.toml:15</code> D190 = &quot;reserved while numbering the standoff work (D191/D192 followed it) and never used&quot;</li>
 <li><span class="id">D190</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:173</code> Also concrete: **D190 does not exist** (a gap in the numbering), and `--check` reports **12 dangling ids** (`D78`, `D79`, `D81`,</li>
 <li><span class="id">D190</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:235</code> | 8 | Resolve the 12 dangling ids; close the D190 gap | S | the index is a promise |</li>
 <li><span class="id">D190</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D190</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:56</code> D136, D190) and **42 with no stated basis**. Neither set is this commit&#x27;s: both are read from `docs/decisions.md`, which</li>
+<li><span class="id">D190</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:19</code> D190). Every one of those counts is inherited from a tree this change does not touch.</li>
 </ul>
 </section>
 <section id="health"><h2>How this page knows</h2>
