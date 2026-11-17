@@ -435,3 +435,48 @@ than the game by construction, which is why a gatherer was refused a **164 raw (
 **The model to copy, then, is three lines**: ground = the tile under the point; things = their `(radius_x, radius_y)` box; overlap =
 distance-to-box `<` the mover's radius. No threshold, no brush allowance, and nothing to slide.
 
+## Proved: the collision is box against box, and overlap counts as touch (2026-11-17)
+
+The owner: *"Proved and follow the original game and decomp."* Three functions, read end to end, settle what "walkable" means.
+
+**1. The ground is a point test.** `FUN_008aa480` (`move_obj.cpp` 0x51d) bounds-checks the tile, reads the unit's terrain
+passability mask, and asks whether the tile's bits, with that mask removed, are zero. Its arguments are cast to `int`; **no radius
+appears in it**.
+
+**2. Things are boxes, and the test is AABB against AABB.** `FUN_00840830` (the per-candidate test inside the query) builds the
+object's box from its **radius table** - `*(float *)(obj + 0x20 + index*4)` for four direction indices, i.e. the dat's radius
+quadruple - grows the *query* box by the mover's radius (`in_ECX+0x268`), and collides when the boxes intersect:
+
+```c
+if ((query_x1 <= obj_x2) && (obj_x1 <= query_x2) && (query_y1 <= obj_y2) && (obj_y1 <= query_y2))
+    → collision
+```
+
+Touching edges collide (`<=`). So **a body may not overlap any object's box**, and every object - tree, mine, building, unit - has
+one, taken from its own radii.
+
+**3. Distance is box-to-box and overlap reads as zero.** `func_002690E0` / `func_00269190` / `func_00269220` in
+`src/unit/unit_action_distance.cpp`:
+
+```c
+float dx = fabsf(other_x - x) - self_radius_x - other_radius_x;
+if (dx < 0.0f) dx = 0.0f;      // overlap collapses to zero
+```
+
+which is `max(0, |dx| - radius_x)` on each axis, then the hypotenuse. That is the number the movement update compares against
+`rangeDistance` - arrival is "the boxes are within range of each other", and **the owner's half-diameter rule is exactly range
+zero**.
+
+**What that says about our engine, and it corrects this file's own earlier section.** Our blocked ground is a *tile* grid: a tree
+is one whole blocked tile, so the box our step test sees is **1 x 1 tiles** for a trunk that the dat describes as a fraction of
+one. That is why a gatherer was refused a **164-raw (0.008-tile)** brush against a tree's *tile* while the game would refuse only
+an overlap of the *trunk's box* - and why the terrain slide looked necessary.
+
+The refusal against the **town centre** (269 ticks, `WaitGround`) is, by this reading, **correct**: the game would call that
+collision too. What is wrong there is the route, and the game's answer is in its own log string - the search answers for *"the
+boundaries of where this unit's radii will go"*.
+
+So the slice that follows is narrow and named: **give resources their box from the pack's `radius`, index them by tile so the test
+stays cheap, and let the step test and the search use those boxes instead of whole tiles.** Buildings already have exact boxes
+(their footprints), units already have radii, and the ground keeps its point test.
+

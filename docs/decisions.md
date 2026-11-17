@@ -7205,3 +7205,28 @@ mover's, and it is the next slice: **a place is a point where the body fits, and
 (one of them the crowd fixture that already failed) - 197 green. That is the state to resume from: the step model is worth landing
 once the place model can live with it.
 
+### D258 - proved from the binary: box against box, and our trees are the wrong size (2026-11-17)
+
+*The owner: **"Proved and follow the original game and decomp."** Three functions read end to end, and they settle the question
+this project has been circling: the game collides **boxes**, not tiles, and every object's box comes from its own radii.*
+
+**The proof** (written out with the code in `docs/movement-in-the-binary.md`):
+
+1. **Ground is a point test** - `FUN_008aa480` compares the tile's bits with the unit's passability mask; arguments cast to `int`,
+   no radius in it.
+2. **Things are AABB boxes** - `FUN_00840830` builds each object's box from its radius table (`obj+0x20 + index*4` over four
+   direction indices), grows the query box by the mover's radius, and collides on `<=` in every axis: touching edges collide.
+3. **Distance is box-to-box with overlap clamped to zero** - `func_002690E0`/`func_00269190`/`func_00269220` in
+   `src/unit/unit_action_distance.cpp` compute `max(0, |dx| - radius_x)` per axis and then the hypotenuse; the movement update
+   compares that with `rangeDistance`. **The owner's half-diameter rule is that function at range zero.**
+
+**What it corrects.** Our blocked ground is a tile grid, so the box our step test sees for a **tree is one whole tile** where the
+dat describes a trunk a fraction of it. That is why a gatherer was refused a **164-raw (0.008-tile)** brush and stood 267 ticks -
+and why the terrain slide looked necessary. The refusal against the **town centre's footprint** is, by the same reading, **right**:
+the game calls that a collision too, and the answer is a route that keeps the body's radius clear - which is what its own log
+string says the search does.
+
+**So the next slice is narrow**: give resources their **box from the pack's `radius`**, index them by tile so the test stays cheap,
+and let the step test and the search use boxes rather than whole tiles. Buildings already have exact boxes (footprints), units
+already have radii, and the ground keeps its point test. That is the piece that lets "no sliding" land.
+
