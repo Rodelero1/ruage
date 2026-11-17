@@ -361,35 +361,21 @@ impl World {
                 });
             }
         }
-        // 6. A body **at rest** cannot move aside, so waiting on it is waiting for ever (measured: a gatherer frozen from
-        //    tick 40,000 to 400,000 beside an idle friend). The step is taken and the repath above routes round it from
-        //    the next tick - the overlap is at most one footprint, and it resolves; a frozen unit never does.
-        if !pass.moving.contains(&other) {
-            // **A unit at rest is still a body** (D193, and D200 removed the owner test from it). The exemption below
-            // exists because a resource node carries no radius, so `reach` falls back to a whole tile and a villager could
-            // not stand beside a tree - and it was being applied to *units* too: a walker passed an idle enemy at **0.237**
-            // tiles where two 0.2 radii need `0.4`. The bound applies to any unit, friend or not; nodes and buildings keep
-            // the exemption, which is the case it was written for.
-            if a_unit {
-                // **A step may not end inside the pair's reach** (D131 A, the owner's call 2026-11-06: *"I think A
-                // should be it"*). Halving rather than arithmetic: the constraint is a circle round the other body, so
-                // the largest fitting step is found by trying the step and then 1/2, 1/4, ... of it - five integer
-                // probes at worst, all in fixed point and no sqrt.
-                // **No clamp against a body** (D210). `bound_to_reach` used to halve the step until it ended outside
-                // `r1 + r2`, which is stricter than the game: the binary's only radius-against-radius retraction has its
-                // result discarded at the movement site (`0x8a7fe7`), and its position setter clamps against the map border
-                // alone. What ends the encounter is the pause (rule 4) and the *past* test above, not geometry.
-                return (dx, dy, StepDecision::TakeAtRest);
-            }
-            // **The bound does not apply to a body at rest** (measured: seven gather and rally tests failed when it did).
-            // A resource node carries no radius, so `reach` falls back to a whole tile - and a villager must be able to
-            // stand beside a tree to chop it, which the bound forbade: it stopped 5 tiles out, on the boundary circle of a
-            // node it was walking to. The rule D131 is about is two bodies that both want the ground, not a mover against
-            // something that will never yield.
+        // 6. **A node or a building at rest is not an obstruction** - and that is the whole of what is left here. The
+        //    exemption exists because a resource node carries no radius, so `reach` falls back to a whole tile and a
+        //    villager could not stand beside a tree to chop it (measured: seven gather and rally tests failed when the bound
+        //    applied to a node). What it is **not** is a licence for a *body*: a unit standing still that is not yet past is a
+        //    non-past collision, and the original has no arm for it (D242 - the epilogue is target / non-past re-path /
+        //    pause / log). Ours had one (`TakeAtRest`, D193/D200) and it is deleted here: it let a walker cross a man who
+        //    had merely stopped, which is the `0.094`-tile overlap D200 measured and the "villagers walk through each
+        //    other" the owner reports.
+        if !a_unit && !pass.moving.contains(&other) {
             return (dx, dy, StepDecision::TakeAtRest);
         }
-        // 7. Anything else: stand still. The blocker is moving, so the pair has an answer next tick - and if it is this
-        //    body that lost the tie-break, rule 4 has already paused it.
+
+        // 7. Anything else: stand still. The blocker is moving, so the pair has an answer next tick - or he has **stopped and
+        //    the re-plan above has just been stamped after his last move**, which is what makes him *past* on the next tick
+        //    and lets this body walk through him (D210's chain, completed by R1a).
         (stop.0, stop.1, StepDecision::WaitBlocked)
     }
 

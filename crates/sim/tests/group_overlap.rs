@@ -264,44 +264,39 @@ fn a_mate_who_is_stopped_becomes_solid() {
     for _ in 0..60 {
         world.step().expect("step");
     }
+    let stopped_at = world.position(b).expect("b has a position");
     world.submit(Command::Stop { unit: b });
     world.step().expect("the stop lands");
 
-    let reach = world.reach_between(a, b).raw();
-    let mut meeting: Option<i64> = None;
-    let mut after = i64::MAX;
-    let mut longest_step = 0i64;
-    let mut was_at = world.position(a).expect("a has a position");
+    // **What this fixture asserts now, and what it stopped asserting** (restated 2026-11-17, D241 ruling 1). It used to
+    // demand that the pair *meet* and that the walker never come inside the reach again - "a stopped body is never walked
+    // over". The owner has ruled that rule out (*"follow game"*): a body that has stopped is **past** to a route planned
+    // after his last move, and the original walks through him, which is how a jam ends without a clamp or a shove. So the
+    // pair may cross, and the two things that remain true are the two that matter: **nobody is displaced** (D241's own
+    // objection - the engine writes no other body's position) and **the walker still arrives** (a stoppage that strands
+    // him is the defect the anchor was hidden behind).
     for _ in 0..400 {
         world.step().expect("step");
-        let gap = distance(&world, a, b);
-        if meeting.is_none() && gap < reach * reach {
-            meeting = Some(gap);
-        } else if meeting.is_some() {
-            after = after.min(gap);
-        }
-        let now = world.position(a).expect("a has a position");
-        let (sx, sy) = (now.0.raw() - was_at.0.raw(), now.1.raw() - was_at.1.raw());
-        longest_step = longest_step.max(sx * sx + sy * sy);
-        was_at = now;
+        assert_eq!(
+            stopped_at.0.raw().div_euclid(world.scale()),
+            world
+                .position(b)
+                .expect("b is alive")
+                .0
+                .raw()
+                .div_euclid(world.scale()),
+            "MEASURED the stopped man was moved off his tile: a body was displaced, which no rule of the original does"
+        );
     }
-    let meeting = meeting
-        .expect("MEASURED the two never came within the reach: the fixture did not meet at all");
-    let overlap = reach - integer_sqrt(meeting);
+    let near = |id: EntityId, goal: (u16, u16)| {
+        let (tx, ty) = tile_of(&world, id);
+        (tx - i64::from(goal.0)).abs() <= 1 && (ty - i64::from(goal.1)).abs() <= 1
+    };
     assert!(
-        overlap <= integer_sqrt(longest_step),
-        "MEASURED the meeting swallowed {} raw of the {} raw reach, more than the {} raw step he was already taking: \
-         he was not walking when the man stopped, he was driven into him",
-        overlap,
-        reach,
-        integer_sqrt(longest_step)
-    );
-    assert!(
-        after >= reach * reach,
-        "MEASURED a stopped body was walked over: after the meeting he came {} raw from him, inside the {} raw reach, so \
-         the route does not go round the man - it goes through him",
-        integer_sqrt(after),
-        reach
+        near(a, (x + 6, y)),
+        "MEASURED the walker never arrived: after the man stopped he was stranded at {:?} instead of {:?}",
+        tile_of(&world, a),
+        (x + 6, y)
     );
 }
 
