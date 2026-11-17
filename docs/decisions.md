@@ -7029,3 +7029,31 @@ beyond them, which **cuts** the corner - a walker wedged against a forest edge f
 corner; the corner is walked through, or the body stands. The goal stays an exact landing, because that is what arrival is built
 on. And a fixture the owner asked for is never `#[ignore]`d without his word - when the fix will not land, the answer is to find
 out why, not to switch the test off.
+
+### D253 - the slide is the last source of half-steps, and both fixes are refuted (2026-11-17)
+
+*Attempted on the owner's `Proceed`, after the adversarial review named the fold's refused-corner gap. **Nothing landed**: the
+gap it found is real, the two designs that close it are refuted by measurement, and the question left is the owner's.*
+
+**The rule's remaining violation.** `whole_steps.rs` passes on open ground. With a body parked half a tile past the first corner,
+the same walk breaks the rule **567 times in 1,398 walking ticks** - the man creeps at **82, 81, 80... raw units** a tick where a
+step is **800**. The cause is `StepDecision::Slide`, the ground slide: it takes the step's **axis component**, so a diagonal aimed
+mostly along the blocked axis moves a fraction of a step. The mover never lands on a route point, so no fold can repair it.
+
+**Design A, refuted**: extend the slide to a full step along the clear axis. Five fixtures regress (a rally walk, two walks round
+a building, a felled tree's gap, a shared woodcutting tile), all because a full-length slide walks a man further than the geometry
+planned.
+
+**Design B, refuted**: stand instead of a fractional slide and let the repath answer. Twelve regress - animals and herding,
+gathering, depletion, a partial load, two combat fixtures, the line upgrade, the crowd - because a man who cannot slide round a
+wall wedges, which is what D188 was written from.
+
+**Why it is a fork and not a defect to patch.** The original game has **no slide**: `getMaxVelFwd` is the unit's speed or exactly
+0.0 on a pause, and its position setter clamps against the map border alone (D210). The slide is ours, added by D188 for progress.
+So: *does a slide count as walking?* If yes, the fixture's rule gains an axis-slide clause and the creep wants bounding by a stall
+count; if no, the slide goes and the twelve fixtures are evidence about a different problem - and that slice starts with the crowd
+fixture that already fails.
+
+**Recorded so it is not re-attempted blind**: the gate that stands a man whose corner remainder is refused was written, uses the
+fold's own `fold_leg` so the two cannot disagree, and was **not landed** - the only fixture that drives it also drives the creep,
+so it would have been untested code. Review: `docs/reviews/2026-11-17-the-slide-and-the-rule.md`.

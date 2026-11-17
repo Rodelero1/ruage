@@ -46,10 +46,13 @@ never crossed" cannot be observed from outside the world without a route accesso
   men spend **340 more body-ticks walking (+0.6%)** and take **10 more repaths (61 -> 71)** because a whole-step tick ends them up
   to 0.04 tiles further; all arrive. And **116 of 116 folds in the suite are taken under `Take`**, so the "slide-fold" hole is not
   observed anywhere.
-- **The gap it found, and it is the next slice**: a **refused** fold leaves a short tick, so the rule as enforced is "a whole step,
-  or a stand, **unless the rest of the step is refused**". `whole_steps.rs` cannot see that case because its route is never
-  refused. The fixture wants a corner with a body just past it, and the answer probably is that the original stands the man (its
-  speed is its speed or 0.0), not that he keeps the partial step.
+- **The gap it found, attempted, and handed back (D253)**: with a body half a tile past a corner the walk breaks the rule **567
+  times in 1,398 ticks** - the man creeps at **82, 81, 80... raw units** a tick - and the cause is the **ground slide**, not the
+  fold: `StepDecision::Slide` takes the step's axis component, a fraction of a step. Both fixes are refuted by measurement:
+  a full-length slide regresses **five** fixtures (walks further than planned), standing instead of sliding regresses **twelve**
+  (animals, gathering, combat - a man who cannot slide wedges, which is D188's finding). **The question for the owner**: does a
+  slide count as walking? The original has no slide at all - speed or 0.0, and a setter that clamps against the border alone - so
+  the slide is ours. Review: `docs/reviews/2026-11-17-the-slide-and-the-rule.md`.
 
 ## The queue, in the order a player would see it
 
