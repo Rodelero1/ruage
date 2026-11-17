@@ -7326,3 +7326,26 @@ the route bends a radius clear *inside* the tiles, so its legs never pass throug
 `short_range_clear` (it already builds shoulder points for discs, and a footprint corner is a disc of zero radius at the corner),
 and it is the piece that makes 1-5 land.
 
+### D262 - the endpoint is the last uncut corner: 3 red to 1, and the one left is a range (2026-11-17)
+
+*Attempted on **"Proceed"** with the shoulder-point plan from D261. The result is the smallest real gain of the evening and it is
+worth recording: **one** projected point took the animals family from **3 failures to 1**.*
+
+**What was built**: only the projection of the route's **endpoint** out of every building footprint grown by the body's radius
+(`push_out_of_buildings`, the same helper the place search uses), applied in `plan_path` to `finish` - the last leg is the one
+unchecked corner in every plan, because the *goal* may sit inside the inflated footprint and then **every** route's final step
+clips the wall by a fraction.
+
+**Measured**: `the_villager_follows_the_sheep` and `the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body` go **green**;
+`a_live_animal_is_a_gather_source` stays red, and its message has changed - not "did not reach the sheep" any more, but **"must end
+up carrying meat"**. He gets there and does not work.
+
+**Why, and it is the next one-line question**: the projection moves him the shortest distance out of the wall, which is *away from
+the node*, and the gather's arrival test is a **standoff distance**, not the game's **box gap** (`func_002690E0`: `max(0, |dx| -
+radius_x)`, compared with `rangeDistance`). Pushed 0.2 tiles out, he is outside the standoff and never starts.
+
+**So the option, and it is the game's own rule**: make "at the node" the game's measure - the **box gap** between worker and node
+within the order's **range** - instead of a ring distance. Then a man pushed out of a wall by his own width is still working,
+because the gap he is measured by is the gap the original measures. That is one function (`reaches`/`at_node`) and it is the last
+piece of the same model.
+

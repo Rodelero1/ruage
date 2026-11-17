@@ -25,12 +25,14 @@ collides on `<=` per axis; `func_002690E0` measures box-to-box, overlap clamped 
 Our tree is *not* the wrong size (`TREEA` is `radius = [0.5, 0.5, 2.0]`, so its box is its tile); the 164-raw refusal was against
 the town centre's footprint, which the game would refuse too.
 
-**Attempted, reverted (D261)**: all five pieces at once - radius-aware line test and pull, box step test, places and waypoints
-pushed out of inflated footprints, slide deleted - and **still 3 red**, refused at **`now=0 next=164`**. The wall is geometric: on a
+**Attempted, reverted (D261)**: five pieces at once (radius-aware line test and pull, box step test, projected places and
+waypoints, slide deleted) - **still 3 red**, refused at **`now=0 next=164`**. The wall is geometric: on a
 **tile-centre** route a diagonal past a corner passes *through* it, so the box overlaps by the whole radius; a town centre's
 `radius` is `[2.0, 2.0, 0.0]`, so its box **is** its 4x4 footprint and the original refuses that step too. **What it has and we
 lack is a finer-than-tile route** - and we already have the shape: `short_range_clear`'s *shoulder points* round every body (D211).
-**Next: shoulder points round a building's corners.**
+**Next: shoulder points round a building's corners.** **Measured since (D262)**: projecting only the route's *endpoint* out of the
+inflated footprints took that family **3 red -> 1**. The one left is a **range**: pushed out of the wall he no longer counts as "at
+the node" - the fix is the game's **box gap** within the order's range (`func_002690E0`), not a standoff distance.
 
 **Waiting on the owner - the only open question.** The queue's floor is **entities >= 155**. The control reads **154** and never
 resolves; the D250 build reads **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is
