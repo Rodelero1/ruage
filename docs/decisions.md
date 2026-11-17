@@ -6992,38 +6992,40 @@ mover aimed at the next route point and `step_towards` lands exactly on a point 
 **The fork put to him**, with costs: (a) land the fixture `#[ignore]`d as the specification; (b) fixture and fix together; (c)
 narrow the rule to the speed setting. **He chose (b)** - D252.
 
-### D252 - whole steps: the rule is pinned, the fix is parked on a measured freeze (2026-11-17)
+### D252 - a corner is folded into the step, and only a walk folds (2026-11-17)
 
-*The owner chose (b): the fixture and the fix in one slice. What landed is the fixture; what did not is the fix, and it is parked
-with its numbers rather than left in the tree.*
+*The owner chose (b), fixture and fix in one slice, and then ruled that a fixture he asked for is **never skipped**: no
+`#[ignore]` without his word. The fix therefore had to land, and the diagnosis below is what it cost.*
 
-**The rule, as a fixture.** `crates/sim/tests/whole_steps.rs`: on every tick a villager is walking, the distance he covers **along
-his route** is exactly one step, or zero (a refused step, a pause, a body in the way); the only short tick allowed is the last,
-which lands on the goal and may not overshoot it. Measured along the route and not as a straight line, because a corner walked
-*through* inside a tick makes the chord shorter than the path - the straight-line version of this test cannot tell a fold from a
-lost tick, which is why it took three attempts to write. The walk test is **`#[ignore]`d with its number in the message**; the
-short-walk arrival test is green.
+**The rule, as a fixture.** `crates/sim/tests/whole_steps.rs`, two tests, neither ignored: on every tick a villager is walking, the
+distance he covers **along his route** is exactly one step, or zero (a refused step, a pause, a body in the way); the only short
+tick allowed is the last, which lands on the goal and may not overshoot it. Along the route and not as a straight line, because a
+corner walked *through* inside a tick makes the chord shorter than the path - the chord version cannot tell a fold from a lost
+tick, which is why it took three attempts.
 
-**The defect it pins.** The mover aims at the route's next point and `step_towards` lands exactly on a point within one step: right
-for the goal, wrong for a corner, which spends the gap (**0.011 tiles, 0.107 of a step**) and loses the rest of the tick. Measured
-by `step_speed_probe`: **15 of 20,000** villager body-ticks between 0.11 and 0.95 of a step, every one decided `Take`, fourteen at
-a transit on one `Move`.
+**The defect.** The mover aims at the route's next point and `step_towards` lands exactly on a point within one step: right for the
+goal, wrong for a corner, which spends the gap (**0.011 tiles, 0.107 of a step**) and loses the rest of the tick. Measured by
+`step_speed_probe`: **15 of 20,000** villager body-ticks between 0.11 and 0.95 of a step, every one decided `Take`, fourteen at a
+transit on one `Move`.
 
-**The fix that is parked** (`docs/reviews/2026-11-17-fold-the-step-parked.patch`, two files): `World::fold_the_step` walks the rest
-of the step along the next leg, spending each corner as the fold begins, refused by ground (`clearance_at < 0`) or a body
-(`radius + other radius`), bounded to two legs, never past the goal, re-stamping sight after it moves. It **makes the fixture
-green** - 0 short ticks, and the walk takes the `ceil(route/step) + 1` ticks it owes - and the acceptance match is **bit-identical**
-(fold off **39.5 / 40.3 s**, fold on **40.0 / 39.7 s**, `entities=138 players=1 hash=01a0fb771ee2e75b repaths=761` both ways).
-Neither is enough, because it **freezes a gatherer**:
-`research::a_trebuchet_cannot_be_trained_before_the_imperial_age` banks **200 of 400** food and stalls for the rest of its
-**400,000** ticks with **1 repath**; a dump shows one body on a four-point route with `Gather { progress 0 }`, in the same position
-from tick 100,000 to 400,000, and the same binary passes that test in **7.7 s** with the fold disabled. The mechanism is unread,
-and a movement change whose consequence cannot be explained is parked, not landed.
+**The fix** (`World::fold_the_step`, called from `move_bodies` after the step and before the waypoint spend): a body that **landed
+on a route point** walks the rest of the step along the next leg - one point at a time, spending each corner as the fold begins,
+refused by ground (`clearance_at < 0`) or a body (`radius + other radius`), bounded to two legs, never past the goal, re-stamping
+sight after it moves. **Only `Move` and `Hunt` fold**: the tasks whose whole contract is "walk this route".
 
-**The attempt before it, also in the patch's message**: spending corners *before* the step makes the aim the point beyond them,
-which **cuts** the corner - a walker wedged against a forest edge for **68 ticks**, `Slide` at **1 raw unit** a tick.
+**Why the narrowing, measured.** The fold applied to every task made the fixture green and the acceptance match **bit-identical**
+(fold off 39.5 / 40.3 s, fold on 40.0 / 39.7 s, `entities=138 hash=01a0fb771ee2e75b repaths=761`) - and starved a fixture: a
+trebuchet test banked **200 of 400** food and stalled for the remaining **400,000** ticks with **1 repath**. The trace: one
+gatherer alternated every tick between **(394394, 313527)** and **(395101, 313901)**, exactly a step apart, from tick 38,000 to
+400,000 - the mover walking him 800 toward his route on odd ticks, `settle_workers` walking him 800 back onto his gather place's
+standoff on even ones. Two passes, two aims, and the fold's extra 800 kept them permanently out of phase. A gather's approach is
+*already* steered by the settle pass, so it is out of this rule's scope; an attacker's stop distance is a range, not a route point,
+which is why `Attack` is out too.
 
-**Commits us to.** The rule is the owner's and stays pinned: a walk is whole steps on the route's own measure, and a corner is
-walked through rather than landed on. The next attempt owes a per-tick trace of a frozen body - `last_step`, aim, clearance - before
-it touches the mover, because two designs have now failed in two different ways and the second one failed a fixture 400,000 ticks
-long.
+**The attempt before it**, kept because the next reader will try it: spending corners *before* the step makes the aim the point
+beyond them, which **cuts** the corner - a walker wedged against a forest edge for **68 ticks**, `Slide` at **1 raw unit** a tick.
+
+**Commits us to.** A walk is whole steps on the route's own measure, and no future mover change may reintroduce a clamp to a
+corner; the corner is walked through, or the body stands. The goal stays an exact landing, because that is what arrival is built
+on. And a fixture the owner asked for is never `#[ignore]`d without his word - when the fix will not land, the answer is to find
+out why, not to switch the test off.

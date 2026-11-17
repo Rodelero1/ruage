@@ -1212,6 +1212,21 @@ impl World {
             repaths: Vec::new(),
             pauses: Vec::new(),
         };
+        // **What each body was asked to walk** (D252): where it stood and the step it was given, so `fold_the_step` can tell
+        // a landing on a corner from a refusal and carry the rest of that tick along the next leg.
+        let mut asked: Vec<(EntityId, (Fixed, Fixed), i64)> = Vec::new();
+        for (index, id, dx, dy) in &deltas {
+            if *dx == Fixed::ZERO && *dy == Fixed::ZERO {
+                continue;
+            }
+            if let Some(entity) = self.entities.get(*index).filter(|entity| entity.id == *id) {
+                asked.push((
+                    *id,
+                    entity.position,
+                    entity.speed.raw() / i64::from(self.tick_rate_hz).max(1),
+                ));
+            }
+        }
         for (index, id, dx, dy) in deltas {
             // **A body told to pause stands this tick out and keeps its path** (D205). The check is on the entity's own
             // timer *and* on this tick's list, because the lower id runs first: it pauses the higher one before the higher
@@ -1474,6 +1489,10 @@ impl World {
                 }
             }
         }
+
+        // **The rest of the step, past a corner** (D252): a body that landed on a route point still owes the remainder of
+        // this tick's step, and walking it now is what keeps a walk a run of whole steps.
+        self.fold_the_step(&asked, &reached, pass.bodies);
 
         // A waypoint reached is a waypoint spent. Done after the move, so a unit that lands on it
         // this tick starts toward the next one on the next tick.

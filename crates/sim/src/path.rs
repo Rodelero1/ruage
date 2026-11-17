@@ -235,6 +235,12 @@ pub fn find_path_avoiding_strict(
     search(walk, from, to, avoid, true).map(|answer| answer.1)
 }
 
+/// A settled tile and the route to it, as `search` reports them.
+type Answer = ((u16, u16), Vec<(u16, u16)>);
+
+/// A tile popped by the search, with its cost: `(estimate, y, x)`, paired with the tile it is.
+type Closest = ((u32, u16, u16), (u16, u16));
+
 /// The one search both entry points use: `answer.0` is the tile it settled on, `answer.1` the route to it.
 ///
 /// `strict` decides what may be settled on. A strict search answers `None` when the goal was never reached; **the closest
@@ -245,7 +251,7 @@ fn search(
     to: (u16, u16),
     avoid: &BTreeSet<(u16, u16)>,
     strict: bool,
-) -> Option<((u16, u16), Vec<(u16, u16)>)> {
+) -> Option<Answer> {
     if !walk.contains(to.0, to.1) || !walk.contains(from.0, from.1) {
         return None;
     }
@@ -273,7 +279,7 @@ fn search(
     let mut came: Vec<u32> = vec![u32::MAX; cells];
     // The closest point: the tile popped whose distance to the goal is smallest, excluding the start (a search that ends
     // where it began has not moved). Kept as a distance so the comparison is arithmetic, never iteration order.
-    let mut closest: Option<((u32, u16, u16), (u16, u16))> = None;
+    let mut closest: Option<Closest> = None;
 
     best[at(from.0, from.1)] = 0;
     open.push(Reverse((estimate(from, to), 0, from.1, from.0)));

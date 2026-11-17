@@ -10,12 +10,9 @@
 //! Measured before the fix (`step_speed_probe`, 5 villagers, 4,000 ticks): 15 of 20,000 body-ticks moved 0.11-0.95 of a step,
 //! 14 of them at a route transit on this very walk - each one a corner whose landing ate the rest of that tick.
 //!
-//! **Ignored, and why** (D252). The rule is the owner's and the fixture is right; the fix is not landable yet. The fold that
-//! makes it green (`docs/reviews/2026-11-17-fold-the-step-parked.patch`) walks the rest of a tick's step along the next leg, and
-//! it **freezes a gatherer** in a 400,000-tick fixture: `research::a_trebuchet_cannot_be_trained_before_the_imperial_age` banks
-//! 200 of 400 food and stalls, with one body holding a four-point route and `progress 0` for the rest of the run. The same test
-//! passes with the fold disabled in the same binary, so the fold is the cause, and the mechanism is unread. A slice whose every
-//! consequence cannot be explained is parked, not landed (D252).
+//! **Never skipped.** The owner's rule and this fixture stay live: no `#[ignore]`, and no reason to add one - the fold that
+//! makes it green is in the mover (`World::fold_the_step`, D252), and it fires only for the walking tasks (`Move`, `Hunt`),
+//! because a gather's approach is steered by `settle_workers` as well and folding there let the two passes undo each other.
 
 mod common;
 
@@ -61,7 +58,6 @@ fn villager(world: &mut World, id: EntityId, at: (u16, u16)) -> bool {
 /// **Every walking tick is a whole step.** A walk across the pack's map from (5,5) to (30,30): the route bends round the
 /// forest, so it is several legs - and a leg boundary is exactly where the mover used to land on the corner.
 #[test]
-#[ignore = "D252: the corner fold that fixes this freezes a gatherer in a 400,000-tick fixture; parked as a patch"]
 fn a_walking_villager_takes_whole_steps() {
     let Some(mut world) = common::fresh() else {
         return;

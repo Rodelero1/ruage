@@ -12,6 +12,122 @@ use crate::{
 };
 
 impl World {
+    /// **A corner is folded into the step, not landed on** (D252). The owner: *"villagers never slow down. They may stop or
+    /// stop to repath ... so either they walk, or stand."*
+    ///
+    /// `step_towards` lands exactly on a point that is within one step. That is right for the goal and costs a walking man
+    /// the rest of that tick's step at every bend: measured **15 of 20,000** villager body-ticks at 0.11-0.95 of a step, 14 of
+    /// them a route transit on one walk. The obvious fix is wrong: spending the corner *before* the step makes the aim the
+    /// point beyond it, and a straight line there **cuts the corner**, which the ground refuses - a walker wedged against a
+    /// forest edge for **68 ticks**, sliding one raw unit a tick.
+    ///
+    /// So the corner is walked **through**, after the ordinary step: the remainder of the tick is spent along the next leg,
+    /// one point at a time, spending each point it reaches. Bounded to two legs (a step is 0.04 of a tile for a villager),
+    /// refused by ground or by a body, and it never folds past the **last** point - the goal is landed on exactly, because
+    /// arrival is an equality at the task layer.
+    pub(crate) fn fold_the_step(
+        &mut self,
+        asked: &[(EntityId, (Fixed, Fixed), i64)],
+        reached: &[(EntityId, (Fixed, Fixed))],
+        bodies: &[(i64, i64, EntityId, usize, i64)],
+    ) {
+        let apart = |a: (Fixed, Fixed), b: (Fixed, Fixed)| -> i64 {
+            let (dx, dy) = (b.0.raw() - a.0.raw(), b.1.raw() - a.1.raw());
+            crate::integer_sqrt(dx * dx + dy * dy)
+        };
+        for (id, here) in reached {
+            let Some((_, start, delta)) = asked.iter().find(|(who, ..)| who == id).copied() else {
+                continue;
+            };
+            let mut left = delta - apart(start, *here);
+            if left <= 0 {
+                continue;
+            }
+            // **Only a landing.** A refused or clipped step leaves the body short of its front point, and folding that would
+            // walk it past ground the mover had just refused.
+            let Some(front) = self.route_points(*id).first().copied() else {
+                continue;
+            };
+            if apart(*here, front) > 1 {
+                continue;
+            }
+            // **Only a walk folds** (D252). `Move` and `Hunt` are the tasks whose whole contract is "walk the route": the
+            // goal is a place, and the only arrival rule is the goal itself. A gather, a build or a deposit *approaches* a
+            // point that a second pass also steers at - `settle_workers` walks an unsquared villager onto his place's standoff
+            // every tick - so folding a landed corner there put the two passes 800 raw units apart and they undid each other
+            // for ever: measured, one gatherer oscillating between (394394,313527) and (395101,313901) from tick 38,000 to
+            // 400,000, and a fixture that banks 400 food stuck at **200** with **1 repath**. An attacker's stop distance is a
+            // range, not a route point, so it is out for the same reason.
+            let folds = self.find(*id).is_some_and(|entity| {
+                matches!(
+                    entity.task,
+                    crate::Task::Move { .. } | crate::Task::Hunt { .. }
+                )
+            });
+            if !folds {
+                continue;
+            }
+            let radius = self.body_radius(self.find(*id).and_then(|entity| entity.unit));
+            let mut at = *here;
+            for _ in 0..2 {
+                if left <= 0 {
+                    break;
+                }
+                // **The corner behind the fold is spent as the fold begins.** The body stands on it (checked above), and
+                // leaving it in the list makes the next tick aim *back* at it: measured, a gatherer oscillated at every
+                // corner and a 400,000-tick fixture's economy froze at **200 of 400** food with **1 repath**.
+                if let Some(path) = self.paths.get_mut(id)
+                    && path.points.len() > 1
+                {
+                    path.points.remove(0);
+                }
+                let points = self.route_points(*id);
+                // **The last point is the goal**, and it is landed on, not folded past: an empty remainder means the corner
+                // the body reached was the goal.
+                let Some(next) = points.first().copied() else {
+                    break;
+                };
+                let gap = apart(at, next);
+                let take = gap.min(left);
+                let (dx, dy) = crate::step_towards(at, next, take);
+                let target = (
+                    Fixed::from_raw(at.0.raw() + dx),
+                    Fixed::from_raw(at.1.raw() + dy),
+                );
+                // **The ground the fold lands on**, by the same rule the mover uses everywhere: the body's disc clear of
+                // every blocked tile.
+                if self.clearance_at(target, radius) < 0 {
+                    break;
+                }
+                // ... and every body it could touch, by the pair's own reach.
+                let tile = self.tile_of_raw(target);
+                let blocked = (-1i64..=1).any(|dy| {
+                    (-1i64..=1).any(|dx| {
+                        self.bodies_at(bodies, (tile.0 + dx, tile.1 + dy))
+                            .iter()
+                            .any(|(_, _, other, _, other_radius)| {
+                                *other != *id
+                                    && apart(target, self.position(*other).unwrap_or(target))
+                                        < radius + *other_radius
+                            })
+                    })
+                });
+                if blocked {
+                    break;
+                }
+                if let Some(entity) = self.find_mut(*id) {
+                    entity.position = target;
+                }
+                // **Sight follows the fold** (D50a): `stamp_entity` ran on the position the step landed on, so a fold that
+                // moved the body further must re-stamp, or the ground it can now see goes unobserved for a tick. The stamp
+                // is an OR into an explored bitset, so a second one costs nothing and cannot double-count.
+                self.stamp_entity(*id);
+                at = target;
+                left -= take;
+            }
+        }
+    }
+
     /// The bodies standing on one tile, from the sorted slice.
     fn bodies_at<'a>(
         &self,

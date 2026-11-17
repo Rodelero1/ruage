@@ -29,17 +29,18 @@ never crossed" cannot be observed from outside the world without a route accesso
   speed/velocity code at all (`docs/prior-art.md`).
 - **The defect**: 15 of 20,000 villager body-ticks moved 0.11-0.95 of a step, all decided `Take`, fourteen of them at a **route
   transit** - the mover landed exactly on a corner and spent the rest of that tick's step on the gap.
-- **The fixture landed**: `crates/sim/tests/whole_steps.rs` - every walking tick covers one whole step *along the route* (or
-  stands), the last tick lands on the goal, and a walk costs the ticks its geometry owes. The walk test is `#[ignore]`d with its
-  number: **tick 158, 86 raw (0.107 of a step), 14 of 1,174 walking ticks**, and 14 extra ticks for the walk.
-- **The fix is parked, not landed** (`docs/reviews/2026-11-17-fold-the-step-parked.patch`): the corner fold makes the fixture green
-  and the acceptance match **bit-identical** (fold off 39.5 / 40.3 s, fold on 40.0 / 39.7 s,
-  `entities=138 players=1 hash=01a0fb771ee2e75b repaths=761`), but it **freezes a gatherer** in a 400,000-tick fixture -
-  `research::a_trebuchet_cannot_be_trained_before_the_imperial_age` banks **200 of 400** and stalls with **1 repath**, one body on
-  a four-point route at `progress 0` from tick 100,000 to 400,000, and the same binary passes in **7.7 s** with the fold off. The
-  mechanism is unread, so the slice is parked (D252) and the next attempt owes a per-tick trace of a frozen body first.
+- **It is fixed and live**: `crates/sim/tests/whole_steps.rs`, 2 tests, **neither ignored** - every walking tick covers one whole
+  step *along the route* (or stands), the last tick lands on the goal, and a walk costs the ticks its geometry owes. Red before the
+  fix at **tick 158, 86 raw (0.107 of a step), 14 of 1,174 walking ticks**, green after.
+- **The fix is `World::fold_the_step`**, and it **only folds `Move` and `Hunt`**. That narrowing is measured, not taste: folding a
+  gather's approach made the acceptance match **bit-identical** (fold off 39.5 / 40.3 s, fold on 40.0 / 39.7 s,
+  `entities=138 players=1 hash=01a0fb771ee2e75b repaths=761`) and starved a 400,000-tick fixture - one gatherer alternating every
+  tick between **(394394, 313527)** and **(395101, 313901)** from tick 38,000 to 400,000, the mover walking him 800 toward his
+  route on odd ticks and `settle_workers` walking him 800 back on even ones, so the bank stuck at **200 of 400** with **1 repath**.
 - **The attempt before it**: spending corners *before* the step cuts them - a walker wedged against a forest edge for **68 ticks**,
   sliding **1 raw unit** a tick.
+- **Standing rule from the owner**: a fixture he asked for is **never `#[ignore]`d** without his explicit word. When the fix will
+  not land, find out why.
 
 ## The queue, in the order a player would see it
 

@@ -201,8 +201,8 @@ fn how_a_villager_moves() {
                             });
                     // **Did he land on a tile centre?** A waypoint is a tile's middle, so a position whose raw coordinates
                     // are `k*scale + scale/2` on both axes is where a leg ended - the "land exactly" rule, not a slide.
-                    let half = i64::from(world.scale()) / 2;
-                    let on_centre = |v: i64| (v - half).rem_euclid(i64::from(world.scale())) == 0;
+                    let half = world.scale() / 2;
+                    let on_centre = |v: i64| (v - half).rem_euclid(world.scale()) == 0;
                     println!(
                         "    partial at tick {} id {} d=({dx}, {dy}) step={step:.0} n={:.3} at=({}, {}) mods=({}, {}) centre={} {task} {decision} path_len={}",
                         world.tick(),
@@ -210,8 +210,8 @@ fn how_a_villager_moves() {
                         distance / step,
                         here.0.raw(),
                         here.1.raw(),
-                        here.0.raw().rem_euclid(i64::from(world.scale())),
-                        here.1.raw().rem_euclid(i64::from(world.scale())),
+                        here.0.raw().rem_euclid(world.scale()),
+                        here.1.raw().rem_euclid(world.scale()),
                         on_centre(here.0.raw()) && on_centre(here.1.raw()),
                         world.path_length(*id)
                     );
