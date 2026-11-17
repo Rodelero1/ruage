@@ -202,11 +202,12 @@ impl World {
         // on the tick the tiles blocked. D183 §5 promises no unit is ever inside a solid footprint; this half of the
         // gate is what keeps the promise - the tile test alone does not.
         let rect = self.footprint_rect(site);
+        let scale = self.scale;
         let overlaps = |other: &crate::Entity| {
-            let (Some((ax, ay, wide, tall)), true) = (rect, other.kind == EntityKind::Unit) else {
+            // No rect, no opinion: the closure's whole question is where the footprint is.
+            let Some((ax, ay, wide, tall)) = rect else {
                 return false;
             };
-            let scale = self.scale;
             let (left, top) = (i64::from(ax) * scale, i64::from(ay) * scale);
             let (right, bottom) = (
                 left + i64::from(wide) * scale,
@@ -217,7 +218,21 @@ impl World {
                 (left - x).max(x - right).max(0),
                 (top - y).max(y - bottom).max(0),
             );
-            (ox * ox + oy * oy).isqrt() < self.body_radius_of(other.id)
+            let squared = ox * ox + oy * oy;
+            // **Two tiles is far enough to answer without the table.** The widest radius the pack carries is half a tile
+            // and a missing one reads as a whole tile below, so a body beyond two tiles cannot reach the footprint - and
+            // `body_radius_of` resolves a variant root per call, which is the cost the movement pass hoists out of its own
+            // per-body loop for the same reason (2.3 s of a 36,000-tick run).
+            if squared > 4 * scale * scale {
+                return false;
+            }
+            // **A missing radius is a whole tile**, which is the engine's own reading of zero (`movement.rs:63`), not "no
+            // body": with a bare `0` the comparison is never true and this half of the gate would silently do nothing.
+            let radius = match self.body_radius_of(other.id) {
+                0 => scale,
+                radius => radius,
+            };
+            squared.isqrt() < radius
         };
         let standing: Vec<(EntityId, u8)> = self
             .entities
