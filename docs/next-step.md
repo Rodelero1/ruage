@@ -12,6 +12,14 @@ first half is settled by reading (below). The narrative lives in `docs/history/n
 resolves; the D250 build reads **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is
 the better outcome and the floor should be restated. Nothing else in the queue is blocked on a decision.
 
+**Second question, and it is new (2026-11-17, R1a measured on `wip/r1a-at-rest`).** Deleting the step-through arm no longer
+deadlocks - a one-tile corridor pair and the head-on pair both pass, so the *past* chain D242 blamed needs no code - but it
+costs the match: **40 s -> 154 s**, entities **138 -> 159**, re-paths **761 -> 423 (body 445->251)**, and the **enemy survives**
+(`players=1` -> 2) where the control eliminates him. So: take the pass-through out and pay 3.9x the wall time, or keep the arm
+and keep the ~0.09-tile walk-through it hides. The numbers, and the two fixtures that had to be restated to what survives D241,
+are in `docs/reviews/2026-11-17-r1a-at-rest.md`. Also named there: **one property is now unpinned** - "a man who is not past is
+never crossed" cannot be observed from outside the world without a route accessor, which is why the slice is parked.
+
 ## The queue, in the order a player would see it
 
 Each slice ships red-first, with its measurement in `docs/reviews/`, and **the gate is the acceptance match at 48,000 ticks**:
