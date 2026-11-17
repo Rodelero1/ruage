@@ -31,6 +31,19 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-17 — a streamer's live link, and the identity table's six duplicates still six
+
+**`SiegeEngineers/aoc-reference-data`, one commit (`a53436be` → `e39f3dec`), `data/players.yaml` only, +2/−0.**
+Player 280's entry gains a `youtube_live:` list holding the `/live` form of the same channel its `youtube` list already
+names. The key is established, not new: **54 entries** carry it at this head and every value ends in `/live`. This is
+roster upkeep of the kind the repo does most days; nothing that carries a published *game* value — unit, tech, civ, cost,
+HP — moved.
+
+Re-measured on the new head rather than assumed: **672 players**, and the duplicate-id set recorded on 2026-11-13 is
+still the same six — 681, 753, 756, 771, 774, 775 — so that rule stands unchanged (not an identity source for those six,
+fine for the published values we read it for). Nothing on an engine axis: asset pipeline (D18), engine/content boundary
+(D17), tick model, platform and licence are untouched. No U-number answered, no recorded decision changed.
+
 ## 2026-11-16 — the trebuchet's transform is in our own dat, and the Housing action is not what houses do
 
 **Two projects were due. `SFTtech/openage` moved two commits (`5f042b9c` → `e3080121`): `OrderedSet.intersection_update`
