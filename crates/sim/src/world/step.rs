@@ -1402,11 +1402,17 @@ impl World {
                 }
                 let planned = match self.walk.as_ref() {
                     Some(walk) => {
-                        short_range_clear(walk, self.scale, from, aim, radius, &obstacles, &discs)
-                            .or_else(|| {
-                                find_path_avoiding(walk, start, goal, &obstacles)
-                                    .map(|steps| self.corners(walk, start, steps, aim))
-                            })
+                        // **The short-range planner is given a goal a body can stand on** (D264). It grows every obstruction by
+                        // the radius, so an aim sitting *on* the node - a tree's tile, a sheep's, a mill's wall - is a goal inside
+                        // an obstruction and it answers `None`, which is why the tile search was doing a gather approach's work.
+                        let aim_legal = self.legal_standoff(aim, radius);
+                        short_range_clear(
+                            walk, self.scale, from, aim_legal, radius, &obstacles, &discs,
+                        )
+                        .or_else(|| {
+                            find_path_avoiding(walk, start, goal, &obstacles)
+                                .map(|steps| self.corners(walk, start, steps, aim))
+                        })
                     }
                     None => None,
                 };

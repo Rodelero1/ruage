@@ -7374,3 +7374,30 @@ approach is 6 tiles long - exactly its job - so the question to answer next is *
 recommendation is to route short approaches through `short_range_clear` first and only fall back to the tile search when it
 returns `None`.
 
+### D264 - the planner was never asked a question it could answer (2026-11-17)
+
+*The owner: **"Proceed."** One small change, one real defect, and the slide's exact role in the ledger.*
+
+**The defect**: `short_range_clear` does the game's job - it grows every obstruction by the body's radius (a Minkowski sum), builds
+a visibility graph over the grown rectangles' corners and adds shoulder points round bodies (D211) - and it was **always passed a
+goal it could not reach**. A gather approach aims at the **node**: a tree's tile, a sheep's tile, a mill's wall. All blocked
+ground. Grown by the radius, the goal is *inside* an obstruction, the graph has no node for it, and the function returns `None` -
+so the **tile search** answered every gather approach in the game, and the good planner was dead code on that path.
+
+**The change**: `World::legal_standoff(at, radius)` - the nearest point near the aim where the body fits (clearance at least zero
+and outside every footprint grown by its radius), found by stepping out along eight directions in eighths of a tile. The
+short-range planner is given **that** point as its goal; the arrival test then decides whether the worker can work from there.
+
+**Measured**: animals **11 of 11 green** (they were 3 red at D263), `whole_steps` 2 green, `body_clearance` 2 green.
+
+**And the slide, measured rather than argued**: then deleted, with the planner now given a legal goal, **the animals family goes
+back to 3 red** - `a_live_animal_is_a_gather_source`, `the_villager_follows_the_sheep`,
+`the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body`. The route is not the problem any more; the **place** is. A
+gatherer keeps to his place to within a fifth of a tile (`settle_workers`), those nudges are far under a step, and a rule that
+refuses anything but a whole step leaves him a fraction short and he never works. The original does not have this category: its
+movement is **continuous**, 0.04 tiles a tick (D258), so "a fraction of a step" is a normal step to it.
+
+**So the slide stays, and D253's creep is its cost, not its purpose.** The sequence is now clear and it is the last piece of this
+whole thread: **the gather approach must be made of whole steps too** - one waypoint, walked to, then stand - and then the slide
+can go. That is a place/waypoint question in `settle_workers`, not a movement question.
+

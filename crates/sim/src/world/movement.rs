@@ -266,6 +266,44 @@ impl World {
         true
     }
 
+    /// **The nearest point a body fits**, when a point sits inside a building's footprint grown by its radius (D262-D264).
+    /// The game's distance to a footprint is `max(0, |dx| - radius_x)` per axis (`func_00269190`), so touching is legal and
+    /// inside is not; a gather aim or a route endpoint that is inside can never be reached by a legal step.
+    pub(crate) fn push_out_of_buildings(&self, at: (Fixed, Fixed), radius: i64) -> (Fixed, Fixed) {
+        let scale = self.scale;
+        let mut point = at;
+        for building in self
+            .entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::Building)
+        {
+            let Some((ax, ay, w, h)) = self.footprint_rect(building.id) else {
+                continue;
+            };
+            let left = i64::from(ax) * scale - radius;
+            let top = i64::from(ay) * scale - radius;
+            let right = (i64::from(ax) + i64::from(w)) * scale + radius;
+            let bottom = (i64::from(ay) + i64::from(h)) * scale + radius;
+            let (x, y) = (point.0.raw(), point.1.raw());
+            if x <= left || x >= right || y <= top || y >= bottom {
+                continue;
+            }
+            let (to_left, to_right) = (x - left, right - x);
+            let (to_top, to_bottom) = (y - top, bottom - y);
+            let nearest = to_left.min(to_right).min(to_top).min(to_bottom);
+            point = if nearest == to_left {
+                (Fixed::from_raw(left), point.1)
+            } else if nearest == to_right {
+                (Fixed::from_raw(right), point.1)
+            } else if nearest == to_top {
+                (point.0, Fixed::from_raw(top))
+            } else {
+                (point.0, Fixed::from_raw(bottom))
+            };
+        }
+        point
+    }
+
     /// One step against the bodies in the way (D98a, C, D205).
     ///
     /// The original queries collisions **at the new position with the unit's radius**, and this is that query: a body
@@ -328,6 +366,15 @@ impl World {
         // slides along the axis that is clear, which is how it gets round a building instead of through it. This is the
         // **terrain** slide and it stays (D205 withdraws the slide round a *body*, not the one round a wall).
         if !self.step_is_walkable(here, (dx, dy), goal_tile, radius) {
+            // **The slide is still load-bearing, and this is where it is measured** (D264). Deleted, with the short-range planner
+            // given a legal goal (so the planner is no longer the problem), the **animals family goes red: 3 of 11** -
+            // `a_live_animal_is_a_gather_source`, `the_villager_follows_the_sheep`,
+            // `the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body`. The reason is not the route: a gatherer's
+            // last approach is a **place kept to within a fifths of a tile by `settle_workers`**, whose nudges are far under a
+            // step, so a step rule that refuses anything but a whole step leaves him a fraction short and he never works.
+            // The original answers the same case differently: **its whole movement is continuous** (0.04 tiles a tick, D258), so
+            // "a fraction of a step" is not a category it has. Until our mover can spend a partial step on the gather approach -
+            // or the place is reached by walking only - the slide stays.
             for (sx, sy) in [(dx, Fixed::ZERO), (Fixed::ZERO, dy)] {
                 if sx == Fixed::ZERO && sy == Fixed::ZERO {
                     continue;

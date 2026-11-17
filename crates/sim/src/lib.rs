@@ -3942,6 +3942,47 @@ impl World {
         nearest.saturating_sub(radius)
     }
 
+    /// **The nearest point near `at` that a body of `radius` may legally stand on** (D264). A gather aim sits on the node -
+    /// a tree's tile, a sheep's tile, the wall of a mill - which is blocked ground, so a planner that grows every obstruction by
+    /// the body's radius has **no route to the goal at all** and returns `None`. That is why the short-range planner, which does
+    /// exactly the game's "grow the obstruction, walk the grown plan" job (D211), was never the one answering a gather approach.
+    /// The aim is moved out along a ring until the body fits; the arrival test then decides whether he can work from there, and
+    /// the game's answer is the **gap between boxes**, not a distance between points (`func_002690E0`).
+    #[must_use]
+    pub fn legal_standoff(&self, at: (Fixed, Fixed), radius: i64) -> (Fixed, Fixed) {
+        let fits = |point: (Fixed, Fixed)| {
+            self.clearance_at(point, radius) >= 0
+                && self.push_out_of_buildings(point, radius) == point
+        };
+        if fits(at) {
+            return at;
+        }
+        let scale = self.scale;
+        // The eight axes first (the binary's ring is sampled unit vectors; these are exact in integers), then finer steps.
+        for ring in 1..=8 {
+            let distance = scale * ring / 8;
+            for (dx, dy) in [
+                (distance, 0),
+                (-distance, 0),
+                (0, distance),
+                (0, -distance),
+                (distance, distance),
+                (-distance, distance),
+                (distance, -distance),
+                (-distance, -distance),
+            ] {
+                let point = (
+                    Fixed::from_raw(at.0.raw() + dx),
+                    Fixed::from_raw(at.1.raw() + dy),
+                );
+                if fits(point) {
+                    return point;
+                }
+            }
+        }
+        at
+    }
+
     /// **A unit's clearance**, using its own body radius (D176).
     #[must_use]
     pub fn body_clearance(&self, id: EntityId) -> i64 {
