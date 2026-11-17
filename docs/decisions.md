@@ -7349,3 +7349,28 @@ within the order's **range** - instead of a ring distance. Then a man pushed out
 because the gap he is measured by is the gap the original measures. That is one function (`reaches`/`at_node`) and it is the last
 piece of the same model.
 
+### D263 - two pieces land in the ledger, and the wall is now a place with coordinates (2026-11-17)
+
+*Attempted the box-gap arrival rule and the endpoint projection together. Neither is in the tree; both are measured, and the
+failure now has an address.*
+
+**Piece that works, measured**: projecting the **route's endpoint** out of every building footprint grown by the body's radius
+(`push_out_of_buildings`, from `plan_path`'s `finish`) takes the animals family from **3 failures to 1**. The last leg is the one
+unchecked corner in every plan, because the *goal* can sit inside the inflated footprint.
+
+**Piece that does not**: rejecting gather places that fall outside the pair's reach after that projection. It changes nothing on
+the failing case, and the trace explains why.
+
+**The failure, with coordinates**: `a_live_animal_is_a_gather_source` sends a villager to a sheep **6 tiles** from the town centre
+(tile 18,18). He walks and stops at **(362642, 316792)** - the **south wall of the town centre** (rows 12-15), **2.16 tiles** short
+of the sheep, `at_node=false` for the rest of the run. He is not 8.66 tiles short any more (the endpoint projection moved him 6.5
+tiles), but he cannot bend round the corner: his route's legs clip the footprint by a fraction and the step test refuses them, and
+the re-plan budget runs out returning the same route.
+
+**So the next piece is the one D261 named, and the tree already contains the planner for it**: `short_range_clear` grows every
+blocked tile by the body's radius (the Minkowski sum), builds a **visibility graph over the grown rectangles' corners**, and adds
+**shoulder points** round every body so a detour can bend *inside* a tile. That is the game's "low-level path". The failing
+approach is 6 tiles long - exactly its job - so the question to answer next is **why the tile search answered instead**, and the
+recommendation is to route short approaches through `short_range_clear` first and only fall back to the tile search when it
+returns `None`.
+

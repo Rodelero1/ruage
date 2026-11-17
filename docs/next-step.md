@@ -17,8 +17,7 @@ game. No sliding."* The fixtures say it in the observable form (one step a tick 
 no slide - and the **pathfinder** half is the one that is missing: `path.rs` has **no radius in it**, so a villager's 0.2-tile body
 plans a *point* route that hugs the town centre and the mover then refuses the step. The original shrinks the walkable area by the
 unit's radius before the search (its own string: *"the waypoints outside the boundaries of where this unit's radii will go"*).
-**PROVED (D260, corrected by the owner): turns are instant** - `calculateYawAngle()` limits the **facing** (`maxYawPerSec`), not
-the step. So the corner is not a turn rate: the **search keeps the body's radius clear** and the **waypoint is snapped to**.
+**PROVED (D260, corrected by the owner): turns are instant** - `calculateYawAngle()` limits the **facing**, not the step.
 
 **PROVED (D258)**: the game collides **boxes, not tiles** - `FUN_00840830` builds each object's box from its radius table and
 collides on `<=` per axis; `func_002690E0` measures box-to-box, overlap clamped to zero (the half-diameter rule).
@@ -26,13 +25,14 @@ Our tree is *not* the wrong size (`TREEA` is `radius = [0.5, 0.5, 2.0]`, so its 
 the town centre's footprint, which the game would refuse too.
 
 **Attempted, reverted (D261)**: five pieces at once (radius-aware line test and pull, box step test, projected places and
-waypoints, slide deleted) - **still 3 red**, refused at **`now=0 next=164`**. The wall is geometric: on a
-**tile-centre** route a diagonal past a corner passes *through* it, so the box overlaps by the whole radius; a town centre's
-`radius` is `[2.0, 2.0, 0.0]`, so its box **is** its 4x4 footprint and the original refuses that step too. **What it has and we
-lack is a finer-than-tile route** - and we already have the shape: `short_range_clear`'s *shoulder points* round every body (D211).
-**Next: shoulder points round a building's corners.** **Measured since (D262)**: projecting only the route's *endpoint* out of the
-inflated footprints took that family **3 red -> 1**. The one left is a **range**: pushed out of the wall he no longer counts as "at
-the node" - the fix is the game's **box gap** within the order's range (`func_002690E0`), not a standoff distance.
+waypoints, slide deleted) - **still 3 red**, refused at **`now=0 next=164`**. On a **tile-centre** route a diagonal past a corner
+passes *through* it, so the box overlaps by the whole radius; a town centre's `radius` is `[2.0, 2.0, 0.0]`, so its box **is** its
+4x4 footprint and the original refuses that step too.
+**Next: route short approaches through the planner that already does this.** `short_range_clear` grows every blocked tile by the
+body's radius and builds a visibility graph over the grown corners plus shoulder points (D211) - the game's low-level path. The
+failing approach is 6 tiles long, its job exactly; **the question is why the tile search answered instead.** **Measured since (D262/D263)**: projecting the route's *endpoint* took the family **3 red -> 1**; the last one stops at the town
+centre's **south wall, 2.16 tiles short** of the sheep, because his legs clip the footprint by a fraction and the re-plan returns
+the same route.
 
 **Waiting on the owner - the only open question.** The queue's floor is **entities >= 155**. The control reads **154** and never
 resolves; the D250 build reads **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is
