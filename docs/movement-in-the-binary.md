@@ -484,3 +484,37 @@ So the slice that follows is narrow and named: **give resources their box from t
 stays cheap, and let the step test and the search use those boxes instead of whole tiles.** Buildings already have exact boxes
 (their footprints), units already have radii, and the ground keeps its point test.
 
+## How the original stops a walk from cutting a corner: it turns first (2026-11-17)
+
+Asked by the owner - *"how does original game and decomp address this?"* - after the finding that our mover walks a **straight line
+at the next waypoint**, so a plan can be valid and the walk still clip a wall by a fraction.
+
+**The unit moves along a *heading*, and the heading turns in fixed steps.** From the decompilation,
+`src/zone/zone_spatial_entity_adjust_heading_step.cpp`:
+
+```c
+int count = ...; if (count < 8) count = 8;
+const float two_pi = 6.283185307179586f;
+float delta_rad = (two_pi * (float)a1) / (float)count;   // a1 = steps to turn (usually one)
+float new_heading = self->heading + delta_rad;
+... wrap to [0, 2pi) ...
+self->methodC4(new_heading);                              // set the facing
+```
+
+So the facing changes by **at most one 45-degree notch per update** (count is floored at eight), and in the movement update the turn
+comes **before** the step: `Doing yaw of %.10f, limitedYawAngle=%d` then `(**(code **)(*in_ECX + 0x29c))()` = "do the movement".
+It even declines a turn it would overshoot: *"NOT Doing yaw ... because we'll hit the point the next time"*.
+
+**That is the answer to the corner.** A body walks along the direction it faces. To go round a corner it must *turn*, and a turn
+takes updates; it cannot move along a line it is not facing. There is no "straight line at the next waypoint" to clip anything,
+because the step is always along the current facing.
+
+**And the rest of the pair is already known**: the new position is tested with **boxes** (`FUN_00840830`), a collision is answered
+by a **repath** or a **pause**, a reached waypoint is **snapped to and spent** (`Teleporting to exact waypoint`, `Incrementing
+waypoint`), and the search plans for *"the boundaries of where this unit's radii will go"*.
+
+**What that means for us.** The slice is bigger than "walk along the leg": our mover has no facing at all. To follow the original it
+needs a heading, a turn of at most one notch (45 degrees, or finer from the content) per update, a step **along the heading**, the
+box collision it already has, and the waypoint snap the fold already does. Then a corner is a turn, a plan means what it says, and
+the slide has nothing to paper over.
+

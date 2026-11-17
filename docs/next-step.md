@@ -17,21 +17,20 @@ game. No sliding."* The fixtures say it in the observable form (one step a tick 
 no slide - and the **pathfinder** half is the one that is missing: `path.rs` has **no radius in it**, so a villager's 0.2-tile body
 plans a *point* route that hugs the town centre and the mover then refuses the step. The original shrinks the walkable area by the
 unit's radius before the search (its own string: *"the waypoints outside the boundaries of where this unit's radii will go"*).
+**PROVED (D260): the original turns before it walks.** `adjust_heading_step` (`func_001DF350`, decomp) turns the facing by
+`2*pi/count`, `count` floored at **8** = **45 degrees a notch**, and the movement update turns **before** it steps; the step is
+always along the current facing, so there is no straight line at a waypoint to clip a wall with. A corner is a **turn**, and a turn
+costs updates. **Our mover has no facing at all** - that is the slice: heading per body, one notch a tick toward the aim, a step
+along the heading, the box collision already there, the fold's snap, no slide.
+
 **PROVED (D258)**: the game collides **boxes, not tiles** - `FUN_00840830` builds each object's box from its radius table and
 collides on `<=` per axis; `func_002690E0` measures box-to-box, overlap clamped to zero (the half-diameter rule).
-**And our tree is not the wrong size** (`TREEA` is `radius = [0.5, 0.5, 2.0]`): the **164-raw** refusal is against the **town
-centre's footprint**, which the game would refuse too. So the defect is the **route and the place**: nothing checks the planned
-polyline against a building's box. Next: **validate the plan against inflated footprints, and a place must fit the body** - that
-lets "no sliding" land.
+Our tree is *not* the wrong size (`TREEA` is `radius = [0.5, 0.5, 2.0]`, so its box is its tile); the 164-raw refusal was against
+the town centre's footprint, which the game would refuse too.
 
-**Attempted, reverted (D257)**: step model, disc-aware pull, box-clear places - **3 red of 200** on the step model alone.
-Older framing, still true: **a blocked tile must know what stands in it and how much of it it fills** - a trunk is not a tile, a footprint is.
-Then one measure serves both and the slide has nothing to hide. **Measured, it is narrow**: stepping by the tile grid alone took the
-no-slide suite from **14 red to 3** (one of the three the crowd fixture that already failed), so what is left is a rule for
-buildings (footprint exact), a tolerance for node trunks, and `a_newcomer_does_not_move_the_working_gatherers`. **And the binary
-says what the rule is**: ground is a point test at the tile (`FUN_008aa480`, no radius), things are boxes with `(radius_x,
-radius_y)`, and distance is measured to the box (`compute_distance_sq` in the decompilation) - so half a diameter from a tree
-touches nothing, and a body cannot enter a footprint. Three lines to copy, no threshold needed.
+**Attempted, reverted (D257)**: step model, disc-aware pull, box-clear places, route validation - **3 red of 200** each time.
+**Ground** is a point test at the tile (`FUN_008aa480`, no radius); **things** are boxes; **distance** is to the box
+(`func_002690E0`), so half a diameter from a tree touches nothing.
 
 **Waiting on the owner - the only open question.** The queue's floor is **entities >= 155**. The control reads **154** and never
 resolves; the D250 build reads **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is
@@ -62,8 +61,7 @@ never crossed" cannot be observed from outside the world without a route accesso
   `entities=138 players=1 hash=01a0fb771ee2e75b repaths=761`) and starved a 400,000-tick fixture - one gatherer alternating every
   tick between **(394394, 313527)** and **(395101, 313901)** from tick 38,000 to 400,000, the mover walking him 800 toward his
   route on odd ticks and `settle_workers` walking him 800 back on even ones, so the bank stuck at **200 of 400** with **1 repath**.
-- **The attempt before it**: spending corners *before* the step cuts them - a walker wedged against a forest edge for **68 ticks**,
-  sliding **1 raw unit** a tick.
+- **The attempt before it**: spending corners *before* the step cuts them - a walker wedged for **68 ticks** at **1 raw** a tick.
 - **Standing rule from the owner**: a fixture he asked for is **never `#[ignore]`d** without his explicit word. When the fix will
   not land, find out why.
 - **The adversarial review** (`docs/reviews/2026-11-17-whole-steps-adversarial.md`) prices it: **no measurable CPU cost** (a

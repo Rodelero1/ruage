@@ -7265,3 +7265,27 @@ once the walk is confined to the route, a blocked straight line is not a case th
 box) - **3 red**; plus disc-aware pull, box-clear places, and route validation - **still 3 red**, all animals, all one straight
 line clipping one footprint. None landed; the engine is unchanged.
 
+### D260 - the original turns before it walks, and our mover has no facing (2026-11-17)
+
+*The owner asked how the original and the decomp answer the "straight at the waypoint" defect D259 found. They answer it with a
+**facing**: a body moves along its heading, and the heading turns by at most one notch per update.*
+
+**The proof.** `src/zone/zone_spatial_entity_adjust_heading_step.cpp` (`func_001DF350`) turns the facing by
+`2*pi/count` with `count` floored at **8** - i.e. **45 degrees a notch** - and the movement update turns **before** it steps
+(`Doing yaw of %.10f, limitedYawAngle=%d`, then the movement call), declining a turn it would overshoot (*"NOT Doing yaw ...
+because we'll hit the point the next time"*). Arrival is a **snap and spend** (`Teleporting to exact waypoint`,
+`Incrementing waypoint`), collisions are **boxes** answered by a repath or a pause, and the search plans for the unit's radii.
+
+**Why that ends the corner problem**: a step is always along the current facing, so there is no straight line to the next waypoint
+to clip anything with. A corner is a **turn**, and a turn costs updates.
+
+**What our mover lacks**: a facing. It has no heading state at all - every tick it walks a straight line from wherever it stands to
+the next waypoint, which is why five attempts at the plan, the place, the box and the route could not fix a walk that ignores all
+of them.
+
+**The slice, then, in the original's own terms**: a heading per body; a turn of at most one notch (45 degrees, or finer when the
+content gives more) per update toward the aim; a step **along the heading**; the box collision (`step_is_walkable` plus
+`collide`, already there); the waypoint snap the fold already does; and no slide, because nothing needs to improvise. That is the
+next stretch's work, and it is a design change with its own fixtures - a turn takes ticks, so a body that must reverse costs a
+visible moment.
+
