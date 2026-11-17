@@ -13,11 +13,16 @@ game. No sliding."* The fixtures say it in the observable form (one step a tick 
 **D255** is where that lands: deleting the slide makes the corner fixture green (567 of 1,398 short ticks -> 0) and reddens
 **14 tests across 8 binaries**, and the single refusal behind them is a **164-raw (0.008-tile) brush** against a blocked tile that
 `a_villager_walking_beside_a_building_keeps_its_body_clear` forbids on every tick. Both fixtures are honest, so the next slice is
-**the model, and it is two halves (D256)**: the **step** half is written - ground at a point, a building's footprint as a box,
+**the model, and it is three pieces (D256/D257)**: the **step** half is written - ground at a point, a building's footprint as a box,
 no slide - and the **pathfinder** half is the one that is missing: `path.rs` has **no radius in it**, so a villager's 0.2-tile body
 plans a *point* route that hugs the town centre and the mover then refuses the step. The original shrinks the walkable area by the
 unit's radius before the search (its own string: *"the waypoints outside the boundaries of where this unit's radii will go"*).
-Plan for the disc, then step with the box - that is the slice. Older framing, still true: **a blocked tile must know what stands in it and how much of it it fills** - a trunk is not a tile, a footprint is.
+**Built and measured, all three reverted**: the step's two questions (tile at the point, building as a box, depth with D192's
+"may keep walking along"), the disc-aware route pull (segment-vs-inflated-box), and box-clear gather places. The first fixes the
+**164-raw** brush refusal; the second changes nothing, because the route was never the problem; the third leaves the gatherer with
+**no place at all**. So the wall is `standoff_point`: places are chosen by tile and spacing with **no notion of the body's box** -
+that is the next slice, and it is D202/D204/D243's ground. With Piece 1 alone the no-slide suite is **3 red of 200** (one the
+crowd fixture that already failed), which is the state to resume from. Older framing, still true: **a blocked tile must know what stands in it and how much of it it fills** - a trunk is not a tile, a footprint is.
 Then one measure serves both and the slide has nothing to hide. **Measured, it is narrow**: stepping by the tile grid alone took the
 no-slide suite from **14 red to 3** (one of the three the crowd fixture that already failed), so what is left is a rule for
 buildings (footprint exact), a tolerance for node trunks, and `a_newcomer_does_not_move_the_working_gatherers`. **And the binary

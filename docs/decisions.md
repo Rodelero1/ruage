@@ -7176,3 +7176,32 @@ reboot at 04:00.
 (one of them the crowd fixture that already fails); with the box test added back it is the same 3 plus the animals family's 3,
 all of them the TC-edge route above.
 
+### D257 - copy the game, attempted in full: three pieces built, and the wall is the gather place (2026-11-17)
+
+*The owner: **"Copy the game."** Three pieces were built and measured in one stretch. Each is the game's own model, each is
+reverted, and the reason they cannot land together is now precise: **the place a gatherer is sent to is chosen without the body's
+box in mind**, and that is a different subsystem from the mover.*
+
+**Piece 1 - the step's two questions.** Ground tested at the tile under the point; a building's footprint tested as a **box**
+against the body's radius (depth = `radius - distance to the box`), with D192's rule for a body already touching (it may walk
+along, it may not go deeper); the terrain slide deleted. Result: the coarse-tile refusal is gone - the **164-raw (0.008-tile)**
+brush that stopped a gatherer 267 ticks is no longer a refusal.
+
+**Piece 2 - the route planned for the body.** The original's search answers for *"the boundaries of where this unit's radii will
+go"*, so `pull_route_avoiding` may only cut a corner when the segment stays out of every building footprint grown by the radius
+(slab test against axis-aligned boxes, plan time only). Result: the same refusal, unchanged - **because the route was never the
+problem**.
+
+**Piece 3 - the place chosen for the body.** The gather standoff may not be a point the mover can never stand on, so candidates
+inside a building's inflated box are rejected. Result: the man then had **no place at all** (`Standoff::NoRoom`) and stood where he
+was: `the_villager_follows_the_sheep` still fails, now for the honest reason.
+
+**What that says.** The mover now asks the game's questions; what is left is that `standoff_point` picks places by *tile* and
+*spacing*, with no notion of the body's box - so a place can be legal by tiles and illegal by geometry, and rejecting those leaves
+none. The fix is inside the gather approach (place selection + the ring's geometry), which is D202/D204/D243's ground, not the
+mover's, and it is the next slice: **a place is a point where the body fits, and the approach is a route the body can walk.**
+
+**Also measured, for the next reader**: with only Piece 1 (step model, tile grid) the no-slide suite is **3 red** of 200 binaries
+(one of them the crowd fixture that already failed) - 197 green. That is the state to resume from: the step model is worth landing
+once the place model can live with it.
+
