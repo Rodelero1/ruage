@@ -17,11 +17,11 @@ game. No sliding."* The fixtures say it in the observable form (one step a tick 
 no slide - and the **pathfinder** half is the one that is missing: `path.rs` has **no radius in it**, so a villager's 0.2-tile body
 plans a *point* route that hugs the town centre and the mover then refuses the step. The original shrinks the walkable area by the
 unit's radius before the search (its own string: *"the waypoints outside the boundaries of where this unit's radii will go"*).
-**PROVED (D260): the original turns before it walks.** `adjust_heading_step` (`func_001DF350`, decomp) turns the facing by
-`2*pi/count`, `count` floored at **8** = **45 degrees a notch**, and the movement update turns **before** it steps; the step is
-always along the current facing, so there is no straight line at a waypoint to clip a wall with. A corner is a **turn**, and a turn
-costs updates. **Our mover has no facing at all** - that is the slice: heading per body, one notch a tick toward the aim, a step
-along the heading, the box collision already there, the fold's snap, no slide.
+**PROVED (D260, corrected by the owner): turns are instant.** What `calculateYawAngle()` (`FUN_008a3270`) limits with
+`maxYawPerSec` is the **facing** - the sprite - not the step; a unit moves in a new direction at once and its picture catches up.
+So the original's protection against a corner is not a turn rate: the **search keeps the body's radius clear** (*"the boundaries of
+where this unit's radii will go"*) and the **waypoint is snapped to**, so each short straight step is along ground the body fits on.
+Ours plans for a point and lets the body drift off it. **The slice: plan for the radius, keep the body on the route.**
 
 **PROVED (D258)**: the game collides **boxes, not tiles** - `FUN_00840830` builds each object's box from its radius table and
 collides on `<=` per axis; `func_002690E0` measures box-to-box, overlap clamped to zero (the half-diameter rule).

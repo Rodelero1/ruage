@@ -509,12 +509,21 @@ It even declines a turn it would overshoot: *"NOT Doing yaw ... because we'll hi
 takes updates; it cannot move along a line it is not facing. There is no "straight line at the next waypoint" to clip anything,
 because the step is always along the current facing.
 
+**Correction, from the owner**: *"Does turn really take time? I remember turns being instant."* He is right, and this section's
+first draft over-read the code. `FUN_008a3270` is **`calculateYawAngle()`** - `calculateYawAngle() objId=%d (interval=%.10f,
+yawAngle=%.10f, maxYaw=%s, maxYawPerSec=%s)`, with `Did not limit yawAngle`, `Limited yawAngle to maxYaw of %s` and `Reversing
+yawAngle` - so what `maxYawPerSec` limits is the **facing**, i.e. the sprite's rotation, over an `interval`; nothing in the movement
+update scales the *step* by the yaw, and the yaw's result in that function feeds a flag, not a distance. **A unit moves in the new
+direction at once; its picture turns at `maxYawPerSec`.** The 8-way `count` in `adjust_heading_step` is the number of sprite
+facings, and `a1` notches are applied in one call.
+
 **And the rest of the pair is already known**: the new position is tested with **boxes** (`FUN_00840830`), a collision is answered
 by a **repath** or a **pause**, a reached waypoint is **snapped to and spent** (`Teleporting to exact waypoint`, `Incrementing
 waypoint`), and the search plans for *"the boundaries of where this unit's radii will go"*.
 
-**What that means for us.** The slice is bigger than "walk along the leg": our mover has no facing at all. To follow the original it
-needs a heading, a turn of at most one notch (45 degrees, or finer from the content) per update, a step **along the heading**, the
-box collision it already has, and the waypoint snap the fold already does. Then a corner is a turn, a plan means what it says, and
-the slide has nothing to paper over.
+**What that means for us.** There is no facing to add - the original's protection against a corner is **not** a turn rate, it is
+that the **search keeps the body's radius clear** and the **waypoint is snapped to**, so a short straight step toward the next
+point is a step along ground the body fits on. Ours plans for a point and lets the body drift off it, which is exactly how a
+**164-raw** clip of a footprint appeared. So the slice is the two pieces already named: plan for the radius, and keep the body on
+the route (the fold gives the snap).
 

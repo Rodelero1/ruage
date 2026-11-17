@@ -7283,9 +7283,16 @@ to clip anything with. A corner is a **turn**, and a turn costs updates.
 the next waypoint, which is why five attempts at the plan, the place, the box and the route could not fix a walk that ignores all
 of them.
 
-**The slice, then, in the original's own terms**: a heading per body; a turn of at most one notch (45 degrees, or finer when the
-content gives more) per update toward the aim; a step **along the heading**; the box collision (`step_is_walkable` plus
-`collide`, already there); the waypoint snap the fold already does; and no slide, because nothing needs to improvise. That is the
-next stretch's work, and it is a design change with its own fixtures - a turn takes ticks, so a body that must reverse costs a
-visible moment.
+**Correction, same evening, from the owner** - *"Does turn really take time? I remember turns being instant."* **He is right.**
+`FUN_008a3270` is `calculateYawAngle()`, and what `maxYawPerSec` limits is the **facing**: `Limited yawAngle to maxYaw of %s`,
+`Reversing yawAngle`, over an `interval`. Nothing in the movement update scales the *step* by the yaw - its result feeds a flag,
+not a distance - and the 8-way `count` in `adjust_heading_step` is the number of sprite facings, with `a1` notches applied in one
+call. **A unit moves in a new direction at once and its picture turns over time.** So "a turn costs ticks" was wrong and is
+withdrawn.
+
+**Which puts the corner back on the two pieces that are left, and both are proven**: the original's protection is that the **search
+keeps the body's radius clear** (*"the boundaries of where this unit's radii will go"*) and the **waypoint is snapped to**
+(`Teleporting to exact waypoint`, `Incrementing waypoint`) - so a short straight step toward the next point is a step along ground
+the body fits on. Ours plans for a point and lets the body drift off it, which is how a **164-raw** clip of a footprint appeared.
+The slice stays: **plan for the radius, keep the body on the route.**
 
