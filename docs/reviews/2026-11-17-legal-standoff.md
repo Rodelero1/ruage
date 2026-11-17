@@ -21,6 +21,11 @@ the working tree; both `--release`):
 | 2 | 41,267 ms | 18,395 ms |
 | 3 | 39,920 ms | 17,016 ms |
 
+A second before-set, from the background job that built the same worktree (it printed after this note was first written):
+**49,560 / 40,102 / 43,427 ms** - same hash, same counts. So the before-range is **39.9-49.6 s**, a **24% spread on an unchanged
+binary**, and the after-set's 17.0-18.4 s sits below every one of the six. The spread is the machine (a 4 GiB / 2 CPU cgroup), not
+the change, and it is the reason the mechanism - ground re-plans 316 -> 122 - is the number to trust, not the wall clock.
+
 **Repaths**: 761 -> 431 in total (body 445 -> 309, **ground 316 -> 122**). The ground re-plans are the tile search's, and they fall
 by 61% because the short-range planner now answers the approach instead of returning `None` and handing it to the search.
 
