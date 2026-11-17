@@ -14,7 +14,9 @@ game. No sliding."* The fixtures say it in the observable form (one step a tick 
 **14 tests across 8 binaries**, and the single refusal behind them is a **164-raw (0.008-tile) brush** against a blocked tile that
 `a_villager_walking_beside_a_building_keeps_its_body_clear` forbids on every tick. Both fixtures are honest, so the next slice is
 **the model: a blocked tile must know what stands in it and how much of it it fills** - a trunk is not a tile, a footprint is.
-Then one measure serves both and the slide has nothing to hide.
+Then one measure serves both and the slide has nothing to hide. **Measured, it is narrow**: stepping by the tile grid alone took the
+no-slide suite from **14 red to 3** (one of the three the crowd fixture that already failed), so what is left is a rule for
+buildings (footprint exact), a tolerance for node trunks, and `a_newcomer_does_not_move_the_working_gatherers`.
 
 **Waiting on the owner - the only open question.** The queue's floor is **entities >= 155**. The control reads **154** and never
 resolves; the D250 build reads **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is

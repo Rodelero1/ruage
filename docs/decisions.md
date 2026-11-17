@@ -7126,6 +7126,12 @@ animals and gathering first: a gatherer ordered onto a sheep stops at **(316980,
 `stalled` at **267**. The refusal is a disc overlap of **164 raw units - 0.008 of a tile** - against a blocked tile, and no
 re-plan budget fixes it (40 instead of 2 changed nothing) because the route the pathfinder returns is the same route.
 
+**And the fix is narrower than it first looked.** The next attempt - step by the **tile grid alone** (the disc test removed, D176's
+guarantee left to placement) - took the no-slide suite from **14 red tests across 8 binaries to 3**, of which one is the crowd
+fixture that already failed: what is left is `a_villager_walking_beside_a_building_keeps_its_body_clear` (the disc rule itself) and
+`a_newcomer_does_not_move_the_working_gatherers` (a gatherer displaced by a newcomer). So the model slice is two rules wide, not a
+rewrite: **a building's footprint is exact, a node's trunk is not**, and one fixture about who keeps his place.
+
 **The two fixtures pin opposite sides.** Allow that 0.008-tile brush (the game's collision is against the *object*, and a body
 against a trunk or a wall face brushes the tile) and `a_villager_walking_beside_a_building_keeps_its_body_clear` fails: it demands
 `body_clearance >= 0` on **every** tick. Refuse it and the sheep fixture fails. There is no single threshold that satisfies both,
