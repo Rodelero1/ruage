@@ -336,3 +336,31 @@ loop, `+1` after each node's eight neighbours are tried), and the break is `h < 
 compared with a count**. Either the original carries a unit mismatch in that guard or one of the two variables is not what it
 looks like in the lifted listing; **it is not ported on either reading**, and the termination rule plus the equal-`f` tie-break
 remain what a replay would depend on.
+
+## The maximum forward velocity, read (2026-11-17): the speed is the unit's own, and a pause is zero
+
+Asked whether a villager's speed can ever change mid-walk, with the game as the first rung. `getMaxVelFwd` is the only place a
+mover's speed is decided, and it is small enough to read whole.
+
+- **`008a2a30`** (move_obj.cpp 3,069-3,145) is the function; its own log strings are at `0x9e8b2c` (*"ret 0.0f due to pause
+  reason"*), `0x9e8b50` (*"ret %s getMaxVelFwd"*) and `0x9e8b8c` (*"ret %s vel < 10.f"*), and its callee `0x7dd9d0` answers the
+  pause reason (`2` -> 0.0f, `-1` -> the speed, everything else -> 0.0f).
+- **The value returned is the unit's own dat speed**: `mov 0xc(%ebx)` is the unit definition, `movss 0xe4(%eax)` its speed.
+  There is **one** multiplier: when `[move+0x14]` (a motion object) is non-null and its float at **`+0x6c`** is `> 0.0`
+  (`comisd 0x9ae7a0`, a 0.0 double), the result is `speed * factor`. Otherwise the bare speed.
+- **A pause returns exactly 0.0f** - a stop, not a slow.
+- **There is no terrain factor, no per-tick ramp, and no partial-speed arm in it.** `007ff920` integrates velocity into position
+  and carries an `acceleration` term, but nothing in the velocity path writes a fraction of the unit's speed.
+- **`+0x6c` is written from one place**: the thiscall setter at `0x7f4130` (`movss %xmm0,0x6c(%ecx)`), which the .text scan finds
+  as the **only** store to that offset. It has **no direct caller** - it is reached through a virtual slot, so **who writes the
+  factor, and whether it is ever below 1.0, is unread**. The mechanism that needs one is the formation
+  (`FormationParams(..., breakAutoFormationsBySpeed=%d)` at `0x807ad8`, `AutoFormation` at `0x80754e`), where villagers are never
+  a member (`docs/prior-art.md`).
+
+**What that supports, and what it does not.** Supported: a body moves at its own speed or at zero, and the pause is the zero -
+which is the owner's rule (*"they may stop or stop to repath ... so either they walk, or stand"*). Not settled: whether a
+formation factor could ever be applied to a villager (its writer is unread), and whether the `acceleration` integration in
+`007ff920` ramps anything in practice (D206 keeps that as a register row; a recording settles it, a reading does not).
+
+The engine's own side of the same question is measured in `docs/next-step.md`'s third question: 15 of 20,000 villager body-ticks
+move between 0.11 and 0.95 of a step, and each one is a waypoint's landing, not a collision.

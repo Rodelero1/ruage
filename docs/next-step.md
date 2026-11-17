@@ -20,6 +20,29 @@ and keep the ~0.09-tile walk-through it hides. The numbers, and the two fixtures
 are in `docs/reviews/2026-11-17-r1a-at-rest.md`. Also named there: **one property is now unpinned** - "a man who is not past is
 never crossed" cannot be observed from outside the world without a route accessor, which is why the slice is parked.
 
+**Third question (2026-11-17): may a villager ever change speed?** The owner: *"villagers never slow down. They may stop or
+stop to repath but since they are never in the formations, there is no reason for them to change speed. So either they walk, or
+stand."* He asked for the game and the decomp to be read before anything is written, and for him to decide. Both reads are done:
+
+- **The game** (`docs/movement-in-the-binary.md`, "The maximum forward velocity, read"): `getMaxVelFwd` (`008a2a30`) returns the
+  unit's own dat speed, multiplied only by a motion-object factor (`[move+0x14]+0x6c`) when that is `> 0`, and **exactly 0.0 on
+  a pause**. No terrain factor, no ramp, no partial arm. The factor's writer is a virtual setter with no direct caller -
+  **unread** - and the only mechanism that needs one is the formation, where villagers are never members.
+- **The decomp cannot help**: it has no speed/velocity code at all (`docs/prior-art.md`, "not an oracle for movement speed").
+- **This engine** (`step_speed_probe`, 5 villagers, 4,000 ticks, `--ignored --nocapture`): **89.00% stand**, **10.93% walk a whole
+  step**, **0.07% (15 of 20,000 body-ticks) move 0.11-0.95 of a step**, none faster than a step. All fifteen are decided
+  `Take` - so not a slide, not a pause - and fourteen of them sit on one long `Move` where **`path_length` decrements on every
+  one**: a sub-step tick is a **waypoint's landing** ("take the whole gap when the remainder is within one step"), not a
+  collision and not a slow-down the mover asked for. The fifteenth is an idle settle at the goal.
+
+**The fork.** (a) Land the fixture `#[ignore]`d with that measurement as the specification, and make the movement slice that
+removes the landing clamp its un-ignoring - the D243/D248 pattern, same day, and it keeps `main` green. (b) Fixture and fix in
+one slice, which means changing the **landing and waypoint-spend** rule together (a spend is an equality today, so a step that
+passes through a waypoint instead of stopping on it stops consuming waypoints unless both change), and re-measuring arrival for
+every task that uses it. (c) Narrow the rule to "the speed setting never changes; a step is `speed/rate` or the remainder of a
+leg", which is his sentence without the sub-step ticks and costs nothing. **Recommendation: (a)**, because the landing clamp is
+load-bearing for arrival and its removal is a slice with its own measurement, not a one-liner.
+
 ## The queue, in the order a player would see it
 
 Each slice ships red-first, with its measurement in `docs/reviews/`, and **the gate is the acceptance match at 48,000 ticks**:

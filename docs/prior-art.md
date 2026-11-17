@@ -2057,3 +2057,20 @@ of what the game never had is what stops the next session porting a class name f
 about their organisation, the ids and counts are facts about our install (D13/D14). And a citation of their files is
 written with a `genie:`/`openaok:` prefix, which `tools/plan_check.py` treats as external by design, so the tree's own
 path check never mistakes their files for ours.
+
+## The decompilation is not an oracle for movement speed (2026-11-17)
+
+`samuelcaldas/age-of-empires-2-decomp` was cloned and searched for the one question a test needs answered: can a unit's speed
+change mid-walk? It cannot answer it, and the search is recorded so the next session does not repeat it.
+
+- **No speed, velocity, acceleration or max-velocity code exists in it.** `grep -ri "maxVel|acceleration|velocity"` over `src/`
+  and `include/` returns one hit, and it is the **camera**: `docs/controller_drag_3299f0.md:86,105` describes drag-movement
+  acceleration for the view controller.
+- **The unit-movement files are stubs.** `src/unit/unit_action_movement.cpp` is 29 lines and `unit_action_movement_ops.cpp` 47,
+  both of per-frame calls into `func_XXXXXX` with no bodies; `src/unit/unit_action_build_formation.cpp` is 16 lines and
+  `src/ai/tactical_ai_combat_subsystem_controller_formation.cpp` 27. Neither contains a speed.
+- **What it does cover** is the zone/spatial layer, part of the AI controller and the action system's plumbing - which is why it
+  is the source for the pathing rules in `docs/pathfinding-conformance.md`, and not for this.
+- Its addresses are **AoC 1.0c / AoK 2.0a / the PS2 ELF**, not HD 5.7 (no licence, all rights reserved: read for behaviour,
+  never transcribed). The movement answers in this tree come from `AoK HD.exe` itself -
+  `docs/movement-in-the-binary.md`, "The maximum forward velocity, read".
