@@ -7226,7 +7226,13 @@ and why the terrain slide looked necessary. The refusal against the **town centr
 the game calls that a collision too, and the answer is a route that keeps the body's radius clear - which is what its own log
 string says the search does.
 
-**So the next slice is narrow**: give resources their **box from the pack's `radius`**, index them by tile so the test stays cheap,
-and let the step test and the search use boxes rather than whole tiles. Buildings already have exact boxes (footprints), units
-already have radii, and the ground keeps its point test. That is the piece that lets "no sliding" land.
+**Correction, in the same evening** (recorded because it is the kind of claim that sticks): I wrote that our trees were the wrong
+size. **They are not** - `TREEA` carries `radius = [0.5, 0.5, 2.0]`, so a tree's box *is* its tile, and our tile grid agrees with
+the dat. The **164-raw** refusal was against the **town centre's footprint**, and by the game's own `<=` collision the original
+would refuse it too.
+
+**So the next slice is the route and the place, not the box**: the planned polyline must be checked against every building's
+footprint grown by the body's radius (`short_range_clear` plans a straight line and nothing validates it), and a gather place must
+be a point where the body's box fits. Buildings already have exact boxes, units already have radii, and the ground keeps its point
+test. That is the piece that lets "no sliding" land.
 

@@ -467,10 +467,14 @@ which is `max(0, |dx| - radius_x)` on each axis, then the hypotenuse. That is th
 `rangeDistance` - arrival is "the boxes are within range of each other", and **the owner's half-diameter rule is exactly range
 zero**.
 
-**What that says about our engine, and it corrects this file's own earlier section.** Our blocked ground is a *tile* grid: a tree
-is one whole blocked tile, so the box our step test sees is **1 x 1 tiles** for a trunk that the dat describes as a fraction of
-one. That is why a gatherer was refused a **164-raw (0.008-tile)** brush against a tree's *tile* while the game would refuse only
-an overlap of the *trunk's box* - and why the terrain slide looked necessary.
+**What that says about our engine - and it corrects an earlier draft of this very section.** I first wrote that our trees were the
+wrong size. **They are not**: `TREEA` in the pack carries `radius = [0.5, 0.5, 2.0]`, so its box *is* its tile, and a tree is
+exactly as big as the game says. The tile grid's box for a tree and the dat's box are the same thing.
+
+The **164-raw (0.008-tile)** refusal a gatherer hit was against the **town centre's footprint**, and by this reading the game would
+refuse it too - the collision test collides on touching, and its search plans for the unit's radii. So the defect is not the box
+and not the step test: it is the **route**, and the game's answer is its own log string, *"the boundaries of where this unit's
+radii will go"*. Ours comes from a straight-line planner (`short_range_clear`) that never looked at a building.
 
 The refusal against the **town centre** (269 ticks, `WaitGround`) is, by this reading, **correct**: the game would call that
 collision too. What is wrong there is the route, and the game's answer is in its own log string - the search answers for *"the
