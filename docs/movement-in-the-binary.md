@@ -364,3 +364,39 @@ formation factor could ever be applied to a villager (its writer is unread), and
 
 The engine's own side of the same question is measured in `docs/next-step.md`'s third question: 15 of 20,000 villager body-ticks
 move between 0.11 and 0.95 of a step, and each one is a waypoint's landing, not a collision.
+
+## How a blocked step is answered, and why there is no slide (2026-11-17)
+
+Read from `doIntelligentMovementUpdate` (`008a4360`, `move_obj.cpp`) in the REA corpus at `/opt/data/tools/rea/pseudo-aokhd`,
+whose asserts name their own source lines. The movement block is `move_obj.cpp` **4,645-4,920**, and its own log strings give the
+order of events without needing an expression read:
+
+| source line | string | what it means |
+|---|---|---|
+| 0x1305 (4,869) | `DOING MOVEMENT, velocity.z=%.10f` | the step is a **velocity**, applied whole |
+| 0x1320 / 0x1325 | `Doing yaw of %.10f, limitedYawAngle=%d` / `NOT Doing yaw ... because we'll hit the point the next time` | heading, with a guard against overshooting the point |
+| 0x12b6 (4,790) | `No collisions at new position` | the new position is **tested**, not adjusted |
+| 0x1225 (4,645) | `We have %d ObSystem collisions at our new position, pathCreationTime=%d:` | how many, and the path's age |
+| 0x122f | `Collision with terrain` | terrain is one class of collision |
+| - | `That's a non-target collision` / `target collision` / `non past collision` | the other three |
+| 0x128b (4,747) | `We have %d non-past collisions and %d terrain collisions, **repathing**` | the answer to a collision is a **new path** |
+| 0x129b (4,763) | `**TOLD TO PAUSE BY UNIT %d**` | or: the lower-priority unit is told to wait |
+| 0x12b2 (4,786) | `Don't know what to do about my collision(s)` | the fallback, with a log, because it should not happen |
+| 0xdc0 (3,520) | `Teleporting to exact waypoint` + 0xdc9 `Incrementing waypoint for path ID=%d` | a reached waypoint is **snapped to and spent**, in the same update |
+
+Three conclusions, and they are structural rather than stylistic:
+
+1. **There is no slide.** The position update is "new position from velocity"; every collision answer is a **repath**, a
+   **pause** ("TOLD TO PAUSE BY UNIT"), or a stop. Nowhere in the block is a step decomposed into axes and one of them dropped -
+   which is what `StepDecision::Slide` does in our mover.
+2. **The pause is a priority comparison**, not geometry: `(**(*unit + 0x2b4))()` is taken for both bodies and the smaller one
+   is told to pause (0x129b). The slot's target was not read, so *which* value it is (speed, mass, order priority) is **unread**;
+   what is certain is that one of the pair yields for the tick, and the other walks on.
+3. **A corner costs nothing.** `Teleporting to exact waypoint` puts the body exactly on the waypoint and `Incrementing waypoint`
+   spends it in the same update - i.e. the original does what `World::fold_the_step` now does, and never stands a man on a corner
+   to save the rest of his tick.
+
+So the slide is **ours**: D188 added it because a villager that could not slide round a wall wedged for 68 ticks, and the game's
+own answer to that situation - a repath, with the loser paused - is a pair our mover does not have in full. The decompilation has
+nothing to add: `src/unit/unit_action_collision.cpp` is 61 lines and walks a coordinate list for group children, with no
+movement geometry in it (`docs/prior-art.md`).

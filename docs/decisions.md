@@ -7049,11 +7049,16 @@ the geometry planned.
 animals and herding, gathering, depletion, a partial load, fights, the line upgrade, the scenario, the crowd - because a man who
 cannot slide round a wall wedges, which is what D188 was written from.
 
-**Why it is a fork and not a defect to patch.** The original game has **no slide**: `getMaxVelFwd` is the unit's speed or exactly
-0.0 on a pause, and its position setter clamps against the map border alone (D210). The slide is ours, added by D188 for progress.
-So: *does a slide count as walking?* If yes, the fixture's rule gains an axis-slide clause and the creep wants bounding by a stall
-count; if no, the slide goes and the twelve fixtures are evidence about a different problem - and that slice starts with the crowd
-fixture that already fails.
+**Why it is a fork and not a defect to patch.** Read out of the original on 2026-11-17 (`doIntelligentMovementUpdate`, `008a4360`,
+in `docs/movement-in-the-binary.md`): a step is a **velocity applied whole**, the new position is then **tested**, and every
+collision answer is a **repath** (`We have %d non-past collisions and %d terrain collisions, repathing`), a **pause** enforced by
+a priority comparison (`TOLD TO PAUSE BY UNIT %d`), or a stop. **No axis is ever dropped** - the slide does not exist there. And a
+reached waypoint is **snapped to and spent in the same update** (`Teleporting to exact waypoint` + `Incrementing waypoint`), which
+is what `fold_the_step` now does and what stops a corner costing a tick.
+
+So the slide is ours, added by D188 because a villager that could not slide wedged for 68 ticks - and the game's own answer to that
+case is the repath-plus-pause pair our mover does not have in full. *Does a slide count as walking?* The game's answer is that
+there is nothing to count: a blocked body either yields the tick or plans again.
 
 **Recorded so it is not re-attempted blind**: the gate that stands a man whose corner remainder is refused was written, uses the
 fold's own `fold_leg` so the two cannot disagree, and was **not landed** - the only fixture that drives it also drives the creep,
