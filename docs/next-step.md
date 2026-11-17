@@ -46,7 +46,14 @@ never crossed" cannot be observed from outside the world without a route accesso
   men spend **340 more body-ticks walking (+0.6%)** and take **10 more repaths (61 -> 71)** because a whole-step tick ends them up
   to 0.04 tiles further; all arrive. And **116 of 116 folds in the suite are taken under `Take`**, so the "slide-fold" hole is not
   observed anywhere.
-- **The gap it found, attempted, and handed back (D253)**: with a body half a tile past a corner the walk breaks the rule **567
+- **Following the game on the slide (D254): attempted, and the wall is elsewhere.** The slide was deleted with the owner's
+  corner fixture written first - red at **567 of 1,398** walking ticks, **82, 81, 80... raw** a tick, then green - and **seven
+  fixtures went red**, four binaries, all animals/gathering. Traced: a gatherer onto a sheep stops at **(316980, 316980)** with
+  `WaitGround` and `stalled` at **267**; his aim is refused by `step_is_walkable` (landing `next < 0`, body clear) although the
+  pathfinder called it reachable. Raising the ground budget from **2 to 40** changed nothing - the re-plan returns the same route.
+  So **we have two measures of "walkable" and the game has one**, and the slide papers over the disagreement. Unifying them
+  touches **D176** (the disc rule the owner asked for) and needs its own fixtures on both sides.
+- **The gap D253 found, attempted, and handed back (D253)**: with a body half a tile past a corner the walk breaks the rule **567
   times in 1,398 ticks** - the man creeps at **82, 81, 80... raw units** a tick - and the cause is the **ground slide**, not the
   fold: `StepDecision::Slide` takes the step's axis component, a fraction of a step. Both fixes are refuted by measurement:
   a full-length slide regresses **five** fixtures (walks further than planned), standing instead of sliding regresses **twelve**

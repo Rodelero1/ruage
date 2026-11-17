@@ -7063,3 +7063,39 @@ there is nothing to count: a blocked body either yields the tick or plans again.
 **Recorded so it is not re-attempted blind**: the gate that stands a man whose corner remainder is refused was written, uses the
 fold's own `fold_leg` so the two cannot disagree, and was **not landed** - the only fixture that drives it also drives the creep,
 so it would have been untested code. Review: `docs/reviews/2026-11-17-the-slide-and-the-rule.md`.
+
+### D254 - following the game on the slide: the rule holds, and the wall is a disagreement (2026-11-17)
+
+*The owner, after the reading: **"Follow the game."** Attempted; the engine is **unchanged** and this records what the attempt
+found, because the finding is sharper than the change would have been.*
+
+**What was tried.** The terrain slide was deleted outright - the original applies its step whole and answers a collision with a
+repath or a pause (`docs/movement-in-the-binary.md`) - with the owner's fixture written first: the same walk with a body parked
+half a tile past the first corner, asserting every walking tick is one step or a stand. **Red before**: 82, 81, 80... raw units a
+tick, **567 of 1,398** walking ticks short. **Green after**: no slide, no creep, and the walk still costs the ticks its geometry
+owes. That part is the rule working exactly as asked.
+
+**Then seven fixtures went red**, four binaries: `a_live_animal_is_a_gather_source`, `the_villager_follows_the_sheep`,
+`the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body`, `a_depleted_node_stops_yielding`,
+`a_farm_starts_with_a_worker_standing_on_it`, `a_partial_load_comes_home_when_the_node_runs_out`, plus the crowd fixture that
+already fails.
+
+**The diagnosis, and it is not the slide.** Traced: a gatherer ordered onto a sheep stops at **(316980, 316980)** with
+`WaitGround` from tick 40 and `stalled` climbing to **267**; his route has three points and does not move. His aim is refused by
+`step_is_walkable`'s own clause - the landing `next < 0`, he is clear `now >= 0` - so the last leg of a route the pathfinder
+called **reachable** is a step the mover refuses. Raising the ground re-plan budget from **2 to 40** changed nothing: the re-plan
+returns the same route, because the route is not wrong and the step test is.
+
+**So the wall is this**: we have **two measures of "walkable"** - the pathfinder grows every blocked tile by the body's radius and
+counts the goal reachable, and the mover's step test refuses the landing that overlaps a grown tile - and the game has **one**
+(a single collision query at the new position). The slide has been papering over the disagreement by letting a man creep along the
+axis the grown tile left free.
+
+**What that costs to fix**, and why it is not this slice: unifying the two measures touches **D176** - the disc rule the owner
+asked for after seeing a villager with its disc inside a wall - so it needs its own fixtures on both sides (a node approach must
+land, and a body must not end inside a wall), and it is a mover change with the whole crowd surface behind it.
+
+**Attempts recorded so the next reader starts ahead**: a full-length slide regressed **16 tests / 10 binaries**; standing instead
+of sliding, with the old budget, regressed **14 tests / 8 binaries**; standing with the budget raised to 40 still regressed the
+same animals family. Review: `docs/reviews/2026-11-17-the-slide-and-the-rule.md`.
+

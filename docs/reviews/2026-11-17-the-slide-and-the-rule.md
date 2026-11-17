@@ -55,6 +55,20 @@ Refuse any slide shorter than the step, stand, and let the existing repath answe
 `the_ten_minute_scenario_builds_trains_and_fights`. Refuted: a man who cannot slide round a wall wedges, which is exactly the
 finding D188 was written from.
 
+## D254 — following the game: the rule holds, the wall is a disagreement
+
+The owner's answer to the fork was *"follow the game"*, so the slide was deleted with his corner fixture written first
+(**red**: 82, 81, 80... raw a tick, **567 of 1,398** walking ticks short; **green** after, no creep). Seven fixtures then went red,
+four binaries, all animals and gathering. Traced to one cause: a gatherer onto a sheep stops at **(316980, 316980)** with
+`WaitGround` from tick 40 and `stalled` at **267**, because his aim is refused by `step_is_walkable` (landing `next < 0`, body
+clear `now >= 0`) although the pathfinder called the route reachable. Raising the ground re-plan budget from **2 to 40** changed
+nothing - the re-plan returns the same route, so the route is right and the step test is the one that disagrees.
+
+**Two measures of "walkable"**: the pathfinder grows every blocked tile by the body's radius, and the mover's step test refuses a
+landing that overlaps a grown tile; the original has one collision query at the new position. The slide has been hiding the gap by
+letting a man creep along whichever axis the grown tile left free. Unifying the two touches **D176** - the disc rule the owner
+asked for after seeing a villager with its disc inside a wall - so it needs fixtures on both sides and is its own slice.
+
 ## What the original does, and why this is a fork rather than a bug to fix
 
 `getMaxVelFwd` (`008a2a30`) returns the unit's own speed, or **exactly 0.0 on a pause** - there is no partial arm
