@@ -7236,3 +7236,32 @@ footprint grown by the body's radius (`short_range_clear` plans a straight line 
 be a point where the body's box fits. Buildings already have exact boxes, units already have radii, and the ground keeps its point
 test. That is the piece that lets "no sliding" land.
 
+### D259 - why every piece so far has failed: the mover walks *at* waypoints, not along the route (2026-11-17)
+
+*Attempted again with the route checked against building boxes. Refuted, and the refutation names the actual shape of the defect -
+which is worth more than the fourth patch.*
+
+**What was built.** `World::route_clear_of_buildings`: every segment of a planned polyline tested against each building's footprint
+grown by the body's radius (slab test, plan time only), and `short_range_clear`'s answer discarded when it fails, so the tile
+search answers instead. With the slide still in place the suite is unchanged (green); with the slide **removed** the animals family
+fails exactly as before - **3 red**.
+
+**Why it must fail**, and this is the finding: the mover does not follow the polyline. On every tick it walks a **straight line
+from wherever it stands to the next waypoint** (`collide` + `step_towards`). Checking the planned segments therefore proves
+nothing about the walk: the man leaves the polyline the moment he is nudged, paused, or lands mid-tick (the fold moves him
+off it by design), and the next tick's straight line is a *new* segment that nothing has tested. Around a building that segment
+cuts the corner by a fraction - **164 raw, 0.008 of a tile** - and the box test refuses it, correctly.
+
+The original does not have this shape: its waypoints are *reached and snapped to* (`Teleporting to exact waypoint`, `Incrementing
+waypoint`), its search answers for the unit's radii, and its collision answer is a repath. Ours walks at points and validates
+plans.
+
+**So the next slice is a design change, not a patch**: the mover must walk the route it was given - leg by leg, the fold carrying
+a landed corner into the next leg (which it already does within a tick), with the *straight-at-the-waypoint* shortcut replaced by
+"aim along the current leg". That is what makes a validated plan mean something, and it is where "no sliding" can finally land:
+once the walk is confined to the route, a blocked straight line is not a case the mover has to improvise around.
+
+**Everything measured tonight, in one place**: slide removed alone - **14 red / 8 binaries**; step model (point ground + building
+box) - **3 red**; plus disc-aware pull, box-clear places, and route validation - **still 3 red**, all animals, all one straight
+line clipping one footprint. None landed; the engine is unchanged.
+
