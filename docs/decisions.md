@@ -6997,6 +6997,10 @@ narrow the rule to the speed setting. **He chose (b)** - D252.
 *The owner chose (b), fixture and fix in one slice, and then ruled that a fixture he asked for is **never skipped**: no
 `#[ignore]` without his word. The fix therefore had to land, and the diagnosis below is what it cost.*
 
+**The rule, in his words, and corrected by him on 2026-11-17**: *"man stands or walks. No acceleration or deceleration"* - not
+"one whole step". The step is the **observable form** of constant speed at a fixed tick rate, which is why the fixture measures
+it, but the rule is about the speed never ramping.
+
 **The rule, as a fixture.** `crates/sim/tests/whole_steps.rs`, two tests, neither ignored: on every tick a villager is walking, the
 distance he covers **along his route** is exactly one step, or zero (a refused step, a pause, a body in the way); the only short
 tick allowed is the last, which lands on the goal and may not overshoot it. Along the route and not as a straight line, because a
@@ -7102,4 +7106,33 @@ land, and a body must not end inside a wall), and it is a mover change with the 
 **Attempts recorded so the next reader starts ahead**: a full-length slide regressed **16 tests / 10 binaries**; standing instead
 of sliding, with the old budget, regressed **14 tests / 8 binaries**; standing with the budget raised to 40 still regressed the
 same animals family. Review: `docs/reviews/2026-11-17-the-slide-and-the-rule.md`.
+
+### D255 - no sliding, and the reason it cannot land yet: a tile is not an object (2026-11-17)
+
+*The owner, correcting the rule and the direction in one message: **"man stands or walks. No acceleration or deceleration"** -
+not "one whole step" - and **"follow the game. No sliding."** Attempted again with that correction; the engine is unchanged and
+this records where it stops, because the stopping point is now a single, named piece of missing model.*
+
+**The rule, in his words.** Constant speed: a man moves at his speed or he does not move, and nothing ramps. "One whole step a
+tick" is only the observable form of that at a fixed tick rate, and the two fixtures are written to say so
+(`crates/sim/tests/whole_steps.rs`).
+
+**What lands conceptually.** With the terrain slide deleted, the owner's corner fixture - a body parked half a tile past the first
+corner - goes from **82, 81, 80...** raw units a tick and **567 of 1,398** walking ticks short to **green**: every walking tick is
+one step or a stand. That is his rule, exactly.
+
+**What it breaks, and why the break is the useful part.** The suite then has **14 red tests across 8 binaries** (192 of 200 green),
+animals and gathering first: a gatherer ordered onto a sheep stops at **(316980, 316980)** with `WaitGround` from tick 40 and
+`stalled` at **267**. The refusal is a disc overlap of **164 raw units - 0.008 of a tile** - against a blocked tile, and no
+re-plan budget fixes it (40 instead of 2 changed nothing) because the route the pathfinder returns is the same route.
+
+**The two fixtures pin opposite sides.** Allow that 0.008-tile brush (the game's collision is against the *object*, and a body
+against a trunk or a wall face brushes the tile) and `a_villager_walking_beside_a_building_keeps_its_body_clear` fails: it demands
+`body_clearance >= 0` on **every** tick. Refuse it and the sheep fixture fails. There is no single threshold that satisfies both,
+because both are honest about different things: **our blocked tile is a whole tile; the game's obstacle is an object with bounds.**
+
+**So the next slice is the model, not the mover**: a blocked tile has to know what stands in it and how much of the tile it fills -
+a tree's trunk is not the tile, a building's footprint is exactly its tiles - and then the step test has one measure that both
+fixtures can live with, and the slide has nothing left to hide. That is also what "no acceleration or deceleration" needs to be
+true everywhere rather than on open ground.
 

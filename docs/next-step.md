@@ -8,6 +8,14 @@ body's centre sits in* rather than the body (D250). That last step's acceptance 
 entities**, **1540 -> 710 repaths**, because **the match is now won at 2,381 s** where the control is undecided at 48,000. R7's
 first half is settled by reading (below). The narrative lives in `docs/history/next-step-2026-11-17-d250.md` and in D242-D250.
 
+**The rule, corrected by the owner (2026-11-17).** *"man stands or walks. No acceleration or deceleration"* - and *"follow the
+game. No sliding."* The fixtures say it in the observable form (one step a tick or a stand), and the slide is what breaks it.
+**D255** is where that lands: deleting the slide makes the corner fixture green (567 of 1,398 short ticks -> 0) and reddens
+**14 tests across 8 binaries**, and the single refusal behind them is a **164-raw (0.008-tile) brush** against a blocked tile that
+`a_villager_walking_beside_a_building_keeps_its_body_clear` forbids on every tick. Both fixtures are honest, so the next slice is
+**the model: a blocked tile must know what stands in it and how much of it it fills** - a trunk is not a tile, a footprint is.
+Then one measure serves both and the slide has nothing to hide.
+
 **Waiting on the owner - the only open question.** The queue's floor is **entities >= 155**. The control reads **154** and never
 resolves; the D250 build reads **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is
 the better outcome and the floor should be restated. Nothing else in the queue is blocked on a decision.

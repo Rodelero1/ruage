@@ -1,11 +1,11 @@
-//! **A walking villager takes whole steps** (D252). The owner, 2026-11-17: *"villagers never slow down. They may stop or stop
-//! to repath but since they are never in the formations, there is no reason for them to change speed. So either they walk, or
-//! stand."*
+//! **A man stands, or he walks** (D252/D255). The owner, 2026-11-17: *"man stands or walks. No acceleration or deceleration"* -
+//! and, when the slide was found: *"Follow the game. No sliding."* One step is `speed / tick_rate` raw units, so the observable
+//! form of constant speed is that every walking tick covers exactly one step, or none.
 //!
-//! One step is `speed / tick_rate` raw units. On every tick a villager is walking, the **distance he covers along his route** is
-//! one whole step; the only short tick allowed is the last one, which lands on the goal and may not overshoot it. "Along his
-//! route" and not "in a straight line", because a corner is walked *through* inside a tick (`World::fold_the_step`), and the
-//! straight line across a fold is shorter than the path walked.
+//! On every tick a villager is walking, the **distance he covers along his route** is one whole step; the only short tick allowed
+//! is the last one, which lands on the goal and may not overshoot it. "Along his route" and not "in a straight line", because a
+//! corner is walked *through* inside a tick (`World::fold_the_step`), and the straight line across a fold is shorter than the
+//! path walked.
 //!
 //! Measured before the fix (`step_speed_probe`, 5 villagers, 4,000 ticks): 15 of 20,000 body-ticks moved 0.11-0.95 of a step,
 //! 14 of them at a route transit on this very walk - each one a corner whose landing ate the rest of that tick.
