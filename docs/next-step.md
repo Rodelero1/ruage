@@ -111,8 +111,8 @@ moves; say so rather than treating it as a defect.
    table plus 16 per step) and **25** is the *heuristic weight* (`FUN_008007f0`: `euclid*2500/100`, or `euclid*0x19` - the same
    number twice), so the original's search is **weighted best-first at about 1.56**, not an admissible A\*. The puzzle was my
    assumption; nothing in the game was inconsistent. What is left before the port: the quantity `local_46c` the loop breaks on
-   (`h < local_46c`, with a hard **20,000**) and the equal-`f` tie-break, which needs the frontier order. Then the generation-stamp
-   array instead of a heap, then row 27's `AddFuturePath` parent derivation. **A weighted search returns slightly longer routes
+   (`h < local_46c`, with a hard **20,000**) and the equal-`f` tie-break, which needs the frontier order. Then the frontier: it is **a heap as well as** a stamped
+   best-cost array (`FUN_00801e90` sifts on every push), so the port copies both, then row 27's `AddFuturePath` parent derivation. **A weighted search returns slightly longer routes
    everywhere**, so it is one slice with its own measurement, not a constant swap.
 
 8. **R8 - the start re-seed, and the path vocabulary** (rows 33, 36, from the sibling thread of 2026-11-16). When the mover

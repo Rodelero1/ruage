@@ -324,6 +324,15 @@ never was one.
 against a weighted one that returns slightly longer routes on purpose". Adopting it changes route *shape* everywhere, which is a
 behaviour change worth its own measurement rather than a constant swap, and it is no longer blocked on an arithmetic puzzle.
 
-**Still unread, and named:** the quantity `local_46c` that the loop compares against `h` before breaking (`h < local_46c`, plus a
-hard **20,000**), which is the termination rule and the part a replay would depend on; and the tie-break among equal `f`, which
-needs the frontier order rather than the arithmetic.
+**The frontier is a heap too, and the note that said otherwise is corrected.** The loop keeps a **frontier array** of
+`(x, y, cost)` triples at `0x119414 + n*8` with its length at `0x2db41c`, and calls **`FUN_00801e90(index)`** on every push -
+a sift, i.e. a binary heap - **beside** the per-tile best-cost array at `0x38414` and its generation byte at `0x2db424` (advance
+by 8, wrap at 240, clear only on wrap). So the earlier summary - "a stamped best-cost array rather than a heap" - named one of the
+two structures and denied the other: both exist, because they answer different questions (best cost per tile vs order of
+expansion).
+
+**Still unread, and named, and it is now sharper rather than settled:** `local_46c` counts **expansions** (zeroed before the
+loop, `+1` after each node's eight neighbours are tried), and the break is `h < local_46c || 20000 < local_46c` - a **distance
+compared with a count**. Either the original carries a unit mismatch in that guard or one of the two variables is not what it
+looks like in the lifted listing; **it is not ported on either reading**, and the termination rule plus the equal-`f` tie-break
+remain what a replay would depend on.
