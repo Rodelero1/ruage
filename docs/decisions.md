@@ -7040,13 +7040,14 @@ the same walk breaks the rule **567 times in 1,398 walking ticks** - the man cre
 step is **800**. The cause is `StepDecision::Slide`, the ground slide: it takes the step's **axis component**, so a diagonal aimed
 mostly along the blocked axis moves a fraction of a step. The mover never lands on a route point, so no fold can repair it.
 
-**Design A, refuted**: extend the slide to a full step along the clear axis. Five fixtures regress (a rally walk, two walks round
-a building, a felled tree's gap, a shared woodcutting tile), all because a full-length slide walks a man further than the geometry
-planned.
+**Design A, refuted**: extend the slide to a full step along the clear axis. **16 tests across 10 binaries** regress - a rally
+walk, two walks round a building, a felled tree's gap, a shared woodcutting tile, and then fights, training, a trebuchet and a
+whole scenario, because a longer slide changes where men stand - all from one cause: a full-length slide walks a man further than
+the geometry planned.
 
-**Design B, refuted**: stand instead of a fractional slide and let the repath answer. Twelve regress - animals and herding,
-gathering, depletion, a partial load, two combat fixtures, the line upgrade, the crowd - because a man who cannot slide round a
-wall wedges, which is what D188 was written from.
+**Design B, refuted**: stand instead of a fractional slide and let the repath answer. **14 tests across 8 binaries** regress -
+animals and herding, gathering, depletion, a partial load, fights, the line upgrade, the scenario, the crowd - because a man who
+cannot slide round a wall wedges, which is what D188 was written from.
 
 **Why it is a fork and not a defect to patch.** The original game has **no slide**: `getMaxVelFwd` is the unit's speed or exactly
 0.0 on a pause, and its position setter clamps against the map border alone (D210). The slide is ours, added by D188 for progress.

@@ -21,26 +21,39 @@ owner's rule is about, and no fold can repair it - the mover never lands on a ro
 ## Design A - make the slide a whole step
 
 Spend the same length along the clear axis instead of its component, so the tick is still exactly one step. Measured on the full
-suite: **five fixtures regress** -
+suite (`d253-suite.log`, 200 binaries): **16 tests across 10 binaries regress** -
 
 - `a_trained_unit_walks_to_the_rally_point`
 - `a_house_built_across_a_walker_makes_it_go_round`
 - `a_villager_walks_round_a_half_built_house`
 - `a_chopped_tree_leaves_no_obstacle`
 - `the_tile_holds_as_many_woodcutters_as_touch_it`
+- `a_barracks_trains_the_spear_line_only_as_far_as_it_is_unlocked`
+- `a_boar_that_loses_interest_returns_to_where_it_was_struck`
+- `a_melee_blow_never_becomes_an_arrow`
+- `a_refused_retaliation_is_recorded_rather_than_swallowed`
+- `a_second_blow_turns_a_boar_that_had_given_up`
+- `a_trebuchet_cannot_be_trained_before_the_imperial_age`
+- `the_skirmish_only_refuses_what_the_fight_has_taken`
+- `the_spear_line_upgrades_the_units_the_player_already_has`
+- `the_ten_minute_scenario_builds_trains_and_fights`
+- `two_players_can_be_different_civilisations`
+- (plus the crowd fixture that already fails)
 
-All five fail for the same reason: a full-length slide walks a man **further than the geometry planned**, so he ends up in places
-the route never asked for. Refuted.
+They fail for one reason: a full-length slide walks a man **further than the geometry planned**, so he ends up in places the route
+never asked for - and because a longer slide changes where men stand, it reaches fights, training and a whole scenario. Refuted.
 
 ## Design B - stand instead of a fractional slide
 
-Refuse any slide shorter than the step, stand, and let the existing repath answer. Measured on the full suite: **twelve fixtures
-regress** - `a_live_animal_is_a_gather_source`, `the_villager_follows_the_sheep`, `a_depleted_node_stops_yielding`,
-`a_farm_starts_with_a_worker_standing_on_it`, `a_partial_load_comes_home_when_the_node_runs_out`, `a_melee_blow_never_becomes_an_arrow`,
+Refuse any slide shorter than the step, stand, and let the existing repath answer. Measured on the full suite
+(`d253-suite2.log`): **14 tests across 8 binaries regress**, the crowd fixture among them: `a_live_animal_is_a_gather_source`,
+`the_villager_follows_the_sheep`, `a_depleted_node_stops_yielding`, `a_farm_starts_with_a_worker_standing_on_it`,
+`a_partial_load_comes_home_when_the_node_runs_out`, `a_melee_blow_never_becomes_an_arrow`,
 `a_refused_retaliation_is_recorded_rather_than_swallowed`, `a_boar_that_loses_interest_returns_to_where_it_struck`,
 `a_second_blow_turns_a_boar_that_had_given_up`, `the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body`,
-`the_spear_line_upgrades_the_units_the_player_already_has`, and the crowd fixture that already fails. Refuted: a man who cannot
-slide round a wall wedges, which is exactly the finding D188 was written from.
+`the_skirmish_only_refuses_what_the_fight_has_taken`, `the_spear_line_upgrades_the_units_the_player_already_has`,
+`the_ten_minute_scenario_builds_trains_and_fights`. Refuted: a man who cannot slide round a wall wedges, which is exactly the
+finding D188 was written from.
 
 ## What the original does, and why this is a fork rather than a bug to fix
 
