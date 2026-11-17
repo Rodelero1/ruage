@@ -7075,10 +7075,14 @@ half a tile past the first corner, asserting every walking tick is one step or a
 tick, **567 of 1,398** walking ticks short. **Green after**: no slide, no creep, and the walk still costs the ticks its geometry
 owes. That part is the rule working exactly as asked.
 
-**Then seven fixtures went red**, four binaries: `a_live_animal_is_a_gather_source`, `the_villager_follows_the_sheep`,
-`the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body`, `a_depleted_node_stops_yielding`,
-`a_farm_starts_with_a_worker_standing_on_it`, `a_partial_load_comes_home_when_the_node_runs_out`, plus the crowd fixture that
-already fails.
+**Then the suite went red: 14 tests across 8 binaries** (192 of 200 binaries green) - `a_live_animal_is_a_gather_source`,
+`the_villager_follows_the_sheep`, `the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body`,
+`a_depleted_node_stops_yielding`, `a_farm_starts_with_a_worker_standing_on_it`,
+`a_partial_load_comes_home_when_the_node_runs_out`, `a_boar_that_loses_interest_returns_to_where_it_was_struck`,
+`a_melee_blow_never_becomes_an_arrow`, `a_refused_retaliation_is_recorded_rather_than_swallowed`,
+`a_second_blow_turns_a_boar_that_had_given_up`, `the_skirmish_only_refuses_what_the_fight_has_taken`,
+`the_spear_line_upgrades_the_units_the_player_already_has`, `the_ten_minute_scenario_builds_trains_and_fights`, and the crowd
+fixture that already fails.
 
 **The diagnosis, and it is not the slide.** Traced: a gatherer ordered onto a sheep stops at **(316980, 316980)** with
 `WaitGround` from tick 40 and `stalled` climbing to **267**; his route has three points and does not move. His aim is refused by

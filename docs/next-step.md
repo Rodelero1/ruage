@@ -47,8 +47,9 @@ never crossed" cannot be observed from outside the world without a route accesso
   to 0.04 tiles further; all arrive. And **116 of 116 folds in the suite are taken under `Take`**, so the "slide-fold" hole is not
   observed anywhere.
 - **Following the game on the slide (D254): attempted, and the wall is elsewhere.** The slide was deleted with the owner's
-  corner fixture written first - red at **567 of 1,398** walking ticks, **82, 81, 80... raw** a tick, then green - and **seven
-  fixtures went red**, four binaries, all animals/gathering. Traced: a gatherer onto a sheep stops at **(316980, 316980)** with
+  corner fixture written first - red at **567 of 1,398** walking ticks, **82, 81, 80... raw** a tick, then green - and the suite
+  went red: **14 tests across 8 binaries** (192 of 200 green), animals and gathering first, then fights, a line upgrade and a
+  whole scenario. Traced: a gatherer onto a sheep stops at **(316980, 316980)** with
   `WaitGround` and `stalled` at **267**; his aim is refused by `step_is_walkable` (landing `next < 0`, body clear) although the
   pathfinder called it reachable. Raising the ground budget from **2 to 40** changed nothing - the re-plan returns the same route.
   So **we have two measures of "walkable" and the game has one**, and the slide papers over the disagreement. Unifying them

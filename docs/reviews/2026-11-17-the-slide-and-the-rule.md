@@ -58,8 +58,9 @@ finding D188 was written from.
 ## D254 — following the game: the rule holds, the wall is a disagreement
 
 The owner's answer to the fork was *"follow the game"*, so the slide was deleted with his corner fixture written first
-(**red**: 82, 81, 80... raw a tick, **567 of 1,398** walking ticks short; **green** after, no creep). Seven fixtures then went red,
-four binaries, all animals and gathering. Traced to one cause: a gatherer onto a sheep stops at **(316980, 316980)** with
+(**red**: 82, 81, 80... raw a tick, **567 of 1,398** walking ticks short; **green** after, no creep). The suite then went red:
+**14 tests across 8 binaries**, 192 of 200 green - animals and gathering first, then three fight fixtures, a line upgrade and a
+whole scenario. Traced to one cause: a gatherer onto a sheep stops at **(316980, 316980)** with
 `WaitGround` from tick 40 and `stalled` at **267**, because his aim is refused by `step_is_walkable` (landing `next < 0`, body
 clear `now >= 0`) although the pathfinder called the route reachable. Raising the ground re-plan budget from **2 to 40** changed
 nothing - the re-plan returns the same route, so the route is right and the step test is the one that disagrees.
