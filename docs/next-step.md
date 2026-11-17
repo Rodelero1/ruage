@@ -41,6 +41,15 @@ never crossed" cannot be observed from outside the world without a route accesso
   sliding **1 raw unit** a tick.
 - **Standing rule from the owner**: a fixture he asked for is **never `#[ignore]`d** without his explicit word. When the fix will
   not land, find out why.
+- **The adversarial review** (`docs/reviews/2026-11-17-whole-steps-adversarial.md`) prices it: **no measurable CPU cost** (a
+  120-villager, 6,000-tick march: 4,301 ms off against 4,235 ms on, medians of three), but **deterministic crowd churn** - the same
+  men spend **340 more body-ticks walking (+0.6%)** and take **10 more repaths (61 -> 71)** because a whole-step tick ends them up
+  to 0.04 tiles further; all arrive. And **116 of 116 folds in the suite are taken under `Take`**, so the "slide-fold" hole is not
+  observed anywhere.
+- **The gap it found, and it is the next slice**: a **refused** fold leaves a short tick, so the rule as enforced is "a whole step,
+  or a stand, **unless the rest of the step is refused**". `whole_steps.rs` cannot see that case because its route is never
+  refused. The fixture wants a corner with a body just past it, and the answer probably is that the original stands the man (its
+  speed is its speed or 0.0), not that he keeps the partial step.
 
 ## The queue, in the order a player would see it
 

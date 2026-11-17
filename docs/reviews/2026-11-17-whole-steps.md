@@ -65,6 +65,12 @@ Acceptance match, release, seed 7, 48,000 ticks, two interleaved runs of each se
 The 0.1% between medians is noise at this sample size and has no behaviour behind it. Where walks do have corners
 (`whole_steps.rs`) the fix turns **14 lost ticks into 0**, and the walk costs the `ceil(route/step) + 1` ticks its geometry owes.
 
+## The adversarial pass
+
+`docs/reviews/2026-11-17-whole-steps-adversarial.md` prices the fold on request: no measurable CPU cost on a corner-heavy march,
+a deterministic **+0.6%** in crowd walking ticks and **+16%** in repaths, **116 of 116** folds taken under `Take`, and one gap named
+- a **refused** fold leaves a short tick, which the fixture cannot see.
+
 ## Stability
 
 - **Ground.** The fold's landing is checked with the mover's own rule (`clearance_at(target, radius) >= 0`), so it cannot put a
