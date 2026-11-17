@@ -16,6 +16,11 @@ two runs each from one binary) never fires the fold - its walks are single-leg, 
 
 So "bit-identical on the acceptance match" is true and says nothing about cost. A corner-heavy probe has to supply the number.
 
+**And the box is noisy enough to swamp anything the fold could cost here.** A second A/B run of the same four settings read
+**44.4 s and 39.6 s** fold-off against **40.3 s and 40.3 s** fold-on - an 11% spread on the *same* setting, which is ±4.5 s of
+machine noise against a fold that fires zero times. The first run's table stays as measured; this one is here so nobody reads
+either table as a measurement of the fold.
+
 **The corner-heavy probe.** 120 villagers, each ordered across the pack's map (routes that bend round the forest), 6,000 ticks,
 release, the same binary with the fold gated by an env return. Three runs each, medians:
 
