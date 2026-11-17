@@ -7296,3 +7296,33 @@ keeps the body's radius clear** (*"the boundaries of where this unit's radii wil
 the body fits on. Ours plans for a point and lets the body drift off it, which is how a **164-raw** clip of a footprint appeared.
 The slice stays: **plan for the radius, keep the body on the route.**
 
+### D261 - plan for the radius, keep the body on the route: five pieces, and the corner that survives them (2026-11-17)
+
+*The owner: **"Proceed."** Five pieces built and measured together; none landed; the wall is now a single geometric fact, and the
+next step is named.*
+
+**What was built, all at once** (each is the game's own model, from D258/D260's readings):
+
+1. **Radius-aware line test** - `line_clear_body` in `path.rs`: a line must keep the radius clear of every blocked or avoided tile
+   within one tile of the path, by slab test against each tile's grown box.
+2. **Radius-aware pull** - `pull_route_avoiding` takes the radius and asks the new line test, so a shortcut cannot graze a corner.
+3. **Box step test** - `step_is_walkable` asks the tile under the point and a **building's footprint box** (`building_overlap`,
+   depth `radius - distance to box`), with D192's rule for a body already touching.
+4. **Places and waypoints pushed out of the inflated footprints** (`push_out_of_buildings`).
+5. **The slide deleted**, and a plan that fails the box test discarded in favour of the search (`route_clear_of_buildings`).
+
+**What it does, measured**: every fixture green with the slide in place, and **the same 3 red** in the animals family with the
+slide out - refused at **`now=0 next=164`**: a landing **164 raw (0.008 tiles)** inside a building's box while clear.
+
+**Why the pieces cannot close it, and this is the finding**: on a **tile-centre** route, a diagonal step past a building's corner
+passes *exactly through* that corner, so the body's box overlaps by its **whole radius** (0.2 tiles = 4000 raw) - a test that no
+route built from tile centres can pass, and the game does not build one either (see the next entry's numbers: **a town centre's
+`radius` is `[2.0, 2.0, 0.0]`, so its box *is* its 4x4 footprint**, and the original would refuse the same step). What the original
+has and we do not is a **finer-than-tile** route: its low-level search bends the path *inside* a tile, and our own `short_range_clear`
+already borrows that idea for **bodies** ("shoulder points round every body so the detour can bend inside a tile", D211).
+
+**So the next piece is the one shape already in the tree, applied to obstacles**: **shoulder points round a building's corners** -
+the route bends a radius clear *inside* the tiles, so its legs never pass through a corner. That is a contained change in
+`short_range_clear` (it already builds shoulder points for discs, and a footprint corner is a disc of zero radius at the corner),
+and it is the piece that makes 1-5 land.
+

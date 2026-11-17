@@ -17,20 +17,20 @@ game. No sliding."* The fixtures say it in the observable form (one step a tick 
 no slide - and the **pathfinder** half is the one that is missing: `path.rs` has **no radius in it**, so a villager's 0.2-tile body
 plans a *point* route that hugs the town centre and the mover then refuses the step. The original shrinks the walkable area by the
 unit's radius before the search (its own string: *"the waypoints outside the boundaries of where this unit's radii will go"*).
-**PROVED (D260, corrected by the owner): turns are instant.** What `calculateYawAngle()` (`FUN_008a3270`) limits with
-`maxYawPerSec` is the **facing** - the sprite - not the step; a unit moves in a new direction at once and its picture catches up.
-So the original's protection against a corner is not a turn rate: the **search keeps the body's radius clear** (*"the boundaries of
-where this unit's radii will go"*) and the **waypoint is snapped to**, so each short straight step is along ground the body fits on.
-Ours plans for a point and lets the body drift off it. **The slice: plan for the radius, keep the body on the route.**
+**PROVED (D260, corrected by the owner): turns are instant** - `calculateYawAngle()` limits the **facing** (`maxYawPerSec`), not
+the step. So the corner is not a turn rate: the **search keeps the body's radius clear** and the **waypoint is snapped to**.
 
 **PROVED (D258)**: the game collides **boxes, not tiles** - `FUN_00840830` builds each object's box from its radius table and
 collides on `<=` per axis; `func_002690E0` measures box-to-box, overlap clamped to zero (the half-diameter rule).
 Our tree is *not* the wrong size (`TREEA` is `radius = [0.5, 0.5, 2.0]`, so its box is its tile); the 164-raw refusal was against
 the town centre's footprint, which the game would refuse too.
 
-**Attempted, reverted (D257)**: step model, disc-aware pull, box-clear places, route validation - **3 red of 200** each time.
-**Ground** is a point test at the tile (`FUN_008aa480`, no radius); **things** are boxes; **distance** is to the box
-(`func_002690E0`), so half a diameter from a tree touches nothing.
+**Attempted, reverted (D261)**: all five pieces at once - radius-aware line test and pull, box step test, places and waypoints
+pushed out of inflated footprints, slide deleted - and **still 3 red**, refused at **`now=0 next=164`**. The wall is geometric: on a
+**tile-centre** route a diagonal past a corner passes *through* it, so the box overlaps by the whole radius; a town centre's
+`radius` is `[2.0, 2.0, 0.0]`, so its box **is** its 4x4 footprint and the original refuses that step too. **What it has and we
+lack is a finer-than-tile route** - and we already have the shape: `short_range_clear`'s *shoulder points* round every body (D211).
+**Next: shoulder points round a building's corners.**
 
 **Waiting on the owner - the only open question.** The queue's floor is **entities >= 155**. The control reads **154** and never
 resolves; the D250 build reads **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is
