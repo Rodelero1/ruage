@@ -43,6 +43,23 @@ wall, never in `None`. Then the acceptance run - hash moves, entities and repath
 6. **the place model** - a gather place the body fits on, and an approach it can walk (D257).
 
 **Owner-ordered 2026-11-18 (D276): the slide and the ground cap go, in this order.**
+1. **A/B the two changes on branch `d276-no-slide`.** The fallback prefix (prefix a re-plan's fallback route with the body's own
+   tile centre, `step.rs:1409`) takes **animals from 3 red to 1** and leaves the movement sweep green (12 binaries), but the
+   acceptance match **stops resolving**: `main` reads **131 entities / players=1 / repaths 551**, the branch **153 / players=2 /
+   474**, with *"not enough food: 500 needed, 195 in the bank"* from 2,387 s. **The build contains two changes and they were not
+   separated** - the deleted slide and the prefix. So: measure the **prefix alone on `main`**, then **slide + prefix**, and take
+   whichever resolves. The remaining red is `a_live_animal_is_a_gather_source` (*"must end up carrying meat"*): he arrives and
+   does not work, which is the **arrival measure** (D262: ring distance vs the game's box gap), a separate slice.
+2. **the expansion budget** - `expansions > h` (h = 25 x Euclidean), cap 20,000. **Blocked on a read**: the guard's target is a
+   *push* onto the frontier (`0x801861`-`0x80189d`), not a return, so what a budget-exhausted search answers is unread. No
+   guess goes in.
+3. **plan for the radius** (row 21) - the graph layer still judges passage by tiles; `path.rs` has no radius in it.
+4. **the walk** - no slide, the waypoint snapped to and spent, the body kept on the route leg by leg (D259/D260). Needs 3.
+5. **the collision block's vocabulary** (rows 20, 22, 23, 25, 29, 30, 36) - `TakeAtRest` out, the avoid set out of the search,
+   the pause re-drawn, the caps gone, the mate set re-tested on `isMoving`, the order's path vocabulary.
+6. **the place model** - a gather place the body fits on, and an approach it can walk (D257).
+
+**Owner-ordered 2026-11-18 (D276): the slide and the ground cap go, in this order.**
 1. **the pull inside `short_range_clear` is tile-based, so it certifies legs the disc refuses.** Two probes on branch
    `d276-no-slide` (review `docs/reviews/2026-11-18-d276-the-slide-and-the-trace.md`) moved the answer twice: the sheep
    fixture's routes come **from `short_range_clear`, not the tile fallback**; both are planned from `(300000,300000)`, the
