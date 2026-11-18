@@ -7576,3 +7576,29 @@ ignored fixtures. The fixture is kept at `/opt/data/cache/scratch/walk_round-wip
 **Next**: print inside `collide` every step whose landing is inside a body's reach and which is nevertheless returned as `Take`,
 and let the trace name the branch. Then land the fix with this fixture, plus defects 1 and 2 which are already measured.
 
+### D270 - the three reports: one measured, two not yet reproduced, and one of my probes was malformed (2026-11-18)
+
+*The owner, with two screenshots: **(1)** a right-click does not send a unit to the place chosen but "a bit above it", and he wants the
+**centre of the circle** on the spot; **(2)** units cannot approach the **upper side** of a building, bush tile etc.; **(3)** villagers
+prefer a **diagonal** route to the drop site over a vertical one even when the vertical is longer.*
+
+**1. Measured, and it is the crowd slot, not the click.** A villager alone sent to a point four tenths of the way into a tile comes
+to rest **exactly on it** - offset **(0, 0, 0)** raw. Sent to the *same* point with another villager already heading there, the second
+stops **24,202 raw (1.21 tiles)** away, at offset **(-17,114, -17,114)** - north-west in tile space, i.e. **up and to the left on
+screen**, which is the "a bit above" in his screenshot. The cause is `start_walk`: a unit that does not take the clicked tile gets
+`tile_centre(slot)`, a whole tile's middle, instead of the point of that tile nearest the click. So the click conversion is right and
+the **slot** is what is coarse.
+
+**2 and 3. Not reproduced yet, and my own probe is to blame.** The probe spawned units relative to *the first resource entity on the
+seeded map* with a straight line that crossed the base, and both its directions came back **`NoPath { from: (24, 17), to: (20, 13) }`** -
+so I measured a refusal, not an asymmetry, and the arithmetic I first printed (identical offsets north and south) was the unit standing
+still after a refused order. The honest position: **no number yet** for (2) or (3). Both need a **controlled map** - a bush with open
+ground on all four sides, and a drop site a straight vertical walk away with a diagonal alternative - not the seeded map.
+
+**What is worth keeping from the refusal**: an order to a point *beside a resource node* is refused outright rather than walking to
+the nearest legal place, and D134's premise is that *every click is accepted* and becomes the nearest legal standing point. That is a
+third symptom to check on the controlled map, not a premise to assume.
+
+**Next**: (a) the slot fix - a follower's goal is the point of its tile **nearest the click**, not the tile's middle; (b) the
+controlled-map probes for the north side and the diagonal preference; (c) then the fixtures and the fixes, test first.
+

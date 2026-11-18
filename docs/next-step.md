@@ -26,12 +26,16 @@ the town centre's footprint, which the game would refuse too.
 
 **Attempted, reverted (D261)**: five pieces at once, **still 3 red** - a tile-centre diagonal past a corner passes *through* it, so
 a body's box overlaps by its whole radius.
-**Next: trace why a step that lands inside a standing body is returned as `Take`.** Reproduced (D269): a route planned through an
-empty gap, a man then standing in it, the walker closes **500 raw/tick** to **7,500** against the 8,000 needed. Two defects measured,
-**not** landed (a fixture that still fails is a half-fix): the `past` exemption must require a collider **walking away** (overlaps
-**104,386 -> 68,718**), and the **slide** must test bodies, not only ground. Fixture: `/opt/data/cache/scratch/walk_round-wip.rs`.
-Measured cause split (D268): mates **0**, past **43,315**, **neither 61,071**; the answer is the original's **repath out of the
-overlap**, whose re-seeding we already have (`FUN_007fb220`).
+**Next: the crowd slot is what misses the click.** Measured (D270): alone, a villager lands **exactly** on the clicked point (offset
+0,0,0); sent to the same point behind another, the follower stops **24,202 raw (1.21 tiles)** away at **(-17,114, -17,114)** -
+up-left, the owner's "a bit above" - because `start_walk` gives it `tile_centre(slot)`. Fix: a follower's goal is the point of its
+tile **nearest the click**. Then the two unmeasured reports (upper side of a bush, diagonal-to-drop-site preference) need
+**controlled maps**, not the seeded one: my first probe crossed the base and measured a `NoPath`, not an asymmetry.
+
+**Next: trace why a step that lands inside a standing body is returned as `Take`.** Reproduced (D269): a route through an empty gap, a
+man then standing in it, the walker closes **500 raw/tick** to **7,500** against the 8,000 needed. Two defects measured, **not** landed
+(a fixture that still fails is a half-fix): `past` must require a collider **walking away** (overlaps **104,386 -> 68,718**), and the
+**slide** must test bodies. Fixture: `/opt/data/cache/scratch/walk_round-wip.rs`.
 
 **Then: trace the planned polyline leg by leg, then delete the slide.** D265: the mover refuses its own route by **164 raw** at a
 fixed point. Given `legal_standoff` the planner answers and the animals are **11 of 11**; delete the slide and it is **3 red** again.
@@ -39,13 +43,9 @@ fixed point. Given `legal_standoff` the planner answers and the animals are **11
 **Waiting on the owner**: the queue's floor is **entities >= 155**; the control reads **154** and never resolves, the D250 build reads
 **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is the better outcome.
 
-**Second question, and it is new (2026-11-17, R1a measured on `wip/r1a-at-rest`).** Deleting the step-through arm no longer
-deadlocks - a one-tile corridor pair and the head-on pair both pass, so the *past* chain D242 blamed needs no code - but it
-costs the match: **40 s -> 154 s**, entities **138 -> 159**, re-paths **761 -> 423 (body 445->251)**, and the **enemy survives**
-(`players=1` -> 2) where the control eliminates him. So: take the pass-through out and pay 3.9x the wall time, or keep the arm
-and keep the ~0.09-tile walk-through it hides. The numbers, and the two fixtures that had to be restated to what survives D241,
-are in `docs/reviews/2026-11-17-r1a-at-rest.md`. Also named there: **one property is now unpinned** - "a man who is not past is
-never crossed" cannot be observed from outside the world without a route accessor, which is why the slice is parked.
+**Second question, measured (R1a, `docs/reviews/2026-11-17-r1a-at-rest.md`).** Taking the step-through arm out no longer deadlocks,
+but it costs the match: **40 s -> 154 s**, entities **138 -> 159**, re-paths **761 -> 423**, and the enemy **survives**
+(`players=1` -> 2). Parked on that price, with one property unpinned: "a man who is not past is never crossed".
 
 **Third question - answered by the owner and landed (2026-11-17, D251/D252).** May a villager ever change speed? The owner:
 *"villagers never slow down ... so either they walk, or stand"*, verified first and then ruled: **fixture and fix in one slice**.
