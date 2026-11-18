@@ -49,6 +49,23 @@ frontier uses"* and therefore that a budget-exhausted search returns what it has
 onto the frontier** (`0x801861`-`0x80189d`, then the sift at `0x801e90`), not a return - so the termination *rule* is settled
 and the answer's *shape* is not. The budget is therefore **not ported**, and the doc says so rather than the inference.
 
+## P1 corrected - the count I first published was a floor, not a total
+
+The first run of the set was `make conformance`, which **stops at the first failing binary**. It printed 15 tests, 14 green,
+1 red, and that is what I reported. Re-running with `--no-fail-fast` gives **36 tests: 34 green, 2 red** - four of the seven
+test files had not run, and one of them held a second red.
+
+**The hidden red, and it was informative**: `walkability::open_ground_costs_the_octile_distance_and_no_more` asserted that an
+open-ground route costs **exactly** the octile distance. That is the rule of an **admissible** A\*, and the ported search is
+not admissible - it carries the game's weight of 25, so it returns longer routes on purpose (measured: **509** against an
+octile of **473**, ratio 1.076). The fixture was rewritten to the game's guarantee, `octile <= cost <= octile x 25/16`, with
+`FUN_008007f0` cited in its header and the measurement in its doc comment; it passes, and the set is now **36 tests, 35 green,
+1 red** - the levelled search.
+
+**This is the exact trap `AGENTS.md` names**, and I walked into it while quoting the rule: a failure list read off a run that
+stopped early is a floor. The count to quote is the one taken with `--no-fail-fast` after `grep -c '^test result'` matches the
+number of test binaries (9 here: 7 files, a lib and the doc-tests).
+
 ## Stability
 
 **What was attacked, and by which check:**

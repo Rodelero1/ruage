@@ -154,10 +154,19 @@ fn a_tile_held_by_two_things_stays_held_until_both_leave() {
     assert!(!walk.blocked(1, 1));
 }
 
-/// RULE: an unobstructed route costs exactly the octile distance, so the terrain layer invents no cost.
+/// RULE: an unobstructed route is charged **only** the per-step cost - 16 for a cardinal step, 23 for a diagonal, no
+/// terrain term - and, because the estimate is **weighted x25** on purpose, it may be as much as `25/16` longer than the
+/// optimal route.
 ///
-/// Source: `zone_spatial_pyramid_eval_cost.cpp` seeds `g = 0` at the start and adds a per-step cost with no terrain term
-/// (terrain is either passable or not); the same claim on our side, checked rather than assumed.
+/// Source: `zone_spatial_pyramid_eval_cost.cpp` adds a per-step cost with no terrain term (ground is passable or not), and
+/// `FUN_008007f0` scales its Euclidean estimate by `2500/100` = 25 (`docs/movement-in-the-binary.md`, "The cost model
+/// settled") - a weight of about 1.56 that buys speed with **deliberately suboptimal** routes. This fixture used to assert
+/// `cost == octile(from, to)` unchanged on open ground; that was the **admissible** search's rule, and the ported search is
+/// not admissible. Who runs the game's own weight does not get an optimal route, so the assertion is the game's guarantee
+/// and not the stronger one: no route beats the octile lower bound, and none exceeds the weight's bound.
+///
+/// Measured when rewritten (2026-11-18): (2,3) -> (25,18) walks **509** against an octile of **473**, ratio 1.076, inside
+/// the 1.5625 bound - the route is a king-move chain that steps one diagonal and two cardinals at a time where it can.
 #[test]
 fn open_ground_costs_the_octile_distance_and_no_more() {
     let walk = walk(30, 30, &[]);
@@ -167,10 +176,17 @@ fn open_ground_costs_the_octile_distance_and_no_more() {
         ((5, 20), (5, 1)),
     ] {
         let route = find_path(&walk, from, to).expect("open ground");
-        assert_eq!(
-            route_cost(from, &route),
-            octile(from, to),
-            "the open-ground route from {from:?} to {to:?} is not the octile cost: {route:?}"
+        let walked = route_cost(from, &route);
+        let optimal = octile(from, to);
+        assert!(
+            walked >= optimal,
+            "the open-ground route from {from:?} to {to:?} beats the octile lower bound: {walked} against {optimal}"
+        );
+        // `h = 25 x euclid` and `cost >= 16 x euclid`, so `h <= 25/16 x cost` - the weighted search's only guarantee.
+        let bound = optimal * 25 / 16 + 1;
+        assert!(
+            walked <= bound,
+            "the open-ground route from {from:?} to {to:?} costs {walked}, past the weight's {bound} ({optimal} x 25/16): {route:?}"
         );
         assert_eq!(route.last(), Some(&to));
     }

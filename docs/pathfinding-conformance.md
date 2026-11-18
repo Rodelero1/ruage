@@ -11,8 +11,12 @@ make conformance
 **Nothing in it is `#[ignore]`d** (D249, the owner: *"None of the conformance tests is to be ignored. If it collides with HD
 functionality, please tell me and let me decide with provided findings from the game."*).
 
-**State of the set at 2026-11-18 (`make conformance`, measured, after the set was reorganised into seven files): **15 tests,
-14 green, 1 red.** The table below is the *original* 29-rule survey and its verdicts are the ones read on 2026-11-16; several
+**State of the set at 2026-11-18, with `--no-fail-fast`: 36 tests, 35 green, 1 red.** (The first run of the day reported
+"15 tests, 14 green, 1 red" and that number was wrong twice: `make conformance` stops at the first failing binary, so four of
+the seven test files had not run at all. The second red —
+`walkability::open_ground_costs_the_octile_distance_and_no_more` — only appeared once the whole set ran, and it was a fixture
+that predated the port: it asserted an **optimal** route, which a weighted search does not give. It now asserts the game's own
+guarantee, `octile <= cost <= octile x 25/16`, and passes.) The table below is the *original* 29-rule survey and its verdicts are the ones read on 2026-11-16; several
 have moved since, so read it as the register of what was read rather than as the current score:
 
 - **green now, red in the table**: row 27 (the cost model - `the_originals_step_cost_is_sixteen` passes; `path.rs` carries

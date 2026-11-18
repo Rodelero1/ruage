@@ -9,7 +9,11 @@ first two items were checked against the tree and the set, and **both were alrea
 - **the closest point is answered** - the search settles on the tile nearest the goal instead of returning `None`
   (rows 19/26/31), so `nearest_reachable`'s one-step defect went with the helper.
 
-**The set, run today (`make conformance`): 15 tests, 14 green, 1 red.** The red one is the whole of the next step:
+**The set, run today with `--no-fail-fast`: 36 tests, 35 green, 1 red.** (The first run said 15/14/1, which was a floor, not a
+total: without the flag cargo stops at the first failing binary, so four of seven files never ran. The second red it hid was
+`walkability::open_ground_costs_the_octile_distance_and_no_more`, a fixture that asserted an **optimal** route — the admissible
+search's rule, which the ported weighted search does not keep. It now asserts `octile <= cost <= octile x 25/16`, cited to
+`FUN_008007f0`, and passes.) The red one left is the whole of the next step:
 
 > `divergences::the_original_solves_a_long_walk_in_its_hierarchy` - *"the short-range solver declined a 58-tile walk; the
 > original has a hierarchy for exactly this"*.
