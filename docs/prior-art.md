@@ -31,6 +31,34 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-18 — openage's `last_before` gave two answers to one question, and the hint chose which
+
+**`SFTtech/openage`, two commits (`e3080121` -> `4c04b6be`, PR #1837, merged 17 Nov, authored 14 Nov), 2 files, +41/-4.**
+`libopenage/curve/keyframe_container.h` documents two neighbouring questions: `last(t, hint)` is the last keyframe with
+`time <= t`, `last_before(t, hint)` the last with `time < t` (lines 84-113). The second broke its own contract when the
+hint pointed *before* `t`: it walked while `time <= t` and then stepped back one, landing on the last keyframe **at** `t`.
+With a hint at or after `t` the other branch was already right, so **one query returned different keyframes depending on
+where the caller had last stood** — a cached-position dependency, the shape of a replay divergence rather than of a slow
+loop. The fix is two comparison operators; the test is 37 lines and asks the same five times from five hints
+(`curve_types.cpp:87-115`: `ib`, `p0`, `p1`, `p2`, `ie`, and the old code answered `10` to `last_before(10, p0)` where
+the new one answers `1`), plus four checks across a second container from both sides of the time (`:199-203`).
+
+**What it would have cost a real caller.** The only in-file use is `sync(other, start)` (`:528`, `:551`):
+`last_before(start, size())`, then `erase_after(at)`. Given a hint before `start`, a keyframe at exactly `start` would
+have survived the erase meant to remove it — anything resynced to a clip or a position keeping one boundary keyframe.
+Measured at this head: both call sites pass `size()`, and a repo-wide grep for `last_before` outside `libopenage/curve/` finds
+**no caller at all**, so the defect was latent, not live.
+
+**No divergence on our axes.** Asset pipeline (D18), engine/content boundary (D17), platform targets and licence are
+untouched. The container lives inside the continuous keyframe time model that U12 records as "no fixed tick at all",
+where ours is a discrete tick in which a body stands still or takes one whole step (D255); `crates/` has no keyframe
+container, no interpolation and **no query that takes a hint** (grep, 2026-11-18: `hint` occurs only as
+`std::hint::black_box`, in four bench and test files). Nothing to port, no U-number moved.
+
+**The shape of the test is the thing worth keeping**, not the eight-line fix: one query, every hint, one answer. That is
+a cheap net for exactly this class of bug, and it costs nothing to write the first time; it is not applied here today
+because the grep above measured that we have no such query.
+
 ## 2026-11-17 — a streamer's live link, and the identity table's six duplicates still six
 
 **`SiegeEngineers/aoc-reference-data`, one commit (`a53436be` → `e39f3dec`), `data/players.yaml` only, +2/−0.**
