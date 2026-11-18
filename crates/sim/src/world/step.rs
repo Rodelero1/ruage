@@ -1410,8 +1410,21 @@ impl World {
                             walk, self.scale, from, aim_legal, radius, &obstacles, &discs,
                         )
                         .or_else(|| {
-                            find_path_avoiding(walk, start, goal, &obstacles)
-                                .map(|steps| self.corners(walk, start, steps, aim))
+                            find_path_avoiding(walk, start, goal, &obstacles).map(|steps| {
+                                let mut points = self.corners(walk, start, steps, aim);
+                                // **The tile chain is validated between tile centres** (D276's trace): a body 0.85 tiles
+                                // off the corner its route was planned from has a first leg nothing has checked, and the
+                                // disc step test refuses it by **164 raw** - the refusal repeats 270 times with an unchanged
+                                // route because the re-plan reproduces the same leg. Walking to its **own tile's centre**
+                                // first makes that first leg one inside a free tile, which the geometry does allow, and
+                                // costs at most half a tile of walking. The short-range answer above needs none of this: it
+                                // is given the body's position as its start.
+                                let centre = self.tile_centre(start);
+                                if from != centre {
+                                    points.insert(0, centre);
+                                }
+                                points
+                            })
                         })
                     }
                     None => None,

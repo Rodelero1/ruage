@@ -76,6 +76,30 @@ body's radius (`line_clear_body`), change nothing else, and report the animals c
 than its tile's centre, or by making the walk aim along the current leg (D259's recommendation) so the plan's segments are the
 walk's segments. That is slice 1's real content, and it is larger than "delete the slide".
 
+**The fallback prefix, measured (2026-11-18): 3 red -> 1 red, and the match stops resolving.**
+
+Found by instrumenting `put_route`: the re-plan at `step.rs:1409` calls `short_range_clear` **directly** (not through
+`plan_path_mode`), so `DBG_PLAN` never saw it - and at ticks 31 and 32 that call returned **`None`**, so the tile-chain
+fallback answered with corners at tile centres. The fix is at that site: prefix the fallback route with the body's **own tile
+centre**, so the first leg is one inside a free tile that the pull did validate.
+
+- **animals: 8/3 -> 10/1.** `the_villager_follows_the_sheep` and `the_shepherd_kills_...` go green; the last red is
+  `a_live_animal_is_a_gather_source` (*"must end up carrying meat"* - he arrives and does not work, the arrival measure).
+- **the movement sweep is green**: `movement, straight_walk, walkable, passage, collision, short_range, points, tile_goal,
+  repath_budget, repath_reasons, stall, stuck, step_decision` - 12 binaries, 0 failures.
+- **the acceptance match, and this is why the branch is parked**: `make headless`, seed 7, 48,000 ticks, release, both builds
+  from source:
+
+  | | entities | players | hash | repaths (body / ground) |
+  |---|---|---|---|---|
+  | `main` | **131** | **1** (won) | `b5292af5a6072d57` | 551 (416 / 135) |
+  | branch | **153** | **2** (unresolved) | `a838c30f003f3521` | 474 (200 / 274) |
+
+  The branch plays a *bigger* match that never ends: the enemy stands, and the script refuses *"not enough food: 500 needed,
+  195 in the bank"* from 2,387 s - the economy does not reach Feudal. Two changes are in this build (the deleted slide and the
+  prefix) and **they were not separated**, which is the flaw in this measurement: the next slice is the A/B - prefix alone on
+  `main`, then slide + prefix - and the winner lands.
+
 Known and accepted: the branch is parked, not merged. `main` is green; this branch carries the measurement and the deleted arm
 so the next slice starts from it rather than from the argument.
 
