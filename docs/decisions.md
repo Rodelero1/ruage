@@ -7786,5 +7786,11 @@ plan chose. "Copy the game" is two halves; the step half is done, the route half
 3. **Delete the cap** (D127/D135) - last, because it needs the substitution rule (row 26) as its stopper, and because D135's
    price was taken **before** the sub-tile pencil existed and must be re-measured.
 
+**Basis.** `docs/movement-in-the-binary.md` (`FUN_008a4360`'s collision epilogue and *"no axis is ever dropped"*,
+`FUN_008aa480`'s point test on the ground, `FUN_00840830`'s boxes, `func_002690E0`'s box distance, `mConsecutiveSubstituteCount`);
+`docs/behaviour-diff.md` rows 13, 21, 22, 26, 29; the decomp's `src/zone/` for the levelled search and `src/unit/` for the box
+distance; the measurements inside D127, D135, D253, D255 and D256 themselves. Review:
+`docs/reviews/2026-11-18-d276-adopt-the-game-on-slide-and-cap.md`.
+
 **Commits us to.** No new cap, no new slide, and no third repair of either. A slice that cannot land parks with its numbers and
 the missing mechanism named - it does not reinstate the rule (D275).
