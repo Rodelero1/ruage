@@ -7797,3 +7797,58 @@ Register: `docs/behaviour-diff.md` rows 13, 21, 22, 26 and 29. Review:
 
 **Commits us to.** No new cap, no new slide, and no third repair of either. A slice that cannot land parks with its numbers and
 the missing mechanism named - it does not reinstate the rule (D275).
+
+### D277 - The ground is a point and the things are boxes: D117 and D177 are each half of one rule (2026-11-18)
+
+**Asked:** *"Let's review D117 and D177. Please explain what they are, what the original game and decomp say, what are the
+options."*
+
+**The two rows, and they contradict each other.** D117 (owner, 2026-11-04) says **passage belongs to the ground**: occupied
+tiles that touch, even at a corner, leave no passage for anyone; tiles that do not touch leave passage for **every** unit
+"no matter the size of the enveloping circle or number of units". D177 (owner, same week, with a screenshot) says **the ground
+test is the body's**: a step is refused when its landing puts the 0.2-tile disc inside a blocked tile
+(`clearance_at < 0`). Both are in the tree today, at different layers - the planner judges passage by tiles, the mover by the
+disc - and that split is the "two measures of walkable" D254 traces every 164-raw refusal to.
+
+**What the original does, in three layers, and it is neither row alone:**
+
+1. **The ground is a test at a point.** `FUN_008aa480` bounds-checks the tile, reads the unit's terrain mask and asks whether
+   the tile's bits survive it. Its arguments are cast to `int` - tile indices - and **no radius appears anywhere in it**.
+2. **Things are AABBs built from their own radius table**, and the query box is grown by the mover's radius, colliding on `<=`
+   per axis - so touching edges collide (`FUN_00840830`). `func_002690E0`'s box distance, `max(0, |dx| - r)` per axis, is the
+   same rule measured rather than tested, and the owner's *half a diameter* is that function at range zero.
+3. **The search plans for the body** - its own string is *"the boundaries of where this unit's radii will go"* - so the *plan*
+   keeps the radius clear even though the *step test* never consults it.
+
+**Where each row survives.** D177's disc-against-a-blocked-tile is **the game's own rule for a tile-sized object**: `TREEA`
+carries `radius = [0.5, 0.5, 2.0]`, so a tree's box *is* its tile, and a body may touch it and not overlap it - which is
+exactly `clearance >= 0`. D117's "the ground is tested as ground" is the game's layer 1, which has no radius in it either.
+**What dies is each row's exclusivity**: D117's *"whatever the size of the circle"* is contradicted by layer 3 (D239 row 21
+already supersedes it), and D177's *"every blocked tile"* is the right rule applied to the wrong unit - the game's unit of
+obstruction is **the object's box**, and a blocked tile is only a good stand-in when the object fills it.
+
+**Unread, and it is the one place the two rows can still disagree in a match:** a building whose `radius` box is **larger** than
+its solid tiles. A town centre's radius is `[2.0, 2.0]` - four tiles across, which is its whole footprint **including the
+walkable yard** units stand on. Either buildings are exempt from the box path, or the box a body is tested against is the solid
+part only. Nothing read yet decides it, and the read is the price of narrowing D177's clause.
+
+**Options, with what each costs.**
+
+- **A - keep both as they are** (planner by tiles, mover by the disc). Free, and it is where every 164-raw refusal and the
+  whole slide workaround come from.
+- **B - the game's three layers** (point ground, object boxes with the radius, plan for the radius). Costs the 3-red animals
+  family until a leg can bend inside a tile, then the slide goes; keeps the true half of both rows.
+- **C - D117 strictly** (no radius anywhere). Cheapest, and it puts a body's disc inside a tree's tile - the exact picture D177
+  was raised from, and a step the game refuses.
+- **D - D177 strictly** (disc against every blocked tile, plan by points). Measured: acceptance repaths **24 -> 529**.
+
+**Decided: B**, and it is what D276's first slice is for - shoulder points round footprint corners, so a leg bends inside a
+tile; then the slide goes; then the planner learns the radius. D117 and D177 stop being two rules and become the two ends of
+one: **the ground is a point, the things are boxes, the plan keeps the radius.**
+
+**Basis.** The original's binary, read at 2026-11-17 and recorded in `docs/movement-in-the-binary.md`: `FUN_008aa480` (point
+test), `FUN_00840830` (boxes grown by the mover's radius, `<=` collision) and `func_002690E0` in the decomp's
+`src/unit/unit_action_distance.cpp` (box-to-box, overlap clamped to zero).
+
+Measured in this tree: the 164-raw (0.008-tile) brush and 267 stalled ticks, the 24 -> 529 repaths, and the tile-grid step
+test's 14 -> 3 red.
