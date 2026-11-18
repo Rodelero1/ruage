@@ -360,6 +360,29 @@ without reading what the target does, which is the exact mistake this file exist
 loop?), what the search *answers* when the budget runs out, and the equal-`f` tie-break inside the sift. The termination rule
 is known; the answer's shape is not, and a replay depends on both. **So the budget is not ported and must not be guessed.**
 
+## What blocks a tile: a stamped footprint, and the radius is not a wall (2026-11-18)
+
+The question D277 carried - is a building a box or a set of tiles? - is settled by one function:
+
+```c
+extern "C" int func_001EE5B0(SpatialGrid *self, int min_x, int min_y, int max_x, int max_y, int type, int id) {
+    int val = ((type << 8) & 0x3F00) | 0x4000 | (id << 16);
+    if (type == 5) val |= 0x8000;
+    for (int y = min_y; y <= max_y; ++y) { int *row = self->grid_table[y];
+        for (int x = min_x; x <= max_x; ++x) row[x] |= val; }
+```
+
+- **An object's blocking is a stamped rectangle of tiles** (`zone_spatial_grid_stamp_obstacle_region.cpp`, `func_001EE5B0`): the
+  stamp carries `0x4000`, a 6-bit `type`, and the object's `id`, and the four-bit neighbour mask (`func_001D29F0`) is what reads it
+  - which is why a neighbour carrying a stamp contributes no edge bit.
+- **The `radius` pair is not a wall.** A town centre's `[2.0, 2.0]` is four tiles across, which equals its whole footprint
+  *including the walkable yard*, and units do stand on the yard - so the box cannot be the block. What the box is for is **bodies**:
+  `func_002690E0`'s box-to-box distance and D267's `ext_a + ext_b + 0.01` separation, both measured body against body.
+- **So the two layers this project argued about for a month are the same layer seen twice**: footprint tiles block (D117's half),
+  and a body is measured against them as a distance (D177's half). Neither is a special case of the other.
+- **Unread:** `type == 5` sets `0x8000` on every stamped tile and nothing read says what that type is. It is not carried into
+  content until it is read.
+
 ## The maximum forward velocity, read (2026-11-17): the speed is the unit's own, and a pause is zero
 
 Asked whether a villager's speed can ever change mid-walk, with the game as the first rung. `getMaxVelFwd` is the only place a

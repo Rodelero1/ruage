@@ -7827,10 +7827,17 @@ exactly `clearance >= 0`. D117's "the ground is tested as ground" is the game's 
 already supersedes it), and D177's *"every blocked tile"* is the right rule applied to the wrong unit - the game's unit of
 obstruction is **the object's box**, and a blocked tile is only a good stand-in when the object fills it.
 
-**Unread, and it is the one place the two rows can still disagree in a match:** a building whose `radius` box is **larger** than
-its solid tiles. A town centre's radius is `[2.0, 2.0]` - four tiles across, which is its whole footprint **including the
-walkable yard** units stand on. Either buildings are exempt from the box path, or the box a body is tested against is the solid
-part only. Nothing read yet decides it, and the read is the price of narrowing D177's clause.
+**The open question, and it closed on a read (2026-11-18, on the owner's *"follow the game"*): a building blocks by its
+stamped tiles, not by its radius box.** `zone_spatial_grid_stamp_obstacle_region.cpp` (`func_001EE5B0`) takes a **rectangle** of
+tiles - `min_x, min_y, max_x, max_y` - and writes into each one
+`val = ((type << 8) & 0x3F00) | 0x4000 | (id << 16)`, i.e. the obstacle stamp the tile mask reads. So an object's blocking is
+**a stamped footprint**, tile by tile; the `radius` box is what a **body** is measured by (D267's `ext_a + ext_b`, `func_002690E0`'s
+box distance). A town centre's yard therefore needs no exemption: the yard tiles are simply not stamped, which is why units stand
+there, and `[2.0, 2.0]` is the sprite/selection extent rather than a wall. **Our model already says this** - footprint tiles block,
+a disc is measured against them - which is why D177's disc rule and D117's tile rule agree once each is put on its own layer.
+
+**Still unread, and named:** `type == 5` also sets `0x8000` on every stamped tile, and nothing read says what type 5 is (gate,
+wall and resource are the candidates).
 
 **Options, with what each costs.**
 
