@@ -457,16 +457,19 @@ impl World {
         // A building's own tile is blocked, so a worker stands *beside* it. Planning to the centre
         // would walk the villager into the building, and the walk home would then start from a
         // blocked tile and never find a route.
+        // **The place is planned for the body's own width** (D280): see `plan_place` - the crowd is what `0` used to drop,
+        // and the body's size is what it also dropped by mistake.
+        let radius = self.body_radius(self.find(villager).and_then(|entity| entity.unit));
         let planned = if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
             match self.work_position(from, to) {
-                Some(stand) => self.plan_path(from, stand, 0),
-                None => self.plan_path(from, to, 0),
+                Some(stand) => self.plan_place(from, stand, radius),
+                None => self.plan_place(from, to, radius),
             }
         } else {
             // The walk still ends at the neighbouring tile's centre - a route that ends anywhere else is a route the movement
             // rules may never call *arrived*, and a worker that never arrives never works. The last third of a tile is closed by
             // `settle` in the gather arm instead (D169).
-            self.plan_path(from, to, 0)
+            self.plan_place(from, to, radius)
         };
         let route = match planned {
             Ok(route) => route,

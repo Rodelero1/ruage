@@ -2164,7 +2164,7 @@ impl World {
         to: (Fixed, Fixed),
         radius: i64,
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        self.plan_path_mode(from, to, radius, false)
+        self.plan_path_mode(from, to, radius, false, false)
     }
 
     /// A plan that may end **at the closest reachable tile**: the original's rule for a mover (deck p. 96), and what a
@@ -2177,7 +2177,7 @@ impl World {
         to: (Fixed, Fixed),
         radius: i64,
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        self.plan_path_mode(from, to, radius, true)
+        self.plan_path_mode(from, to, radius, true, false)
     }
 
     fn plan_path_mode(
@@ -2186,6 +2186,7 @@ impl World {
         to: (Fixed, Fixed),
         radius: i64,
         closest: bool,
+        ignore_bodies: bool,
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
         let (start, goal) = (self.tile_of(from), self.tile_of(to));
@@ -2193,7 +2194,7 @@ impl World {
         // his reserved place - and the ring already reserved it against every other body (D186/D188). Modelling the crowd as
         // obstacles *again* here made a dense little map unroutable (`NoPath from (0,0) to (3,1)`, the tree never touched),
         // so a place route ignores them and the reservation does the work.
-        let (standers, bodies) = if radius == 0 {
+        let (standers, bodies) = if radius == 0 || ignore_bodies {
             (BTreeSet::new(), Vec::new())
         } else {
             (
@@ -2231,6 +2232,21 @@ impl World {
             self.tile_centre(end)
         };
         Ok(self.corners(walk, start, steps, finish))
+    }
+
+    /// **A place route still has a body** (D280). `radius == 0` was doing two jobs: "ignore the crowd" (D211 - the ring has
+    /// already reserved the place against every body) and "this body has no size" to the ground geometry, which is false.
+    /// The planner then certified legs for a point that the mover's disc refuses - measured: **29 of 29** ground refusals in
+    /// the animals, gather and gather-motion suites belonged to a `Gather` approach. Here the **ground** is planned for the
+    /// body's own radius and only the **bodies** are ignored, which is the split the original never had to make: it plans
+    /// every route for *"the boundaries of where this unit's radii will go"*.
+    pub(crate) fn plan_place(
+        &self,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+        radius: i64,
+    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
+        self.plan_path_mode(from, to, radius, false, true)
     }
 
     /// The route a **body** would walk: the same plan, with its own footprint as the clearance.
