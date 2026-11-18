@@ -42,5 +42,15 @@ wall, never in `None`. Then the acceptance run - hash moves, entities and repath
    the pause re-drawn, the caps gone, the mate set re-tested on `isMoving`, the order's path vocabulary.
 6. **the place model** - a gather place the body fits on, and an approach it can walk (D257).
 
+**Owner-ordered 2026-11-18 (D276): the slide and the ground cap go, in this order.**
+1. **a leg may bend inside a tile** - octagon shoulder points round **footprint corners** in `short_range_clear`, the piece D261
+   named and never built (it already builds them for body discs; a footprint corner is clearance zero). Fixture: D255's measured
+   state goes from **3 red to 0** with the slide deleted - the animals family, one straight line clipping one footprint.
+2. **delete the slide** (`StepDecision::Slide`, D253/D255/D256) - the step is the game's: velocity whole, the tile at the point,
+   the building's footprint as a box; a refusal is a repath or a stand. Not before 1, because 14 tests across 8 binaries red is
+   the measured price of the order reversed.
+3. **delete `MAX_GROUND_REPLANS`** (D127/D135) - last, because it needs row 26's **substituted waypoint** as its stopper;
+   D135's 3.5-against-0.3 ms/tick was taken before the sub-tile pencil existed and is re-measured.
+
 **Waiting on the owner, and it does not block item 1:** the acceptance floor `entities >= 155`. The control reads **154 and
 never resolves**; the D250 build reads **137 and wins at 2,381 s**. Until it is restated every slice reports **both** numbers.
