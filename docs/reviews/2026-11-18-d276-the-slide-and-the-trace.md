@@ -52,6 +52,26 @@ is why the refusal repeats 270 times with an unchanged route - the mover is not 
 14 tests red in D253), and a "tolerance" on the step test (the 164 raw is a corner graze *of a leg the plan chose*, not a
 brush on a legal plan).
 
+**Two probes later, and the answer moved again (both probes removed, both findings kept):**
+
+1. **`DBG_PLAN` on `plan_path_mode`**: the sheep fixture makes exactly **two plans, both through `short_range_clear`** - no
+   fallback at all, so "the tile search answered" (D263's question) is **not** this fixture's case. Both plans are logged from
+   `from=(300000,300000)` - the **corner** of tile (15,15), which is where `Command::Spawn` put the body.
+2. **The follower is 0.85 tiles from that point when it first refuses** (316980,316980 at tick 31): so the route is *planned
+   from where the body was born* and followed from where it now stands. The tick-32 re-plan does return a **different** route
+   (3 points, first at 18.5,15.5), and then never changes again for 270 ticks - so the re-plan is not stale, it is
+   **wrong by the mover's measure**: its first leg is clear to the planner (a *tile* line test) and refused by the mover (a
+   *disc* step test) at 164 raw.
+
+**Fix attempted and reverted**: prefixing the fallback route with the body's own tile centre. It cannot help - the route does
+not come from the fallback - and it was reverted the moment the animals family stayed at 8/3, rather than left in as a
+plausible-looking change.
+
+**What it leaves, named:** the disagreement is **inside `short_range_clear`'s answer**: its pull and its line test are
+tile-based (`line_clear_avoiding`), so a leg it certifies can still be a leg the disc step test refuses. D261 bundled that fix
+with four others and measured 3 red; **it has never been measured alone**, and that is the next slice: give the pull the
+body's radius (`line_clear_body`), change nothing else, and report the animals count and the acceptance run.
+
 **What it leaves, named:** the first leg must start where the body stands - either by planning from the body's position rather
 than its tile's centre, or by making the walk aim along the current leg (D259's recommendation) so the plan's segments are the
 walk's segments. That is slice 1's real content, and it is larger than "delete the slide".
