@@ -1432,8 +1432,19 @@ impl World {
                             walk, self.scale, from, aim_legal, radius, &obstacles, &discs,
                         )
                         .or_else(|| {
-                            find_path_avoiding(walk, start, goal, &obstacles)
-                                .map(|steps| self.corners(walk, start, steps, aim))
+                            find_path_avoiding(walk, start, goal, &obstacles).map(|steps| {
+                                let mut points = self.corners(walk, start, steps, aim);
+                                // **The fallback's first leg starts at a tile point the body is not on** (D276's trace):
+                                // the pull validates lines between tile centres, so the leg from where the body actually
+                                // stands is the one leg nothing has checked - measured at a 164-raw graze, refused on
+                                // every tick, with the same route re-planned each time. Walking to the body's **own tile
+                                // centre** first makes that leg one inside a free tile, and costs at most half a tile.
+                                let centre = self.tile_centre(start);
+                                if from != centre {
+                                    points.insert(0, centre);
+                                }
+                                points
+                            })
                         })
                     }
                     None => None,
