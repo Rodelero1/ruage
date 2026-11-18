@@ -7612,10 +7612,17 @@ and others stand around him."***
 `tile_centre(slot)`, the middle of a square from `slot_for`'s ring scan, which starts at `(-1, -1)`: every follower therefore landed
 **up and to the left**, measured **25,455 raw (1.27 tiles)** from the click, which is the owner's *"a bit above"*.
 
-**Adopted**: the first order takes the point; a follower's goal is `crowd_ring_point` - eight candidate points on a ring of **one
-gather spacing** (the pair's footprint plus a quarter of a tile, 0.65) around it, ordered by how near each is to where that villager
-already stands, the `N`-th best tried first so a crowd deals round the ring, and every candidate required to be ground the body fits on
-and clear of every other body. `slot_for` is deleted.
+**Adopted**: the first order takes the point; a follower's goal is `crowd_ring_point` - eight candidate points on a ring of **four times
+the body's radius** (0.8 of a tile for a villager) around it, ordered by how near each is to where that villager already stands, the
+`N`-th best tried first so a crowd deals round the ring. Every candidate must be ground the body fits on, clear of every other body,
+**and clear of the point another man of the same crowd is already walking to**. `slot_for` is deleted.
+
+**The ring's radius is a measurement, not a taste**: eight points on a ring of radius `r` are `0.765 * r` apart, so at the gather
+spacing (0.65) two neighbours are **9,950 raw** apart - less than the **8,000** their footprints need once they drift, and the
+`group_move` fixture caught exactly that (two of one order at **6,311 raw**). At `4 x radius` the chord is **12,240 raw**, and the
+fixture passes. And the "clear of a claimed point" rule is what stops two men taking the same slot and walking **across** each other:
+`overlap::eight_villagers_ordered_to_one_tile_never_walk_through_each_other` failed on the first version, **0.344 tiles** apart at tick
+172 against the 0.367 they first touched - deeper, which is walking through - and passes with the rule.
 
 **Fixtures** (unignored, written first, watched fail): `click_spot::a_crowd_stands_round_the_unit_that_took_the_spot` - red at
 **25,455 raw**, green at **12,998 raw (0.65 tiles)** on both sides; and `click_spot::a_single_unit_stops_on_the_spot_it_was_sent_to`,

@@ -3103,9 +3103,11 @@ impl World {
         taken: usize,
         me: EntityId,
     ) -> (Fixed, Fixed) {
-        // **Far enough round that the man on the spot can still stand on it**: the pair's footprint plus a quarter of a tile,
-        // which is the gather ring's own 0.65 (a follower at shoulder width alone blocks the centre he is meant to leave free).
-        let spacing = (radius * 2).max(1) + self.scale / 4;
+        // **Wide enough that neighbours on the ring do not touch**: eight points on a ring of radius `r` are `0.765 * r` apart
+        // (the chord at 45 degrees), so the ring has to be about twice the pair's footprint before two followers clear each
+        // other - measured, a 0.65 ring left two of one order **6,311 raw** apart where their footprints need **8,000**. At
+        // `4 x radius` (0.8 of a tile for a villager) the chord is **12,240 raw**, and the man on the spot still has his ring.
+        let spacing = (radius * 4).max(self.scale * 3 / 4);
         let dirs: [(i64, i64); 8] = [
             (1000, 0),
             (707, 707),
@@ -3135,6 +3137,9 @@ impl World {
             if self.clearance_at(point, radius) < 0 {
                 continue;
             }
+            // **A follower's slot must also be free of the slots already dealt**: two men sent to the same ring who both like
+            // the same point walk across one another to reach it, which is the crossing D269 is about (measured, eight villagers
+            // ordered to one tile got **0.344 tiles** apart at tick 172 - deeper than they first touched, 0.367).
             let clear = self.entities.iter().all(|other| {
                 if other.kind != EntityKind::Unit || other.id == me {
                     return true;
@@ -3147,7 +3152,19 @@ impl World {
                     other.position.0.raw() - point.0.raw(),
                     other.position.1.raw() - point.1.raw(),
                 );
-                dx * dx + dy * dy >= reach * reach
+                if dx * dx + dy * dy < reach * reach {
+                    return false;
+                }
+                // And free of the point another man of this crowd is already walking to.
+                let Some(claim) = self
+                    .paths
+                    .get(&other.id)
+                    .and_then(|route| route.points.last().copied())
+                else {
+                    return true;
+                };
+                let (cx, cy) = (claim.0.raw() - point.0.raw(), claim.1.raw() - point.1.raw());
+                cx * cx + cy * cy >= reach * reach
             });
             if clear {
                 return point;

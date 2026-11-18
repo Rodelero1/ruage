@@ -140,8 +140,8 @@ fn a_single_unit_stops_on_the_spot_it_was_sent_to() {
     );
 }
 
-/// **Three units, one click**: the first takes the spot, the others stand **round him** - each within a stride of the spot, and
-/// never inside one another.
+/// **Three units, one click**: the first takes the spot, the others stand **round him** - each within a tile of the spot (the
+/// ring is `4 x radius`, 0.8 of a tile for a villager), and never inside one another.
 #[test]
 fn a_crowd_stands_round_the_unit_that_took_the_spot() {
     let Some(mut world) = common::fresh() else {
@@ -182,7 +182,7 @@ fn a_crowd_stands_round_the_unit_that_took_the_spot() {
     for other in crowd.iter().skip(1) {
         let ring = span_to(&world, *other, spot);
         assert!(
-            ring <= scale * 3 / 4,
+            ring <= scale,
             "a follower stands {ring} raw units from the spot: he was sent to a square's middle, not round the man on it"
         );
     }
