@@ -19,6 +19,16 @@ probes it removes are not where the time goes - **2.2%**, and on a run whose fai
 
 ## Stability
 
+**What each red says, in its own words** (the messages, because they are the symptom per fixture):
+
+- `the_villager_follows_the_sheep` - *"the villager has to reach the sheep it was sent to, not stop half-way"*
+- `a_live_animal_is_a_gather_source` - *"a villager working a sheep must end up carrying meat"*
+- `the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body` - *"the shepherd has to strike the animal, not have it
+  turn into a corpse on arrival"*
+
+**All three are approach and arrival; none is an overlap.** That is the strongest support for the trace's conclusion below: with
+the slide gone nothing gets *inside* anything - what stops is a man 0.35 tiles off his tile's centre never taking his first step.
+
 **The trace, which is the finding D265 asked for** (one fixture, `DBG_GROUND=1`, 270 refusals from tick 31):
 
 ```
