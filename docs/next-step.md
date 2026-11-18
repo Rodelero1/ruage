@@ -43,6 +43,25 @@ wall, never in `None`. Then the acceptance run - hash moves, entities and repath
 6. **the place model** - a gather place the body fits on, and an approach it can walk (D257).
 
 **Owner-ordered 2026-11-18 (D276): the slide and the ground cap go, in this order.**
+1. **the pull inside `short_range_clear` is tile-based, so it certifies legs the disc refuses.** Two probes on branch
+   `d276-no-slide` (review `docs/reviews/2026-11-18-d276-the-slide-and-the-trace.md`) moved the answer twice: the sheep
+   fixture's routes come **from `short_range_clear`, not the tile fallback**; both are planned from `(300000,300000)`, the
+   corner of tile (15,15) where `Spawn` put the body, and the follower is **0.85 tiles** from it when it first refuses. The
+   tick-32 re-plan returns a *different* route and then never changes for 270 ticks, so it is not stale - it is wrong by the
+   mover's measure: its first leg is clear to a **tile** line test and refused by the **disc** step test at **164 raw**.
+   **Next: give the pull the body's radius (`line_clear_body`), change nothing else, and report the animals count and the
+   acceptance run.** D261 bundled this with four other changes and measured 3 red; it has never been measured alone. (The
+   reverted attempt - prefixing the fallback route with the tile centre - is recorded so it is not tried again.)
+2. **the expansion budget** - `expansions > h` (h = 25 x Euclidean), cap 20,000. **Blocked on a read**: the guard's target is a
+   *push* onto the frontier (`0x801861`-`0x80189d`), not a return, so what a budget-exhausted search answers is unread. No
+   guess goes in.
+3. **plan for the radius** (row 21) - the graph layer still judges passage by tiles; `path.rs` has no radius in it.
+4. **the walk** - no slide, the waypoint snapped to and spent, the body kept on the route leg by leg (D259/D260). Needs 3.
+5. **the collision block's vocabulary** (rows 20, 22, 23, 25, 29, 30, 36) - `TakeAtRest` out, the avoid set out of the search,
+   the pause re-drawn, the caps gone, the mate set re-tested on `isMoving`, the order's path vocabulary.
+6. **the place model** - a gather place the body fits on, and an approach it can walk (D257).
+
+**Owner-ordered 2026-11-18 (D276): the slide and the ground cap go, in this order.**
 1. **the first leg must start where the body stands.** Traced 2026-11-18 on branch `d276-no-slide` (review
    `docs/reviews/2026-11-18-d276-the-slide-and-the-trace.md`): with the slide deleted, animals is **8 passed / 3 failed** (D264's
    three, reproduced) and the trace names the stage - the body stands at **(15.849, 15.849)**, 0.35 tiles off its own tile's
