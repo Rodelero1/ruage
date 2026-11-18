@@ -476,6 +476,28 @@ impl World {
             // **The waypoint this body could not reach is counted** (D279): the original substitutes a waypoint it will not
             // reach "this or the next update" instead of waiting on it, and it counts nothing per route - so the cap of two
             // ground re-plans goes with the substitution in, not after it.
+            // DBG_PROBE: which kind of route the refused step belongs to (D280's question). Committed so it cannot be lost
+            // to a `git checkout` - see the pitfall in the movement reference.
+            if std::env::var("DBG_ORIGIN").is_ok() {
+                let scale = self.scale;
+                let (first, len) = self
+                    .paths
+                    .get(&id)
+                    .map(|route| (route.points.first().copied(), route.points.len()))
+                    .unwrap_or((None, 0));
+                let kind = match first {
+                    None => "none",
+                    Some(point) => {
+                        let aligned = |raw: i64| raw % scale == 0 || raw % scale == scale / 2;
+                        if aligned(point.0.raw()) && aligned(point.1.raw()) {
+                            "tile-chain"
+                        } else {
+                            "geometry"
+                        }
+                    }
+                };
+                eprintln!("ORIGIN kind={kind} len={len}");
+            }
             pass.waits.push(id);
             if let Some((goal_tile, _)) = goal {
                 if pass.repaths.len() < MAX_REPATHS_PER_TICK {
