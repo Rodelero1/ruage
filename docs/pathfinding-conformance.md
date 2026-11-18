@@ -9,9 +9,20 @@ make conformance
 ```
 
 **Nothing in it is `#[ignore]`d** (D249, the owner: *"None of the conformance tests is to be ignored. If it collides with HD
-functionality, please tell me and let me decide with provided findings from the game."*). One test per rule, and the state of
-the set is the honest answer: **28 green, 5 red**. The red five are three rules of the game this engine does not keep (U25 a,
-b, c) and one defect of ours with its fix measured and held back (U25 d). A green run would be the claim *we keep all 33*.
+functionality, please tell me and let me decide with provided findings from the game."*).
+
+**State of the set at 2026-11-18 (`make conformance`, measured, after the set was reorganised into seven files): **15 tests,
+14 green, 1 red.** The table below is the *original* 29-rule survey and its verdicts are the ones read on 2026-11-16; several
+have moved since, so read it as the register of what was read rather than as the current score:
+
+- **green now, red in the table**: row 27 (the cost model - `the_originals_step_cost_is_sixteen` passes; `path.rs` carries
+  **16 / 23 / weight 25**, landed in `16853ac`), and rows 19/26/31's closest-point answer (the search settles on the tile
+  nearest the goal rather than answering `None`).
+- **the one red**: row 28, `divergences::the_original_solves_a_long_walk_in_its_hierarchy` - `short_range` declines a 58-tile
+  walk because its window is bounded at 40 tiles, and the original has a levelled search for exactly that.
+- **not in the set at all**: the expansion budget (`expansions > h`, cap 20,000) and the octile table's exact values; both are
+  read but not ported, and neither has a fixture.
+
 
 **Why the gate never sees it.** The crate is its own workspace (`crates/conformance/Cargo.toml` carries `[workspace]`, the root
 lists it in `exclude`), so a red conformance test cannot turn the repository's gate red - `cargo test --workspace` does not

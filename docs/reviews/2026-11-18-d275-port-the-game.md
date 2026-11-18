@@ -31,6 +31,24 @@ it, `0x800d40`-`0x800d5d` compare, `0x801855`/`0x80185b` are the shared tail) an
 withdrawn** - it is a budget, and the odd pairing is the design. What remains unread is what the epilogue *writes* and the
 heap's equal-`f` tie-break; P1 carries both.
 
+## P1 - measured before building: the cost model is already in `main`
+
+The queue put the cost model second, so the first thing checked was what the tree already has. `crates/sim/src/path.rs`
+**already carries the ported model** - `CARDINAL = 16`, `DIAGONAL = 23`, `ESTIMATE_WEIGHT = 25` with `h = Euclidean x 25` -
+landed in `16853ac` (*"wip: follow the game - the search answers the closest point, and 16/23 with the weighted estimate"*),
+and it already settles on the **closest point** rather than answering `None`. Two of the register's red rows were therefore
+green before the slice began, and the doc that said otherwise (`docs/pathfinding-conformance.md`'s *"28 green, 5 red"*) was
+stale in two directions: the set has since been reorganised into seven files, and the current run is different.
+
+**Measured, `make conformance`, 2026-11-18: 15 tests, 14 green, 1 red.** The red is
+`divergences::the_original_solves_a_long_walk_in_its_hierarchy` - `short_range` declines a 58-tile walk at its 40-tile window,
+which is the levelled search we do not have. That is now the next step, and it is the only thing in the set that fails.
+
+**A claim of mine withdrawn, from P0's own write-up.** P0 said the guard's two breaks jump to *"the same epilogue the exhausted
+frontier uses"* and therefore that a budget-exhausted search returns what it has. Reading the target shows it **pushes a node
+onto the frontier** (`0x801861`-`0x80189d`, then the sift at `0x801e90`), not a return - so the termination *rule* is settled
+and the answer's *shape* is not. The budget is therefore **not ported**, and the doc says so rather than the inference.
+
 ## Stability
 
 **What was attacked, and by which check:**

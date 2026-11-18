@@ -346,13 +346,19 @@ which reads as a distance compared with a count. Disassembled at the site, it is
 
 So the budget is **the heuristic itself**: a search answers at most *h* expansions, where `h = 25 x Euclidean distance in
 tiles`, and never more than **20,000**. Further goals get more expansions, which is why the odd pairing is not an error - the
-"distance" is the budget and the count is the spend. Both breaks jump to the **same epilogue** the exhausted frontier uses
-(`0x80185b` is reached from a `jle` on an empty frontier), so a budget-exhausted search returns what it has rather than a
-failure: it is the mechanism behind the talk's *"otherwise give the closest point path"* (register rows 26 and 31).
+"distance" is the budget and the count is the spend.
 
-**Still unread, and named:** what that epilogue *writes* when the budget runs out - the best node on the frontier, the last
-expanded node, or its parent - and the equal-`f` tie-break inside the heap (`FUN_00801e90`). The termination rule is now
-known; the answer's *shape* is not, and a replay depends on both.
+**What the break does is NOT settled, and a first read of it was wrong.** The target of both breaks, `0x801855`, is the head of
+a block that **pushes a node onto the frontier** (`0x801861`-`0x80189d`: increment the length at `+0x2db41c`, write the tile as
+two words at `+0x119414`, write a cost of `0` at `+0x119418`, call the sift `FUN_00801e90`), and `0x80185b` is also reached
+from the `jle` on an **empty frontier**. A push is not a return, so either the guard re-seeds and continues, or the block is
+the outer loop's tail and this function is not the whole search. **Either way the earlier sentence here - "both breaks land on
+the epilogue, so a budget-exhausted search returns what it has" - is withdrawn**: it was inferred from a shared jump target
+without reading what the target does, which is the exact mistake this file exists to prevent.
+
+**Still unread, and named:** what the guard's push carries (a re-seed node with cost zero? a sentinel that ends the outer
+loop?), what the search *answers* when the budget runs out, and the equal-`f` tie-break inside the sift. The termination rule
+is known; the answer's shape is not, and a replay depends on both. **So the budget is not ported and must not be guessed.**
 
 ## The maximum forward velocity, read (2026-11-17): the speed is the unit's own, and a pause is zero
 
