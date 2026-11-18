@@ -7549,3 +7549,30 @@ the gather path at all is the question the trace must answer.
 **Kept from this attempt**: the probe's classification (`world.is_mate`/`is_past` are public for it, and it prints the first five
 offenders with their tasks), which is what made the numbers above possible.
 
+### D269 - the standing man a villager walks into: reproduced, two defects measured, the real hole still open (2026-11-18)
+
+*The owner: **"Villagers still try to push through standing villager instead of trying to repath around him."***
+
+**Reproduced** on a wall with one gap: a villager's route is planned while the gap is empty, a man is then put in the gap and left
+standing, and the walker closes **500 raw a tick** and passes **500 raw inside** him (apart 9,500 / 8,500 / 8,000 / **7,500** against
+the 8,000 the two footprints need). Nothing refuses a step and nothing re-paths.
+
+**Two defects found, both real, neither sufficient**:
+
+1. **The past exemption passable-for-ever.** `is_past` = D210's `path->createdAt >= other->lastMoveTime`, which makes a man who has
+   been standing a while passable by every route planned since. The binary prints `isMoving` beside `lastMoveTime` for the collider
+   it classifies, and the exemption is about a man **walking away**. Requiring movement in the last couple of ticks measured
+   **104,386 -> 68,718** overlapping pair-ticks (-34%), **51,676 -> 10,191** deeper than half a footprint (-80%), `past`-explained
+   43,315 -> 111.
+2. **The slide is ground-only.** `StepDecision::Slide` asks `step_is_walkable`, which knows walls and not bodies, so a man against a
+   wall beside the man in the gap slides into him.
+
+**Neither fixed the reproduction** - the walker still reached 7,500 with both in place - so the step is being allowed **before**
+either rule is consulted: `blocker_at` is not returning the man in the gap, or the step comes from a path that does not go through
+it. **Nothing landed**: a change whose own fixture still fails is a half-fix, and the owner's rule is strict test-first with no
+ignored fixtures. The fixture is kept at `/opt/data/cache/scratch/walk_round-wip.rs` and the numbers in
+`docs/reviews/2026-11-18-walk-into-a-standing-man.md`.
+
+**Next**: print inside `collide` every step whose landing is inside a body's reach and which is nevertheless returned as `Take`,
+and let the trace name the branch. Then land the fix with this fixture, plus defects 1 and 2 which are already measured.
+

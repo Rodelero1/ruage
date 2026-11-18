@@ -24,21 +24,20 @@ collides on `<=` per axis; `func_002690E0` measures box-to-box, overlap clamped 
 Our tree is *not* the wrong size (`TREEA` is `radius = [0.5, 0.5, 2.0]`, so its box is its tile); the 164-raw refusal was against
 the town centre's footprint, which the game would refuse too.
 
-**Attempted, reverted (D261)**: five pieces at once, **still 3 red** at **`next=164`**: a tile-centre diagonal past
-a corner passes *through* it, so the box overlaps by the whole radius - a town centre's `radius` is `[2.0, 2.0, 0.0]`, so its box
-**is** its 4x4 footprint.
-**Next: make a collision whose landing is already inside a body produce a repath that leaves it.** Measured (D268): of 104,386
-overlapping pair-ticks, mates **0**, past **43,315**, **neither 61,071** - and the first offenders are two villagers walking to one
-node, **7,116 raw** apart where their footprints need **8,000**. Deleting the "already inside" clause made it worse
-(**167,025**): refusing a step congeals a pair instead of separating it. The original's answer is a **repath out of the overlap**,
-whose re-seeding we already have (`FUN_007fb220`, D212).
+**Attempted, reverted (D261)**: five pieces at once, **still 3 red** - a tile-centre diagonal past a corner passes *through* it, so
+a body's box overlaps by its whole radius.
+**Next: trace why a step that lands inside a standing body is returned as `Take`.** Reproduced (D269): a route planned through an
+empty gap, a man then standing in it, the walker closes **500 raw/tick** to **7,500** against the 8,000 needed. Two defects measured,
+**not** landed (a fixture that still fails is a half-fix): the `past` exemption must require a collider **walking away** (overlaps
+**104,386 -> 68,718**), and the **slide** must test bodies, not only ground. Fixture: `/opt/data/cache/scratch/walk_round-wip.rs`.
+Measured cause split (D268): mates **0**, past **43,315**, **neither 61,071**; the answer is the original's **repath out of the
+overlap**, whose re-seeding we already have (`FUN_007fb220`).
 
 **Then: trace the planned polyline leg by leg, then delete the slide.** D265: the mover refuses its own route by **164 raw** at a
 fixed point. Given `legal_standoff` the planner answers and the animals are **11 of 11**; delete the slide and it is **3 red** again.
 
-**Waiting on the owner - the only open question.** The queue's floor is **entities >= 155**. The control reads **154** and never
-resolves; the D250 build reads **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is
-the better outcome and the floor should be restated. Nothing else in the queue is blocked on a decision.
+**Waiting on the owner**: the queue's floor is **entities >= 155**; the control reads **154** and never resolves, the D250 build reads
+**137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is the better outcome.
 
 **Second question, and it is new (2026-11-17, R1a measured on `wip/r1a-at-rest`).** Deleting the step-through arm no longer
 deadlocks - a one-tile corridor pair and the head-on pair both pass, so the *past* chain D242 blamed needs no code - but it
