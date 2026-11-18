@@ -7744,7 +7744,7 @@ leaves its measurement on a branch with the missing mechanism named. The conform
 `docs/movement-in-the-binary.md` and the decomp; all five are ours, all five are withdrawn, and the three slices that replace
 them have a dependency order rather than a preference.
 
-**D127 - a ground re-plan is capped at two per route - withdrawn.** The rule came from `glouw/openempire`'s "re-examine the
+**D127, the ground cap** - a re-plan was capped at two per route. Withdrawn. The rule came from `glouw/openempire`'s "re-examine the
 route, do not walk into it", which is right, plus a cap of our own invention. The original counts nothing: a terrain collision
 is a repath, every time. **What makes a cap look necessary is that our re-plan can loop** - measured 11,260 attempts of which
 11,070 failed, 3.5 ms/tick against 0.3 - and the loop exists because the search returns routes the mover then refuses
@@ -7753,24 +7753,24 @@ waypoint it cannot reach is **substituted** (`mConsecutiveSubstituteCount`, row 
 than retried. **The cap is deleted when row 26 exists, not before**: without a stopper, uncapped means the 47.5 s match
 measured in D135.
 
-**D135 - a failed re-plan spends one of the two attempts - withdrawn with D127.** It is a performance fix *inside* a rule that
+**D135, the failed attempt** - it spent one of those two. Withdrawn with D127. It is a performance fix *inside* a rule that
 is going: the counter it repairs has no counterpart in the game. What survives is its **measurement** (attempts 11,260 -> 192,
 47.5 s -> 11.8 s) and the principle it shares with D209: a per-tick cost that is not a function of the entity count is a retry
 loop, not a busier match.
 
-**D253 - the slide is the last source of half-steps - withdrawn, the slide goes.** `StepDecision::Slide` takes a step's **axis
+**D253, the slide** - the last source of half-steps. Withdrawn; the slide goes. `StepDecision::Slide` takes a step's **axis
 component**, so a diagonal aimed mostly along a blocked axis moves a fraction: measured **82, 81, 80... raw units a tick where a
 step is 800**, for **567 of 1,398** walking ticks. The original drops no axis - a step is a velocity applied whole, the new
 position is tested, and the answers are repath, pause or stop. Both slide repairs were already refuted by measurement (a
 full-length slide: **16 tests across 10 binaries**; standing instead: **14 across 8**), so what is left is deletion, not repair.
 
-**D255 - "no sliding" cannot land because a tile is not an object - correct, and it stays the diagnosis.** Deleting the slide
+**D255, why no-sliding cannot land** - a tile is not an object. Correct, and it stays the diagnosis. Deleting the slide
 with the disc step test reddens **14 tests across 8 binaries**; stepping by the **tile grid alone** takes that to **3**, of which
 one is the crowd fixture that already fails. The 164-raw (0.008-tile) refusal is a disc against a **whole blocked tile**, where
 the original tests **the tile under the point** and collides **boxes** (`FUN_008aa480`, `FUN_00840830`, and
 `func_002690E0`'s box distance). So the missing piece is not a tolerance: it is a finer-than-tile route.
 
-**D256 - the step now asks the right question and the route asks the wrong one - confirmed, and it is the dependency.**
+**D256, the two halves** - the step now asks the right question and the route asks the wrong one. Confirmed; it is the dependency.
 `step_is_walkable` asking "the tile at the point, plus a building's footprint as a box" is the game's model and stays.
 `path.rs` has **no radius in it**, so the plan is a point route that hugs a footprint and the box test then refuses a step the
 plan chose. "Copy the game" is two halves; the step half is done, the route half is not.
