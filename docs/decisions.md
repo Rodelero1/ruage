@@ -7681,3 +7681,59 @@ square/triangle"*) put the ring's lowest row on the feet. The latest instruction
 base-anchored sprite the two cannot both hold; the later word wins, it is recorded in the code and the fixture, and one word brings the
 old rule back.
 
+
+### D272 - A repath out of an overlap makes it worse (written 2026-11-18, for a cite that had no row)
+
+`crates/sim/src/world/movement.rs:572` cites **D272** for *"a repath out of an overlap was tried and refuted"*, and the number
+was never written down - the finding lives in D271's last paragraph. Recorded here so the cite resolves, with its own numbers.
+
+**What was tried.** Queueing a re-plan whenever a step lands inside another body: the answer D268 said was missing, and the
+original's own answer to a non-past collision. Measured on the acceptance probe (`collision_probe`, 36,000 ticks):
+
+| | rule 3 kept | + a repath out of the overlap |
+|---|---|---|
+| overlapping pair-ticks | 104,386 | **337,570** |
+| deeper than half a footprint | 51,676 | **288,009** |
+| explained by *past* | 43,315 | **239,106** |
+
+**Why it fails.** The churn keeps more bodies moving, and moving bodies are exactly what the *past* exemption lets through, so
+each re-plan manufactures the next exemption. Three answers to this one defect now have numbers - refuse the step (D268), keep
+moving (D52), re-plan out of it (this row) - and the middle is the best of the three. The defect itself is upstream of all of
+them: a step **landing 7,500 inside a body** where 8,000 is needed (D269).
+
+### D275 - Port the game's pathing: fidelity first, and cost is a later question (owner, 2026-11-18)
+
+**The ruling, in his words.** *"Port everything from the game. I want the game to be ported as accurately as sensible. We can
+think about optimizations later."* Given after D15's four options were put to him with their measured costs.
+
+**What it settles.** D239 adopted every divergent row of `docs/behaviour-diff.md` where the game's side was *read*, but each
+slice stayed free to be refused by measurement - and two were (D242's row 29/30, R1a). **That freedom is withdrawn:**
+a measurement is no longer a reason to keep a divergence. Row 22's caps, the terrain slide, the same-tick mate heuristic,
+`TakeAtRest`, `D52`'s "a body already inside is not an obstruction", `D134`'s one-step answer and the gather place model all
+go when their replacement is proven. A slice that cannot land names the missing mechanism and parks on a branch; it does not
+reinstate our rule, and the 3.5 ms/tick that justified the ground cap is now a number to fix later rather than a reason to
+keep it.
+
+**What "as accurately as sensible" bounds.** D1's G1, unchanged: read the site, port the rule **and its constants**, prove it
+with a fixture. G2's bit-exactness stays rejected - where the original's own arithmetic is a float (row 13's `g`, the
+weighted heuristic), the port keeps the *arithmetic shape* in fixed point and the fixture pins the **cost ordering and the
+tie-break**, not the decimal.
+
+**Already read, so the first slice is not a puzzle.** The cost model settled on 2026-11-16 (`docs/movement-in-the-binary.md`,
+"The cost model settled"): **16** per cardinal step, an octile table at `0xafd2a0`, and `h = 25 x Euclidean` - which makes the
+original a **weighted A\*** (weight ~1.56) that returns slightly longer routes **on purpose**. The frontier is a **heap**
+(`FUN_00801e90` sifts on every push) *beside* the per-tile best-cost array with its generation byte - both structures exist,
+and the earlier "array rather than a heap" note was corrected. **The one unread item is the termination guard**:
+`h < local_46c || 20000 < local_46c` compares a distance with a count, and the termination rule plus the equal-`f` tie-break
+are what a replay depends on them. That read comes first, and it owes one paragraph, not code.
+
+**The order** (which is `docs/next-step.md`): the termination guard; the cost model; the search planned for the body's radius;
+two levels with a parent and the closest point instead of "no path"; the walk (no slide, snap-and-spend, leg by leg); the
+collision block's vocabulary; the gather place model. **Optimisations are last**, and two of them are the game's own design
+the levelled search and the stamped array - which its talk reports as the *faster* choice (2x average, 40x on the old worst
+case), so here fidelity and speed point the same way.
+
+**Commits us to.** No new divergence without a row here; a rule of ours the game does not have is deleted when its
+replacement is proven, never kept because a fixture depends on it (D255/D256's precedent); and a slice that cannot land
+leaves its measurement on a branch with the missing mechanism named. The conformance set (`make conformance`) is the score:
+**28 green / 5 red** today, and the target is 33/0.
