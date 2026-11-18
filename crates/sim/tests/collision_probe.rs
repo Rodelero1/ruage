@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 
 use ruage_script::{Runner, load_scenario_file};
-use ruage_sim::{EntityKind, Task, World};
+use ruage_sim::{EntityId, EntityKind, Task, World};
 
 fn repo(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -194,6 +194,7 @@ fn how_deeply_bodies_still_overlap() {
         std::collections::BTreeMap::new();
     let mut new_overlaps: u64 = 0;
     let mut deepest_new = 0i64;
+    let (mut mates, mut past, mut unjustified) = (0u64, 0u64, 0u64);
 
     for _ in 0..36_000u32 {
         runner.due(&mut world);
@@ -243,6 +244,30 @@ fn how_deeply_bodies_still_overlap() {
                 }
                 if apart < reach {
                     overlapping += 1;
+                    // **Whose fault is the overlap** (D267): the two exemptions the original grants - a group walking over
+                    // itself (`func_007f4330`/D207) and a collider whose last move is older than our route (the past test,
+                    // D210) - are legal in the original too. Anything neither is a rule we state and break.
+                    let (one, two) = (EntityId(a_id), EntityId(b_id));
+                    if world.is_mate(one, two) {
+                        mates += 1;
+                    } else if world.is_past(one, two) || world.is_past(two, one) {
+                        past += 1;
+                    } else {
+                        unjustified += 1;
+                        if unjustified <= 5 {
+                            let say = |id: EntityId| {
+                                world
+                                    .entity(id)
+                                    .map(|entity| format!("{:?}", entity.task))
+                                    .unwrap_or_else(|| "gone".to_owned())
+                            };
+                            println!(
+                                "NEITHER {one:?} {:?} / {two:?} {:?} apart={apart} reach={reach} at=({ax},{ay})/({bx},{by})",
+                                say(one),
+                                say(two)
+                            );
+                        }
+                    }
                     deepest = deepest.max(reach - apart);
                     if reach - apart > reach / 2 {
                         gross += 1;
@@ -265,6 +290,7 @@ fn how_deeply_bodies_still_overlap() {
          of those, {same_tile} in one tile and {cross_tile} across a tile line\n\
          **new** overlaps (a step the rule let through, not a stack the map seeded): {new_overlaps}, \n\
          deepest new {deepest_new} raw units ({:.3} tiles)\n\
+         by cause: mates {mates}, past {past}, **neither {unjustified}**\n\
          repaths {} made_room {}",
         overlapping as f64 * 100.0 / pair_ticks.max(1) as f64,
         deepest as f64 / scale as f64,

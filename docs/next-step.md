@@ -27,11 +27,14 @@ the town centre's footprint, which the game would refuse too.
 **Attempted, reverted (D261)**: five pieces at once, **still 3 red** at **`next=164`**: a tile-centre diagonal past
 a corner passes *through* it, so the box overlaps by the whole radius - a town centre's `radius` is `[2.0, 2.0, 0.0]`, so its box
 **is** its 4x4 footprint.
-**Next: trace the planned polyline leg by leg, then delete the slide.** D264 found why the good planner was dead here - it was
-given a goal *inside* an obstruction (the node's own tile) and returned `None` - and **D265 refutes D264's own explanation**: the settle
-writes positions directly, so the step rule never sees it, and the mover refuses its own route by **164 raw** at a fixed point.
-Given `legal_standoff` the planner answers and the animals family is **11 of 11**; delete the slide and it is **3 red** again. The
-polyline's leg-by-leg trace names the stage. **Measured**: the endpoint projection (D262) took the family **3 red -> 1**.
+**Next: make a collision whose landing is already inside a body produce a repath that leaves it.** Measured (D268): of 104,386
+overlapping pair-ticks, mates **0**, past **43,315**, **neither 61,071** - and the first offenders are two villagers walking to one
+node, **7,116 raw** apart where their footprints need **8,000**. Deleting the "already inside" clause made it worse
+(**167,025**): refusing a step congeals a pair instead of separating it. The original's answer is a **repath out of the overlap**,
+whose re-seeding we already have (`FUN_007fb220`, D212).
+
+**Then: trace the planned polyline leg by leg, then delete the slide.** D265: the mover refuses its own route by **164 raw** at a
+fixed point. Given `legal_standoff` the planner answers and the animals are **11 of 11**; delete the slide and it is **3 red** again.
 
 **Waiting on the owner - the only open question.** The queue's floor is **entities >= 155**. The control reads **154** and never
 resolves; the D250 build reads **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is

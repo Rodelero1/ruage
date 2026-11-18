@@ -7476,3 +7476,76 @@ rule**.
 4,000-tick crowd checked for step size), watch them fail with these numbers, then close hole 1. Hole 2 waits for a reading of the
 original.
 
+### D267 - a body is placed, not dropped: the original's separation rule, adopted (2026-11-18)
+
+*The owner: **"Please review overlapping rules from original game and decomp and then please adopt them 100%"**, and on the fork
+that followed: **"Adopt fully: the newcomer steps aside (trained or scenario)."***
+
+**What the original does, read in full.** Two places, and they are different rules:
+
+1. **At placement** - `func_002697C0` / `func_002699A0` (`aoe2-decomp/src/unit/unit_action_resolve.cpp`, 80 lines): for each
+   child of a group, step out from the spot it was given by **`ext_a + ext_b + 0.01`** (the two radii plus one hundredth of a
+   tile - the pair *touches*, so the 0.01 is on the outside), on **one of four sides** with a **random offset across that side**,
+   **fifty** tries, refusing a point that is off the map, in a terrain class the order does not accept, or obstructed at that
+   point. Every accepted position joins the list the next child is separated against, so a group fans out from the first man.
+   **No existing body is moved** - the newcomer is written to the new spot.
+2. **While walking** - `FUN_008a4360` (`move_obj.cpp`): a step to the new position gathers collisions; the order's **target** means
+   the walk is done; **terrain** or a **non-past** collision (the other unit's last move is *newer* than ours) means **repath**; a
+   **past** collision is walked through. There is no pushing anywhere in it.
+
+**What we already had**: rule 2, from D207 (a group walks over itself), D210 (the past test, from the binary's
+`path->createdAt < other->lastMoveTime`) and D200 (a target is a stop, an owner is irrelevant). **What we lacked** was rule 1.
+
+**Adopted**: `World::place_apart(at, radius, salt)` in `movement.rs`, called from `Command::Spawn` for every unit - trained or
+scenario-placed. Its four rules are the decomp's, one for one: the step out is the pair's radii plus `scale/100`; four sides, an
+offset across the side, fifty tries; the point must be on the map, on ground the body fits on, and clear of every other body; and
+**nothing** it does moves a body already standing. The original draws side and offset from `func_001AAB30`; ours is a xorshift
+seeded from the entity id, so it is identical on every machine and every run.
+
+**Fixtures** (written first, watched fail, never ignored): `spawn_apart::a_body_put_on_top_of_a_friend_is_set_beside_him` (red at
+*"two bodies put on one spot stand **0** raw units apart, inside the **8000** their footprints need"*) and
+`spawn_apart::a_group_put_on_one_point_all_stand_clear` (five bodies on one point, every pair).
+
+**The one rule D267 had to amend, and why**: `collision::units_that_already_share_a_tile_are_not_pushed_apart` (D52) asserted both
+bodies still stood in tile **(26,22)**; with placement separation the newcomer lands in **(26,21)**. D52's rule - *nothing pushes a
+body* - is untouched: the standing body does not move at all. What the fixture could not tell apart was a **tile**, which its own
+comment had already called a proxy ("two bodies 0.7 of a tile apart in the same tile are not inside each other"). Amended, with the
+owner's word, to
+`collision::a_newcomer_steps_aside_and_the_body_already_there_does_not_move`, which asserts the two rules themselves: the stander's
+position is **byte-identical** after 20 ticks, and the newcomer is no closer than the pair's footprint.
+
+### D268 - the movement clause the original does not have, tried and refuted by its own numbers (2026-11-18)
+
+*Part of adopting the overlap rules 100%. **Placement** is adopted (D267). The **movement** half was tried, measured, and put
+back.*
+
+**What was tried**: deleting rule 3 of the collision block - *"a body the mover is already inside is not an obstruction"* (D52). The
+original has no such clause; its answer to a non-past collision is a **repath**, and D267 had just removed the reason the clause
+existed (bodies were no longer born inside each other).
+
+**Measured, 36,000 ticks of the acceptance match (`collision_probe`)**:
+
+| | rule 3 in place | rule 3 deleted |
+|---|---|---|
+| overlapping pair-ticks | **104,386** (0.68%) | **167,025** (0.88%) |
+| deeper than half a footprint | **51,676** | **75,380** |
+| pair-ticks inspected | 15,245,283 | 18,922,347 |
+
+**It got worse, and the reason is the point**: refusing a step does not *separate* a pair that is already inside - the collision is
+still there next tick, so the pair congeals and the crowd behind them piles up (the same match, 24% more pair-ticks inspected
+because more bodies were alive). The clause is what lets an overlapping body move **out**. Copying the original's clause without
+copying its working repath-out-of-an-overlap just makes the overlap permanent.
+
+**Also measured while it was in** (and this is the number that says where the work is): of the **104,386** overlapping pair-ticks,
+**mates 0**, **past 43,315**, **neither 61,071**. The first offenders printed were two villagers walking to the same node,
+**7,116 raw** apart where their footprints need **8,000** - gliding along at a constant overlap, which is exactly what rule 3
+permits and what a repath would end.
+
+**So the next step is the repath, not the clause**: a collision whose landing is already inside another body has to produce a route
+that *leaves* the overlap (the original's low-level search re-seeds from inside an obstruction by `2 x radius` along a ring -
+`FUN_007fb220`, which our `short_range_clear` already implements for a **start** inside a body, D212). Whether it is asked for on
+the gather path at all is the question the trace must answer.
+
+**Kept from this attempt**: the probe's classification (`world.is_mate`/`is_past` are public for it, and it prints the first five
+offenders with their tasks), which is what made the numbers above possible.
+

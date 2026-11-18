@@ -3473,7 +3473,8 @@ impl World {
     /// **Whether a collider is past** (D210): it has not moved since this body's route was planned, so the route already
     /// accounts for it. The original's test is `path->createdAt < other->lastMoveTime`; a past collider is dropped - no
     /// pause, no repath and no bound - and with the step unclamped that is what lets the winner walk through the paused loser.
-    pub(crate) fn is_past(&self, id: EntityId, other: EntityId) -> bool {
+    #[must_use]
+    pub fn is_past(&self, id: EntityId, other: EntityId) -> bool {
         // **The comparison is the original's, and its direction is the whole rule**: a collider is *past* when he has
         // **not** moved since this route was planned - `path->createdAt >= other->lastMoveTime`. The first version of this
         // had it backwards, which made two men walking at each other permanently "past" and ghost through one another.
@@ -3488,7 +3489,8 @@ impl World {
     /// exemption *mutual*. Mutuality is not decoration: the original ends the exemption when a unit leaves its formation -
     /// "stop button is pressed / click on enemy unit / attack move" - and a stopped man's route is gone, so his old mates
     /// must stop walking over him the same tick.
-    pub(crate) fn is_mate(&self, a: EntityId, b: EntityId) -> bool {
+    #[must_use]
+    pub fn is_mate(&self, a: EntityId, b: EntityId) -> bool {
         self.paths
             .get(&a)
             .is_some_and(|route| route.mates.contains(&b))

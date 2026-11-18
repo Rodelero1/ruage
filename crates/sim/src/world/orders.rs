@@ -235,6 +235,15 @@ impl World {
                 } else {
                     Vec::new()
                 };
+                // **A body is placed, not dropped** (D267). The original separates a newcomer from the bodies already standing
+                // where it is put (`func_002699A0`: out by the two radii plus a hundredth of a tile, on one of four sides, fifty
+                // tries) - and that is where trained units come from, all of them stepping out of one door onto one point.
+                // Nothing moves an existing body, so this is placement and not pushing (D52 stands).
+                let position = if kind == EntityKind::Unit {
+                    self.place_apart(position, self.body_radius(unit), u64::from(id.0))
+                } else {
+                    position
+                };
                 let born = self.tick;
                 let inserted = self.insert(Entity {
                     last_step: StepDecision::Idle,

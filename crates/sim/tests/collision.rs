@@ -177,25 +177,42 @@ fn a_crowd_sent_to_one_place_does_not_stack() {
 }
 
 #[test]
-fn units_that_already_share_a_tile_are_not_pushed_apart() {
-    // The control for D52, and the reason this is avoidance rather than pushing: a unit is not shoved out of
-    // the way when it already overlaps. Pushing would be a different mechanic - every push can cascade, and
-    // every cascade is state to hash - and the owner chose soft avoidance, not pushing.
+fn a_newcomer_steps_aside_and_the_body_already_there_does_not_move() {
+    // **The control for D52, amended by D267** (the owner, 2026-11-18: *"adopt them 100%"*). D52's rule is that nothing
+    // ever **pushes** a body - no shoving, no cascade, no cascade's state to hash - and D267 is that a body is **placed**
+    // rather than dropped: the original's `func_002699A0` steps a newcomer out by the two radii plus a hundredth of a tile.
+    // The two rules are about different things, and the assertion that could not tell them apart was a **tile**: two bodies
+    // 0.4 of a tile apart share a tile or do not depending on where in the tile they stand, which the fixture's own comment
+    // had already called a proxy. So this now asserts the two rules themselves: the body that was already standing there
+    // does not move **at all**, and the newcomer ends up no closer than the pair's footprint.
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
     let spearman = fx.economy.role["spearman"];
     let a = place(&mut world, 1, 9_705, spearman, (26, 22), Fixed::ZERO);
+    let stander = world.position(a).expect("a position");
     let b = place(&mut world, 1, 9_706, spearman, (26, 22), Fixed::ZERO);
 
     for _ in 0..20 {
         world.step().expect("step");
     }
 
-    assert_eq!(tile_of(&world, a), (26, 22));
     assert_eq!(
-        tile_of(&world, b),
-        (26, 22),
-        "a standing unit was pushed out of a tile it was already sharing"
+        world.position(a).expect("a position"),
+        stander,
+        "a body that was already standing there was moved by a newcomer"
+    );
+    let (distance, reach) = {
+        let (one, two) = (
+            world.position(a).expect("a position"),
+            world.position(b).expect("a position"),
+        );
+        let (dx, dy) = (one.0.raw() - two.0.raw(), one.1.raw() - two.1.raw());
+        ((dx * dx + dy * dy).isqrt(), world.reach_between(a, b).raw())
+    };
+    assert!(
+        distance >= reach,
+        "the newcomer stands {distance} raw units from the body already there, inside the {reach} their \
+         footprints need"
     );
 }
 
