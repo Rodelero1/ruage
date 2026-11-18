@@ -68,6 +68,11 @@ pub fn max_scale_for(tiles: u64) -> i64 {
 
 /// **How many times one route may be re-planned because its ground went stale** (D127). Two is enough for a house built across
 /// a lane and one more obstruction; more turns a hopeless goal into a search every tick.
+/// **How many consecutive ground refusals a waypoint gets before it is substituted** (D279). The original's mechanism is
+/// read - *"we won't reach our waypoint either this or the next update, but we have a count of %d, faking it"* - and its
+/// **threshold is not**, so this number is **ours** and is named as such: two refusals is the literal reading of "this or
+/// the next update". It goes in the state hash through `Route::waited`, because it decides when a waypoint is dropped.
+pub(crate) const SUBSTITUTE_STALLS: u8 = 2;
 pub(crate) const MAX_GROUND_REPLANS: u8 = 2;
 
 /// A unit the budget leaves out simply waits this tick, which is what a blocked unit does anyway, and tries again next.
@@ -945,6 +950,10 @@ pub(crate) struct Route {
     /// How many times this route has been re-planned because its **ground** went stale. Capped: a route whose goal is buried
     /// behind new walls would otherwise search again on every tick, which is the cost D98a's "past" rule exists to avoid.
     pub(crate) stalls: u8,
+    /// **Consecutive refusals on the current waypoint** (D279): the original counts them and *"fakes it"* - a waypoint it
+    /// will not reach in this update or the next is **substituted**, not waited on (`mConsecutiveSubstituteCount`). Reset by
+    /// any step that happens and by any waypoint that is spent. Hashed, because it decides whether a waypoint is dropped.
+    pub(crate) waited: u8,
     /// **The tick this route was planned on** (D210): the original stamps `path+0x10` with the clock, and compares it with a
     /// collider's `lastMoveTime` to decide whether that collider is *past* - "he has not moved since I planned round this,
     /// so my route already accounts for him". With the step no longer clamped against a body, this is what ends a head-on:
@@ -971,6 +980,9 @@ pub(crate) struct Passing<'a> {
     /// Bodies told to pause by a collision this tick, in entity order, possibly naming the same body twice (each side of
     /// the pair sees the other). Applied after the pass, where the seeded stream can be drawn from.
     pub(crate) pauses: Vec<EntityId>,
+    /// Bodies whose step the **ground** refused this tick, in entity order. Applied after the pass: a waypoint refused
+    /// often enough is substituted (`mConsecutiveSubstituteCount`, D279) instead of waited on for ever.
+    pub(crate) waits: Vec<EntityId>,
 }
 
 /// **What a unit's card reads** (2026-11-04): the numbers the bottom-central panel puts beside a portrait.

@@ -1207,6 +1207,7 @@ impl World {
             .collect();
         let bodies = self.body_tiles();
         let mut pass = Passing {
+            waits: Vec::new(),
             bodies: &bodies,
             moving: &moving,
             repaths: Vec::new(),
@@ -1218,6 +1219,11 @@ impl World {
         for (index, id, dx, dy) in &deltas {
             if *dx == Fixed::ZERO && *dy == Fixed::ZERO {
                 continue;
+            }
+            // **A step that happens clears the waypoint's refused count** (D279): the count is about one waypoint being
+            // unreachable, not about a route's history, so a man who moves is not accumulating toward a substitution.
+            if let Some(route) = self.paths.get_mut(id) {
+                route.waited = 0;
             }
             if let Some(entity) = self.entities.get(*index).filter(|entity| entity.id == *id) {
                 asked.push((
@@ -1347,6 +1353,22 @@ impl World {
             entity.pause_remaining = ticks.saturating_sub(1);
         }
 
+        // **A waypoint the ground refused often enough is substituted** (D279). The original's own words for it are
+        // *"we won't reach our waypoint either this or the next update, but we have a count of %d, faking it"*: the count
+        // is kept, and when it passes the threshold the waypoint is dropped rather than the man standing at it for the
+        // rest of the match. The **goal** is never dropped - an unreachable goal still ends with him standing, which is
+        // what `a_walled_in_goal` asserts - so the list must hold more than one point.
+        for id in &pass.waits {
+            let Some(route) = self.paths.get_mut(id) else {
+                continue;
+            };
+            route.waited = route.waited.saturating_add(1);
+            if route.waited >= crate::SUBSTITUTE_STALLS && route.points.len() > 1 {
+                route.points.remove(0);
+                route.waited = 0;
+            }
+        }
+
         // Re-plan around the bodies that were in the way, now that the movement pass has finished with the entity
         // list. A repath keeps what the route already avoids - those bodies are still past - and adds the new one; a
         // search that fails leaves the old route in place, so the unit waits rather than walking into the body.
@@ -1441,6 +1463,7 @@ impl World {
                                 points,
                                 avoiding,
                                 stalls,
+                                waited: 0,
                                 mates,
                                 // `put_route` stamps the tick; a re-plan is a new plan, which is the original's
                                 // `path+0x10 = clock` after a search.

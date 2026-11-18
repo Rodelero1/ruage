@@ -7,7 +7,7 @@
 use ruage_fixed::Fixed;
 
 use crate::{
-    Entity, EntityId, EntityKind, MAX_GROUND_REPLANS, MAX_REPATHS_PER_TICK, Passing, Repath,
+    Entity, EntityId, EntityKind, MAX_REPATHS_PER_TICK, Passing, Repath,
     StepDecision, Task, World,
 };
 
@@ -465,22 +465,20 @@ impl World {
             // The original answers the same case differently: **its whole movement is continuous** (0.04 tiles a tick, D258), so
             // "a fraction of a step" is not a category it has. Until our mover can spend a partial step on the gather approach -
             // or the place is reached by walking only - the slide stays.
-            for (sx, sy) in [(dx, Fixed::ZERO), (Fixed::ZERO, dy)] {
-                if sx == Fixed::ZERO && sy == Fixed::ZERO {
-                    continue;
-                }
-                if self.step_is_walkable(here, (sx, sy), goal_tile, radius) {
-                    return (sx, sy, StepDecision::Slide);
-                }
-            }
+            // **The terrain slide is gone** (D276/D279): the original applies its step whole and answers a blocked step
+            // with a re-plan or a stand - *"no axis is ever dropped"*. The substituted waypoint above is what keeps a
+            // refusal from becoming a stall, which is why the two changes land together.
             // **Ground, not a body** (D127). No slide means the route's next waypoint is now blocked - a house was built
             // across it, or the unit was nudged off the line the geometry planned through. Standing still was the old answer,
             // and it was for ever: nothing re-examined the route, so the unit pushed at the wall for the rest of the match
             // (the owner: *"I still see scout bumping into trees and getting stuck"*). `openempire` re-plans every 25 cycles
             // whether or not it can name the reason; this asks for one, at most twice per route.
+            // **The waypoint this body could not reach is counted** (D279): the original substitutes a waypoint it will not
+            // reach "this or the next update" instead of waiting on it, and it counts nothing per route - so the cap of two
+            // ground re-plans goes with the substitution in, not after it.
+            pass.waits.push(id);
             if let Some((goal_tile, _)) = goal {
-                let stalls = self.paths.get(&id).map_or(0, |route| route.stalls);
-                if stalls < MAX_GROUND_REPLANS && pass.repaths.len() < MAX_REPATHS_PER_TICK {
+                if pass.repaths.len() < MAX_REPATHS_PER_TICK {
                     pass.repaths.push(Repath {
                         unit: id,
                         body: None,

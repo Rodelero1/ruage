@@ -212,6 +212,10 @@ impl World {
             // A route's stall count decides **whether it may be re-planned again**, so it is state: two runs that disagree
             // about it diverge the moment an obstruction appears (D127). Written only when non-zero, so a world that never
             // stalls hashes as it did before this existed.
+            if route.waited != 0 {
+                fnv_bytes(&mut hash, b"waited");
+                fnv_bytes(&mut hash, &[route.waited]);
+            }
             if route.stalls != 0 {
                 fnv_bytes(&mut hash, b"stalls");
                 fnv_bytes(&mut hash, &[route.stalls]);
