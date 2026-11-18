@@ -7868,3 +7868,39 @@ test), `FUN_00840830` (boxes grown by the mover's radius, `<=` collision) and `f
 
 Measured in this tree: the 164-raw (0.008-tile) brush and 267 stalled ticks, the 24 -> 529 repaths, and the tile-grid step
 test's 14 -> 3 red.
+
+### D278 - The acceptance floor is the win, not an entity count (owner, 2026-11-18)
+
+**The ruling, in his words.** Asked to choose between the queue's `entities >= 155` floor and the match's own outcome: *"restate
+it to the win"*.
+
+**What the floor was, and why it inverts.** D242 and D250 gated slices on **`entities >= 155` and `repaths` near 380**. The
+numbers say what is wrong with it: `main` at 2026-11-18 reads **131 entities and `players=1`** - a *won* match - while the build
+that read **154 entities never resolved**, and the D250 build read **137 and won at 2,381 s**. An entity count is a proxy for
+"a live match", and it inverts at exactly the moment that matters: when a side loses its base, its units stop being trained and
+the count **falls**. So the floor punished winning.
+
+**The gate, from now on - three numbers, none of them a proxy:**
+
+1. **The match resolves** at or before 48,000 ticks: `players=1` (one side eliminated) or an explicit draw. A run that ends with
+   `players=2` and live refusals saying the economy cannot reach its next age is a **failure** regardless of its entity count.
+2. **The economy is alive**: the acceptance script's last refusal must not be a resource wall at the end of the run - `"not
+   enough food: 500 needed, 195 in the bank"` from 2,387 s is the signature of a stalled economy, and it is now a named failure
+   rather than a curiosity.
+3. **Nothing that was green goes red**: the suite is the rule set, and the acceptance is not allowed to buy a win by breaking a
+   fixture.
+
+**Where the win cannot be read, the floor goes back to its old job**: a *pure movement probe* (a crowd, a corridor, a march) has
+no match to win, and its own fixture is the gate. The floor applied to the acceptance match only, and it was always being quoted
+about the acceptance match.
+
+**What this changes in practice.** The two parked branches re-read as: `d276-no-slide` **fails** (players=2, food wall at 2,387 s)
+and `d276-prefix-only` **passes** (players=1, unchanged) - the same verdicts as before, now for a stated reason rather than a
+number that happened to agree.
+
+**Basis.** Measured in this tree: `main` 131 entities / `players=1` / `b5292af5a6072d57`; the D250 build 137 / won at 2,381 s; the
+control 154 / never resolves; `d276-no-slide` 153 / `players=2` with the food wall from 2,387 s. Register: D242's and D250's
+floors are superseded as gates, and their measurements stand.
+
+**Commits us to.** Every slice reports **the win, the food wall if any, and the entity count** - the count as information, never
+as the gate - and a slice that wins with fewer entities is a slice that won.

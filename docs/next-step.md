@@ -97,18 +97,21 @@ wall, never in `None`. Then the acceptance run - hash moves, entities and repath
 6. **the place model** - a gather place the body fits on, and an approach it can walk (D257).
 
 **Owner-ordered 2026-11-18 (D276): the slide and the ground cap go, in this order.**
-1. **the first leg must start where the body stands.** Traced 2026-11-18 on branch `d276-no-slide` (review
-   `docs/reviews/2026-11-18-d276-the-slide-and-the-trace.md`): with the slide deleted, animals is **8 passed / 3 failed** (D264's
-   three, reproduced) and the trace names the stage - the body stands at **(15.849, 15.849)**, 0.35 tiles off its own tile's
-   centre, and the re-planned route's first point is **(18.5, 15.5)**; the straight line from where he stands grazes a blocked
-   tile by **164 raw** and is refused, 270 times, with an unchanged route. A line from the tile centre would be clear. So the
-   plan's **first leg is made from a point the body is not on**: either plan from the body's position, or aim along the current
-   leg (D259). Fixture: animals **3 red -> 0** with the slide deleted, on the parked branch.
-2. **delete the slide** (`StepDecision::Slide`, D253/D255/D256) - the step is the game's: velocity whole, the tile at the point,
-   the building's footprint as a box; a refusal is a repath or a stand. Not before 1, because 14 tests across 8 binaries red is
-   the measured price of the order reversed.
-3. **delete `MAX_GROUND_REPLANS`** (D127/D135) - last, because it needs row 26's **substituted waypoint** as its stopper;
-   D135's 3.5-against-0.3 ms/tick was taken before the sub-tile pencil existed and is re-measured.
+1. **Build the original's substituted waypoint, and delete the cap** (D276's amended order, D278's gate). The mover counts
+   consecutive refusals on the **same waypoint**; past that wait it **skips the waypoint** instead of standing - the binary's own
+   words are *"we won't reach our waypoint either this or the next update, but we have a count of %d, faking it"*
+   (`mConsecutiveSubstituteCount`, register row 26) - and a ground refusal no longer spends `MAX_GROUND_REPLANS`. Fixtures: a
+   waypoint behind a wall is skipped within N ticks and the following one is reached; an unreachable goal ends with the man
+   standing, not looping; `repath_budget`'s "at most two" is rewritten to the game's rule. **Then the acceptance: the win, the
+   food wall, the counts.**
+2. **Delete the slide** (`StepDecision::Slide`, D253/D255/D256) - one step applied whole; a refusal is a re-plan or a stand. It
+   should cost nothing once item 1 lands, and that is the test of item 1. Keep the fallback prefix: measured inert, and free.
+3. **The arrival measure** - "at the node" becomes the game's **box gap** within the job's range (`func_002690E0`) instead of a
+   ring distance. That is the last animals red.
+4. **The levelled search** - the last conformance red.
 
-**Waiting on the owner, and it does not block item 1:** the acceptance floor `entities >= 155`. The control reads **154 and
-never resolves**; the D250 build reads **137 and wins at 2,381 s**. Until it is restated every slice reports **both** numbers.
+**The gate (owner, 2026-11-18, D278): the win, the economy, the suite.** `entities >= 155` is retired - it punished winning,
+because a beaten side stops training and its count falls. Every slice reports **`players`** (the match must resolve), **whether
+the economy hit a resource wall** (*"not enough food: 500 needed, 195 in the bank"* late in a run is a failure), and the entity
+and re-path counts as information. `main` reads **131 / players=1** and is the baseline to beat; `d276-no-slide` reads **153 /
+players=2** with the food wall and fails.
