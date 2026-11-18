@@ -20,6 +20,17 @@ The one place this note could be wrong is the `3.5 ms/tick against 0.3` that jus
 D267 withdrew it as a reason, and D275 now withdraws it as a licence. It stays in the corpus as a measurement to beat, not as
 a rule, and the slice that deletes the cap re-measures it.
 
+## P0 - the termination guard, read (the first slice, done inside this step)
+
+The queue's first item was a read with no code, and it closed: `FUN_008007f0`'s break is **`expansions > h`** (the heuristic,
+`25 x Euclidean`) with an absolute cap of **20,000**, and both jumps land on the epilogue an **empty frontier** uses - so the
+original's search is **best-effort by construction**: when the budget runs out it answers what it has, which is the mechanism
+behind *"otherwise give the closest point path"*. Verified at the site (`0x800c58` zeroes the counter, `0x80177a` increments
+it, `0x800d40`-`0x800d5d` compare, `0x801855`/`0x80185b` are the shared tail) and written up in
+`docs/movement-in-the-binary.md`. **My earlier claim that this was "a unit mismatch in the guard or a misread variable" is
+withdrawn** - it is a budget, and the odd pairing is the design. What remains unread is what the epilogue *writes* and the
+heap's equal-`f` tie-break; P1 carries both.
+
 ## Stability
 
 **What was attacked, and by which check:**

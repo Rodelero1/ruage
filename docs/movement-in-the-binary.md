@@ -331,11 +331,28 @@ by 8, wrap at 240, clear only on wrap). So the earlier summary - "a stamped best
 two structures and denied the other: both exist, because they answer different questions (best cost per tile vs order of
 expansion).
 
-**Still unread, and named, and it is now sharper rather than settled:** `local_46c` counts **expansions** (zeroed before the
-loop, `+1` after each node's eight neighbours are tried), and the break is `h < local_46c || 20000 < local_46c` - a **distance
-compared with a count**. Either the original carries a unit mismatch in that guard or one of the two variables is not what it
-looks like in the lifted listing; **it is not ported on either reading**, and the termination rule plus the equal-`f` tie-break
-remain what a replay would depend on.
+**The termination guard, settled (2026-11-18, P0 of D275).** The last open item was `h < local_46c || 20000 < local_46c`,
+which reads as a distance compared with a count. Disassembled at the site, it is exactly that - and it is deliberate:
+
+```
+800c58: mov DWORD PTR [ebp-0x468],0x0        ; the counter, zeroed once before the loop
+80177a: inc DWORD PTR [ebp-0x468]            ; +1 per expansion (after the node's eight neighbours are tried)
+800d19: imul edx,esi,0x19                    ; h = (int)euclid * 25 - the other arm of the 2500/100 form
+800d40: cmp DWORD PTR ds:0xaad420,0xffffffff ; is the weighting disabled?
+800d47: mov ecx,DWORD PTR [ebp-0x468]        ; ecx = expansions
+800d4f: cmp ecx,edx  / 800d51: jg 0x801855   ; stop once expansions > h
+800d57: cmp ecx,0x4e20 / 800d5d: jg 0x801855 ; stop once expansions > 20000
+```
+
+So the budget is **the heuristic itself**: a search answers at most *h* expansions, where `h = 25 x Euclidean distance in
+tiles`, and never more than **20,000**. Further goals get more expansions, which is why the odd pairing is not an error - the
+"distance" is the budget and the count is the spend. Both breaks jump to the **same epilogue** the exhausted frontier uses
+(`0x80185b` is reached from a `jle` on an empty frontier), so a budget-exhausted search returns what it has rather than a
+failure: it is the mechanism behind the talk's *"otherwise give the closest point path"* (register rows 26 and 31).
+
+**Still unread, and named:** what that epilogue *writes* when the budget runs out - the best node on the frontier, the last
+expanded node, or its parent - and the equal-`f` tie-break inside the heap (`FUN_00801e90`). The termination rule is now
+known; the answer's *shape* is not, and a replay depends on both.
 
 ## The maximum forward velocity, read (2026-11-17): the speed is the unit's own, and a pause is zero
 

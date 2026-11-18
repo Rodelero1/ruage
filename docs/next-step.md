@@ -7,9 +7,13 @@ are the port list; the conformance set is the score - **28 green / 5 red**, targ
 
 **The queue, in order. Each slice is test-first, measured, reviewed and pushed; none may be refused on cost (D275).**
 
-1. **P0 - read the termination guard.** `FUN_008007f0`'s break is `h < local_46c || 20000 < local_46c`, a distance compared
-   with a count. Settle what `local_46c` is. Deliverable: one paragraph in `docs/movement-in-the-binary.md`; **no code**.
-   The termination rule and the equal-`f` tie-break are what a replay depends on, so this cannot be guessed.
+1. ~~**P0 - read the termination guard.**~~ **DONE 2026-11-18**, and it is not a misreading: the search's budget *is* the
+   heuristic. `local_46c` is an expansion counter, and the loop breaks at `expansions > h` (i.e. `> 25 x Euclidean` tiles) or
+   `> 20000`, jumping to the **same epilogue** an empty frontier uses - so a budget-exhausted search returns the best it has
+   instead of failing, which is the talk's *"otherwise give the closest point path"* in code. Disassembly and addresses:
+   `docs/movement-in-the-binary.md`, "The termination guard, settled". **Still unread:** what that epilogue writes when the
+   budget runs out (best frontier node, last expanded, or its parent) and the equal-`f` tie-break inside `FUN_00801e90`.
+   **P1 carries that read**, because a route's shape depends on the tie-break and the acceptance hash depends on the route.
 2. **P1 - the cost model (row 13).** Already read, not yet ported: **16** per cardinal step, the octile table
    (`table[min] + 16*(max-min)`, `FUN_007ffc80`, `DAT_00afd2a0`), **`h = 25 x Euclidean`** - a **weighted A\*, weight ~1.56,
    returning longer routes on purpose** - and the frontier as a **heap** (`FUN_00801e90`) beside the per-tile best-cost array
