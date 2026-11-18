@@ -1528,7 +1528,12 @@ pub fn draw_highlights(
             // square/triangle"*, then *"the circle is supposed to be at the bottom, not waist. The unit is above the circle."* With the body
             // anchored by its base (D178) and the ring centred on the same point, half the ellipse lay on the **grass below** the body - a circle
             // the unit stood behind. Raised by its own half-height, the ellipse's lowest row is the base and the ring embraces the ankles.
-            let centre = (point.0, point.1 - half.1 as i32);
+            // **The circle's centre is the ground point** (D274, the owner: *"I want the center of the circle be the place where
+            // unit stands on and where the center of the unit base goes to"*). D179 raised the ellipse by its own half-height so
+            // its lowest row touched the feet - he had asked for that with *"align the center of the ellipse with the bottom side of
+            // the square/triangle"*, and the latest word supersedes it: the centre of the circle is where the unit stands, and the
+            // sprite's base rises from that same point.
+            let centre = point;
             // **A body is a circle**, so its ring is an ellipse: the owner saw the diamond and said so.
             (centre, half, true)
         } else {
@@ -1574,7 +1579,12 @@ pub fn draw_highlights(
         }
     }
     if let Some(at) = highlights.order {
-        let centre = camera.project(at);
+        // **The cross is drawn where a body at that point is drawn** (D274). The order carries a **world** point (D273), and
+        // `project` speaks the projection's tile space, so projecting it raw put the cross **half a tile down and to the right** of
+        // the pixel the player clicked - the owner, with the fix before this one in: *"Wherever I click, the yellow cross appears
+        // lower then were I click."* One conversion for every consumer: a body, its ring, its bar and the mark all go through
+        // `drawn_at`.
+        let centre = camera.project(drawn_at(at));
         for offset in -4i32..=4 {
             frame.put(centre.0 + offset, centre.1, palette::ORDER);
             frame.put(centre.0, centre.1 + offset, palette::ORDER);

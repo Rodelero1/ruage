@@ -7656,3 +7656,28 @@ point `A` orders `A`, where the body at `A` is painted half a tile away) and now
 **it was not the fault the owner was reporting** - a single unit, alone, was already landing exactly on the point it was *given*, and the
 point it was given was half a tile wrong. The single-unit fixture passed all along because it measured the sim, and the sim was right.
 
+### D274 - the cross and the circle land on the click too (2026-11-18)
+
+*The owner: **"Wherever I click, the yellow cross appears lower then were I click. And then the unit doesn't move its center of the circle
+to the place I clicked ... I want the center of the circle be the place where unit stands on and where the center of the unit base goes
+to."***
+
+**D273 fixed one consumer of the view's frame and left two**: the order (fixed) and then
+
+1. **the yellow cross**, drawn `project(at)` for a **world** point - so it appeared **half a tile down and to the right** of the click,
+   which is "lower than where I click";
+2. **the selection circle**, raised by its own half-height (D179's rule), so its **centre** sat above the ground point.
+
+**Fixed**: the cross is drawn `project(drawn_at(at))`, the same conversion every body, ring and bar uses; the circle is drawn centred on
+the ground point with no raise. `ring_at_the_feet` becomes `ring_on_the_ground` and asserts the new rule, carrying both of the owner's
+quotes in its header so the reversal is visible.
+
+**The fixture that would have caught all three at once** is now in the tree:
+`click_round_trip::the_circle_ends_on_the_pixel_that_was_clicked` - click a pixel **13 px right and 9 px up** from a diamond's centre,
+submit the order the window would submit, run 600 ticks, and require the circle's centre within **1 px** of the click. Green.
+
+**And the rule this reverses**: D179 (the owner's own earlier words, *"align the center of the ellipse with the bottom side of the
+square/triangle"*) put the ring's lowest row on the feet. The latest instruction puts the ring's **centre** on the ground point. With a
+base-anchored sprite the two cannot both hold; the later word wins, it is recorded in the code and the fixture, and one word brings the
+old rule back.
+

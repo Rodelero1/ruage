@@ -1,4 +1,4 @@
-//! **The ring sits at the bottom of the body, round its feet** (D179).
+//! **The ring is centred on the ground point** (D274, superseding D179).
 //!
 //! The owner, twice: first *"it would help to align the center of the ellipse with the bottom side of the square/triangle"*, then, after the body was
 //! anchored by its base, *"the circle is supposed to be at the bottom, not waist. The unit is above the circle."* He is right about the picture: with
@@ -85,11 +85,14 @@ fn the_ring_sits_round_the_feet_not_under_them() {
         }
     }
     assert!(ring_low > i32::MIN, "the ring was drawn");
-    // **The ring ends where the body ends** - no half of it lying on the grass under the unit.
+    // **The circle's centre is the ground point** (D274, the owner: *"I want the center of the circle be the place where unit
+    // stands on and where the center of the unit base goes to"*). D179 raised the ellipse so its lowest row met the feet; the latest
+    // word puts the centre itself on the spot, which is the one point a click, the order and the drawing must all agree on. So the
+    // ring is symmetric about the base row: as much of it above the feet as below.
+    let ring_above = base - ring_high;
     assert!(
-        (ring_low - base).abs() <= 2,
-        "the ring's lowest row is {ring_low} and the unit's feet are at {base}: the ellipse is {} px {} the feet",
-        (ring_low - base).abs(),
-        if ring_low > base { "below" } else { "above" }
+        (ring_low - base - ring_above).abs() <= 3,
+        "the ring is {ring_above} px above the feet and {} px below: it is not centred on the ground point",
+        ring_low - base
     );
 }

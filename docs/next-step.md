@@ -26,9 +26,9 @@ the town centre's footprint, which the game would refuse too.
 
 **Attempted, reverted (D261)**: five pieces at once, **still 3 red** - a tile-centre diagonal past a corner passes *through* it, so
 a body's box overlaps by its whole radius.
-**Landed (D271/D273)**: the clicked point was **half a tile** off every time - the view drew with `drawn_at` (`-0.5`) and read pixels
-with `pick_point` (unconverted), measured **24 pixels** of round-trip error, now **0** (`click_round_trip`). Crowds: the first man takes
-the spot, followers stand on a ring **0.8 tiles** round him. **Next: D269** - a step lands **7,500** inside a body where 8,000 is
+**Landed (D271/D273/D274)**: all three places a click touches now agree - the order (`world_point`), the yellow cross and the circle's
+centre - measured end to end as **0 px** difference from the clicked pixel (`click_round_trip::the_circle_ends_on_the_pixel_that_was_clicked`).
+Crowds: the first man takes the spot, followers stand on a ring **0.8 tiles** round him. **Next: D269** - a step lands **7,500** inside a body where 8,000 is
 needed, upstream of every rule in the collision block. Then the two unmeasured reports (upper side of a bush, diagonal-to-drop-site) on
 **controlled maps**.
 

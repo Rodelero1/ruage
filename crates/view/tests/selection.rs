@@ -161,22 +161,28 @@ fn an_order_marker_appears_where_the_order_went() {
     let without = render_with(&snapshot, &camera, &Highlights::default());
     assert_eq!(count(&without, palette::ORDER), 0, "a marker from nothing");
 
+    // **The invariant is the pixel, not a tile** (D274). `Highlights::order` carries a **world** point - what the click produced
+    // (`Camera::world_point`) - so the marker must land on the pixel the player actually clicked. The old assertion compared the
+    // marker against `project(tile-space point)`, which is the same defect it was meant to catch: a body drawn half a tile from
+    // where the mark went.
+    // A pixel the camera certainly sees: the projection of a point near the middle of its view.
+    let clicked = camera.project((12.0, 11.0));
+    let at = camera.world_point(clicked);
     let with = render_with(
         &snapshot,
         &camera,
         &Highlights {
             selected: &[],
-            order: Some((12.0, 11.0)),
+            order: Some(at),
         },
     );
     assert!(
         count(&with, palette::ORDER) > 4,
         "the order marker was not drawn"
     );
-    let (px, py) = camera.project((12.0, 11.0));
     assert_eq!(
-        with.pixel(px as u32, py as u32),
+        with.pixel(clicked.0 as u32, clicked.1 as u32),
         palette::ORDER,
-        "the marker is not at the tile the order was given for"
+        "the marker is not on the pixel the order was given for"
     );
 }
