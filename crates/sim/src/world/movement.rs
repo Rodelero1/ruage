@@ -465,14 +465,9 @@ impl World {
             // The original answers the same case differently: **its whole movement is continuous** (0.04 tiles a tick, D258), so
             // "a fraction of a step" is not a category it has. Until our mover can spend a partial step on the gather approach -
             // or the place is reached by walking only - the slide stays.
-            for (sx, sy) in [(dx, Fixed::ZERO), (Fixed::ZERO, dy)] {
-                if sx == Fixed::ZERO && sy == Fixed::ZERO {
-                    continue;
-                }
-                if self.step_is_walkable(here, (sx, sy), goal_tile, radius) {
-                    return (sx, sy, StepDecision::Slide);
-                }
-            }
+            // **The terrain slide is deleted** (D253/D255/D256, D276): the original applies its step whole and answers a
+            // blocked step with a re-path or a stand - *"no axis is ever dropped"*. `StepDecision::Slide` is now unreachable
+            // from here; the enum keeps its arm so the counters and traces still read, and it should be retired with them.
             // **Ground, not a body** (D127). No slide means the route's next waypoint is now blocked - a house was built
             // across it, or the unit was nudged off the line the geometry planned through. Standing still was the old answer,
             // and it was for ever: nothing re-examined the route, so the unit pushed at the wall for the rest of the match
