@@ -353,10 +353,15 @@ fn a_right_click_orders_the_point_under_the_cursor() {
     let Some(ruage_sim::Command::WalkTo { to, .. }) = orders.first() else {
         panic!("a click on open ground must order a point, not a tile: {orders:?}");
     };
-    let (want_x, want_y) = (aimed.0 * 20_000.0, aimed.1 * 20_000.0);
+    // **The order is the world point under the pixel** (D273), which is `project`'s tile space **plus the half tile** that
+    // `drawn_at` takes off when it draws a body. This assertion used to name the tile-space point, and that is precisely the bug the
+    // owner saw: clicking the diamond a unit is painted on ordered a spot half a tile up and to the left of it. The round trip -
+    // click, order, draw - is now the invariant, and `click_round_trip` measures it to the pixel.
+    let (want_x, want_y) = camera.world_point(pixel(&camera, aimed));
     assert!(
-        (to.0.raw() - want_x as i64).abs() < 600 && (to.1.raw() - want_y as i64).abs() < 600,
-        "the order went to ({}, {}) instead of the clicked point ({want_x}, {want_y})",
+        (to.0.raw() - (f64::from(want_x) * 20_000.0) as i64).abs() < 600
+            && (to.1.raw() - (f64::from(want_y) * 20_000.0) as i64).abs() < 600,
+        "the order went to ({}, {}) instead of the world point under the cursor ({want_x}, {want_y})",
         to.0.raw(),
         to.1.raw()
     );

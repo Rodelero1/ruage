@@ -403,11 +403,25 @@ impl Camera {
         let (w, h) = self.viewport;
         let sx = (pixel.0 as f32 - w as f32 / 2.0) / rx;
         let sy = (pixel.1 as f32 - h as f32 / 2.0 - ry) / ry;
-        // x - y = sx and x + y = sy.
-        (
+        // x - y = sx and x + y = sy, in the **tile** space `project` speaks: a diamond whose centre is tile `t`.
+        let (x, y) = (
             (sx + sy) / 2.0 + self.origin.0,
             (sy - sx) / 2.0 + self.origin.1,
-        )
+        );
+        // **This is `project`'s own space** - a tile's diamond centre, which is a world position **minus the half tile** `drawn_at`
+        // takes off when it draws. An order must therefore add that half tile back (`world_point`, D273): the first version of the
+        // right-click used this value straight as a world point, so every order carried a spot **half a tile up and to the left** of
+        // the pixel the player pointed at - measured, the click round trip was **24 pixels** out at `tile_pixels = 96`.
+        (x, y)
+    }
+
+    /// **The world point under the pointer** (D273): `pick_point` plus the half tile that `drawn_at` removes when it draws a body.
+    /// A simulation position and a projected tile differ by exactly `(-0.5, -0.5)`, so an order built from `pick_point` alone
+    /// lands half a tile away from the pixel the player clicked.
+    #[must_use]
+    pub fn world_point(&self, pixel: (i32, i32)) -> (f32, f32) {
+        let (x, y) = self.pick_point(pixel);
+        (x + 0.5, y + 0.5)
     }
 
     /// The tile under a pixel: the exact inverse of `project`, so a click lands on the diamond the player sees.

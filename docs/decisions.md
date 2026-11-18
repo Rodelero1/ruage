@@ -7634,3 +7634,25 @@ and the deep ones from **51,676 to 288,009**, because the churn keeps more units
 **239,106**. Recorded at rule 3. The next attack on that family is D269's: a step landing **7,500** inside a body where 8,000 is
 needed is upstream of every rule in the collision block.
 
+### D273 - the click was half a tile out, and the half was the view's (2026-11-18)
+
+*The owner, after D271: **"No, the unit never goes to the exact spot. The issue is exactly as it was. Center of the unit circle is not
+aligned with the spot (not even close)."** He was right, and D271 fixed a different half of the same complaint.*
+
+**The defect, in one sentence**: the view draws a world position with `project(drawn_at(p))` - which subtracts **half a tile** - and
+read a pixel back with `pick_point`, which returns the projection's space **unconverted**, so the right-click's `Command::WalkTo`
+carried a point **half a tile up and to the left** of the pixel the player pointed at. Measured, the click round trip was **24 pixels**
+out at `tile_pixels = 96`: the half diamond, exactly, and not a rounding error.
+
+**The fix**: `Camera::world_point(pixel)`, `pick_point` **plus the half tile**, named for what it is; `pick_point` stays the
+projection's own inverse because the camera fixtures depend on that and are right. Both order paths use it - `ui::Selection::order`
+and `window.rs`'s `cursor_point`. Every drawing site already used `drawn_at`, so the two frames now agree by construction.
+
+**Fixtures**: `click_round_trip` (new, unignored, watched fail at **24 pixels**, now **0** across a 13x9 grid), and
+`picking::a_right_click_orders_the_point_under_the_cursor` **amended** - it had asserted the defect as a constant (a click on tile-space
+point `A` orders `A`, where the body at `A` is painted half a tile away) and now asserts the invariant.
+
+**And one honest correction about D271**: the crowd ring was a real fault (followers landed at a tile's middle, **1.27 tiles** off), but
+**it was not the fault the owner was reporting** - a single unit, alone, was already landing exactly on the point it was *given*, and the
+point it was given was half a tile wrong. The single-unit fixture passed all along because it measured the sim, and the sim was right.
+

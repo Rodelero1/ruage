@@ -92,7 +92,10 @@ fn what_the_ring_costs_for_a_hundred_orders() {
     }
     let start = std::time::Instant::now();
     for id in &crowd {
-        let _ = world.submit_checked(Command::WalkTo { unit: *id, to: spot });
+        let _ = world.submit_checked(Command::WalkTo {
+            unit: *id,
+            to: spot,
+        });
     }
     let placed = start.elapsed();
     for _ in 0..600 {

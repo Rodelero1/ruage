@@ -908,7 +908,8 @@ impl ApplicationHandler for App {
                         .centred_on((f32::from(tile.0), f32::from(tile.1)));
                 }
                 self.cursor = self.camera.pick(pixel);
-                self.cursor_point = self.camera.pick_point(pixel);
+                // **The world point** (D273): `pick_point` is the projection's tile space, half a tile off a simulation position.
+                self.cursor_point = self.camera.world_point(pixel);
                 self.cursor_pixel = pixel;
                 // **The ghost follows the pointer** (D156): before the first click there is no run, and `hover` says nothing.
                 let tile = self.cursor_tile();

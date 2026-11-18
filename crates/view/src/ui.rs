@@ -211,7 +211,9 @@ impl Selection {
                 // then rounded to a tile, so every order - however precisely aimed - finished at the centre of a square. The
                 // engine already carries this form (`Command::WalkTo`); only the view was throwing the point away.
                 (EntityKind::Unit, _) => {
-                    let point = camera.pick_point(pixel);
+                    // **The world point, not the tile's** (D273): `pick_point` speaks the projection's tile space, which is a
+                    // world position minus the half tile `drawn_at` removes. Using it raw put every order half a tile up-left.
+                    let point = camera.world_point(pixel);
                     let scale = snapshot.scale as f32;
                     orders.push(Command::WalkTo {
                         unit,
