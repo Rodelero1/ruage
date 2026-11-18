@@ -7410,3 +7410,33 @@ to express - and which the original never asks for, because it walks a worker on
 (D252) already carries the remainder past a waypoint inside the same tick (the game's *"Teleporting to exact waypoint"*,
 *"Incrementing waypoint"*), so a short tick is not the issue either.
 
+### D265 - the refusal, traced; and a correction to D264's explanation (2026-11-17)
+
+*"Proceed" on the next step. Nothing landed; the trace is worth more than the patch, and one of D264's claims was wrong.*
+
+**The trace**: slide deleted, `the_villager_follows_the_sheep` instrumented at the refusal point. The villager refuses **270 times**
+from tick 31, always from the same place:
+
+    REFUSE id=2 tick=31 here=(316980,316980) step=(566,566)  clear=-530
+    REFUSE id=2 tick=32 here=(316980,316980) step=(793,-104) clear=-164     (repeats to tick 300+)
+
+`clearance_at` is the *landing's* clearance for his 0.2 disc, so **-164 raw = 0.008 tiles** inside a grown obstruction, and
+**-530 = 0.0265**. He is standing legally (`now >= 0`) and every step would take him inside by a hair - which is D192's rule firing
+correctly (`next < 0 && now >= 0`).
+
+**The correction**: D264 said the animals family fails without the slide because `settle_workers` keeps a place "to within a fifth
+of a tile" with nudges under a step. **Reading the code refutes it**: the settle writes `entity.position` **directly** - it does not
+go through `move_bodies`, so the step rule never sees those moves and cannot refuse them. The three reds are the **mover refusing
+its own route**, not the settle. D264's sentence is left in place above as the record of what I claimed; this entry is what the
+code says.
+
+**Tried and refuted in the same sitting** (seventh variant, same residual): a fine-sampled (`scale/8`) body-aware leg test
+(`leg_is_walkable`) plus a standoff that prefers a point whose leg from the nearest body is walkable. **Still 3 red of 11.** So the
+grazing leg is **not** the final leg to the aim: it is a leg *inside* the planned polyline, or each tick's aim is re-derived so the
+"nearest body" test is answering about a different moment.
+
+**What the next measurement is, and it is a measurement**: take the route `short_range_clear` returns for this fixture and walk its
+legs in order with `leg_is_walkable`; the **first** failing leg names the stage that produced it - the grown-corner graph, the pull
+(whose own line test is *tile*-based, `line_clear_avoiding`, so a pulled shortcut can graze for a body), or the raw final leg.
+Seven variants have failed by reasoning about which stage it is; one trace of the actual polyline settles it.
+

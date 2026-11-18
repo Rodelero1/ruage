@@ -27,12 +27,11 @@ the town centre's footprint, which the game would refuse too.
 **Attempted, reverted (D261)**: five pieces at once, **still 3 red** at **`next=164`**: a tile-centre diagonal past
 a corner passes *through* it, so the box overlaps by the whole radius - a town centre's `radius` is `[2.0, 2.0, 0.0]`, so its box
 **is** its 4x4 footprint.
-**Next: stop `settle_workers` asking for sub-step nudges, then delete the slide.** D264 found why the good planner was dead here - it was
-given a goal *inside* an obstruction (the node's own tile) and returned `None`; given `legal_standoff` it
-answers and the animals family is **11 of 11**. But delete the slide and it is **3 red** again, because a gatherer's place is kept
-to within a fifth of a tile by `settle_workers` and those nudges are under a step. **The place/waypoint, not the mover, is the last piece**: walk him onto the place, then stand, as the original does. **Measured since (D262/D263)**: projecting the route's *endpoint* took the family **3 red -> 1**; the last one stops at the town
-centre's **south wall, 2.16 tiles short** of the sheep, because his legs clip the footprint by a fraction and the re-plan returns
-the same route.
+**Next: trace the planned polyline leg by leg, then delete the slide.** D264 found why the good planner was dead here - it was
+given a goal *inside* an obstruction (the node's own tile) and returned `None` - and **D265 refutes D264's own explanation**: the settle
+writes positions directly, so the step rule never sees it, and the mover refuses its own route by **164 raw** at a fixed point.
+Given `legal_standoff` the planner answers and the animals family is **11 of 11**; delete the slide and it is **3 red** again. The
+polyline's leg-by-leg trace names the stage. **Measured**: the endpoint projection (D262) took the family **3 red -> 1**.
 
 **Waiting on the owner - the only open question.** The queue's floor is **entities >= 155**. The control reads **154** and never
 resolves; the D250 build reads **137** and **wins**. Either the floor is about a *contest* and needs its own fixture, or the win is
