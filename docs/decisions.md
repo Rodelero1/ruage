@@ -7440,3 +7440,39 @@ legs in order with `leg_is_walkable`; the **first** failing leg names the stage 
 (whose own line test is *tile*-based, `line_clear_avoiding`, so a pulled shortcut can graze for a body), or the raw final leg.
 Seven variants have failed by reasoning about which stage it is; one trace of the actual polyline settles it.
 
+### D266 - the owner's two rules are fixtures, and the fixtures are scenes: measured, both rules are broken elsewhere (2026-11-17)
+
+*The owner: **"The unit tests disallowing villagers to approach each other closer than to circle radius and to slow down are not
+followed. Why?"** Answer: they are followed **where the fixtures look**, and the fixtures look at three men and one man.*
+
+**Every fixture that states these rules passes**: `clearance` 6, `body_clearance` 2, `collision` 4,
+`a_walking_villager_takes_whole_steps`, `gather_contact` 2. So the engine is not ignoring the rules.
+
+**Measured on a real match instead** (`collision_probe`, 36,000 ticks, 15,245,283 pair-ticks inspected):
+
+- **Pairs closer than both radii: 104,386 pair-ticks (0.68%)**, on **31,906 of 36,000 ticks**, **max 14 in one tick**.
+- **Deepest 8,000 raw = 0.400 tiles** - a full overlap. **51,676** pair-ticks are **deeper than half a footprint**.
+- **New** overlaps - a step the rule let through, not a stack the map seeded: **978**, deepest **1,597 raw (0.080 tiles)**.
+  `made_room=0` throughout: nothing is ever pushed apart.
+
+**Slowdowns, measured** (`step_speed_probe`, 5 villagers, 20,000 body-ticks): **partial steps 17 (0.09%)**, all **`Take`** (not the
+slide), **0.85-0.99 of a step**, every one a **landing** - and the known creep when a step is blocked: **82, 81, 80 raw units a
+tick, 567 of 1,398 ticks** (D253), i.e. **10% steps**, which is the slide.
+
+**Why the tests did not catch either**: they are **scenes, not rules**. `a_crowd_sent_to_one_place_does_not_stack` walks **three**
+men to **one** place; `a_walking_villager_takes_whole_steps` walks **one** villager in the open. A 0.09% partial step and a 0.68%
+pair overlap live outside what those two scenes contain - so the fixtures are honest about what they measure and **silent about the
+rule**.
+
+**The two holes are different in kind, and that is the fork**:
+
+1. **978 new overlaps** are steps the collision pass let through. This is a rule the engine states and then breaks; refusing the step
+   is the same shape as the ground rule and has a bounded cost.
+2. **104,386 - 978 = 103,408** pair-ticks are **stacks the map seeded** - men spawned on top of each other. Pushing those apart is a
+   *separation* pass the engine has never had, and it changes what a seeded map looks like (`made_room=0` is not a bug, it is an
+   absence). How the original resolves a seeded stack is unread.
+
+**Next, in this order**: write the two **general** fixtures (a 30-villager march checked every tick for pairwise distance, and a
+4,000-tick crowd checked for step size), watch them fail with these numbers, then close hole 1. Hole 2 waits for a reading of the
+original.
+
