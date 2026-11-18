@@ -1410,8 +1410,15 @@ impl World {
                             walk, self.scale, from, aim_legal, radius, &obstacles, &discs,
                         )
                         .or_else(|| {
-                            find_path_avoiding(walk, start, goal, &obstacles)
-                                .map(|steps| self.corners(walk, start, steps, aim))
+                            find_path_avoiding(walk, start, goal, &obstacles).map(|steps| {
+                                let mut points = self.corners(walk, start, steps, aim);
+                                // A/B only (D276): the fallback's first leg starts at a tile centre the body is not on.
+                                let centre = self.tile_centre(start);
+                                if from != centre {
+                                    points.insert(0, centre);
+                                }
+                                points
+                            })
                         })
                     }
                     None => None,
