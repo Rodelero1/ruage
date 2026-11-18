@@ -43,6 +43,24 @@ wall, never in `None`. Then the acceptance run - hash moves, entities and repath
 6. **the place model** - a gather place the body fits on, and an approach it can walk (D257).
 
 **Owner-ordered 2026-11-18 (D276): the slide and the ground cap go, in this order.**
+1. **The order is reversed: substitution and no cap first, then the slide** (D276 amended, measured). The A/B is in: a re-plan's
+   fallback prefixed with the body's own tile centre is **bit-identical** on `main` (`b5292af5a6072d57`, 131 entities,
+   `players=1`), so it is inert - and the branch that bundled it with the **deleted slide** never resolves (`players=2`, *"not
+   enough food: 500 needed, 195 in the bank"* from 2,387 s). With the slide gone, every ground graze becomes a re-plan, the
+   route's two attempts are spent, and the man stands in `WaitGround` for ever. **So: build the original's substituted waypoint
+   (register row 26) and delete `MAX_GROUND_REPLANS` first; then the slide, which should then cost nothing.** Keep the fallback
+   prefix - it is free - as part of that slice. The remaining animals red is `a_live_animal_is_a_gather_source`, the arrival
+   measure (ring distance vs the game's box gap), a separate slice.
+2. **the expansion budget** - `expansions > h` (h = 25 x Euclidean), cap 20,000. **Blocked on a read**: the guard's target is a
+   *push* onto the frontier (`0x801861`-`0x80189d`), not a return, so what a budget-exhausted search answers is unread. No
+   guess goes in.
+3. **plan for the radius** (row 21) - the graph layer still judges passage by tiles; `path.rs` has no radius in it.
+4. **the walk** - no slide, the waypoint snapped to and spent, the body kept on the route leg by leg (D259/D260). Needs 3.
+5. **the collision block's vocabulary** (rows 20, 22, 23, 25, 29, 30, 36) - `TakeAtRest` out, the avoid set out of the search,
+   the pause re-drawn, the caps gone, the mate set re-tested on `isMoving`, the order's path vocabulary.
+6. **the place model** - a gather place the body fits on, and an approach it can walk (D257).
+
+**Owner-ordered 2026-11-18 (D276): the slide and the ground cap go, in this order.**
 1. **A/B the two changes on branch `d276-no-slide`.** The fallback prefix (prefix a re-plan's fallback route with the body's own
    tile centre, `step.rs:1409`) takes **animals from 3 red to 1** and leaves the movement sweep green (12 binaries), but the
    acceptance match **stops resolving**: `main` reads **131 entities / players=1 / repaths 551**, the branch **153 / players=2 /

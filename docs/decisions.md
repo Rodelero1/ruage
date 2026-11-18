@@ -7795,6 +7795,15 @@ Measured in this tree, in the five rows under review: the 10% steps, the 14-and-
 Register: `docs/behaviour-diff.md` rows 13, 21, 22, 26 and 29. Review:
 `docs/reviews/2026-11-18-d276-adopt-the-game-on-slide-and-cap.md`.
 
+**Amendment (2026-11-18, on the A/B the slice ran): the order is reversed, and the game says so twice.** Measured on branch
+`d276-prefix-only` off `main`: a re-plan's fallback route prefixed with the body's own tile centre leaves the acceptance match
+**bit-identical** (`b5292af5a6072d57`, 131 entities, `players=1`, 551 re-paths) - so that change is inert there. The branch that
+bundled it with the **deleted slide** reads 153 entities, `players=2`, match unresolved, *"not enough food: 500 needed, 195 in
+the bank"* from 2,387 s. **So the slide is what costs the match**, and the reason is the cap this row proposed to delete last:
+with no slide, every ground graze becomes a re-plan, the route's two attempts are spent on the first two, and the man stands in
+`WaitGround` for good. The cap and the slide are one mechanism seen from both ends. **So the order is: the substituted waypoint
+(row 26) and the uncapped re-plan first, then the slide** - the reverse of what this row said when it was written.
+
 **Commits us to.** No new cap, no new slide, and no third repair of either. A slice that cannot land parks with its numbers and
 the missing mechanism named - it does not reinstate the rule (D275).
 
