@@ -7398,6 +7398,15 @@ refuses anything but a whole step leaves him a fraction short and he never works
 movement is **continuous**, 0.04 tiles a tick (D258), so "a fraction of a step" is a normal step to it.
 
 **So the slide stays, and D253's creep is its cost, not its purpose.** The sequence is now clear and it is the last piece of this
-whole thread: **the gather approach must be made of whole steps too** - one waypoint, walked to, then stand - and then the slide
-can go. That is a place/waypoint question in `settle_workers`, not a movement question.
+whole thread: **`settle_workers` must stop asking for movements smaller than a step** - the game walks a worker to his place and
+then stands him, it never nudges him a fraction of a step - and then the slide can go. That is a place/waypoint question in
+`settle_workers`, not a movement question.
+
+**A correction of wording, prompted by the owner ("Where did you get 'only whole steps' from?")**: *"one whole step"* is **my
+phrase, not his**. He said **"man stands or walks. No acceleration or deceleration."** The step is only how constant speed looks at
+a fixed tick rate, and the fixture measures it because that is observable. What actually blocks the slide is not the *size* of a
+step: it is that `settle_workers` asks for a **sub-step nudge** (a fifth of a tile at most), which a constant-speed mover has no way
+to express - and which the original never asks for, because it walks a worker onto his place and leaves him standing. The fold
+(D252) already carries the remainder past a waypoint inside the same tick (the game's *"Teleporting to exact waypoint"*,
+*"Incrementing waypoint"*), so a short tick is not the issue either.
 
