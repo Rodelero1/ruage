@@ -3087,46 +3087,73 @@ impl World {
     /// then the ring around it, in a fixed order so two runs agree. Tiles that are not walkable are skipped;
     /// a target with no room left keeps the wanted tile, and the last-step rule keeps the crowd from
     /// stacking on it.
-    fn slot_for(&self, wanted: (u16, u16), n: usize) -> (u16, u16) {
-        if n == 0 {
-            return wanted;
-        }
-        let mut seen = 0usize;
-        for radius in 0..=6i32 {
-            for dy in -radius..=radius {
-                for dx in -radius..=radius {
-                    if dx.abs() != radius && dy.abs() != radius {
-                        continue;
-                    }
-                    let (Some(x), Some(y)) = (
-                        u16::try_from(i32::from(wanted.0) + dx).ok(),
-                        u16::try_from(i32::from(wanted.1) + dy).ok(),
-                    ) else {
-                        continue;
-                    };
-                    if radius == 0 {
-                        // The clicked tile is the first slot, which the caller already took.
-                        continue;
-                    }
-                    if !self.is_free_ground(x, y) {
-                        continue;
-                    }
-                    // A tile already claimed by an earlier unit of the same crowd is not free either.
-                    let claimed = self
-                        .entities
-                        .iter()
-                        .any(|entity| matches!(self.goal_of(entity), Some((tile, true)) if tile == (x, y)));
-                    if claimed {
-                        continue;
-                    }
-                    seen += 1;
-                    if seen == n {
-                        return (x, y);
-                    }
+    /// **Where a follower of a click stands: round the man who took the spot** (D271, the owner, 2026-11-18): *"If multiple
+    /// villagers are chosen, then the first comes to the spot and others stand around him."*
+    ///
+    /// A ring one **shoulder-width** out (`radius + radius`, plus a hundredth of a tile so the pair touches and does not
+    /// overlap - the same step D267's placement uses), in eight directions, ordered by how near each is to where this villager
+    /// already stands so a man arriving from the east stands east of the spot. The `taken`-th best is tried first and the rest
+    /// after it, which deals a crowd round the ring instead of stacking it on one side. Every candidate is asked to be legal
+    /// ground with the body's own clearance, and clear of the bodies already there.
+    fn crowd_ring_point(
+        &self,
+        at: (Fixed, Fixed),
+        radius: i64,
+        from: (Fixed, Fixed),
+        taken: usize,
+        me: EntityId,
+    ) -> (Fixed, Fixed) {
+        // **Far enough round that the man on the spot can still stand on it**: the pair's footprint plus a quarter of a tile,
+        // which is the gather ring's own 0.65 (a follower at shoulder width alone blocks the centre he is meant to leave free).
+        let spacing = (radius * 2).max(1) + self.scale / 4;
+        let dirs: [(i64, i64); 8] = [
+            (1000, 0),
+            (707, 707),
+            (0, 1000),
+            (-707, 707),
+            (-1000, 0),
+            (-707, -707),
+            (0, -1000),
+            (707, -707),
+        ];
+        let point_of = |(ux, uy): (i64, i64)| -> (Fixed, Fixed) {
+            (
+                Fixed::from_raw(at.0.raw() + ux * spacing / 1000),
+                Fixed::from_raw(at.1.raw() + uy * spacing / 1000),
+            )
+        };
+        let mut order: Vec<(i64, i64)> = dirs.to_vec();
+        order.sort_by_key(|dir| {
+            let point = point_of(*dir);
+            let (dx, dy) = (point.0.raw() - from.0.raw(), point.1.raw() - from.1.raw());
+            dx * dx + dy * dy
+        });
+        let start = taken % order.len();
+        order.rotate_left(start);
+        for dir in order {
+            let point = point_of(dir);
+            if self.clearance_at(point, radius) < 0 {
+                continue;
+            }
+            let clear = self.entities.iter().all(|other| {
+                if other.kind != EntityKind::Unit || other.id == me {
+                    return true;
                 }
+                let reach = match radius + self.body_radius(other.unit) {
+                    0 => self.scale,
+                    sum => sum,
+                };
+                let (dx, dy) = (
+                    other.position.0.raw() - point.0.raw(),
+                    other.position.1.raw() - point.1.raw(),
+                );
+                dx * dx + dy * dy >= reach * reach
+            });
+            if clear {
+                return point;
             }
         }
-        wanted
+        at
     }
 
     /// The tile an entity is trying to stand on, and whether that tile is *its own* - a place it goes to

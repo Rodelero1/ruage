@@ -26,11 +26,10 @@ the town centre's footprint, which the game would refuse too.
 
 **Attempted, reverted (D261)**: five pieces at once, **still 3 red** - a tile-centre diagonal past a corner passes *through* it, so
 a body's box overlaps by its whole radius.
-**Next: the crowd slot is what misses the click.** Measured (D270): alone, a villager lands **exactly** on the clicked point (offset
-0,0,0); sent to the same point behind another, the follower stops **24,202 raw (1.21 tiles)** away at **(-17,114, -17,114)** -
-up-left, the owner's "a bit above" - because `start_walk` gives it `tile_centre(slot)`. Fix: a follower's goal is the point of its
-tile **nearest the click**. Then the two unmeasured reports (upper side of a bush, diagonal-to-drop-site preference) need
-**controlled maps**, not the seeded one: my first probe crossed the base and measured a `NoPath`, not an asymmetry.
+**Landed (D271)**: the first man takes the clicked spot, followers stand on a ring **0.65 tiles** round him (was a tile centre,
+**1.27 tiles** up-left). Fixtures `click_spot` (2, unignored). **Refuted in the same sitting (D272)**: "repath out of an overlap" -
+overlaps **104,386 -> 337,570**. **Next: D269** - a step lands **7,500** inside a body where 8,000 is needed, upstream of every rule
+in the collision block. Then the two unmeasured reports (upper side of a bush, diagonal-to-drop-site) on **controlled maps**.
 
 **Next: trace why a step that lands inside a standing body is returned as `Take`.** Reproduced (D269): a route through an empty gap, a
 man then standing in it, the walker closes **500 raw/tick** to **7,500** against the 8,000 needed. Two defects measured, **not** landed

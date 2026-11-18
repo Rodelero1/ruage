@@ -569,6 +569,13 @@ impl World {
             other_at.1.raw() - here.1.raw(),
         );
         if gap_x * gap_x + gap_y * gap_y < reach * reach {
+            // **A repath out of an overlap was tried and refuted** (D272). D52 lets an overlapping body keep moving, and D268
+            // showed refusing it congeals a pair (104,386 -> 167,025 pair-ticks). Taking the owner's "2c" and queueing a repath
+            // out was the third answer, and it is the worst of the three by this probe: **104,386 -> 337,570** pair-ticks,
+            // deeper than half a footprint **51,676 -> 288,009**, and the "past" exemption balloons to **239,106** because the
+            // churn keeps more units moving. So the clause stays exactly as D52 wrote it: the local optimum of this mover is
+            // "keep moving", and what is wrong is upstream - a step is landing inside a body at all (D269's **7,500** against
+            // 8,000), which no rule here can be blamed for.
             return (dx, dy, StepDecision::TakeOverlapping);
         }
         // 4. **A unit in the way: the original's tie-break** (D205). Byte for byte (`0x8a80ed`-`0x8a8141`):

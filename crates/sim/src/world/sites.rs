@@ -664,11 +664,15 @@ impl World {
             .filter(|entity| entity.id != unit)
             .filter(|entity| matches!(self.goal_of(entity), Some((tile, true)) if tile == wanted))
             .count();
-        let slot = self.slot_for(wanted, already_heading);
-        let goal = if slot == wanted {
+        // **The first man takes the spot; the others stand round him** (D271, the owner, 2026-11-18: *"If multiple villagers
+        // are chosen, then the first comes to the spot and others stand around him"*). This used to give a follower
+        // `tile_centre(slot)` - the middle of a square the ring search picked, and `slot_for` scans from `(-1, -1)` outwards,
+        // so every follower landed up and to the left: measured **25,455 raw (1.27 tiles)** from the click.
+        let goal = if already_heading == 0 {
             to
         } else {
-            self.tile_centre(slot)
+            let radius = self.body_radius(self.find(unit).and_then(|entity| entity.unit));
+            self.crowd_ring_point(to, radius, from, already_heading, unit)
         };
         let goal = self.check_order_at(unit, goal)?;
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;

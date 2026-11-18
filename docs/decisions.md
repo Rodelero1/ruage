@@ -7602,3 +7602,28 @@ third symptom to check on the controlled map, not a premise to assume.
 **Next**: (a) the slot fix - a follower's goal is the point of its tile **nearest the click**, not the tile's middle; (b) the
 controlled-map probes for the north side and the diagonal preference; (c) then the fixtures and the fixes, test first.
 
+### D271 - the first man takes the spot, the others stand round him (2026-11-18)
+
+*The owner chose **(b)**, and refined it: **"Any single unit chosen has to go to the exact spot by moving the center of the circle to
+that exact spot. If spot unreachable, try come as close as possible. If multiple villagers are chosen, then the first comes to the spot
+and others stand around him."***
+
+**What was wrong.** A single unit already reached the clicked point **exactly** - measured offset **(0, 0, 0)** raw. A follower got
+`tile_centre(slot)`, the middle of a square from `slot_for`'s ring scan, which starts at `(-1, -1)`: every follower therefore landed
+**up and to the left**, measured **25,455 raw (1.27 tiles)** from the click, which is the owner's *"a bit above"*.
+
+**Adopted**: the first order takes the point; a follower's goal is `crowd_ring_point` - eight candidate points on a ring of **one
+gather spacing** (the pair's footprint plus a quarter of a tile, 0.65) around it, ordered by how near each is to where that villager
+already stands, the `N`-th best tried first so a crowd deals round the ring, and every candidate required to be ground the body fits on
+and clear of every other body. `slot_for` is deleted.
+
+**Fixtures** (unignored, written first, watched fail): `click_spot::a_crowd_stands_round_the_unit_that_took_the_spot` - red at
+**25,455 raw**, green at **12,998 raw (0.65 tiles)** on both sides; and `click_spot::a_single_unit_stops_on_the_spot_it_was_sent_to`,
+which guards the half that already held.
+
+**And the "repath out of an overlap" half (his "2c") was tried and refuted in the same sitting**: queueing a repath whenever a step
+lands inside a body - the answer D268 said was missing - takes the acceptance probe's overlaps from **104,386 to 337,570** pair-ticks
+and the deep ones from **51,676 to 288,009**, because the churn keeps more units moving and the *past* exemption balloons to
+**239,106**. Recorded at rule 3. The next attack on that family is D269's: a step landing **7,500** inside a body where 8,000 is
+needed is upstream of every rule in the collision block.
+
