@@ -89,6 +89,32 @@ Two limits, both load-bearing:
 | 28 | the original has a levelled hierarchy for long walks; ours declines past 40 | **red** - U25 (c) |
 | 29 | the tile answered for an unreachable click is the one nearest the click | **red** - U25 (d) |
 
+## Rule set 1 read to the end: the edge mask is **derived**, so passage needs no new representation
+
+Rule set 1 (`crates/conformance/tests/walkability.rs`, 8 tests, all green) rests on
+`zone_spatial_pyramid_check_tile.cpp`'s four-bit neighbour mask. The question a port has to answer is whether that mask is
+**authored** (a wall stored between two tiles, which our per-tile `bool` could not express) or **derived** (a cache of the
+four neighbours' passability, which it can). Read at 2026-11-18, both halves of the file:
+
+- **The reconstructed C** (`func_001D29F0`, file bottom): the mask is built by four neighbour tests, each of which only asks
+  `thresholds[neighbour_terrain] > 0.0f` - a per-terrain passability threshold - and sets `0x2` N, `0x1` W, `0x4` S, `0x8` E.
+  A tile whose *own* ground fails the threshold gets `*out_flag = 0` and returns.
+- **The MIPS listing at the top of the same file is stricter than the C, and the C is lossy**: at `001D2A38`-`001D2A6C` the
+  *own* tile's descriptor is tested for bit `0x4000` and, when it is set, every edge bit is cleared; at `001D2AC8`-`001D2AD0`
+  the **neighbour's** `0x4000` suppresses that neighbour's bit. `0x4000` is the **obstacle stamp** -
+  `zone_spatial_grid_stamp_obstacle_region.cpp:15` builds it as `((type << 8) & 0x3F00) | 0x4000 | (id << 16)`, i.e. "a thing
+  stands on this tile".
+
+So the game's rule is **`bit set <=> that neighbour is passable ground with nothing standing on it`** - exactly
+`!walk.blocked(neighbour)`, which is what this engine tests, and exactly why the mask is a **one-byte cache** rather than a
+second representation. **Nothing needs to be ported to "have rule set 1"**: the per-tile predicate keeps the same set, and the
+diagonal rule (both corners) is the AND of two bits, which is the both-corners test already in `path.rs`.
+
+**What a future reader should not redo:** do not add an edge-mask type to `Walk` to "match the original" - it would be a second
+copy of `blocked()` that can disagree with the first, and the original keeps it only because a byte is cheaper than three
+lookups. **What is worth keeping** is the C-versus-MIPS lesson: the reconstructed C body dropped the `0x4000` test, so a rule
+read only from the decomp's C would have said objects do not affect passage.
+
 ## The defect the set found, measured twice
 
 `findings.rs` holds two tests that state **our own** rule, not one of the game's. Both found the same defect:
