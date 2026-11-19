@@ -2140,6 +2140,14 @@ impl World {
             if tile == from_tile || tile == to_tile {
                 continue;
             }
+            // **A start hemmed in by standers is re-seeded outward, not refused** (`FUN_007fb220`: a mover standing inside
+            // an obstruction is re-seeded `2 x radius` outward, and *only* that far). A crowd ordered through one gap stands
+            // shoulder to shoulder, so all eight neighbours of the start can be stander tiles - and a search that cannot
+            // leave its own tile answers `NoPath` to an order the original accepts and walks as close as it can. Measured
+            // 2026-11-19: twelve militia and one gap, `NoPath { from: (6, 20), to: (19, 19) }` on an attack-move.
+            if tile.0.abs_diff(from_tile.0) <= 1 && tile.1.abs_diff(from_tile.1) <= 1 {
+                continue;
+            }
             tiles.insert(tile);
         }
         tiles
