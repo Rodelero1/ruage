@@ -87,7 +87,7 @@ impl World {
                     Fixed::from_raw(dy.raw() * step / length),
                 )
             };
-            let mut blockers: Vec<(u16, u16)> = Vec::new();
+            let mut blockers: Vec<crate::ground::Clear> = Vec::new();
             let (taken, why) =
                 self.walk_the_step(id, direction, step, &mut pauses, &mut blockers)?;
             self.record_step(index, id, why);
@@ -149,7 +149,10 @@ impl World {
             let millis = crate::PAUSE_MIN_MS + i64::from(roll % crate::PAUSE_SPREAD_MS);
             let ticks = u16::try_from((millis * rate / 1_000).max(1)).unwrap_or(u16::MAX);
             if let Some(entity) = self.find_mut(id) {
-                entity.pause_remaining = ticks.saturating_sub(1);
+                // **The drawn duration, not one tick less** (D282). The pass stands a body for as many ticks as the counter
+                // holds, so writing `ticks - 1` turned the game's own 0.25 s floor into 0.20 s at 20 Hz - measured, the
+                // loser's stand fell outside `the_loser_stands_for_the_drawn_pause`'s band.
+                entity.pause_remaining = ticks;
             }
         }
         Ok(())
@@ -165,7 +168,7 @@ impl World {
         direction: (Fixed, Fixed),
         step: i64,
         pauses: &mut Vec<EntityId>,
-        blockers: &mut Vec<(u16, u16)>,
+        blockers: &mut Vec<crate::ground::Clear>,
     ) -> Result<((Fixed, Fixed), StepDecision), SimError> {
         let Some(start) = self.position(id) else {
             return Ok(((Fixed::ZERO, Fixed::ZERO), StepDecision::Idle));
@@ -345,7 +348,7 @@ impl World {
     /// The goal is the route's own last point, so the re-plan does not drift toward a tile centre, and the route keeps its
     /// creation time - it is the *past* test's only input. A search that fails leaves the old route in place and the man
     /// stands, which is the original's answer to a wall of bodies he cannot get round, and what the pause is for.
-    fn replan_around_bodies(&mut self, id: EntityId, blockers: &[(u16, u16)]) {
+    fn replan_around_bodies(&mut self, id: EntityId, blockers: &[crate::ground::Clear]) {
         let Some(route) = self.paths.get(&id) else {
             return;
         };
@@ -386,7 +389,7 @@ impl World {
         _here: (Fixed, Fixed),
         landing: (Fixed, Fixed),
         pauses: &mut Vec<EntityId>,
-        blockers: &mut Vec<(u16, u16)>,
+        blockers: &mut Vec<crate::ground::Clear>,
     ) -> Option<StepDecision> {
         let entity = self.find(id)?;
         // **Only a unit is stopped by anything.** An arrow is an entity that moves through the same pass, and it flies over
@@ -441,8 +444,16 @@ impl World {
             // opposite of the original: its path-ignore list is the mover's *moving* mates, so a stopped unit **blocks**.
             // What answers the collision is the re-plan above (the collider's tile joins the avoid list); the pause below
             // is what stops the pair colliding again while the route is re-made.
-            if !blockers.contains(&self.tile_of(other.position)) {
-                blockers.push(self.tile_of(other.position));
+            // **The clearance, not the tile** (D282): the mover's own reach to that body, which is what the game's
+            // radius-grown rectangle encodes. A tile list could not express 0.4 of a tile and the route cut the corner.
+            if !blockers
+                .iter()
+                .any(|clear| clear.at == (other.position.0.raw(), other.position.1.raw()))
+            {
+                blockers.push(crate::ground::Clear {
+                    at: (other.position.0.raw(), other.position.1.raw()),
+                    reach,
+                });
             }
             // 4. **The older unit wins and walks on, the younger stands.** The original pauses the higher id
             //    (`cmp eax,esi / jle`) and *discards* the retraction its radius test computes (`0x8a7fe7`, D210), so the

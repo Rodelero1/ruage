@@ -8016,3 +8016,36 @@ defects found inside the attempt in `docs/reviews/2026-11-19-d281-the-body-colli
 
 **Commits us to.** A body collision answered by a route, not by an exemption and not by a nudge; the *past* test asked of the
 order's clock; and the stall the new red names is the crowd slice's first item.
+
+### D282 - A plan keeps a body's clearance, not a tile (owner, 2026-11-19)
+
+**The order.** *"Proceed"* on the audit's first recommendation, which was itself the decomp's: `FUN_007f9d80` puts every
+object the mover does not ignore into the search as a rectangle **grown by the mover's radius**, so "keep a body's distance"
+is the game's rule **at plan time** - `0x8a7fe7` only removes the *step* clamp. D281's re-plan avoided the collider's
+**tile**, which cannot express 0.4 of a tile: the route still cut the corner, and the walker came **4,619 raw** from a body
+standing 8,000 raw away.
+
+**What landed.**
+
+1. **`ground::Clear`**: a body's centre and the mover's reach to it, carried beside the tile grid. A tile whose centre is
+   inside it is not planned through, and a straightening jump that passes within it is refused (point-to-segment distance,
+   integers, exact).
+2. **`plan_path` takes the standing bodies into every plan** (`World::standing_bodies`): every body with no route left or
+   standing its pause out, near the line, is a clearance. That is the original's ignore list read the other way round: the
+   mover's *moving* mates are ignored, so a stopped body is an obstacle at plan time.
+3. **The pause is written as drawn**: `motion.rs` wrote `ticks - 1`, so the game's 0.25 s floor became **0.20 s** at 20 Hz.
+
+**Measured.** `evasion::a_blocked_unit_goes_round_a_standing_body_and_arrives` **red -> green** (the whole point of the
+slice); `head_on::the_loser_stands_for_the_drawn_pause` **red -> green**; the acceptance fixture unchanged at **39.58 s**
+(the clearance scan is a unit scan per plan, no search added). Suite numbers in the review note.
+
+**What it does not settle.** Two bodies that **share a tile** still cannot be planned round - the search starts on the tile
+they share - so `a_mate_who_is_stopped_becomes_solid` stays red at **4,478 raw**; and `collision::a_walker_never_ends_a_tick_inside_a_friend`'s
+scene no longer meets at all, because a head-on pair now plans round each other, which is the game's behaviour but not what
+that fixture stages.
+
+**Basis.** `FUN_007f9d80` (the growth), `FUN_00840830` (`+0x268`, collide on `<=`), `0x8a7fe7` (the clamp that is discarded),
+`setPause`'s `0.25-1.50 s`; `docs/reviews/2026-11-19-fixtures-vs-the-decomp.md` rows 11 and 12; the owner's *"Proceed"*.
+
+**Commits us to.** Planning for the body's distance rather than the tile it stands on, and to a pause that is as long as the
+draw that set it.

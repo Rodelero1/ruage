@@ -2009,11 +2009,76 @@ impl World {
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
+        let clear = self.standing_bodies(from, to);
+        self.plan_path_with(from, to, &clear)
+    }
+
+    /// **The bodies a plan has to keep clear of** (D282): every body that is *not going anywhere* - no route left, or
+    /// standing its pause out - and is not the mover.
+    ///
+    /// The original's search takes the objects on the route and, for each one the mover does not ignore, adds a rectangle
+    /// **grown by the mover's radius** (`FUN_007f9d80`); the ignore list is the mover's *moving* mates. So a stopped body is
+    /// an obstacle at plan time, which is why the game's walker goes round a standing man instead of into him. Ours planned
+    /// through everyone and only ever learned about a body when a step was refused.
+    fn standing_bodies(&self, from: (Fixed, Fixed), to: (Fixed, Fixed)) -> Vec<ground::Clear> {
+        if self.ground.is_none() {
+            return Vec::new();
+        }
+        // The mover stands where he plans from: his own body is skipped, or every plan would start inside its own clearance.
+        let own = self.scale / 4;
+        let mut clear = Vec::new();
+        for other in &self.entities {
+            if other.kind != EntityKind::Unit || other.hp <= 0 {
+                continue;
+            }
+            let (dx, dy) = (
+                other.position.0.raw() - from.0.raw(),
+                other.position.1.raw() - from.1.raw(),
+            );
+            if dx.abs() <= own && dy.abs() <= own {
+                continue;
+            }
+            let moving = self
+                .paths
+                .get(&other.id)
+                .is_some_and(|route| !route.points.is_empty());
+            if moving && other.pause_remaining == 0 {
+                continue;
+            }
+            let reach = self.reach_raw(None, other.unit);
+            let at = (other.position.0.raw(), other.position.1.raw());
+            // Only a body near the line can change the answer; the rest are dropped before the search ever asks.
+            let span = reach + self.scale * 2;
+            let (min_x, max_x) = (
+                from.0.raw().min(to.0.raw()) - span,
+                from.0.raw().max(to.0.raw()) + span,
+            );
+            let (min_y, max_y) = (
+                from.1.raw().min(to.1.raw()) - span,
+                from.1.raw().max(to.1.raw()) + span,
+            );
+            if at.0 < min_x || at.0 > max_x || at.1 < min_y || at.1 > max_y {
+                continue;
+            }
+            clear.push(ground::Clear { at, reach });
+        }
+        clear
+    }
+
+    /// The planner behind `plan_path` and `plan_path_avoiding`: the same route, with a list of bodies to keep clear of.
+    fn plan_path_with(
+        &self,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+        clear: &[ground::Clear],
+    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let ground = self.ground.as_ref().ok_or(SimError::NoTables)?;
-        let answer = ground.route(self.scale, from, to).ok_or(SimError::NoPath {
-            from: self.tile_of(from),
-            to: self.tile_of(to),
-        });
+        let answer = ground
+            .route_avoiding(self.scale, from, to, clear)
+            .ok_or(SimError::NoPath {
+                from: self.tile_of(from),
+                to: self.tile_of(to),
+            });
         self.plan_count.set(self.plan_count.get() + 1);
         answer
     }
@@ -2024,17 +2089,15 @@ impl World {
         &self,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
-        avoid: &[(u16, u16)],
+        avoid: &[ground::Clear],
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        let ground = self.ground.as_ref().ok_or(SimError::NoTables)?;
-        let answer = ground
-            .route_avoiding(self.scale, from, to, avoid)
-            .ok_or(SimError::NoPath {
-                from: self.tile_of(from),
-                to: self.tile_of(to),
-            });
-        self.plan_count.set(self.plan_count.get() + 1);
-        answer
+        let mut clear = self.standing_bodies(from, to);
+        for one in avoid {
+            if !clear.iter().any(|already| already.at == one.at) {
+                clear.push(*one);
+            }
+        }
+        self.plan_path_with(from, to, &clear)
     }
 
     /// The route a particular **body** would walk. The body is not a planner input any more (D279): a route is about

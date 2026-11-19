@@ -22,6 +22,46 @@ use std::collections::BinaryHeap;
 use ruage_data::Map;
 use ruage_fixed::Fixed;
 
+/// **A body the plan must keep clear of** (D282): where it stands, and how far the mover's body plus its own reaches.
+///
+/// The original puts a stopped object into the search as a rectangle **grown by the mover's radius** (`FUN_007f9d80`) and
+/// grows the collision query box the same way (`FUN_00840830`, `+0x268`). A tile grid cannot express a 0.4-tile clearance,
+/// so the clearance is carried beside the grid: a tile whose centre is inside it is not planned through, and a straightening
+/// jump that passes within it is refused.
+#[derive(Clone, Copy, Debug)]
+pub struct Clear {
+    /// The body's centre, in raw units.
+    pub at: (i64, i64),
+    /// The distance the route must keep from it, in raw units: the mover's reach to that body.
+    pub reach: i64,
+}
+
+impl Clear {
+    /// How far one raw point is from the body's centre, squared - the cheap test the search runs per candidate tile.
+    fn still_inside(&self, point: (i64, i64)) -> bool {
+        let (dx, dy) = (point.0 - self.at.0, point.1 - self.at.1);
+        dx * dx + dy * dy < self.reach * self.reach
+    }
+
+    /// **Does the straight segment between two raw points pass inside the clearance?** Point-to-segment distance, in
+    /// integers, so the answer is exact and identical everywhere.
+    fn crossed_by(&self, from: (i64, i64), to: (i64, i64)) -> bool {
+        let (px, py) = (self.at.0 - from.0, self.at.1 - from.1);
+        let (vx, vy) = (to.0 - from.0, to.1 - from.1);
+        let length = vx * vx + vy * vy;
+        // The nearest point on the segment, clamped to it: the projection may fall before the start or past the end.
+        let (nx, ny) = if length == 0 {
+            (0, 0)
+        } else {
+            let dot = px * vx + py * vy;
+            let t = dot.clamp(0, length);
+            (vx * t / length, vy * t / length)
+        };
+        let (dx, dy) = (px - nx, py - ny);
+        dx * dx + dy * dy < self.reach * self.reach
+    }
+}
+
 /// The original's cost of one cardinal step (`docs/movement-in-the-binary.md`, `FUN_008007f0`).
 pub const CARDINAL: u32 = 16;
 /// The same table's diagonal: `16 x sqrt2`, rounded.
@@ -134,13 +174,34 @@ impl Ground {
     ///
     /// Bresenham in integers, so the answer is exact and identical everywhere.
     pub fn line_clear(&self, from: (u16, u16), to: (u16, u16)) -> bool {
-        self.line_clear_with(from, to, &[])
+        self.line_clear_with(from, to, 1, &[])
     }
 
     /// **The same line, with tiles a body holds counting as solid** (D281). The smoothing pass uses this: a straight jump
     /// across a tile the plan was told to get round would undo the plan, which is what the first version did - the route
     /// bent in the search and was pulled straight again through the man.
-    fn line_clear_with(&self, from: (u16, u16), to: (u16, u16), avoid: &[(u16, u16)]) -> bool {
+    fn line_clear_with(
+        &self,
+        from: (u16, u16),
+        to: (u16, u16),
+        scale: i64,
+        avoid: &[Clear],
+    ) -> bool {
+        // **The clearance first**: a straight line between two tile centres that passes inside a body's clearance would be
+        // pulled back through the man the plan went round, which is how the first version of this rule failed.
+        let (from_raw, to_raw) = (
+            (
+                i64::from(from.0) * scale + scale / 2,
+                i64::from(from.1) * scale + scale / 2,
+            ),
+            (
+                i64::from(to.0) * scale + scale / 2,
+                i64::from(to.1) * scale + scale / 2,
+            ),
+        );
+        if avoid.iter().any(|clear| clear.crossed_by(from_raw, to_raw)) {
+            return false;
+        }
         let (mut x, mut y) = (i64::from(from.0), i64::from(from.1));
         let (x1, y1) = (i64::from(to.0), i64::from(to.1));
         let (dx, dy) = ((x1 - x).abs(), -(y1 - y).abs());
@@ -166,7 +227,7 @@ impl Ground {
             let (Ok(tx), Ok(ty)) = (u16::try_from(x), u16::try_from(y)) else {
                 return false;
             };
-            if !last && (!self.walkable(tx, ty) || avoid.contains(&(tx, ty))) {
+            if !last && (!self.walkable(tx, ty) || self.inside_a_body(scale, (tx, ty), avoid)) {
                 return false;
             }
             // **A diagonal does not cut a corner.** Both tiles the step squeezes between must be free, exactly as in the
@@ -182,8 +243,8 @@ impl Ground {
                 };
                 if !self.walkable(ax, ay)
                     || !self.walkable(bx, by)
-                    || avoid.contains(&(ax, ay))
-                    || avoid.contains(&(bx, by))
+                    || self.inside_a_body(scale, (ax, ay), avoid)
+                    || self.inside_a_body(scale, (bx, by), avoid)
                 {
                     return false;
                 }
@@ -215,7 +276,7 @@ impl Ground {
         scale: i64,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
-        avoid: &[(u16, u16)],
+        avoid: &[Clear],
     ) -> Option<Vec<(Fixed, Fixed)>> {
         self.route_with(scale, from, to, avoid)
     }
@@ -225,7 +286,7 @@ impl Ground {
         scale: i64,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
-        avoid: &[(u16, u16)],
+        avoid: &[Clear],
     ) -> Option<Vec<(Fixed, Fixed)>> {
         let start = self.tile_of(scale, from)?;
         let goal = self.tile_of(scale, to)?;
@@ -235,9 +296,9 @@ impl Ground {
         if avoid.is_empty() && self.walkable(goal.0, goal.1) && self.line_clear(start, goal) {
             return Some(vec![to]);
         }
-        let steps = self.search(start, goal, avoid)?;
+        let steps = self.search(start, goal, scale, avoid)?;
         let end = steps.last().copied().unwrap_or(start);
-        let pulled = self.pull(start, &steps, avoid);
+        let pulled = self.pull(start, &steps, scale, avoid);
         let half = scale / 2;
         let mut points: Vec<(Fixed, Fixed)> = pulled
             .iter()
@@ -256,6 +317,19 @@ impl Ground {
         Some(points)
     }
 
+    /// **Is this tile's centre inside a body's clearance?** A tile the mover cannot stand on without touching the body it is
+    /// going round, expressed on the grid the search actually walks.
+    fn inside_a_body(&self, scale: i64, tile: (u16, u16), avoid: &[Clear]) -> bool {
+        if avoid.is_empty() {
+            return false;
+        }
+        let centre = (
+            i64::from(tile.0) * scale + scale / 2,
+            i64::from(tile.1) * scale + scale / 2,
+        );
+        avoid.iter().any(|clear| clear.still_inside(centre))
+    }
+
     /// The tile a raw point stands in, when it is on the map.
     fn tile_of(&self, scale: i64, point: (Fixed, Fixed)) -> Option<(u16, u16)> {
         let x = u16::try_from(point.0.raw().div_euclid(scale)).ok()?;
@@ -269,7 +343,8 @@ impl Ground {
         &self,
         start: (u16, u16),
         steps: &[(u16, u16)],
-        avoid: &[(u16, u16)],
+        scale: i64,
+        avoid: &[Clear],
     ) -> Vec<(u16, u16)> {
         if steps.len() < 2 {
             return steps.to_vec();
@@ -282,7 +357,7 @@ impl Ground {
         let mut at = 0;
         while at < last {
             let mut jump = last;
-            while jump > at + 1 && !self.line_clear_with(nodes[at], nodes[jump], avoid) {
+            while jump > at + 1 && !self.line_clear_with(nodes[at], nodes[jump], scale, avoid) {
                 jump -= 1;
             }
             pulled.push(nodes[jump]);
@@ -300,7 +375,8 @@ impl Ground {
         &self,
         start: (u16, u16),
         goal: (u16, u16),
-        avoid: &[(u16, u16)],
+        scale: i64,
+        avoid: &[Clear],
     ) -> Option<Vec<(u16, u16)>> {
         let width = usize::from(self.width);
         let count = width * usize::from(self.height);
@@ -349,7 +425,7 @@ impl Ground {
                 let (Ok(nx), Ok(ny)) = (u16::try_from(nx), u16::try_from(ny)) else {
                     continue;
                 };
-                if !self.walkable(nx, ny) || avoid.contains(&(nx, ny)) {
+                if !self.walkable(nx, ny) || self.inside_a_body(scale, (nx, ny), avoid) {
                     continue;
                 }
                 // **No corner cutting.** A diagonal enters two tiles; both must be free, or the body clips the corner of
@@ -363,8 +439,8 @@ impl Ground {
                     };
                     if !self.walkable(sx, y)
                         || !self.walkable(x, sy)
-                        || avoid.contains(&(sx, y))
-                        || avoid.contains(&(x, sy))
+                        || self.inside_a_body(scale, (sx, y), avoid)
+                        || self.inside_a_body(scale, (x, sy), avoid)
                     {
                         continue;
                     }
