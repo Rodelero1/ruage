@@ -44,34 +44,3 @@ fn the_original_plans_for_the_body_radius() {
         .expect("the gap is a tile wide");
     assert_eq!(route.len(), 1, "the gap is a straight line on the tiles");
 }
-
-/// RULE: the original stops expanding when its estimate passes a bound, so a hopeless search costs a bounded number of cells
-/// (`zone_spatial_pyramid_search_path.cpp`, the `expansions > h` guard at `0x801861`).
-///
-/// **Not ported** (D279): no budget. A whole-map search costs what the map costs, and a goal walled in is answered by the
-/// nearest cell after the search has settled every reachable tile. On this map that is microseconds; on a full-size map with
-/// many hopeless searches per tick it is the first thing to put back.
-#[test]
-#[ignore = "no expansion budget on purpose (D279): the map is small enough that it does not bind"]
-fn the_original_bounds_a_hopeless_search() {
-    // A goal inside a sealed room: the search settles the room's outside and stops, however big the map is.
-    let mut sealed = Vec::new();
-    for x in 8..=12u16 {
-        sealed.push((x, 8));
-        sealed.push((x, 12));
-    }
-    for y in 8..=12u16 {
-        sealed.push((8, y));
-        sealed.push((12, y));
-    }
-    let field = ground(64, 64, &sealed);
-    let route = field
-        .route(SCALE, centre(2, 2), centre(10, 10))
-        .expect("the search settles outside the room");
-    let last = route.last().copied().expect("a route has an end");
-    let tile = (
-        u16::try_from(last.0.raw().div_euclid(SCALE)).unwrap_or(0),
-        u16::try_from(last.1.raw().div_euclid(SCALE)).unwrap_or(0),
-    );
-    assert!(!sealed.contains(&tile), "the route stops outside the room at {tile:?}");
-}

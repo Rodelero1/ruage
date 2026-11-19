@@ -96,6 +96,9 @@ pub const DIAGONAL: u32 = 23;
 /// The estimate's weight: the original scales Euclidean tile distance by 25, so its search is deliberately not admissible
 /// and returns routes slightly longer than the shortest. Kept because it is what the game does, not because it is better.
 pub const ESTIMATE: u32 = 25;
+/// **The hard ceiling on expansions** (`20000 < local_46c` at `0x800d57`): the estimate is the budget, and this is the most the
+/// binary will ever spend on one search, whatever the distance asks for.
+pub const EXPANSION_CAP: u32 = 20_000;
 
 /// Every tile a body may stand on, and what stands on it.
 ///
@@ -183,19 +186,62 @@ impl Ground {
             .is_some_and(|at| !self.terrain[at] && self.occupants[at] > 0)
     }
 
-    /// **How deep is a body's box inside an object's, in raw units?** Zero when it touches nothing, which is the game's own
-    /// contact point; positive is penetration, and the largest figure wins.
-    ///
-    /// The original's query (`FUN_00840830`) is a yes/no - the boxes intersect - and its placement phase (`func_002699A0`)
-    /// is what keeps a body out of an object in the first place, so a body that is *already* inside one never arises there.
-    /// Ours can arise (a fixture or a spawn places a body on a tile corner, half inside the tree beside it), and a plain
-    /// yes/no then refuses **every** step, so the body never moves at all: measured, a corridor pair spawned on tile corners
-    /// overlapped the tree row and stood for 2,000 ticks. So the step asks the game's question of the *change* - a step may
-    /// not take a body **deeper** into an object - which is the same rule wherever a body starts outside one, and lets a body
-    /// that starts inside walk out.
-    pub(crate) fn object_depth(&self, scale: i64, point: (i64, i64), reach: i64) -> i64 {
+    /// **Which object tiles this body touches** - the game's own query (`FUN_00840830`: the box grown by the mover's radius,
+    /// colliding on `<=`, so **edges count as collision**). Written into `out` so the step can ask twice a tick without
+    /// allocating.
+    fn objects_touched(
+        &self,
+        scale: i64,
+        point: (i64, i64),
+        reach: i64,
+        out: &mut Vec<(u16, u16)>,
+    ) {
+        out.clear();
         // A grown box reaches `half + reach` from its tile's centre, so at the widest body the dat carries (a trebuchet at
         // half a tile) it touches the next tile's centre and no further: three by three covers every body there is.
+        debug_assert!(
+            reach <= scale / 2,
+            "a body wider than half a tile cannot be tested against a three-by-three neighbourhood: reach {reach}, scale {scale}"
+        );
+        let grown = scale / 2 + reach;
+        let (tx, ty) = (point.0.div_euclid(scale), point.1.div_euclid(scale));
+        for dy in -1..=1i64 {
+            for dx in -1..=1i64 {
+                let (Ok(x), Ok(y)) = (u16::try_from(tx + dx), u16::try_from(ty + dy)) else {
+                    continue;
+                };
+                if !self.occupied(x, y) {
+                    continue;
+                }
+                let centre = (
+                    i64::from(x) * scale + scale / 2,
+                    i64::from(y) * scale + scale / 2,
+                );
+                if (point.0 - centre.0).abs() <= grown && (point.1 - centre.1).abs() <= grown {
+                    out.push((x, y));
+                }
+            }
+        }
+    }
+
+    /// **Does a body standing here touch an object?** The single-question form, for the step and the conformance set.
+    pub fn touches_object(&self, scale: i64, point: (i64, i64), reach: i64) -> bool {
+        let mut touched = Vec::new();
+        self.objects_touched(scale, point, reach, &mut touched);
+        !touched.is_empty()
+    }
+
+    /// **How deep is a body's box inside an object's, in raw units?** Zero when it only touches, which is the game's own
+    /// collision point; positive is penetration, and the largest figure wins.
+    ///
+    /// The original's query is a yes/no - the boxes intersect - and its placement phase (`func_002699A0`) is what keeps a body
+    /// out of an object, so a body that is *already* inside one never arises there. Ours can arise (a fixture or a spawn
+    /// places a body on a tile corner, half inside the tree beside it), and a plain yes/no then refuses **every** step, so the
+    /// body never moves at all: measured, a corridor pair spawned on tile corners overlapped the tree row and stood for
+    /// 2,000 ticks. So the step asks the game's question of the *change* - a step may not take a body **deeper** into an object
+    /// it already touches - which is identical wherever a body starts outside one, and lets a body that starts inside walk
+    /// out.
+    pub(crate) fn object_depth(&self, scale: i64, point: (i64, i64), reach: i64) -> i64 {
         debug_assert!(
             reach <= scale / 2,
             "a body wider than half a tile cannot be tested against a three-by-three neighbourhood: reach {reach}, scale {scale}"
@@ -275,6 +321,17 @@ impl Ground {
         } else {
             CARDINAL
         }
+    }
+
+    /// **The original's octile distance between two tiles** (`FUN_007ffc80`): `23 x the diagonal share + 16 x the rest`,
+    /// i.e. `16 x max + 7 x min`. It is the search's "how close am I really" measure - the best-settled node is the one with
+    /// the **smallest octile distance to the goal**, not the smallest weighted estimate - and it is public so the conformance
+    /// set can check it rather than trust it.
+    pub fn octile(from: (u16, u16), to: (u16, u16)) -> u32 {
+        let dx = u32::from(from.0.abs_diff(to.0));
+        let dy = u32::from(from.1.abs_diff(to.1));
+        let (long, short) = (dx.max(dy), dx.min(dy));
+        CARDINAL * long + DIAGONAL * short
     }
 
     /// **The original's estimate from one tile to another**: Euclidean tile distance scaled by 25 (`FUN_008007f0`). Public
@@ -582,6 +639,26 @@ impl Ground {
         scale: i64,
         avoid: &[Clear],
     ) -> Option<Vec<(u16, u16)>> {
+        self.search_reporting(start, goal, scale, avoid).0
+    }
+
+    /// **The same search, reporting what it spent.**
+    ///
+    /// The original's budget is **its own estimate**: `expansions > h`, where `h = 25 x the Euclidean tile distance`, and
+    /// never more than **20,000** (`FUN_008007f0`, the guard at `0x800d4f` and the second clause beside it). So a farther goal
+    /// is allowed more expansions and a hopeless one costs a bounded number of cells instead of every reachable tile. When the
+    /// budget runs out the search answers the **best node it settled** - the binary pushes that node with cost 0 and its caller
+    /// walks the parents from it - which is the same answer it gives a goal it cannot reach.
+    ///
+    /// "Best" is the **smallest octile distance to the goal**, first found wins: `if (iVar21 < local_468)` in the binary, with
+    /// `iVar21 = FUN_007ffc80(node, goal)`, a strict comparison, so a tie keeps the earlier node.
+    pub fn search_reporting(
+        &self,
+        start: (u16, u16),
+        goal: (u16, u16),
+        scale: i64,
+        avoid: &[Clear],
+    ) -> (Option<Vec<(u16, u16)>>, u32) {
         let width = usize::from(self.width);
         let count = width * usize::from(self.height);
         let index = |tile: (u16, u16)| usize::from(tile.1) * width + usize::from(tile.0);
@@ -598,8 +675,12 @@ impl Ground {
         let mut open = BinaryHeap::new();
         best[start_at] = 0;
         open.push(Reverse((estimate(start), 0u32, start.1, start.0)));
-        // The closest cell the search ever stands on: the answer when the goal cannot be reached.
-        let mut settled_best: Option<(u32, u32, usize)> = None;
+        // **The budget is the estimate**: the binary computes it once, before the loop, from Euclidean tile distance x 25, and
+        // caps it at 20,000. It is spent one node at a time, and the loop stops *before* expanding a node it cannot afford.
+        let budget = Self::estimate(start, goal).min(EXPANSION_CAP);
+        let mut expanded = 0u32;
+        // The closest cell the search ever stands on: the answer when the goal cannot be reached, or when the budget runs out.
+        let mut settled_best: Option<(u32, usize)> = None;
         while let Some(Reverse((_, g, y, x))) = open.pop() {
             let here = (x, y);
             let here_at = index(here);
@@ -607,17 +688,19 @@ impl Ground {
             if g > best[here_at] {
                 continue;
             }
-            let h = estimate(here);
+            if expanded >= budget {
+                break;
+            }
+            expanded += 1;
             // **The closest cell the search stands on**, which is the original's answer to a goal it cannot reach. The start
             // is not a candidate: "come as close as you can" must move the body, not leave it where it stands. Ties go to
             // the cheaper cell, so the settled point is on the shortest path the search found, not merely near the goal.
-            if here_at != start_at
-                && settled_best.is_none_or(|(old_h, old_g, _)| (h, g) < (old_h, old_g))
-            {
-                settled_best = Some((h, g, here_at));
+            let near = Self::octile(here, goal);
+            if here_at != start_at && settled_best.is_none_or(|(old, _)| near < old) {
+                settled_best = Some((near, here_at));
             }
             if here == goal {
-                settled_best = Some((0, g, here_at));
+                settled_best = Some((0, here_at));
                 break;
             }
             for (dx, dy) in NEIGHBOURS {
@@ -658,9 +741,11 @@ impl Ground {
                 }
             }
         }
-        let (_, _, end) = settled_best?;
+        let Some((_, end)) = settled_best else {
+            return (None, expanded);
+        };
         if end == start_at {
-            return None;
+            return (None, expanded);
         }
         let mut path = vec![tile(end)];
         let mut at = end;
@@ -672,7 +757,7 @@ impl Ground {
             at = previous;
         }
         path.reverse();
-        Some(path)
+        (Some(path), expanded)
     }
 }
 

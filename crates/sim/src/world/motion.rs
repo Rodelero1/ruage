@@ -457,10 +457,18 @@ impl World {
         if !walkable {
             return Some(StepDecision::WaitGround);
         }
-        // **And the objects' boxes, asked of the change**: a step that takes the body *deeper* into a tree or a wall is
-        // refused, and one that leaves it no deeper is the body's own business - the game never has a body inside an object
-        // (its placement phase prevents it), while ours can start that way, and a plain yes/no would nail such a body to the
-        // spot for the rest of the match.
+        // **And the objects' boxes, by the game's own test**: `FUN_00840830` grows the query box by the mover's radius and
+        // collides on `<=`, so a landing that *touches* a tree, a wall or a footprint is refused - not only one that
+        // penetrates it. Two clauses, because the game never has a body inside an object (its placement phase prevents it)
+        // while ours can start that way, and a plain yes/no would nail such a body to the spot:
+        //
+        // 1. a landing that touches an object tile the body does **not** already touch is refused;
+        // 2. a landing that takes the body **deeper** into one it does touch is refused too, so it may slide out but not in.
+        // **PENDING A RULING** (`docs/parity-plan.md` P3): the binary's test collides on **touching** (`FUN_00840830`, four
+        // `<=`), and `Ground::touches_object` is that test, pinned by `conformance::contact`. It is not what this clause does,
+        // because touching-as-collision says a body of radius half a tile cannot thread a one-tile gap - its box exactly fills
+        // the lane - and D117 (the owner, 2026-11-04) says the opposite: *"a one-tile gap is a gap, whatever the circle"*.
+        // Until he says which wins, the step keeps the strict-overlap test it had.
         if let Some(ground) = self.ground.as_ref() {
             let landing_depth =
                 ground.object_depth(self.scale, (landing.0.raw(), landing.1.raw()), own);
