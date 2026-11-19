@@ -38,8 +38,26 @@ ordered behaviour the game does not have, so "meet the original" and "the rule I
 - **P3 is blocked on the plan/step agreement about touching**: a route certified by `leg_is_clear` still asks for a landing
   that touches two blocked tiles, and the body stands in `WaitGround` for 3,000 ticks.
 - **P4 is blocked on P8**: the goal fallback that made off-grid gather/attack points survivable is part of the book's furniture.
-- **P5 is free**: cutting the forty-tick order-finish was measured inside a bundle with P4 and changed no fixture; it wants its
-  own witness and should land first, alone.
+- **P5 is NOT free after all - it is the third step blocked on P8.** Cut alone (witness written first and watched failing:
+  `crates/sim/tests/order_never_given_up.rs`, "the task is Idle after 120 ticks"), the order-finish turns out to be what breaks
+  every crowd jam in the engine today: four fixtures went red - `a_mate_who_is_stopped_becomes_solid`,
+  `the_loser_stands_for_the_drawn_pause`, `a_man_who_cannot_get_his_square_takes_the_next_tree`, and
+  `collision::a_walker_never_ends_a_tick_inside_a_friend` (which presses one step deeper once nobody gives up). None of them is
+  wrong: they describe a crowd whose only escape from a jam is that some men abandon their orders. With the order-finish gone,
+  the collision pause has to do that work - which is exactly what the seat book's removal (P8) is supposed to install. So **P8 is
+  the keystone**: P4, P5 and (after the plan/step agreement) P3 queue behind it, and P8 lands first.
+
+## The order the next session should follow
+
+1. **P8** - cut the seat book (ring places, `reserve_places`, `respread`, `settle_workers`, `standoff_point`), let collisions and
+   pauses spread the crowd, re-point `overlap`, `gather_ring`, `gather_spread`, `gather_standoff` and the four jam fixtures above.
+   This is the step everything else waits on, and it is the owner's own instruction ("cut the book entirely").
+2. **P5** - the order-finish goes, its witness restored from this note's description.
+3. **P4** - the re-plan throttle goes with the goal fallback it sat beside (no longer needed once there are no off-grid goal
+   points).
+4. **P3** - touching collides, in one slice with the plan/step agreement (`leg_is_clear` as strict as the step), then re-point
+   `building_passage::a_big_unit_walks_through_a_one_tile_gap` to the game's answer (D117 withdrawn).
+5. **P11** - the levelled search; then **P1** (the budget) lands with it.
 
 ## The fork that the owner has already ruled (P3, kept for the record)
 

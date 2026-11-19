@@ -42,6 +42,14 @@ and the parked skirmish pair.
 7. **The lost guard**: `a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` was deleted by the owner's ruling and was the
    only cover for "a mid-tick spawn shifts the entity list, so movements are applied by id, not index".
 
+## Where the parity push stands (2026-11-19, `9ef8e97`)
+
+P1/P2 landed (`c11e49d`): the search reports its expansions, answers the octile-nearest settled cell, and is **not** budget-
+enforced - at `h = 25 x tiles` a flat search truncates a legitimate detour (measured: a one-tile walk answered fifteen tiles
+east), so the budget lands **with** the levelled search (P11). P3, P4 and P5 were each attempted and each is blocked on the seat
+book: **P8 is the keystone** and the next slice. The full order and every measured reason is in `docs/parity-plan.md` and
+`docs/reviews/2026-11-19-p3-p4-p5-attempted-the-blockers.md`.
+
 ## Prior implementation of the landed slice (D203) - kept because the next slice reads it
 
 | subject | where it lives now | what pins it | what it does today |
