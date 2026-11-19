@@ -7920,3 +7920,53 @@ floors are superseded as gates, and their measurements stand.
 
 **Commits us to.** Every slice reports **the win, the food wall if any, and the entity count** - the count as information, never
 as the gate - and a slice that wins with fewer entities is a slice that won.
+
+### D284 - The group is on the order, so the plan walks through its own men (2026-11-19)
+
+**The red this closes.** `army_walk::a_crowd_walking_through_a_gap_stays_on_free_ground` refused an accepted click:
+`NoPath { from: (6, 20), to: (19, 19) }` with twelve militia ordered through one gap. The last session's reading stands -
+the cause is **when we plan**, not the width of anything - but the shape that fixes it is not a re-ordering of the tick.
+
+**What the game does, and it is one list read twice.** `FUN_008007f0` builds a per-search ignore list at its entry point
+(`local_404`, cap 255) holding **self**, the **order's target**, and then either the route-own array's entries that answer
+`isMoving` (`+0x2a0`) - the no-group form - or **every id in the group object** `FUN_0072cf10` (`+0xd0` count, `+0xd8`
+array) with **no per-member test at all**. `FUN_00801a20` then reads that list as **passability**: a tile is free ground
+when every body on it is on the list, so a group's route is planned *through* its own members. The collision block reads
+the same ids (`FUN_007fe010`) and **drops** an exempt collider. One list, two readers, and it is **route-local**.
+
+**The defect, stated exactly.** Ours had the list in the **collision block only** (`Route::mates`, D207) and not in the
+search, and it was stamped **after** the batch had landed. So a man's step walked through his order while his plan treated
+those same men as tile walls - and the first of twelve men, planned while the other eleven had no route, could not leave his
+own tile. **D207's sentence "the search `FUN_008007f0` never reads the route's ignore list" is withdrawn** by the 2026-11-16
+read of that function (`docs/movement-in-the-binary.md` §"The path ignore list"): the list is built *there* and used as
+passability. D207's *rule* stands; its reading of where the list is read was one function short.
+
+**What lands, in three parts.**
+
+1. **The group exists before the first plan.** `drain_orders` pre-scans the batch for movement orders into `ordered_now`
+   (one match, `World::movement_order`, feeding both readers), then applies; a refused order is removed again, so it cannot
+   leave its unit in a group it never walked with. Same set as before at the end of the tick - the knowledge only moves
+   earlier.
+2. **The search reads the list.** `stander_tiles` and `stander_bodies` skip the mover's group (`World::path_ignore` at order
+   time, `Route::mates` on a re-plan - the route-local list the original keeps), so a tile held only by the group is free
+   ground to the plan. `World::group_mates` is now the **one** definition both readers use, so the plan and the collision
+   block cannot drift apart again.
+3. **A movement click is never refused** (D134). The submit-time dry run plans *before* the group exists, so a crowd could
+   refuse its own click; `walk_goal_permissive` answers the click point when that dry run finds no route and the plan made
+   when the order lands - group known - answers where the body will stand. A genuinely unreachable goal still fails there,
+   which is what keeps "a tree behind a wall is a refusal" (item 9).
+
+**Soldiers only**, unchanged from D237: a villager takes his own path and never walks through another, so a box-selected
+crowd of villagers forms no group in the original either and `group_mates` answers empty for them.
+
+**The known compromise, still D207's.** "Same tick" is not "same selection": two separate clicks landing in one tick form
+one group here and two in the game. The register row for an explicit group id on the command stays open, and when it lands
+`group_mates` reads the command instead of the tick.
+
+**Basis.** The original's **binary**: `FUN_008007f0` (builds the list), `FUN_00801a20` (reads it as passability),
+`FUN_0072cf10` (the group object), `FUN_007fe010` (the collision skip), read 2026-11-14 and again 2026-11-16 through the
+disassembly in `docs/movement-in-the-binary.md`; and **measured** in this tree - the red on `7eabb70`
+(`NoPath { from: (6, 20), to: (19, 19) }`, watched failing before the code and again in the `before-group` worktree), the
+twelve men's arrival (furthest 1.51 tiles from the goal), and the suite. D134 (every click is accepted), D207 (the group),
+D237 (soldiers only).
+Review: `docs/reviews/2026-11-19-the-group-is-on-the-order.md`.
