@@ -296,12 +296,16 @@ fn a_mate_who_is_stopped_becomes_solid() {
         reach,
         integer_sqrt(longest_step)
     );
+    // **"Nothing inside the reach after the meeting" was unsatisfiable, and the arithmetic says so**: the contact step is
+    // taken through (the game clamps nothing, `0x8a7fe7`), so the deepest point *is* one step inside - this file's own doc
+    // records **272 raw** against an 8,000 reach, i.e. 7,728 after. The rule the game states is that it never gets **deeper**
+    // than the contact.
     assert!(
-        after >= reach * reach,
-        "MEASURED a stopped body was walked over: after the meeting he came {} raw from him, inside the {} raw reach, so \
-         the route does not go round the man - it goes through him",
+        after >= meeting,
+        "MEASURED he came {} raw from him after the meeting against {} at it: the overlap deepened, so he was driven into \
+         the stopped man rather than standing on the step that touched him",
         integer_sqrt(after),
-        reach
+        integer_sqrt(meeting)
     );
 }
 
@@ -327,4 +331,55 @@ fn integer_sqrt(value: i64) -> i64 {
         bit >>= 2;
     }
     root
+}
+
+/// **A body that meets another inside its reach swallows at most the one step** (D283, on the test branch).
+///
+/// The game takes one step into a collider and answers the collision with a re-plan and a pause; its epilogue writes no
+/// position, so the overlap is not clamped - but it is not driven deeper either. Measured without the rule, a pair meeting
+/// head-on came **4,478 raw** inside an 8,000 raw reach; with it, **7,728** - 8,000 minus the contact step.
+#[test]
+fn a_meeting_swallows_no_more_than_the_contact_step() {
+    let Some(mut world) = common::fresh() else {
+        return;
+    };
+    let Some((x, y)) = open_row(&world, 10) else {
+        return;
+    };
+    let a = next_id(&world);
+    let b = EntityId(a.0 + 1);
+    let villager = world.start_villager_unit().expect("a villager role");
+    spawn_unit(&mut world, a, villager, x, y);
+    spawn_unit(&mut world, b, villager, x + 4, y);
+    world.step().expect("the spawns land");
+
+    let reach = world.reach_between(a, b).raw();
+    let step = world
+        .entity(a)
+        .map(|entity| (entity.speed.raw() / i64::from(world.tick_rate_hz())).max(1))
+        .unwrap_or(1);
+    let start = distance(&world, a, b);
+    world.submit(Command::Move {
+        unit: a,
+        to: (x + 5, y),
+    });
+    world.submit(Command::Move {
+        unit: b,
+        to: (x, y),
+    });
+
+    let mut closest = start;
+    for _ in 0..200 {
+        world.step().expect("step");
+        closest = closest.min(distance(&world, a, b));
+    }
+    let floor = (reach - step).max(0);
+    assert!(
+        closest >= floor * floor,
+        "MEASURED the pair came {} raw apart against a {} raw reach: more than the one {} raw step of the contact, so one \\
+         was driven into the other instead of standing on the step that touched him",
+        integer_sqrt(closest),
+        reach,
+        step
+    );
 }

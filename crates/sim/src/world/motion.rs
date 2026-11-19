@@ -386,7 +386,7 @@ impl World {
     fn refusal(
         &self,
         id: EntityId,
-        _here: (Fixed, Fixed),
+        here: (Fixed, Fixed),
         landing: (Fixed, Fixed),
         pauses: &mut Vec<EntityId>,
         blockers: &mut Vec<crate::ground::Clear>,
@@ -425,6 +425,24 @@ impl World {
                 other.position.1.raw() - landing.1.raw(),
             );
             if dx * dx + dy * dy >= reach * reach {
+                continue;
+            }
+            // **Never deeper into a body you are already inside** (D283, on the test branch). The game takes one step
+            // through a collider and then answers the collision with a re-plan and a pause, so an overlap happens - but it
+            // is not driven deeper tick after tick. Measured without this rule: a walker meeting a stopped man came **4,478
+            // raw** inside an 8,000 raw reach, eight ticks of pressing; with it, **7,728** - the 272 raw contact step.
+            let (back_x, back_y) = (
+                other.position.0.raw() - here.0.raw(),
+                other.position.1.raw() - here.1.raw(),
+            );
+            let before = back_x * back_x + back_y * back_y;
+            let now = dx * dx + dy * dy;
+            if before < reach * reach && now < before {
+                blockers.push(crate::ground::Clear {
+                    at: (other.position.0.raw(), other.position.1.raw()),
+                    reach,
+                });
+                blocked = true;
                 continue;
             }
             // 1. The body the order was given to is never walked through.
