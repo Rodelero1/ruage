@@ -8,12 +8,25 @@ acceptance_economy the_acceptance_match_trains_more_villagers` was **330.97 s** 
 **the nearest eight** - and it no longer answers a node with nothing left in it, which had four villagers bouncing between
 two spent bushes every tick (7,369 re-tasks by tick 14,400).
 
-**The first thing left, and it is visible:** a **crowd walks slowly**. Every collision pauses the higher id for 0.25-1.50 s
-(the original's own `setPause`), and the old settle - which nudged each man along the ring a fraction of a tile a tick -
-used to hide it. Measured on `a_newcomer_does_not_move_the_working_gatherers`: eight villagers 10-12 tiles from one tree
-seat **one** man at work inside 1,200 ticks. The honest options are (a) shorten the drawn pause, (b) let a man whose goal is
-a *node* walk over his own mates the way a selection does, or (c) leave it - a crowd converging on one tile is not the
-ordinary case. **No decision yet: this is a fork for the owner.**
+**The crowd: the mechanism is read, and the adoption is parked (D281, NOT LANDED).** The owner's answer - *"follow what does
+the original game and decomp do"* - was read out of the collision block and implemented: a non-past collision **re-plans the
+mover round the collider's tiles**, the **higher id pauses** 0.25-1.50 s, the epilogue **writes no position** (bodies overlap
+as they pass), a collider is *past* only by `path->createdAt >= other->lastMoveTime`, and the path-ignore list is the mover's
+**moving** mates, so a stopped body blocks. With it in place the acceptance fixture went **42.62 s -> 38.96 s** and three of
+D279's reds turned green - but **three others went red**, so it was **reverted whole**; the readings, the numbers and the
+shape to re-apply are in `docs/reviews/2026-11-19-d281-the-body-collision.md`.
+
+1. **First, the regression**: `tests::a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` - *"entity 2 must move by its
+   own delta: left 0, right 5"*. A body that should step five raw took none. That is a defect in the attempt, not a rule, and
+   nothing else in the slice can be trusted until it is understood.
+2. **Then the stand**: `the_higher_id_pauses_...keeps_its_route` measured **44 ticks (2.200 s)** against a 30-tick bound. Under
+   the game's model the loser stands for its own pause *and* is blocked by the winner until he has moved off, so the 30-tick
+   bound may itself be our invention - a reading to make, not to assume.
+3. **Two bodies on one tile cannot be planned round** (the search starts on the tile they share): `a_mate_who_is_stopped_becomes_solid`
+   still ends **4,207 raw** inside an 8,000 raw reach even with the re-plan in place. Its second assertion - "nothing inside the
+   reach after the meeting" - is our old retraction; the game's epilogue writes no position.
+4. **The eight crowd fixtures** assert the withdrawn settle ring and stay red until rewritten to the game's rule; that rewrite
+   is part of this slice, not before it.
 
 **The second thing, and it needs no fork:** the port is **1.6x** off `main` on the acceptance fixture (42.62 s against
 26.6 s) and **the remaining cost has no single owner**. Measured after D280 with the phase probe (timers on `World::step`,

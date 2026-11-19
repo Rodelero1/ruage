@@ -7973,3 +7973,36 @@ own D138 comment.
 
 **Commits us to.** A pick that costs one place and one route per candidate among eight, whatever the map holds - and no
 future filter of the map may reintroduce a path question before the sort.
+
+### D281 - The body collision is the original's: the mover re-plans round it, and a route's clock is its order's (NOT LANDED, owner, 2026-11-19)
+
+**The ruling.** Asked which of three ways to make a crowd behave, the owner: *"Follow what does the original game and decomp
+do."* So the crowd is not a fidelity trade to be chosen here - it is whatever `FUN_00844360` and the path layer do.
+
+**What the original does, read (`docs/movement-in-the-binary.md`, the collision block's epilogue).** A collision against the
+order's target ends the order (*"That collision is with our target, so we're done"*). **Any other non-past collision is
+counted and then the mover re-plans** - *"We have %d non-past collisions and %d terrain collisions, repathing"* - and the
+**higher id of each surviving pair is told `setPause(rand*1.25/32767 + 0.25)`**. The epilogue **never writes a position**. A
+collider is *past* when `path->createdAt >= other->lastMoveTime`. The path-ignore list holds the mover's **moving**
+group-mates (`isMoving`) and nothing else, so a stopped unit is not passed through.
+
+**What it would settle for the engine.** (1) a non-past body collision re-plans the same goal with the colliders' tiles
+avoided; (2) `Route::created` is the original's `path+0x10` and a re-plan does not reset it; (3) D279's exemption *"a body
+that is not going anywhere is past"* is withdrawn - it made every stopped man a ghost, which the ignore list does not.
+
+**Measured on this tree, and why it is not landed.** With all three in place the acceptance fixture went **42.62 s ->
+38.96 s** and **three** of D279's reds turned green - `a_repath_route_is_pulled_like_a_planned_one`,
+`both_sides_field_an_army`, `the_skirmish_only_refuses_what_the_fight_has_taken` - but **three others went red**, which is a
+half-fix by the tree's own rule:
+
+- `tests::a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` - an entity that must move **5 raw** moved **0**;
+- `the_higher_id_pauses_for_a_quarter_to_one_and_a_half_seconds_and_keeps_its_route` - the loser stood **44 ticks** against
+  a 30-tick bound;
+- `the_ten_minute_scenario_builds_trains_and_fights`.
+
+**Basis.** The epilogue and the past test as read above; the owner's ruling quoted above; the numbers in
+`docs/reviews/2026-11-19-d281-the-body-collision.md`, which also records the two defects found *inside* the attempt (the
+smoothing pass undid the plan; re-stamping `created` made the avoided man *past*) - both are worth keeping when it lands.
+
+**Commits us to.** Re-attempting it from the review, not from scratch: the first red to understand is why a moving body
+stops moving at all (`a_spawn_in_the_same_tick_does_not_move_the_wrong_entities`), because that is a regression, not a rule.
