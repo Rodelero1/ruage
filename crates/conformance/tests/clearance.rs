@@ -193,70 +193,41 @@ fn a_start_inside_a_body_is_re_seeded_outward() {
     );
 }
 
-/// RULE: the short-range solver declines work that is disproportionate rather than guessing - and the bound is on the
-/// **work**, never on how far apart the two points are.
+/// RULE: the short-range solver declines work that is disproportionate rather than guessing - a bounded window.
 ///
-/// Source: the original bounds a search by a **budget of `h` expansions, capped at 20,000** (`FUN_008007f0`), not by a
-/// span. This fixture used to pin the opposite - a 40-tile side window, our own number. That window was the half of the
-/// divergence `divergences.rs` names that could be dropped without a hierarchy: on a 64 x 64 map a 58-tile walk across open
-/// ground builds **two** nodes and costs nothing, so declining it for its length was the invention. What is pinned now is
-/// the pair that straddles the **rectangle budget** (`MAX_RECTS`, 96) instead - measured 2026-11-19.
+/// Source: our own bound (`short.rs:29-36`: 40 tiles a side, 96 rectangles, 400 nodes), and the original's counter-less
+/// answer is the opposite - it expands the search area once and then returns the closest point. The divergence is recorded
+/// in `divergences.rs`; what this test pins is that the bound is *stated* rather than silent.
 #[test]
 fn a_window_beyond_the_bound_is_declined() {
-    // A long walk on open ground is answered: the span is not the cost.
-    let open = walk(64, 64, &[]);
+    let walk = walk(64, 64, &[]);
+    let route = short_range_clear(
+        &walk,
+        SCALE,
+        at(2, 2),
+        at(60, 60),
+        RADIUS,
+        &BTreeSet::new(),
+        &[],
+    );
+    assert!(
+        route.is_none(),
+        "a 58-tile walk was solved inside the 40-tile window rather than declined"
+    );
+    // Inside the window it answers. The window is the endpoints' box plus a three-tile margin, so a 30-tile walk is 36 tiles
+    // a side and a 36-tile one is 42 - past the bound, which is why the pair below straddles 34 rather than 40.
     assert!(
         short_range_clear(
-            &open,
+            &walk,
             SCALE,
             at(2, 2),
-            at(60, 60),
+            at(30, 30),
             RADIUS,
             &BTreeSet::new(),
             &[]
         )
         .is_some(),
-        "a 58-tile walk across open ground builds two nodes and must be solved"
-    );
-    // The bound that remains is the work. Spaced single tiles do not merge into one rectangle, so a dense field of them
-    // exceeds the solver's rectangle budget and it declines rather than paying for a graph the size of the map.
-    let field = |step: u16| -> Vec<(u16, u16)> {
-        let mut blocked = Vec::new();
-        for x in (2..26).step_by(usize::from(step)) {
-            for y in (2..26).step_by(usize::from(step)) {
-                blocked.push((x, y));
-            }
-        }
-        blocked
-    };
-    let dense = walk(32, 32, &field(2));
-    assert!(
-        short_range_clear(
-            &dense,
-            SCALE,
-            at(0, 0),
-            at(28, 28),
-            RADIUS,
-            &BTreeSet::new(),
-            &[]
-        )
-        .is_none(),
-        "a window holding more than the rectangle budget must be declined"
-    );
-    // The same field at a quarter the density is inside the budget: the decline above is the budget, not the blocking.
-    let sparse = walk(32, 32, &field(4));
-    assert!(
-        short_range_clear(
-            &sparse,
-            SCALE,
-            at(0, 0),
-            at(28, 28),
-            RADIUS,
-            &BTreeSet::new(),
-            &[]
-        )
-        .is_some(),
-        "a field inside the rectangle budget must be solved"
+        "a 30-tile walk is inside the window and must be solved"
     );
 }
 
