@@ -81,6 +81,26 @@ becomes "men stand touching the node, a body apart from each other"), plus the f
 **Acceptance, in this order:** the four jam fixtures stay green with P5 applied; ten men work one bush with no two bodies
 overlapping; a man who is working does not move; the acceptance match's time is within the +1.1 s measured for P4+P5.
 
+
+## P8b - what is left of the book is *the game's own design* (measured 2026-11-19, needs the owner's word)
+
+Reading the remainder of the book against the evidence, before cutting any of it:
+
+- **The taken list is the game's.** `standoff_point` refuses a place that another body stands on, another *order* has taken
+  (`gather_place`), or that cannot be reached - and that is exactly what the prior-art reading of the original says it does:
+  *"the planner walks the target's perimeter at a standoff ... nearest usable spot"*, and *"they decide a spot by a deterministic
+  scan of a target's perimeter with a taken list, at the moment the order is given"* (`docs/prior-art.md:1220`, `:1256`). Cutting
+  the registry would therefore be a **new** difference, not parity: the original carries "who else is coming" in the request.
+- **The angular ring is legacy, not the seating rule.** `ring_point` / `GATHER_PLACES` / `GATHER_RING_MILLI = 1156` survive in
+  **one** place, `ring_open` (`lib.rs:3763`), a 36-sample walkability test that gates the settle. Seating comes from
+  `tiles::touching_places` (D192's 0.70 rule). The ring's 1.156 circle lands in the same eight neighbours the touching places do,
+  so `ring_open` and "is any touching place walkable" are near-equivalent - removing it is a cleanup with no measured behaviour
+  change, and it is correctly *last*.
+
+**So P4 and P5 cannot be unblocked by finishing P8**: their blocker was never the book's *existence* but the two jobs the book
+does for the engine today - the off-grid goal point each order carries, and the ability of a jam to clear by men abandoning
+orders. Cutting the taken list would not remove either.
+
 ## The order the next session should follow
 
 0. ~~**P8a** - the re-lay (`maybe_respread`, `respread_at`, the `respreads` bucket): **DONE**, D287, `docs/reviews/2026-11-19-p8a-the-relay-goes.md`.
@@ -91,8 +111,8 @@ overlapping; a man who is working does not move; the acceptance match's time is 
    pauses spread the crowd, re-point `overlap`, `gather_ring`, `gather_spread`, `gather_standoff` and the four jam fixtures above.
    This is the step everything else waits on, and it is the owner's own instruction ("cut the book entirely").
 2. **P5** - the order-finish goes, its witness restored from this note's description.
-3. **P4** - the re-plan throttle goes with the goal fallback it sat beside (no longer needed once there are no off-grid goal
-   points).
+3. **P4** - the re-plan throttle goes with the goal fallback it sat beside - **but see P8b**: the off-grid goal point
+   survives P8, so this needs its own design (make the goal a *tile*, as the search's answer already is, before the fallback can go).
 4. **P3** - touching collides, in one slice with the plan/step agreement (`leg_is_clear` as strict as the step), then re-point
    `building_passage::a_big_unit_walks_through_a_one_tile_gap` to the game's answer (D117 withdrawn).
 5. **P11** - the levelled search; then **P1** (the budget) lands with it.
