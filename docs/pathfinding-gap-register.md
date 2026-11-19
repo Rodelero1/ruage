@@ -22,7 +22,7 @@ against it, and plan the difference to zero. Sources: `AoK HD.exe` read at the a
 | search obstacles | **standers only** (velocity zero), inserted per search, never into the shared grid | `FUN_007f9d80` |
 | step | velocity applied **whole**; no axis dropped, no slide | `008a4360` |
 | collision answers | target done / **non-past** becomes a repath / **pause the higher id 0.25-1.50 s** / past walked through / *"don't know what to do"* falls through | `008a4360`, `0x8aa6d0` |
-| ignore list | written **after** the search, read **only** by the classifier; = formation members re-tested on `isMoving` + the order's target | `FUN_008007f0`, `FUN_007fe010` |
+| ignore list | built **at the search's entry point** (self + the order's target + the group's members, or the route's `isMoving` entries) and read **twice**: by the search as **passability** - a tile whose bodies are all on it is free ground - and by the collision classifier as a skip | `FUN_008007f0`, `FUN_00801a20`, `FUN_007fe010` |
 | waypoints | snapped to and spent in the same update; **substituted** when not reachable "this or the next update" | `008a4360`, `mConsecutiveSubstituteCount` |
 | no failure | a search that cannot reach answers **the closest point**; the order layer may still ask "as close as I can" | the talk, p. 83 |
 | speed | the unit's own dat speed; **0.0 on a pause**; no ramp, no terrain factor | `getMaxVelFwd`, `008a2a30` |
@@ -76,6 +76,11 @@ against it, and plan the difference to zero. Sources: `AoK HD.exe` read at the a
 6. **The expansion budget**, then **the octile table**, then the **border nudge** - the search's remaining constants.
 7. **Two levels with a parent path** - the last conformance red, and the one that makes 1-6 unnecessary to fight.
 8. **The order's path vocabulary** - forced waypoint, teleport, per-path hit.
+
+**Already zeroed (2026-11-19, D284).** The ignore list's **plan-level** use: the search now skips the mover's order group, so
+a group's route is planned through its own members (`FUN_00801a20`), and the group is formed before the first plan of the
+batch. What remains of that row is the **membership** - same tick instead of a formation, and a mate exempted because it has
+a route rather than because `isMoving` says so this tick (D207's stand-in, still open).
 
 **The measurement that governs every step**: `players` (the match must resolve), no late resource wall, the suite green, and the
 entity/re-path counts as information (D278). Today: `main` **131 / players=1**, and the working branch **150 / players=2** with
