@@ -994,6 +994,12 @@ pub struct World {
     /// How many times a blocked unit has re-planned its route. **Instrumentation, not state**: nothing reads it and it
     /// is not hashed; a test counts it to prove a known obstacle is not re-planned every tick (D98a).
     repath_count: u64,
+    /// **How many routes the engine has asked for** (D280). Instrumentation, not state: never hashed, never read by the tick.
+    /// A planner call is the unit a *choice* is priced in - a picker that asks `route` about every node on the map pays for
+    /// the map, and the count is what makes that visible to a fixture instead of to a stopwatch. Every call counts one,
+    /// straight line or search: the line test is cheap, so a bound on the total is a bound on the searches too.
+    #[serde(skip)]
+    plan_count: std::cell::Cell<u64>,
     /// The **last movement decision** for each body, and how many of each have been made (D193). Instrumentation, like the
     /// counters above: never hashed, never read by the tick. `step_trace` was the review's name for it.
     /// Counted per decision, in a flat array: a `BTreeMap` here cost **1.8 µs a tick** at 128 bodies (6.7 -> 8.5), which is a third
@@ -1535,6 +1541,7 @@ impl World {
             stalled: BTreeMap::new(),
             respread_at: BTreeMap::new(),
             repath_count: 0,
+            plan_count: std::cell::Cell::new(0),
             step_counts: [0; StepDecision::ALL.len()],
             tracing_steps: false,
             resources: None,
@@ -1759,6 +1766,12 @@ impl World {
     /// never reads it and it is not hashed; a test counts it to prove a known obstacle is not re-planned every tick.
     pub fn repaths(&self) -> u64 {
         self.repath_count
+    }
+
+    /// **How many routes this world has planned** (D280). Instrumentation, like `repaths`: it exists so a fixture can say
+    /// "choosing the next tree cost nine routes, not the map" rather than "the acceptance match got slower".
+    pub fn routes_planned(&self) -> u64 {
+        self.plan_count.get()
     }
 
     /// **What the movement pass decided for this body on the last tick it was asked** (D196): `None` if there is no such entity.
@@ -1997,10 +2010,12 @@ impl World {
         to: (Fixed, Fixed),
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let ground = self.ground.as_ref().ok_or(SimError::NoTables)?;
-        ground.route(self.scale, from, to).ok_or(SimError::NoPath {
+        let answer = ground.route(self.scale, from, to).ok_or(SimError::NoPath {
             from: self.tile_of(from),
             to: self.tile_of(to),
-        })
+        });
+        self.plan_count.set(self.plan_count.get() + 1);
+        answer
     }
 
     /// The route a particular **body** would walk. The body is not a planner input any more (D279): a route is about

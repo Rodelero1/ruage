@@ -7937,3 +7937,39 @@ pause block; the owner's directive above.
 
 **Commits us to.** Deleting the listed mechanisms rather than keeping them behind a flag, and paying for the fixtures built
 on them; no acceptance run in this slice (his call), the unit and conformance suites being the gate.
+
+### D280 - The picker asks the cheap questions first, and the expensive one of the nearest eight (2026-11-19)
+
+**What it was.** D279's port left `nearest_like` asking `node_workable` - which plans a route - of **every resource on
+the map**, inside the loop that was supposed to be the cheap filter, before the sort and the `truncate(8)`. The comment
+above it had claimed the opposite since D138 ("cheap first, expensive last, and only for the nearest few"); the code had
+the expensive question first and the cheap one never.
+
+**Measured, on the acceptance fixture, after the port.** `760,946` route plans by tick 14,400, **157 a tick**, and
+`198.6 s` of `225.9 s` spent inside them: `114` path questions per pick and **13 ms** of a tick, while the match's own
+new work was under 30 s. The fixture was **322 s** against `main`'s **26.6 s**. The pick happens about ten times a
+second because a scenario rule re-orders four villagers at an exhausted tile, which is what turned a per-map cost into a
+per-tick one.
+
+**The rule.**
+
+1. **Cheap first, and provably cheap**: kind, scouted, reach and "nobody else has it" - four comparisons and one distance.
+2. **Then the sort and `truncate(8)`**, so nothing expensive is asked of a node that cannot be among the eight.
+3. **Then the expensive question, of those eight only**: a node is worked **on** its own tile (a carcass, a sheep) or
+   **beside** it (a tree, a mine, a farm). "Beside" is a free tile that a route reaches: `work_position` for the place,
+   `can_reach` for the route. "On" is a route to the tile.
+4. **`can_reach` is never asked about a blocked tile.** The closest-tile planner answers almost any blocked goal with a
+   whole-map search and a cheerful yes, which is why the old arm could never refuse a candidate and why it cost a map.
+
+**What it costs, in behaviour.** The eight are now the nearest same-kind nodes the player has **scouted** and nobody else
+has claimed - not the nearest eight that happen to have a free tile. A wood inside a wall can therefore occupy one of the
+eight and be passed over, where before it was filtered out before the truncation; the answer is the same until a worker
+has eight unhidden nodes nearer than his next real one, which the acceptance fixture does not reach and no scene in the
+suite does either.
+
+**Basis.** The measurement above (`nine_times_the_wood_does_not_cost_nine_times_the_pick`: **66 routes to name one tree on
+a map of 66**, **6 on a map of 6**; after the rule, **2 and 2**), the phase probe over `World::step`, and `nearest_like`'s
+own D138 comment.
+
+**Commits us to.** A pick that costs one place and one route per candidate among eight, whatever the map holds - and no
+future filter of the map may reintroduce a path question before the sort.

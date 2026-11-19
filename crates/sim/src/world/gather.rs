@@ -23,6 +23,19 @@ impl World {
         self.nearest_like_in(from, old, worker, false)
     }
 
+    /// **The engine's own answer to "which source is next"** (D280), for the scenario language and for a fixture that
+    /// prices the choice. One question, one answer: the nearest node of the same kind as `old` that this worker knows,
+    /// can reach, and can work. The scenario's `gather` action needs exactly this (D198) - and until now it could only
+    /// ask its own copy of the question, which is how the two pickers came to differ.
+    pub fn next_source_near(
+        &self,
+        from: (Fixed, Fixed),
+        old: EntityId,
+        worker: EntityId,
+    ) -> Option<EntityId> {
+        self.nearest_like(from, old, worker)
+    }
+
     /// **The nearest other node of the same kind that nobody else is working** (D182). The owner's rule: when the ring round a square is full,
     /// the extra worker takes the next source rather than crowding in - so a node another villager is already gathering from does not count.
     pub(crate) fn nearest_like_free(
@@ -86,16 +99,19 @@ impl World {
             .as_ref()
             .and_then(|economy| economy.farm.resource.as_deref())
             .and_then(|name| self.slot_of(name));
-        // **Cheap first, expensive last, and only for the nearest few.** Reachability costs a path search per candidate, and
-        // this function is asked every time a node runs dry - over a map with 118 nodes that was 236 path searches for one
-        // villager, and the acceptance run's slow ticks spent **1,336 path searches a tick** in exactly this loop. The sort is
-        // distance-only; the walk is asked of the nearest eight, which is more than a worker will ever pass up in practice.
+        // **Cheap first, expensive last, and only for the nearest few** (D280). Reachability costs a path search, and the
+        // picker is asked every time a node runs out - so the order of the questions *is* the cost. Before this rule the
+        // loop below asked `node_workable` of **every resource on the map** before it had sorted them: measured on the
+        // acceptance map, **114 path questions a pick** and **13 ms of a tick**, and **66 routes to name one tree on a map
+        // of 66** (`nine_times_the_wood_does_not_cost_nine_times_the_pick`). The expensive question is now asked of the
+        // eight survivors, which is what a pick may cost: one place and one route each.
+        //
+        // The eight are the nearest **same-kind nodes the player has scouted and nobody else has claimed** - not the
+        // nearest eight that happen to have a free tile. A wood inside a wall can sit in that list and be passed over,
+        // which is the answer the old filter gave, one question cheaper.
         let mut candidates: Vec<(i64, u32, EntityId)> = Vec::new();
         for entity in &self.entities {
             if entity.id == old || entity.id == worker {
-                continue;
-            }
-            if matches!(entity.kind, EntityKind::Resource(_)) && !self.node_workable(entity.id) {
                 continue;
             }
             if skip_claimed && self.claimed_by_other(entity.id, worker) {
@@ -112,7 +128,12 @@ impl World {
                 continue;
             }
             let same = match (kind, entity.kind) {
-                (EntityKind::Resource(slot), EntityKind::Resource(other)) => slot == other,
+                // **A drained node is not a source** (D280). Matching on the column alone put a worker on an empty tree,
+                // whose own re-task put him back here: measured, four villagers bounced between two spent bushes **every
+                // tick** of the acceptance match (7,369 re-tasks by tick 14,400) at a route each, 59.8 s of a 155 s run.
+                (EntityKind::Resource(slot), EntityKind::Resource(other)) => {
+                    slot == other && entity.amount.raw() > 0
+                }
                 // ... and a finished farm, for the column a farm fills.
                 (EntityKind::Resource(slot), EntityKind::Building) => {
                     farm_slot == Some(slot)
@@ -152,19 +173,23 @@ impl World {
         }
         candidates.sort_unstable();
         candidates.truncate(8);
-        // Reachability is part of the choice, and a node's own tile is usually **blocked** (a tree, a mine, a farm), so the
-        // question is whether a worker can reach somewhere it can *work* it - the same tile `work_position` picks when the
-        // gather order is given. Asking `can_reach(node.position)` refused every tree, which is how the first version sent
-        // every lumberjack to Idle.
+        // **The expensive question, asked of the eight.** A node is worked by standing **on** it (a carcass, a sheep) or
+        // **beside** it (a tree, a mine, a farm). "On it" is a route to the node's own tile; "beside it" is a place that is
+        // free *and* reachable - and asking `can_reach` about the node's own blocked tile was the other half of the trap:
+        // the closest-tile planner answers almost any blocked goal with a whole-map search and a cheerful "yes", so a pick
+        // bought a map for an answer it could not use.
         for (_, _, id) in candidates {
             let Some(entity) = self.find(id) else {
                 continue;
             };
-            if self.can_reach(from, entity.position)
-                || self
-                    .work_position(from, entity.position)
-                    .is_some_and(|stand| self.can_reach(from, stand))
-            {
+            let (tx, ty) = self.tile_of(entity.position);
+            let workable = if self.tile_walkable(tx, ty) {
+                self.can_reach(from, entity.position)
+            } else {
+                self.work_position(from, entity.position)
+                    .is_some_and(|place| self.can_reach(from, place))
+            };
+            if workable {
                 return Some(id);
             }
         }
