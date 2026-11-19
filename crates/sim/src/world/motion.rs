@@ -413,7 +413,6 @@ impl World {
             return Some(StepDecision::WaitGround);
         }
         let target = Self::order_target(entity);
-        let mut blocked = false;
         for other in self
             .entities
             .iter()
@@ -431,8 +430,16 @@ impl World {
             if target == Some(other.id) {
                 return Some(StepDecision::WaitTarget);
             }
-            // A moving group walks over itself (the original's selection exemption, D207).
-            if self.is_mate(id, other.id) {
+            // **The path-ignore list** (`0x1242`, *"That's a path ignore unit"*): the mover's own group, and only while
+            // its members are **moving** - the binary builds that list from the route's objects whose `isMoving`
+            // (`+0x2a0`) answers 1 or whose `+0x150` answers 1, and a stopped unit's velocity is zero. So a stopped mate
+            // is not ignored: he blocks, which is what "units give up their formation when the stop button is pressed" means.
+            let moving = self
+                .paths
+                .get(&other.id)
+                .is_some_and(|route| !route.points.is_empty())
+                && other.pause_remaining == 0;
+            if moving && self.is_mate(id, other.id) {
                 continue;
             }
             // 3. A collider that has not moved since this route was planned is *past*: the route already accounts for it.
@@ -455,17 +462,17 @@ impl World {
                     reach,
                 });
             }
-            // 4. **The older unit wins and walks on, the younger stands.** The original pauses the higher id
-            //    (`cmp eax,esi / jle`) and *discards* the retraction its radius test computes (`0x8a7fe7`, D210), so the
-            //    winner's step is taken through the loser - which is also why the pair cannot deadlock: one of them is
-            //    always allowed to move.
+            // 4. **The higher id is told to pause** (`cmp eax,esi / jle`, `0x8a80ff`; `setPause(0.25-1.50 s)` at
+            //    `0x8a8141`). Nothing else stops the mover: the original's epilogue **never writes a position**, so the
+            //    step is taken and the radius retraction it computes is discarded (`0x8a7fe7`). D279 added a second brake
+            //    here - *"the older unit wins and walks on, the younger stands"*, `blocked = true` - which the binary does
+            //    not have. In a crowd every man stood for every lower-id neighbour and nobody drained: confirmed by the
+            //    owner on the test branch (*"villagers get stuck"*) and by the acceptance crew stopping at **7 then 7**.
             if other.id.0 > id.0 {
                 pauses.push(other.id);
-                continue;
             }
-            blocked = true;
         }
-        blocked.then_some(StepDecision::WaitBlocked)
+        None
     }
 
     /// The entity an order is trying to reach, when the order has one. `Move` has none - its goal is a place.
