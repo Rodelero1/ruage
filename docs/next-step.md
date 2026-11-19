@@ -49,25 +49,29 @@ the wrong order, and there may be a third, but it has to be found the same way.
 3. **The expansion budget** (`expansions > h`, cap 20,000; the guard's target is a *push*, `0x801861`-`0x80189d`, so what a
    budget-exhausted search answers is still unread). No budget: a hopeless search settles every reachable tile.
 
-**Known reds on this branch (20, measured after D281; the list is the suite's own):**
+**Known reds on this branch (20, measured after D281) - now classified against the game** (`docs/reviews/2026-11-19-fixtures-vs-the-decomp.md`):
 
-- **the crowd and the seat** (8): `a_walker_never_ends_a_tick_inside_a_friend`, `villagers_never_come_closer_than_one_diameter`, `a_mate_who_is_stopped_becomes_solid`, `six_settled_men_hold_their_places`, `ten_men_work_one_bush_a_body_apart`, `three_gatherers_all_work_the_same_square_on_its_ring`, `a_settled_man_is_not_displaced_by_a_later_arrival`, `a_newcomer_does_not_move_the_working_gatherers` - each asserts what the **withdrawn settle ring and retraction** provided. The game has neither: bodies overlap as they pass and the loser stands for the drawn pause. **Fixture work, not engine work** - except `a_newcomer_does_not_move_the_working_gatherers`, whose seat claim is a ring rule that still has to be read out of the original.
-- **the standoff a body keeps while passing** (1): `a_blocked_unit_goes_round_a_standing_body_and_arrives` - the walker came **4,619** raw from the body against an 8,000 standoff. The re-plan bends round the collider's *tile*; the game keeps no full diameter from a body it passes (`0x8a7fe7`), so this one is the same rewrite pile as the crowd, unless the radius query below says otherwise.
-- **the gather refusal book** (3): `a_man_who_cannot_fit_takes_the_next_source`, `a_man_who_cannot_get_his_square_takes_the_next_tree`, `a_walled_off_wood_is_tried_once_and_then_left_alone` - the refusal these count is decided by `start_gather`'s reach check now, and the picker/scenario path does not record it.
-- **edges** (4): `a_villager_drops_only_within_half_a_diameter_of_the_drop_site`, `a_walk_past_a_house_keeps_its_bodys_clearance`, `the_loser_stands_for_the_drawn_pause`, `a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot`, `auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out`.
-- **the stall the new model exposed** (1): `the_ten_minute_scenario_builds_trains_and_fights` - see item 1 below.
-- **already red on `main`** (2): `animals::a_live_animal_is_a_gather_source` and `animals::the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body` - the arrival measure (ring distance vs the game's box gap).
+- **the fixture contradicts the game** (3, fixture work - rewrite them): `villagers_never_come_closer_than_one_diameter` (a global no-overlap invariant the game does not have: a *past* collider is dropped and the position stands), `ten_men_work_one_bush_a_body_apart` (asserts `working.len() == touching_place_count(...)`, a cap of seven, under a name that says ten and no cap; and it compares the engine to the helper the engine itself calls), `a_man_who_cannot_fit_takes_the_next_source` (the same cap; the retarget half is unread in both sources).
+- **not a movement rule** (3): `a_villager_drops_only_within_half_a_diameter_of_the_drop_site` (the drop order's range is unread), `a_man_who_cannot_get_his_square_takes_the_next_tree` (our ring; the rule is the owner's D204/D241), `a_walled_off_wood_is_tried_once_and_then_left_alone` (the runner's refusal book).
+- **the engine is wrong, and the cause is named** (6): `a_blocked_unit_goes_round_a_standing_body_and_arrives` (**4,619** raw against 8,000 - the plan carries tiles, the game carries a rect grown by the mover's radius, `FUN_007f9d80`), `a_walk_past_a_house_keeps_its_bodys_clearance` (same hole), `a_mate_who_is_stopped_becomes_solid` (same hole, two bodies on one tile), `the_loser_stands_for_the_drawn_pause` (our pause is written `ticks - 1`, so a 250 ms draw becomes **0.20 s**, under the game's floor), and the two animals reds (arrival is a centre distance where the game uses the **box gap** against `rangeDistance`, `func_002690E0`).
+- **in line, with a caveat** (2): `six_settled_men_hold_their_places`, `three_gatherers_all_work_the_same_square_on_its_ring` (their doc comments cite the withdrawn 1.156 ring), `a_settled_man_is_not_displaced_by_a_later_arrival` (its `between >= 0.39` half is stricter than the game in that scene), `a_newcomer_does_not_move_the_working_gatherers` (asserts our seat book, not positions).
+- **not attributed** (3): the two reseed reds, and `a_walker_never_ends_a_tick_inside_a_friend` is **in line** - its name is stale, its assertions are not; its red is an engine defect.
+- **the stall** (1): `the_ten_minute_scenario_builds_trains_and_fights` - **0 of 1,000** builder progress in 1,400 ticks: the builder never entered the adjacency band (`step.rs:1610`) or `site_is_clear` refused every stroke (`build.rs:188`).
 
 **Next, in order:**
 
-1. **The builder stall** (`the_ten_minute_scenario_builds_trains_and_fights`): at 500 s the barracks is
-   `construction=Some(progress 0 of 1000)` and its builder is `Idle`. Find out whether he never reached the site or reached it
-   and could not get a place, then fix that - a man shut out of his own build site is a broken match.
-2. **The radius query** (`FUN_00844310`, and the tile object array behind `FUN_00801a20`): two bodies on one tile cannot be
-   planned round, because the search starts on the tile they share and every ground test is a tile test. The original's
-   collision and passability answers are a **radius** query over the objects on a tile, ours is a counted tile. Read it before
-   designing anything - it is the same hole under the stall and under `a_blocked_unit_...`.
-3. **Rewrite the nine retraction/settle fixtures** to the game's rule (item list above), so the red set can actually fall.
+1. **The radius in the plan** (`FUN_007f9d80`: a stopped object enters the search as a rect **grown by the mover's radius**;
+   `FUN_00840830` grows the query box by `+0x268` and collides on `<=`). Our `replan_around_bodies` avoids the collider's
+   *tile*, so a man keeps 0.577 of the standoff (`a_blocked_unit...` 4,619 of 8,000) and two bodies on one tile cannot be got
+   round at all. That one change is the answer to three reds at once, and it was built once before (D211: *"the eight vertices
+   of the octagon that circumscribes their clearance"*) and dropped in the D281 rewrite.
+2. **The pause off-by-one**: `motion.rs:152` writes `ticks.saturating_sub(1)`, so a 250 ms draw stands **0.20 s**. Write the
+   drawn duration.
+3. **The builder stall** (`the_ten_minute_scenario_builds_trains_and_fights`): **0 of 1,000** progress in 1,400 ticks - either
+   the builder never entered the adjacency band (`step.rs:1610`) or `site_is_clear` refused every stroke (`build.rs:188`).
+4. **Rewrite the three fixtures that contradict the game** (`villagers_never_come_closer_than_one_diameter`,
+   `ten_men_work_one_bush_a_body_apart`, `a_man_who_cannot_fit_takes_the_next_source`), and re-point
+   `a_newcomer_does_not_move_the_working_gatherers` at positions rather than our seat book.
 4. **The owner's acceptance run** - D279 and D281 both landed without one by his instruction. What to look at: whether the
    match resolves, whether a crowd reaches a tree, and whether a group order to one tile looks like the game.
 5. **The arrival measure** for animals: "at the node" becomes the game's **box gap** within the job's range (`func_002690E0`)
