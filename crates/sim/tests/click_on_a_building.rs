@@ -77,16 +77,15 @@ fn free_ground(world: &World, tile: (i64, i64)) -> bool {
         .is_some_and(|(x, y)| world.tile_walkable(x, y))
 }
 
-/// An empty rectangle of the project map, at least three tiles clear on its west and east sides.
+/// An empty rectangle of the project map with clear ground **all round it**: the two men are spawned three tiles west and
+/// six east of the footprint, on the row below its top, so the whole band `x - 4 ..= x + width + 2` by `y ..= y + height`
+/// has to be open or the fixture would be measuring the map's furniture.
 fn open_patch(world: &World, width: i64, height: i64) -> Option<(i64, i64)> {
     for y in 26..52i64 {
         for x in 8..44i64 {
-            let clear =
-                (0..width).all(|dx| (0..height).all(|dy| free_ground(world, (x + dx, y + dy))));
-            let approach = (1..=4).all(|back| {
-                free_ground(world, (x - back, y)) && free_ground(world, (x + width - 1 + back, y))
-            });
-            if clear && approach {
+            let clear = (0..height + 1)
+                .all(|dy| (-4..width + 3).all(|dx| free_ground(world, (x + dx, y + dy))));
+            if clear {
                 return Some((x, y));
             }
         }
@@ -210,6 +209,9 @@ fn a_click_on_a_house_and_a_click_beside_it_end_at_the_same_distance() {
         .expect("a speed");
     assert!(step > 0, "the fixture needs a moving body");
 
+    // **Both men are done well before this**: the west one ends on contact and the east one when the ground refuses it for
+    // forty ticks. The loop still runs a while, because the invariant it holds is *per tick* - nobody's box ever enters the
+    // wall - and stopping early would leave the last few ticks unwatched.
     for tick in 0..2_400 {
         world.step().expect("step");
         for (which, id) in [
@@ -239,6 +241,53 @@ fn a_click_on_a_house_and_a_click_beside_it_end_at_the_same_distance() {
     );
 }
 
+/// **And from the east**, where the step runs *against* the axis it cuts on.
+///
+/// Written after the review found the axis arithmetic could carry a negative denominator into the cut's comparison: a body
+/// walking west or north into its target would then be cut to **zero movement** and stand still, while the same walk
+/// eastwards worked. The two are one rule or they are not a rule.
+#[test]
+fn a_click_on_a_house_from_the_east_stops_at_the_same_distance() {
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let Some(at) = open_patch(&world, 4, 4) else {
+        return;
+    };
+    let house = building(&mut world, 1, "house", at, 0);
+    let rect = rect_of(&world, house);
+    let scale = world.scale();
+    let east = villager(&mut world, (at.0 + 6, at.1 + 1), (scale / 2, scale / 2));
+    let middle = (
+        Fixed::from_raw((rect.0 + rect.2) / 2),
+        Fixed::from_raw((rect.1 + rect.3) / 2),
+    );
+    walk_to(&mut world, east, middle, Some(house));
+
+    let radius = world.body_radius_of(east);
+    let step = world
+        .entity(east)
+        .map(|entity| entity.speed.raw() / i64::from(world.tick_rate_hz()))
+        .expect("a speed")
+        .max(1);
+    let mut ended = None;
+    for tick in 0..u64::try_from(10 * scale / step).unwrap_or(600) + 60 {
+        world.step().expect("step");
+        if world
+            .entity(east)
+            .is_some_and(|entity| matches!(entity.task, ruage_sim::Task::Idle))
+        {
+            ended = Some(tick);
+            break;
+        }
+    }
+    ended.expect("the walk from the east never ended: it is standing short of the wall");
+    let gap = centre_gap(&world, east, rect);
+    assert!(
+        (radius..=radius + step).contains(&gap),
+        "the click from the east stopped {gap} raw from the wall - the radius is {radius}, one step {step}"
+    );
+}
+
 /// **The order names the house, and touching it ends the order** - not a forty-tick stall against something in the way.
 ///
 /// The original's collision block: *"That collision is with our target, so we're done"* (`0x127d`). Our order carried only a
@@ -260,10 +309,17 @@ fn a_walk_that_names_a_house_ends_when_it_touches_it() {
     );
     walk_to(&mut world, walker, middle, Some(house));
 
-    // The wall is eight tiles away at most: ninety ticks at a third of a tile a tick is far more than it takes. An order that
-    // is still live here is an order that never ended on contact.
+    // **The deadline is derived, not chosen**: ten tiles of travel at this body's own step, plus a margin for the pause the
+    // crowd rule may draw. A literal tick count would silently stop measuring anything if the tick rate or the speed moved -
+    // `config/sim.toml` already contemplates 60 Hz.
+    let step = world
+        .entity(walker)
+        .map(|entity| entity.speed.raw() / i64::from(world.tick_rate_hz()))
+        .expect("a speed")
+        .max(1);
+    let deadline = u64::try_from(10 * scale / step).unwrap_or(600) + 60;
     let mut ended = None;
-    for tick in 0..180 {
+    for tick in 0..deadline {
         world.step().expect("step");
         if world
             .entity(walker)

@@ -36,14 +36,16 @@ this session executed: the four edits land together, because three of them alone
 
 **What was attacked, and what it cost.**
 
-- **Same-count, different-set, measured both ways.** The suite as it stands: **199 binaries, 882 passed, 21 failed, 21
-  ignored**. Against the same 24 binaries run at the previous commit on this machine (`5dd2c7e`), **four** reds turn green -
+- **Same-count, different-set, measured both ways.** The suite as it stands: **199 binaries, 884 passed, 21 failed, 21
+  ignored** (the final run, to exit). The baseline had to be measured, not quoted: the docs carried "20 failed", and a run of
+  the same binaries at `5dd2c7e` on this machine found **23** by name. Against that set, **four** reds turn green -
   `corner_gap::a_walk_past_a_house_keeps_its_bodys_clearance`, `overlap::a_villager_who_is_gathering_does_not_move`,
   `footprint::no_unit_crosses_an_undepleted_resource_tile` and
   `animals::the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body` - and **two** join: `skirmish::both_sides_field_an_army` and `skirmish::the_skirmish_only_refuses_what_the_fight_has_taken`. Those two are
   the owner's **parked** pair, they flip on a single tick of movement timing (red on D279, green after D281, red after D282),
   and they flip again here for the same reason: one extra tick of pause and up to one detour is enough to miss a script
-  deadline that already records 921 of 1,000. They are expected on this branch, not ignored.
+  deadline that already records 921 of 1,000. They are expected on this branch, not ignored. Nineteen of the 23 baseline reds
+  are still red, unchanged.
 - **Three fixtures went red on the first cut, and all three were the engine's fault, not theirs:**
   - `footprint::a_head_on_pair_in_a_one_tile_corridor_never_overlaps` - *"the pair never came closer than 140000 raw"*. Both
     bodies are spawned on **tile corners**, so each already overlapped the tree row beside it by 4000 raw; a plain yes/no box
@@ -94,3 +96,32 @@ this session executed: the four edits land together, because three of them alone
 ```
 cargo test --workspace --offline --no-fail-fast
 ```
+
+
+## The reviewer's findings (`make ai-review`, HEAD `6d8ef1c`)
+
+The run was **budget-limited**: 64 files, 6 comments, 967,044 tokens, 4m54s, and its own log names the files it **did not
+read** - `ground.rs`, `world/motion.rs`, `world/step.rs`, `world/sites.rs`, `world/orders.rs` among them, i.e. most of the
+engine and all of the movement pass. So this note cannot claim the diff was read end to end; it can only account for the six
+findings that came back, all of which are in `lib.rs` and the new fixture:
+
+- **Accepted - `entry_parameter` carried a negative denominator.** A step with a negative component returned
+  `(far - from, delta)`, both negative: the "which axis enters later" cross-multiplication therefore compared inverted
+  fractions, and the guard that follows read the fraction as *already inside* - so a body walking **west** or **north** into its
+  target was cut to **zero movement**. Fixed by normalising both terms (`(from - far, -delta)`), and **pinned by a unit test
+  watched failing first** (`the_target_cut_is_the_same_in_every_direction`), plus a fixture for the owner's click from the
+  east. Reported honestly: the fix landed before its test, because the review found it rather than a fixture - the test was
+  written afterwards and the bug put back to watch it fail.
+- **Accepted - `push_out_of_target` could land inside a neighbour tile's box**, because each solid tile was pushed out of
+  independently. A click in the middle of a two-tile wall could be pushed to a face still inside its other half, and the plan
+  then had a goal no legal step could reach. The pass now repeats until the point stops moving.
+- **Accepted - `state_hash` ignored `Task::Move`'s new `target`.** That field changes where a step is cut and when the order
+  ends, so two runs differing only in it would have had an identical fingerprint. It is hashed now (a presence byte plus the
+  id), in the same shape the other task arms use.
+- **Accepted, fixture-side - the new fixture's `open_patch` did not check the tiles it spawns the men on**, its deadline was a
+  bare `180` whose comment mis-stated the step length, and the loop ran all 2,400 ticks for a static outcome. The patch now
+  covers the whole band the men stand in, the deadline is derived from the body's own step and speed, and the comment says
+  what the loop is for.
+- **Refused - nothing.** All six were right; two of the three engine findings were defects that no fixture in the tree
+  exercises (a westward cut, a multi-tile push-out), which is the strongest argument in this note for reading the reviewer's
+  findings against the code rather than against the suite.

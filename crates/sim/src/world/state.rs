@@ -275,10 +275,19 @@ impl World {
             }
             match entity.task {
                 Task::Idle => fnv_bytes(&mut hash, &[0u8]),
-                Task::Move { to, .. } => {
+                Task::Move { to, target } => {
                     fnv_bytes(&mut hash, &[7u8]);
                     fnv_bytes(&mut hash, &to.0.raw().to_le_bytes());
                     fnv_bytes(&mut hash, &to.1.raw().to_le_bytes());
+                    // **The object the walk is about is state** (D286): it decides where the step is cut and when the order
+                    // ends on contact, so two runs that differed only in it would diverge with an identical fingerprint.
+                    match target {
+                        Some(id) => {
+                            fnv_bytes(&mut hash, &[1u8]);
+                            fnv_bytes(&mut hash, &id.0.to_le_bytes());
+                        }
+                        None => fnv_bytes(&mut hash, &[0u8]),
+                    }
                 }
                 Task::Hunt { to } => {
                     // Its own tag, not `Move`'s: two units walking to the same tile in the same

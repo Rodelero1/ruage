@@ -3507,11 +3507,14 @@ impl World {
             return None;
         }
         let (dx, dy) = (x1 - x0, y1 - y0);
+        // **Both terms positive**, so the fraction is well ordered whichever way the body walks: a step to the left enters
+        // through the *far* face, and writing it as `(from - far, -delta)` keeps numerator and denominator the same sign as
+        // the rightward case instead of leaving two negatives that invert every comparison made on them.
         let axis = |from: i64, delta: i64, near: i64, far: i64| -> (i64, i64) {
             if delta > 0 && from <= near {
                 (near - from, delta)
             } else if delta < 0 && from >= far {
-                (far - from, delta)
+                (from - far, -delta)
             } else {
                 (0, 1)
             }
@@ -3546,30 +3549,40 @@ impl World {
         target: EntityId,
     ) -> (Fixed, Fixed) {
         let mut point = point;
-        for (centre, half) in self.solid_boxes(target) {
-            let (left, right) = (
-                centre.0.raw() - half.0 - reach,
-                centre.0.raw() + half.0 + reach,
-            );
-            let (top, bottom) = (
-                centre.1.raw() - half.1 - reach,
-                centre.1.raw() + half.1 + reach,
-            );
-            let (x, y) = (point.0.raw(), point.1.raw());
-            if x <= left || x >= right || y <= top || y >= bottom {
-                continue;
+        // **Until it is clear of every tile of the thing** (D286): pushing out of one tile's box can land inside a neighbour's
+        // - a click in the middle of a two-tile wall is pushed to a face that is still inside its other half - so the pass
+        // repeats until the point stops moving. It converges: each push leaves the union further out.
+        for _ in 0..8 {
+            let before = point;
+            for (centre, half) in self.solid_boxes(target) {
+                let (left, right) = (
+                    centre.0.raw() - half.0 - reach,
+                    centre.0.raw() + half.0 + reach,
+                );
+                let (top, bottom) = (
+                    centre.1.raw() - half.1 - reach,
+                    centre.1.raw() + half.1 + reach,
+                );
+                let (x, y) = (point.0.raw(), point.1.raw());
+                if x <= left || x >= right || y <= top || y >= bottom {
+                    continue;
+                }
+                let (to_left, to_right, to_top, to_bottom) =
+                    (x - left, right - x, y - top, bottom - y);
+                let nearest = to_left.min(to_right).min(to_top).min(to_bottom);
+                point = if nearest == to_left {
+                    (Fixed::from_raw(left), point.1)
+                } else if nearest == to_right {
+                    (Fixed::from_raw(right), point.1)
+                } else if nearest == to_top {
+                    (point.0, Fixed::from_raw(top))
+                } else {
+                    (point.0, Fixed::from_raw(bottom))
+                };
             }
-            let (to_left, to_right, to_top, to_bottom) = (x - left, right - x, y - top, bottom - y);
-            let nearest = to_left.min(to_right).min(to_top).min(to_bottom);
-            point = if nearest == to_left {
-                (Fixed::from_raw(left), point.1)
-            } else if nearest == to_right {
-                (Fixed::from_raw(right), point.1)
-            } else if nearest == to_top {
-                (point.0, Fixed::from_raw(top))
-            } else {
-                (point.0, Fixed::from_raw(bottom))
-            };
+            if point == before {
+                break;
+            }
         }
         point
     }
@@ -5340,6 +5353,35 @@ overrides = "overrides.toml"
         }
         let ids: Vec<u32> = w.entities().iter().map(|e| e.id.0).collect();
         assert_eq!(ids, vec![1, 2, 3], "iteration order must be entity id");
+    }
+
+    /// **The cut into a target is the same in every direction** (D286, found by the review).
+    ///
+    /// `entry_parameter` reports when a step enters a grown box as a fraction of the step. Written with the sign of the
+    /// movement in both terms, a step to the left or upwards carried a negative denominator, the "which axis enters later"
+    /// comparison inverted, and the guard that follows read the fraction as "already there" - so a body walking **west** into
+    /// its target was cut to zero movement and stood still while the same walk eastwards arrived. The four directions are one
+    /// rule or they are not a rule.
+    #[test]
+    fn the_target_cut_is_the_same_in_every_direction() {
+        let scale = 20_000;
+        let reach = 4_000;
+        let half = (scale / 2, scale / 2);
+        let centre = (Fixed::from_raw(0), Fixed::from_raw(0));
+        // A step from one body-width outside the grown box, straight at it, from each side.
+        let from = i64::from(1) * (scale / 2 + reach) + scale / 5;
+        for sign in [1i64, -1] {
+            let here = (Fixed::from_raw(sign * from), Fixed::ZERO);
+            let landing = (Fixed::from_raw(sign * (from - scale / 4)), Fixed::ZERO);
+            let entry = World::entry_parameter(here, landing, centre, half, reach)
+                .unwrap_or_else(|| panic!("a step into the box from {sign:+} must have an entry"));
+            // Compared in integers: the fixed-point gate (D67) forbids a float in the tick, and a unit test that used one
+            // would be excusing in itself what the engine may not do.
+            assert!(
+                entry.0 > 0 && entry.0 <= entry.1,
+                "from {sign:+} the entry is {entry:?}, which the caller reads as \"already inside\""
+            );
+        }
     }
 
     #[test]

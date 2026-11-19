@@ -4,8 +4,8 @@
 a click landed on (`Command::Move`/`WalkTo`/`Task::Move` carry `target: Option<EntityId>`, filled by the window from
 `pick_entity`); `ground::Clear` is a **box**; the plan keeps clear of the **blocked tiles'** boxes as well as bodies
 (`solid_boxes`, `crosses_an_object`, `leg_is_clear`); and the step asks the same box question, **cutting a step at the target's
-face** (`target_contact`). Acceptance fixture **39.58 s -> 33.74 s**; suite **199 binaries, 882 passed, 21 failed, 21 ignored**
-(the two skirmish reds are the owner's parked pair - see item 4). Full account, including the nine corrections the suite forced
+face** (`target_contact`). Acceptance fixture **39.58 s -> 33.74 s**; suite **199 binaries, 884 passed, 21 failed, 21 ignored** - four of the 23
+baseline reds green, two joined (the owner's parked skirmish pair - see item 4). Full account, including the nine corrections the suite forced
 onto the slice: `docs/reviews/2026-11-19-d286-one-box-ruler.md`, and D286 in `docs/decisions.md`.
 
 **The red set now, by name (21).** `a_mate_who_is_stopped_becomes_solid`, `six_settled_men_hold_their_places`,
