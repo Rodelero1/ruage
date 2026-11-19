@@ -17,8 +17,8 @@ ordered behaviour the game does not have, so "meet the original" and "the rule I
 |---|---|---|---|---|---|
 | P1 | ~~a search with **no budget**~~ **DONE 2026-11-19**: a hopeless goal expands every reachable tile | stops at **`h` expansions** (25 x Euclidean tile distance) and never past **20,000**, then answers the **best node it settled** - it pushes that node with cost 0 and the caller walks the parents from it | **adopt** | `FUN_008007f0_008007f0.c` (REA corpus), guard `0x800d4f`, tail `0x801855`-`0x80189d`, read 2026-11-19 | conformance: a sealed room's expansion count ≤ `h`, and the answer is the closest tile |
 | P2 | ~~the nearest-cell answer picks by **(weighted h, g)**, later node wins ties~~ **DONE 2026-11-19** | picks by **octile distance to the goal**, `strict <` so the **first** node found wins | **adopt** | `FUN_008007f0`, `if (iVar21 < local_468)` where `iVar21 = FUN_007ffc80(node, goal)` | conformance: two equally-near cells, the one the search settles first answers |
-| P3 | ~~a step is refused only on **strict overlap** (`<`), so a body resting exactly at contact may still walk~~ **STOPPED ON A RULING**: see the fork below | the box test collides on **touching** (`<=`) | **adopt**: collide on `<=`, and let the target cut land one raw unit short of the face so a body can never be wedged by exactness | `FUN_00840830` (`<=`, `+0x268`) | fixture: a body pressed against a wall can still walk along it; the two clicks still end at the radius |
-| P4 | a **terrain** refusal buys a new route once a second (`REPLAN_TICKS = 20`) | re-plans on **every** terrain collision, every update | **cut** ours: re-plan on every refusal | `0x122f`, `0x128b` (*"We have %d non-past collisions and %d terrain collisions, repathing"*) | measurement: acceptance fixture and the wall-press fixture (a man against a wall is the worst case) |
+| P3 | ~~a step is refused only on **strict overlap** (`<`)~~ **BLOCKED, measured**: the plan certifies a leg the step then refuses, so P3 lands with a plan/step agreement about touching - and the owner has ruled for the game (`<=`, D117 withdrawn) | the box test collides on **touching** (`<=`) | **adopt**: collide on `<=`, and let the target cut land one raw unit short of the face so a body can never be wedged by exactness | `FUN_00840830` (`<=`, `+0x268`) | fixture: a body pressed against a wall can still walk along it; the two clicks still end at the radius |
+| P4 | a **terrain** refusal buys a new route once a second (`REPLAN_TICKS = 20`) - **BLOCKED on P8**: the off-grid gather/attack goal points need the fallback that sat beside the throttle | re-plans on **every** terrain collision, every update | **cut** ours: re-plan on every refusal | `0x122f`, `0x128b` (*"We have %d non-past collisions and %d terrain collisions, repathing"*) | measurement: acceptance fixture and the wall-press fixture (a man against a wall is the worst case) |
 | P5 | an order blocked for **40 ticks** is finished (`finish_blocked_orders`) | no such rule: a walk that cannot advance **stands**; the pause is the only brake | **cut** ours | `0x12b2` (*"Don't know what to do about my collision(s)"*), and nothing in the epilogue ends an order | the fixtures that relied on it re-pointed, then the acceptance fixture |
 | P6 | the ground holds a **count** per tile and treats a blocked tile as one **whole tile wide** | an object carries its own **radius pair** from the dat, and the query is a **radius over the objects on a tile** (`obj + 0x20 + index*4`) | **adopt**: per-object boxes in the ground's tile index, built from the pack's radii | `FUN_00844310` (the query), `FUN_00840830` (the box) | conformance: a tree smaller than a tile leaves the rest of the tile walkable; a body radius above half a tile is planned round |
 | P7 | the plan's avoid list **skips a body the mover already overlaps**, so two bodies on one tile cannot be planned round | the search starts on the shared tile and **every stander the mover does not ignore is in it** | **adopt**: no skip; the shared tile's occupants are in the avoid list | `FUN_007f9d80`, D282's note | `a_mate_who_is_stopped_becomes_solid` green at its 8,000 raw standoff |
@@ -28,7 +28,20 @@ ordered behaviour the game does not have, so "meet the original" and "the rule I
 | P11 | one flat A* over every tile | **three** pathfinders: a levelled/mip-mapped route, a tile short-range one, and a polygonal one for combat | **adopt, priced**: the levelled search is a speed layer whose HD addresses are not read - the AoC decomp's `zone_spatial_pyramid_*` is the only source | `docs/pathfinding-conformance.md` row 28 (red, `#[ignore]`d) | conformance: a 58-tile walk answers from the hierarchy |
 | P12 | no per-edge passage: a tile is walkable or it is not | the AoC decomp gives a tile a **four-bit N/S/W/E neighbour mask** - a step is legal per **edge** | **unread for HD**: no HD address pins the mask. Reading it is the step before adopting or cutting | `zone_spatial_pyramid_check_tile.cpp` (`func_001D29F0`) | - |
 
-## The one fork that has already stopped the plan (P3)
+## Rulings and blockers, as measured tonight
+
+- **P3's fork is ruled**: *"the game wins (a): adopt `<=`, a half-tile body stops at a one-tile gap, and D117 is withdrawn."*
+  D117 no longer stands; `building_passage::a_big_unit_walks_through_a_one_tile_gap` must be re-pointed to the game's answer
+  **when the rule lands**, not before (the engine cannot assert a rule it does not follow).
+- **P1 is blocked on P11**: at `h = 25 x tiles` a flat search truncates a legitimate detour - measured, a one-tile walk answered
+  with a node fifteen tiles east. The budget lands with the levelled search, or not at all.
+- **P3 is blocked on the plan/step agreement about touching**: a route certified by `leg_is_clear` still asks for a landing
+  that touches two blocked tiles, and the body stands in `WaitGround` for 3,000 ticks.
+- **P4 is blocked on P8**: the goal fallback that made off-grid gather/attack points survivable is part of the book's furniture.
+- **P5 is free**: cutting the forty-tick order-finish was measured inside a bundle with P4 and changed no fixture; it wants its
+  own witness and should land first, alone.
+
+## The fork that the owner has already ruled (P3, kept for the record)
 
 The binary's collision test is four `<=` (`FUN_00840830`), and its search grows every object by the mover's radius
 (`FUN_007f9d80`). Under those, a body of radius **half a tile** - a packed trebuchet, the widest in the pack - **cannot thread a
