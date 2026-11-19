@@ -128,6 +128,7 @@ fn eight_villagers_ordered_to_one_tile_never_walk_through_each_other() {
     for id in &ids {
         world
             .submit_checked(Command::Move {
+                target: None,
                 unit: *id,
                 to: (34, 34),
             })
@@ -322,6 +323,7 @@ fn a_passer_by_does_not_move_the_seated_gatherers() {
     );
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (tile.0 + 3, tile.1),
         })

@@ -129,6 +129,7 @@ fn ground_it_cannot_cross_is_re_planned_once_a_second() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (7, 4),
         })

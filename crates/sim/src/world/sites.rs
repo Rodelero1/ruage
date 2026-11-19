@@ -234,7 +234,10 @@ impl World {
             },
         );
         if let Some(entity) = self.find_mut(id) {
-            entity.task = Task::Move { to: goal };
+            entity.task = Task::Move {
+                to: goal,
+                target: None,
+            };
         }
     }
 
@@ -632,7 +635,10 @@ impl World {
         if let Some(target) = target
             && let Some(entity) = self.find_mut(unit)
         {
-            entity.task = Task::Move { to: target };
+            entity.task = Task::Move {
+                to: target,
+                target: None,
+            };
         }
     }
 
@@ -647,11 +653,23 @@ impl World {
         to: (Fixed, Fixed),
         fighting: bool,
         patrol: bool,
+        target: Option<EntityId>,
     ) -> Result<(), SimError> {
         // **Every click is accepted** (D134): a target on blocked ground becomes the nearest legal standing point before
         // anything is planned, slotted or stored, so the order's goal is always a tile a body can occupy.
         let from = self.find(unit).map_or(to, |entity| entity.position);
-        let to = self.walk_goal(unit, from, to)?;
+        // **A click on a thing is an order about the thing** (D286): the goal becomes the nearest point outside its box, so
+        // the route aims at the thing and no legal step has to enter it. A click on the ground keeps D134's answer - the
+        // nearest place the body can stand.
+        let to = match target {
+            Some(thing) => {
+                let reach = self
+                    .find(unit)
+                    .map_or(0, |entity| self.body_radius(entity.unit));
+                self.push_out_of_target(to, reach, thing)
+            }
+            None => self.walk_goal(unit, from, to)?,
+        };
         // Crowd slots are **tiles** (a place to stand), so the point becomes a tile for the slot search and survives as
         // the goal when this unit takes the clicked tile itself (A).
         let wanted = self.tile_of(to);
@@ -674,7 +692,7 @@ impl World {
             let radius = self.body_radius(self.find(unit).and_then(|entity| entity.unit));
             self.crowd_ring_point(to, radius, from, already_heading, unit)
         };
-        let goal = self.check_order_at(unit, goal)?;
+        let goal = self.check_order_at(unit, goal, target.is_some())?;
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
         let route = self.plan_path_for(unit, entity.position, goal)?;
         let here = self.tile_of(entity.position);
@@ -696,7 +714,7 @@ impl World {
             entity.task = if fighting {
                 Task::Hunt { to: goal }
             } else {
-                Task::Move { to: goal }
+                Task::Move { to: goal, target }
             };
         }
         Ok(())

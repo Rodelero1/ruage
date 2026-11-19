@@ -36,6 +36,7 @@ fn main() {
         .map(|entity| entity.id)
     {
         world.submit(Command::Move {
+            target: None,
             unit: villager,
             to: (24, 20),
         });

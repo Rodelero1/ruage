@@ -1,6 +1,67 @@
-# OPEN - the rules follow the decomp; the fixtures that do not are named (D282)
+# OPEN - what is left after the box ruler (D286 landed)
 
-**Where things stand (2026-11-19, measured).** D279's port is on this branch (`movement-clean-slate`, HEAD `532a997`):
+**Where this branch stands (2026-11-19, measured, `blunt-port`).** D286's four edits are **landed**: an order names the object
+a click landed on (`Command::Move`/`WalkTo`/`Task::Move` carry `target: Option<EntityId>`, filled by the window from
+`pick_entity`); `ground::Clear` is a **box**; the plan keeps clear of the **blocked tiles'** boxes as well as bodies
+(`solid_boxes`, `crosses_an_object`, `leg_is_clear`); and the step asks the same box question, **cutting a step at the target's
+face** (`target_contact`). Acceptance fixture **39.58 s -> 33.74 s**; suite **199 binaries, 882 passed, 21 failed, 21 ignored**
+(the two skirmish reds are the owner's parked pair - see item 4). Full account, including the nine corrections the suite forced
+onto the slice: `docs/reviews/2026-11-19-d286-one-box-ruler.md`, and D286 in `docs/decisions.md`.
+
+**The red set now, by name (21).** `a_mate_who_is_stopped_becomes_solid`, `six_settled_men_hold_their_places`,
+`three_gatherers_all_work_the_same_square_on_its_ring`, `a_settled_man_is_not_displaced_by_a_later_arrival`,
+`ten_men_work_one_bush_a_body_apart`, `villagers_never_come_closer_than_one_diameter`, `a_walker_never_ends_a_tick_inside_a_friend`,
+`the_loser_stands_for_the_drawn_pause`, `a_man_who_cannot_fit_takes_the_next_source`,
+`a_man_who_cannot_get_his_square_takes_the_next_tree`, `a_villager_drops_only_within_half_a_diameter_of_the_drop_site`,
+`a_depleted_node_sends_the_villager_to_the_next_one_of_its_kind`, `a_forager_whose_bush_is_finished_goes_to_a_farm`,
+`a_gather_step_can_put_a_villager_on_a_farm`, `a_walled_off_wood_is_tried_once_and_then_left_alone`,
+`a_tree_is_down_within_sixteen_seconds`, `a_tree_is_still_standing_ten_seconds_in`, the reseed pair
+(`a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot`, `auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out`),
+and the parked skirmish pair.
+
+**Next, in order:**
+
+1. **The trees (four reds, one owner).** `a_tree_is_down_within_sixteen_seconds` and `a_tree_is_still_standing_ten_seconds_in`
+   say a tree's hit points do not fall at the pack's 1.5 hp/s (measured: 20 hit points left after 16 s); the two "next tree"
+   reds say a woodcutter whose tree ran dry does not move on. Both are the *chop* path, not the walk, and both were red before
+   this slice - read `grant_takes`'s chop carry (`fell_carry`) against the pack's `fell_milli_per_second` before touching
+   anything else, because a tree that never falls also never empties, which would explain the second red for free.
+2. **Two bodies on one tile** - the last structural hole, unchanged by this slice: the clearance is skipped for a body the mover
+   already overlaps, so `a_mate_who_is_stopped_becomes_solid` sits at **4,478 raw**. D283's refutation stands (a per-collider
+   veto freezes a crowd: **7 then 7**), so the next attempt is a **net** rule or the game's own radius query (`FUN_00844310`).
+3. **The crowd fixtures** that assert the withdrawn settle ring (`six_settled_men_hold_their_places`,
+   `three_gatherers_all_work_the_same_square_on_its_ring`, `ten_men_work_one_bush_a_body_apart`,
+   `villagers_never_come_closer_than_one_diameter`, `a_settled_man_is_not_displaced_by_a_later_arrival`) - the crowd slice's
+   to rewrite to the game's rule: bodies overlap as they pass, a stopped body blocks, the loser stands for the drawn pause.
+   `a_newcomer_does_not_move_the_working_gatherers` was re-pointed by this slice (the staleness test is a box test now) and is
+   **green**; the rest still assert our own seat book.
+4. **The parked skirmish pair** (owner: *"The failures to train militia do not seem relevant to the pathfinding. Skip them for
+   now."*) - a script deadline, not a movement rule; they flip on a single tick and are expected red here.
+5. **The drop-site red** (`a_villager_drops_only_within_half_a_diameter_of_the_drop_site`) - the return order's range is unread.
+6. **The decide profile** - the remaining gap to `main`'s 26.6 s.
+7. **The lost guard**: `a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` was deleted by the owner's ruling and was the
+   only cover for "a mid-tick spawn shifts the entity list, so movements are applied by id, not index".
+
+## Prior implementation of the landed slice (D203) - kept because the next slice reads it
+
+| subject | where it lives now | what pins it | what it does today |
+|---|---|---|---|
+| a move order | `lib.rs:486` `Task::Move { to }`, `lib.rs:581` `Command::Move { to }`, `lib.rs:4091` `WalkTo`/`Move` group stamp | `building_passage`, `click_spot`, `click_into_the_woods` | carries a **place**, never an object: a click on a building is "walk to this spot" |
+| an order's target | `world/motion.rs:479` `order_target` | `collision.rs`, `gather_*` | `Attack`/`Gather`/`Return`/`Build` only - `Move` has none, so the target arm cannot fire for a click |
+| the clearance | `ground.rs:32` `Clear { at, reach }`, `still_inside`, `crossed_by` | `body_clearance.rs` | a **disc**: reach is the pair's radii sum, tested by squared distance |
+| the plan's obstacles | `lib.rs:2023` `standing_bodies`, `ground.rs:322` `inside_a_body` | `a_blocked_unit_goes_round_a_standing_body_and_arrives` | **bodies only**; a building's footprint is the grid's whole-tile test, so a leg may clip its corner by a rounding |
+| the step's ground test | `world/motion.rs:401` `tile_walkable` on the landing tile | `building_passage` (3 fixtures), `corner_gap` | the **tile**, not the body - a centre may reach a footprint's border (`0.07` from it, the owner's "~0") |
+| the click | `crates/view/src/bin/window.rs:498` `pick_entity` -> `WalkTo` | - | the picked entity is used for `Gather`/`Attack` and **dropped** for a walk |
+
+**Measured before this slice** (`blunt-port` at `5dd2c7e`): acceptance fixture **39.58 s**, suite 198 binaries / 881 passed
+/ 20 failed / 21 ignored. The step's box test **alone** was tried and reverted: it passes acceptance in **21.81 s** and reds
+`a_villager_walks_round_a_house_rather_than_through_it`, `a_villager_walks_round_a_half_built_house` and
+`a_big_unit_walks_through_a_one_tile_gap`, because the plan handed it routes it now refuses - which is why the four land
+together.
+
+---
+
+**Where things stand (2026-11-19, measured).** D279's port is on this branch (`blunt-port`, HEAD `5dd2c7e`):
 `ground.rs` (grid + one A\\* + the line test), `world/motion.rs` (one whole step a tick, four refusals) and
 `world/placement.rs` replace 1,663 deleted lines. D280 closed the **12x regression** it left: `ruage-sim --test
 acceptance_economy the_acceptance_match_trains_more_villagers` was **330.97 s** and is **42.62 s** (debug, 48,000 ticks;

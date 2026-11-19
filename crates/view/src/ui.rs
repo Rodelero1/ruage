@@ -216,6 +216,7 @@ impl Selection {
                     let point = camera.world_point(pixel);
                     let scale = snapshot.scale as f32;
                     orders.push(Command::WalkTo {
+                        target: None,
                         unit,
                         to: (
                             ruage_fixed::Fixed::from_raw((point.0 * scale) as i64),

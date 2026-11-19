@@ -22,43 +22,70 @@ use std::collections::BinaryHeap;
 use ruage_data::Map;
 use ruage_fixed::Fixed;
 
-/// **A body the plan must keep clear of** (D282): where it stands, and how far the mover's body plus its own reaches.
+/// **An obstacle the plan must keep clear of** (D282, D286): the object's **box**, and the mover's own reach.
 ///
 /// The original puts a stopped object into the search as a rectangle **grown by the mover's radius** (`FUN_007f9d80`) and
 /// grows the collision query box the same way (`FUN_00840830`, `+0x268`). A tile grid cannot express a 0.4-tile clearance,
 /// so the clearance is carried beside the grid: a tile whose centre is inside it is not planned through, and a straightening
 /// jump that passes within it is refused.
+///
+/// **A box, not a disc** (D286). A disc of 0.7 forbids a one-tile gap that the game lets a 0.2-radius body through, and the
+/// game's own test is an AABB against an AABB. `half` is the obstacle's own half-extents - a body's radius, a tile's half -
+/// and `reach` is the mover's radius, so the grown box is `half + reach` on each axis.
 #[derive(Clone, Copy, Debug)]
 pub struct Clear {
-    /// The body's centre, in raw units.
+    /// The obstacle's centre, in raw units.
     pub at: (i64, i64),
-    /// The distance the route must keep from it, in raw units: the mover's reach to that body.
+    /// The obstacle's own half-extents, in raw units: a body's radius, or half a tile for a grid object.
+    pub half: (i64, i64),
+    /// The mover's own reach: how far its body stands from that box.
     pub reach: i64,
 }
 
 impl Clear {
-    /// How far one raw point is from the body's centre, squared - the cheap test the search runs per candidate tile.
-    fn still_inside(&self, point: (i64, i64)) -> bool {
-        let (dx, dy) = (point.0 - self.at.0, point.1 - self.at.1);
-        dx * dx + dy * dy < self.reach * self.reach
+    /// The obstacle grown by the mover's body on every side - the rectangle the search and the step both answer for.
+    fn grown(&self) -> (i64, i64) {
+        (self.half.0 + self.reach, self.half.1 + self.reach)
     }
 
-    /// **Does the straight segment between two raw points pass inside the clearance?** Point-to-segment distance, in
-    /// integers, so the answer is exact and identical everywhere.
+    /// **Is this raw point inside the grown box?** Touching is *not* inside: a body at exactly its radius from a wall is at
+    /// the game's own contact point, which is where a walk ends. A test that refused touching could never arrive.
+    fn still_inside(&self, point: (i64, i64)) -> bool {
+        let (hx, hy) = self.grown();
+        (point.0 - self.at.0).abs() < hx && (point.1 - self.at.1).abs() < hy
+    }
+
+    /// **Does the straight segment between two raw points pass inside the grown box?** A segment against an axis-aligned
+    /// rectangle, by separating axis - the two axis normals and the segment's own normal - in integers, so the answer is
+    /// exact and identical everywhere. A segment that runs along a face touches it and does not cross.
     fn crossed_by(&self, from: (i64, i64), to: (i64, i64)) -> bool {
-        let (px, py) = (self.at.0 - from.0, self.at.1 - from.1);
-        let (vx, vy) = (to.0 - from.0, to.1 - from.1);
-        let length = vx * vx + vy * vy;
-        // The nearest point on the segment, clamped to it: the projection may fall before the start or past the end.
-        let (nx, ny) = if length == 0 {
-            (0, 0)
-        } else {
-            let dot = px * vx + py * vy;
-            let t = dot.clamp(0, length);
-            (vx * t / length, vy * t / length)
+        let (hx, hy) = self.grown();
+        let (min_x, max_x) = (self.at.0 - hx, self.at.0 + hx);
+        let (min_y, max_y) = (self.at.1 - hy, self.at.1 + hy);
+        // Axis x, then axis y: the segment's own span against the box's.
+        let (sx0, sx1) = (from.0.min(to.0), from.0.max(to.0));
+        let (sy0, sy1) = (from.1.min(to.1), from.1.max(to.1));
+        if sx1 <= min_x || sx0 >= max_x || sy1 <= min_y || sy0 >= max_y {
+            return false;
+        }
+        // The segment's normal: the box's four corners projected onto it, against the segment's own two ends.
+        let (dx, dy) = (
+            i128::from(to.0) - i128::from(from.0),
+            i128::from(to.1) - i128::from(from.1),
+        );
+        let along = |x: i64, y: i64| -dy * i128::from(x) + dx * i128::from(y);
+        let (ends_lo, ends_hi) = {
+            let (a, b) = (along(from.0, from.1), along(to.0, to.1));
+            (a.min(b), a.max(b))
         };
-        let (dx, dy) = (px - nx, py - ny);
-        dx * dx + dy * dy < self.reach * self.reach
+        let mut corners = [
+            along(min_x, min_y),
+            along(max_x, min_y),
+            along(min_x, max_y),
+            along(max_x, max_y),
+        ];
+        corners.sort_unstable();
+        ends_hi > corners[0] && ends_lo < corners[3]
     }
 }
 
@@ -147,6 +174,98 @@ impl Ground {
             .is_some_and(|at| !self.terrain[at] && self.occupants[at] == 0)
     }
 
+    /// **Does an *object* stand on this tile** - a tree, a wall, a building - as opposed to impassable terrain?
+    ///
+    /// The distinction is the game's: terrain is a point test with no radius (`FUN_008aa480`), while every object has a box
+    /// that the mover's body may not enter (`FUN_00840830`). So this is what the box rules read, and `walkable` keeps both.
+    fn occupied(&self, x: u16, y: u16) -> bool {
+        self.index(x, y)
+            .is_some_and(|at| !self.terrain[at] && self.occupants[at] > 0)
+    }
+
+    /// **How deep is a body's box inside an object's, in raw units?** Zero when it touches nothing, which is the game's own
+    /// contact point; positive is penetration, and the largest figure wins.
+    ///
+    /// The original's query (`FUN_00840830`) is a yes/no - the boxes intersect - and its placement phase (`func_002699A0`)
+    /// is what keeps a body out of an object in the first place, so a body that is *already* inside one never arises there.
+    /// Ours can arise (a fixture or a spawn places a body on a tile corner, half inside the tree beside it), and a plain
+    /// yes/no then refuses **every** step, so the body never moves at all: measured, a corridor pair spawned on tile corners
+    /// overlapped the tree row and stood for 2,000 ticks. So the step asks the game's question of the *change* - a step may
+    /// not take a body **deeper** into an object - which is the same rule wherever a body starts outside one, and lets a body
+    /// that starts inside walk out.
+    pub(crate) fn object_depth(&self, scale: i64, point: (i64, i64), reach: i64) -> i64 {
+        // A grown box reaches `half + reach` from its tile's centre, so at the widest body the dat carries (a trebuchet at
+        // half a tile) it touches the next tile's centre and no further: three by three covers every body there is.
+        debug_assert!(
+            reach <= scale / 2,
+            "a body wider than half a tile cannot be tested against a three-by-three neighbourhood: reach {reach}, scale {scale}"
+        );
+        let grown = scale / 2 + reach;
+        let (tx, ty) = (point.0.div_euclid(scale), point.1.div_euclid(scale));
+        let mut deepest = 0;
+        for dy in -1..=1i64 {
+            for dx in -1..=1i64 {
+                let (Ok(x), Ok(y)) = (u16::try_from(tx + dx), u16::try_from(ty + dy)) else {
+                    continue;
+                };
+                if !self.occupied(x, y) {
+                    continue;
+                }
+                let centre = (
+                    i64::from(x) * scale + scale / 2,
+                    i64::from(y) * scale + scale / 2,
+                );
+                let (across, down) = (
+                    grown - (point.0 - centre.0).abs(),
+                    grown - (point.1 - centre.1).abs(),
+                );
+                if across > 0 && down > 0 {
+                    deepest = deepest.max(across.min(down));
+                }
+            }
+        }
+        deepest
+    }
+
+    /// **Does a straight leg pass inside any object's grown box?** The plan-side half of `in_an_object`: a leg between two
+    /// points can clip a footprint's corner even when both of its ends are clear, which is what the owner saw as a body
+    /// walking through a house's corner. Asked per tile the leg crosses, over that tile's own three-by-three neighbourhood.
+    fn crosses_an_object(&self, scale: i64, from: (i64, i64), to: (i64, i64), reach: i64) -> bool {
+        let (tx, ty) = (
+            from.0.div_euclid(scale).min(to.0.div_euclid(scale)),
+            from.1.div_euclid(scale).min(to.1.div_euclid(scale)),
+        );
+        let (ex, ey) = (
+            from.0.div_euclid(scale).max(to.0.div_euclid(scale)),
+            from.1.div_euclid(scale).max(to.1.div_euclid(scale)),
+        );
+        // Every tile the leg's own bounding box reaches, plus one ring: a box grown by less than a tile spills only into
+        // the neighbours of the tiles the leg crosses, and the ring costs a handful of grid reads.
+        for y in ty - 1..=ey + 1 {
+            for x in tx - 1..=ex + 1 {
+                let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
+                    continue;
+                };
+                if !self.occupied(x, y) {
+                    continue;
+                }
+                let at = (
+                    i64::from(x) * scale + scale / 2,
+                    i64::from(y) * scale + scale / 2,
+                );
+                let grown = Clear {
+                    at,
+                    half: (scale / 2, scale / 2),
+                    reach,
+                };
+                if grown.crossed_by(from, to) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// The original's cost of one step (`FUN_008007f0`): 16 along an axis, 23 diagonally.
     pub fn step_cost(from: (u16, u16), to: (u16, u16)) -> u32 {
         if from == to {
@@ -174,7 +293,7 @@ impl Ground {
     ///
     /// Bresenham in integers, so the answer is exact and identical everywhere.
     pub fn line_clear(&self, from: (u16, u16), to: (u16, u16)) -> bool {
-        self.line_clear_with(from, to, 1, &[])
+        self.line_clear_with(from, to, 1, 0, &[])
     }
 
     /// **The same line, with tiles a body holds counting as solid** (D281). The smoothing pass uses this: a straight jump
@@ -185,6 +304,7 @@ impl Ground {
         from: (u16, u16),
         to: (u16, u16),
         scale: i64,
+        reach: i64,
         avoid: &[Clear],
     ) -> bool {
         // **The clearance first**: a straight line between two tile centres that passes inside a body's clearance would be
@@ -200,6 +320,11 @@ impl Ground {
             ),
         );
         if avoid.iter().any(|clear| clear.crossed_by(from_raw, to_raw)) {
+            return false;
+        }
+        // **And the objects the leg would clip** (D286): a building's footprint is a box, and a leg between two clear tile
+        // centres can still pass inside it by a rounding - which is the corner a body was seen cutting.
+        if reach > 0 && self.crosses_an_object(scale, from_raw, to_raw, reach) {
             return false;
         }
         let (mut x, mut y) = (i64::from(from.0), i64::from(from.1));
@@ -264,7 +389,7 @@ impl Ground {
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
     ) -> Option<Vec<(Fixed, Fixed)>> {
-        self.route_with(scale, from, to, &[])
+        self.route_with(scale, from, to, 0, &[])
     }
 
     /// **The same route, with tiles a body is standing on treated as blocked** (D281). This is the original's answer to a
@@ -276,9 +401,10 @@ impl Ground {
         scale: i64,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
+        reach: i64,
         avoid: &[Clear],
     ) -> Option<Vec<(Fixed, Fixed)>> {
-        self.route_with(scale, from, to, avoid)
+        self.route_with(scale, from, to, reach, avoid)
     }
 
     fn route_with(
@@ -286,19 +412,36 @@ impl Ground {
         scale: i64,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
+        reach: i64,
         avoid: &[Clear],
     ) -> Option<Vec<(Fixed, Fixed)>> {
         let start = self.tile_of(scale, from)?;
         let goal = self.tile_of(scale, to)?;
-        // A straight walk needs no chain: the search's own answer would be pulled back to this one point anyway. Not when
-        // tiles are to be avoided: the line test knows nothing about bodies, and a straight line through a collider is
-        // exactly the step the caller is giving up.
-        if avoid.is_empty() && self.walkable(goal.0, goal.1) && self.line_clear(start, goal) {
+        // A straight walk needs no chain: the search's own answer would be pulled back to this one point anyway. The test is
+        // of the **leg the body will actually walk**, not of the line between two tile centres (see `leg_is_clear`).
+        if self.walkable(goal.0, goal.1)
+            && self.leg_is_clear(
+                scale,
+                (from.0.raw(), from.1.raw()),
+                (to.0.raw(), to.1.raw()),
+                reach,
+                avoid,
+            )
+        {
             return Some(vec![to]);
         }
         let steps = self.search(start, goal, scale, avoid)?;
         let end = steps.last().copied().unwrap_or(start);
-        let pulled = self.pull(start, &steps, scale, avoid);
+        let pulled = self.pull(
+            (from.0.raw(), from.1.raw()),
+            (to.0.raw(), to.1.raw()),
+            end == goal,
+            start,
+            &steps,
+            scale,
+            reach,
+            avoid,
+        );
         let half = scale / 2;
         let mut points: Vec<(Fixed, Fixed)> = pulled
             .iter()
@@ -315,6 +458,43 @@ impl Ground {
             *last = if end == goal { to } else { *last };
         }
         Some(points)
+    }
+
+    /// **Is the leg the body will actually walk clear?** A route is certified for the line the body walks, not for the line
+    /// between two tile centres: a body that starts off-centre - a fixture's spawn on a tile corner, a man stopped by a body
+    /// on the way - walks a line the tile test never looked at. Measured on a trebuchet of radius half a tile, spawned on a
+    /// corner beside a one-tile gap: the tile-centre line is exactly down the gap, the line he walks clips the house beside
+    /// it, and every step into the gap was refused.
+    ///
+    /// So the same three questions are asked of the raw segment: the tiles it crosses are walkable (the grid's own point
+    /// test), no object's grown box is crossed, and no body's clearance is.
+    fn leg_is_clear(
+        &self,
+        scale: i64,
+        from: (i64, i64),
+        to: (i64, i64),
+        reach: i64,
+        avoid: &[Clear],
+    ) -> bool {
+        if avoid.iter().any(|clear| clear.crossed_by(from, to)) {
+            return false;
+        }
+        if reach > 0 && self.crosses_an_object(scale, from, to, reach) {
+            return false;
+        }
+        let (Ok(fx), Ok(fy)) = (
+            u16::try_from(from.0.div_euclid(scale)),
+            u16::try_from(from.1.div_euclid(scale)),
+        ) else {
+            return false;
+        };
+        let (Ok(tx), Ok(ty)) = (
+            u16::try_from(to.0.div_euclid(scale)),
+            u16::try_from(to.1.div_euclid(scale)),
+        ) else {
+            return false;
+        };
+        self.line_clear_with((fx, fy), (tx, ty), scale, 0, &[])
     }
 
     /// **Is this tile's centre inside a body's clearance?** A tile the mover cannot stand on without touching the body it is
@@ -339,11 +519,22 @@ impl Ground {
 
     /// Spend the waypoints a clear line lets the body skip, so what is left is the corners the terrain forces. The
     /// original smooths its waypoint list for the same reason.
+    ///
+    /// **The first leg starts where the body stands, not on a tile centre.** A body that spawns off-centre walks from its own
+    /// point to the route's first corner, and that leg is the one that clipped a house beside a gap: the tile-centre line was
+    /// exactly down the gap, the line the body walked was not. Every leg is certified with `leg_is_clear` for that reason -
+    /// the same three questions asked of the actual segment - and the last one ends on the goal **point** when the goal was
+    /// reached, which is where the body will stand (*"Setting position to exact waypoint"*).
+    #[allow(clippy::too_many_arguments)]
     fn pull(
         &self,
+        from_raw: (i64, i64),
+        to_raw: (i64, i64),
+        ends_on_goal: bool,
         start: (u16, u16),
         steps: &[(u16, u16)],
         scale: i64,
+        reach: i64,
         avoid: &[Clear],
     ) -> Vec<(u16, u16)> {
         if steps.len() < 2 {
@@ -352,12 +543,25 @@ impl Ground {
         let mut nodes = Vec::with_capacity(steps.len() + 1);
         nodes.push(start);
         nodes.extend_from_slice(steps);
+        // Where the body actually walks for each node: its own point first, a tile centre after that, and the goal point last.
+        let half = scale / 2;
+        let centre = |tile: (u16, u16)| {
+            (
+                i64::from(tile.0) * scale + half,
+                i64::from(tile.1) * scale + half,
+            )
+        };
         let last = nodes.len() - 1;
+        let mut raw: Vec<(i64, i64)> = nodes.iter().map(|tile| centre(*tile)).collect();
+        raw[0] = from_raw;
+        if ends_on_goal {
+            raw[last] = to_raw;
+        }
         let mut pulled = Vec::with_capacity(nodes.len());
         let mut at = 0;
         while at < last {
             let mut jump = last;
-            while jump > at + 1 && !self.line_clear_with(nodes[at], nodes[jump], scale, avoid) {
+            while jump > at + 1 && !self.leg_is_clear(scale, raw[at], raw[jump], reach, avoid) {
                 jump -= 1;
             }
             pulled.push(nodes[jump]);

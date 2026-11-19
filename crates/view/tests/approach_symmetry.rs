@@ -68,6 +68,7 @@ fn a_unit_can_reach_a_house_from_the_north_and_from_the_south() {
         world.step().expect("step");
         world
             .submit_checked(Command::Move {
+                target: None,
                 unit: EntityId(id),
                 to: (
                     u16::try_from(goal.0).expect("in range"),

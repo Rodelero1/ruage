@@ -229,7 +229,10 @@ impl World {
                         },
                     );
                     if let Some(entity) = self.find_mut(id) {
-                        entity.task = Task::Move { to: post };
+                        entity.task = Task::Move {
+                            to: post,
+                            target: None,
+                        };
                     }
                 }
                 None => self.stand_down(id),
@@ -631,11 +634,12 @@ impl World {
             ) else {
                 continue;
             };
-            let (gap_x, gap_y) = (there.0.raw() - here.0.raw(), there.1.raw() - here.1.raw());
-            let squared = gap_x * gap_x + gap_y * gap_y;
-            let reach = self.reach_raw(
-                self.find(villager).and_then(|entity| entity.unit),
-                self.find(animal).and_then(|entity| entity.unit),
+            // **The game's own distance** (D285, D286): the gap between the two boxes, not between the two centres. A body
+            // that walks at another stops with its box against the other's, and on a diagonal its centre is then farther
+            // away than the radii sum - so the centre test said "not in reach" for a shepherd standing at its sheep.
+            let gap = self.box_gap_sq(
+                (here.0, here.1, self.body_radius_of(villager)),
+                (there.0, there.1, self.node_radius(animal)),
             );
             // **In reach _plus one step_, or on the animal's own ground.** A body that walks at another stops when the
             // next step would enter the pair's standoff, so it comes to rest a step *short* of it - measured at 10,399
@@ -651,9 +655,8 @@ impl World {
                         .ok()
                 })
                 .map_or(0, |delta| delta.raw());
-            let touch = reach + step;
             let beside = self.tile_of(here) == self.tile_of(there);
-            if !beside && squared > touch * touch {
+            if !beside && gap > i128::from(step) * i128::from(step) {
                 continue;
             }
             self.slaughter.insert(villager, animal);
@@ -1436,17 +1439,22 @@ impl World {
                     // A melee attacker strikes from the next tile, diagonals included, or from where its footprint
                     // touches the target's (C2) - a body stopped short by a friend's footprint is still in contact.
                     let contact = self.reach_raw(entity.unit, victim_unit);
+                    // **Box to box, in both arms** (D142, D286). The dat's range is measured between the bodies' edges, so a
+                    // 4x4 town centre is hit from its wall rather than its middle - and melee is the same measure with a range
+                    // of zero. The centre distance cannot answer it: a mover stopped by the target's **box** on a diagonal is
+                    // farther away by its centres than the two radii sum, so a radii test said "not in reach" while the bodies
+                    // were touching. Measured, a villager stood against a sheep with its boxes touching and no blow struck.
+                    let edge = self.gap_squared_to(
+                        entity.position,
+                        self.body_radius(entity.unit),
+                        target_body,
+                    );
                     let in_reach = if range.raw() > 0 {
-                        // **Box to box** (D142): the dat's range is measured between the bodies' edges, so a 4x4 town
-                        // centre is hit from its wall rather than its middle.
-                        self.gap_squared_to(
-                            entity.position,
-                            self.body_radius(entity.unit),
-                            target_body,
-                        ) <= range.raw() * range.raw()
+                        edge <= range.raw() * range.raw()
                     } else {
-                        adjacent || squared <= contact * contact
+                        adjacent || edge <= 0
                     };
+                    let _ = contact;
                     // A siege engine - and a skirmisher - has a dead zone: inside it the shot is not
                     // possible however close the target is, so the shooter backs away instead of
                     // standing there. The distance is measured **to the target's edge**, because two
@@ -1792,7 +1800,18 @@ impl World {
                         (target.0, target.1, self.node_radius(node)),
                     );
                     let _ = (touching, ring_open, beside, reach, squared, arrived);
-                    let at_node = body == 0;
+                    // **As close as the ground lets him be** (D286). The game's arrival is the box gap against the order's
+                    // range, and for a job that is zero - the boxes touch; its movement is continuous, so the tick before
+                    // contact is already at it. Ours moves in whole steps, and a step that would end inside the node's box is
+                    // **cut at the face**, so the man comes to rest on it - but the settle can seat him a fraction short,
+                    // and an equality then tells a man standing against a mine that he is not at it: measured, a miner with
+                    // `progress 0` and the bank stuck at 100 for 400,000 ticks. One step is the quantized form of the same
+                    // rule, and it is the "a radius, not an equality" shape C2 already settled elsewhere.
+                    let step = entity
+                        .speed
+                        .div_exact(i64::from(self.tick_rate_hz).max(1))
+                        .map_or(0, |delta| delta.raw());
+                    let at_node = body <= i128::from(step) * i128::from(step);
                     // **Stand where the bodies touch** (D169). `reach` is the sum of the two radii - the dat's 0.2 for a
                     // villager and content's 0.5 for a tree - and it is what "at the node" used to mean. The *walk* ends at the
                     // neighbouring tile's centre, a whole tile out, so a woodcutter swung at a tree from half a tile away: the
@@ -1873,15 +1892,20 @@ impl World {
                         let owned = owned_place.filter(|place| {
                             !self.entities.iter().any(|other| {
                                 other.id != entity.id && other.kind == EntityKind::Unit && {
-                                    // **Just the pair's reach, not the gather spacing.** Places sit exactly `spacing` (0.66)
-                                    // apart, so asking for a body within 0.66 of a held place made every place look stale to its
-                                    // own neighbour: both re-chose, both moved, and the ten-men fixture came out at 0.067 tiles.
-                                    // A place is stale only when a body is close enough that the man cannot stand on it.
-                                    let gap =
-                                        self.reach_raw(entity.unit, other.unit) + self.scale / 20;
-                                    (other.position.0.raw() - place.0.raw()).pow(2)
-                                        + (other.position.1.raw() - place.1.raw()).pow(2)
-                                        < gap * gap
+                                    // **A place is stale only when a body's box covers it** (D286): the point the man's centre
+                                    // stands on, against the other body's own box - the game's measure, no slack. The old test
+                                    // was the pair's reach plus a twentieth of a tile, which is a *centre* distance: with bodies
+                                    // now coming to rest at box contact, a neighbour on the diagonal sits nearer by the centres
+                                    // than that slack allows, so a man at work lost his place to a newcomer - measured,
+                                    // `a_newcomer_does_not_move_the_working_gatherers`.
+                                    self.box_gap_sq(
+                                        (
+                                            other.position.0,
+                                            other.position.1,
+                                            self.body_radius(other.unit).max(0),
+                                        ),
+                                        (place.0, place.1, 0),
+                                    ) == 0
                                 }
                             })
                         });
@@ -2092,7 +2116,7 @@ impl World {
                 }
                 // Inside a building: no movement, no work, and no cooldown runs - a sheltered unit is
                 // simply not on the map.
-                Task::Move { to } => {
+                Task::Move { to, .. } => {
                     let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
                         SimError::Displacement {
                             id: entity.id,

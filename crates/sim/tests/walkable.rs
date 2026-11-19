@@ -69,6 +69,7 @@ fn a_farm_is_walked_over_not_around() {
     world.step().expect("one tick");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (42, 40),
         })

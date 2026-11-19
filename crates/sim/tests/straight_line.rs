@@ -79,6 +79,7 @@ fn an_open_line_is_a_single_waypoint() {
     world.step().expect("the spawn lands");
 
     world.submit(Command::Move {
+        target: None,
         unit: villager,
         to: (x + 6, y),
     });
@@ -121,6 +122,7 @@ fn an_obstacle_across_the_line_forces_the_search() {
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
+        target: None,
         unit: villager,
         to: (x + 6, y),
     });
@@ -161,6 +163,7 @@ fn the_goal_tile_does_not_block_its_own_line() {
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
+        target: None,
         unit: walker,
         to: (x + 4, y),
     });
@@ -200,6 +203,7 @@ fn a_route_round_a_tree_carries_no_slack() {
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
+        target: None,
         unit: villager,
         to: (x + 6, y),
     });

@@ -100,6 +100,7 @@ fn a_stopped_friend_is_not_walked_through() {
     let walker = a_villager(&mut world, 9_500, 4, row);
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (30, row as u16),
         })
@@ -115,6 +116,7 @@ fn a_stopped_friend_is_not_walked_through() {
     let friend = a_villager(&mut world, 9_600, ahead, row);
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: friend,
             to: (u16::try_from(ahead - 1).expect("a column"), row as u16),
         })

@@ -88,6 +88,7 @@ fn a_unit_replans_when_its_route_turns_into_a_wall() {
     let walker = spawn(&mut world, villager, (sx, sy), EntityKind::Unit, 25);
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (
                 u16::try_from(gx).expect("in range"),

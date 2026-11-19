@@ -109,6 +109,7 @@ fn a_walker_does_not_finish_on_top_of_a_friend() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (24, 20),
         })
@@ -146,7 +147,11 @@ fn a_crowd_sent_to_one_place_does_not_stack() {
 
     for unit in [a, b, c] {
         world
-            .submit_checked(Command::Move { unit, to: (26, 22) })
+            .submit_checked(Command::Move {
+                target: None,
+                unit,
+                to: (26, 22),
+            })
             .expect("move");
     }
     for _ in 0..600 {
@@ -231,6 +236,7 @@ fn a_walker_never_ends_a_tick_inside_a_friend() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (26, 20),
         })

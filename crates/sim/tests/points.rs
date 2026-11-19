@@ -91,6 +91,7 @@ fn a_point_several_tiles_away_is_reached_exactly() {
         Fixed::from_raw(i64::from(y) * scale + scale / 4),
     );
     world.submit(Command::WalkTo {
+        target: None,
         unit: villager,
         to: target,
     });
@@ -144,6 +145,7 @@ fn a_point_inside_its_own_tile_is_still_reached() {
         Fixed::from_raw(i64::from(y) * scale + scale / 4),
     );
     world.submit(Command::WalkTo {
+        target: None,
         unit: villager,
         to: target,
     });
@@ -173,6 +175,7 @@ fn a_tile_order_still_means_its_centre() {
     world.step().expect("the spawn lands");
 
     world.submit(Command::Move {
+        target: None,
         unit: villager,
         to: (x + 3, y),
     });

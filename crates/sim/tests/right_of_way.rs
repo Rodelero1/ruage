@@ -253,6 +253,7 @@ fn cross(
     common::must(
         "a move order",
         world.submit_checked(Command::Move {
+            target: None,
             unit: lower,
             to: tile(goal_low),
         }),
@@ -265,6 +266,7 @@ fn cross(
     common::must(
         "a move order",
         world.submit_checked(Command::Move {
+            target: None,
             unit: higher,
             to: tile(goal_high),
         }),
@@ -532,6 +534,7 @@ fn a_loser_does_not_stand_for_ever_against_a_man_who_never_moves() {
     common::must(
         "a move order",
         world.submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (14, 8),
         }),

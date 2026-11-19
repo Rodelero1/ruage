@@ -82,6 +82,7 @@ fn a_body_on_the_goal_tile_is_walked_to() {
     world.step().expect("the spawns land");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (x + 2, y),
         })
@@ -130,12 +131,14 @@ fn the_younger_body_yields_the_contested_tile() {
     world.step().expect("the spawns land");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: older,
             to: (x + 6, y),
         })
         .expect("the older walks");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: younger,
             to: (x, y),
         })

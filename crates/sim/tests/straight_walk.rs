@@ -109,6 +109,7 @@ fn a_walk_at_fifty_nine_degrees_is_one_straight_line() {
 
     let goal = (x + 6, y + 10);
     world.submit(Command::Move {
+        target: None,
         unit: villager,
         to: goal,
     });
@@ -174,6 +175,7 @@ fn a_walk_lands_exactly_on_its_point() {
     let villager = place_villager(&mut world, (x + 1, y + 1));
     let goal = (x + 4, y + 3);
     world.submit(Command::Move {
+        target: None,
         unit: villager,
         to: goal,
     });
@@ -210,6 +212,7 @@ fn a_short_diagonal_walk_still_moves() {
     };
     let villager = place_villager(&mut world, (x, y));
     world.submit(Command::Move {
+        target: None,
         unit: villager,
         to: (x + 1, y + 1),
     });
@@ -265,6 +268,7 @@ fn a_unit_with_no_speed_stays_where_it_is() {
     let resting = world.position(id).expect("alive");
 
     world.submit(Command::Move {
+        target: None,
         unit: id,
         to: (x + 3, y + 2),
     });

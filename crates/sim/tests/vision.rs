@@ -206,6 +206,7 @@ fn explored_ground_stays_known_after_the_unit_leaves() {
     // Walk it away: the ground it stood on is remembered, not forgotten.
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: scout,
             to: (44, 44),
         })
@@ -251,6 +252,7 @@ fn an_enemy_is_only_visible_while_somebody_watches() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: scout,
             to: (44, 44),
         })

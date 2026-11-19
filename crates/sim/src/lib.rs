@@ -483,7 +483,14 @@ pub enum Task {
     /// Putting up a building at `site`.
     Build { site: EntityId },
     /// Walking to a place with nothing to do there. The rally point's task: the unit goes, then stops.
-    Move { to: (Fixed, Fixed) },
+    ///
+    /// **The order names the object the click landed on** (D286). The original's collision block says *"That collision is with
+    /// our target, so we're done"* (`0x127d`) and builds the path-ignore list from the order's target (`local_45c + 8`), so a
+    /// click on a building is an order *about that building* rather than about empty ground. `None` is a click on the ground.
+    Move {
+        to: (Fixed, Fixed),
+        target: Option<EntityId>,
+    },
     /// Walking to a place *looking for a fight*: attack-move and patrol are the same walk with two
     /// arrival rules, and the difference between them lives in `World::patrols` rather than in the
     /// task. What a hunt does in the tick loop is: take the nearest enemy in reach if there is one,
@@ -556,20 +563,12 @@ pub enum Task {
 pub enum Command {
     /// Take from a resource node. The rate, the capacity and the variant come from the tables,
     /// not from the command: a replay must not be able to name its own numbers.
-    Gather {
-        villager: EntityId,
-        node: EntityId,
-    },
+    Gather { villager: EntityId, node: EntityId },
     /// Stand a unit down: drop its path and return it to idle.
-    Stop {
-        unit: EntityId,
-    },
+    Stop { unit: EntityId },
     /// Raze something of your own. The player is named because ownership is the only thing there is
     /// to check: every other command inherits its owner from the actor, and a deletion has no actor.
-    Delete {
-        player: u8,
-        entity: EntityId,
-    },
+    Delete { player: u8, entity: EntityId },
     /// Walk to a tile and stop. The ordinary order, and the one the rally point uses.
     /// Walk to a **point**, not to a tile's centre (A). The original's movement is free of the grid - its waypoints and
     /// goal points are floats - while tiles are for terrain, resource and building placement. A `Move` names a tile and
@@ -577,27 +576,22 @@ pub enum Command {
     WalkTo {
         unit: EntityId,
         to: (Fixed, Fixed),
+        /// The object the click landed on, when it landed on one (D286).
+        target: Option<EntityId>,
     },
     Move {
         unit: EntityId,
         to: (u16, u16),
+        /// The object the click landed on, when it landed on one (D286).
+        target: Option<EntityId>,
     },
     /// Walk to a tile, fighting whatever enemy it meets on the way.
-    AttackMove {
-        unit: EntityId,
-        to: (u16, u16),
-    },
+    AttackMove { unit: EntityId, to: (u16, u16) },
     /// Walk to a tile, then back to where the order was given, forever - fighting on the way.
-    Patrol {
-        unit: EntityId,
-        to: (u16, u16),
-    },
+    Patrol { unit: EntityId, to: (u16, u16) },
     /// How much of a fight this unit picks on its own. The ground it stands on becomes its post, which
     /// is what a defensive stance returns to.
-    Stance {
-        unit: EntityId,
-        stance: Stance,
-    },
+    Stance { unit: EntityId, stance: Stance },
     /// Attack another player's unit or building.
     Attack {
         attacker: EntityId,
@@ -605,10 +599,7 @@ pub enum Command {
     },
     /// Produce a unit at a building. Cost and duration come from the unit table; whether this
     /// building may make this unit comes from `economy.toml` (the dat does not carry that edge).
-    Train {
-        building: EntityId,
-        unit: u32,
-    },
+    Train { building: EntityId, unit: u32 },
     /// Put up a **line** of buildings - walls, in practice (D155): the tiles a drag covered, in order.
     ///
     /// The list, not a start-and-end pair, because the view already has to compute the line to draw its preview and its red
@@ -630,29 +621,17 @@ pub enum Command {
     /// **Walk a villager onto a foundation that already stands** (D186 addendum 3): the gesture the original makes when a
     /// crowd is clicked onto a half-built site, kept as its own command because `Build` also means *place*, and a placement
     /// over an existing site must stay refused.
-    JoinBuild {
-        villager: EntityId,
-        site: EntityId,
-    },
+    JoinBuild { villager: EntityId, site: EntityId },
     /// **Queue a replacement farm at a mill** (D226). One entry pays the farm's own dat price out of the stockpile now, and the
     /// next plot that runs out is replaced from the queue. The building is only the button: the queue belongs to its **owner** and
     /// is shared with every other mill that player has, per the owner's correction of 2026-11-15.
-    Reseed {
-        building: EntityId,
-        count: u32,
-    },
+    Reseed { building: EntityId, count: u32 },
     /// **Switch automatic reseeding on or off** (D226). Definitive Edition's feature, not HD's; a player setting, written by any
     /// of that player's mills, and followed by villagers wherever they are.
-    AutoReseed {
-        building: EntityId,
-        on: bool,
-    },
+    AutoReseed { building: EntityId, on: bool },
     /// Research a tech at a building. Price, duration, where it may happen and what it applies all
     /// come from the tech and effect tables - a replay carries the id, never the numbers.
-    Research {
-        building: EntityId,
-        tech: u32,
-    },
+    Research { building: EntityId, tech: u32 },
     /// Where a building's finished units go. `Some(tile)` walks them there; `Some` of the building's own
     /// tile keeps them inside it, which is the only way a production building holds anybody (D38);
     /// `None` clears the rally and leaves them beside the building.
@@ -662,14 +641,9 @@ pub enum Command {
     },
     /// Put a unit inside a building. The capacity is the building's own `garrison` field, so the only
     /// numbers involved are the data's.
-    Garrison {
-        unit: EntityId,
-        building: EntityId,
-    },
+    Garrison { unit: EntityId, building: EntityId },
     /// Let everyone out of a building.
-    Ungarrison {
-        building: EntityId,
-    },
+    Ungarrison { building: EntityId },
     Spawn {
         id: EntityId,
         player: u8,
@@ -2009,8 +1983,23 @@ impl World {
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        let clear = self.standing_bodies(from, to);
-        self.plan_path_with(from, to, &clear)
+        let reach = self.reach_at(from);
+        let clear = self.standing_bodies(from, to, reach);
+        self.plan_path_with(from, to, reach, &clear)
+    }
+
+    /// **The mover's own reach into every grown box** (D286): the radius of the live unit planning from this point.
+    ///
+    /// The planner answers for a *place*, not an id (D279), so the body is found by where it stands. A place with no body on
+    /// it - a route planned from a hypothetical point - has a reach of zero, which is the point test the game's terrain rule
+    /// uses (`FUN_008aa480`, no radius).
+    fn reach_at(&self, at: (Fixed, Fixed)) -> i64 {
+        self.entities
+            .iter()
+            .find(|entity| {
+                entity.kind == EntityKind::Unit && entity.hp > 0 && entity.position == at
+            })
+            .map_or(0, |entity| self.body_radius(entity.unit))
     }
 
     /// **The bodies a plan has to keep clear of** (D282): every body that is *not going anywhere* - no route left, or
@@ -2020,7 +2009,12 @@ impl World {
     /// **grown by the mover's radius** (`FUN_007f9d80`); the ignore list is the mover's *moving* mates. So a stopped body is
     /// an obstacle at plan time, which is why the game's walker goes round a standing man instead of into him. Ours planned
     /// through everyone and only ever learned about a body when a step was refused.
-    fn standing_bodies(&self, from: (Fixed, Fixed), to: (Fixed, Fixed)) -> Vec<ground::Clear> {
+    fn standing_bodies(
+        &self,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+        reach: i64,
+    ) -> Vec<ground::Clear> {
         if self.ground.is_none() {
             return Vec::new();
         }
@@ -2045,10 +2039,16 @@ impl World {
             if moving && other.pause_remaining == 0 {
                 continue;
             }
-            let reach = self.reach_raw(None, other.unit);
+            // **The box is the other body's, the reach is the mover's** (D286): `FUN_00840830` grows the query box by the
+            // mover's radius and `FUN_007f9d80` puts the object in as its own rectangle, so a clearance is those two numbers
+            // and not one disc. A body the content gives no radius gets its tile, which is what the disc used to fall back to.
+            let half = match self.body_radius(other.unit) {
+                0 => self.scale / 2,
+                own => own,
+            };
             let at = (other.position.0.raw(), other.position.1.raw());
             // Only a body near the line can change the answer; the rest are dropped before the search ever asks.
-            let span = reach + self.scale * 2;
+            let span = half + reach + self.scale * 2;
             let (min_x, max_x) = (
                 from.0.raw().min(to.0.raw()) - span,
                 from.0.raw().max(to.0.raw()) + span,
@@ -2060,7 +2060,11 @@ impl World {
             if at.0 < min_x || at.0 > max_x || at.1 < min_y || at.1 > max_y {
                 continue;
             }
-            clear.push(ground::Clear { at, reach });
+            clear.push(ground::Clear {
+                at,
+                half: (half, half),
+                reach,
+            });
         }
         clear
     }
@@ -2070,11 +2074,12 @@ impl World {
         &self,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
+        reach: i64,
         clear: &[ground::Clear],
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let ground = self.ground.as_ref().ok_or(SimError::NoTables)?;
         let answer = ground
-            .route_avoiding(self.scale, from, to, clear)
+            .route_avoiding(self.scale, from, to, reach, clear)
             .ok_or(SimError::NoPath {
                 from: self.tile_of(from),
                 to: self.tile_of(to),
@@ -2091,24 +2096,30 @@ impl World {
         to: (Fixed, Fixed),
         avoid: &[ground::Clear],
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        let mut clear = self.standing_bodies(from, to);
+        let reach = self.reach_at(from);
+        let mut clear = self.standing_bodies(from, to, reach);
         for one in avoid {
             if !clear.iter().any(|already| already.at == one.at) {
                 clear.push(*one);
             }
         }
-        self.plan_path_with(from, to, &clear)
+        self.plan_path_with(from, to, reach, &clear)
     }
 
     /// The route a particular **body** would walk. The body is not a planner input any more (D279): a route is about
     /// walls, and this exists so the call sites read as what they mean.
     fn plan_path_for(
         &self,
-        _id: EntityId,
+        id: EntityId,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        self.plan_path(from, to)
+        // The body is known here, so the reach is its own radius rather than a lookup by position.
+        let reach = self
+            .find(id)
+            .map_or(0, |entity| self.body_radius(entity.unit));
+        let clear = self.standing_bodies(from, to, reach);
+        self.plan_path_with(from, to, reach, &clear)
     }
 
     /// The next waypoint of a unit's route, as a world position.
@@ -2216,6 +2227,7 @@ impl World {
         &self,
         unit: EntityId,
         to: (Fixed, Fixed),
+        exact: bool,
     ) -> Result<(Fixed, Fixed), SimError> {
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
         if entity.kind != EntityKind::Unit {
@@ -2228,11 +2240,35 @@ impl World {
         if !self.on_map(tx, ty) {
             return Err(SimError::OffMap { tile: (tx, ty) });
         }
+        // **An order about a thing keeps its exact point** (D286): the walk ends on contact with the thing, so the route must
+        // aim at the point it was given - *"Setting position to exact waypoint"* - rather than at the centre of whichever
+        // tile the ground lets it reach. The point has already been pushed out of the thing's own box by the caller.
+        if exact {
+            return Ok(to);
+        }
         // **A walk is always accepted** (D134): the answer is the nearest tile the route reaches, and the caller walks
         // there. Reachability is asked by the orders that name a *thing* - a build site (`check_build_inner`) and a gather
         // node (`start_gather`) - because those are the ones that would pay for work never done.
         let route = self.plan_path(entity.position, to)?;
         Ok(route.last().copied().unwrap_or(to))
+    }
+
+    /// **The object a walk order names is a thing that can be touched** (D286): a unit or a building, so the order's
+    /// target arm - *"That collision is with our target, so we're done"* - has something to collide with. A resource is
+    /// refused here because a click on one is a gather order, and a walk cannot mean "stand against this tree".
+    fn check_walk_target(&self, unit: EntityId, target: Option<EntityId>) -> Result<(), SimError> {
+        let Some(target) = target else {
+            return Ok(());
+        };
+        let entity = self.find(target).ok_or(SimError::MissingEntity(target))?;
+        if matches!(entity.kind, EntityKind::Resource(_)) {
+            return Err(SimError::NotATarget { id: target });
+        }
+        if entity.id == unit {
+            // A walk to yourself is a stand, not an order; there is no box to touch.
+            return Err(SimError::NotATarget { id: target });
+        }
+        Ok(())
     }
 
     fn check_order(&self, unit: EntityId, to: (u16, u16)) -> Result<(Fixed, Fixed), SimError> {
@@ -2434,7 +2470,10 @@ impl World {
                         },
                     );
                     if let Some(entity) = self.find_mut(id) {
-                        entity.task = Task::Move { to: entry.home };
+                        entity.task = Task::Move {
+                            to: entry.home,
+                            target: None,
+                        };
                     }
                 }
                 Err(_) => {
@@ -2967,7 +3006,7 @@ impl World {
     /// is, because that is the stacking a player sees.
     pub(crate) fn goal_of(&self, entity: &Entity) -> Option<((u16, u16), bool)> {
         let (goal, exclusive) = match entity.task {
-            Task::Move { to } | Task::Hunt { to } => (to, true),
+            Task::Move { to, .. } | Task::Hunt { to } => (to, true),
             // A drop site is worked, not occupied: two villagers must be able to hand in at one town
             // centre on the same tick, and a building's own tile is never free ground anyway.
             // **A carrier aims at the yard, not at the building's own ground** (D200). The drop's anchor tile is blocked -
@@ -3350,6 +3389,191 @@ impl World {
         }
     }
 
+    /// **The boxes a thing is *solid* with right now** (D286) - its footprint split into the tiles that actually block.
+    ///
+    /// A building's own box is its whole footprint, but a **farm** and an **untouched foundation** are walked over (D183) - the
+    /// ground says so - and the original collides with what stands, not with a plan. A town centre is the case that makes the
+    /// split necessary: its yard is walkable and its core is not, so one box for the footprint would stop a man in the yard.
+    /// A unit or a resource is one box; a body the dat gives no radius (a corpse) has none at all.
+    pub(crate) fn solid_boxes(&self, id: EntityId) -> Vec<((Fixed, Fixed), (i64, i64))> {
+        let Some(entity) = self.find(id) else {
+            return Vec::new();
+        };
+        match entity.kind {
+            EntityKind::Building => {
+                let Some((ax, ay, w, h)) = self.footprint_rect(id) else {
+                    return Vec::new();
+                };
+                let scale = self.scale;
+                let mut boxes = Vec::new();
+                for dy in 0..h {
+                    for dx in 0..w {
+                        let (x, y) = (ax + dx, ay + dy);
+                        if self.tile_walkable(x, y) {
+                            continue;
+                        }
+                        boxes.push((
+                            (
+                                Fixed::from_raw(i64::from(x) * scale + scale / 2),
+                                Fixed::from_raw(i64::from(y) * scale + scale / 2),
+                            ),
+                            (scale / 2, scale / 2),
+                        ));
+                    }
+                }
+                boxes
+            }
+            EntityKind::Resource(_) => {
+                vec![(entity.position, (self.scale / 2, self.scale / 2))]
+            }
+            _ => {
+                let half = self.body_radius(entity.unit);
+                if half <= 0 {
+                    Vec::new()
+                } else {
+                    vec![(entity.position, (half, half))]
+                }
+            }
+        }
+    }
+
+    /// **Where a step stops when the order's own target is in the way** (D286): the first point along the step where the
+    /// mover's box meets one of the target's solid boxes.
+    ///
+    /// The original answers a collision with the order's target by ending the order (*"That collision is with our target, so
+    /// we're done"*) and **not writing a position** - its movement is continuous, so the tick before contact is already at
+    /// contact. Ours moves in whole steps of `speed / tick_rate`, so refusing the landing leaves the body up to a step short:
+    /// measured, a gatherer stopped with a **nonzero** box gap, which `at_node` reads as "not at the node" and a walk never
+    /// ends. So the step is **cut at the face** - *"Setting position to exact waypoint"* - which is also the number the owner's
+    /// saves measure: `0.70` from a tile's centre is exactly `0.5 + 0.2`, the body's radius against the border.
+    ///
+    /// `None` when the step would not end inside any of the target's solid boxes - a builder walking onto a farm plot or an
+    /// untouched foundation is not touching anything, because nothing there is solid.
+    pub(crate) fn target_contact(
+        &self,
+        here: (Fixed, Fixed),
+        landing: (Fixed, Fixed),
+        target: EntityId,
+        reach: i64,
+    ) -> Option<(Fixed, Fixed)> {
+        let (x0, y0) = (here.0.raw(), here.1.raw());
+        let (dx, dy) = (landing.0.raw() - x0, landing.1.raw() - y0);
+        let mut best: Option<(i64, i64)> = None;
+        for (centre, half) in self.solid_boxes(target) {
+            let Some(entry) = Self::entry_parameter(here, landing, centre, half, reach) else {
+                continue;
+            };
+            // The **earliest** entry wins: the step stops at the first face it meets, not the deepest one.
+            let sooner = match best {
+                None => true,
+                Some((bn, bd)) => {
+                    i128::from(entry.0) * i128::from(bd) < i128::from(bn) * i128::from(entry.1)
+                }
+            };
+            if sooner {
+                best = Some(entry);
+            }
+        }
+        let (tn, td) = best?;
+        if tn <= 0 || td <= 0 {
+            return Some(here);
+        }
+        // Rounded **towards where the step started**, so the body comes to rest on the face and not a raw unit past it.
+        let along = |delta: i64| -> i64 {
+            i64::try_from(i128::from(delta) * i128::from(tn) / i128::from(td)).unwrap_or(0)
+        };
+        Some((
+            Fixed::from_raw(x0 + along(dx)),
+            Fixed::from_raw(y0 + along(dy)),
+        ))
+    }
+
+    /// **When a step enters a box grown by the mover's radius, as a fraction of the step.** `None` when it does not end inside
+    /// it. Each axis contributes the fraction at which it crosses that axis's near face; the later of the two is the entry.
+    fn entry_parameter(
+        here: (Fixed, Fixed),
+        landing: (Fixed, Fixed),
+        centre: (Fixed, Fixed),
+        half: (i64, i64),
+        reach: i64,
+    ) -> Option<(i64, i64)> {
+        let (hx, hy) = (half.0 + reach, half.1 + reach);
+        let (left, right) = (centre.0.raw() - hx, centre.0.raw() + hx);
+        let (top, bottom) = (centre.1.raw() - hy, centre.1.raw() + hy);
+        let (x0, y0) = (here.0.raw(), here.1.raw());
+        let (x1, y1) = (landing.0.raw(), landing.1.raw());
+        // A landing that only touches the grown box is already at the contact point: nothing to cut.
+        if !(x1 > left && x1 < right && y1 > top && y1 < bottom) {
+            return None;
+        }
+        let (dx, dy) = (x1 - x0, y1 - y0);
+        let axis = |from: i64, delta: i64, near: i64, far: i64| -> (i64, i64) {
+            if delta > 0 && from <= near {
+                (near - from, delta)
+            } else if delta < 0 && from >= far {
+                (far - from, delta)
+            } else {
+                (0, 1)
+            }
+        };
+        let (mut tn, mut td) = axis(x0, dx, left, right);
+        let (yn, yd) = axis(y0, dy, top, bottom);
+        if i128::from(yn) * i128::from(td) > i128::from(tn) * i128::from(yd) {
+            (tn, td) = (yn, yd);
+        }
+        Some((tn, td))
+    }
+
+    /// **Does a body standing at `point`, `reach` wide, touch this thing?** The grown-box test of `FUN_00840830`, which is
+    /// also what *"that collision is with our target, so we're done"* is asked of. Only the target's **solid** part counts, so
+    /// a farm plot and an untouched foundation cannot be touched, and touching is not touching: the boxes must **overlap**, so
+    /// a body resting exactly at its radius is at the game's contact point and not inside it.
+    pub(crate) fn body_touches(&self, id: EntityId, point: (Fixed, Fixed), reach: i64) -> bool {
+        self.solid_boxes(id).iter().any(|(centre, half)| {
+            (point.0.raw() - centre.0.raw()).abs() < half.0 + reach
+                && (point.1.raw() - centre.1.raw()).abs() < half.1 + reach
+        })
+    }
+
+    /// **The nearest point a body fits outside a thing's solid part** (D286): where a click *on* a building becomes a place
+    /// to stand. The order still names the building, so the walk ends on contact - this only stops the route aiming at a point
+    /// inside a wall, which no legal step can reach. A thing with nothing solid (a farm, an untouched foundation) leaves the
+    /// point exactly where it was, because that is ground a body may stand on.
+    pub(crate) fn push_out_of_target(
+        &self,
+        point: (Fixed, Fixed),
+        reach: i64,
+        target: EntityId,
+    ) -> (Fixed, Fixed) {
+        let mut point = point;
+        for (centre, half) in self.solid_boxes(target) {
+            let (left, right) = (
+                centre.0.raw() - half.0 - reach,
+                centre.0.raw() + half.0 + reach,
+            );
+            let (top, bottom) = (
+                centre.1.raw() - half.1 - reach,
+                centre.1.raw() + half.1 + reach,
+            );
+            let (x, y) = (point.0.raw(), point.1.raw());
+            if x <= left || x >= right || y <= top || y >= bottom {
+                continue;
+            }
+            let (to_left, to_right, to_top, to_bottom) = (x - left, right - x, y - top, bottom - y);
+            let nearest = to_left.min(to_right).min(to_top).min(to_bottom);
+            point = if nearest == to_left {
+                (Fixed::from_raw(left), point.1)
+            } else if nearest == to_right {
+                (Fixed::from_raw(right), point.1)
+            } else if nearest == to_top {
+                (point.0, Fixed::from_raw(top))
+            } else {
+                (point.0, Fixed::from_raw(bottom))
+            };
+        }
+        point
+    }
+
     /// **The game's distance between two bodies: the gap between their boxes** (D285). `func_002690E0`
     /// (`compute_distance_sq`) subtracts both bodies' sizes from each axis before anything else and clamps at zero, so the
     /// number is **border to border** and any overlap is exactly zero. Arrival is that number against the order's
@@ -3379,7 +3603,7 @@ impl World {
             return (0, 0);
         };
         let reach = match entity.task {
-            Task::Move { to } | Task::Hunt { to } => Some(to),
+            Task::Move { to, .. } | Task::Hunt { to } => Some(to),
             Task::Attack { .. }
             | Task::Gather { .. }
             | Task::Return { .. }

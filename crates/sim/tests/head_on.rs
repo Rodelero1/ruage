@@ -94,11 +94,13 @@ fn two_men_meeting_head_on_pass_each_other() {
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
+        target: None,
         unit: a,
         to: (x + 6, y),
     });
     world.step().expect("a tick between the orders");
     world.submit(Command::Move {
+        target: None,
         unit: b,
         to: (x, y),
     });
@@ -155,11 +157,13 @@ fn the_loser_stands_for_the_drawn_pause() {
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
+        target: None,
         unit: a,
         to: (x + 6, y),
     });
     world.step().expect("a tick between the orders");
     world.submit(Command::Move {
+        target: None,
         unit: b,
         to: (x, y),
     });

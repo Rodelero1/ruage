@@ -87,6 +87,7 @@ fn a_walk_takes_whole_steps_and_never_a_partial_one() {
     let goal = (at.0 + 8, at.1);
     world
         .submit_checked(Command::WalkTo {
+            target: None,
             unit: id,
             to: centre(&world, goal),
         })
@@ -131,12 +132,14 @@ fn two_men_who_swap_places_do_not_deadlock() {
     let (goal_a, goal_b) = ((at.0 + 10, at.1 + 1), (at.0, at.1 + 1));
     world
         .submit_checked(Command::WalkTo {
+            target: None,
             unit: a,
             to: centre(&world, goal_a),
         })
         .expect("a's order");
     world
         .submit_checked(Command::WalkTo {
+            target: None,
             unit: b,
             to: centre(&world, goal_b),
         })
@@ -174,6 +177,7 @@ fn a_man_sent_at_a_body_stops_beside_it() {
     // No order for `sitter`: he stands where he was placed.
     world
         .submit_checked(Command::WalkTo {
+            target: None,
             unit: walker,
             to: centre(&world, (at.0 + 6, at.1 + 1)),
         })
@@ -209,6 +213,7 @@ fn a_walker_gets_past_a_body_that_stands_in_his_way() {
     let goal = (at.0 + 10, at.1 + 1);
     world
         .submit_checked(Command::WalkTo {
+            target: None,
             unit: walker,
             to: centre(&world, goal),
         })

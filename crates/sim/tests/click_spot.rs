@@ -93,6 +93,7 @@ fn what_the_ring_costs_for_a_hundred_orders() {
     let start = std::time::Instant::now();
     for id in &crowd {
         let _ = world.submit_checked(Command::WalkTo {
+            target: None,
             unit: *id,
             to: spot,
         });
@@ -127,6 +128,7 @@ fn a_single_unit_stops_on_the_spot_it_was_sent_to() {
     );
     world
         .submit_checked(Command::WalkTo {
+            target: None,
             unit: walker,
             to: spot,
         })
@@ -165,7 +167,11 @@ fn a_crowd_stands_round_the_unit_that_took_the_spot() {
         let id = next_id(&world);
         spawn_villager(&mut world, id, x + dx, y + dy);
         world
-            .submit_checked(Command::WalkTo { unit: id, to: spot })
+            .submit_checked(Command::WalkTo {
+                target: None,
+                unit: id,
+                to: spot,
+            })
             .expect("a walk order");
         world.step().expect("the order lands");
         crowd.push(id);

@@ -8079,10 +8079,29 @@ distance question is answered by the same box measure.
 4. **The step asks the same box question** (`FUN_00840830`) instead of `tile_walkable`, and **the route's last point is the
    exact waypoint** rather than the settled tile's centre.
 
-**Why it is a decision row and not a landed change yet.** Measured on this branch: the step's box test **alone** passes the
-acceptance fixture in **21.81 s** (39.58 s before, `main` 26.6 s) and turns **three** green fixtures red - `a_villager_walks_round_a_house_rather_than_through_it`, `a_villager_walks_round_a_half_built_house`,
-`a_big_unit_walks_through_a_one_tile_gap` - because the plan still works in tiles and hands the step routes it now refuses.
-The four edits above are one slice and must land together; nothing of it is half-applied in the tree.
+**Landed (2026-11-19, `blunt-port`).** All four edits, together, as the row required. The step's box test **alone** had
+measured **21.81 s** on the acceptance fixture (39.58 s before, `main` 26.6 s) while turning three green fixtures red -
+`a_villager_walks_round_a_house_rather_than_through_it`, `a_villager_walks_round_a_half_built_house`,
+`a_big_unit_walks_through_a_one_tile_gap` - because the plan still worked in tiles and handed the step routes it refused.
+With the plan half in place the acceptance fixture **passes in 33.74 s**, and those three are green.
+
+**What the port needed beyond the row, all of it measured** (`docs/reviews/2026-11-19-d286-one-box-ruler.md`):
+
+1. **Only the target's *solid* part is a box.** A farm plot and an untouched foundation are walkable (D183), so a footprint
+   box stopped builders from stepping onto their own site: farms never seeded and houses never finished. `solid_boxes` reads
+   the blocked tiles of the footprint, which also keeps a town centre's yard walkable.
+2. **A step is cut at the target's face, not refused at it.** The original refuses the landing and writes no position, and its
+   movement is continuous, so the tick before contact is at contact; ours steps in `speed / tick_rate` chunks and stopped up
+   to a step short, leaving a gatherer's box gap nonzero and a walk never arriving. `target_contact` is *"Setting position to
+   exact waypoint"*, and it is what puts the body at **0.70** from a tile's centre - `0.5 + 0.2`.
+3. **A body the dat gives no radius has no box** and is walked over, which is how a worker stands on a carcass.
+4. **The leg certified is the leg the body walks**, from its own position and not from its tile's centre: a trebuchet (radius
+   half a tile) spawned on a corner was certified a straight walk down a one-tile gap and then refused every step into it.
+5. **A body already inside an object may not step *deeper*, but may step out** - the original's placement phase prevents that
+   case; ours can produce it, and a plain yes/no nailed such a body to the spot.
+6. **In reach is box to box in every arm** (melee contact, the shepherd's blow), and `at_node` is "within one step": on a
+   diagonal a body stopped by a box is farther away by its centres than the radii sum, and an equality on a step grid is
+   unreachable - measured, a miner with `progress 0` and the bank stuck at 100 for 400,000 ticks.
 
 **Basis.** `func_002690E0`, `FUN_007f9d80`, `FUN_00840830` (`+0x268`), the epilogue's target arm (`0x127d`), the ignore list's
 `local_45c + 8`, the motion layer's *"Setting position to exact waypoint"*; the owner's two rulings quoted above; the

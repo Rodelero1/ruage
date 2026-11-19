@@ -66,6 +66,7 @@ fn a_walking_villager_takes_whole_steps() {
     assert!(villager(&mut world, id, (5, 5)), "a villager");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: id,
             to: (30, 30),
         })
@@ -176,6 +177,7 @@ fn a_short_walk_lands_on_its_goal() {
     assert!(villager(&mut world, id, (20, 20)), "a villager");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: id,
             to: (22, 22),
         })

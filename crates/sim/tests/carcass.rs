@@ -252,6 +252,7 @@ fn a_soldier_who_softens_the_boar_does_not_take_the_meat() {
     );
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: soldier,
             to: away,
         })
@@ -370,6 +371,7 @@ fn a_carcass_rots_at_the_rate_the_pack_gives() {
     };
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: villager,
             to: away,
         })
@@ -425,6 +427,7 @@ fn a_carcass_that_has_rotted_away_leaves_the_map() {
     };
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: villager,
             to: away,
         })

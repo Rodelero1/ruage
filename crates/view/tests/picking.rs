@@ -350,7 +350,10 @@ fn a_right_click_orders_the_point_under_the_cursor() {
     // A place inside a tile but nowhere near its middle.
     let aimed = (12.35, 11.8);
     let orders = selection.order(&snapshot, &camera, pixel(&camera, aimed));
-    let Some(ruage_sim::Command::WalkTo { to, .. }) = orders.first() else {
+    let Some(ruage_sim::Command::WalkTo {
+        target: None, to, ..
+    }) = orders.first()
+    else {
         panic!("a click on open ground must order a point, not a tile: {orders:?}");
     };
     // **The order is the world point under the pixel** (D273), which is `project`'s tile space **plus the half tile** that

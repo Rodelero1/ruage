@@ -246,6 +246,7 @@ fn the_gate_closes_when_the_last_unit_leaves() {
     // Send it away and let it leave: the gate must close behind it.
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (
                 u16::try_from(at.0 + 6).expect("in range"),

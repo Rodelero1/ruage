@@ -121,6 +121,7 @@ fn a_house_built_across_a_walker_makes_it_go_round() {
     // A long walk along the row the house will appear on: the route is through the middle of it.
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (
                 u16::try_from(at.0 + 8).expect("in range"),
@@ -203,6 +204,7 @@ fn a_walk_to_a_point_does_not_cut_through_a_new_house() {
     );
     world
         .submit_checked(Command::WalkTo {
+            target: None,
             unit: walker,
             to: goal,
         })

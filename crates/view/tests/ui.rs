@@ -223,7 +223,9 @@ fn a_right_click_on_the_ground_is_a_move() {
     // `a_right_click_orders_the_point_under_the_cursor`.
     let scale = snapshot.scale;
     match orders.first() {
-        Some(Command::WalkTo { to, .. }) => {
+        Some(Command::WalkTo {
+            target: None, to, ..
+        }) => {
             let tile = (to.0.raw().div_euclid(scale), to.1.raw().div_euclid(scale));
             assert_eq!(
                 tile,

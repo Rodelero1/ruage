@@ -130,6 +130,7 @@ fn a_house_built_over_a_villager_moves_it_out() {
     // And it can still be given an order: a body in a pocket it cannot leave is the same bug one step later.
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: EntityId(9_620),
             to: (14, 8),
         })

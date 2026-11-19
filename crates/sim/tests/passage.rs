@@ -192,6 +192,7 @@ fn two_trees_touching_at_a_corner_leave_no_gap() {
     world.step().expect("the spawn lands");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (5, 4),
         })

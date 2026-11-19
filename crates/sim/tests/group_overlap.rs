@@ -141,10 +141,12 @@ fn a_group_ordered_together_walks_over_each_other() {
 
     // **One tick, two orders**: that is the group, as far as this engine can express one today.
     world.submit(Command::Move {
+        target: None,
         unit: a,
         to: (x + 6, y),
     });
     world.submit(Command::Move {
+        target: None,
         unit: b,
         to: (x, y),
     });
@@ -191,11 +193,13 @@ fn two_units_ordered_apart_are_not_a_group_and_the_loser_pauses() {
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
+        target: None,
         unit: a,
         to: (x + 6, y),
     });
     world.step().expect("a tick between the orders");
     world.submit(Command::Move {
+        target: None,
         unit: b,
         to: (x, y),
     });
@@ -253,10 +257,12 @@ fn a_mate_who_is_stopped_becomes_solid() {
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
+        target: None,
         unit: a,
         to: (x + 6, y),
     });
     world.submit(Command::Move {
+        target: None,
         unit: b,
         to: (x, y),
     });

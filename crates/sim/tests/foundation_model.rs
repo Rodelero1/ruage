@@ -250,6 +250,7 @@ fn construction_waits_while_a_unit_stands_on_the_site() {
     // The enemy walks onto the ghost - which is walkable ground, so the order is an ordinary move.
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: squatter,
             to: (9, 6),
         })

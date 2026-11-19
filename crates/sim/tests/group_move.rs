@@ -106,6 +106,7 @@ fn a_crowd_ordered_to_one_tile_all_arrive_and_spread() {
     for unit in &squad {
         world
             .submit_checked(Command::Move {
+                target: None,
                 unit: *unit,
                 to: (22, 22),
             })

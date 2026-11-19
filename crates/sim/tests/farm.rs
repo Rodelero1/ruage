@@ -308,6 +308,7 @@ fn an_emptied_farm_leaves_a_husk_that_nothing_blocks_and_then_goes() {
     // **It obstructs nothing**: a villager walks over the husk's own ground.
     let over = (husk.position.0, husk.position.1);
     world.submit(Command::Move {
+        target: None,
         unit: farmer,
         to: (
             u16::try_from(over.0.raw() / scale).expect("in range"),

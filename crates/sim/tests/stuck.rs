@@ -69,7 +69,11 @@ fn a_unit_sent_into_a_wood_stands_beside_it() {
     let start = (wood.0.saturating_sub(3), wood.1);
     let id = soldier(&mut world, (i64::from(start.0), i64::from(start.1)));
     world
-        .submit_checked(Command::Move { unit: id, to: wood })
+        .submit_checked(Command::Move {
+            target: None,
+            unit: id,
+            to: wood,
+        })
         .expect("a move order at a tree");
 
     for _ in 0..400 {
@@ -86,7 +90,11 @@ fn a_unit_sent_into_a_wood_stands_beside_it() {
     let _ = away;
     let goal = (now.0.saturating_sub(4), now.1);
     world
-        .submit_checked(Command::Move { unit: id, to: goal })
+        .submit_checked(Command::Move {
+            target: None,
+            unit: id,
+            to: goal,
+        })
         .expect("a move order away");
     for _ in 0..400 {
         world.step().expect("stepping");

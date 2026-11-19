@@ -103,6 +103,20 @@ impl World {
             if why == StepDecision::WaitGround {
                 self.replan_after_ground(id);
             }
+            // **A walk whose target it has touched is over** (D286): the original's collision block says *"That collision is
+            // with our target, so we're done"* and the order ends there. Other tasks that name a target - a gather, a build,
+            // a fight - stand beside it and keep working, so only a walk is finished here; their own arrival rules decide.
+            if why == StepDecision::WaitTarget
+                && matches!(
+                    self.find(id).map(|entity| entity.task),
+                    Some(Task::Move {
+                        target: Some(_),
+                        ..
+                    })
+                )
+            {
+                self.end_walk(id);
+            }
             if taken != (Fixed::ZERO, Fixed::ZERO) {
                 moved.push(id);
             }
@@ -262,6 +276,20 @@ impl World {
                 Fixed::from_raw(here.0.raw() + mx),
                 Fixed::from_raw(here.1.raw() + my),
             );
+            // **A step that would end inside the order's own target stops on its face** (D286). The collision with the
+            // target ends the order, and the cut keeps the body at the game's contact distance instead of up to one step
+            // short of it - which is what makes a gatherer's box gap zero (he is *at* the node) and a walk end exactly at
+            // the radius the owner's saves measure.
+            if let Some(target) = self.find(id).and_then(Self::order_target)
+                && target != id
+                && let Some(entity) = self.find(id)
+                && let Some(contact) =
+                    self.target_contact(here, landing, target, self.body_radius(entity.unit))
+            {
+                here = contact;
+                why = StepDecision::WaitTarget;
+                break;
+            }
             if let Some(refusal) = self.refusal(id, here, landing, pauses, blockers) {
                 // **A refused step is a stand, not a shorter step.** If the refusal comes after part of the tick was already
                 // walked - a waypoint crossed and the next leg blocked - the body keeps its starting position for this tick.
@@ -373,6 +401,15 @@ impl World {
         }
     }
 
+    /// **The order is done**: the body is idle where it stands and its route goes with the order.
+    fn end_walk(&mut self, id: EntityId) {
+        if let Some(entity) = self.find_mut(id) {
+            entity.task = Task::Idle;
+        }
+        self.paths.remove(&id);
+        self.stalled.remove(&id);
+    }
+
     /// Drop the waypoint the body is standing on.
     fn spend_waypoint(&mut self, id: EntityId) {
         if let Some(route) = self.paths.get_mut(&id)
@@ -382,11 +419,11 @@ impl World {
         }
     }
 
-    /// **The four refusals**, in the original's order. `Some(decision)` means the step is not taken.
+    /// **The refusals**, in the original's order. `Some(decision)` means the step is not taken.
     fn refusal(
         &self,
         id: EntityId,
-        _here: (Fixed, Fixed),
+        here: (Fixed, Fixed),
         landing: (Fixed, Fixed),
         pauses: &mut Vec<EntityId>,
         blockers: &mut Vec<crate::ground::Clear>,
@@ -398,11 +435,19 @@ impl World {
         if entity.kind != EntityKind::Unit {
             return None;
         }
-        // 2. **The ground.** A step that lands on a blocked tile is not taken. The test is the **tile**, not the disc:
-        //    the original's collision block answers a terrain collision by re-planning, and its radius test's result is
-        //    discarded at the movement site (`0x8a7fe7`, D210) - a disc test here wedges a man 28 raw units short of a
-        //    bush's corner, refusing every step that closes the gap, which froze a gatherer for 1,200 ticks in
-        //    `a_touching_tile_is_enough_to_bank`. A graze of a rounding is not worth a freeze.
+        let own = self.body_radius(entity.unit);
+        let target = Self::order_target(entity);
+        // 1. **A collision with the order's own target ends the order** (`0x127d`, *"That collision is with our target, so
+        //    we're done"*). The test is the game's own: the mover's box against the thing's box (`FUN_00840830`), grown by its
+        //    radius. A walk that names a house therefore stops with its body against the wall, and one that names a man stops
+        //    at his shoulder - the same distance for both of the owner's clicks.
+        if target.is_some_and(|thing| thing != id && self.body_touches(thing, landing, own)) {
+            return Some(StepDecision::WaitTarget);
+        }
+        // 2. **The ground.** Impassable terrain is the game's **point test** (`FUN_008aa480` - a tile, no radius), which is
+        //    what `tile_walkable` answers. The *things* on the ground are **boxes**, and the mover's box may not enter them
+        //    (`FUN_00840830` grows the query box by its radius): that is the half a centre-on-the-border walk was missing,
+        //    and it is the same ruler the plan uses, so a route the plan handed over is a route the step accepts.
         // **A world with no map knows no blocked ground** - a bare `World::new` (a unit test of the mover, a fixture that
         // only wants collision) must still be able to walk.
         let (tx, ty) = self.tile_of_raw(landing);
@@ -412,7 +457,20 @@ impl World {
         if !walkable {
             return Some(StepDecision::WaitGround);
         }
-        let target = Self::order_target(entity);
+        // **And the objects' boxes, asked of the change**: a step that takes the body *deeper* into a tree or a wall is
+        // refused, and one that leaves it no deeper is the body's own business - the game never has a body inside an object
+        // (its placement phase prevents it), while ours can start that way, and a plain yes/no would nail such a body to the
+        // spot for the rest of the match.
+        if let Some(ground) = self.ground.as_ref() {
+            let landing_depth =
+                ground.object_depth(self.scale, (landing.0.raw(), landing.1.raw()), own);
+            if landing_depth > 0 {
+                let here_depth = ground.object_depth(self.scale, (here.0.raw(), here.1.raw()), own);
+                if landing_depth > here_depth {
+                    return Some(StepDecision::WaitGround);
+                }
+            }
+        }
         for other in self
             .entities
             .iter()
@@ -425,10 +483,6 @@ impl World {
             );
             if dx * dx + dy * dy >= reach * reach {
                 continue;
-            }
-            // 1. The body the order was given to is never walked through.
-            if target == Some(other.id) {
-                return Some(StepDecision::WaitTarget);
             }
             // **The path-ignore list** (`0x1242`, *"That's a path ignore unit"*): the mover's own group, and only while
             // its members are **moving** - the binary builds that list from the route's objects whose `isMoving`
@@ -449,17 +503,22 @@ impl World {
             // **A body that has stopped is not a ghost** (D281). D279 read its silence as an exemption - a paused man or one
             // with no route left was walked through - and that made every stopped man pass-through-able, which is the
             // opposite of the original: its path-ignore list is the mover's *moving* mates, so a stopped unit **blocks**.
-            // What answers the collision is the re-plan above (the collider's tile joins the avoid list); the pause below
-            // is what stops the pair colliding again while the route is re-made.
-            // **The clearance, not the tile** (D282): the mover's own reach to that body, which is what the game's
-            // radius-grown rectangle encodes. A tile list could not express 0.4 of a tile and the route cut the corner.
+            // What answers the collision is the re-plan below (the collider's box joins the avoid list); the pause is what
+            // stops the pair colliding again while the route is re-made.
+            // **The clearance, not the tile** (D282), and it is a **box** (D286): the other body's own radius, grown by the
+            // mover's. A tile list could not express 0.4 of a tile and the route cut the corner.
+            let half = match self.body_radius(other.unit) {
+                0 => self.scale / 2,
+                own_other => own_other,
+            };
             if !blockers
                 .iter()
                 .any(|clear| clear.at == (other.position.0.raw(), other.position.1.raw()))
             {
                 blockers.push(crate::ground::Clear {
                     at: (other.position.0.raw(), other.position.1.raw()),
-                    reach,
+                    half: (half, half),
+                    reach: own,
                 });
             }
             // 4. **The higher id is told to pause** (`cmp eax,esi / jle`, `0x8a80ff`; `setPause(0.25-1.50 s)` at
@@ -475,13 +534,16 @@ impl World {
         None
     }
 
-    /// The entity an order is trying to reach, when the order has one. `Move` has none - its goal is a place.
+    /// The entity an order is trying to reach, when the order has one. **A walk has one now** (D286): the object the click
+    /// landed on, if it landed on anything - which is what lets the original's *"That collision is with our target, so we're
+    /// done"* arm fire for a move at all.
     fn order_target(entity: &Entity) -> Option<EntityId> {
         match entity.task {
             Task::Attack { target, .. } => Some(target),
             Task::Gather { node, .. } => Some(node),
             Task::Return { drop, .. } => Some(drop),
             Task::Build { site } => Some(site),
+            Task::Move { target, .. } => target,
             _ => None,
         }
     }

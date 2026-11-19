@@ -275,7 +275,7 @@ impl World {
             }
             match entity.task {
                 Task::Idle => fnv_bytes(&mut hash, &[0u8]),
-                Task::Move { to } => {
+                Task::Move { to, .. } => {
                     fnv_bytes(&mut hash, &[7u8]);
                     fnv_bytes(&mut hash, &to.0.raw().to_le_bytes());
                     fnv_bytes(&mut hash, &to.1.raw().to_le_bytes());
