@@ -19,9 +19,10 @@ measured, all on this tree:
   cost. The remaining hypothesis, unproven, is **more work per tick because more of the match functions**: gather orders
   now succeed where the closest-tile planner used to refuse them, so more villagers walk, and every step stamps vision.
   **This is not profiled** (no `perf` on this box) and is the first item of the next step.
-- **the suite**: the last **complete** run reads **873 passed, 25 failed, 21 ignored across 198 test binaries**. Two
-  fixes landed after it (a bare world with no map must still walk, and a walk order is always accepted) and the re-run was
-  still going when this note was written, so **25 is an upper bound** - the exact list is in `docs/next-step.md`;
+- **the suite** (`cargo test --workspace --no-fail-fast`, the run that exited after the last two fixes): **198 test
+  binaries, 876 passed, 22 failed, 21 ignored**. The 22 reds are named by class in `docs/next-step.md`; two of them
+  (`animals::a_live_animal_is_a_gather_source`, `animals::the_shepherd_kills_the_sheep...`) were **already red on `main`**
+  (D276 recorded three animals reds there);
 - **conformance**: 13 passed, 3 ignored (the three layers this port does not carry: hierarchy, radius-aware search,
   expansion budget);
 - **the code**: 1,663 lines removed against 789 added in the engine's movement layer. The per-tick *work* the pass does is

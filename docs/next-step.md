@@ -3,8 +3,8 @@
 **Where things stand (2026-11-18, measured).** D279's port landed on branch `movement-clean-slate`: `path.rs`, `short.rs` and
 `world/movement.rs` are **gone** (1,663 lines), and `ground.rs` (grid + one A\* + the line test), `world/motion.rs` (one whole
 step a tick, four refusals) and `world/placement.rs` replace them. The withdrawn mechanisms are listed by name in the decision
-row. The suite's last complete run: **198 test binaries, 873 passed, 25 failed, 21 ignored** (two fixes landed after that run and
-are not re-measured); conformance: 13 passed, 3 ignored.
+row. The suite's last run (`--no-fail-fast`, after the final fixes): **198 test binaries, 876 passed, 22 failed, 21 ignored**;
+conformance: 13 passed, 3 ignored.
 
 **The first thing to fix, and it is measured.** `ruage-sim --test acceptance_economy` took **26.6 s** earlier in the same
 session and takes **322 s** on this branch (debug, 48,000 ticks). Two experiments refute the obvious suspects - pausing
