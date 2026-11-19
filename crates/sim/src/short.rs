@@ -27,10 +27,14 @@ use crate::path::Walk;
 /// How far beyond the endpoints' box the window reaches, in tiles. An obstacle just outside the direct line still matters
 /// for the corner it puts in the path.
 const MARGIN: i64 = 3;
-/// The largest window, in tiles on a side, this will solve. A long strategic walk keeps its tile corners instead of paying
-/// for a map-sized graph: the corners a player watches are the ones in a base.
-const MAX_SIDE: i64 = 40;
 /// The most rectangles a window may produce before the solver declines.
+///
+/// **A bound on the work, not on the distance** (2026-11-19). This module used to refuse any window wider than 40 tiles on
+/// a side - our number, and a *geometric* limit the original does not have: its bound on a search is a **budget of `h`
+/// expansions, capped at 20,000** (`FUN_008007f0`), i.e. a count of work. A 58-tile walk across open ground builds two
+/// nodes and costs nothing, so refusing it was the divergence `the_original_solves_a_long_walk_in_its_hierarchy` names -
+/// and on this map the flat search reaches a goal anywhere, so no hierarchy is needed to answer it. The remaining two
+/// constants are the honest analogue of that budget: they cap rectangles and nodes, not the span between two points.
 const MAX_RECTS: usize = 96;
 /// The most graph nodes (four per rectangle, plus the two endpoints) it will build.
 const MAX_NODES: usize = 400;
@@ -179,7 +183,7 @@ pub fn short_range_clear(
     let y0 = (fy.min(ty) - MARGIN).max(0);
     let x1 = (fx.max(tx) + MARGIN).min(i64::from(width) - 1);
     let y1 = (fy.max(ty) + MARGIN).min(i64::from(height) - 1);
-    if x1 < x0 || y1 < y0 || x1 - x0 >= MAX_SIDE || y1 - y0 >= MAX_SIDE {
+    if x1 < x0 || y1 < y0 {
         return None;
     }
     let (Ok(x0), Ok(y0), Ok(x1), Ok(y1)) = (
