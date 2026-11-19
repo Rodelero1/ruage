@@ -8047,3 +8047,17 @@ ever: any future caller that stamps `created` on a re-plan re-creates the 4,207-
 rule D279 withdrew), `group_overlap::a_mate_who_is_stopped_becomes_solid` (two bodies on one tile cannot be planned
 round), and the spawn-bookkeeping fixture, removed with its reason in place of it.
 
+**D281 addendum (2026-11-19), the same conclusion measured from our side.** Before the collision block was read out of the
+decomp, the re-plan storm on `d279-substitute` (`704d9ba`, the layer D279's re-port replaced) was counted by **route
+origin**: `geometry` 390,239 (47.5%), `tile-chain` 393,558 (47.9%), `none` 38,025 (4.6%), at 156,578 re-paths
+(`players=2`). Three things, and the first is a **withdrawal**:
+
+1. **"The planner and the mover have two disagreeing ground predicates" was wrong.** There is one (`clearance_at`,
+   `nearest - radius`) and every call site compares it identically. The planned "unify the predicate" slice is dropped.
+2. **The mover's step test is ground *and* bodies**, so a `geometry` refusal is mostly "a body moved into the leg" - the
+   label names the route's origin, not the cause. That is what makes the epilogue the answer to half the storm.
+3. **The tallies are an upper bound, not a count**: 821,822 probe lines against 156,433 re-paths is 5.3 per re-path and
+   the inflation is **unexplained**; only the ratio is trustworthy.
+
+`docs/reviews/2026-11-19-the-refusal-origin-corrected.md`. A **record**, not a to-do: the fallback and the geometry graph
+it counted are deleted on this branch.
