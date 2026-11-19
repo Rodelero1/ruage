@@ -3342,6 +3342,30 @@ impl World {
         Fixed::from_raw(self.reach_raw(unit(a), unit(b)))
     }
 
+    /// The box radius of a **node**: a resource or a building is one tile wide (`scale / 2`), an animal is its own body.
+    pub(crate) fn node_radius(&self, id: EntityId) -> i64 {
+        match self.find(id) {
+            Some(entity) if entity.kind == EntityKind::Unit => self.body_radius(entity.unit),
+            _ => self.scale / 2,
+        }
+    }
+
+    /// **The game's distance between two bodies: the gap between their boxes** (D285). `func_002690E0`
+    /// (`compute_distance_sq`) subtracts both bodies' sizes from each axis before anything else and clamps at zero, so the
+    /// number is **border to border** and any overlap is exactly zero. Arrival is that number against the order's
+    /// `rangeDistance` - *"We're in range of our target, so we'll increment our waypoint"* - and for a job with range 0 it
+    /// means "the boxes touch".
+    ///
+    /// A unit's box is its radius; a node's is its tile (a tree or a bush is one tile wide), which is what the owner's
+    /// saves measure: **0.70** from a tile centre at an edge (`0.5 + 0.2`) and **0.935** at a corner (`0.707 + 0.2`).
+    pub(crate) fn box_gap_sq(&self, a: (Fixed, Fixed, i64), b: (Fixed, Fixed, i64)) -> i128 {
+        let dx = (a.0.raw() - b.0.raw()).abs() - a.2 - b.2;
+        let dy = (a.1.raw() - b.1.raw()).abs() - a.2 - b.2;
+        let dx = i128::from(dx.max(0));
+        let dy = i128::from(dy.max(0));
+        dx * dx + dy * dy
+    }
+
     fn reach_raw(&self, a: Option<u32>, b: Option<u32>) -> i64 {
         match self.body_radii(a, b) {
             0 => self.scale,

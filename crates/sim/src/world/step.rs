@@ -1778,26 +1778,21 @@ impl World {
                     // **A ring, unless it is buried** (D192): a node whose every touching place is blocked ground - a tree deep in a
                     // forest - is worked from the open tile beside it, which is the one case the border cannot describe.
                     let ring_open = self.ring_open(centre);
-                    // Arrived the old way - on the node's ground, inside the bodies' reach, or beside a node it cannot stand
-                    // on - which for a resource is no longer enough to work from.
-                    let beside_adjacent =
-                        beside && here.0.abs_diff(there.0) <= 1 && here.1.abs_diff(there.1) <= 1;
-                    let arrived = here == there || squared <= reach * reach || beside_adjacent;
-                    // **Standing on his own place is working the node** (D279). The place is the ring point the order took
-                    // when it landed; a man an eighth of a tile off it - rounding in an integer step - is standing where the
-                    // game would put him, and `touching` alone missed that by 266 raw units in `a_touching_tile_is_enough_to_bank`.
-                    let own_place = self.gather_place_of(entity.id, node).is_some_and(|place| {
-                        let (px, py) = (
-                            place.0.raw() - entity.position.0.raw(),
-                            place.1.raw() - entity.position.1.raw(),
-                        );
-                        px * px + py * py <= (self.scale / 20) * (self.scale / 20)
-                    });
-                    let at_node = if is_resource {
-                        touching || own_place || (beside_adjacent && !ring_open)
-                    } else {
-                        arrived
-                    };
+                    let arrived = here == there || squared <= reach * reach;
+                    // **"At the node" is the game's box gap** (D285): the gap between the villager's box and the node's,
+                    // against a range of zero - the boxes touch. This replaces four of our own rules (`touching` with its
+                    // tolerance, `own_place` and its eighth of a tile, `ring_open`, `beside_adjacent`): the game has one
+                    // distance and they were four approximations of it.
+                    let body = self.box_gap_sq(
+                        (
+                            entity.position.0,
+                            entity.position.1,
+                            self.body_radius(entity.unit),
+                        ),
+                        (target.0, target.1, self.node_radius(node)),
+                    );
+                    let _ = (touching, ring_open, beside, reach, squared, arrived);
+                    let at_node = body == 0;
                     // **Stand where the bodies touch** (D169). `reach` is the sum of the two radii - the dat's 0.2 for a
                     // villager and content's 0.5 for a tree - and it is what "at the node" used to mean. The *walk* ends at the
                     // neighbouring tile's centre, a whole tile out, so a woodcutter swung at a tree from half a tile away: the
