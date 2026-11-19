@@ -41,10 +41,15 @@ same shape as the stall: one extra tick of pause and up to one detour is enough 
 
 **Next, in order** (post-D282: the radius in the plan, the pause off-by-one and the builder stall are all closed):
 
-1. **Two bodies on one tile** - the last structural hole. The clearance is skipped for a body the mover already overlaps (else
-   every plan starts inside its own clearance), so `a_mate_who_is_stopped_becomes_solid` stays red at **4,478 raw** and a man
-   can be pushed through another who shares his tile. The game's answer is the radius query (`FUN_00844310`) over the objects
-   on a tile, with the mover's own reach grown in; reading that consumer is the slice.
+1. **Two bodies on one tile** - the last structural hole, and now with a measured refutation behind it. The clearance is
+   skipped for a body the mover already overlaps (else every plan starts inside its own clearance), so
+   `a_mate_who_is_stopped_becomes_solid` sits at **4,478 raw** and a man can be pushed through another who shares his tile.
+   **Tried and reverted (D283):** "never step deeper into a body you are already inside" bounds the overlap exactly as the game
+   does - the pair went **4,478 -> 7,728 raw against an 8,000 reach**, i.e. the contact step and nothing more - and it **froze
+   the crowd**: the acceptance crew stopped growing (**7 then 7** between 400 s and 800 s), because a man inside three
+   clearances has no legal step at all. The next attempt needs a rule that bounds the *pair* without refusing every step a body
+   makes while it is inside somebody - a net-motion test (deeper into one, further from another) or the game's own radius query
+   (`FUN_00844310`) over the objects on a tile, with the mover's reach grown in. That consumer is still the thing to read.
 2. **A building's clearance** (`a_walk_past_a_house_keeps_its_bodys_clearance`): the clearance list carries bodies, not
    footprints, so a route still clips a house's corner by a rounding. The same `Clear` shape applies to a footprint's box.
 3. **The seat churn** (the audit ruled these **in line**, so the engine is the wrong side): `six_settled_men_hold_their_places`,
