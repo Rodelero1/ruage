@@ -5,18 +5,10 @@
 //! is the goal alone, while a search across open ground stores every tile it crosses. Written before the
 //! implementation (D7).
 
-use std::path::PathBuf;
-
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, World};
 
 mod common;
-
-fn repo(rel: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join(rel)
-}
 
 fn fresh() -> Option<World> {
     common::fresh()
@@ -180,25 +172,15 @@ fn the_goal_tile_does_not_block_its_own_line() {
     );
 }
 
-/// **B**: a route that has to bend carries no slack. The pather's own path around a tree holds a node per tile; the stored
-/// route jumps to the furthest node a clear line reaches, so it is strictly shorter - and the obstacle is reproduced
-/// exactly in a local `Walk`, so the comparison is against the same world the engine planned in.
+/// **B**: a route that has to bend carries no slack. The search's own answer is a node per tile; the stored route jumps
+/// to the furthest tile a clear line reaches, so going round one blocking tile is **one corner and the goal**, not a
+/// staircase. The search itself is `Ground::route`'s business (`tests/ground.rs`); this is what the engine stores.
 #[test]
 fn a_route_round_a_tree_carries_no_slack() {
     let Some(mut world) = fresh() else { return };
     let Some((x, y)) = open_row(&world, 8) else {
         return;
     };
-    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).expect("pack");
-    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map");
-    let mut walk = ruage_sim::Walk::from_map(&map);
-    walk.block(x + 3, y);
-    let pather = ruage_sim::find_path(&walk, (x, y), (x + 6, y)).expect("the row is reachable");
-    assert!(
-        pather.len() > 2,
-        "the fixture needs a route to trim: {pather:?}"
-    );
-
     let villager = next_id(&world);
     let tree = EntityId(villager.0 + 1);
     place_unit(&mut world, villager, 1, x, y);
@@ -224,8 +206,7 @@ fn a_route_round_a_tree_carries_no_slack() {
     world.step().expect("the order lands");
     let stored = world.path_length(villager);
     assert!(
-        stored < pather.len(),
-        "the stored route must be shorter than the pather's own polyline: {stored} against {}",
-        pather.len()
+        stored <= 2,
+        "one blocked tile is one corner, not a staircase: the route holds {stored} points"
     );
 }

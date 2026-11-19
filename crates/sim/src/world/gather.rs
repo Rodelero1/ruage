@@ -459,14 +459,14 @@ impl World {
         // blocked tile and never find a route.
         let planned = if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
             match self.work_position(from, to) {
-                Some(stand) => self.plan_path(from, stand, 0),
-                None => self.plan_path(from, to, 0),
+                Some(stand) => self.plan_path(from, stand),
+                None => self.plan_path(from, to),
             }
         } else {
             // The walk still ends at the neighbouring tile's centre - a route that ends anywhere else is a route the movement
             // rules may never call *arrived*, and a worker that never arrives never works. The last third of a tile is closed by
             // `settle` in the gather arm instead (D169).
-            self.plan_path(from, to, 0)
+            self.plan_path(from, to)
         };
         let route = match planned {
             Ok(route) => route,
@@ -479,6 +479,20 @@ impl World {
                 return Err(error);
             }
         };
+        // **A node behind a wall is refused, not walked at** (D241, kept by D279): the search answers an unreachable goal
+        // with the nearest tile it settled on, so a route always exists - the question is whether it ends at the node's
+        // ground. One tile is the working reach here; the picker's own refusal (`share_failed`) is what remembers it.
+        if let Some(end) = route.last() {
+            let (dx, dy) = (end.0.raw() - to.0.raw(), end.1.raw() - to.1.raw());
+            let reach = 2 * self.scale;
+            if dx * dx + dy * dy > reach * reach {
+                self.share_failed.insert(node, self.tick);
+                return Err(SimError::NoPath {
+                    from: self.tile_of(from),
+                    to: self.tile_of(to),
+                });
+            }
+        }
         self.put_route(
             villager,
             Route {
@@ -511,6 +525,15 @@ impl World {
                 self.standoff_point(from, to, node, villager, &[], false)
             {
                 self.reserve_gather_place(villager, node, place);
+                // **The place is the route's last waypoint** (D279). The plan above ends at the *node's* tile, which is
+                // blocked ground, so it settles on the nearest tile centre - about a tile short of the ring. Walking the
+                // route and then the place is the whole approach: the tile chain to get there, and the last few tenths of a
+                // tile to stand on.
+                if let Some(route) = self.paths.get_mut(&villager)
+                    && route.points.last() != Some(&place)
+                {
+                    route.points.push(place);
+                }
             }
         }
         // The load is the villager's, not the node's: re-tasking onto the next tree (or the next sheep) must not spill

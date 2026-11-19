@@ -209,15 +209,6 @@ impl World {
                 fnv_bytes(&mut hash, &x.raw().to_le_bytes());
                 fnv_bytes(&mut hash, &y.raw().to_le_bytes());
             }
-            // A route's stall count decides **whether it may be re-planned again**, so it is state: two runs that disagree
-            // about it diverge the moment an obstruction appears (D127). Written only when non-zero, so a world that never
-            // stalls hashes as it did before this existed.
-            if route.stalls != 0 {
-                fnv_bytes(&mut hash, b"stalls");
-                fnv_bytes(&mut hash, &[route.stalls]);
-            }
-            // The bodies a route is planned around decide where the unit goes next, so they are state. Written only
-            // when non-empty, so a world that never collides hashes exactly as one written before D98a.
             // A route's mates decide whether a body is solid to it, so they are state (D207). Written only when
             // non-empty, so a world with no group orders hashes as it did before this existed.
             // **When the route was planned** decides which colliders are past (D210), so it is state.
@@ -229,13 +220,6 @@ impl World {
                 fnv_bytes(&mut hash, b"mates");
                 fnv_bytes(&mut hash, &(route.mates.len() as u32).to_le_bytes());
                 for other in &route.mates {
-                    fnv_bytes(&mut hash, &other.0.to_le_bytes());
-                }
-            }
-            if !route.avoiding.is_empty() {
-                fnv_bytes(&mut hash, b"route");
-                fnv_bytes(&mut hash, &(route.avoiding.len() as u32).to_le_bytes());
-                for other in &route.avoiding {
                     fnv_bytes(&mut hash, &other.0.to_le_bytes());
                 }
             }

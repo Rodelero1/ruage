@@ -54,7 +54,7 @@ cheap live defects first.
 
 | id | Item | Status | Needs | Evidence / the hole |
 |---|---|---|---|---|
-| S1 | Movement, collision, one A*, short-range pather, clearance, slide / give-way / repath | **DONE** | F1, F6 | `world/movement.rs`, `src/path.rs`, `src/short.rs`; `tests/collision.rs`, `body_clearance.rs`, `repath_*`; D206 |
+| S1 | Movement, collision, one A*, the four refusals, one whole step (D279's clean slate) | **DONE** | F1, F6 | `src/ground.rs`, `world/motion.rs`, `world/placement.rs`; `tests/ground.rs`, `tests/motion.rs`; D279 |
 | S2 | Orders: `Move`, `WalkTo`, `AttackMove`, `Patrol`, `Stop`, `Stance` | **DONE** | S1 | `Command` in `crates/sim/src/lib.rs:544`; `tests/orders.rs`, `stances.rs` |
 | S3 | Gather: place/standoff/touching, per-node crowd, fill, share pass, retarget | **DONE-ish** | S1, F9 | `world/gather.rs`, `world/shares.rs`; 12 `tests/gather_*.rs` files. **Hole: T7 (unbounded search)** |
 | S4 | Return and drop sites, whole units + fraction in hand | **DONE-ish** | S3 | `world/sites.rs:427 nearest_drop_site`; `tests/dropoff.rs`, `whole_units.rs`. **Hole: T7** |
@@ -134,7 +134,7 @@ file was written.
 | M6 | Relics and artifacts | S12 (garrison holds them), S14 (victory conditions) | `relic` only in comments |
 | M7 | Repair | **the `repair_hp_per_second = -1.0` sentinel** (`config/economy.toml:134`) — a dat candidate exists (VMREP `work_rate` 12.5) | loader refuses; no `Task::Repair` |
 | M8 | Attack-ground | S10 (a projectile with a point) | `Command` has no variant |
-| M9 | Formations | D206: **speed is constant; formations are the only speed adjustment, and they are later** | `Command` has no variant; `formation` is a comment in `movement.rs:297` |
+| M9 | Formations | D206: **speed is constant; formations are the only speed adjustment, and they are later** | `Command` has no variant; nothing in `motion.rs` groups units |
 | M10 | Replay record/playback, lockstep, desync detection | T11, T12 first — a replay that cannot agree on a tick is a format with no oracle | `crates/script` is the scenario format; no `.aoe2record` writer |
 | M11 | Order queue (shift-click waypoints): several orders per unit | S2; `waypoint` appears **83 times** in the exe and `genie:movement/waypoint.cpp` exists | `Command` has no queue — the only queues are a building's production and a wall drag |
 | M12 | Follow and guard orders | S2; `follow` 12 and `guard` 9 in the exe; `genie:orders/` lists follows beside moves and patrols | no `Command` variant |

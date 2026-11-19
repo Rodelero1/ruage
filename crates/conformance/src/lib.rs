@@ -10,12 +10,12 @@
 //! `#[ignore]`d with the reason and the decision, so `cargo test -p ruage-conformance -- --ignored` prints exactly the list
 //! of places where we stand apart from the original.
 //!
-//! The helpers below are the same shapes the engine's own fixtures use - a bare `Walk` for the tile layer, raw points for
-//! the body layer - so a rule can be checked without building a world, a tick or a match.
+//! The helpers below are the same shapes the engine's own fixtures use - a bare `Ground` for the tile layer, raw points
+//! for the body layer - so a rule can be checked without building a world, a tick or a match.
 
 use ruage_data::{Map, Terrain};
 use ruage_fixed::Fixed;
-use ruage_sim::Walk;
+use ruage_sim::Ground;
 
 /// The project's scale: one tile is 20,000 raw units.
 pub const SCALE: i64 = 20_000;
@@ -38,18 +38,45 @@ pub fn open_map(width: u16, height: u16) -> Map {
     }
 }
 
-/// A walk layer with the named tiles occupied - `Walk::block`, which is what a tree or a wall does.
-pub fn walk(width: u16, height: u16, blocked: &[(u16, u16)]) -> Walk {
-    let mut walk = Walk::from_map(&open_map(width, height));
+/// A ground layer with the named tiles occupied - `Ground::block`, which is what a tree or a wall does.
+pub fn ground(width: u16, height: u16, blocked: &[(u16, u16)]) -> Ground {
+    let mut ground = Ground::from_map(&open_map(width, height));
     for (x, y) in blocked {
-        walk.block(*x, *y);
+        ground.block(*x, *y);
     }
-    walk
+    ground
 }
 
-/// A point in raw units, from tile coordinates.
+/// The tiles a **route of points** passes through, in order, starting with the tile the walk starts in. The route's own
+/// points are tile centres (and the goal), so this is the tile chain it walks.
+pub fn tiles_of(from: (u16, u16), points: &[(Fixed, Fixed)]) -> Vec<(u16, u16)> {
+    let tile = |point: (Fixed, Fixed)| {
+        (
+            u16::try_from(point.0.raw().div_euclid(SCALE)).unwrap_or(0),
+            u16::try_from(point.1.raw().div_euclid(SCALE)).unwrap_or(0),
+        )
+    };
+    let mut chain = vec![from];
+    for point in points {
+        let next = tile(*point);
+        if chain.last() != Some(&next) {
+            chain.push(next);
+        }
+    }
+    chain
+}
+
+/// A point in raw units, from tile coordinates: the tile's **corner**, which is where a tile number starts.
 pub fn at(x: i64, y: i64) -> (Fixed, Fixed) {
     (Fixed::from_raw(x * SCALE), Fixed::from_raw(y * SCALE))
+}
+
+/// The **centre** of a tile in raw units, which is where a route's waypoints sit.
+pub fn centre(x: i64, y: i64) -> (Fixed, Fixed) {
+    (
+        Fixed::from_raw(x * SCALE + SCALE / 2),
+        Fixed::from_raw(y * SCALE + SCALE / 2),
+    )
 }
 
 /// The cost of a tile route under the engine's own step costs. The route excludes its start, so the first step is charged

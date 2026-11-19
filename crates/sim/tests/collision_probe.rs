@@ -291,11 +291,10 @@ fn how_deeply_bodies_still_overlap() {
          **new** overlaps (a step the rule let through, not a stack the map seeded): {new_overlaps}, \n\
          deepest new {deepest_new} raw units ({:.3} tiles)\n\
          by cause: mates {mates}, past {past}, **neither {unjustified}**\n\
-         repaths {} made_room {}",
+         repaths {}",
         overlapping as f64 * 100.0 / pair_ticks.max(1) as f64,
         deepest as f64 / scale as f64,
         deepest_new as f64 / scale as f64,
-        world.repaths(),
-        world.made_room()
+        world.repaths()
     );
 }

@@ -1,194 +1,108 @@
-//! **Rule set 1: what counts as a passage.**
+//! **RULE: what the ground permits.**
 //!
-//! Read from `zone_spatial_pyramid_check_tile.cpp` (`func_001D29F0`, PS2) - a tile carries a **four-bit neighbour mask**
-//! (N `0x2`, S `0x4`, W `0x1`, E `0x8`), so passability is a property of an *edge between two tiles*, not of a tile's own
-//! centre - and from the same module's search, which only ever expands to a neighbour whose mask bit is set.
-//!
-//! The engine's version of the same rule is in `crates/sim/src/path.rs`: a cardinal step needs its own tile free, and a
-//! **diagonal step needs both of the tiles it brushes**: a diagonal that would clip a corner is not a passage.
+//! Source: `zone_spatial_pyramid_check_tile.cpp` and `zone_spatial_pyramid_check_cell_step.cpp` - a cell is walked if it is
+//! free, and a diagonal step needs both of the cells it touches to be free, so a route never clips the corner of the wall it
+//! was planned round. Occupancy is **counted** in the original's grid (`zone_spatial_grid_link_occupant.cpp` unlinks one
+//! occupant at a time), which is why a tile a tree and a wall both stand on stays blocked until both are gone.
 
-use ruage_conformance::{DIAGONAL, at, octile, route_cost, walk};
-use ruage_sim::{find_path, line_clear};
+use ruage_conformance::{SCALE, centre, ground, tiles_of};
 
-/// RULE: a diagonal step is legal only if both tiles it brushes are free - the corner of a wall is a wall.
-///
-/// Source: `zone_spatial_pyramid_check_tile.cpp` (`func_001D29F0`) masks the four edges; the corner case is the pair the
-/// mask cannot describe, and the search resolves it the other way - `path.rs:271-280`.
+/// RULE: a diagonal may not pass between two blocked tiles.
 #[test]
 fn a_diagonal_may_not_cut_between_two_blocked_tiles() {
-    // (2,1) and (1,2) blocked: (1,1) and (2,2) are free, and only touch at the shared corner.
-    let walk = walk(8, 8, &[(2, 1), (1, 2)]);
-    assert!(
-        !line_clear(&walk, (1, 1), (2, 2)),
-        "a straight line between two diagonal free tiles clipped both blocked corners and was called clear"
-    );
-    let route = find_path(&walk, (1, 1), (2, 2)).expect("there is a way round");
-    assert!(
-        route_cost((1, 1), &route) > DIAGONAL,
-        "the route took the one-step diagonal between two blocked corners: {route:?}"
-    );
-}
-
-/// RULE: two tiles that touch only at a corner are not a passage, even when both are free.
-///
-/// Source: the same corner rule read the other way round - `find_path`'s diagonal test consults the *intermediate* tiles, so
-/// a diagonal between two blocked tiles on either side is refused whatever the endpoints say (`path.rs:271-280`).
-#[test]
-fn two_free_tiles_in_a_blocked_diagonal_are_not_a_gap() {
-    // The blocked pair runs NE-SW; the free pair crosses it NW-SE.
-    let walk = walk(9, 9, &[(5, 5), (6, 6)]);
-    assert!(
-        !line_clear(&walk, (5, 6), (6, 5)),
-        "a line through the corner where two blocked tiles meet was called clear"
-    );
-    let route = find_path(&walk, (5, 6), (6, 5)).expect("the long way round exists");
-    assert!(
-        route_cost((5, 6), &route) > DIAGONAL,
-        "the search crossed the blocked corner: {route:?}"
-    );
-}
-
-/// RULE: a blocked tile may hold the goal - the node being worked stands on its own tile.
-///
-/// Source: `zone_spatial_pyramid_find_path.cpp` builds its frontier from passable tiles but treats the *target* cell as
-/// reachable when it is the search's goal; our side states it at `path.rs:281` and `path.rs:184-186`.
-#[test]
-fn the_goal_may_be_a_blocked_tile() {
-    let walk = walk(10, 10, &[(7, 5)]);
-    let route = find_path(&walk, (2, 5), (7, 5)).expect("a tree is reachable");
-    assert_eq!(
-        route.last(),
-        Some(&(7, 5)),
-        "the route stopped short of the blocked goal: {route:?}"
-    );
-    // Everything before the goal is free ground.
-    for tile in &route[..route.len() - 1] {
-        assert!(!walk.blocked(tile.0, tile.1), "the route crossed {tile:?}");
+    // (4,4) free, (5,5) free, and the two tiles the diagonal squeezes between blocked.
+    let field = ground(12, 12, &[(5, 4), (4, 5)]);
+    let route = field
+        .route(SCALE, centre(4, 4), centre(5, 5))
+        .expect("there is a way, even if not the diagonal");
+    let chain = tiles_of((4, 4), &route);
+    for pair in chain.windows(2) {
+        let (from, to) = (pair[0], pair[1]);
+        if from.0 != to.0 && from.1 != to.1 {
+            let side_a = (to.0, from.1);
+            let side_b = (from.0, to.1);
+            assert!(
+                field.walkable(side_a.0, side_a.1) || field.walkable(side_b.0, side_b.1),
+                "the route cut the corner between {side_a:?} and {side_b:?}: {chain:?}"
+            );
+        }
     }
 }
 
-/// RULE: a blocked start may be left - a worker stands on the tile of the thing it is working.
-///
-/// Source: the same goal exemption, applied at the other end (`path.rs:210-211`), and the original's separate start
-/// re-seed for a body-blocked start (`FUN_007fb220`, `path.rs:93-97`).
+/// RULE: a line may **end** on a blocked tile - a node's own tile holds the thing being worked - but may not cross one.
 #[test]
-fn the_start_may_be_a_blocked_tile() {
-    let walk = walk(10, 10, &[(2, 5)]);
-    let route = find_path(&walk, (2, 5), (8, 5)).expect("a worker can walk off its own tree");
+fn a_line_may_end_on_a_blocked_tile_but_not_cross_one() {
+    let field = ground(12, 12, &[(6, 4)]);
     assert!(
-        !route.is_empty(),
-        "a route of no steps does not leave the tile"
+        field.line_clear((2, 4), (6, 4)),
+        "a line ending on the tile it was sent to is clear"
     );
-    assert_eq!(route.last(), Some(&(8, 5)));
+    assert!(
+        !field.line_clear((2, 4), (9, 4)),
+        "a line that crosses the blocked tile is not"
+    );
 }
 
-/// RULE: the map's edge is a wall, and a goal off the map is refused rather than clamped.
-///
-/// Source: `zone_spatial_pyramid_check_tile.cpp` bounds every neighbour test by `max_x`/`max_y`; our side refuses a tile
-/// it does not contain in `Walk::blocked` and in the search's bounds test (`path.rs:204-206`).
+/// RULE: the map edge is a wall. A search never leaves the map and a line never runs off it.
 #[test]
 fn the_map_edge_is_a_wall() {
-    let walk = walk(6, 6, &[]);
+    let field = ground(10, 10, &[]);
+    assert!(!field.contains(10, 5), "x = 10 is off a ten-wide map");
+    assert!(!field.contains(5, 10), "y = 10 is off a ten-high map");
+    // A route whose goal is off the map is not planned at all: there is no ground to stand on.
     assert!(
-        find_path(&walk, (0, 0), (6, 0)).is_none(),
-        "x = width is off the map"
-    );
-    assert!(
-        find_path(&walk, (0, 0), (0, 6)).is_none(),
-        "y = height is off the map"
-    );
-    assert!(
-        find_path(&walk, (0, 0), (5, 5)).is_some(),
-        "the corner itself is on the map"
+        field
+            .route(SCALE, centre(2, 2), centre(40, 40))
+            .is_none(),
+        "a goal off the map has no ground"
     );
 }
 
-/// RULE: a route is a chain of single king moves, never repeating a tile, ending on the goal.
-///
-/// Source: `zone_spatial_pyramid_eval_cost.cpp` (`func_001D35C0`) only ever inserts the four mask directions from a node, so
-/// an emitted path is a walk of adjacent cells; our search's eight-neighbour loop has the same property (`path.rs:255-298`).
-#[test]
-fn a_route_is_a_chain_of_single_steps_without_repeats() {
-    let walk = walk(
-        24,
-        24,
-        &[(10, 5), (10, 6), (10, 7), (10, 8), (11, 8), (12, 8)],
-    );
-    let route = find_path(&walk, (3, 3), (20, 20)).expect("open corners");
-    let mut here = (3u16, 3u16);
-    let mut seen = std::collections::BTreeSet::new();
-    for step in &route {
-        let dx = i64::from(step.0) - i64::from(here.0);
-        let dy = i64::from(step.1) - i64::from(here.1);
-        assert!(
-            dx.abs() <= 1 && dy.abs() <= 1 && (dx != 0 || dy != 0),
-            "the route jumps from {here:?} to {step:?}"
-        );
-        assert!(seen.insert(*step), "the route visits {step:?} twice");
-        here = *step;
-    }
-    assert_eq!(here, (20, 20), "the route does not end on the goal");
-}
-
-/// RULE: ground is counted, not flagged - two things may share a tile and the first to leave does not free it.
-///
-/// Source: not a pathing function but the layer it stands on. `zone_spatial_grid_scan_cross_occupants.cpp` counts occupants
-/// per cell rather than testing one flag; our `Walk` counts for the same measured reason (`path.rs:28-31`).
+/// RULE: a tile held by two things stays held until both leave.
 #[test]
 fn a_tile_held_by_two_things_stays_held_until_both_leave() {
-    let mut walk = walk(4, 4, &[]);
-    walk.block(1, 1);
-    walk.block(1, 1);
-    walk.unblock(1, 1);
+    let mut field = ground(8, 8, &[]);
+    assert!(field.walkable(3, 3));
+    field.block(3, 3);
+    field.block(3, 3);
+    assert!(!field.walkable(3, 3));
+    field.unblock(3, 3);
     assert!(
-        walk.blocked(1, 1),
-        "one of two occupants leaving freed the tile"
+        !field.walkable(3, 3),
+        "one occupant is still standing there"
     );
-    walk.unblock(1, 1);
-    assert!(
-        !walk.blocked(1, 1),
-        "the tile stayed blocked after both left"
-    );
-    // An unbalanced release cannot wrap the count into "blocked by 65,535 things".
-    walk.unblock(1, 1);
-    assert!(!walk.blocked(1, 1));
+    field.unblock(3, 3);
+    assert!(field.walkable(3, 3), "both are gone");
 }
 
-/// RULE: an unobstructed route is charged **only** the per-step cost - 16 for a cardinal step, 23 for a diagonal, no
-/// terrain term - and, because the estimate is **weighted x25** on purpose, it may be as much as `25/16` longer than the
-/// optimal route.
-///
-/// Source: `zone_spatial_pyramid_eval_cost.cpp` adds a per-step cost with no terrain term (ground is passable or not), and
-/// `FUN_008007f0` scales its Euclidean estimate by `2500/100` = 25 (`docs/movement-in-the-binary.md`, "The cost model
-/// settled") - a weight of about 1.56 that buys speed with **deliberately suboptimal** routes. This fixture used to assert
-/// `cost == octile(from, to)` unchanged on open ground; that was the **admissible** search's rule, and the ported search is
-/// not admissible. Who runs the game's own weight does not get an optimal route, so the assertion is the game's guarantee
-/// and not the stronger one: no route beats the octile lower bound, and none exceeds the weight's bound.
-///
-/// Measured when rewritten (2026-11-18): (2,3) -> (25,18) walks **509** against an octile of **473**, ratio 1.076, inside
-/// the 1.5625 bound - the route is a king-move chain that steps one diagonal and two cardinals at a time where it can.
+/// RULE: the route never doubles back, and every waypoint is a tile a body may stand on. The **pull** means a hop can be
+/// several tiles long - that is what a clear line buys - so the claim is about repeats and about free ground, not about one
+/// tile a step.
 #[test]
-fn open_ground_costs_the_octile_distance_and_no_more() {
-    let walk = walk(30, 30, &[]);
-    for (from, to) in [
-        ((2u16, 3u16), (25u16, 18u16)),
-        ((0, 0), (29, 29)),
-        ((5, 20), (5, 1)),
-    ] {
-        let route = find_path(&walk, from, to).expect("open ground");
-        let walked = route_cost(from, &route);
-        let optimal = octile(from, to);
+fn a_route_never_repeats_a_tile_and_every_waypoint_is_free() {
+    let wall: Vec<(u16, u16)> = (0..=6).map(|y| (6, y)).collect();
+    let field = ground(14, 14, &wall);
+    let route = field
+        .route(SCALE, centre(2, 2), centre(10, 2))
+        .expect("a way round exists");
+    let chain = tiles_of((2, 2), &route);
+    let mut seen = Vec::new();
+    for tile in &chain {
         assert!(
-            walked >= optimal,
-            "the open-ground route from {from:?} to {to:?} beats the octile lower bound: {walked} against {optimal}"
+            !seen.contains(tile),
+            "the route repeats {tile:?}: {chain:?}"
         );
-        // `h = 25 x euclid` and `cost >= 16 x euclid`, so `h <= 25/16 x cost` - the weighted search's only guarantee.
-        let bound = optimal * 25 / 16 + 1;
-        assert!(
-            walked <= bound,
-            "the open-ground route from {from:?} to {to:?} costs {walked}, past the weight's {bound} ({optimal} x 25/16): {route:?}"
-        );
-        assert_eq!(route.last(), Some(&to));
+        seen.push(*tile);
     }
-    let _ = at(0, 0);
+    // The last waypoint is the goal itself; every one before it is a tile centre, so every one is free ground.
+    for point in &route[..route.len().saturating_sub(1)] {
+        let tile = (
+            u16::try_from(point.0.raw().div_euclid(SCALE)).unwrap_or(0),
+            u16::try_from(point.1.raw().div_euclid(SCALE)).unwrap_or(0),
+        );
+        assert!(
+            field.walkable(tile.0, tile.1),
+            "a waypoint sits on blocked ground {tile:?}"
+        );
+    }
 }

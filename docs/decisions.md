@@ -7904,3 +7904,36 @@ floors are superseded as gates, and their measurements stand.
 
 **Commits us to.** Every slice reports **the win, the food wall if any, and the entity count** - the count as information, never
 as the gate - and a slice that wins with fewer entities is a slice that won.
+
+### D279 - The movement layer is the original's, ported bluntly from the decompilation (owner, 2026-11-18)
+
+**The ruling, in his words.** *"Drop all of pathfinding and obstacle avoidance code and decisions. All of them. I want clean
+slate. Then please check the original game and https://github.com/samuelcaldas/age-of-empires-2-decomp and implement as close
+as possible. So not over engineer, do not overcomplicate, just blunt conversion to rust. ... If decisions are needed, again ask
+original game. Don't run verification runs. ... I want to see myself in a game which runs anyhow."*
+
+**What that settles, and what it withdraws.** Every movement mechanism this tree invented is withdrawn **as a body**, not
+one at a time: the short-range visibility graph (D211/D264), the place model and the radius argument in the planner
+(D257), the avoid set and the re-plan budget (D98a/D135/D248), the substituted waypoint (D276/D279's half-port), the
+slide (D253/D255/D256), the step fold (D252), the settle ring (D188) and `TakeAtRest` (D193). Their fixtures go with them.
+What replaces them is the original's own model, read from the decompilation's `zone/` sources and the tree's register:
+
+1. **A tile grid** of counted occupants (the original's spatial grid): terrain impassable, objects stamped on their tiles.
+2. **One A\* over that grid**, costs 16/23 and `h = 25 x Euclidean` - the numbers already read out of `FUN_008007f0`. No
+   hierarchy, no window, no radius. An unreachable goal answers the **closest settled tile**.
+3. **One whole step a tick** toward the next waypoint; no slide, no partial step, no fold.
+4. **Four refusal rules**: the order's own target; ground; a body **at rest since the route was planned** (which the mover
+   walks past - the original's *past* test, `path+0x10` against `lastMoveTime`); anything else, which refuses the step and
+   pauses the **higher id** for 0.25-1.50 s (the original's `setPause`, `0x8a80ed`-`0x8a8141`).
+5. **One re-plan per ground refusal**, throttled per unit, to the same goal.
+
+**Why a blunt port and not a tenth design.** The register's own record is that five designs in one evening left the same red
+set, and that the red set survived the naming of the shape. The owner's answer is to stop designing: take the original's
+structure whole, at the cost of fidelity where the original's structure is still unread.
+
+**Basis.** The decompilation at `/opt/data/tools/src/aoe2-decomp` (the repo he named, cloned): `zone_path_eval.cpp`,
+`zone_spatial_pyramid_*`, `zone_spatial_entity_*`; the tree's `docs/movement-in-the-binary.md` for the cost model and the
+pause block; the owner's directive above.
+
+**Commits us to.** Deleting the listed mechanisms rather than keeping them behind a flag, and paying for the fixtures built
+on them; no acceptance run in this slice (his call), the unit and conformance suites being the gate.

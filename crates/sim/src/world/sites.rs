@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ruage_fixed::Fixed;
 
-use crate::{Entity, EntityId, EntityKind, Route, SimError, Task, Walk, World};
+use crate::{Entity, EntityId, EntityKind, Ground, Route, SimError, Task, World};
 
 /// How long a *failed* step-aside is remembered before the search is asked again (D223). Long enough that a stuck man costs
 /// no path search a tick, short enough that a builder's arrival gets an answer within a second.
@@ -21,7 +21,7 @@ impl World {
     /// resolves it later. **Units do not block a site** - the game drops a building on your own villagers and pushes them
     /// out - and a spent farm is the one thing a new building may cover.
     pub(crate) fn site_refusal(&self, player: u8, unit: u32, at: (u16, u16)) -> Option<SimError> {
-        let walk = self.walk.as_ref()?;
+        let walk = self.ground.as_ref()?;
         let mut held: BTreeMap<(u16, u16), EntityId> = BTreeMap::new();
         // Ground held by a building this player **cannot see**. The walk layer has it blocked - `insert` blocks a
         // building's tiles the moment it stands - so asking `walk.blocked` alone refused a blind placement with
@@ -217,7 +217,7 @@ impl World {
             return;
         };
         let goal = self.tile_centre(to);
-        let Ok(route) = self.plan_path(from, goal, 0) else {
+        let Ok(route) = self.plan_path(from, goal) else {
             self.resuming.insert(id, resumable);
             self.aside_retry
                 .insert(id, self.tick.saturating_add(ASIDE_RETRY_TICKS));
@@ -247,7 +247,7 @@ impl World {
         from: (u16, u16),
         position: (Fixed, Fixed),
     ) -> Option<(u16, u16)> {
-        let (wide, tall) = self.walk.as_ref().map_or((0, 0), Walk::size);
+        let (wide, tall) = self.ground.as_ref().map_or((0, 0), Ground::size);
         // **Empty first, then merely walkable** (D192). A crowd standing against a resource next to the site used to leave every
         // ring tile occupied, `exit_tile` answered `None`, and the man on the ghost was never moved - so `site_is_clear` refused
         // for ever and the content pack's house sat at hp 1 after 2,000 ticks. Bodies are not walls for their own side (D189), so a
@@ -264,7 +264,7 @@ impl World {
                     if !empty && !self.tile_walkable(x, y) {
                         continue;
                     }
-                    if self.plan_path(position, self.tile_centre(at), 0).is_ok() {
+                    if self.plan_path(position, self.tile_centre(at)).is_ok() {
                         return Some(at);
                     }
                 }
@@ -388,7 +388,7 @@ impl World {
             // and the builder stalls one step short (measured: a farm that never started, 600 ticks of jitter at 4.78).
             let position = self.tile_centre(tile);
             // Free is not the same as reachable: a free tile inside a wall is no place to stand.
-            self.plan_path(from, position, 0).ok().map(|_| position)
+            self.plan_path(from, position).ok().map(|_| position)
         })
     }
 
@@ -573,7 +573,7 @@ impl World {
         candidates.sort_by_key(|(distance, tile)| (*distance, *tile));
         candidates.into_iter().find_map(|(_, tile)| {
             let position = self.tile(tile);
-            self.plan_path(from, position, 0).ok().map(|_| position)
+            self.plan_path(from, position).ok().map(|_| position)
         })
     }
 
@@ -585,7 +585,7 @@ impl World {
             return;
         };
         let mut target = None;
-        if let Ok(route) = self.plan_path(from, to, 0) {
+        if let Ok(route) = self.plan_path(from, to) {
             self.put_route(
                 unit,
                 Route {
@@ -614,7 +614,7 @@ impl World {
                             continue;
                         }
                         let candidate = self.tile_centre((cx, cy));
-                        if let Ok(route) = self.plan_path(from, candidate, 0) {
+                        if let Ok(route) = self.plan_path(from, candidate) {
                             self.put_route(
                                 unit,
                                 Route {

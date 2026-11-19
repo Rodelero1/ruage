@@ -23,19 +23,14 @@ use ruage_data::{
     Unit, Units,
 };
 
+mod ground;
 mod metrics;
-mod path;
 mod roles;
-mod short;
 pub mod tiles;
 mod world;
+pub use ground::Ground;
 pub use metrics::Metrics;
-pub use path::{
-    Walk, find_path, find_path_avoiding, find_path_avoiding_strict, find_path_strict, line_clear,
-    line_clear_avoiding,
-};
 use ruage_fixed::Fixed;
-pub use short::{short_range, short_range_clear};
 
 /// The largest number of players a match can have: eight, so four-versus-four (D20). It is a
 /// constant rather than a runtime number because stockpiles are fixed-size arrays, and it is eight
@@ -65,13 +60,6 @@ pub fn max_scale_for(tiles: u64) -> i64 {
     }
     i64::try_from(root).unwrap_or(i64::MAX)
 }
-
-/// **How many times one route may be re-planned because its ground went stale** (D127). Two is enough for a house built across
-/// a lane and one more obstruction; more turns a hopeless goal into a search every tick.
-pub(crate) const MAX_GROUND_REPLANS: u8 = 2;
-
-/// A unit the budget leaves out simply waits this tick, which is what a blocked unit does anyway, and tries again next.
-pub(crate) const MAX_REPATHS_PER_TICK: usize = 4;
 
 /// **How long the loser of a unit collision is paused** (D205): the original draws `rand()*1.25/32767+0.25`, i.e. a
 /// uniform **0.25 to 1.50 seconds**, and stores it on the path as a countdown. Ours is drawn in milliseconds from the
@@ -710,36 +698,28 @@ pub enum StepDecision {
     Idle,
     /// The step was taken: ground clear, no body in the way.
     Take,
-    /// The step was taken over a body the mover is already inside (D52).
+    /// The step was taken into a body the mover is already inside, or over a collider the original drops (a moving
+    /// group-mate, or a body that has not moved since the route was planned).
     TakeOverlapping,
-    /// The step was taken into a body at rest, whose repath routes round it from the next tick (rule 8).
-    TakeAtRest,
-    /// The step was slid along one clear axis of **ground** the route's waypoint runs into.
-    Slide,
-    /// Refused: this body lost a unit collision and stands still until its pause runs out (D205). It keeps its path.
+    /// Refused: this body lost a unit collision and stands until its pause runs out. It keeps its route.
     Paused,
-    /// Refused: the route's waypoint is blocked by ground, and a re-plan was asked for (D127).
+    /// Refused: the route's waypoint is blocked by ground, and a re-plan was asked for.
     WaitGround,
-    /// Refused: the blocker is the body the order was given to (rule 2).
+    /// Refused: the blocker is the body the order was given to.
     WaitTarget,
-    /// Refused: a body stands on the tile the order asked for (rule 2, D131/D192/D200).
-    WaitGoal,
-    /// Refused: anything else in the way (the last rule).
+    /// Refused: a body that has moved since the route was planned is in the way.
     WaitBlocked,
 }
 
 impl StepDecision {
     /// Every variant, in declaration order: the counter array is indexed by this.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 7] = [
         Self::Idle,
         Self::Take,
         Self::TakeOverlapping,
-        Self::TakeAtRest,
-        Self::Slide,
         Self::Paused,
         Self::WaitGround,
         Self::WaitTarget,
-        Self::WaitGoal,
         Self::WaitBlocked,
     ];
 
@@ -755,13 +735,8 @@ impl StepDecision {
     pub fn is_a_wait(self) -> bool {
         matches!(
             self,
-            Self::Paused | Self::WaitGround | Self::WaitTarget | Self::WaitGoal | Self::WaitBlocked
+            Self::Paused | Self::WaitGround | Self::WaitTarget | Self::WaitBlocked
         )
-    }
-
-    /// Whether the refusal was "somebody stands on the tile you were sent to" - the clause D192 made hostile-only.
-    pub fn waited_for_a_goal_tile(self) -> bool {
-        self == Self::WaitGoal
     }
 }
 
@@ -919,58 +894,19 @@ pub(crate) struct Rot {
     expires: u64,
 }
 
-/// A unit's remaining route, and the bodies it is planned around (D98a).
-///
-/// The avoid set lives **with** the route rather than in a table keyed by unit, so a new order cannot inherit the old
-/// plan's blind spots: replacing the route replaces the set. A collision with a unit in this set is *past* - the plan
-/// already accounts for it - which is exactly what stops a blocked unit from repathing every tick.
-/// A repath collected in the movement pass and applied after it (D98a): the unit, the body that was in the way, and the
-/// tile that body occupies. The blocked tile is the body's own, so it is not stored twice.
-pub(crate) struct Repath {
-    pub(crate) unit: EntityId,
-    /// The body the route must now avoid, or `None` when the obstruction is **ground** - a stale route whose waypoints
-    /// have turned into blocked tiles (D127). Nothing is added to the avoid set in that case.
-    pub(crate) body: Option<EntityId>,
-    pub(crate) goal: (u16, u16),
-}
-
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Default)]
 pub(crate) struct Route {
-    /// Remaining waypoints, **as points**: the geometry's corners (D113), or the centres of the tiles a search returned when
-    /// the geometry declined. The last point is the goal itself, so an order between tiles lands where it pointed (A).
-    /// **A paused body keeps this list untouched** (D205): the pause is a timer, not a re-plan.
+    /// Remaining waypoints, **as points**: the corners of the tile search, and the exact place the order named as the last
+    /// one, so an order between tiles lands where it pointed. A paused body keeps this list untouched: the pause is a
+    /// timer, not a re-plan.
     pub(crate) points: Vec<(Fixed, Fixed)>,
-    /// Units this route was planned around. Not hashed on its own: it is part of the route, and the route is hashed.
-    pub(crate) avoiding: BTreeSet<EntityId>,
-    /// How many times this route has been re-planned because its **ground** went stale. Capped: a route whose goal is buried
-    /// behind new walls would otherwise search again on every tick, which is the cost D98a's "past" rule exists to avoid.
-    pub(crate) stalls: u8,
-    /// **The tick this route was planned on** (D210): the original stamps `path+0x10` with the clock, and compares it with a
-    /// collider's `lastMoveTime` to decide whether that collider is *past* - "he has not moved since I planned round this,
-    /// so my route already accounts for him". With the step no longer clamped against a body, this is what ends a head-on:
-    /// the loser is paused, stops moving, and the winner's next collision with him is past.
+    /// **The tick this route was planned on**: the original stamps `path+0x10` with the clock and compares it with a
+    /// collider's `lastMoveTime` to decide whether that collider is *past*. It is the whole of the head-on rule.
     pub(crate) created: u64,
-    /// **The men this unit was ordered with** (D207). The original's table of exceptions is its *selection*: the search
-    /// avoids the mover's moving selection-mates and its collision classifier drops them entirely, so a moving group walks
-    /// over itself while everybody else is solid (read 2026-11-14; Forgotten Empires' own forum answer: *"units give up
-    /// their formation (and therefore block each other) when: stop button is pressed / click on enemy unit / attack move"*).
-    /// This engine has no selection, so the interim rule is the owner's: **orders submitted in one tick form the group**,
-    /// and an explicit group id on the command replaces it later (D207).
+    /// **The men this unit was ordered with** (D207). The original drops a mover's *moving selection-mates* from its
+    /// collision classifier, so a group walks over itself while everybody else is solid. This engine has no selection, so
+    /// the interim rule is the owner's: orders submitted in one tick form the group.
     pub(crate) mates: BTreeSet<EntityId>,
-}
-
-/// What one tick of the movement pass carries between steps: the bodies that can be in the way, who has a step to take,
-/// and the reactions it collects for **after** the loop (a repath plans a route and must not be run while the entity list
-/// is being walked; a pause is drawn from the seeded stream and written to an entity).
-pub(crate) struct Passing<'a> {
-    pub(crate) bodies: &'a [(i64, i64, EntityId, usize, i64)],
-    /// Who has something to do this tick. A body at rest cannot move aside for anybody, which is the difference between
-    /// waiting a tick and waiting for ever.
-    pub(crate) moving: &'a BTreeSet<EntityId>,
-    pub(crate) repaths: Vec<Repath>,
-    /// Bodies told to pause by a collision this tick, in entity order, possibly naming the same body twice (each side of
-    /// the pair sees the other). Applied after the pass, where the seeded stream can be drawn from.
-    pub(crate) pauses: Vec<EntityId>,
 }
 
 /// **What a unit's card reads** (2026-11-04): the numbers the bottom-central panel puts beside a portrait.
@@ -1029,7 +965,7 @@ pub struct World {
     /// pack is checked against it when it is loaded - so a slot is always inside the row.
     stock: [[u32; MAX_RESOURCES]; MAX_PLAYERS],
     /// Terrain, copied once at seed time. Static for a match.
-    pub(crate) walk: Option<Walk>,
+    pub(crate) ground: Option<Ground>,
     /// Damage constants from `combat.toml`, set with `load_combat`.
     #[serde(skip)]
     damage_rules: Option<DamageRules>,
@@ -1070,16 +1006,12 @@ pub struct World {
     /// How many of `repath_count` were forced by a **body** rather than by ground (D193 measurement). Instrumentation, like
     /// the total: never hashed, never read by the tick. It exists because D192 met a 70% rise in repaths and could say only
     /// that it had happened.
-    repath_by_body: u64,
     /// How many were forced by ground: a route whose waypoint is now blocked by terrain, a gate or a fresh building.
-    repath_by_ground: u64,
     /// How many ground re-plans **failed**. A counter, like `repath_count`, and not state: it exists so a test can say
     /// "this unit tried twice and stopped" instead of "this unit searched all match" (D135).
-    repath_failures: u64,
     /// How many times a step made room instead of being refused (C1b). **Withdrawn by D205**: the make-room step is gone,
     /// so this stays at zero and is kept only because the headless summary prints it and a reader compares that line
     /// against older runs - a zero here is the change, not a missing feature.
-    made_room_count: u64,
     /// The tech and effect tables, when they have been loaded. A research order is resolved against
     /// them the way damage is resolved against `combat.toml`: once, at order time.
     #[serde(skip)]
@@ -1591,7 +1523,7 @@ impl World {
             outcome: None,
             researched: BTreeMap::new(),
             stock: [[0; MAX_RESOURCES]; MAX_PLAYERS],
-            walk: None,
+            ground: None,
             damage_rules: None,
             combat_projectile_speed: None,
             elevation_above: None,
@@ -1605,10 +1537,6 @@ impl World {
             repath_count: 0,
             step_counts: [0; StepDecision::ALL.len()],
             tracing_steps: false,
-            repath_by_body: 0,
-            repath_by_ground: 0,
-            repath_failures: 0,
-            made_room_count: 0,
             resources: None,
             node_radii: Vec::new(),
             sim_rng: Pcg32::new(seed, SIM_STREAM),
@@ -1872,30 +1800,6 @@ impl World {
         }
     }
 
-    /// How many of `repaths()` a **body** forced, and how many **ground** did. Two counters rather than one because the
-    /// question "did this slice make bodies more work or is there simply more traffic?" cannot be answered from a total.
-    pub fn repaths_by_body(&self) -> u64 {
-        self.repath_by_body
-    }
-
-    /// See `repaths_by_body`.
-    pub fn repaths_by_ground(&self) -> u64 {
-        self.repath_by_ground
-    }
-
-    /// How many ground re-plans failed: the measure of a unit caught against ground it cannot answer for (D135).
-    pub fn repath_failures(&self) -> u64 {
-        self.repath_failures
-    }
-
-    /// How many steps have made room for a body in the way (C1b). **Always zero since D205**, which withdrew the
-    /// make-room step, the give-way and the nudge at unit collisions; kept so the headless summary's `made_room=` field
-    /// stays comparable across runs.
-    #[must_use]
-    pub fn made_room(&self) -> u64 {
-        self.made_room_count
-    }
-
     pub fn position(&self, id: EntityId) -> Option<(Fixed, Fixed)> {
         self.find(id).map(|e| e.position)
     }
@@ -1993,8 +1897,21 @@ impl World {
     /// Can a walker get from one place to another? Asked by the scenario runner when it picks which
     /// node to send a villager to, so the script chooses a node it can reach instead of ordering a
     /// trip the engine will refuse.
+    /// **Can a body get *to* this place?** A route that exists is not enough (D279): the search answers a walled-in goal with
+    /// the closest tile it can reach, so "a route exists" is true for a place inside a sealed room. The answer is the route's
+    /// own end - within one tile of the place - which is also what a worker needs in order to work it.
     pub fn can_reach(&self, from: (Fixed, Fixed), to: (Fixed, Fixed)) -> bool {
-        self.plan_path(from, to, 0).is_ok()
+        let Ok(route) = self.plan_path(from, to) else {
+            return false;
+        };
+        // **Two tiles, not one** (D279): a node's own tile is blocked, so the closest tile a route can end on is a
+        // neighbour's centre - up to 1.4 tiles away diagonally - and a worker can work from there. One tile would refuse
+        // every tree in the game, which is exactly what it did to `research.rs`'s `bank`.
+        let reach = 2 * self.scale;
+        route.last().is_some_and(|end| {
+            let (dx, dy) = (end.0.raw() - to.0.raw(), end.1.raw() - to.1.raw());
+            dx * dx + dy * dy <= reach * reach
+        })
     }
 
     /// A tile's origin as a world position. Tiles are the unit of the map; the scale is the unit
@@ -2068,235 +1985,33 @@ impl World {
         )
     }
 
-    /// A route between two positions, as **points to walk through**, or `NoPath` when the target is walled off.
+    /// **A route between two points**, as the waypoints a body walks, or `NoPath` when there is no ground to plan on.
     ///
-    /// Two solvers, in this order, and the second is why a walk bends where the ground does (D113):
-    /// 1. **The short-range pathfinder** (`short.rs`): the goal is within its window and reachable, so it answers the whole
-    ///    question geometrically - obstacles expanded by the body's radius, corners of the merged rectangles, shortest path
-    ///    through them. This is the route a player watches.
-    /// 2. **A\* over the tile grid**, pulled to the corners an obstacle forces, when the geometry declines (a window too big
-    ///    for its budget, or a goal outside it). Those are straight lines between **tile corners** - better than a staircase,
-    ///    worse than the geometry, and cheap.
-    ///
-    /// `radius` is the body's own footprint: a route for a scout is not a route for a house. A caller that only asks whether
-    /// a place is reachable passes `0`, because the question is about walls, not clearance.
-    /// **The bodies a search must treat as ground** (D210b). The original inserts an object into its per-search rectangle
-    /// list when it is not on the ignore list **and its velocity is zero** (`FUN_007f9d80`), and the list is rebuilt for
-    /// every search - never written into the shared grid. That is what makes the *past* test sound: a man who is standing
-    /// still is planned around, so a route that later meets him can only be an old route.
-    ///
-    /// A body counts as standing when it did **not move on the last tick**. Not "has no route" and not "is idle": a man
-    /// walking to his death this tick must not become a wall to everybody who plans after him.
-    /// **The same standers, as discs** (D211): a centre and the clearance a route must keep from it - `my radius + his`,
-    /// which is the distance the original grows its obstacle rectangles by. The search bends round these, so a detour can
-    /// pass inside one tile; the tile set below is the same men for the search that can only think in tiles.
-    fn stander_bodies(
-        &self,
-        radius: i64,
-        from_tile: (u16, u16),
-        to_tile: (u16, u16),
-    ) -> Vec<((Fixed, Fixed), i64)> {
-        let mut bodies = Vec::new();
-        for entity in &self.entities {
-            // **Never moved is standing** (D211): `last_moved == 0` is the "no step yet" sentinel, and at tick 1 every
-            // body in a fresh world carries it - the first version skipped them all and the plan answered a straight line
-            // through a man who had been standing there since the map was seeded.
-            if entity.kind != EntityKind::Unit
-                || (entity.last_moved != 0 && entity.last_moved + 1 >= self.tick)
-            {
-                continue;
-            }
-            let tile = self.tile_of(entity.position);
-            if tile == from_tile || tile == to_tile {
-                continue;
-            }
-            // **Exactly the reach, not a hair more** (D211). An eighth of a tile of margin looked harmless and was not: a
-            // gather ring's places are 0.40 apart, so a clearance of 0.45 puts every neighbour's place inside a standing
-            // worker's disc and the crowd can no longer reach its own ring - measured, 18 tests red across gather,
-            // depletion and rally. Touching is legal in the original (its clamp stops a body exactly at `r1 + r2`), so the
-            // search asks for the reach and no more.
-            // **The sum, and no tile-wide fallback** (D211). A gather place is planned with radius `0`, and the first
-            // version fell back to a whole tile of clearance when the sum was zero - so every neighbour blocked a tile
-            // around himself and a worker could not reach his own ring (measured: the tree untouched at `Fixed(100000)`
-            // in `a_depleted_node_stops_yielding`). Zero clearance means "no disc", which is right for two points.
-            let sum = radius + self.body_radius(entity.unit);
-            bodies.push((entity.position, sum));
-        }
-        bodies
-    }
-
-    fn stander_tiles(&self, from_tile: (u16, u16), to_tile: (u16, u16)) -> BTreeSet<(u16, u16)> {
-        let mut tiles = BTreeSet::new();
-        for entity in &self.entities {
-            if entity.kind != EntityKind::Unit {
-                continue;
-            }
-            if entity.last_moved != 0 && entity.last_moved + 1 >= self.tick {
-                continue;
-            }
-            let tile = self.tile_of(entity.position);
-            // **The two ends are always walkable**: a search that cannot stand on its own start is not a search, and a goal
-            // a body occupies is still "come as close as you can".
-            if tile == from_tile || tile == to_tile {
-                continue;
-            }
-            tiles.insert(tile);
-        }
-        tiles
-    }
-
-    /// A plan that must end **on the goal tile** - thing orders (D241) and every caller that reads "no path" as a refusal.
+    /// One planner (D279). The original's tile search, ported in `ground.rs`: no radius argument, no second solver, no
+    /// window and no avoid set. A route is about walls; whether the body *fits* somewhere is a movement question, answered
+    /// by the step pass (`world::motion`). A goal that is walled in is not an error: the search settles on the nearest cell
+    /// it can reach and the route ends there, which is the original's "come as close as you can".
     pub(crate) fn plan_path(
         &self,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
-        radius: i64,
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        self.plan_path_mode(from, to, radius, false)
+        let ground = self.ground.as_ref().ok_or(SimError::NoTables)?;
+        ground.route(self.scale, from, to).ok_or(SimError::NoPath {
+            from: self.tile_of(from),
+            to: self.tile_of(to),
+        })
     }
 
-    /// A plan that may end **at the closest reachable tile**: the original's rule for a mover (deck p. 96), and what a
-    /// walk or attack-move order means by "every click is accepted" (D134). The route's last point is where the body will
-    /// stand, so a caller takes its destination from there rather than planning a second time - the double plan is what
-    /// made an accepted click refusable (`army_walk`, 2026-11-16).
-    fn plan_path_closest(
-        &self,
-        from: (Fixed, Fixed),
-        to: (Fixed, Fixed),
-        radius: i64,
-    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        self.plan_path_mode(from, to, radius, true)
-    }
-
-    fn plan_path_mode(
-        &self,
-        from: (Fixed, Fixed),
-        to: (Fixed, Fixed),
-        radius: i64,
-        closest: bool,
-    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
-        let (start, goal) = (self.tile_of(from), self.tile_of(to));
-        // **A place route is not a walk** (D211): `radius == 0` means "reach this square", which is how a gatherer is sent to
-        // his reserved place - and the ring already reserved it against every other body (D186/D188). Modelling the crowd as
-        // obstacles *again* here made a dense little map unroutable (`NoPath from (0,0) to (3,1)`, the tree never touched),
-        // so a place route ignores them and the reservation does the work.
-        let (standers, bodies) = if radius == 0 {
-            (BTreeSet::new(), Vec::new())
-        } else {
-            (
-                self.stander_tiles(start, goal),
-                self.stander_bodies(radius, start, goal),
-            )
-        };
-        if let Some(points) =
-            short_range_clear(walk, self.scale, from, to, radius, &standers, &bodies)
-        {
-            return Ok(points);
-        }
-        // The geometry declined: the tile search answers instead, and its corners become the route.
-        // A blocked goal is allowed here for the same reason it always was - a node's own tile holds the thing being
-        // worked, and "come as close as you can" is what an order on a wall means.
-        let steps = if start == goal || line_clear(walk, start, goal) {
-            vec![goal]
-        } else if closest {
-            find_path_avoiding(walk, start, goal, &standers).ok_or(SimError::NoPath {
-                from: start,
-                to: goal,
-            })?
-        } else {
-            find_path_avoiding_strict(walk, start, goal, &standers).ok_or(SimError::NoPath {
-                from: start,
-                to: goal,
-            })?
-        };
-        // **Where the body will actually stand**: the goal's click point when the route ends on its tile, and the settled
-        // tile's centre when the ground stopped it short.
-        let end = steps.last().copied().unwrap_or(goal);
-        let finish = if end == goal {
-            to
-        } else {
-            self.tile_centre(end)
-        };
-        Ok(self.corners(walk, start, steps, finish))
-    }
-
-    /// The route a **body** would walk: the same plan, with its own footprint as the clearance.
+    /// The route a particular **body** would walk. The body is not a planner input any more (D279): a route is about
+    /// walls, and this exists so the call sites read as what they mean.
     fn plan_path_for(
         &self,
-        id: EntityId,
+        _id: EntityId,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        let radius = self.body_radius(self.find(id).and_then(|entity| entity.unit));
-        self.plan_path(from, to, radius)
-    }
-
-    /// A pulled tile chain as points: each corner is the **centre of its tile**, and the last point is the goal itself, so a
-    /// click between tiles lands where it was clicked.
-    fn corners(
-        &self,
-        walk: &Walk,
-        start: (u16, u16),
-        steps: Vec<(u16, u16)>,
-        goal: (Fixed, Fixed),
-    ) -> Vec<(Fixed, Fixed)> {
-        let pulled = Self::pull_route(walk, start, steps);
-        let half = self.scale / 2;
-        let mut points: Vec<(Fixed, Fixed)> = pulled
-            .iter()
-            .map(|(x, y)| {
-                (
-                    Fixed::from_raw(i64::from(*x) * self.scale + half),
-                    Fixed::from_raw(i64::from(*y) * self.scale + half),
-                )
-            })
-            .collect();
-        if let Some(last) = points.last_mut() {
-            *last = goal;
-        }
-        points
-    }
-
-    /// **B**: spend the waypoints a clear line lets the unit skip.
-    ///
-    /// The pather's route is a polyline through tile centres and it carries slack - measured at **4.94% of walking
-    /// distance over 200 routes** on the project map - because A\* minimises the sum of 10/14 steps rather than the length
-    /// of the line the unit actually walks. From each node this jumps to the furthest node `line_clear` reaches, so the
-    /// corners that remain are the ones an obstacle forces. Cheap: it runs when a route is planned, never per tick.
-    fn pull_route(walk: &Walk, start: (u16, u16), steps: Vec<(u16, u16)>) -> Vec<(u16, u16)> {
-        Self::pull_route_avoiding(walk, start, steps, &BTreeSet::new())
-    }
-
-    /// The same pull, obeying the tiles a repath's search went round (D98a). Without this the **repathed** route is the
-    /// search's own answer - a node per tile - and the unit walks it tile centre to tile centre: the staircase, in the one
-    /// place the owner actually watches a base full of villagers, because most long walks there are repaths.
-    fn pull_route_avoiding(
-        walk: &Walk,
-        start: (u16, u16),
-        steps: Vec<(u16, u16)>,
-        avoid: &BTreeSet<(u16, u16)>,
-    ) -> Vec<(u16, u16)> {
-        if steps.len() < 2 {
-            return steps;
-        }
-        let mut nodes = Vec::with_capacity(steps.len() + 1);
-        nodes.push(start);
-        nodes.extend(steps);
-        let mut pulled: Vec<(u16, u16)> = Vec::with_capacity(nodes.len());
-        let last = nodes.len() - 1;
-        let mut at = 0usize;
-        while at + 1 < nodes.len() {
-            let mut jump = last;
-            // Every intermediate node the search returns is free ground (only the goal may be blocked), so the pull needs
-            // no rule of its own about the end: `line_clear_avoiding` applies the same endpoint exemption the search does.
-            while jump > at + 1 && !line_clear_avoiding(walk, nodes[at], nodes[jump], avoid) {
-                jump -= 1;
-            }
-            pulled.push(nodes[jump]);
-            at = jump;
-        }
-        pulled
+        self.plan_path(from, to)
     }
 
     /// The next waypoint of a unit's route, as a world position.
@@ -2416,8 +2131,10 @@ impl World {
         if !self.on_map(tx, ty) {
             return Err(SimError::OffMap { tile: (tx, ty) });
         }
-        let radius = self.body_radius(entity.unit);
-        let route = self.plan_path_closest(entity.position, to, radius)?;
+        // **A walk is always accepted** (D134): the answer is the nearest tile the route reaches, and the caller walks
+        // there. Reachability is asked by the orders that name a *thing* - a build site (`check_build_inner`) and a gather
+        // node (`start_gather`) - because those are the ones that would pay for work never done.
+        let route = self.plan_path(entity.position, to)?;
         Ok(route.last().copied().unwrap_or(to))
     }
 
@@ -2444,15 +2161,14 @@ impl World {
     /// those have to keep - a tree behind a wall is a refusal, not a walk to the fence (item 9's rule).
     fn walk_goal(
         &self,
-        unit: EntityId,
+        _unit: EntityId,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
     ) -> Result<(Fixed, Fixed), SimError> {
         // **One plan, and its end is the place** (D249): the search answers the reachable tile nearest the click, so the
         // order walks where the ground allows instead of a helper picking a tile and the route being planned a second time
         // - that second plan could fail on a tile the first had already accepted.
-        let radius = self.body_radius(self.find(unit).and_then(|entity| entity.unit));
-        let route = self.plan_path_closest(from, to, radius)?;
+        let route = self.plan_path(from, to)?;
         Ok(route.last().copied().unwrap_or(to))
     }
 
@@ -2611,7 +2327,7 @@ impl World {
                 entry.chasing = false;
             }
             self.stand_down(id);
-            match self.plan_path(position, entry.home, 0) {
+            match self.plan_path(position, entry.home) {
                 Ok(route) => {
                     self.put_route(
                         id,
@@ -3054,33 +2770,6 @@ impl World {
                 sum.saturating_add(self.population_provided(player, built))
             });
         total.min(population.cap_default)
-    }
-
-    /// The bodies that can be in the way this tick, **sorted by tile then id**:
-    /// `(tile x, tile y, id, index into the entity list, its own radius)`.
-    ///
-    /// A flat sorted slice rather than a map of tile to list: the map allocated a `Vec` per occupied tile on every
-    /// moving tick, which is 150 allocations a tick at the acceptance match's size, and the sorted slice answers the
-    /// same nine-tile query with `partition_point` and one allocation. The index is an index into the entity list, not
-    /// a copied position: a body that steps during the tick has to be seen where it now is, and a map of copies left a
-    /// pair standing 500 raw units inside each other (measured in C's first build).
-    fn body_tiles(&self) -> Vec<(i64, i64, EntityId, usize, i64)> {
-        let mut bodies: Vec<(i64, i64, EntityId, usize, i64)> =
-            Vec::with_capacity(self.entities.len());
-        for (index, entity) in self.entities.iter().enumerate() {
-            if entity.kind != EntityKind::Unit
-                || matches!(entity.task, Task::Garrisoned { .. })
-                || entity.hp <= 0
-            {
-                continue;
-            }
-            let (x, y) = self.tile_of_raw(entity.position);
-            // The footprint is resolved **once per body per tick**, not once per pair it is asked about: at 150 bodies
-            // and five queries a step that was the difference between 20.7 s and 18.4 s on the acceptance run.
-            bodies.push((x, y, entity.id, index, self.body_radius(entity.unit)));
-        }
-        bodies.sort_unstable_by_key(|(x, y, id, _, _)| (*x, *y, id.0));
-        bodies
     }
 
     /// The `n`-th tile of a crowd's destination, counting the clicked tile as the first: the tile itself,
@@ -3702,7 +3391,7 @@ impl World {
             }
             let position = self.tile(tile);
             // Free is not the same as reachable: a free tile inside a wall is no place to stand.
-            self.plan_path(from, position, 0).ok().map(|_| position)
+            self.plan_path(from, position).ok().map(|_| position)
         })
     }
 
@@ -3949,7 +3638,7 @@ impl World {
     #[must_use]
     pub fn clearance_at(&self, position: (Fixed, Fixed), radius: i64) -> i64 {
         let scale = self.scale;
-        let Some(walk) = self.walk.as_ref() else {
+        let Some(walk) = self.ground.as_ref() else {
             return i64::MAX;
         };
         let (x, y) = (position.0.raw(), position.1.raw());
@@ -4042,7 +3731,7 @@ impl World {
     /// Is this tile on the map at all? Free ground is the stricter question, and a rally point may
     /// legitimately be somewhere with a tree on it.
     fn on_map(&self, x: u16, y: u16) -> bool {
-        self.walk.as_ref().is_some_and(|walk| walk.contains(x, y))
+        self.ground.as_ref().is_some_and(|walk| walk.contains(x, y))
     }
 
     /// Can this node be worked at all? A node is worked by standing **on** it (a tree) or **beside** it (a mine, a farm),
@@ -4164,7 +3853,7 @@ impl World {
                 // kept its tiles blocked until the husk was removed, so a replacement laid on the same ground was refused with
                 // `SiteBlocked` (measured raising one, D226). Unblocking here is also what makes the doc true for movement.
                 for (x, y) in self.footprint_area_of(*id) {
-                    if let Some(walk) = self.walk.as_mut() {
+                    if let Some(walk) = self.ground.as_mut() {
                         walk.unblock(x, y);
                     }
                 }
@@ -4218,7 +3907,7 @@ impl World {
                 && matches!(entity.kind, EntityKind::Resource(_))
             {
                 let tile = self.tile_of(entity.position);
-                if let Some(walk) = self.walk.as_mut() {
+                if let Some(walk) = self.ground.as_mut() {
                     walk.unblock(tile.0, tile.1);
                 }
             }
@@ -4331,7 +4020,7 @@ impl World {
     /// measured on the grid as it stands *before* the building is inserted. Nearest is by squared tile distance, with the
     /// tile itself as the tie-break so the answer is deterministic.
     fn escape_from(&self, tiles: &[(u16, u16)], from: (u16, u16)) -> Option<(Fixed, Fixed)> {
-        let (wide, tall) = self.walk.as_ref().map_or((0, 0), Walk::size);
+        let (wide, tall) = self.ground.as_ref().map_or((0, 0), Ground::size);
         let mut best: Option<NearKey> = None;
         // **The ring, not the square.** A square scan up to the map's size is a quarter of a million tile tests per
         // dispossessed unit, and it cost 60 s on the suite when I first wrote it this way; a ring costs O(radius) and the
@@ -4546,7 +4235,7 @@ impl World {
     /// "can this tile be walked on" is a question a test (and a future UI) asks of the world directly.
     #[must_use]
     pub fn tile_walkable(&self, x: u16, y: u16) -> bool {
-        self.walk.as_ref().is_some_and(|walk| !walk.blocked(x, y))
+        self.ground.as_ref().is_some_and(|walk| !walk.blocked(x, y))
     }
 
     /// Whether an entity is a **living animal**, and if it is, whether it is herdable. `None` for a tree, a building, a

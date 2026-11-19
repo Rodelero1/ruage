@@ -94,6 +94,9 @@ fn a_walking_villager_takes_whole_steps() {
         "the walk is too short to measure: {owed} ticks owed"
     );
 
+    // **The measurement is distance walked along the route**, one tick at a time (D252): *"man stands or walks. No
+    // acceleration or deceleration."* The route-based form is the right one - a corner is walked *through* inside a tick, so
+    // the straight line from where he was to where he is is shorter than the path he took.
     let mut previous = world.position(id).expect("he stands somewhere");
     let mut previous_route = world.route_points(id);
     let mut walking_ticks = 0u32;
@@ -105,10 +108,10 @@ fn a_walking_villager_takes_whole_steps() {
             break;
         };
         let after = world.route_points(id);
-        // **The walk along the route**: the points the tick spent, then the leg from the last of them to where he stands.
+        let from = previous;
         let spent = previous_route.len().saturating_sub(after.len());
         let mut walked = 0.0;
-        let mut point_at = previous;
+        let mut point_at = from;
         for point in previous_route.iter().take(spent) {
             walked += apart(point_at, *point);
             point_at = *point;
@@ -116,6 +119,12 @@ fn a_walking_villager_takes_whole_steps() {
         walked += apart(point_at, here);
         previous_route = after;
         previous = here;
+        // **A body that did not move walked nothing**, whatever the route's bookkeeping says: a tick that re-planned can
+        // leave a shorter list that still ends in the same points, and reading that as distance walked reported 287 raw
+        // units on a tick the villager stood still.
+        if here == from {
+            walked = 0.0;
+        }
         if !matches!(
             world.entity(id).map(|entity| entity.task),
             Some(Task::Move { .. })
@@ -143,12 +152,12 @@ fn a_walking_villager_takes_whole_steps() {
     );
     if let Some((tick, walked)) = first_short {
         panic!(
-            "tick {tick}: the villager walked {walked:.0} raw units along his route where one step is {step} - a walk is a \
-             whole step or a stand, and {short_ticks} of his {walking_ticks} walking ticks were neither"
+            "tick {tick}: the villager moved {walked:.0} raw units where one step is {step} - a walk is a whole step or a \
+             stand, and {short_ticks} of his {walking_ticks} walking ticks were neither"
         );
     }
-    // **And the walk costs the ticks it owes**, not one per corner: the fold is what buys this, and without it a bend costs a
-    // whole tick (measured on the same walk: 14 corners, 14 extra ticks).
+    // **And the walk costs the ticks it owes**, not one per corner: a bend must not cost a whole tick, which is what the
+    // polyline step buys.
     assert!(
         walking_ticks <= owed + 2,
         "the walk took {walking_ticks} ticks where {route_length:.0} raw at {step} a step owes {owed} - a corner is \

@@ -6,7 +6,7 @@
 //! cargo run --release --offline -p ruage-sim --example path_cost
 //! ```
 //!
-//! It builds the `Walk` the acceptance map gives, picks a long pair of tiles, and times `find_path` over and over,
+//! It builds the `Ground` the acceptance map gives, picks a long pair of tiles, and times `route` over and over,
 //! printing the mean and the checksum of every route. The checksum is the point: a search that got faster by finding
 //! different routes has not been optimised, it has been broken, and the acceptance hash cannot see a change made only on
 //! the error path.
@@ -14,7 +14,8 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use ruage_sim::{Walk, find_path};
+use ruage_fixed::Fixed;
+use ruage_sim::Ground;
 
 const SEARCHES: usize = 2_000;
 
@@ -40,7 +41,14 @@ fn main() {
             return;
         }
     };
-    let walk = Walk::from_map(&map);
+    let walk = Ground::from_map(&map);
+    let scale = 20_000i64;
+    let at = |tile: (u16, u16)| {
+        (
+            Fixed::from_raw(i64::from(tile.0) * scale + scale / 2),
+            Fixed::from_raw(i64::from(tile.1) * scale + scale / 2),
+        )
+    };
     let (width, height) = walk.size();
 
     // The longest free pair the map allows: two corners, so the search expands the whole grid rather than two tiles.
@@ -64,17 +72,19 @@ fn main() {
             println!("{label}: endpoints are blocked on this map, skipped");
             continue;
         }
-        let length = find_path(&walk, from, to).map_or(0, |path| path.len());
+        let length = walk
+            .route(scale, at(from), at(to))
+            .map_or(0, |path| path.len());
         let start = Instant::now();
         let mut checksum = 0u64;
         for _ in 0..SEARCHES {
-            if let Some(path) = find_path(&walk, from, to) {
+            if let Some(path) = walk.route(scale, at(from), at(to)) {
                 // Order-sensitive: a different route gives a different sum, which is how "faster" and "different" are told
                 // apart.
                 checksum = checksum.wrapping_add(path.len() as u64);
-                for (index, tile) in path.iter().enumerate() {
+                for (index, point) in path.iter().enumerate() {
                     checksum = checksum.wrapping_mul(31).wrapping_add(
-                        (u64::from(tile.0) << 8) ^ (u64::from(tile.1) << 1) ^ index as u64,
+                        (point.0.raw() as u64) ^ ((point.1.raw() as u64) << 1) ^ index as u64,
                     );
                 }
             }

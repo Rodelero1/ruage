@@ -9,7 +9,7 @@ use ruage_data::{Economy, Map, Units};
 use ruage_fixed::Fixed;
 
 use crate::{
-    Entity, EntityId, EntityKind, MAX_PLAYERS, SimError, StepDecision, Task, Walk, World,
+    Entity, EntityId, EntityKind, Ground, MAX_PLAYERS, SimError, StepDecision, Task, World,
     free_neighbour,
 };
 
@@ -227,7 +227,7 @@ impl World {
                 self.blast.insert(*id, radius.raw());
             }
         }
-        self.walk = Some(Walk::from_map(map));
+        self.ground = Some(Ground::from_map(map));
         self.footprints.clear();
         for (role, mask) in &economy.footprint {
             if let Some(unit) = economy.role.get(role) {
@@ -490,7 +490,7 @@ impl World {
                 .is_none_or(|construction| construction.progress_ticks > 0)
         {
             for tile in self.solid_tiles(&entity) {
-                if let Some(walk) = self.walk.as_mut() {
+                if let Some(walk) = self.ground.as_mut() {
                     walk.block(tile.0, tile.1);
                 }
             }
@@ -502,7 +502,7 @@ impl World {
         // half of the rule the owner named. `step_spent_nodes` frees the tile when the node is emptied and removed.
         if matches!(entity.kind, EntityKind::Resource(_)) && entity.amount.raw() > 0 {
             let tile = self.tile_of(entity.position);
-            if let Some(walk) = self.walk.as_mut() {
+            if let Some(walk) = self.ground.as_mut() {
                 walk.block(tile.0, tile.1);
             }
         }

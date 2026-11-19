@@ -1,5 +1,11 @@
 # The pathing conformance set
 
+> **REWRITTEN BY D279 (2026-11-18).** The set now states the ported model's rules - the grid, one A\* at the original's
+> costs, the line test, the closest-tile answer - across five files (`cost_model`, `walkability`, `obstacles`, `findings`,
+> `divergences`): **13 tests green and 3 `#[ignore]`d**, because D279 supersedes D249's "nothing is ignored": the three
+> ignored ones are the layers this port deliberately does not carry (hierarchy, radius-aware search, expansion budget), each
+> with what it would cost. Everything below this note describes the *previous* set and the rules it asserted.
+
 **What it is.** `crates/conformance` asserts the pathfinding and obstacle-avoidance rules of **the original** against this
 engine's planners - one rule per test, the source of every rule named in the test's doc comment. It is a second set, run on
 its own:
