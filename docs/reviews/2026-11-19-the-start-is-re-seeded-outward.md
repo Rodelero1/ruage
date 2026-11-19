@@ -39,3 +39,13 @@ before any cost is claimed - and with the contention it will still be noisy.
 - The change is a *widening* of what a plan may stand on next to its own start, so the risk it carries is a body's first
   step entering a mate's tile. The crowd fixture is exactly that case and is green; the reach test at the step is
   unchanged, so a first step into a body still refuses and re-plans.
+
+## The honest label on this patch: the rule is the game's, the **width is not**
+
+`FUN_007fb220` re-seeds *the start point* by **2 x radius** - **0.4 tiles** for a 0.2-tile body. This patch instead exempts
+**a whole tile in each of the eight directions** from the stander list, which is **2.5x** the game's reach, and it is a
+different mechanism: the game moves the body's own start, this lets the plan walk through the bodies beside it. It makes
+the crowd fixture pass, and it is **an approximation of our own** - so it is labelled here rather than left to read as a
+ported rule. The faithful form is a re-seed of the start point (candidates on a ring at `<= 2 x radius`, terrain- and
+body-checked, the route prefixed with the body's real position), which is the slice to make next; the one-tile ring comes
+out then, whatever the fixture says.
