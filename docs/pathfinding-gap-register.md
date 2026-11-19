@@ -79,5 +79,7 @@ against it, and plan the difference to zero. Sources: `AoK HD.exe` read at the a
 
 **The measurement that governs every step**: `players` (the match must resolve), no late resource wall, the suite green, and the
 entity/re-path counts as information (D278). Today: `main` **131 / players=1**, and the working branch **150 / players=2** with
-**149,254** ground re-paths - the storm the caps hid, still unexplained by any of 1-8, which is why step 1 owes a probe that
+**149,254** ground re-paths - the storm the caps hid, **since measured**: half of it is the tile-chain fallback (step 1,
+rows 1 and 26) and half is *bodies* (the collision block's epilogue, row 29), so neither step alone moves more than half
+(`docs/reviews/2026-11-19-the-storm-split-by-route-origin.md`). Step 1 still owes a probe that
 prints **the route's origin** per refusal, not the task.

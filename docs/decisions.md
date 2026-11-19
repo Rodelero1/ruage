@@ -7836,6 +7836,22 @@ exactly `clearance >= 0`. D117's "the ground is tested as ground" is the game's 
 already supersedes it), and D177's *"every blocked tile"* is the right rule applied to the wrong unit - the game's unit of
 obstruction is **the object's box**, and a blocked tile is only a good stand-in when the object fills it.
 
+**Addendum (2026-11-19), measured: the "two predicates" reading of the storm is withdrawn.** The 149,254 ground re-paths
+were split by the **origin** of the refused route on `d279-substitute` (`704d9ba`): `geometry` **47.5%**, `tile-chain`
+**47.9%**, `none` **4.6%** (390,239 / 393,558 / 38,025 lines of 821,822). Three things follow, and the first cancels a
+planned slice:
+
+1. **There is one ground predicate, not two.** `clearance_at` (`nearest - radius`) is called by the planner and the mover
+   alike, and compared identically (`< 0` refuses, `>= 0` allows). "Unify the predicate" is not a slice.
+2. **The mover's step test is ground *and* bodies** (`clearance_at(..) >= 0 && clear(..)`), so a `geometry` refusal is
+   mostly *"a body moved into the leg"* - the label names the route's origin, not the cause. That is why the collision
+   block's epilogue (re-plan round the collider, pause the higher id) is the answer to half the storm.
+3. **The tallies are an upper bound**: 821,822 probe lines against 156,433 re-paths is **5.3 per re-path** and that
+   inflation is unexplained; the ratio is the measurement.
+
+Delete the fallback (the tile-chain half) **and** answer a body refusal with the epilogue (the geometry half) - neither
+alone moves more than half of it. Measurement: `docs/reviews/2026-11-19-the-storm-split-by-route-origin.md`.
+
 **The open question, and it closed on a read (2026-11-18, on the owner's *"follow the game"*): a building blocks by its
 stamped tiles, not by its radius box.** `zone_spatial_grid_stamp_obstacle_region.cpp` (`func_001EE5B0`) takes a **rectangle** of
 tiles - `min_x, min_y, max_x, max_y` - and writes into each one
