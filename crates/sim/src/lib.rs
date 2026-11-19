@@ -2203,7 +2203,15 @@ impl World {
             )
         };
         if let Some(points) =
-            short_range_clear(walk, self.scale, from, to, radius, &standers, &bodies)
+            short_range_clear(walk, self.scale, from, to, radius, &standers, &bodies, false)
+        {
+            return Ok(points);
+        }
+        // **Declined once, so widen once** (D280): the original's rule is *"expand the search area once, otherwise give the
+        // closest point path"*. Only after that does anything fall back to tile corners, because a tile chain's legs are the
+        // ones the disc refuses - measured, 22 of 22 ground refusals in the movement suites.
+        if let Some(points) =
+            short_range_clear(walk, self.scale, from, to, radius, &standers, &bodies, true)
         {
             return Ok(points);
         }

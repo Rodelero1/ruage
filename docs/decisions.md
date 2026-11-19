@@ -7904,3 +7904,38 @@ floors are superseded as gates, and their measurements stand.
 
 **Commits us to.** Every slice reports **the win, the food wall if any, and the entity count** - the count as information, never
 as the gate - and a slice that wins with fewer entities is a slice that won.
+
+### D280 - The body's width goes inside the planner, which means the tile-chain fallback is deleted (owner, 2026-11-18)
+
+**The ruling.** Put with four options and their measured costs - cap back (135 ground re-paths, match won), widen plus no cap
+(156,433, `players=2`), cap plus widen, width inside the planner, or remember a repeated answer - the owner chose **D: the body's
+width inside the planner**.
+
+**What D is, exactly, and what it is not.** The original plans for *"the boundaries of where this unit's radii will go"*: the width
+is inside the search, so a route it hands over is one the mover never refuses. Our geometry path (`short_range_clear`) already does
+this - it grows every obstruction by the radius - and the **tile-chain fallback does not and cannot**: the pull works in tile space
+(`pull_route_avoiding` tests `line_clear_avoiding` between tiles), and at tile resolution a villager's 0.2-tile width is invisible.
+Sampling a *raw* segment for clearance is what the geometry graph exists to do. **So D cannot be implemented as "make the fallback
+radius-aware": it is implemented by deleting the fallback** - the register's "nothing extra" row - and letting the widened geometry
+or the closest point answer instead.
+
+**What is measured, so the next slice starts from numbers:** fixtures with the widening in place report animals **11/0**, gather
+**22/0**, gather_motion **6/0** and **zero** ground refusals (was 22, all tile-chain routes); the acceptance match with the same
+build reads **153 entities, `players=2`, 156,433 ground re-paths**, against `main`'s **131 / `players=1` / 135**. So the fixture-level
+win is real and the match is not good enough, and the fallback is still the only place a refusal can come from once the geometry
+answers.
+
+**The slice D owes, in order.** (1) Instrument the **acceptance** run with the route-origin probe plus a "the re-plan returned the
+same route" flag - the fixtures cannot show which of the two is happening, and two of my guesses about it were wrong. (2) Delete
+the tile-chain fallback: geometry once, geometry widened once, then the **closest point** - never tile corners. (3) Re-measure the
+acceptance: the gate is `players=1` with no late resource wall (D278). (4) Only then delete `MAX_GROUND_REPLANS`, because the
+treadmill it hides is a fallback artefact and not a collision rule.
+
+**What this does not license.** Shortening the drawn pause, or letting a villager walk over his mates, to make the crowd faster: both
+are divergences the game does not have, and the slow crowd the clean-slate branch measured is a **seating** question, not a pathing
+one.
+
+**Basis.** The binary's own string for the search's extent (*"the boundaries of where this unit's radii will go"*,
+`doIntelligentMovementUpdate`) and its substitute-waypoint count (`mConsecutiveSubstituteCount`); the talk's *"expand the search
+area once, otherwise give the closest point path"* (p. 83); measured in this tree today: animals 11/0, gather 22/0, gather_motion
+6/0, zero refusals, and the acceptance 153 / `players=2` / 156,433 ground re-paths against `main` 131 / `players=1` / 135.

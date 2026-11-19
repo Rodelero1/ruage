@@ -60,7 +60,7 @@ pub fn short_range(
     radius: i64,
     avoid: &BTreeSet<(u16, u16)>,
 ) -> Option<Vec<(Fixed, Fixed)>> {
-    short_range_clear(walk, scale, from, to, radius, avoid, &[])
+    short_range_clear(walk, scale, from, to, radius, avoid, &[], false)
 }
 
 /// **A small enough pencil** (D211): the same search, with bodies as **discs** instead of tiles.
@@ -78,6 +78,10 @@ pub fn short_range_clear(
     radius: i64,
     avoid: &BTreeSet<(u16, u16)>,
     bodies: &[((Fixed, Fixed), i64)],
+    // **Retry once with a wider window** (D280): the original's rule is "expand the search area once, otherwise give the
+    // closest point path". A declined search answers a tile chain today, whose legs nothing validated - measured, 22 of 22
+    // ground refusals in the movement suites - so the second attempt is worth its cost before that answer is used again.
+    widen: bool,
 ) -> Option<Vec<(Fixed, Fixed)>> {
     if from == to {
         return Some(Vec::new());
@@ -233,9 +237,11 @@ pub fn short_range_clear(
     // clear of terrain and still hold the man this search was asked to route round, and his octagon is then the whole of
     // the graph. `rectangles` cannot return an empty set for a non-empty window, so this test only ever fired on the case
     // above - which used to be answered before this point.
-    if rects.len() > MAX_RECTS {
+    let rect_limit = if widen { MAX_RECTS * 4 } else { MAX_RECTS };
+    if rects.len() > rect_limit {
         return None;
     }
+    let node_limit = if widen { MAX_NODES * 4 } else { MAX_NODES };
     // The Minkowski sum: every obstruction grows by the body's radius, so the body may be shrunk to the point `from`/`to`.
     let boxes: Vec<Box4> = rects
         .iter()
@@ -321,7 +327,7 @@ pub fn short_range_clear(
             }
         }
     }
-    if nodes.len() > MAX_NODES {
+    if nodes.len() > node_limit {
         return None;
     }
     let nodes: Vec<(i64, i64)> = nodes.into_iter().collect();

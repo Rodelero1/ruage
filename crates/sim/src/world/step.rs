@@ -1429,8 +1429,14 @@ impl World {
                         // an obstruction and it answers `None`, which is why the tile search was doing a gather approach's work.
                         let aim_legal = self.legal_standoff(aim, radius);
                         short_range_clear(
-                            walk, self.scale, from, aim_legal, radius, &obstacles, &discs,
+                            walk, self.scale, from, aim_legal, radius, &obstacles, &discs, false,
                         )
+                        .or_else(|| {
+                            // One widening, then the fallback (D280).
+                            short_range_clear(
+                                walk, self.scale, from, aim_legal, radius, &obstacles, &discs, true,
+                            )
+                        })
                         .or_else(|| {
                             find_path_avoiding(walk, start, goal, &obstacles).map(|steps| {
                                 let mut points = self.corners(walk, start, steps, aim);
