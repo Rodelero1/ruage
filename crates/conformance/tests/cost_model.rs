@@ -8,7 +8,7 @@
 //! These are the four numbers a re-port can get wrong silently, so each is asserted against the constant it claims rather
 //! than against whatever the engine happens to do today.
 
-use ruage_conformance::{CARDINAL, DIAGONAL, ground, octile};
+use ruage_conformance::{CARDINAL, DIAGONAL, SCALE, ground, octile};
 
 /// RULE: a diagonal is the octile ratio of a cardinal step, not the same and not twice.
 #[test]
@@ -46,7 +46,7 @@ fn a_route_is_never_cheaper_than_the_octile_bound() {
     let field = ground(20, 20, &wall);
     let (from, to) = ((4u16, 4u16), (14u16, 4u16));
     let chain = field
-        .search(from, to)
+        .search(from, to, SCALE, &[])
         .expect("a way round exists");
     let mut total = 0;
     let mut here = from;
