@@ -16,10 +16,13 @@ a *node* walk over his own mates the way a selection does, or (c) leave it - a c
 ordinary case. **No decision yet: this is a fork for the owner.**
 
 **The second thing, and it needs no fork:** the port is **1.6x** off `main` on the acceptance fixture (42.62 s against
-26.6 s) and the next hotspot is not yet named. The probe that found the last two is in `docs/reviews/2026-11-19-d280-the-picker.md`
-(phase timers on `World::step` and on `apply_turn`, deleted afterwards because they cost 0.15 ms a tick): the split at
-tick 14,400 after both halves should be taken again before anything is guessed - `move_bodies` was **3.0 s by tick 9,600**
-and 6.2 s by 14,400, which is the largest of the phases that never had a defect found in it.
+26.6 s) and **the remaining cost has no single owner**. Measured after D280 with the phase probe (timers on `World::step`,
+deleted afterwards - they cost 0.15 ms a tick), at tick 14,400 of 48,000: **`decide` 12.8 s, `move_bodies` 6.8 s, `turns`
+4.9 s** of 26.0 s, and nothing in the first 9,600 ticks stands out (`decide` 2.7 s, `turns` 1.2 s, `move` 0.9 s of 5.3 s).
+That is a spread, not a defect: `decide` is about **36 us a unit-tick** across ~25 units in a debug build, which is the
+shape of a large per-entity function rather than of one wrong question. So the next slice here is a **profile of
+`decide`**, not a guess - the two wins this week both came from a question asked in the wrong order, and there may be a
+third, but it has to be found the same way.
 
 **The three divergences the conformance set names and `#[ignore]`s** - each with what it would cost:
 
