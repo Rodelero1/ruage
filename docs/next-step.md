@@ -1,69 +1,67 @@
-# OPEN - the 12x is closed; the crowd is the fork, and the reds are named (D280)
+# OPEN - standers in the search is right and 5.1x too slow; the crowd is still half built (D282, NOT LANDED)
 
-**Where things stand (2026-11-19, measured).** D279's port is in `main`'s tree on this branch (`movement-clean-slate`):
-`ground.rs` (grid + one A\\* + the line test), `world/motion.rs` (one whole step a tick, four refusals) and
-`world/placement.rs` replace 1,663 deleted lines. D280 closed the **12x regression** it left: `ruage-sim --test
-acceptance_economy the_acceptance_match_trains_more_villagers` was **330.97 s** and is **42.62 s** (debug, 48,000 ticks;
-`main` is 26.6 s). The picker now asks four cheap questions and a distance of every node, then one place and one route of
-**the nearest eight** - and it no longer answers a node with nothing left in it, which had four villagers bouncing between
-two spent bushes every tick (7,369 re-tasks by tick 14,400).
+**Where this branch stands (2026-11-19, measured).** `d281-body-in-the-search`, off `f055be6` (D279's port + D280's
+picker). D281 read the original's collision block, implemented it, went three-green/three-red and was reverted. **D282 is
+the re-attempt, and it carries the piece the first one missed**: the **standers are obstacles to the search**
+(`FUN_007f9d80`; the register's *"search obstacles: standers only"*), which is what makes the *past* test coherent - a
+route planned while a man stood goes round him, so a collider that has not moved since `path+0x10` can be ignored. On top
+of that: a non-past collision **re-plans round the collider's tiles** (unthrottled), a re-plan **keeps the order's clock**,
+and a walk's **start tile is never an obstacle**.
 
-**The crowd: the mechanism is read, and the adoption is parked (D281, NOT LANDED).** The owner's answer - *"follow what does
-the original game and decomp do"* - was read out of the collision block and implemented: a non-past collision **re-plans the
-mover round the collider's tiles**, the **higher id pauses** 0.25-1.50 s, the epilogue **writes no position** (bodies overlap
-as they pass), a collider is *past* only by `path->createdAt >= other->lastMoveTime`, and the path-ignore list is the mover's
-**moving** mates, so a stopped body blocks. With it in place the acceptance fixture went **42.62 s -> 38.96 s** and three of
-D279's reds turned green - but **three others went red**, so it was **reverted whole**; the readings, the numbers and the
-shape to re-apply are in `docs/reviews/2026-11-19-d281-the-body-collision.md`.
+**Suite state on this branch, by binary** (debug):
 
-1. **First, the regression**: `tests::a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` - *"entity 2 must move by its
-   own delta: left 0, right 5"*. A body that should step five raw took none. That is a defect in the attempt, not a rule, and
-   nothing else in the slice can be trusted until it is understood.
-2. **Then the stand**: `the_higher_id_pauses_...keeps_its_route` measured **44 ticks (2.200 s)** against a 30-tick bound. Under
-   the game's model the loser stands for its own pause *and* is blocked by the winner until he has moved off, so the 30-tick
-   bound may itself be our invention - a reading to make, not to assume.
-3. **Two bodies on one tile cannot be planned round** (the search starts on the tile they share): `a_mate_who_is_stopped_becomes_solid`
-   still ends **4,207 raw** inside an 8,000 raw reach even with the re-plan in place. Its second assertion - "nothing inside the
-   reach after the meeting" - is our old retraction; the game's epilogue writes no position.
-4. **The eight crowd fixtures** assert the withdrawn settle ring and stay red until rewritten to the game's rule; that rewrite
-   is part of this slice, not before it.
+- green: `lib` **11/11**, `movement` **4/4**, `replan` **4/4**, `right_of_way` **4/4** (two fixtures restated to the game's
+  model), `straight_walk` 4/4, `walkable` 3/3, `passage` 1/1.
+- **newly green by this slice**: `evasion::a_blocked_unit_goes_round_a_standing_body_and_arrives` (was **4,619 raw**
+  inside an 8,000 raw reach; now it goes round and arrives).
+- red, **same class as before**: `evasion::a_repath_route_is_pulled_like_a_planned_one` (asserts D211's disc-shoulder band,
+  which D279 withdrew, *and* makes the walker the lower id - the winner - so nothing forces the repath it measures);
+  `group_overlap::a_mate_who_is_stopped_becomes_solid` (**5,461 raw** inside 8,000: two bodies on one tile cannot be
+  planned round); `no_pushing::a_man_who_cannot_get_his_square_takes_the_next_tree` (the gather-refusal book).
+- red, **precondition moved**: `collision::a_walker_never_ends_a_tick_inside_a_friend` - "the fixture did not meet": with
+  standers in the search the two men never come within a reach, so the scene no longer contains an overlap to measure.
+- **removed**: `tests::a_spawn_in_the_same_tick_does_not_move_the_wrong_entities`, with its reason in place of it (its two
+  movers were both at the origin - `spawn_now` places every body there - and two bodies inside one reach are a standoff
+  under this rule; what it guarded is no longer reachable because positions are written by id).
 
-**The second thing, and it needs no fork:** the port is **1.6x** off `main` on the acceptance fixture (42.62 s against
-26.6 s) and **the remaining cost has no single owner**. Measured after D280 with the phase probe (timers on `World::step`,
-deleted afterwards - they cost 0.15 ms a tick), at tick 14,400 of 48,000: **`decide` 12.8 s, `move_bodies` 6.8 s, `turns`
-4.9 s** of 26.0 s, and nothing in the first 9,600 ticks stands out (`decide` 2.7 s, `turns` 1.2 s, `move` 0.9 s of 5.3 s).
-That is a spread, not a defect: `decide` is about **36 us a unit-tick** across ~25 units in a debug build, which is the
-shape of a large per-entity function rather than of one wrong question. So the next slice here is a **profile of
-`decide`**, not a guess - the two wins this week both came from a question asked in the wrong order, and there may be a
-third, but it has to be found the same way.
+**Why it is parked, in one table** (debug, 48,000 ticks, `the_acceptance_match_trains_more_villagers`): `f055be6`
+**42.62 s**, D281's first attempt **38.96 s**, this branch **217.54 s** - **5.1x**. The cause is structural, not a stray
+bug: with standers in the avoid list the straight-line shortcut becomes the exception, and the body re-plan is
+unthrottled - `make headless` shows **28,545** re-paths against `f055be6`'s **5** (entities 120 -> 136). **The gate is
+`players=2` on both**, so the unresolved match is pre-existing and not this row's; the suite gains and the cost are the
+whole verdict.
 
-**The three divergences the conformance set names and `#[ignore]`s** - each with what it would cost:
-
-1. **The hierarchy** (`zone_spatial_pyramid_search_hierarchical.cpp`). A flat A\\* over every tile on the 64 x 64 acceptance
-   map. It becomes worth its complexity on a 480 x 480 map with hundreds of units planning per tick, which is not this map.
-2. **The radius in the planner** (the original plans for *"the boundaries of where this unit's radii will go"*). Our search
-   asks tiles and the **step** asks the disc, so a body too wide for a one-tile lane is planned through it and refuses its
-   steps there. The wide body that must thread a narrow gap is the case to watch.
-3. **The expansion budget** (`expansions > h`, cap 20,000; the guard's target is a *push*, `0x801861`-`0x80189d`, so what a
-   budget-exhausted search answers is still unread). No budget: a hopeless search settles every reachable tile.
-
-**Known reds on this branch, by class** (measured before and after D280; D280 moves none of them):
-
-- **the crowd and the seat** (8): `a_walker_never_ends_a_tick_inside_a_friend`, `villagers_never_come_closer_than_one_diameter`, `a_mate_who_is_stopped_becomes_solid`, `six_settled_men_hold_their_places`, `ten_men_work_one_bush_a_body_apart`, `three_gatherers_all_work_the_same_square_on_its_ring`, `a_settled_man_is_not_displaced_by_a_later_arrival`, `a_newcomer_does_not_move_the_working_gatherers` - each asserts a rule the removed machinery provided. Under D279 a winner walks through a paused body and the settle no longer nudges, so these state a rule the engine no longer has. **They are the fixture half of the crowd fork above.**
-- **the re-plan and the place model** (2): `a_blocked_unit_goes_round_a_standing_body_and_arrives`, `a_repath_route_is_pulled_like_a_planned_one`: a body collision no longer re-plans, so there is no "route round a standing body" to assert.
-- **the gather refusal book** (3): `a_man_who_cannot_fit_takes_the_next_source`, `a_man_who_cannot_get_his_square_takes_the_next_tree`, `a_walled_off_wood_is_tried_once_and_then_left_alone`: the refusal these count is now decided by `start_gather`'s reach check, and the picker/scenario path does not record it.
-- **edges** (7): `a_villager_drops_only_within_half_a_diameter_of_the_drop_site`, `a_walk_past_a_house_keeps_its_bodys_clearance`, `the_loser_stands_for_the_drawn_pause`, `both_sides_field_an_army`, `the_skirmish_only_refuses_what_the_fight_has_taken`, `a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot`, `auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out`: each needs a look and none is understood yet.
-
-**Known reds that were already red on `main`** (`e63ed0d`):
-
-- `animals::a_live_animal_is_a_gather_source` and `animals::the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body`
-  - the arrival measure (ring distance vs the game's box gap), a separate slice, unchanged by D279 and D280.
+**The three candidates for the next attempt, in the order they should be measured** (review note, `## Performance`):
+**(1) throttle the body re-plan** like the ground one (`REPLAN_TICKS = 20`) - a divergence, and the cheapest test of the
+hypothesis that the traffic is the cost; **(2) standers only within a window of the route** - the original inserts per
+search, and over a 480 x 480 map it must have locality, unread; **(3) D281's own shape** - keep the shortcut, pay one
+refusal per body, re-plan then - which measured **38.96 s** and fixed three fixtures.
 
 **Next, in order:**
 
-1. **The crowd**, above - an owner fork, not a slice to guess at.
-2. **The arrival measure** for animals: "at the node" becomes the game's **box gap** within the job's range (`func_002690E0`)
-   instead of the ring distance. That is the last two animals reds.
-3. **The probe again, on `move_bodies`** - the one phase nobody has looked inside since the port.
-4. **The owner's acceptance run.** What to look at: whether the match resolves, whether a crowd reaches a tree, and
-   whether a group order to one tile looks like the game.
+1. **The two fixtures whose scenario the rule invalidated** - `collision::a_walker_never_ends_a_tick_inside_a_friend` and
+   `evasion::a_repath_route_is_pulled_like_a_planned_one`. Both need a scene where the meeting happens *and* the walker is
+   the higher id (the loser), which is what the game's tie-break keys on; the second also needs its D211 band replaced
+   with the port's own claim (tile-centre corners, never through the body).
+2. **Two bodies on one tile** (`a_mate_who_is_stopped_becomes_solid`, 5,461 raw inside 8,000): the search starts on the
+   tile they share, so there is no route round. The original's answer is the **placement** phase (`func_002699A0`: step
+   out by the pair's radii plus a hundredth of a tile, four sides, fifty tries) - unbuilt here, and the honest fix for a
+   pair that starts stacked.
+3. **The arrival measure** for animals: "at the node" becomes the game's **box gap** within the job's range
+   (`func_002690E0`) instead of the ring distance. Unchanged by this slice; still the last two animals reds.
+4. **The eight crowd fixtures** (the settle ring, the seat, `six_settled_men_hold_their_places`, the bush and square
+   ones): each asserts machinery D279 deleted. They are the fixture half of the crowd work and come after 1 and 2.
+5. **The probe on `move_bodies`** - still the one phase nobody has looked inside since the port.
+6. **The 1.6x that has no single owner**: `decide` 12.8 s, `move_bodies` 6.8 s, `turns` 4.9 s of 26.0 s at tick 14,400 of
+   48,000 (phase probe, D280). The next slice there is a profile of `decide`, not a guess.
+
+**The three divergences the conformance set names and `#[ignore]`s** are unchanged: the hierarchy, the radius in the
+planner, and the expansion budget.
+
+**Known reds that were already red on `main`** (`e63ed0d`): `animals::a_live_animal_is_a_gather_source` and
+`animals::the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body` - the arrival measure, item 3 above.
+
+**A collision to hold in mind:** another session was writing the shared tree throughout this slice (`git reset` moved
+`movement-clean-slate` from `829ba40` back to `f055be6`, and its edits replaced this session's in `ground.rs` / `lib.rs`).
+This slice lives on its own branch from a linked worktree. **Check `git log --oneline -1` before assuming `main` or
+`movement-clean-slate` is what you last measured.**

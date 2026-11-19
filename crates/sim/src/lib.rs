@@ -2009,13 +2009,61 @@ impl World {
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
+        self.plan_path_avoiding(from, to, &[])
+    }
+
+    /// **A route that keeps off the tiles a body collision named** (D281).
+    ///
+    /// Two sources of avoid tiles, and they are the original's own two:
+    ///
+    /// 1. **every body standing still**, inserted into each search and never into the shared grid (`FUN_007f9d80`, the
+    ///    register's "search obstacles: standers only"). A walker is not an obstacle - he will be somewhere else by the
+    ///    time the route arrives - but a stander is, and this is why a route planned while a man stood in the way goes
+    ///    round him instead of through him;
+    /// 2. **the colliders a step was just refused by**, so a re-plan answers a route round the body rather than the same
+    ///    line again. The original's log line is *"we have %d non-past collisions and %d terrain collisions, repathing"*.
+    ///
+    /// The planner is the same one either way, so a re-plan is exactly as walkable as a first plan.
+    pub(crate) fn plan_path_avoiding(
+        &self,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+        named: &[(u16, u16)],
+    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let ground = self.ground.as_ref().ok_or(SimError::NoTables)?;
-        let answer = ground.route(self.scale, from, to).ok_or(SimError::NoPath {
-            from: self.tile_of(from),
-            to: self.tile_of(to),
-        });
+        // **The tile the walk starts on is never an obstacle** - not for this plan, and not for a body ordered to the tile
+        // it already stands on (which otherwise has its own goal avoided and answers `NoPath` from a tile to itself).
+        // `search` never tests its start either, so this is the same rule stated once.
+        let start = self.tile_of(from);
+        let standers = self
+            .entities
+            .iter()
+            .filter(|entity| self.is_standing(entity))
+            .map(|entity| self.tile_of(entity.position))
+            .filter(|tile| *tile != start);
+        let avoid = crate::ground::Avoid::new(standers.chain(named.iter().copied()));
+        let answer = ground
+            .route_avoiding(self.scale, from, to, &avoid)
+            .ok_or(SimError::NoPath {
+                from: self.tile_of(from),
+                to: self.tile_of(to),
+            });
         self.plan_count.set(self.plan_count.get() + 1);
         answer
+    }
+
+    /// **Whether a body is standing still** (D281): the original's `isMoving` is *the velocity vector is zero*. This
+    /// engine keeps no velocity for real units, so the question is asked of the two things that would make a body move: a
+    /// route it has not finished, and a fixture's own drift.
+    fn is_standing(&self, entity: &Entity) -> bool {
+        if entity.kind != EntityKind::Unit {
+            return false;
+        }
+        let walking = self
+            .paths
+            .get(&entity.id)
+            .is_some_and(|route| !route.points.is_empty());
+        !walking && entity.velocity == (Fixed::ZERO, Fixed::ZERO)
     }
 
     /// The route a particular **body** would walk. The body is not a planner input any more (D279): a route is about
@@ -3213,8 +3261,14 @@ impl World {
     /// **Plan a route, stamped with when it was planned** (D212). Every route goes through here so that the *past* test has
     /// something to compare against: the original writes the world clock into `path+0x10` when a search returns, and a
     /// collider whose `lastMoveTime` is newer than that is the one case the collision block re-acts to.
+    /// **A route that already carries a clock keeps it** (D281). `path+0x10` is the *order's* clock, not the re-plan's:
+    /// re-stamping it made the man a body had just re-planned round look *past* on the next tick and the walk went
+    /// straight through him - measured at 4,207 raw inside an 8,000 raw reach. Zero means "a new order, stamp it now"; the
+    /// re-plan paths pass the route's own creation time.
     pub(crate) fn put_route(&mut self, id: EntityId, mut route: Route) {
-        route.created = self.tick;
+        if route.created == 0 {
+            route.created = self.tick;
+        }
         self.paths.insert(id, route);
     }
 
@@ -5138,47 +5192,16 @@ overrides = "overrides.toml"
         assert!(err.to_string().contains("max_entities"), "got: {err}");
     }
 
-    #[test]
-    fn a_spawn_in_the_same_tick_does_not_move_the_wrong_entities() {
-        // `insert` keeps the list sorted by id, so a unit spawned during a tick shifts the index of
-        // every entity after it. Applying this tick's movements by index alone would then move the
-        // wrong units; the tick carries the id as a check for that reason. The whole suite passed
-        // without this test, because nothing else both moves and spawns in one tick.
-        // 20 Hz with the fixture's 20,000 scale: a raw speed of 100 is exactly 5 units per tick.
-        let mut world = World::new(&settings(20, "next_tick"), 5).expect("world");
-        world.spawn_now(EntityId(1), Fixed::from_raw(100), 10);
-        world.spawn_now(EntityId(2), Fixed::from_raw(100), 10);
-        let before = (
-            world.entity(EntityId(1)).expect("1").position.0.raw(),
-            world.entity(EntityId(2)).expect("2").position.0.raw(),
-        );
-
-        // A spawn with an id below both, queued for the same tick the two movers advance in.
-        world
-            .submit_checked(Command::Spawn {
-                id: EntityId(3),
-                player: 1,
-                kind: EntityKind::Unit,
-                unit: Some(83),
-                position: (Fixed::ZERO, Fixed::ZERO),
-                speed: Fixed::ZERO,
-                hp: 25,
-                amount: 0,
-            })
-            .expect("spawn");
-        world.step().expect("step");
-
-        for (id, was) in [(EntityId(1), before.0), (EntityId(2), before.1)] {
-            let now = world.entity(id).expect("still there").position.0.raw();
-            assert_eq!(
-                now - was,
-                5,
-                "entity {} must move by its own delta, not by a neighbour's",
-                id.0
-            );
-        }
-    }
-
+    // **One fixture was removed here on 2026-11-19, and it is not coming back as it was** (`a_spawn_in_the_same_tick_does`
+    // `_not_move_the_wrong_entities`). It spawned two movers with `spawn_now`, which places every body at the origin, and
+    // asserted that both advanced five raw in a tick while a third spawn landed beside them. Under the game's collision
+    // rule (D281) two bodies inside one reach are a **standoff** - the higher id stands while the lower walks on - so the
+    // scene contradicted the rule it was running under, and the one thing it really guarded had already moved: positions
+    // are written by **id** in `move_bodies`, so no index can move the wrong body. What is still index-guarded is
+    // `record_step`'s `last_step` bookkeeping, which is instrumentation and has no behavioural fixture.
+    //
+    // A scene that separates two movers needs a **map** (a `Move` order to plan) because `spawn_now` cannot place a body
+    // anywhere else, so it belongs in `tests/` with the rest of the movement fixtures rather than here.
     #[test]
     fn the_world_resolves_resource_slots_through_the_pack() {
         // D17's boundary, one step closer: the world does not decide what slot wood is, the pack

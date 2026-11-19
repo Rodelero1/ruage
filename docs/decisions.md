@@ -8006,3 +8006,44 @@ smoothing pass undid the plan; re-stamping `created` made the avoided man *past*
 
 **Commits us to.** Re-attempting it from the review, not from scratch: the first red to understand is why a moving body
 stops moving at all (`a_spawn_in_the_same_tick_does_not_move_the_wrong_entities`), because that is a regression, not a rule.
+
+### D282 - The search sees standers, and a route's clock is its order's (NOT LANDED: 5.1x, D281 re-attempted, 2026-11-19)
+
+**What it is.** D281's three readings, plus the one mechanism they imply that the first attempt did not have:
+
+1. **The standers are obstacles to the search** (`FUN_007f9d80`; the register's *"search obstacles: standers only
+   (velocity zero), inserted per search, never into the shared grid"*). A walker is not an obstacle - he will be elsewhere
+   when the route arrives - but a stander is. **This is what makes the past test coherent**: a route planned while a man
+   stood goes *round* him, so a collider that has not moved since `path+0x10` really can be ignored.
+2. **A non-past body collision re-plans** with the collider's tiles kept off, unthrottled, bounded by the loser's pause
+   and the past test - the original's *"we have %d non-past collisions and %d terrain collisions, repathing"*.
+3. **A route's clock is its order's.** `put_route` stamps `created` only when it is zero, so a re-plan keeps `path+0x10`.
+   D281 measured the defect this fixes: re-stamping made the man just re-planned round look *past*, and the walk went
+   **4,207 raw** inside an **8,000 raw** reach.
+4. **The tile the walk starts on is never an obstacle**, or a body ordered to the tile it stands on answers `NoPath` from
+   a tile to itself.
+
+D279's *"a body that is not going anywhere is past"* exemption is deleted: the original's ignore list holds the mover's
+**moving** mates and nothing else, so a stopped body blocks.
+
+**Basis.** The readings in D281 and `docs/movement-in-the-binary.md`; the register's standers row; the measurements in
+`docs/reviews/2026-11-19-d282-standers-in-the-search.md` - `evasion` 4/6 to **5/6** (the standing-body detour), `movement`
+**4/4**, `right_of_way` 2/4 to **4/4** with two fixtures restated to the game's model (the pause bound is on the *draw*,
+0.25-1.50 s, not on the stand; the crossing is derived from the carrier's own route).
+
+**And why it is not landed.** The mechanism is right and it costs **217.54 s** on the acceptance fixture where `f055be6`
+reads **42.62 s** - 5.1x - because the straight-line shortcut becomes the exception (any stander near the line forces a
+whole-map search) and the body re-plan is unthrottled (28,545 re-paths against 5). The gate is `players=2` on **both**
+builds, so the match failure is pre-existing and not this row's. The branch is parked with its numbers; the next attempt
+starts at the review's three candidates - throttle the body re-plan, window the standers, or keep D281's shortcut-and-pay
+shape which measured **38.96 s**.
+
+**Commits us to.** Two consequences that must not be "fixed" separately: a stander is an obstacle to a *plan* and the
+past test is what lets a step through him - so a fixture that wants a walk through a friend is asserting the exemption
+back, and a fixture that wants a detour round one is asserting this row. And re-planning carries the order's clock for
+ever: any future caller that stamps `created` on a re-plan re-creates the 4,207-raw walk-through.
+
+**Not landed from D281's list.** The disc-shoulder band in `evasion::a_repath_route_is_pulled_like_a_planned_one` (a D211
+rule D279 withdrew), `group_overlap::a_mate_who_is_stopped_becomes_solid` (two bodies on one tile cannot be planned
+round), and the spawn-bookkeeping fixture, removed with its reason in place of it.
+

@@ -6,8 +6,8 @@ this tree is either source data or supporting documentation.
 
 | | |
 |---|---|
-| Spec version | 1.193 |
-| Last updated | 2026-11-18 |
+| Spec version | 1.194 |
+| Last updated | 2026-11-19 |
 | Decision status | **D1 = G1, D2 = file-based oracle, D17 = four layers with the resource enum deleted — see §6 and `docs/decisions.md`** |
 | Historical handoff | [`docs/age2hd.md`](docs/age2hd.md) — read it *through* the errata in §4 |
 | Ground truth | `Age2HD/` (the game install) — read-only, treat as immutable |

@@ -4,10 +4,15 @@
 //!
 //! 1. **the order's own target** - a man sent at a body arrives beside it, and never walks through it;
 //! 2. **the ground** - a step that lands inside a blocked tile is not taken; the body asks for one new route, throttled;
-//! 3. **a body at rest since the route was planned** is *past* (`path+0x10` against `lastMoveTime`) and the mover walks
-//!    on - that is what ends a head-on once the loser has stood for a tick;
-//! 4. **anything else** refuses the step and **pauses the higher id** for 0.25-1.50 s (`setPause`, `0x8a80ed`-`0x8a8141`),
-//!    which is the original's `cmp eax,esi / jle` and the whole of its tie-break.
+//! 3. **a body that has not moved since the route was planned** is *past* (`path+0x10` against `lastMoveTime`) and the
+//!    mover walks on - that is what lets the winner of a head-on pass through the loser;
+//! 4. **anything else** refuses the step, **pauses the higher id** for 0.25-1.50 s (`setPause`, `0x8a80ed`-`0x8a8141`)
+//!    and **re-plans the mover round the collider's tiles** - the original's *"we have %d non-past collisions and %d
+//!    terrain collisions, repathing"*. The epilogue writes **no position** (`0x8a7fe7`), so the pair overlaps for the
+//!    ticks they pass each other.
+//!
+//! **Only a body that moves is solid.** D279 exempted a body with no route or a pause in hand, which made every stopped
+//! man a ghost; the original's ignore list holds the mover's **moving** group-mates and nothing else (D281).
 //!
 //! **The step itself is whole.** The owner's rule - *"man stands or walks. No acceleration or deceleration"* - is
 //! implemented literally: the body travels exactly `speed / tick_rate` raw units along its polyline, crossing waypoints
@@ -39,7 +44,10 @@ impl World {
         // seeded stream and the pass only reads the world.
         let mut pauses: Vec<EntityId> = Vec::new();
         let mut moved: Vec<EntityId> = Vec::new();
+        // The tiles of the bodies that refused **this** body's step, filled by `refusal` and consumed by the re-plan.
+        let mut blockers: Vec<(u16, u16)> = Vec::new();
         for (index, id, dx, dy) in deltas {
+            blockers.clear();
             if dx == Fixed::ZERO && dy == Fixed::ZERO {
                 self.record_step(index, id, StepDecision::Idle);
                 self.stalled.remove(&id);
@@ -87,12 +95,20 @@ impl World {
                     Fixed::from_raw(dy.raw() * step / length),
                 )
             };
-            let (taken, why) = self.walk_the_step(id, direction, step, &mut pauses)?;
+            let (taken, why) = self.walk_the_step(id, direction, step, &mut pauses, &mut blockers)?;
             self.record_step(index, id, why);
             // **A ground refusal buys one new route** - the original re-plans on a terrain collision, and the throttle keeps
             // a wall the goal is buried behind from costing a whole-map search every tick.
             if why == StepDecision::WaitGround {
                 self.replan_after_ground(id);
+            }
+            // **A body refusal buys one, too, and this one is not throttled** (D281): the original re-plans on any non-past
+            // collision, and what bounds it is the pause it draws and the *past* test - a man who moved since the route was
+            // planned stops being an obstacle. The colliders' tiles are what the search keeps off, so the answer is a route
+            // *round* the body rather than the same line again.
+            if why == StepDecision::WaitBlocked && !blockers.is_empty() {
+                let avoid = std::mem::take(&mut blockers);
+                self.replan_around(id, &avoid);
             }
             if taken != (Fixed::ZERO, Fixed::ZERO) {
                 moved.push(id);
@@ -156,6 +172,7 @@ impl World {
         direction: (Fixed, Fixed),
         step: i64,
         pauses: &mut Vec<EntityId>,
+        blockers: &mut Vec<(u16, u16)>,
     ) -> Result<((Fixed, Fixed), StepDecision), SimError> {
         let Some(start) = self.position(id) else {
             return Ok(((Fixed::ZERO, Fixed::ZERO), StepDecision::Idle));
@@ -249,7 +266,7 @@ impl World {
                 Fixed::from_raw(here.0.raw() + mx),
                 Fixed::from_raw(here.1.raw() + my),
             );
-            if let Some(refusal) = self.refusal(id, here, landing, pauses) {
+            if let Some(refusal) = self.refusal(id, here, landing, pauses, blockers) {
                 // **A refused step is a stand, not a shorter step.** If the refusal comes after part of the tick was already
                 // walked - a waypoint crossed and the next leg blocked - the body keeps its starting position for this tick.
                 // Anything else leaves a tick that is neither a whole step nor a stand, which is the one thing the owner's
@@ -314,6 +331,7 @@ impl World {
             goal = self.tile_centre(self.tile_of(goal));
         }
         let mates = route.mates.clone();
+        let created = route.created;
         let Some(from) = self.position(id) else {
             return;
         };
@@ -322,7 +340,38 @@ impl World {
                 id,
                 crate::Route {
                     points,
-                    created: 0,
+                    created,
+                    mates,
+                },
+            );
+            self.repath_count += 1;
+        }
+    }
+
+    /// **Plan the same goal again, round the bodies that refused the step** (D281).
+    ///
+    /// The original's answer to a non-past collision is one search with the collider's tiles kept off - its own log line
+    /// is *"we have %d non-past collisions and %d terrain collisions, repathing"*. There is no budget: what bounds the
+    /// cost is the pause drawn for the loser and the *past* test. The route's **clock is the order's**, so a re-plan does
+    /// not make the man it went round look *past* next tick.
+    fn replan_around(&mut self, id: EntityId, avoid: &[(u16, u16)]) {
+        let Some(route) = self.paths.get(&id) else {
+            return;
+        };
+        let Some(goal) = route.points.last().copied() else {
+            return;
+        };
+        let mates = route.mates.clone();
+        let created = route.created;
+        let Some(from) = self.position(id) else {
+            return;
+        };
+        if let Ok(points) = self.plan_path_avoiding(from, goal, avoid) {
+            self.put_route(
+                id,
+                crate::Route {
+                    points,
+                    created,
                     mates,
                 },
             );
@@ -346,6 +395,7 @@ impl World {
         _here: (Fixed, Fixed),
         landing: (Fixed, Fixed),
         pauses: &mut Vec<EntityId>,
+        blockers: &mut Vec<(u16, u16)>,
     ) -> Option<StepDecision> {
         let entity = self.find(id)?;
         // **Only a unit is stopped by anything.** An arrow is an entity that moves through the same pass, and it flies over
@@ -395,23 +445,18 @@ impl World {
             if self.is_past(id, other.id) {
                 continue;
             }
-            // **A body that is not going anywhere is past** (D279): one standing its pause out, or one with no route left
-            // (a worker at his place, a man who has arrived). Without this, a crowd chains - a paused loser re-pauses
-            // whoever walks into him - and the acceptance match went from **27 s to over nine minutes** in a debug build,
-            // because a ring of villagers is permanently inside each other's reach. The original drops a collider its
-            // classifier calls *past* and never pauses twice for the same obstruction; this is that rule with the only
-            // evidence the model has for "moving".
-            let going_somewhere = self
-                .paths
-                .get(&other.id)
-                .is_some_and(|route| !route.points.is_empty());
-            if other.pause_remaining > 0 || !going_somewhere {
-                continue;
-            }
             // 4. Anything else: **the older unit wins and walks on, the younger stands.** The original pauses the higher id
             //    (`cmp eax,esi / jle`) and *discards* the retraction its radius test computes (`0x8a7fe7`, D210), so the
             //    winner's step is taken through the loser - which is also why the pair cannot deadlock: one of them is
-            //    always allowed to move.
+            //    always allowed to move. The collider's tile joins the avoid list so the loser's re-plan bends round him.
+            //
+            //    **A body that is stopped is not past** (D281). D279 exempted one with no route left or a pause in hand,
+            //    which made every stopped man a ghost: the original's ignore list is the mover's *moving* mates and
+            //    nothing else. What used to arrive here is now the re-plan in `move_bodies`.
+            let tile = self.tile_of(other.position);
+            if !blockers.contains(&tile) {
+                blockers.push(tile);
+            }
             if other.id.0 > id.0 {
                 pauses.push(other.id);
                 continue;

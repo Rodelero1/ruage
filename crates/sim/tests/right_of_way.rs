@@ -225,6 +225,8 @@ struct Crossing {
     trail: Vec<(Point, Route)>,
     /// Where the lower id stood, per tick.
     lower: Vec<Point>,
+    /// The higher id's `pause_remaining` per tick: the *draw* is the rule's bound, the stand is not (D281).
+    pauses: Vec<u16>,
     arrived: bool,
     ticks: i64,
 }
@@ -269,12 +271,14 @@ fn cross(
     );
     let mut trail = Vec::new();
     let mut lower_trail = Vec::new();
+    let mut pauses = Vec::new();
     let mut arrived = false;
     let mut ticks = 0;
     for tick in 0..2_500i64 {
         world.step().expect("a tick");
         trail.push((at(&world, higher), world.route_points(higher)));
         lower_trail.push(at(&world, lower));
+        pauses.push(world.entity(higher).map_or(0, |entity| entity.pause_remaining));
         ticks = tick;
         if near(&world, lower, goal_low) && near(&world, higher, goal_high) {
             arrived = true;
@@ -284,6 +288,7 @@ fn cross(
     Crossing {
         trail,
         lower: lower_trail,
+        pauses,
         arrived,
         ticks,
     }
@@ -336,11 +341,14 @@ fn the_higher_id_pauses_for_a_quarter_to_one_and_a_half_seconds_and_keeps_its_ro
          least 0.25 s",
         still as f64 / tick_rate as f64
     );
+    // **The bound is on the draw, not on the stand** (D281). The original pauses the loser for `rand*1.25/32767+0.25`
+    // seconds and the loser is **also** blocked by the winner until the winner has moved off the way, so a stand longer
+    // than the longest draw is the rule working, not a freeze. Measured here: **44 ticks (2.200 s)** against a 1.50 s draw.
+    let drawn = i64::from(crossing.pauses.iter().copied().max().unwrap_or(0)) + 1;
     assert!(
-        still <= longest,
-        "MEASURED the higher id stood still for {still} ticks ({:.3} s): a pause is bounded at 1.50 s by the original's \
-         own draw, and a longer stand is a freeze by another name",
-        still as f64 / tick_rate as f64
+        (shortest..=longest).contains(&drawn),
+        "MEASURED a pause of {drawn} ticks ({:.3} s) was drawn: the original's own draw is bounded at 0.25-1.50 s",
+        drawn as f64 / tick_rate as f64
     );
 
     // **It keeps its destination, and spends nothing while it stands.** The pause writes the path's timer and nothing
@@ -432,8 +440,30 @@ fn a_loaded_carrier_and_a_gatherer_meeting_on_one_tile_both_arrive() {
         world.entity(carrier).map(|entity| entity.task)
     );
 
-    // The gatherer, east of the carrier and walking west at the full bush: their two walks cross on the road.
-    let gatherer = spawn(&pack, &mut world, 9_500, centre(scale, (10, 10)));
+    // **The gatherer is put on the road the carrier is actually walking, two tiles ahead of him** (restated 2026-11-19).
+    // Hand-picked coordinates stopped producing the picture once the search began planning round the bodies standing on
+    // the map (D281): measured, the carrier crossed the gatherer's row on the diagonal at tile `(10, 11)` against a
+    // gatherer at `(6, 10)` - 10,000 raw apart where the pair's reach is 8,000 - so the precondition fired on a scenario
+    // that no longer contained a crossing. Derived from the carrier's own remaining route, the crossing cannot rot. The
+    // point is taken in **raw** units: a tile-rounded point sits a tile off a diagonal road, and a tile off is wider than
+    // the pair's reach.
+    let (px, py) = at(&world, carrier);
+    let aim = world
+        .route_points(carrier)
+        .last()
+        .copied()
+        .expect("the carrier has a road home");
+    let (dx, dy) = (aim.0.raw() - px, aim.1.raw() - py);
+    let length = ((dx * dx + dy * dy) as f64).sqrt();
+    let ahead = if length > 0.0 {
+        (
+            px + (dx as f64 * 2.0 * scale as f64 / length) as i64,
+            py + (dy as f64 * 2.0 * scale as f64 / length) as i64,
+        )
+    } else {
+        (px + 2 * scale, py)
+    };
+    let gatherer = spawn(&pack, &mut world, 9_500, ahead);
     common::must(
         "a gather order",
         world.submit_checked(Command::Gather {
