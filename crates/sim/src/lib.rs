@@ -2095,9 +2095,13 @@ impl World {
         radius: i64,
         from_tile: (u16, u16),
         to_tile: (u16, u16),
+        ignore: &BTreeSet<EntityId>,
     ) -> Vec<((Fixed, Fixed), i64)> {
         let mut bodies = Vec::new();
         for entity in &self.entities {
+            if ignore.contains(&entity.id) {
+                continue;
+            }
             // **Never moved is standing** (D211): `last_moved == 0` is the "no step yet" sentinel, and at tick 1 every
             // body in a fresh world carries it - the first version skipped them all and the plan answered a straight line
             // through a man who had been standing there since the map was seeded.
@@ -2125,20 +2129,26 @@ impl World {
         bodies
     }
 
-    fn stander_tiles(&self, from_tile: (u16, u16), to_tile: (u16, u16)) -> BTreeSet<(u16, u16)> {
+    fn stander_tiles(
+        &self,
+        from_tile: (u16, u16),
+        to_tile: (u16, u16),
+        ignore: &BTreeSet<EntityId>,
+    ) -> BTreeSet<(u16, u16)> {
         let mut tiles = BTreeSet::new();
         for entity in &self.entities {
-            if entity.kind != EntityKind::Unit {
+            if entity.kind != EntityKind::Unit || ignore.contains(&entity.id) {
                 continue;
             }
             if entity.last_moved != 0 && entity.last_moved + 1 >= self.tick {
                 continue;
             }
-            // **A body with somewhere to go is not a stander** (D279's `isMoving`, and the original's own test: the
-            // velocity vector is non-zero). The recency test above misses the case that matters - a crowd ordered in one
-            // tick has not moved yet when the next man is planned, so all twelve read as standers and the search cannot
-            // leave its own tile. Measured 2026-11-19: twelve militia through one gap, `NoPath from (6, 20) to (19, 19)`,
-            // and the game's `2 x radius` re-seed is far too small to fix it - because in the game they are not standers.
+            // **A body with somewhere to go is not a stander** (`isMoving`, `0x8aa290`: the velocity vector at `+0x130`
+            // has non-zero length - the original's own test, and the one its ignore list filters on). The recency test
+            // above misses the case that matters - a crowd ordered in one tick has not moved yet when the next man is
+            // planned, so all twelve read as standers and the search cannot leave its own tile. Measured 2026-11-19:
+            // twelve militia through one gap, `NoPath from (6, 20) to (19, 19)`, and the game's `2 x radius` re-seed is far
+            // too small to fix it - because in the game they are not standers.
             if self
                 .paths
                 .get(&entity.id)
@@ -2157,6 +2167,45 @@ impl World {
         tiles
     }
 
+    /// **The mover's path-ignore list: the tick's order group, minus the mover** (D207's group, `FUN_008007f0`'s array).
+    ///
+    /// The original builds one list and reads it **twice**: its search treats a tile as free ground when every body on it is
+    /// on the list (`FUN_00801a20`), and its collision block skips the same ids with no pause and no repath. Ours had the list
+    /// in the collision block only (`Route::mates`), so a man's step walked through his own order while his plan treated those
+    /// same men as walls - which is why the first of twelve men ordered through one gap could not leave his own tile, and the
+    /// order was refused with `NoPath` even though the game accepts every click (D134).
+    ///
+    /// Soldiers only, for the owner's reason (D237): a villager takes his own path and never walks through another, so a
+    /// box-selected crowd of villagers has no group in the original either.
+    fn group_mates(&self, mover: EntityId, group: &BTreeSet<EntityId>) -> BTreeSet<EntityId> {
+        let Some(unit) = self.find(mover).and_then(|entity| entity.unit) else {
+            return BTreeSet::new();
+        };
+        if !self.is_military(unit) {
+            return BTreeSet::new();
+        }
+        group
+            .iter()
+            .copied()
+            .filter(|other| {
+                *other != mover
+                    && self
+                        .find(*other)
+                        .and_then(|entity| entity.unit)
+                        .is_some_and(|unit| self.is_military(unit))
+            })
+            .collect()
+    }
+
+    /// The bodies a search for **this mover** may treat as ground, **at order time**: his group, and nobody else. A re-plan
+    /// reads the list off the route instead (`Route::mates`), because by then the tick's group is empty and the men he was
+    /// ordered with are still walking with him.
+    fn path_ignore(&self, mover: Option<EntityId>) -> BTreeSet<EntityId> {
+        mover
+            .map(|id| self.group_mates(id, &self.ordered_now))
+            .unwrap_or_default()
+    }
+
     /// A plan that must end **on the goal tile** - thing orders (D241) and every caller that reads "no path" as a refusal.
     pub(crate) fn plan_path(
         &self,
@@ -2164,20 +2213,21 @@ impl World {
         to: (Fixed, Fixed),
         radius: i64,
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        self.plan_path_mode(from, to, radius, false)
+        self.plan_path_mode(from, to, radius, false, None)
     }
 
     /// A plan that may end **at the closest reachable tile**: the original's rule for a mover (deck p. 96), and what a
     /// walk or attack-move order means by "every click is accepted" (D134). The route's last point is where the body will
     /// stand, so a caller takes its destination from there rather than planning a second time - the double plan is what
     /// made an accepted click refusable (`army_walk`, 2026-11-16).
-    fn plan_path_closest(
+    fn plan_path_closest_for(
         &self,
+        id: EntityId,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
-        radius: i64,
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
-        self.plan_path_mode(from, to, radius, true)
+        let radius = self.body_radius(self.find(id).and_then(|entity| entity.unit));
+        self.plan_path_mode(from, to, radius, true, Some(id))
     }
 
     fn plan_path_mode(
@@ -2186,6 +2236,7 @@ impl World {
         to: (Fixed, Fixed),
         radius: i64,
         closest: bool,
+        mover: Option<EntityId>,
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let walk = self.walk.as_ref().ok_or(SimError::NoTables)?;
         let (start, goal) = (self.tile_of(from), self.tile_of(to));
@@ -2196,9 +2247,10 @@ impl World {
         let (standers, bodies) = if radius == 0 {
             (BTreeSet::new(), Vec::new())
         } else {
+            let ignore = self.path_ignore(mover);
             (
-                self.stander_tiles(start, goal),
-                self.stander_bodies(radius, start, goal),
+                self.stander_tiles(start, goal, &ignore),
+                self.stander_bodies(radius, start, goal, &ignore),
             )
         };
         if let Some(points) =
@@ -2281,7 +2333,8 @@ impl World {
         Ok(points)
     }
 
-    /// The route a **body** would walk: the same plan, with its own footprint as the clearance.
+    /// The route a **body** would walk: the same plan, with its own footprint as the clearance **and its order group as the
+    /// path-ignore list** - the original's search takes the mover's route, so its group travels with the question.
     fn plan_path_for(
         &self,
         id: EntityId,
@@ -2289,7 +2342,7 @@ impl World {
         to: (Fixed, Fixed),
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let radius = self.body_radius(self.find(id).and_then(|entity| entity.unit));
-        self.plan_path(from, to, radius)
+        self.plan_path_mode(from, to, radius, false, Some(id))
     }
 
     /// A pulled tile chain as points: each corner is the **centre of its tile**, and the last point is the goal itself, so a
@@ -2476,9 +2529,7 @@ impl World {
         if !self.on_map(tx, ty) {
             return Err(SimError::OffMap { tile: (tx, ty) });
         }
-        let radius = self.body_radius(entity.unit);
-        let route = self.plan_path_closest(entity.position, to, radius)?;
-        Ok(route.last().copied().unwrap_or(to))
+        Ok(self.walk_goal_permissive(unit, entity.position, to))
     }
 
     fn check_order(&self, unit: EntityId, to: (u16, u16)) -> Result<(Fixed, Fixed), SimError> {
@@ -2489,7 +2540,7 @@ impl World {
         if !self.on_map(to.0, to.1) {
             return Err(SimError::OffMap { tile: to });
         }
-        self.walk_goal(unit, entity.position, self.tile_centre(to))
+        Ok(self.walk_goal_permissive(unit, entity.position, self.tile_centre(to)))
     }
 
     /// **The nearest legal standing point** to a walk order's target (D134; the owner's answer to *"close as it can"*:
@@ -2511,9 +2562,23 @@ impl World {
         // **One plan, and its end is the place** (D249): the search answers the reachable tile nearest the click, so the
         // order walks where the ground allows instead of a helper picking a tile and the route being planned a second time
         // - that second plan could fail on a tile the first had already accepted.
-        let radius = self.body_radius(self.find(unit).and_then(|entity| entity.unit));
-        let route = self.plan_path_closest(from, to, radius)?;
+        let route = self.plan_path_closest_for(unit, from, to)?;
         Ok(route.last().copied().unwrap_or(to))
+    }
+
+    /// The same question when a refusal is not allowed: **a movement click is never refused** (D134), and a plan made
+    /// *before* the order lands cannot see the group it will land with - a submit-time dry run reads the other eleven men of a
+    /// coming order as standers, so a crowd ordered through one gap refused its own click (`NoPath`, measured 2026-11-19).
+    /// Where that dry run finds no route, the click point stands as the goal and the plan made when the order lands - with the
+    /// group known (`World::path_ignore`) - answers where the body will actually stand. A goal that is genuinely unreachable
+    /// still fails there, which is what keeps "a tree behind a wall is a refusal, not a walk to the fence" (item 9).
+    fn walk_goal_permissive(
+        &self,
+        unit: EntityId,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+    ) -> (Fixed, Fixed) {
+        self.walk_goal(unit, from, to).unwrap_or(to)
     }
 
     /// The stance an order will meet once the queue has landed.
@@ -4345,6 +4410,19 @@ impl World {
             | Command::AutoReseed { building, .. }
             | Command::Ungarrison { building } => *building,
             Command::Spawn { id, .. } => *id,
+        }
+    }
+
+    /// **The unit a command gives a movement order to**, if it gives one - the only commands that join the tick's group
+    /// (D207). One match for both readers: the group is stamped after the orders land, and now also **before the first plan**
+    /// in the batch, so the two cannot disagree about membership.
+    fn movement_order(command: &Command) -> Option<EntityId> {
+        match command {
+            Command::Move { unit, .. }
+            | Command::WalkTo { unit, .. }
+            | Command::AttackMove { unit, .. }
+            | Command::Patrol { unit, .. } => Some(*unit),
+            _ => None,
         }
     }
 

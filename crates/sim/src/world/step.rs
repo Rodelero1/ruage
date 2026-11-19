@@ -107,13 +107,29 @@ impl World {
     /// **Take the queued orders and apply them**, refusing rather than failing the match.
     fn drain_orders(&mut self) {
         let queued = std::mem::take(&mut self.queue);
+        // **The tick's group is formed before the first plan, not after the last order.** In the original the group travels
+        // on the order (`FUN_0072cf10`), so by the time a search runs, every member of it is already known and the search may
+        // plan *through* the whole group; ours stamped the group after the batch had landed, so the first of twelve men was
+        // planned while the other eleven still read as standers and could not leave his own tile (`NoPath { from: (6, 20),
+        // to: (19, 19) }`, measured 2026-11-19). Same set either way - the pre-scan only moves the knowledge earlier.
+        for command in &queued {
+            if let Some(unit) = Self::movement_order(command) {
+                self.ordered_now.insert(unit);
+            }
+        }
         for command in queued {
             // A command that became impossible between being accepted and landing is **refused, not fatal**: the tile
             // somebody else took this tick, the tree that fell, the price that went up. The match must not end because two
             // orders in the same tick wanted the same square - which is exactly how the acceptance run died at tick 16,008
             // (`something already stands at (18, 17)`, a market and a blacksmith both choosing it).
             let actor = Self::command_entity(&command);
+            let ordered = Self::movement_order(&command);
             if let Err(why) = self.apply(command) {
+                // An order that never landed must not leave its unit in a group it never walked with - and the men planned
+                // after the refusal must not be allowed to walk through it.
+                if let Some(unit) = ordered {
+                    self.ordered_now.remove(&unit);
+                }
                 self.refusal = Some((actor, why, self.tick));
             }
         }
@@ -132,25 +148,9 @@ impl World {
         }
         let group = std::mem::take(&mut self.ordered_now);
         for &id in &group {
-            let mates: BTreeSet<EntityId> = if self
-                .find(id)
-                .and_then(|entity| entity.unit)
-                .is_some_and(|unit| self.is_military(unit))
-            {
-                group
-                    .iter()
-                    .copied()
-                    .filter(|other| {
-                        *other != id
-                            && self
-                                .find(*other)
-                                .and_then(|entity| entity.unit)
-                                .is_some_and(|unit| self.is_military(unit))
-                    })
-                    .collect()
-            } else {
-                BTreeSet::new()
-            };
+            // One definition of the group for both readers (`World::group_mates`): the set the search was allowed to walk
+            // through while planning is the set the collision block drops when walking.
+            let mates = self.group_mates(id, &group);
             if let Some(route) = self.paths.get_mut(&id) {
                 route.mates = mates;
             }
@@ -1389,10 +1389,18 @@ impl World {
                     .and_then(|route| route.points.last().copied())
                     .unwrap_or_else(|| self.tile_centre(goal));
                 let radius = self.body_radius(self.find(id).and_then(|entity| entity.unit));
+                // **The same list the route was planned with** (D207, and `FUN_008007f0`'s route-local array): a re-plan
+                // reads the group off the route, not off this tick, because the men it was ordered with are still walking
+                // with it - the tick's own group is empty by the time the movement pass runs.
+                let ignore = self
+                    .paths
+                    .get(&id)
+                    .map(|route| route.mates.clone())
+                    .unwrap_or_default();
                 // **The pencil** (D211): the men standing in the way are discs the route bends round, and the body that
                 // caused this repath is one of them whether or not he is moving - he is the reason the route is being
                 // planned again. A tile-only search cannot pass a man in a lane; this one can.
-                let mut discs = self.stander_bodies(radius, start, goal);
+                let mut discs = self.stander_bodies(radius, start, goal, &ignore);
                 if let Some(other) = body
                     && let Some(at) = self.position(other)
                 {

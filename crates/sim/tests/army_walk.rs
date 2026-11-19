@@ -98,6 +98,56 @@ fn an_attack_move_across_a_wood_stays_on_free_ground() {
     );
 }
 
+/// **A crowd ordered through a gap arrives.** The fixture above asks that nobody stands on blocked ground, which a refused
+/// order satisfies by never moving - so it cannot tell "the crowd walked through the wood" from "the crowd never left". This
+/// one asks for the arrival: every man of the twelve ends within three tiles of the goal, on the far side of the wood.
+///
+/// Measured 2026-11-19: on `7eabb70` the order is refused before it lands (`NoPath { from: (6, 20), to: (19, 19) }`) and
+/// nothing moves; with the group formed before the plan the furthest of the twelve stands 1.51 tiles from the goal. The
+/// bound is 3.0 so it pins the crossing, not the ring the twelve settle in.
+#[test]
+fn a_crowd_ordered_through_a_gap_arrives() {
+    let Some(mut world) = fresh() else { return };
+    let wood = a_forest(&world);
+    let militia = world.role_unit("militia").expect("a militia role");
+    let start = (i64::from(wood.0) - 4, i64::from(wood.1));
+    let goal = (wood.0 + 8, wood.1);
+    let mut fighters = Vec::new();
+    for step in 0..12i64 {
+        let at = (start.0 - step % 3, start.1 + step / 3);
+        fighters.push(soldier(&mut world, at, militia));
+    }
+    for id in &fighters {
+        world
+            .submit_checked(Command::AttackMove {
+                unit: *id,
+                to: goal,
+            })
+            .expect("an attack-move through the wood");
+    }
+
+    for _ in 0..3_000 {
+        world.step().expect("stepping");
+    }
+    let scale = world.scale();
+    let mut stranded = Vec::new();
+    for id in &fighters {
+        let at = world.position(*id).expect("a position");
+        let (dx, dy) = (
+            at.0.raw() - i64::from(goal.0) * scale,
+            at.1.raw() - i64::from(goal.1) * scale,
+        );
+        // A tile is `scale` raw, so three tiles is `3 * scale` - compared squared, to keep it integer.
+        if dx * dx + dy * dy > 9 * scale * scale {
+            stranded.push((id.0, at));
+        }
+    }
+    assert!(
+        stranded.is_empty(),
+        "the crowd never crossed the wood (wood {wood:?}, goal {goal:?}): {stranded:?}"
+    );
+}
+
 /// **A crowd is the hard case.** The army walks as a body, and a body in a gate is where a unit gets *pushed* - the assembler
 /// moves bodies off each other, and a shove that ignores the ground lands one inside a tree. Twelve soldiers, one gap.
 #[test]
