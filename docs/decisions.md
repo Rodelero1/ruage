@@ -8049,3 +8049,43 @@ that fixture stages.
 
 **Commits us to.** Planning for the body's distance rather than the tile it stands on, and to a pause that is as long as the
 draw that set it.
+
+### D286 - An order names a target, and one box ruler decides every distance (owner, 2026-11-19)
+
+**The ruling.** Asked how to close the last gap between our approach rule and the original's, the owner: *"follow the
+game/decomp."* So the game's data shape wins over our convenience: an order **names the object it is about**, and every
+distance question is answered by the same box measure.
+
+**What the original has, read.**
+
+1. **An order carries a target object.** The collision block's own words are *"That collision is with our target, so we're
+   done"* (`0x127d`), and the path-ignore list is built from `param_5[2]` (self) and the order's target (`local_45c + 8`).
+   A click that lands on a building therefore produces an order *about that building*.
+2. **One distance**: `func_002690E0` subtracts both bodies' sizes per axis and clamps at zero - border to border - and the
+   motion layer compares it with the order's `rangeDistance` (*"We're in range of our target, so we'll increment our
+   waypoint"*). Range 0 means the boxes touch.
+3. **Obstacles are boxes grown by the mover's radius** in the search (`FUN_007f9d80`) and in the collision query
+   (`FUN_00840830`, `+0x268`, colliding on `<=`).
+4. **The path ends on the exact waypoint** - *"Setting position to exact waypoint"* - not on a tile centre.
+
+**What this settles for the engine** (the next commit, in this order):
+
+1. **`Command::Move` and `Task::Move` gain an optional target entity**, filled when the click lands on a unit or a building,
+   and the target-collision rule then ends the order on contact - one rule for both of the owner's clicks.
+2. **`ground::Clear` becomes a box** (half-extents per axis) instead of a disc, so a blocked tile's grown box is exactly the
+   game's rectangle: a one-tile gap stays passable for a 0.2-radius body, which a 0.7-radius disc would forbid.
+3. **The plan's clearances include blocked tiles' boxes** (buildings and resources), not only bodies, so a route never
+   clips a footprint corner - that is what the three "walk round a house" fixtures caught when the step was changed alone.
+4. **The step asks the same box question** (`FUN_00840830`) instead of `tile_walkable`, and **the route's last point is the
+   exact waypoint** rather than the settled tile's centre.
+
+**Why it is a decision row and not a landed change yet.** Measured on this branch: the step's box test **alone** passes the
+acceptance fixture in **21.81 s** (39.58 s before, `main` 26.6 s) and turns **three** green fixtures red - `a_villager_walks_round_a_house_rather_than_through_it`, `a_villager_walks_round_a_half_built_house`,
+`a_big_unit_walks_through_a_one_tile_gap` - because the plan still works in tiles and hands the step routes it now refuses.
+The four edits above are one slice and must land together; nothing of it is half-applied in the tree.
+
+**Basis.** `func_002690E0`, `FUN_007f9d80`, `FUN_00840830` (`+0x268`), the epilogue's target arm (`0x127d`), the ignore list's
+`local_45c + 8`, the motion layer's *"Setting position to exact waypoint"*; the owner's two rulings quoted above; the
+measurements in `docs/reviews/2026-11-19-d285-box-gap-arrival.md` and this row.
+
+**Commits us to.** An order that names what it is about, and one box measure in the plan, the step and the arrival test.

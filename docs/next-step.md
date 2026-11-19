@@ -39,7 +39,11 @@ builder stall: he plans round the man now). Two came back - `skirmish::both_side
 same shape as the stall: one extra tick of pause and up to one detour is enough to miss a deadline that already recorded 921 of
 1,000 at 62 s of a 70 s window.
 
-**Next, in order** (post-D282: the radius in the plan, the pause off-by-one and the builder stall are all closed):
+**Next, in order** (post-D286: the one box ruler, four edits, one slice - see the decision row):
+
+0. **D286's slice**: `Command::Move`/`Task::Move` gain an optional target; `ground::Clear` becomes a box; the plan's
+   clearances include blocked tiles' boxes; the step asks the same box question and the route ends on the exact waypoint.
+   Measured alone, the step half passes acceptance in **21.81 s** and reds three green fixtures, so the four land together.
 
 1. **Two bodies on one tile** - the last structural hole, and now with a measured refutation behind it. The clearance is
    skipped for a body the mover already overlaps (else every plan starts inside its own clearance), so
