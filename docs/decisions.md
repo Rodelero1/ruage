@@ -7939,3 +7939,24 @@ one.
 `doIntelligentMovementUpdate`) and its substitute-waypoint count (`mConsecutiveSubstituteCount`); the talk's *"expand the search
 area once, otherwise give the closest point path"* (p. 83); measured in this tree today: animals 11/0, gather 22/0, gather_motion
 6/0, zero refusals, and the acceptance 153 / `players=2` / 156,433 ground re-paths against `main` 131 / `players=1` / 135.
+
+**D280 amendment, by the match's own origin split (2026-11-18).** The instrumented acceptance (`DBG_ORIGIN=1`, seed 7, in flight
+at the time of writing) counts every ground refusal by the kind of route the body was handed:
+
+```
+geometry   123,713      tile-chain   147,630      none   17,523
+```
+
+So the suites' clean picture does **not** carry to the match: **half** the storm is the tile chain and **the other half is the
+geometry planner's own routes** - a radius-aware route the mover still refuses. Two consequences, and the second one reorders the
+slice:
+
+1. Deleting the fallback answers ~47% and is still required (the game has no point-route fallback).
+2. **The planner and the mover must read one predicate, not two.** The original has a single collision test - AABBs from the radius
+   table, grown by the mover's radius, colliding on `<=` - and both the search and the step call it. Ours has the planner's
+   clearance test and the mover's `contains_point`/`within_radius` pair, and they disagree about the same corner. That disagreement
+   is the 123,713, and it is the next slice, before the fallback.
+
+**And the cap does not come back.** Restoring `MAX_GROUND_REPLANS` would be a divergence the game does not have; the game's answer to
+a waypoint it cannot reach is to **substitute it** (`mConsecutiveSubstituteCount`), which this branch already carries and which needs
+its fixture. The cap stays off, and the substitution fixture is what closes the treadmill.
