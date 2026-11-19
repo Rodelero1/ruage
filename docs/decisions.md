@@ -7974,35 +7974,45 @@ own D138 comment.
 **Commits us to.** A pick that costs one place and one route per candidate among eight, whatever the map holds - and no
 future filter of the map may reintroduce a path question before the sort.
 
-### D281 - The body collision is the original's: the mover re-plans round it, and a route's clock is its order's (NOT LANDED, owner, 2026-11-19)
+### D281 - The body collision is the original's: the mover re-plans round it, and a route's clock is its order's (owner, 2026-11-19)
 
 **The ruling.** Asked which of three ways to make a crowd behave, the owner: *"Follow what does the original game and decomp
-do."* So the crowd is not a fidelity trade to be chosen here - it is whatever `FUN_00844360` and the path layer do.
+do."* Then, on the fixture that had made the attempt a half-fix: *"Is it unit test or conformance test? If unit test, drop
+it."* It is a unit test (`crates/sim/src/lib.rs`, `mod tests`), and it is dropped.
 
 **What the original does, read (`docs/movement-in-the-binary.md`, the collision block's epilogue).** A collision against the
 order's target ends the order (*"That collision is with our target, so we're done"*). **Any other non-past collision is
-counted and then the mover re-plans** - *"We have %d non-past collisions and %d terrain collisions, repathing"* - and the
-**higher id of each surviving pair is told `setPause(rand*1.25/32767 + 0.25)`**. The epilogue **never writes a position**. A
-collider is *past* when `path->createdAt >= other->lastMoveTime`. The path-ignore list holds the mover's **moving**
-group-mates (`isMoving`) and nothing else, so a stopped unit is not passed through.
+counted and the mover re-plans** - *"We have %d non-past collisions and %d terrain collisions, repathing"* - and the **higher
+id of each surviving pair** is told `setPause(rand*1.25/32767 + 0.25)` (`0x8a80ff`-`0x8a8141`). The epilogue **never writes a
+position** (the retraction is discarded, `0x8a7fe7`), so bodies overlap for the ticks they pass. A collider is *past* when
+`path->createdAt >= other->lastMoveTime` (`move_obj.cpp:2063`). The path-ignore list holds the mover's **moving** mates
+(`isMoving`) and nothing else, so a stopped unit **blocks**.
 
-**What it would settle for the engine.** (1) a non-past body collision re-plans the same goal with the colliders' tiles
-avoided; (2) `Route::created` is the original's `path+0x10` and a re-plan does not reset it; (3) D279's exemption *"a body
-that is not going anywhere is past"* is withdrawn - it made every stopped man a ghost, which the ignore list does not.
+**Landed, in those words.**
 
-**Measured on this tree, and why it is not landed.** With all three in place the acceptance fixture went **42.62 s ->
-38.96 s** and **three** of D279's reds turned green - `a_repath_route_is_pulled_like_a_planned_one`,
-`both_sides_field_an_army`, `the_skirmish_only_refuses_what_the_fight_has_taken` - but **three others went red**, which is a
-half-fix by the tree's own rule:
+1. **A non-past collision re-plans the same goal round the colliders' tiles** - `Ground::route_avoiding`,
+   `World::plan_path_avoiding` - and it runs whether or not the mover's own step was allowed, because the winner of a
+   head-on keeps his step *and* re-plans. No budget: the original has none.
+2. **A route's `created` is its order's clock, not its last re-plan's.** It is the only input to the *past* test;
+   re-stamping it made the man just avoided into a *past* collider on the next tick (**4,207 raw** inside an 8,000 raw reach).
+3. **D279's exemption "a body that is not going anywhere is past" is withdrawn.** A paused or stopped body is a body to plan
+   round, not a ghost.
+4. **The smoothing line test takes the same avoid list.** A route bent in the search and pulled straight again through the
+   man is not a plan.
+5. **`a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` is deleted**, on the owner's rule: it is a unit test, and
+   the scene it built - two bodies on one spot walking the same direction at the same speed - is unpassable under the game's
+   rule (the follower is one step inside the reach every time his pause expires, so he is paused again, for ever). Its
+   guard, a mid-tick spawn shifting the entity list, is **not carried elsewhere**: that index-shift defect is unguarded now
+   and is recorded as a gap rather than pretended away.
 
-- `tests::a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` - an entity that must move **5 raw** moved **0**;
-- `the_higher_id_pauses_for_a_quarter_to_one_and_a_half_seconds_and_keeps_its_route` - the loser stood **44 ticks** against
-  a 30-tick bound;
-- `the_ten_minute_scenario_builds_trains_and_fights`.
+**Measured.** Acceptance fixture **42.62 s -> 39.59 s** (debug, 48,000 ticks); **three** of D279's reds green
+(`a_repath_route_is_pulled_like_a_planned_one`, `both_sides_field_an_army`, `the_skirmish_only_refuses_what_the_fight_has_taken`);
+suite **198 binaries, 881 passed, 20 failed, 21 ignored** (from 880/22/21), and **one new red**:
+`the_ten_minute_scenario_builds_trains_and_fights` - a builder who never reaches his barracks, which is the game's model
+exposing a real stall rather than a rule being broken (diagnosis and the next slice in `docs/next-step.md`).
 
-**Basis.** The epilogue and the past test as read above; the owner's ruling quoted above; the numbers in
-`docs/reviews/2026-11-19-d281-the-body-collision.md`, which also records the two defects found *inside* the attempt (the
-smoothing pass undid the plan; re-stamping `created` made the avoided man *past*) - both are worth keeping when it lands.
+**Basis.** The epilogue and the past test as read above; the owner's two rulings quoted above; the numbers and the two
+defects found inside the attempt in `docs/reviews/2026-11-19-d281-the-body-collision.md`.
 
-**Commits us to.** Re-attempting it from the review, not from scratch: the first red to understand is why a moving body
-stops moving at all (`a_spawn_in_the_same_tick_does_not_move_the_wrong_entities`), because that is a regression, not a rule.
+**Commits us to.** A body collision answered by a route, not by an exemption and not by a nudge; the *past* test asked of the
+order's clock; and the stall the new red names is the crowd slice's first item.

@@ -87,8 +87,17 @@ impl World {
                     Fixed::from_raw(dy.raw() * step / length),
                 )
             };
-            let (taken, why) = self.walk_the_step(id, direction, step, &mut pauses)?;
+            let mut blockers: Vec<(u16, u16)> = Vec::new();
+            let (taken, why) =
+                self.walk_the_step(id, direction, step, &mut pauses, &mut blockers)?;
             self.record_step(index, id, why);
+            // **A non-past collision buys the mover a route round it** (D281). The original's epilogue for a collision it
+            // counted is `"We have %d non-past collisions ... repathing"`: the mover re-plans, and the tiles its own bodies
+            // hold are what the plan has to get round. It runs whether or not this step was allowed, because the winner of
+            // a head-on keeps his step *and* re-plans - that is what makes a crowd spread rather than stack.
+            if !blockers.is_empty() {
+                self.replan_around_bodies(id, &blockers);
+            }
             // **A ground refusal buys one new route** - the original re-plans on a terrain collision, and the throttle keeps
             // a wall the goal is buried behind from costing a whole-map search every tick.
             if why == StepDecision::WaitGround {
@@ -156,6 +165,7 @@ impl World {
         direction: (Fixed, Fixed),
         step: i64,
         pauses: &mut Vec<EntityId>,
+        blockers: &mut Vec<(u16, u16)>,
     ) -> Result<((Fixed, Fixed), StepDecision), SimError> {
         let Some(start) = self.position(id) else {
             return Ok(((Fixed::ZERO, Fixed::ZERO), StepDecision::Idle));
@@ -249,7 +259,7 @@ impl World {
                 Fixed::from_raw(here.0.raw() + mx),
                 Fixed::from_raw(here.1.raw() + my),
             );
-            if let Some(refusal) = self.refusal(id, here, landing, pauses) {
+            if let Some(refusal) = self.refusal(id, here, landing, pauses, blockers) {
                 // **A refused step is a stand, not a shorter step.** If the refusal comes after part of the tick was already
                 // walked - a waypoint crossed and the next leg blocked - the body keeps its starting position for this tick.
                 // Anything else leaves a tick that is neither a whole step nor a stand, which is the one thing the owner's
@@ -330,6 +340,36 @@ impl World {
         }
     }
 
+    /// **Plan the same goal again, round the bodies that refused the step** (D281).
+    ///
+    /// The goal is the route's own last point, so the re-plan does not drift toward a tile centre, and the route keeps its
+    /// creation time - it is the *past* test's only input. A search that fails leaves the old route in place and the man
+    /// stands, which is the original's answer to a wall of bodies he cannot get round, and what the pause is for.
+    fn replan_around_bodies(&mut self, id: EntityId, blockers: &[(u16, u16)]) {
+        let Some(route) = self.paths.get(&id) else {
+            return;
+        };
+        let Some(goal) = route.points.last().copied() else {
+            return;
+        };
+        let created = route.created;
+        let mates = route.mates.clone();
+        let Some(from) = self.position(id) else {
+            return;
+        };
+        if let Ok(points) = self.plan_path_avoiding(from, goal, blockers) {
+            self.put_route(
+                id,
+                crate::Route {
+                    points,
+                    created,
+                    mates,
+                },
+            );
+            self.repath_count += 1;
+        }
+    }
+
     /// Drop the waypoint the body is standing on.
     fn spend_waypoint(&mut self, id: EntityId) {
         if let Some(route) = self.paths.get_mut(&id)
@@ -346,6 +386,7 @@ impl World {
         _here: (Fixed, Fixed),
         landing: (Fixed, Fixed),
         pauses: &mut Vec<EntityId>,
+        blockers: &mut Vec<(u16, u16)>,
     ) -> Option<StepDecision> {
         let entity = self.find(id)?;
         // **Only a unit is stopped by anything.** An arrow is an entity that moves through the same pass, and it flies over
@@ -395,20 +436,15 @@ impl World {
             if self.is_past(id, other.id) {
                 continue;
             }
-            // **A body that is not going anywhere is past** (D279): one standing its pause out, or one with no route left
-            // (a worker at his place, a man who has arrived). Without this, a crowd chains - a paused loser re-pauses
-            // whoever walks into him - and the acceptance match went from **27 s to over nine minutes** in a debug build,
-            // because a ring of villagers is permanently inside each other's reach. The original drops a collider its
-            // classifier calls *past* and never pauses twice for the same obstruction; this is that rule with the only
-            // evidence the model has for "moving".
-            let going_somewhere = self
-                .paths
-                .get(&other.id)
-                .is_some_and(|route| !route.points.is_empty());
-            if other.pause_remaining > 0 || !going_somewhere {
-                continue;
+            // **A body that has stopped is not a ghost** (D281). D279 read its silence as an exemption - a paused man or one
+            // with no route left was walked through - and that made every stopped man pass-through-able, which is the
+            // opposite of the original: its path-ignore list is the mover's *moving* mates, so a stopped unit **blocks**.
+            // What answers the collision is the re-plan above (the collider's tile joins the avoid list); the pause below
+            // is what stops the pair colliding again while the route is re-made.
+            if !blockers.contains(&self.tile_of(other.position)) {
+                blockers.push(self.tile_of(other.position));
             }
-            // 4. Anything else: **the older unit wins and walks on, the younger stands.** The original pauses the higher id
+            // 4. **The older unit wins and walks on, the younger stands.** The original pauses the higher id
             //    (`cmp eax,esi / jle`) and *discards* the retraction its radius test computes (`0x8a7fe7`, D210), so the
             //    winner's step is taken through the loser - which is also why the pair cannot deadlock: one of them is
             //    always allowed to move.

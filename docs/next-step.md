@@ -8,25 +8,28 @@ acceptance_economy the_acceptance_match_trains_more_villagers` was **330.97 s** 
 **the nearest eight** - and it no longer answers a node with nothing left in it, which had four villagers bouncing between
 two spent bushes every tick (7,369 re-tasks by tick 14,400).
 
-**The crowd: the mechanism is read, and the adoption is parked (D281, NOT LANDED).** The owner's answer - *"follow what does
-the original game and decomp do"* - was read out of the collision block and implemented: a non-past collision **re-plans the
-mover round the collider's tiles**, the **higher id pauses** 0.25-1.50 s, the epilogue **writes no position** (bodies overlap
-as they pass), a collider is *past* only by `path->createdAt >= other->lastMoveTime`, and the path-ignore list is the mover's
-**moving** mates, so a stopped body blocks. With it in place the acceptance fixture went **42.62 s -> 38.96 s** and three of
-D279's reds turned green - but **three others went red**, so it was **reverted whole**; the readings, the numbers and the
-shape to re-apply are in `docs/reviews/2026-11-19-d281-the-body-collision.md`.
+**The crowd follows the decomp now (D281, landed) - and the model exposed a stall.** A non-past body collision **re-plans the
+mover round the collider's tiles**, the **higher id pauses** 0.25-1.50 s, the epilogue **writes no position** (bodies overlap as
+they pass), a collider is *past* only by `path->createdAt >= other->lastMoveTime`, and the path-ignore list is the mover's
+**moving** mates - so a stopped body blocks, and D279's *"not going anywhere is past"* exemption is gone. Acceptance fixture
+**42.62 s -> 39.59 s**; three of D279's reds green; suite **198 binaries, 881 passed, 20 failed, 21 ignored** (from 880/22/21).
 
-1. **First, the regression**: `tests::a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` - *"entity 2 must move by its
-   own delta: left 0, right 5"*. A body that should step five raw took none. That is a defect in the attempt, not a rule, and
-   nothing else in the slice can be trusted until it is understood.
-2. **Then the stand**: `the_higher_id_pauses_...keeps_its_route` measured **44 ticks (2.200 s)** against a 30-tick bound. Under
-   the game's model the loser stands for its own pause *and* is blocked by the winner until he has moved off, so the 30-tick
-   bound may itself be our invention - a reading to make, not to assume.
-3. **Two bodies on one tile cannot be planned round** (the search starts on the tile they share): `a_mate_who_is_stopped_becomes_solid`
-   still ends **4,207 raw** inside an 8,000 raw reach even with the re-plan in place. Its second assertion - "nothing inside the
-   reach after the meeting" - is our old retraction; the game's epilogue writes no position.
-4. **The eight crowd fixtures** assert the withdrawn settle ring and stay red until rewritten to the game's rule; that rewrite
-   is part of this slice, not before it.
+1. **First, and it is a stall the new model exposed:** `the_ten_minute_scenario_builds_trains_and_fights` fails at 500 s with
+   the barracks at `construction=Some(progress 0 of 1000)` and its builder `Idle`. A man shut out of his own build site is a
+   broken match, not a look - the question is whether he never reached it, or reached it and could not get a place (the same
+   tile-sharing hole that leaves `a_mate_who_is_stopped_becomes_solid` at **4,207 raw**).
+2. **Two bodies on one tile cannot be planned round** - the search starts on the tile they share - so the avoid list is empty
+   where it matters most. The game's answer is a *radius* query (`FUN_00844310`) whose tile array holds every object, not a
+   tile list; ours holds counts. That gap is now the one to read.
+3. **The eight crowd fixtures** assert the withdrawn settle ring (`a_walker_never_ends_a_tick_inside_a_friend`,
+   `villagers_never_come_closer_than_one_diameter`, `six_settled_men_hold_their_places`, `ten_men_work_one_bush_a_body_apart`,
+   `three_gatherers_all_work_the_same_square_on_its_ring`, `a_settled_man_is_not_displaced_by_a_later_arrival`,
+   `a_newcomer_does_not_move_the_working_gatherers`, and `a_mate_who_is_stopped_becomes_solid`'s second assertion): they are the
+   crowd slice's to rewrite to the game's rule - bodies overlap as they pass, a stopped body blocks, the loser stands for the
+   drawn pause.
+4. **One guard was lost on the owner's ruling**: `a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` was a unit test
+   and is deleted. It protected "a unit spawned mid-tick shifts the entity list, so movements are applied by id, not index" -
+   **nothing covers that now**. If a wrong-entity movement is ever suspected, this is the first place to look.
 
 **The second thing, and it needs no fork:** the port is **1.6x** off `main` on the acceptance fixture (42.62 s against
 26.6 s) and **the remaining cost has no single owner**. Measured after D280 with the phase probe (timers on `World::step`,

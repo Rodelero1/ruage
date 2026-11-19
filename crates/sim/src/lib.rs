@@ -2018,6 +2018,25 @@ impl World {
         answer
     }
 
+    /// **A route that goes round these tiles** (D281): what a mover plans when a body refuses its step and that body is not
+    /// *past*. The original re-plans at that moment and hands the search the tiles its own bodies hold.
+    pub(crate) fn plan_path_avoiding(
+        &self,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+        avoid: &[(u16, u16)],
+    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
+        let ground = self.ground.as_ref().ok_or(SimError::NoTables)?;
+        let answer = ground
+            .route_avoiding(self.scale, from, to, avoid)
+            .ok_or(SimError::NoPath {
+                from: self.tile_of(from),
+                to: self.tile_of(to),
+            });
+        self.plan_count.set(self.plan_count.get() + 1);
+        answer
+    }
+
     /// The route a particular **body** would walk. The body is not a planner input any more (D279): a route is about
     /// walls, and this exists so the call sites read as what they mean.
     fn plan_path_for(
@@ -3213,8 +3232,15 @@ impl World {
     /// **Plan a route, stamped with when it was planned** (D212). Every route goes through here so that the *past* test has
     /// something to compare against: the original writes the world clock into `path+0x10` when a search returns, and a
     /// collider whose `lastMoveTime` is newer than that is the one case the collision block re-acts to.
+    /// **A re-plan does not reset the route's clock** (D281). `created` is the original's `path+0x10`, and its only reader
+    /// is the *past* test - `path->createdAt < other->lastMoveTime`. A re-plan that stamped itself with the current tick
+    /// turned every stationary body into a *past* one for the next comparison, so the man the plan had just been told to
+    /// get round became walk-through-able: measured, **4,207 raw inside an 8,000 raw reach**. Zero means "a new order,
+    /// stamp it now"; the re-plan paths pass the route's own creation time.
     pub(crate) fn put_route(&mut self, id: EntityId, mut route: Route) {
-        route.created = self.tick;
+        if route.created == 0 {
+            route.created = self.tick;
+        }
         self.paths.insert(id, route);
     }
 
@@ -5136,47 +5162,6 @@ overrides = "overrides.toml"
             .spawn_now_checked(EntityId(5), Fixed::ZERO, 10)
             .expect_err("max_entities = 4 must be enforced");
         assert!(err.to_string().contains("max_entities"), "got: {err}");
-    }
-
-    #[test]
-    fn a_spawn_in_the_same_tick_does_not_move_the_wrong_entities() {
-        // `insert` keeps the list sorted by id, so a unit spawned during a tick shifts the index of
-        // every entity after it. Applying this tick's movements by index alone would then move the
-        // wrong units; the tick carries the id as a check for that reason. The whole suite passed
-        // without this test, because nothing else both moves and spawns in one tick.
-        // 20 Hz with the fixture's 20,000 scale: a raw speed of 100 is exactly 5 units per tick.
-        let mut world = World::new(&settings(20, "next_tick"), 5).expect("world");
-        world.spawn_now(EntityId(1), Fixed::from_raw(100), 10);
-        world.spawn_now(EntityId(2), Fixed::from_raw(100), 10);
-        let before = (
-            world.entity(EntityId(1)).expect("1").position.0.raw(),
-            world.entity(EntityId(2)).expect("2").position.0.raw(),
-        );
-
-        // A spawn with an id below both, queued for the same tick the two movers advance in.
-        world
-            .submit_checked(Command::Spawn {
-                id: EntityId(3),
-                player: 1,
-                kind: EntityKind::Unit,
-                unit: Some(83),
-                position: (Fixed::ZERO, Fixed::ZERO),
-                speed: Fixed::ZERO,
-                hp: 25,
-                amount: 0,
-            })
-            .expect("spawn");
-        world.step().expect("step");
-
-        for (id, was) in [(EntityId(1), before.0), (EntityId(2), before.1)] {
-            let now = world.entity(id).expect("still there").position.0.raw();
-            assert_eq!(
-                now - was,
-                5,
-                "entity {} must move by its own delta, not by a neighbour's",
-                id.0
-            );
-        }
     }
 
     #[test]

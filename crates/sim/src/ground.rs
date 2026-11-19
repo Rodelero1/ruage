@@ -134,6 +134,13 @@ impl Ground {
     ///
     /// Bresenham in integers, so the answer is exact and identical everywhere.
     pub fn line_clear(&self, from: (u16, u16), to: (u16, u16)) -> bool {
+        self.line_clear_with(from, to, &[])
+    }
+
+    /// **The same line, with tiles a body holds counting as solid** (D281). The smoothing pass uses this: a straight jump
+    /// across a tile the plan was told to get round would undo the plan, which is what the first version did - the route
+    /// bent in the search and was pulled straight again through the man.
+    fn line_clear_with(&self, from: (u16, u16), to: (u16, u16), avoid: &[(u16, u16)]) -> bool {
         let (mut x, mut y) = (i64::from(from.0), i64::from(from.1));
         let (x1, y1) = (i64::from(to.0), i64::from(to.1));
         let (dx, dy) = ((x1 - x).abs(), -(y1 - y).abs());
@@ -159,7 +166,7 @@ impl Ground {
             let (Ok(tx), Ok(ty)) = (u16::try_from(x), u16::try_from(y)) else {
                 return false;
             };
-            if !last && !self.walkable(tx, ty) {
+            if !last && (!self.walkable(tx, ty) || avoid.contains(&(tx, ty))) {
                 return false;
             }
             // **A diagonal does not cut a corner.** Both tiles the step squeezes between must be free, exactly as in the
@@ -173,7 +180,11 @@ impl Ground {
                 let (Ok(bx), Ok(by)) = (u16::try_from(x), u16::try_from(y - sy)) else {
                     return false;
                 };
-                if !self.walkable(ax, ay) || !self.walkable(bx, by) {
+                if !self.walkable(ax, ay)
+                    || !self.walkable(bx, by)
+                    || avoid.contains(&(ax, ay))
+                    || avoid.contains(&(bx, by))
+                {
                     return false;
                 }
             }
@@ -192,15 +203,41 @@ impl Ground {
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
     ) -> Option<Vec<(Fixed, Fixed)>> {
+        self.route_with(scale, from, to, &[])
+    }
+
+    /// **The same route, with tiles a body is standing on treated as blocked** (D281). This is the original's answer to a
+    /// collider that is not *past*: its epilogue counts the collision and **re-plans** (`"We have %d non-past collisions ...
+    /// repathing"`), and the tiles its own bodies hold are what the plan has to get round. The list is bodies only - terrain
+    /// is already in the grid.
+    pub fn route_avoiding(
+        &self,
+        scale: i64,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+        avoid: &[(u16, u16)],
+    ) -> Option<Vec<(Fixed, Fixed)>> {
+        self.route_with(scale, from, to, avoid)
+    }
+
+    fn route_with(
+        &self,
+        scale: i64,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+        avoid: &[(u16, u16)],
+    ) -> Option<Vec<(Fixed, Fixed)>> {
         let start = self.tile_of(scale, from)?;
         let goal = self.tile_of(scale, to)?;
-        // A straight walk needs no chain: the search's own answer would be pulled back to this one point anyway.
-        if self.walkable(goal.0, goal.1) && self.line_clear(start, goal) {
+        // A straight walk needs no chain: the search's own answer would be pulled back to this one point anyway. Not when
+        // tiles are to be avoided: the line test knows nothing about bodies, and a straight line through a collider is
+        // exactly the step the caller is giving up.
+        if avoid.is_empty() && self.walkable(goal.0, goal.1) && self.line_clear(start, goal) {
             return Some(vec![to]);
         }
-        let steps = self.search(start, goal)?;
+        let steps = self.search(start, goal, avoid)?;
         let end = steps.last().copied().unwrap_or(start);
-        let pulled = self.pull(start, &steps);
+        let pulled = self.pull(start, &steps, avoid);
         let half = scale / 2;
         let mut points: Vec<(Fixed, Fixed)> = pulled
             .iter()
@@ -228,7 +265,12 @@ impl Ground {
 
     /// Spend the waypoints a clear line lets the body skip, so what is left is the corners the terrain forces. The
     /// original smooths its waypoint list for the same reason.
-    fn pull(&self, start: (u16, u16), steps: &[(u16, u16)]) -> Vec<(u16, u16)> {
+    fn pull(
+        &self,
+        start: (u16, u16),
+        steps: &[(u16, u16)],
+        avoid: &[(u16, u16)],
+    ) -> Vec<(u16, u16)> {
         if steps.len() < 2 {
             return steps.to_vec();
         }
@@ -240,7 +282,7 @@ impl Ground {
         let mut at = 0;
         while at < last {
             let mut jump = last;
-            while jump > at + 1 && !self.line_clear(nodes[at], nodes[jump]) {
+            while jump > at + 1 && !self.line_clear_with(nodes[at], nodes[jump], avoid) {
                 jump -= 1;
             }
             pulled.push(nodes[jump]);
@@ -254,7 +296,12 @@ impl Ground {
     ///
     /// The original's costs and estimate; a diagonal step is not allowed to cut a corner (both orthogonal neighbours must
     /// be walkable), which is the same rule the line test and the search have always shared.
-    pub fn search(&self, start: (u16, u16), goal: (u16, u16)) -> Option<Vec<(u16, u16)>> {
+    pub fn search(
+        &self,
+        start: (u16, u16),
+        goal: (u16, u16),
+        avoid: &[(u16, u16)],
+    ) -> Option<Vec<(u16, u16)>> {
         let width = usize::from(self.width);
         let count = width * usize::from(self.height);
         let index = |tile: (u16, u16)| usize::from(tile.1) * width + usize::from(tile.0);
@@ -302,7 +349,7 @@ impl Ground {
                 let (Ok(nx), Ok(ny)) = (u16::try_from(nx), u16::try_from(ny)) else {
                     continue;
                 };
-                if !self.walkable(nx, ny) {
+                if !self.walkable(nx, ny) || avoid.contains(&(nx, ny)) {
                     continue;
                 }
                 // **No corner cutting.** A diagonal enters two tiles; both must be free, or the body clips the corner of
@@ -314,7 +361,11 @@ impl Ground {
                     ) else {
                         continue;
                     };
-                    if !self.walkable(sx, y) || !self.walkable(x, sy) {
+                    if !self.walkable(sx, y)
+                        || !self.walkable(x, sy)
+                        || avoid.contains(&(sx, y))
+                        || avoid.contains(&(x, sy))
+                    {
                         continue;
                     }
                 }
