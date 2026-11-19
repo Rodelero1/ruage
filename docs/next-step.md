@@ -1,5 +1,24 @@
 # OPEN - the hierarchy is the only red; port it
 
+> **2026-11-19, state of `main` (`d4cb9d3`), read this before the plan below.** Landed since the register: the storm is
+> split (`docs/reviews/2026-11-19-the-storm-split-by-route-origin.md` - one ground predicate, half of it bodies); the
+> short-range **window removal was measured and reverted** (conformance green, acceptance 26.6 s -> 43.38 s, so the bound
+> to build is a **segment-test budget**, `docs/reviews/2026-11-19-the-bound-is-the-wrong-kind-reverted.md`); and the
+> **game's start rule is in** - re-seed `2 x radius` (`FUN_007fb220`) plus *a body with somewhere to go is not a stander*
+> (`isMoving`) - with our one-tile ring deleted (`docs/reviews/2026-11-19-the-games-start-rule-not-ours.md`).
+>
+> **The one red this leaves is `army_walk::a_crowd_walking_through_a_gap_stays_on_free_ground`** (`NoPath from (6, 20) to
+> (19, 19)`), and the measured cause is **when we plan**: each order is planned as it is *submitted*, so the first of
+> twelve men is planned while the other eleven have no route and are, by the game's own test, standers. The original plans
+> when the order executes, with the group already formed - its search takes the **group object** and ignores its members
+> (`FUN_0072cf10`: `+0xd0` count, `+0xd8` array, *no per-member test*, `docs/movement-in-the-binary.md` §"The path ignore
+> list"), and its classifier re-tests them on `isMoving`.
+>
+> **So the next slice is the group, before the plan**: collect the tick's orders, write the group onto every member's
+> route, and only then plan each - or submit without a route and plan at the first step in `move_bodies`. The first is
+> smaller; the crowd fixture decides it. Nothing of the old window may come back to make it pass.
+
+
 **Where things stand (2026-11-18, measured).** D275 orders the game's pathing ported in full. Before writing code, the queue's
 first two items were checked against the tree and the set, and **both were already done**:
 
