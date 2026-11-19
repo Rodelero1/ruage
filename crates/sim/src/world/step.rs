@@ -79,9 +79,6 @@ impl World {
         // its actors - and the original's walk would not find him either, because he was destroyed in his own turn.
         turn.keep_the_standing(self);
         self.reserve_places(turn.places);
-        for node in turn.respreads {
-            self.maybe_respread(node);
-        }
         // **Before the re-tasks** (D204): a man the ring has refused for long enough is sent to another node this same
         // tick, so the count that decides it and the order that answers it are read from the same state.
         self.count_refused_squares(turn.square_refusals);
@@ -927,93 +924,6 @@ impl World {
     /// that a walker who can get round does get round - which is every case the evasion tests already cover, and why they
     /// keep passing - and short enough that a man who cannot is not lost for the match.
     const STALLED_TICKS: u32 = 40;
-
-    /// **Re-lay a node's ring when it refuses a man** (D200, the owner's rule of 2026-11-13), at most once per twenty ticks:
-    /// every re-lay moves every man on the node, so it must not happen on consecutive ticks.
-    fn maybe_respread(&mut self, node: EntityId) {
-        const EVERY: u64 = 20;
-        let last = self.respread_at.get(&node).copied().unwrap_or(0);
-        if self.tick.saturating_sub(last) < EVERY {
-            return;
-        }
-        let scale = self.scale;
-        let packed = (scale / 5) * 2;
-        let mut places: Vec<(Fixed, Fixed)> = Vec::new();
-        for tile in self.resource_tiles(node) {
-            places.extend(crate::tiles::touching_places(
-                (i64::from(tile.0), i64::from(tile.1)),
-                packed / 2,
-                packed,
-                scale,
-            ));
-        }
-        let workers: Vec<EntityId> = self
-            .entities()
-            .iter()
-            .filter(|entity| matches!(entity.task, Task::Gather { node: at, .. } if at == node))
-            .map(|entity| entity.id)
-            .collect();
-        if places.is_empty() || workers.is_empty() {
-            return;
-        }
-        // **A man at work keeps his place** (D246, the owner: *"villager is never to be nudged to leave place he is working
-        // at"*). The re-lay used to hand out *every* place again, nearest-first, so a newcomer's arrival could move a man who
-        // was already taking from the node - the `SEATMOVE` line of D238. A seat held by a worker with progress is therefore
-        // **frozen**: it is taken out of the pool (nobody else may have it) and its holder is not re-seated. Men who have not
-        // started still get the nearest free place, which is what makes room for a newcomer without disturbing anybody.
-        let working: Vec<EntityId> = workers
-            .iter()
-            .copied()
-            .filter(|id| {
-                self.entities
-                    .get(id.0 as usize)
-                    .is_some_and(|entity| matches!(entity.task, Task::Gather { progress, .. } if progress.raw() > 0))
-            })
-            .collect();
-        for id in &working {
-            if let Some(place) = self.gather_place.get(id).map(|(_, at)| *at) {
-                let point = (Fixed::from_raw(place.0), Fixed::from_raw(place.1));
-                if let Some(index) = places
-                    .iter()
-                    .position(|at| at.0 == point.0 && at.1 == point.1)
-                {
-                    places.remove(index);
-                }
-            }
-        }
-        // **Nearest place first**, one per man: the packing is greedy, which keeps the assignment stable between re-lays.
-        let mut assigned = 0usize;
-        for id in workers.iter().copied().filter(|id| !working.contains(id)) {
-            let Some(at) = self.position(id) else {
-                continue;
-            };
-            let mut best: Option<(i64, usize)> = None;
-            for (index, point) in places.iter().enumerate() {
-                let far = (point.0.raw() - at.0.raw()).pow(2) + (point.1.raw() - at.1.raw()).pow(2);
-                if best.is_none_or(|(closest, _)| far < closest) {
-                    best = Some((far, index));
-                }
-            }
-            if let Some((_, index)) = best {
-                let point = places.remove(index);
-                // **Two men are never given places closer than one diameter** (D246). The ring is generated per tile, so
-                // candidate places from neighbouring tiles can sit **0.2** apart - and the old code handed them out anyway,
-                // which is why the ring needed a per-tick band correction to push men out of each other (D200/D202, and the
-                // owner's rule 4 that a working man must not move). Enforcing the separation here means the places are right
-                // when they are handed out, and nobody has to be nudged afterwards.
-                places.retain(|at| {
-                    let dx = at.0.raw() - point.0.raw();
-                    let dy = at.1.raw() - point.1.raw();
-                    dx * dx + dy * dy >= packed * packed
-                });
-                self.reserve_gather_place(id, node, point);
-                assigned += 1;
-            }
-        }
-        if assigned > 0 {
-            self.respread_at.insert(node, self.tick);
-        }
-    }
 
     /// **An order that a standing body makes impossible is finished where the man stands** (D200). A `Move` onto a tile a
     /// friend holds can never complete: the walker stops at the pair's reach, `reaches` is never true, and the order stays
@@ -1932,11 +1842,6 @@ impl World {
                         if found.is_none_or(|answer| matches!(answer, crate::Standoff::NoRoom))
                             && owned.is_none()
                         {
-                            // **The ring refused him: re-lay it** (D200). Seven men at the comfortable 0.66 leave gaps of 0.33
-                            // either side - less than the 0.40 floor - so a tenth can only be seated if the seated seven
-                            // shuffle. That is a node-level operation, so the node is queued and the work is done after the
-                            // entity loop, rate-limited to once per twenty ticks per node.
-                            work.respreads.push(node);
                             // **A man who cannot get his square looks at the next tile of the same resource** (D204, the
                             // owner: *"I want instead to look for another free place at next tile with same resource instead
                             // of fighting over the place at the same tile"*). The count is what keeps this from being the
@@ -2270,8 +2175,6 @@ struct TickWork {
     settles: Vec<Settle>,
     /// Men who chose a place on a node's ring this tick and must now keep it (D186 addendum 5).
     places: Vec<(EntityId, EntityId, (Fixed, Fixed))>,
-    /// Nodes that refused a worker this tick and should re-lay their ring (D200, the owner's rule of 2026-11-13).
-    respreads: Vec<EntityId>,
     /// **How long each man has stood refused a square** (D204): `Some((node, ticks))` is a man still refused at that
     /// node, `None` is a man who has a square - or has just been sent to another one - so his count goes. Carried here
     /// because `decide` reads the world and never writes it; `count_refused_squares` folds these in after the loop.
@@ -2286,7 +2189,6 @@ const TURNS: usize = MAX_PLAYERS + 1;
 #[derive(Default)]
 struct TurnWork {
     places: Vec<(EntityId, EntityId, (Fixed, Fixed))>,
-    respreads: Vec<EntityId>,
     square_refusals: Vec<(EntityId, Option<(EntityId, u32)>)>,
     engaging: Vec<(EntityId, EntityId)>,
     turning: Vec<EntityId>,
@@ -2336,7 +2238,6 @@ impl TickWork {
             };
         }
         bucket!(places, 0);
-        bucket!(respreads);
         bucket!(square_refusals, 0);
         bucket!(engaging, 0);
         bucket!(turning);
@@ -2370,7 +2271,6 @@ impl TurnWork {
             };
         }
         keep!(places, 0);
-        keep!(respreads);
         keep!(square_refusals, 0);
         keep!(engaging, 0);
         keep!(turning);

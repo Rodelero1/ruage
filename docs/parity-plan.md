@@ -47,8 +47,46 @@ ordered behaviour the game does not have, so "meet the original" and "the rule I
   the collision pause has to do that work - which is exactly what the seat book's removal (P8) is supposed to install. So **P8 is
   the keystone**: P4, P5 and (after the plan/step agreement) P3 queue behind it, and P8 lands first.
 
+## P8 - the seat book, cut: the design, with its surface named
+
+**The owner's instruction:** *"cut the book entirely and let collisions and pauses do the spreading, re-pointing the
+fixtures."* Reading the code before cutting shows the book is **narrower than the name suggests**, and one part of it is *not*
+ours:
+
+- **Kept - the order-time spot** (`World::standoff_point`, `crates/sim/src/lib.rs:3794`). It picks, once per order, the nearest
+  free place touching the node's tiles (`tiles::touching_places`), refusing places another body holds, another order has taken,
+  or that the man cannot reach. That is the game's rule as the prior art states it (`docs/prior-art.md:1220`: *"the planner walks
+  the target's perimeter at a standoff, starts at the caller's own face, nearest usable spot"*), so it is not the thing to cut.
+- **Cut - the registry that outlives the order.** `World::gather_place` (`lib.rs:1134`), `reserve_gather_place` (`lib.rs:3949`),
+  `gather_place_of` (`lib.rs:3967`), `release_gather_place` (`sites.rs:208`), `place_is_live`, and the two places the step reads
+  it (`step.rs:1844` `owned_place`, `step.rs:2080`). Nothing in the original keeps a man's seat: he stands where he stands, and
+  the body is solid.
+- **Cut - the re-spread.** `respread_at` (`lib.rs:967`), `maybe_respread` (`step.rs:933`), the `respreads` turn bucket
+  (`step.rs:82, 2274ff`), and the refusal-counted re-lay at `step.rs:1939`. Re-laying a ring because a man was refused is the
+  per-tick band correction D200/D202 introduced; the original has no equivalent, and it *moves working men*, which the owner's
+  rule 4 forbids anyway.
+- **Cut - the angular ring.** `ring_point` (`lib.rs:3904`), `GATHER_RING_MILLI` (`lib.rs:1363`), `GATHER_PLACES` (`lib.rs:1369`),
+  and the ring sampling at `lib.rs:3770`. Nothing in the binary places men at two-degree granularity; `touching_places` (per-tile,
+  at one diameter) is the generator that stays, and `crowd_ring_point` (`lib.rs:2923`) belongs to **moves** (his D271) and is
+  untouched by this slice.
+- **Kept for now, judged afterwards**: `settle_workers` (`step.rs:1069`) - it is the step's own landing, not the registry, and
+  with the target cut (D286) a man already comes to rest at contact.
+
+**The fixtures that will re-point, by name, and the claim each has to change:** `overlap::a_newcomer_does_not_move_the_working_gatherers`
+(the newcomer no longer displaces anybody - that is the cut), `gather_ring`, `gather_spread`, `gather_standoff`,
+`gather_standoff_rule`, `gather_touching`, `gather_contact` (each asserts a ring/place number that the cut removes; the claim
+becomes "men stand touching the node, a body apart from each other"), plus the four jam fixtures named under P5 - they should
+*stay* green once the order-finish is cut, and if they do not, P8 is not finished.
+
+**Acceptance, in this order:** the four jam fixtures stay green with P5 applied; ten men work one bush with no two bodies
+overlapping; a man who is working does not move; the acceptance match's time is within the +1.1 s measured for P4+P5.
+
 ## The order the next session should follow
 
+0. ~~**P8a** - the re-lay (`maybe_respread`, `respread_at`, the `respreads` bucket): **DONE**, D287, `docs/reviews/2026-11-19-p8a-the-relay-goes.md`.
+   Measured as a no-behaviour-change deletion (888 / 18 / 21, no name moved), because D246 had already frozen working seats and
+   `NoRoom` is not reachable in any scene the suite can build. The witness it leaves behind - `working_men_never_move::a_working_man_is_never_moved`
+   - is the line the rest of P8 must not cross.~~
 1. **P8** - cut the seat book (ring places, `reserve_places`, `respread`, `settle_workers`, `standoff_point`), let collisions and
    pauses spread the crowd, re-point `overlap`, `gather_ring`, `gather_spread`, `gather_standoff` and the four jam fixtures above.
    This is the step everything else waits on, and it is the owner's own instruction ("cut the book entirely").

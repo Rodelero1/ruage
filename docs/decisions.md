@@ -8108,3 +8108,20 @@ With the plan half in place the acceptance fixture **passes in 33.74 s**, and th
 measurements in `docs/reviews/2026-11-19-d285-box-gap-arrival.md` and this row.
 
 **Commits us to.** An order that names what it is about, and one box measure in the plan, the step and the arrival test.
+
+## D287 - A node's ring is never re-laid (owner, 2026-11-19)
+
+**Ruling.** The owner, on the parity order: *"cut the book entirely and let collisions and pauses do the spreading."* A node's
+ring is therefore **placed once, when the order is given**, and never re-laid: `maybe_respread` (D200) and its `respread_at`
+guard are gone, along with the `respreads` bucket on the tick's work.
+
+**Why it was ours.** The original picks a man's place once and after that his body is solid; nothing re-seats him. The re-lay
+existed to make a crowded node seat more men than the comfortable ring holds, by shuffling the men who had not started yet.
+
+**Measured, not argued.** `crates/sim/tests/working_men_never_move.rs` - a man working (`Gather`, `progress > 0`, D246's own
+definition) and still for twenty ticks must not move a raw unit - passes both with the cut and without it, because D246 already
+froze working seats and because `standoff_point` falls back to the packed spacing, so `Standoff::NoRoom` is not reached in any
+scene this suite can build (fourteen men on one tree included). The cut is a **deletion of unreachable machinery**, and the full
+suite confirms it: 888 passed / 18 failed / 21 ignored, the same 18 reds and no name changed (`docs/reviews/2026-11-19-p8a-the-relay-goes.md`).
+
+**Commits us to.** The witness stays as the line P8's remaining cuts (the place registry, the angular ring) must not cross.
