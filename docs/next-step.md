@@ -39,28 +39,34 @@ builder stall: he plans round the man now). Two came back - `skirmish::both_side
 same shape as the stall: one extra tick of pause and up to one detour is enough to miss a deadline that already recorded 921 of
 1,000 at 62 s of a 70 s window.
 
-**Next, in order:**
+**Next, in order** (post-D282: the radius in the plan, the pause off-by-one and the builder stall are all closed):
 
-1. **The radius in the plan** (`FUN_007f9d80`: a stopped object enters the search as a rect **grown by the mover's radius**;
-   `FUN_00840830` grows the query box by `+0x268` and collides on `<=`). Our `replan_around_bodies` avoids the collider's
-   *tile*, so a man keeps 0.577 of the standoff (`a_blocked_unit...` 4,619 of 8,000) and two bodies on one tile cannot be got
-   round at all. That one change is the answer to three reds at once, and it was built once before (D211: *"the eight vertices
-   of the octagon that circumscribes their clearance"*) and dropped in the D281 rewrite.
-2. **The pause off-by-one**: `motion.rs:152` writes `ticks.saturating_sub(1)`, so a 250 ms draw stands **0.20 s**. Write the
-   drawn duration.
-3. **The builder stall** (`the_ten_minute_scenario_builds_trains_and_fights`): **0 of 1,000** progress in 1,400 ticks - either
-   the builder never entered the adjacency band (`step.rs:1610`) or `site_is_clear` refused every stroke (`build.rs:188`).
+1. **Two bodies on one tile** - the last structural hole. The clearance is skipped for a body the mover already overlaps (else
+   every plan starts inside its own clearance), so `a_mate_who_is_stopped_becomes_solid` stays red at **4,478 raw** and a man
+   can be pushed through another who shares his tile. The game's answer is the radius query (`FUN_00844310`) over the objects
+   on a tile, with the mover's own reach grown in; reading that consumer is the slice.
+2. **A building's clearance** (`a_walk_past_a_house_keeps_its_bodys_clearance`): the clearance list carries bodies, not
+   footprints, so a route still clips a house's corner by a rounding. The same `Clear` shape applies to a footprint's box.
+3. **The seat churn** (the audit ruled these **in line**, so the engine is the wrong side): `six_settled_men_hold_their_places`,
+   `three_gatherers_all_work_the_same_square_on_its_ring`, `a_settled_man_is_not_displaced_by_a_later_arrival`,
+   `a_newcomer_does_not_move_the_working_gatherers`. A working man must not be moved off his place: the settle pass re-lays men
+   who are already working, and `a_newcomer...` asserts our own seat book rather than positions, so it needs re-pointing too.
 4. **Rewrite the fixtures that contradict the game** (`villagers_never_come_closer_than_one_diameter`,
-   `ten_men_work_one_bush_a_body_apart`, `a_man_who_cannot_fit_takes_the_next_source`, `a_walker_never_ends_a_tick_inside_a_friend`
-   whose scene no longer meets, and `a_newcomer_does_not_move_the_working_gatherers`'s seat book) and re-point them at
-   positions and at the rule the game actually states.
-4. **The owner's acceptance run** - D279 and D281 both landed without one by his instruction. What to look at: whether the
-   match resolves, whether a crowd reaches a tree, and whether a group order to one tile looks like the game.
+   `ten_men_work_one_bush_a_body_apart`, `a_man_who_cannot_fit_takes_the_next_source`, and
+   `a_walker_never_ends_a_tick_inside_a_friend`, whose scene no longer meets now that a head-on pair plans round each other).
 5. **The arrival measure** for animals: "at the node" becomes the game's **box gap** within the job's range (`func_002690E0`)
    instead of the ring distance. That is the last two animals reds.
-6. **The probe on `decide`**, for the remaining 1.5x.
-7. **The three conformance divergences**: the radius in the planner is item 2 above; the hierarchy and the expansion budget
-   are map-scale items, priced in the section above.
-8. **One guard was lost on the owner's ruling**: `a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` was a unit test and
-   is deleted. It protected "a spawn mid-tick shifts the entity list, so movements are applied by id, not index" - **nothing
-   covers that now**. If a wrong-entity movement is ever suspected, look there first.
+6. **The `decide` profile** - 39.58 s against `main`'s 26.6 s, a spread with no single owner (`decide` 12.8 s, `move_bodies`
+   6.8 s, `turns` 4.9 s at tick 14,400 of 48,000).
+7. **The three conformance divergences**: the radius in the planner is item 1's neighbour; the hierarchy and the expansion
+   budget are map-scale and priced above.
+8. **The lost guard**: `a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` was a unit test the owner had dropped, and it
+   was the only cover for "a mid-tick spawn shifts the entity list, so movements are applied by id, not index".
+
+**Parked by the owner (2026-11-19): *"The failures to train militia do not seem relevant to the pathfinding. Skip them for
+now."*** `skirmish::both_sides_field_an_army` (*"player 1 never fielded infantry"*) and
+`skirmish::the_skirmish_only_refuses_what_the_fight_has_taken` (*"player 1 has no unit militia"*) stay **red and not looked
+at** on this branch. They are a script deadline, not a movement rule - the step is refused because the building it trains
+from is not finished - and they flip on a tick of movement timing (red on D279, green after D281, red after D282's one extra
+tick of pause). **Not ignored and not skipped**: they still fail the suite, and the next session should know that is expected
+on this branch.
