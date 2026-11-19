@@ -2134,18 +2134,22 @@ impl World {
             if entity.last_moved != 0 && entity.last_moved + 1 >= self.tick {
                 continue;
             }
+            // **A body with somewhere to go is not a stander** (D279's `isMoving`, and the original's own test: the
+            // velocity vector is non-zero). The recency test above misses the case that matters - a crowd ordered in one
+            // tick has not moved yet when the next man is planned, so all twelve read as standers and the search cannot
+            // leave its own tile. Measured 2026-11-19: twelve militia through one gap, `NoPath from (6, 20) to (19, 19)`,
+            // and the game's `2 x radius` re-seed is far too small to fix it - because in the game they are not standers.
+            if self
+                .paths
+                .get(&entity.id)
+                .is_some_and(|route| !route.points.is_empty())
+            {
+                continue;
+            }
             let tile = self.tile_of(entity.position);
             // **The two ends are always walkable**: a search that cannot stand on its own start is not a search, and a goal
             // a body occupies is still "come as close as you can".
             if tile == from_tile || tile == to_tile {
-                continue;
-            }
-            // **A start hemmed in by standers is re-seeded outward, not refused** (`FUN_007fb220`: a mover standing inside
-            // an obstruction is re-seeded `2 x radius` outward, and *only* that far). A crowd ordered through one gap stands
-            // shoulder to shoulder, so all eight neighbours of the start can be stander tiles - and a search that cannot
-            // leave its own tile answers `NoPath` to an order the original accepts and walks as close as it can. Measured
-            // 2026-11-19: twelve militia and one gap, `NoPath { from: (6, 20), to: (19, 19) }` on an attack-move.
-            if tile.0.abs_diff(from_tile.0) <= 1 && tile.1.abs_diff(from_tile.1) <= 1 {
                 continue;
             }
             tiles.insert(tile);
@@ -2205,18 +2209,61 @@ impl World {
         // The geometry declined: the tile search answers instead, and its corners become the route.
         // A blocked goal is allowed here for the same reason it always was - a node's own tile holds the thing being
         // worked, and "come as close as you can" is what an order on a wall means.
+        let query = |tile: (u16, u16)| {
+            if closest {
+                find_path_avoiding(walk, tile, goal, &standers)
+            } else {
+                find_path_avoiding_strict(walk, tile, goal, &standers)
+            }
+        };
+        let mut origin = start;
         let steps = if start == goal || line_clear(walk, start, goal) {
             vec![goal]
-        } else if closest {
-            find_path_avoiding(walk, start, goal, &standers).ok_or(SimError::NoPath {
-                from: start,
-                to: goal,
-            })?
         } else {
-            find_path_avoiding_strict(walk, start, goal, &standers).ok_or(SimError::NoPath {
-                from: start,
-                to: goal,
-            })?
+            match query(start) {
+                Some(steps) => steps,
+                // **A start standing inside an obstruction is re-seeded `2 x radius` outward, and only that far**
+                // (`FUN_007fb220`; the register's *start* row). A crowd ordered through one gap stands shoulder to
+                // shoulder, so a search can be unable to leave its own tile - and the original's answer is to move the
+                // start a little and plan from there, not to refuse the order and not to widen what the plan may cross.
+                None => {
+                    let reach = radius * 2;
+                    let mut found = None;
+                    if reach > 0 {
+                        for (dx, dy) in [
+                            (1i64, 0i64),
+                            (0, 1),
+                            (-1, 0),
+                            (0, -1),
+                            (1, 1),
+                            (1, -1),
+                            (-1, 1),
+                            (-1, -1),
+                        ] {
+                            let seed = (
+                                Fixed::from_raw(from.0.raw() + dx * reach),
+                                Fixed::from_raw(from.1.raw() + dy * reach),
+                            );
+                            let tile = self.tile_of(seed);
+                            if tile == start
+                                || !self.is_free_ground(tile.0, tile.1)
+                                || standers.contains(&tile)
+                            {
+                                continue;
+                            }
+                            if let Some(steps) = query(tile) {
+                                origin = tile;
+                                found = Some(steps);
+                                break;
+                            }
+                        }
+                    }
+                    found.ok_or(SimError::NoPath {
+                        from: start,
+                        to: goal,
+                    })?
+                }
+            }
         };
         // **Where the body will actually stand**: the goal's click point when the route ends on its tile, and the settled
         // tile's centre when the ground stopped it short.
@@ -2226,7 +2273,12 @@ impl World {
         } else {
             self.tile_centre(end)
         };
-        Ok(self.corners(walk, start, steps, finish))
+        let mut points = self.corners(walk, origin, steps, finish);
+        // The body walks out of its own tile first, so a re-seeded plan does not begin somewhere the man is not standing.
+        if origin != start {
+            points.insert(0, from);
+        }
+        Ok(points)
     }
 
     /// The route a **body** would walk: the same plan, with its own footprint as the clearance.
