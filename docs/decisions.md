@@ -8400,3 +8400,23 @@ of the session, caught by the loader again; the fixture now derives its height f
 
 **Commits us to.** A rule that is correct but unaffordable does not ship; the number decides, and the number is written down with what was
 measured and how.
+
+## D301 - The pyramid is cached, and D300's conclusion is withdrawn
+
+**Ruling.** `Ground` holds the pyramid (`pyramid()`, built on demand, `Rc`-shared, `#[serde(skip)]`), invalidated inside `block` and
+`unblock` - the only two mutators - so a caller cannot forget to invalidate it.
+
+**D300's premise was wrong, and so was its conclusion.** It said the cache "would never hit" because `block`/`unblock` fire on every unit
+step. They do not: `occupants` is touched only by **objects** (a tree, a building, a gate), there are exactly **eight** call sites, and a
+unit's body lives in the step pass, not in `occupants`. Measured: **201 routes, 1 build**.
+
+**D300's number measured the wrong case too.** "~52× slower" compared the hierarchy against a **straight-line test** on open ground
+(477 ns, no search at all). Where both actually search - a wall across the path - the hierarchy is **6.3× faster**: **4.6 µs** against
+**28.9 µs**. So the shape for 11d is the binary's own, plus this engine's shortcut: **straight line first, then the levelled search, then
+the flat search as fallback**.
+
+**Measured.** Test-first (`E0599` twice, then 2 green), `pyramid_cache.rs` **2 passed / 0.00 s**, probe 1 passed; build **21.1 µs** once,
+cached route **4.8 µs**, descent **11 ns**. Review: `docs/reviews/2026-11-19-d301-the-pyramid-cache.md`.
+
+**Commits us to.** A cache is invalidated in the mutator, never at the call site; and a performance claim names the case it measured,
+because this one was measured on the case where the fast path does not run.

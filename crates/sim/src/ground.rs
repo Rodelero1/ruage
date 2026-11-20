@@ -110,6 +110,14 @@ pub struct Ground {
     height: u16,
     terrain: Vec<bool>,
     occupants: Vec<u16>,
+    /// **The level pyramid, built on demand and dropped when the ground changes** (D301). `occupants` is touched only by *objects* -
+    /// a tree, a building, a gate - never by a unit, whose body the step pass handles through `objects_touched`. So this cache is warm
+    /// across every tick a unit walks and is rebuilt only when something is placed or removed.
+    #[serde(skip)]
+    pyramid: std::cell::RefCell<Option<std::rc::Rc<crate::Levels>>>,
+    /// How many times the pyramid has been built: a diagnostic, the way `plan_count` is.
+    #[serde(skip)]
+    pyramid_builds: std::cell::Cell<u64>,
 }
 
 impl Ground {
@@ -131,6 +139,8 @@ impl Ground {
             height: map.height,
             occupants: vec![0; terrain.len()],
             terrain,
+            pyramid: std::cell::RefCell::new(None),
+            pyramid_builds: std::cell::Cell::new(0),
         }
     }
 
@@ -141,6 +151,31 @@ impl Ground {
     /// Is this tile on the map at all?
     pub fn contains(&self, x: u16, y: u16) -> bool {
         self.index(x, y).is_some()
+    }
+
+    /// **The level pyramid, built once and reused until the ground changes** (D301). `RefCell` because a search takes `&self` and the
+    /// build is a cache, not a mutation of the ground's meaning.
+    #[must_use]
+    pub fn pyramid(&self) -> std::rc::Rc<crate::Levels> {
+        if let Some(levels) = self.pyramid.borrow().as_ref() {
+            return std::rc::Rc::clone(levels);
+        }
+        let built = std::rc::Rc::new(crate::Levels::of(self));
+        self.pyramid_builds.set(self.pyramid_builds.get() + 1);
+        self.pyramid.replace(Some(std::rc::Rc::clone(&built)));
+        built
+    }
+
+    /// **How many times the pyramid has been built**, for a probe or a test.
+    #[must_use]
+    pub fn pyramid_builds(&self) -> u64 {
+        self.pyramid_builds.get()
+    }
+
+    /// **The coarse route for a long walk**, over the cached pyramid.
+    #[must_use]
+    pub fn coarse_route(&self, from: (u16, u16), to: (u16, u16)) -> Option<crate::CoarseRoute> {
+        self.pyramid().coarse_route(from, to)
     }
 
     /// Is something standing on this tile? A caller that has already asked `contains` wants the obstacle half alone.
@@ -159,6 +194,8 @@ impl Ground {
             && let Some(count) = self.occupants.get_mut(at)
         {
             *count = count.saturating_add(1);
+            // The pyramid describes where objects stand, so it is stale from this moment (D301).
+            self.pyramid.replace(None);
         }
     }
 
@@ -168,6 +205,7 @@ impl Ground {
             && let Some(count) = self.occupants.get_mut(at)
         {
             *count = count.saturating_sub(1);
+            self.pyramid.replace(None);
         }
     }
 

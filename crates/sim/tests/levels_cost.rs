@@ -119,7 +119,7 @@ fn the_pyramid_costs_this_much() {
     let mut built = 0u64;
     for _ in 0..RUNS {
         let levels = Levels::of(&ground);
-        built += u64::try_from(levels.cells(3).0).unwrap_or(0);
+        built += u64::from(levels.cells(3).0);
     }
     let build = start.elapsed() / RUNS;
     assert!(built > 0, "the build must do work");
@@ -140,6 +140,36 @@ fn the_pyramid_costs_this_much() {
     }
     let search = start.elapsed() / RUNS;
 
+    // **The comparison that matters**: a walk the straight line cannot take, so the flat path actually searches instead of
+    // short-circuiting on `line_clear`. A wall across the middle of the map forces both to work.
+    let mut blocked = ground_of(PROJECT);
+    for y in 0..40u16 {
+        blocked.block(32, y);
+    }
+    let _ = blocked.coarse_route((4, 4), (60, 60));
+    let start = Instant::now();
+    for _ in 0..RUNS {
+        let _ = blocked.coarse_route((4, 4), (60, 60));
+    }
+    let coarse_walled = start.elapsed() / RUNS;
+    let start = Instant::now();
+    let mut searched = 0usize;
+    for _ in 0..RUNS {
+        let at = |x: i64, y: i64| {
+            (
+                Fixed::from_raw(x * 20_000 + 10_000),
+                Fixed::from_raw(y * 20_000 + 10_000),
+            )
+        };
+        if let Some(route) = blocked.route(20_000, at(4, 4), at(60, 60)) {
+            searched += route.len();
+        }
+    }
+    let flat_walled = start.elapsed() / RUNS;
+    eprintln!(
+        "ZZPROBE walled walk: coarse {coarse_walled:?}  flat {flat_walled:?}  ({searched} waypoints over {RUNS} runs)"
+    );
+
     // The flat search on the same walk, for the comparison 11d turns on.
     let scale = 20_000i64;
     let centre = |x: i64, y: i64| {
@@ -157,8 +187,17 @@ fn the_pyramid_costs_this_much() {
     }
     let flat_search = start.elapsed() / RUNS;
 
+    // **The cached path** (D301): warm the pyramid, then time the search alone.
+    let _ = ground.coarse_route((4, 4), (60, 60));
+    let warm = ground.pyramid_builds();
+    let start = Instant::now();
+    for _ in 0..RUNS {
+        let _ = ground.coarse_route((4, 4), (60, 60));
+    }
+    let cached = start.elapsed() / RUNS;
+
     eprintln!(
-        "ZZPROBE project 64x65: pyramid build {build:?}  descent {descent:?}  coarse search {search:?}  ({c} cells per route)  flat tile search {flat_search:?} ({f} waypoints)",
+        "ZZPROBE cached-route {cached:?} (builds {warm})\nZZPROBE project 64x65: pyramid build {build:?}  descent {descent:?}  coarse search {search:?}  ({c} cells per route)  flat tile search {flat_search:?} ({f} waypoints)",
         c = cells / RUNS as usize,
         f = flat / RUNS as usize
     );
