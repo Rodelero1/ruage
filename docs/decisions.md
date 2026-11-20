@@ -8571,3 +8571,26 @@ every fixture that pins a route's end point would need re-reading. That is a ste
 
 **What would settle it**: trace the caller of `FUN_008000d0` (the object that owns the path request) and see whether anything tests the leg
 before calling it - `FUN_007ffae0`'s result is the place to look, since the move code reads it repeatedly around the request.
+
+## D310 - The avoid list has no 255 cap, and that is left open on purpose
+
+**Read (crosscheck #8).** `standing_bodies` builds the list a route must keep clear of: every live unit within a span of the line, minus the
+mover's own body and minus friends who are **moving and not paused** (they will not be in the way). The result is passed to
+`plan_path_with` and fed to the search as `Clear { at, half, reach }` entries. **There is no cap on its length**, where the binary's ignore list
+is `local_404[255]` (`0x1265`) and stops filling at `0xfe`.
+
+**Why the cap is not being added tonight.** Two reasons, both about evidence rather than effort:
+
+1. **The selection would be ours, not the game's.** The binary fills its list in its own order (the object's colliders first, then the groups at
+   `param_5[0x1a]` and `param_5[0x21]`) and stops at 255; ours iterates entities in **id order** and would truncate at 255 by id. Both are
+   arbitrary in a crowd, but they are *different* arbitrariness, and calling ours "the cap" would be a parity claim it does not earn.
+2. **No witness can see it.** A route with 300 nearby bodies produces a route either way, and the difference only shows in *which* bodies are
+   avoided - which no fixture can assert without a test-only probe of the list, and a test-only probe would assert the implementation rather
+   than a behaviour.
+
+**What would make it a step:** a scene where the 256th body is the one that matters (a wall of 255 villagers and a route that must go round the
+256th), which is constructible and is how the cap should be proven when it lands.
+
+**So the state is**: the avoid list exists and is used (D281), its *length* is unbounded, and that is a recorded difference rather than a defect
+that hides - a crowd of more than 255 bodies within a line's span is where the two engines can differ, and the game will be the one that gives
+up first.
