@@ -6,22 +6,41 @@
 
 use ruage_conformance::{SCALE, centre, ground};
 
-/// RULE: the original searches a **hierarchy** - a node carries a level, a coarse node spans `<< level` tiles, and an edge is
-/// refined to a tile on the shared boundary (`zone_spatial_pyramid_search_hierarchical.cpp`,
-/// `zone_spatial_pyramid_check_edge.cpp`).
+/// RULE: the original searches a **hierarchy** - a node carries a level, a coarse node spans `<< level` tiles, and the route it hands
+/// back is the **refined coarse chain**: `FUN_007ee980` walks the parent chain a coarse node at a time and pushes a waypoint per node
+/// (`FUN_007edb80` for the node's tile, `FUN_007eeda0` to step toward the next, `FUN_007fd880` to push the point), so the waypoints
+/// land on **cell centres of the level the search started at** - `n * 2^level + 0.5` tiles.
 ///
-/// **Not ported** (D279): this search is a flat A\* over every tile. On the project map (64 x 64) a corner-to-corner search
-/// is well under a millisecond, so the hierarchy buys nothing to measure at this size; it becomes worth its complexity on a
-/// 480 x 480 map with a hundred units planning per tick.
+/// **Not ported yet**: this search is a flat A\* over every tile and answers a long open walk with **one** waypoint. P11 is building the
+/// levelled search (`docs/pathfinding-levels-evidence.md`): 11a the level maps and 11b the descent are landed, 11c is the coarse A\* and
+/// this refinement.
 #[test]
-#[ignore = "flat A* on purpose (D279): the hierarchy is a speed layer, priced in docs/next-step.md"]
+#[ignore = "P11c not built yet: the coarse A* and its refinement are the next step"]
 fn the_original_solves_a_long_walk_in_its_hierarchy() {
     // A 58-tile walk across open ground, which is the case the hierarchy exists for.
     let field = ground(96, 96, &[]);
     let route = field
         .route(SCALE, centre(4, 4), centre(62, 4))
         .expect("a long walk across open ground");
-    assert_eq!(route.len(), 1, "an open walk is one waypoint");
+    // **The observable of a coarse route**: more than one waypoint, and every waypoint but the last on the 8-tile lattice the level-3
+    // search works on (`n * 8 + 0.5`), because that is where the refined chain puts them.
+    assert!(
+        route.len() > 1,
+        "a 58-tile walk came back as {} waypoint(s): the flat search answers one, the levelled one answers the coarse chain",
+        route.len()
+    );
+    for point in &route[..route.len() - 1] {
+        let x = point.0.raw();
+        let y = point.1.raw();
+        let scale = i64::from(SCALE);
+        let on_lattice = |raw: i64| (raw - scale / 2) % (8 * scale) == 0;
+        assert!(
+            on_lattice(x) && on_lattice(y),
+            "waypoint ({:.2}, {:.2}) is not on the 8-tile lattice the level-3 search works on",
+            x as f64 / scale as f64,
+            y as f64 / scale as f64
+        );
+    }
 }
 
 /// RULE: the original plans for **the boundaries of where this unit's radii will go** - its search treats every obstruction

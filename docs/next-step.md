@@ -16,10 +16,16 @@ the foot of this file.
 ## The next slice, in order
 
 1. **P11 - the levelled hierarchy**, crosschecked and shaped (`docs/pathfinding-levels-evidence.md`): four levels 3..0, cell =
-   `2^level` tiles, a coarse A* with Euclidean h over the cells, refinement to cell-centre waypoints, and a flat tile A* kept as the
-   fallback. Order: **11a the four level maps** (unambiguous, next), then 11c the coarse A* and refinement, then 11b the descent - which
-   is **blocked on one unknown**: the descent reads bit 0x20 of a cell's *second* byte while the per-search stamper writes the *first*,
-   and the second byte's producer has not been found. Not guessed.
+   `2^level` tiles, a coarse A* over the cells, refinement to cell-centre waypoints, and a flat tile A* kept as the fallback.
+   **11a landed** (`Levels::of`, the four maps by the stamping rule - D296) and **11b landed** (`Levels::descent`, the coarsest usable
+   level - D297, built on a labelled interpretation of the descent's second byte).
+   **Next: 11c, the coarse A* and its refinement**, whose witness is now correct and red:
+   `crates/conformance/tests/divergences.rs::the_original_solves_a_long_walk_in_its_hierarchy` fails with *"a 58-tile walk came back as
+   1 waypoint(s)"*. The pieces to write, all read from the binary: a node is `(x, y, level, g, h, f, parent)` (`FUN_007ef170`), `h` is
+   Euclidean (`FUN_007ee760`), the frontier is an **insertion-sorted linked list on `f`, newest first among ties** - not a heap
+   (`FUN_007ed500`) - and refinement pushes a cell-centre waypoint per coarse node (`FUN_007ee980`'s chain walk, `FUN_007edb80` +
+   `FUN_007eeda0` + `FUN_007fd880`). The coarse step cost is the one number not yet read: `FUN_007ed8f0` answers `|dx| + |dy|` between
+   cell centres, which is a *descent* cost, so the A* `g` is still unknown and must be read before it is chosen.
 2. **P1 - the search budget**, against `FUN_007f9d80` / `FUN_008007f0`, once P11 lands.
 3. **P4 - the re-plan throttle** and the off-grid goal fallback it leans on; then **P3** (the plan agreeing with the step about
    touching - a certified route currently asks for a landing that touches two blocked tiles and the body waits in `WaitGround`).
