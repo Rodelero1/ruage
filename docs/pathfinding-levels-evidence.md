@@ -216,3 +216,39 @@ it needs its own witness before it lands.
 
 **Nothing is implemented for this yet.** It is written down because it is the actual next step, and because a "cached pyramid" bolted onto
 `Ground` as it stands would have been a cache that never hits.
+
+## The window's padding and the radius, both in `FUN_007f0be0` (2026-11-20)
+
+The owner asked whether a trebuchet really cannot pass a one-tile gap in the original. Reading `FUN_007f0be0` - the function that brackets
+every levelled search with `(..., 1)` before and `(..., 0)` after - answers both of the questions this file had left open:
+
+```c
+void FUN_007f0be0(float x, float y, float h, float radius, int on) {
+  fVar9 = h + radius;
+  // the SEARCH WINDOW is a box around the GOAL, grown by h + radius
+  iVar7 = max(0, (int)(x - fVar9));   iVar8 = max(0, (int)(y - fVar9));
+  iVar3 = (int)(fVar9 + x);           iVar5 = (int)(fVar9 + y);
+  in_ECX[0x44] = iVar3;  in_ECX[0x45] = iVar5;  in_ECX[0x42] = iVar7;  in_ECX[0x43] = iVar8;
+  // and the obstacles in it are stamped at LEVEL 3, one cell at a time, with the same h + radius
+  for (iVar7 = iVar7 >> 3; iVar7 <= iVar3 >> 3; iVar7++)
+    for (iVar2 = iVar8 >> 3; iVar2 <= iVar5 >> 3; iVar2++)
+      local_8 += FUN_007f0da0(3, iVar7, iVar2, x, y, h, radius, on);
+}
+```
+
+- **The window is the goal's box grown by `h + radius`** - not a mystery constant, and not the whole map. `h` is `FUN_008000d0`'s
+  `*(float *)(*(int *)(param_1 + 0xc) + 0x34) + local_58`, i.e. the mover's radius (plus the target's when the walk ends on a body), and
+  `radius` is a second margin the caller supplies. So the search is clipped to a neighbourhood of the **goal**, padded by about a body's
+  width - which is why the clip never changes a legitimate answer, and why it is cheap.
+- **The radius grows the obstacles inside that window**, at level 3, through `FUN_007f0da0` - so the coarse map a search sees is the
+  obstacle map **grown by the mover's radius**, which is the AoC note's "shrink the unit to a point, expand every obstruction" in the
+  binary's own code.
+
+**So yes: the original plans a body by its radius, and a 0.5-radius trebuchet is planned as a one-tile-wide body.** A one-tile gap between
+two solid tiles leaves `1.0 - 2 × 0.5 = 0` clear width; the box ruler collides on `<=` (`FUN_00840830`), so the gap is **not** a passage for
+it - which is what our witness asserts and what our radius-aware attempt reproduced.
+
+**What is still not certain**, and is worth saying before it is quoted as gameplay: the growth is stamped at **8×8 cells** and then
+recursed down, so a feature narrower than a stamp may be **washed out** of the coarse map entirely rather than resolved to a tile - i.e. the
+game may refuse the *whole neighbourhood* of a narrow gap rather than exactly the gap. Our per-tile `fits` is finer than the stamp and
+therefore never more permissive, but the routes a player sees in the two are not identical. That is the next read: `FUN_007f0da0`.
