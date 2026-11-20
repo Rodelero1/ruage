@@ -291,10 +291,9 @@ crosses resource kinds), P2 (the octile tie-break).
    Suite **893 / 14 / 21** against 890 / 17 / 21. The "unexplained" `right_of_way` failure was **not** order-dependent - it
    reproduces on every run - and it was the no-coincidence guard deadlocking the crossing; the guard is withdrawn (the binary has no
    press floor) and the fixture passes.~~
-2. ~~**The gather seat book** - a gatherer presses in: **DONE** (D293). Six fixtures re-pointed, suite **897 / 11 / 21** (re-measured after the last fixture edit; the slice's commit says 896/12, which was one edit early). The book
-   (`standoff_point`, `Standoff`, `gather_place*`) is inert and `#[allow(dead_code)]`; **delete it** as the first task of the next
-   slice, after the five fixtures that still read `gather_places()` stop (they are named in the review), which also settles
-   `a_man_who_cannot_fit_takes_the_next_source` and the two `overlap`/`gather_ring` ones.~~
+2. ~~**The gather seat book** - DONE end to end: D293 stopped the engine reading it (896/12, six fixtures re-pointed), the next commit
+   took the fixtures off it (895/11, two seat-capacity fixtures deleted with their subject), and **D294 deleted it** - suite unchanged
+   at 895/11/21 with the red set byte-identical.~~
 3. **The same-kind re-target and the reseed payment** - `gather::a_depleted_node_sends_the_villager_to_the_next_one_of_its_kind`,
    `reseed::a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot`,
    `reseed::auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out`. All three were red before D289 and are untouched by it;

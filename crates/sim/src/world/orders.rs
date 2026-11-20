@@ -47,7 +47,13 @@ impl World {
                 self.gather_source(*node)?;
                 // A walled-off node is refused here rather than discovered ten seconds later by a
                 // villager walking into a wall and giving up.
-                if let Some(position) = self.find(*villager).map(|e| e.position) {
+                // **A man already on the node's tile has no route to plan.** A search asked for a start that is its own goal
+                // answers `NoPath`, and the order was refused as a walled-off node - reachable now that a crowd presses onto a
+                // node's tile (D293). The general planner keeps its rule: a *walk* to a point in one's own tile still plans, so
+                // the walker lands on the point and not on the tile's centre.
+                if let Some(position) = self.find(*villager).map(|e| e.position)
+                    && self.tile_of(position) != self.tile_of(target.position)
+                {
                     self.plan_path_for(*villager, position, target.position)?;
                 }
             }

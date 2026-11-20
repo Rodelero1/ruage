@@ -8282,3 +8282,22 @@ still doing something. Clippy is clean at `-D warnings` across the workspace and
 
 **Commits us to.** No code path may keep a per-man record of *where round a node he stands*; if a future rule needs one it has to
 argue against D290 (the original has no press floor) first.
+
+## D295 - A gather on the tile a man already stands on is accepted (owner rule: nothing may refuse an order the game takes)
+
+**Ruling.** `Command::Gather` for a node whose tile is the tile the villager stands on is **accepted with an empty route**, not refused.
+The validator skips its "is the node reachable" search in exactly that case, and `start_gather_with` plans no route. The general planner
+is untouched: a **walk** to a point inside one's own tile still plans, because the walker must land on the clicked point rather than
+on the tile's centre.
+
+**Why it came up.** D293's press model lets a crowd stand on ground the seat book used to keep clear, and three fixtures spawn a
+villager on the bush's own tile. All three failed with `NoPath { from: (12, 7), to: (12, 7) }`, and the order was then remembered as a
+**walled-off node** (`share_failed`) - a villager refused his own bush for the rest of the match.
+
+**The wrong fix, measured and reverted.** The first version put the same-tile rule in `plan_path_with`, the planner every walk uses.
+Suite **897 passed / 9 failed** with **three new reds**: `a_point_inside_its_own_tile_is_still_reached` (a walk to a point in one's own
+tile must still plan), `an_enemy_foundation_in_plain_sight_does_not_block_me`, and `a_newcomer_does_not_move_the_working_gatherers`.
+Narrowed to gather validation: **900 passed / 6 failed / 21 ignored**.
+
+**Commits us to.** Every acceptance rule that refuses an order needs a scene where the game accepts it - a `NoPath` on a
+zero-length route is never right, and neither is a general rule that changes walking to fix gathering.

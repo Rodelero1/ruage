@@ -477,7 +477,12 @@ impl World {
         // A building's own tile is blocked, so a worker stands *beside* it. Planning to the centre
         // would walk the villager into the building, and the walk home would then start from a
         // blocked tile and never find a route.
-        let planned = if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
+        // **Already standing on the node's tile**: there is nothing to walk, and the search would answer `NoPath` for a start
+        // that is its own goal. That used to be unreachable because the settle walked a man off a node's tile; it is reachable
+        // now, because a crowd presses onto whatever ground is between it and the node.
+        let planned = if self.tile_of(from) == self.tile_of(to) {
+            Ok(Vec::new())
+        } else if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
             match self.work_position(from, to) {
                 Some(stand) => self.plan_path(from, stand),
                 None => self.plan_path(from, to),

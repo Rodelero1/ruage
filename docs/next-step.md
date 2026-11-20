@@ -1,26 +1,66 @@
-# OPEN - the gather seat book is the next slice (D292 landed, 2026-11-19)
+# OPEN - P11 (the levelled search hierarchy), after the gather seat model was finished (D295, 2026-11-19)
 
-**Where this branch stands, measured (`blunt-port`, `4072892`).** Five rulings landed today and each is in `docs/decisions.md` with a
-review under `docs/reviews/`: D286 (one box ruler, a click names its object), D287 (the node re-lay deleted), D289 (a crowd goes to the
-tile it was ordered to; D271 withdrawn), D290 (**no press floor** anywhere - the binary computes the separation and discards it), D291
-(the engine never crosses resource kinds), D292 (`beside` and the forty-tick finish gone: no rule of ours stands a man down).
-**Suite: 893 passed / 14 failed / 21 ignored** (`/opt/data/cache/scratch/after-p5c.txt`), `acceptance_economy` **30.34 s**.
+**Where this branch stands, measured (`blunt-port`).** The gather seat model is finished end to end (D287, D289, D290, D291, D293,
+D294, D295) and **the suite is 900 passed / 6 failed / 21 ignored** - from 893 / 14 / 21 at the start of the day. The six reds are at
+the foot of this file.
 
-**The next slice: the gather seat book** (step 2 of `docs/parity-plan.md`). A gatherer must walk at the node he was given and press
-in - no `standoff_point` taken list, no per-tile seat search, no `settle_workers` placement - with only D204's **same-kind** re-target
-(D291) able to move him. It owns **eight** of the fourteen reds: `two_woodcutters_on_one_tree_both_touch_it_and_stand_a_body_apart`,
-`three_gatherers_all_work_the_same_square_on_its_ring`, `ten_men_work_one_bush_a_body_apart`, `six_settled_men_hold_their_places`,
-`a_settled_man_is_not_displaced_by_a_later_arrival`, `villagers_never_come_closer_than_one_diameter`,
-`a_man_who_cannot_fit_takes_the_next_source`, and the gather half of `no_pushing`.
+## Where the parity work stands
 
-**Do it in one slice, not piecemeal.** The registry surface is 24 references and the naive removal re-creates the bug it existed for -
-men swapping seats every tick (measured historically at 0.001 / 0.20 / 0.243 tiles apart). The witness to write first: *a gatherer
-whose node is free takes from it while standing pressed against a neighbour, and no man is ever re-seated by the engine* - which is the
-gather-side twin of `working_men_never_move::a_working_man_is_never_moved`.
+- **P8 (the gather seat book) is finished, end to end.** D287 (no re-lay), D289 (every man is sent to the tile he was ordered to), D290 (there is
+  no press floor), D291 (the engine re-targets within a kind only), D293 (a gatherer presses in) and D294 (the book is deleted).
+  D294 deleted the book and D295 accepts a gather on the tile a man already stands on (it was refused as a walled-off node, and the
+  refusal is remembered for the match). Evidence: `docs/press-depth-evidence.md`, `docs/gather-seating-evidence.md`, and the reviews.
+- **The crowd spreads by the game's own rule**: D204's same-kind re-target, now triggered by the **refusal count** for a man whose
+  route is spent (`world/step.rs`), because the old trigger (`Standoff::NoRoom`) no longer exists.
 
-**Then, in order:** the same-kind re-target and the reseed payment (three reds), P4 (throttle, then the goal as a tile), P3 (touching
-collides, once the plan and the step agree), P11 then P1 (the levelled search, and the budget with it), and the AI layer that D291 made
-a requirement.
+## The next slice, in order
 
-**Earlier slices' notes** (D203, D279, D281, D282, D285, D286 and the parked skirmish pair) are in
-`docs/history/2026-11-19-next-step-before-d292.md`.
+1. **P11 - levelled hierarchy** (`crates/sim/src/...` search): P1 cannot land without it. At `h = 25 x tiles` a flat search truncates a
+   legitimate detour: measured, a villager one tile from its sheep was answered the best settled node **fifteen tiles east** and walked
+   into a wall. A coarse node covering `<< level` tiles is the only way the binary affords that budget.
+2. **P1 - the search budget**, against `FUN_007f9d80` / `FUN_008007f0`, once P11 lands.
+3. **P4 - the re-plan throttle** and the off-grid goal fallback it leans on; then **P3** (the plan agreeing with the step about
+   touching - a certified route currently asks for a landing that touches two blocked tiles and the body waits in `WaitGround`).
+4. **The two `reseed` fixtures** (`auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out`,
+   `a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot`) - economy, not movement.
+
+## The six reds, verbatim
+
+```
+a_man_who_cannot_fit_takes_the_next_source
+a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot
+a_settled_man_is_not_displaced_by_a_later_arrival
+a_villager_drops_only_within_half_a_diameter_of_the_drop_site
+a_walled_off_wood_is_tried_once_and_then_left_alone
+auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out
+both_sides_field_an_army
+six_settled_men_hold_their_places
+ten_men_work_one_bush_a_body_apart
+the_skirmish_only_refuses_what_the_fight_has_taken
+three_gatherers_all_work_the_same_square_on_its_ring
+```
+
+*Their files: run `cargo test --workspace --offline --no-fail-fast` - the full list with test binaries is in
+`/opt/data/cache/scratch/suite-book1.log`.*```
+a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot
+a_villager_drops_only_within_half_a_diameter_of_the_drop_site
+a_walled_off_wood_is_tried_once_and_then_left_alone
+auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out
+both_sides_field_an_army
+the_skirmish_only_refuses_what_the_fight_has_taken
+```
+a_man_who_cannot_fit_takes_the_next_source
+a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot
+a_settled_man_is_not_displaced_by_a_later_arrival
+a_villager_drops_only_within_half_a_diameter_of_the_drop_site
+a_walled_off_wood_is_tried_once_and_then_left_alone
+auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out
+both_sides_field_an_army
+six_settled_men_hold_their_places
+ten_men_work_one_bush_a_body_apart
+the_skirmish_only_refuses_what_the_fight_has_taken
+three_gatherers_all_work_the_same_square_on_its_ring
+```
+
+*Their files: run `cargo test --workspace --offline --no-fail-fast` - the full list with test binaries is in
+`/opt/data/cache/scratch/suite-book1.log`.*

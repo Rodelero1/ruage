@@ -11,10 +11,6 @@ use crate::{
     EntityId, EntityKind, Landing, MAX_PLAYERS, Rot, Route, Shot, SimError, Stance, Task, World,
     reaches, step_towards,
 };
-/// **A man to move onto his place**: who, where, and - when the place is on a gather ring - that ring's centre, so a blocked
-/// walk can slide round it (D189).
-type Settle = (EntityId, (Fixed, Fixed), Option<(Fixed, Fixed)>);
-
 impl World {
     /// Advance exactly one tick: apply queued commands, integrate, increment the counter.
     ///
@@ -44,10 +40,6 @@ impl World {
         // closes is solid for them.
         self.step_gates();
         self.move_bodies(std::mem::take(&mut work.deltas))?;
-        // **Settle onto the work** (D169): a worker that has arrived walks the last third of a tile onto the point where its
-        // body and the node's touch. It is a placement, not a walk, because the movement rules only call a route finished on a
-        // tile centre - a route ending 0.7 of a tile out is a route a worker never finishes.
-        self.settle_workers(std::mem::take(&mut work.settles));
 
         self.fly_shots(
             work.shots,
@@ -914,43 +906,6 @@ impl World {
     /// that a walker who can get round does get round - which is every case the evasion tests already cover, and why they
     /// keep passing - and short enough that a man who cannot is not lost for the match.
     const STALLED_TICKS: u32 = 40;
-
-    /// **A worker who has to be put on his place is given the place as a route** (D279).
-    ///
-    /// This used to be its own step machine - a ring walk, three halvings against a neighbour, a mutable body list - because
-    /// it wrote the position directly and so could not use the movement pass. It can: the place is a waypoint, and the
-    /// step pass is what knows about ground, bodies, the pause and the whole-step rule. One route, and the man walks.
-    fn settle_workers(&mut self, settles: Vec<Settle>) {
-        for (id, to, _ring) in settles {
-            if self.find(id).is_none() || self.position(id) == Some(to) {
-                continue;
-            }
-            // **A man who already has somewhere to go is not re-aimed** (D279). Re-issuing the place every tick undid every
-            // fallback the step pass made: a place the body could not reach was re-planned 20 ticks later, given up for the
-            // tile beside it, and then immediately handed back - measured, a woodcutter frozen 1.36 tiles from his tree from
-            // tick 100 to 800.
-            if self
-                .paths
-                .get(&id)
-                .is_some_and(|route| !route.points.is_empty())
-            {
-                continue;
-            }
-            let mates = self
-                .paths
-                .get(&id)
-                .map(|route| route.mates.clone())
-                .unwrap_or_default();
-            self.put_route(
-                id,
-                Route {
-                    points: vec![to],
-                    created: 0,
-                    mates,
-                },
-            );
-        }
-    }
 
     fn fly_shots(
         &mut self,
@@ -2040,7 +1995,6 @@ struct TickWork {
     engaging: Vec<(EntityId, EntityId)>,
     turning: Vec<EntityId>,
     homing: Vec<EntityId>,
-    settles: Vec<Settle>,
     /// Men who chose a place on a node's ring this tick and must now keep it (D186 addendum 5).
     places: Vec<(EntityId, EntityId, (Fixed, Fixed))>,
     /// **How long each man has stood refused a square** (D204): `Some((node, ticks))` is a man still refused at that
