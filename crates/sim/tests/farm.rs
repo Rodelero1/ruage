@@ -27,15 +27,21 @@ fn next_id(world: &World) -> u32 {
 
 /// A finished farm on clear ground, holding `food` **whole** units.
 fn a_farm(world: &mut World, at: (i64, i64), food: i64) -> EntityId {
-    let id = EntityId(next_id(world));
     let scale = world.scale();
+    a_farm_at(world, (at.0 * scale, at.1 * scale), food)
+}
+
+/// The same plot anchored at an arbitrary **point**, which is what `Command::Spawn` is handed: the middle of a tile is as
+/// legal as its corner, and a scenario or a saved game may carry either.
+fn a_farm_at(world: &mut World, at: (i64, i64), food: i64) -> EntityId {
+    let id = EntityId(next_id(world));
     world
         .submit_checked(Command::Spawn {
             id,
             player: 1,
             kind: EntityKind::Building,
             unit: world.role_unit("farm"),
-            position: (Fixed::from_raw(at.0 * scale), Fixed::from_raw(at.1 * scale)),
+            position: (Fixed::from_raw(at.0), Fixed::from_raw(at.1)),
             speed: Fixed::ZERO,
             hp: 480,
             // `amount` in a Spawn is **whole units**: the engine scales it.
@@ -124,6 +130,43 @@ fn a_second_farmer_goes_to_a_free_farm() {
         working_on(&world, second),
         Some(farm_b),
         "the second goes to the free farm instead of standing on the first man's crop"
+    );
+}
+
+/// **A plot's reach is its ground, not the point it is anchored at.** `Command::Spawn` puts a building wherever it is told,
+/// so a plot may stand anchored at the **middle** of a tile; its nearest free ring tile is then one and a half tiles away on
+/// both axes, and a reach measured to the anchor *point* refused the order outright - a man could not be sent to a plot
+/// standing in the open three tiles away. The measure is the gap to the **footprint**, which is the shape of the game's own
+/// arrival test (a box gap): a stand that touches the plot's ground is a stand.
+#[test]
+fn a_man_sent_to_a_plot_anchored_at_a_tiles_middle_works_it() {
+    let Some(mut world) = fresh() else {
+        return;
+    };
+    let (x, y) = clear_ground(&world);
+    let scale = world.scale();
+    // The middle of the anchor tile: half a tile east and south of the corner `a_farm` uses.
+    let farm = a_farm_at(
+        &mut world,
+        (x * scale + scale / 2, y * scale + scale / 2),
+        50,
+    );
+    let farmer = a_villager(&mut world, (x + 3, y + 3));
+    world
+        .submit_checked(Command::Gather {
+            villager: farmer,
+            node: farm,
+        })
+        .expect("a plot three tiles away on open ground: the order must be taken");
+
+    let before = world.entity(farm).expect("the plot").amount.raw();
+    for _ in 0..400 {
+        world.step().expect("stepping");
+    }
+    let after = world.entity(farm).expect("the plot").amount.raw();
+    assert!(
+        after < before,
+        "the man walks over and takes food out of it: {before} -> {after}"
     );
 }
 

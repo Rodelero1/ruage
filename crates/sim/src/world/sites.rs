@@ -336,6 +336,43 @@ impl World {
         ))
     }
 
+    /// **How far a point is from a node's ground**, squared and in raw units: zero when the point is on the footprint.
+    ///
+    /// A node's *position* is an anchor, not its extent - `Command::Spawn` puts a building wherever it is handed, a scenario
+    /// may carry the middle of a tile, and a route's points are tile corners - so a distance to the position reads the wrong
+    /// thing for anything wider than a point. A node with no footprint (a resource) answers as its own point, which is what a
+    /// one-tile node is.
+    pub(crate) fn gap_to_footprint(&self, point: (Fixed, Fixed), node: EntityId) -> i64 {
+        let Some((ax, ay, wide, tall)) = self.footprint_rect(node) else {
+            let Some(at) = self.find(node).map(|entity| entity.position) else {
+                return 0;
+            };
+            let dx = point.0.raw() - at.0.raw();
+            let dy = point.1.raw() - at.1.raw();
+            return dx * dx + dy * dy;
+        };
+        let scale = self.scale;
+        let left = i64::from(ax) * scale;
+        let top = i64::from(ay) * scale;
+        let right = i64::from(ax.saturating_add(wide)) * scale;
+        let bottom = i64::from(ay.saturating_add(tall)) * scale;
+        let across = if point.0.raw() < left {
+            left - point.0.raw()
+        } else if point.0.raw() > right {
+            point.0.raw() - right
+        } else {
+            0
+        };
+        let down = if point.1.raw() < top {
+            top - point.1.raw()
+        } else if point.1.raw() > bottom {
+            point.1.raw() - bottom
+        } else {
+            0
+        };
+        across * across + down * down
+    }
+
     /// **Where a builder stands to work a site**: a free, reachable tile on the **outer ring of the footprint**, nearest
     /// to where the builder is now - never a tile of the footprint itself (D183 §3).
     ///

@@ -63,7 +63,14 @@ fn seeded(fx: &Fixture) -> World {
     world
 }
 
-fn spawn(world: &mut World, kind: EntityKind, unit: u32, at: (i32, i32), amount: u32) -> EntityId {
+fn spawn(
+    fx: &Fixture,
+    world: &mut World,
+    kind: EntityKind,
+    unit: u32,
+    at: (i32, i32),
+    amount: u32,
+) -> EntityId {
     let id = EntityId(
         world
             .entities()
@@ -74,6 +81,17 @@ fn spawn(world: &mut World, kind: EntityKind, unit: u32, at: (i32, i32), amount:
             + 1,
     );
     let scale = world.scale();
+    // **A man walks at the speed content gives him** - the dat's 0.8 tiles a second, not zero. A villager that cannot move
+    // stands wherever he is put and never arrives at the plot, so the fixture measured a statue rather than a farmer: both
+    // reseed rows were red for a week with the queue paid and no plot worked (found in D312).
+    let speed = if kind == EntityKind::Unit {
+        fx.units
+            .unit(unit)
+            .and_then(|stats| stats.speed.resolve(scale, "speed").ok())
+            .unwrap_or(ruage_fixed::Fixed::ZERO)
+    } else {
+        ruage_fixed::Fixed::ZERO
+    };
     world
         .submit_checked(Command::Spawn {
             id,
@@ -84,7 +102,7 @@ fn spawn(world: &mut World, kind: EntityKind, unit: u32, at: (i32, i32), amount:
                 ruage_fixed::Fixed::from_raw(i64::from(at.0) * scale + scale / 2),
                 ruage_fixed::Fixed::from_raw(i64::from(at.1) * scale + scale / 2),
             ),
-            speed: ruage_fixed::Fixed::ZERO,
+            speed,
             hp: 600,
             amount,
         })
@@ -130,10 +148,10 @@ fn farm_at(
 fn a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let mill = spawn(&mut world, EntityKind::Building, 68, (16, 14), 0);
-    let villager = spawn(&mut world, EntityKind::Unit, 83, (21, 18), 0);
+    let mill = spawn(&fx, &mut world, EntityKind::Building, 68, (16, 14), 0);
+    let villager = spawn(&fx, &mut world, EntityKind::Unit, 83, (21, 18), 0);
     // A plot with two food in it: it runs out inside a second of play.
-    let farm = spawn(&mut world, EntityKind::Building, 50, (20, 18), 2);
+    let farm = spawn(&fx, &mut world, EntityKind::Building, 50, (20, 18), 2);
     let at = world.entity(farm).expect("the farm").position;
     world
         .submit_checked(Command::Gather {
@@ -196,10 +214,10 @@ fn auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out() {
     let mut world = seeded(&fx);
     // **The button is pressed at the far mill** and the plot is on the other side of the map, which is the owner's correction made
     // a test: the setting belongs to the player, so where it was switched on cannot matter.
-    let mill = spawn(&mut world, EntityKind::Building, 68, (6, 6), 0);
-    let _near = spawn(&mut world, EntityKind::Building, 68, (16, 14), 0);
-    let villager = spawn(&mut world, EntityKind::Unit, 83, (21, 18), 0);
-    let farm = spawn(&mut world, EntityKind::Building, 50, (20, 18), 2);
+    let mill = spawn(&fx, &mut world, EntityKind::Building, 68, (6, 6), 0);
+    let _near = spawn(&fx, &mut world, EntityKind::Building, 68, (16, 14), 0);
+    let villager = spawn(&fx, &mut world, EntityKind::Unit, 83, (21, 18), 0);
+    let farm = spawn(&fx, &mut world, EntityKind::Building, 50, (20, 18), 2);
     let at = world.entity(farm).expect("the farm").position;
     world
         .submit_checked(Command::Gather {
@@ -248,9 +266,9 @@ fn auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out() {
 fn without_a_queue_or_the_toggle_nothing_is_reseeded() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let _mill = spawn(&mut world, EntityKind::Building, 68, (16, 14), 0);
-    let villager = spawn(&mut world, EntityKind::Unit, 83, (21, 18), 0);
-    let farm = spawn(&mut world, EntityKind::Building, 50, (20, 18), 2);
+    let _mill = spawn(&fx, &mut world, EntityKind::Building, 68, (16, 14), 0);
+    let villager = spawn(&fx, &mut world, EntityKind::Unit, 83, (21, 18), 0);
+    let farm = spawn(&fx, &mut world, EntityKind::Building, 50, (20, 18), 2);
     world
         .submit_checked(Command::Gather {
             villager,
@@ -280,7 +298,7 @@ fn without_a_queue_or_the_toggle_nothing_is_reseeded() {
 fn only_a_finished_mill_may_queue_or_toggle() {
     let Some(fx) = fixture() else { return };
     let mut world = seeded(&fx);
-    let house = spawn(&mut world, EntityKind::Building, 70, (16, 14), 0);
+    let house = spawn(&fx, &mut world, EntityKind::Building, 70, (16, 14), 0);
     assert!(
         world
             .submit_checked(Command::AutoReseed {

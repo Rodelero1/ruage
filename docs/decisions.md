@@ -8623,3 +8623,52 @@ which of the two it is, in one run. That is the shape every other diagnosis in t
 economy code end to end.
 
 **What this note is not**: a fix. The two fixtures are still red, and the suite stands at **920 / 6 / 21**.
+
+## D312 - The two reseed reds were a statue, and the reach was measured to the anchor point
+
+**Crosscheck, continuing D311's own probe.** Three prints - `start_gather` entry, the plan it produced, and the result at apply time - said
+in one run what D311 could only bracket:
+
+```
+DBG plan stage: from=(19, 18) to=(20, 18) kind=Some(Building)
+DBG planned: Ok((1, Some((Fixed(380000), Fixed(340000)))))
+DBG apply gather EntityId(130)->EntityId(131): Err(NoPath { from: (19, 18), to: (20, 18) })
+```
+
+**D311's two candidates were both wrong.** The reseed arm was fine and the placement was never tried: the *gather order* was refused, so the
+plot never ran out and nothing asked for a replacement. D311's evidence stands (the queue is paid, the toggle is remembered, the neighbours
+pass); its conclusion - "the fault is in the reseed arm or in the placement" - is withdrawn, and it had pointed a whole step at the wrong file.
+
+**Fault 1, the engine: the reach was measured to a point.** D279's test compared the route's last point with the node's position. A route's
+points are tile **corners**, a node's position is wherever `Command::Spawn`, a scenario or a save put it, and a farm is 3x3 - so for a plot
+anchored at the middle of a tile (20.5, 18.5) the first free ring tile (19, 17) read **1.5 tiles away on each axis**, 4.5 tile-squared against a
+2-tile reach, and a villager could not be sent to a plot standing in the open three tiles away.
+Fixed by `World::gap_to_footprint` (`sites.rs`): the gap from a point to the node's **footprint box**, zero on it. A resource has no unit and
+so no footprint and answers as its own point - which is the one-tile node it is. **The number does not change**: 2 tiles stays, the thing it is
+measured to does not (the FORM of a rule, `references/game-rule-to-engine.md`). It is still a fixed number rather than the game's box gap
+against a range of zero, and that deviation stays labelled.
+
+**Fault 2, the fixture, and it is ours: the villager could not walk.** With the order accepted, the gather arm's own log showed `step=0` and
+`at_node=false` for 1,200 ticks: the `reseed` helper spawned **villagers** with `speed: Fixed::ZERO`, so the man stood 0.3 tiles short of the
+plot's box, never took, never emptied it, and never gave the reseed arm anything to do. The queue, the toggle, the husk and the replacement on
+the same ground were complete the whole time. The helper now resolves the man's speed from content, as `farm.rs` already did; **every assertion
+is untouched** and both rows pass.
+
+**Witness, watched failing first** (`crates/sim/tests/farm.rs::a_man_sent_to_a_plot_anchored_at_a_tiles_middle_works_it`): a plot spawned at a
+tile's middle, a man three tiles away on open ground, `Gather` ordered, 400 ticks. Before: `the man walks over and takes food out of it:
+1000000 -> 1000000`. After: green.
+
+**Measured.** Suite **923 / 4 / 21** from **920 / 6 / 21**; the red-set `diff` is exactly the two `reseed` rows leaving and **no red joined**.
+Acceptance match (release, seed 7, 48,000 ticks) **8.54 s** against **8.53 s / 8.81 s** on the parent `373902f`, with a **bit-identical** final
+hash `3f6c802027ff40fb` (141 entities, 6031 repaths) - so the looser reach **fires zero times** there, which is the proof it is inert in that
+scenario and the limit of the measurement. Clippy clean, `fmt` clean. Review: `docs/reviews/2026-11-20-d312-the-reach-is-the-ground.md`.
+
+**Found and not fixed, each with its shape.**
+
+1. **`submit_checked` accepts what the apply refuses.** Its dry run plans to the node's *point* (`orders.rs:57`) and never runs the reach test, so
+   both orders above were answered `Ok` and dropped at `step` with the `Err` discarded. A click that is accepted and does nothing is a defect of
+   its own; the fix is for the dry run to ask what the apply will ask, with its own witness (a click on a plot behind a wall refused **at the
+   click**).
+2. **`work_position` picks a stand by compass order, not by proximity** - its ring starts north-west and it skips the tile the man stands on,
+   because `plan_path(from, from)` is `NoPath`. Measured: a man beside a plot at `(19, 18)` was sent to `(19, 17)`. `approach_footprint`, the
+   builder's version, already picks the nearest; the two should agree.

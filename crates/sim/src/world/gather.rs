@@ -506,11 +506,13 @@ impl World {
         };
         // **A node behind a wall is refused, not walked at** (D241, kept by D279): the search answers an unreachable goal
         // with the nearest tile it settled on, so a route always exists - the question is whether it ends at the node's
-        // ground. One tile is the working reach here; the picker's own refusal (`share_failed`) is what remembers it.
+        // **ground**. The measure is the gap to the footprint, not to the anchor point (D312): a route's points are tile
+        // corners and an entity's position is wherever `Command::Spawn`, a scenario or a save put it, so a point measure
+        // read the first free ring tile of a centre-anchored plot as 1.5 tiles away on *each* axis instead of 1.0 - and
+        // refused a villager sent to a plot standing in the open (measured: 4.5 tile-squared against a 2-tile reach).
         if let Some(end) = route.last() {
-            let (dx, dy) = (end.0.raw() - to.0.raw(), end.1.raw() - to.1.raw());
             let reach = 2 * self.scale;
-            if dx * dx + dy * dy > reach * reach {
+            if self.gap_to_footprint(*end, node) > reach * reach {
                 self.share_failed.insert(node, self.tick);
                 return Err(SimError::NoPath {
                     from: self.tile_of(from),

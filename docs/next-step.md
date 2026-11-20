@@ -1,54 +1,55 @@
-# OPEN - P1 (the search budget), then route-shape coverage, then the six reds
+# OPEN - the four remaining reds, then the two defects D312 found, then the written-up reads
 
-**Where this branch stands, measured (`blunt-port`, `8073007`).** P11 is **done**: the levelled search is the land-unit default behind the
-straight line and in front of the flat search (D296-D302), cached per ground change (D301), and it took **acceptance from 33.74 s to
-22.96 s**. The suite is **918 passed / 6 failed / 21 ignored**, plus `radius_route` parked (D303). The six reds are at the foot of this file.
+**Where this branch stands, measured (`blunt-port`, D312).** The two `reseed` reds are **fixed**: the gather order was being refused by the
+reach test (measured to the anchor point, not the plot's ground - `gap_to_footprint`) and the fixture's villager had **speed 0**, so a statue was
+asked to work a plot. Suite **923 passed / 4 failed / 21 ignored**; the red set went six -> four with no red joining. Acceptance match
+bit-identical (`3f6c802027ff40fb`, 8.54 s against 8.53-8.81 s on `373902f`). The four reds are at the foot of this file.
 
-## Ready to start now - no evidence needed
+## Ready now - no evidence needed
 
-1. **P1, the search budget.** The witnesses already exist and are `#[ignore]`d only because a *flat* search could not afford them:
-   `crates/conformance/tests/budget.rs::a_hopeless_search_is_bounded_by_its_own_estimate` and the 20,000-cap row. Long walks now start on the
-   levelled search, which is what D279 said the budget needed. Un-ignore them, enforce `estimate` / `EXPANSION_CAP` in `search_reporting`,
-   and the truncation that parked them ("a villager one tile from its sheep answered a node fifteen tiles east") should no longer be
-   reachable.
-2. **Route-shape coverage.** D302's own review flagged it: no fixture asserts a *per-tile polyline* any more, so the red-set diff cannot see
-   that blocked routes are now coarse chains. Two fixtures: the flat fallback answers tile-level corners; the hierarchy answers cell centres.
-3. **The six reds**, named at the foot of this file - two `reseed` economy ones, the drop-site invariant, walled-off wood,
-   `both_sides_field_an_army`, and the skirmish refusal.
+1. **The four reds**, in cost order as they were queued (the two `reseed` ones above are done and out of the list):
+   1. `a_villager_drops_only_within_half_a_diameter_of_the_drop_site` - an invariant, and the rule is the owner's own.
+   2. `a_walled_off_wood_is_tried_once_and_then_left_alone` - the `share_failed` book; movement-adjacent, so it may have shifted under D306's
+      radius change (the radius is now part of the search).
+   3. `both_sides_field_an_army` and `the_skirmish_only_refuses_what_the_fight_has_taken` - the two scenario rows, red since before this work.
+2. **A click that is accepted and does nothing** (D312 finding 1). `submit_checked`'s dry run plans to the node's **point** (`orders.rs:57`) and
+   never runs the reach test, so the apply refuses an order the click already accepted, with the `Err` dropped at `step`. The fix is for the dry
+   run to ask the same question the apply will; the witness is a click on a plot behind a wall, refused **at the click**.
+3. **`work_position` chooses a stand by compass order** (D312 finding 2): the ring starts north-west, and it skips the tile the man already
+   stands on because `plan_path(from, from)` is `NoPath` - measured, a man beside a plot at `(19, 18)` walked to `(19, 17)`. `approach_footprint`
+   (the builder's) already picks the **nearest**; the two should agree. Every gather order in the game goes through it, so it wants its own witness
+   and its own review.
 
 ## Ready after one short read each
 
-4. **`FUN_007f0da0`** - the function that stamps grown obstacles into the level-3 cells. It decides the **granularity** of the radius growth,
-   and therefore whether a one-tile gap survives at all (D303's parked witness). It also settles difference #1's window, #3's distance term
-   and #4's h, because `FUN_007f0be0` already gave the window its shape: the **goal's box grown by `h + radius`**.
-5. **`FUN_007eeda0`** - refinement of an edge to a **tile on the boundary** (#5): the fix that stops our coarse routes being 8-tile spaced.
-6. **The straight-line tier** (#10): trace `FUN_008a4360` / `FUN_008a39a0` / `FUN_008a3a20` for a pre-search line test - if there is none,
-   tier 1 is ours alone and should be named as such.
-7. **The re-path's ignore list** (#8): four entities, cap 255, `0x1265`. We have `plan_path_avoiding`; the cap and the choice of entries are
-   the missing pieces.
+4. **`FUN_007eeda0`** - refinement of an edge to a **tile on the boundary** (#5): the fix that stops our coarse routes being 8-tile spaced, and
+   the one that lets D306's **16-tile gate** go. Recorded in D308 with its port order.
+5. **The straight-line tier** (#10): D309 read `FUN_008000d0`, `FUN_008a4360` and `FUN_008a3a20` and found **no pre-search line test** - three
+   probes, none of them a clearance check - so our tier 1 is unverified as parity. What settles it is the caller of `FUN_008000d0`: the object that
+   owns the path request, and whether anything tests the leg before it. If nothing does, tier 1 is **ours alone** and should be declared a
+   deliberate speed difference rather than left in the register.
+6. **The re-path's ignore list** (#8): four entities, cap 255 at `0x1265`. D310 read it: we build the avoid list from every live body within a
+   span of the line, **with no cap** and in **id order**, where the binary fills colliders first and stops at 255. The witness that would make the
+   cap a step is a wall of 255 villagers plus a route that must go round the 256th.
 
 ## Needs the owner
 
-8. **The trebuchet-in-a-gap test in HD** (his, "later"). If a packed trebuchet passes a one-tile gap, the fix is `fits` from `> 0` to
-   `>= 0` - the game's depenetration is computed and discarded (D290), so tangency is a passage - and D303's witness flips to assert the
-   passage. If it does not pass, the growth has to match `FUN_007f0da0`'s granularity instead.
-9. **Bodies priced at 2000** (#6). The game's behaviour is known; the decision is whether a crowd's own routes should stop routing round
-   itself. Changes every crowd route.
-10. **A terrain cost class** (#2's 100/600 rows): needs a `config/` and a map-format change, not an engine one.
+7. **Bodies priced at 2000** (#6). The game's behaviour is known; the decision is whether a crowd's own routes should stop routing round itself.
+   Changes every crowd route.
+8. **A terrain cost class** (#2's 100/600 rows): a `config/` and map-format change, not an engine one.
 
 ## What is *not* owed
 
-- Any further work on the levelled search itself: four levels, the descent, the cost table, the chain and the refinement are all landed,
-  measured and gated.
+- Any further work on the levelled search: four levels, the descent, the cost table, the chain and the refinement are landed, measured and gated.
 - The tile search's parity: octile table, `25 x euclid` budget, 20,000 cap, tie-break and best-settled fallback all match.
+- The reseed machinery: queue, player-wide toggle, husk, walkable husk ground and the replacement on the same footprint are all landed and pinned
+  (D226, D312).
 
-## The six reds, verbatim
+## The four reds, verbatim
 
 ```
-a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot
 a_villager_drops_only_within_half_a_diameter_of_the_drop_site
 a_walled_off_wood_is_tried_once_and_then_left_alone
-auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out
 both_sides_field_an_army
 the_skirmish_only_refuses_what_the_fight_has_taken
 ```
