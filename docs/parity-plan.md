@@ -166,10 +166,17 @@ The crowded-goal witness (eight men ordered to one tile, `docs/p5-witness-draft-
    the man it named had **reached** at tick 94 - while an earlier run had shown him `Idle` at 86, i.e. **something re-issues his
    order** after the engine stood him down.
 
-**So P5 is blocked on one question**: who re-issues a finished order, and should the arrival test be exact (`reaches` with a raw
-tolerance, not a step) now that `beside` is gone? Both are answered by the same probe - instrument every writer of `entity.task` for
-one crowded scene and read the order of events - and that is the next session's first move. Until then, `beside` and
-`finish_blocked_orders` stay in the engine: cutting them alone makes the suite worse without proving anything.
+**The witness as it must be written** is in `docs/p5-witness-draft-crowd.rs`, and its claim is not "every man stays `Move`" - the
+one man who arrives may legitimately stand down. It is: **a man may stand down only standing on the goal**; every other man keeps
+his order. Written that way it **bites on the unmodified engine** (`at tick 104 EntityId(9102) was given up away from the goal:
+Idle`), which is what a witness has to do.
+
+**Still open, measured**: with `beside` and `finish_blocked_orders` both cut, that same fixture **still** reddens with the identical
+message at the identical tick, so a **third** writer stands a `Move` down away from its goal. The instrumentation that would name it
+did not complete (a scripted edit corrupted `share_failed.insert(node, self.tick)` and the tree was reverted), so the next session's
+first move is that probe done by hand: tag each of the nine `entity.task = Task::Idle;` sites, capture the tick **before** the
+`find_mut` borrow, and read which one fires in this scene. Until it is named, `beside` and `finish_blocked_orders` stay in the
+engine - cutting them alone makes the suite worse without proving anything.
 
 ## The order the next session should follow
 

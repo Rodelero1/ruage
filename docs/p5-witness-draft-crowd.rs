@@ -1,17 +1,3 @@
-// **A DRAFT, not compiled by the workspace.** The crowded-goal witness for P5: eight men ordered to one tile. It is the scene
-// that finally bites - `ZZREACHED EntityId(9103) tick 94 ...` and `ZZFINISHED tick 94` on the unmodified engine - but it cannot
-// separate the rules, because **three** end a walk and only two of them are ours to cut:
-//
-//   1. `beside` (D200) - cut;
-//   2. `finish_blocked_orders` (D200) - cut;
-//   3. `reaches(position, to, one step)` - the arrival test itself, which is *generous*: a man **within one step of the goal
-//      counts as arrived**, so several men can satisfy it and the order completes legitimately. With 1 and 2 cut the fixture
-//      stayed red, and the man it named had REACHED at tick 94 - and had also been `Idle` at 86 in a run before, i.e. something
-//      re-issues his order after the engine stood him down. That re-issue is the next thing to find, and it is what the witness
-//      needs before P5 can land.
-//
-// Kept here rather than in `crates/sim/tests/` because a red fixture may not sit in the suite (D249).
-
 //! **An order is never given up by the engine.** The owner, 2026-11-19: *"I want no deliberate differences to original game. If
 //! there is any, I want that adjusted to meet the original or cut off."* The evidence (`docs/gather-seating-evidence.md`) says the
 //! original never resolves a wedged walk - the game's most-reported bug is villagers *"frozen in place"*, *"stuck blocking each
@@ -163,20 +149,33 @@ fn a_crowded_walk_is_never_finished() {
             .expect("a walk to the same tile");
     }
 
-    // **Two hundred ticks: five times the old forty-tick window.**
+    // **Two hundred ticks: five times the old forty-tick window.** The one man who *does* get there may stand down - he
+    // arrived, and an order that is complete is complete. Everybody else must still be walking: the original never stands a
+    // wedged man down (`docs/gather-seating-evidence.md`).
+    let scale = world.scale();
+    let at_goal = |world: &World, man: EntityId| -> bool {
+        let Some(entity) = world.entity(man) else {
+            return false;
+        };
+        (entity.position.0.raw() - i64::from(goal.0) * scale).abs() <= scale / 10
+            && (entity.position.1.raw() - i64::from(goal.1) * scale).abs() <= scale / 10
+    };
     for tick in 0..200 {
         world.step().expect("stepping");
         for man in &men {
             let task = world.entity(*man).expect("alive").task;
+            if matches!(task, Task::Move { .. }) {
+                continue;
+            }
             assert!(
-                matches!(task, Task::Move { .. }),
-                "at tick {tick} {man:?} was given up by the engine: {task:?} - the original never finishes a wedged walk"
+                at_goal(&world, *man),
+                "at tick {tick} {man:?} was given up by the engine away from the goal: {task:?} - the original never \
+                 finishes a wedged walk"
             );
         }
     }
 
-    // They did move: at least one man reached the goal and the others closed on it.
-    let scale = world.scale();
+    // They did move: exactly one man reached the goal and the others closed on it.
     let reached = men
         .iter()
         .filter(|man| {
