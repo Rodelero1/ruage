@@ -8458,3 +8458,20 @@ pyramid cache is keyed by radius as well as by generation.
 
 **Commits us to.** A register entry is a claim like any other and gets checked before it is built on - this one was half wrong, and the
 correction narrowed the work rather than widening it.
+
+## D304 - The search budget is live, and a third row proves it bites
+
+**Ruling.** The two conformance rows parked since D279 are **live**: `a_hopeless_search_is_bounded_by_its_own_estimate` and
+`the_budget_never_exceeds_twenty_thousand`. Nothing in the engine changed - `search_reporting` already computed
+`budget = estimate.min(EXPANSION_CAP)`, stopped before an unaffordable expansion, and answered from the closest cell it had stood on; what
+D279 lacked was a search that could afford the rule, and P11 supplied it.
+
+**Measured.** `crates/conformance/tests/budget.rs`: **4 passed / 0.00 s**. The fourth is new and closes the vacuous-pass hole:
+`a_search_that_runs_out_of_budget_stops_short_of_the_goal` seals a 40×40 room and asserts the search **spends exactly its budget** (1000) and
+answers inside the room. **Mutation-proved**: with the budget replaced by `u32::MAX`, that row fails on `1498 of 1000` and the estimate row
+fails with it; restored, all four pass.
+
+**Still weak, said plainly.** Two rows compute the budget with the same `estimate` the search uses, so a shared arithmetic error satisfies
+both; the cap row is the independent one. Review: `docs/reviews/2026-11-20-d304-the-budget-goes-live.md`.
+
+**Commits us to.** A test that is un-parked after its cause is fixed needs a row proving it still bites, or it is decoration.

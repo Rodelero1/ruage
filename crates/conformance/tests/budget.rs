@@ -24,8 +24,9 @@ use ruage_conformance::{SCALE, centre, ground};
 
 /// RULE: a search that **reaches** its goal is not truncated, and its answer is the goal itself.
 ///
-/// The budget is read but **not enforced** (see the two `#[ignore]`d rows), so this is the row that holds today: a walk the
-/// search can afford ends on the goal, whatever the map.
+/// **The budget is enforced, and this row says the enforcement does not cost a walk it can afford**: a reachable goal is still
+/// reached, whatever the map. The two rows below - the estimate and the 20,000 cap - were `#[ignore]`d from D279 until P11 landed,
+/// because a *flat* search could not afford them; long walks now start on the levelled search, so they are live.
 #[test]
 fn a_reachable_goal_is_still_reached() {
     let field = ground(96, 96, &[]);
@@ -40,16 +41,13 @@ fn a_reachable_goal_is_still_reached() {
     );
 }
 
-/// RULE: the budget the binary enforces, **not enforced here yet** - and the reason is measured.
+/// RULE: the budget the binary enforces (`FUN_008007f0`: expansions <= estimate, hard cap 20,000).
 ///
-/// The binary's budget is its own estimate (`expansions > h`, cap 20,000). It can afford to be tight because its search is
-/// **levelled**: a coarse node covers `<< level` tiles, so a long walk is a handful of expansions. Ours is flat, one node per
-/// tile, and at `h = 25 x tiles` the budget truncates a *legitimate* detour: measured on
-/// `retaliation::a_melee_blow_never_becomes_an_arrow`, a villager one tile from its sheep was answered the "best settled" node
-/// **fifteen tiles east** and walked into a wall. So the budget lands **with** the hierarchy (`docs/parity-plan.md` P11), or
-/// not at all.
+/// **It was parked on a measurement, and the measurement no longer holds.** A flat search at `h = 25 x tiles` truncated a legitimate
+/// detour - a villager one tile from its sheep was answered the best settled node **fifteen tiles east** - so D279 parked this row until
+/// the hierarchy existed. P11 landed it (D296-D302): long walks start on the levelled search, whose coarse nodes cover `<< level` tiles,
+/// and the truncation is gone.
 #[test]
-#[ignore = "the budget needs the levelled search to be affordable (P1 lands with P11); measured, 2026-11-19"]
 fn a_hopeless_search_is_bounded_by_its_own_estimate() {
     let mut sealed = Vec::new();
     for x in 8..=12u16 {
@@ -70,12 +68,41 @@ fn a_hopeless_search_is_bounded_by_its_own_estimate() {
     );
 }
 
-/// RULE: the 20,000 cap, **not enforced here yet** for the same reason as the row above.
+/// RULE: the 20,000 cap, which bounds even the worst map - the same rule as the row above, at the cliff edge.
 #[test]
-#[ignore = "the budget needs the levelled search to be affordable (P1 lands with P11); measured, 2026-11-19"]
 fn the_budget_never_exceeds_twenty_thousand() {
     let field = ground(480, 480, &[]);
     let (from, to) = ((1u16, 1u16), (478u16, 478u16));
     let (_route, expansions) = field.search_reporting(from, to, SCALE, &[]);
     assert!(expansions <= 20_000, "the search spent {expansions}");
+}
+
+/// RULE: **the bound bites** - a search that runs out of budget answers with a point short of the goal, and spends its budget. This is the
+/// row the other two cannot be: they would pass if the search never truncated at all.
+#[test]
+fn a_search_that_runs_out_of_budget_stops_short_of_the_goal() {
+    // A sealed box 40 tiles across, with the goal outside it: the walk is short (so the budget is small - 25 x the few tiles to the
+    // wall) but the reachable room inside is 1,600 tiles, far more than the budget can expand.
+    let mut wall = Vec::new();
+    for t in 0..40u16 {
+        wall.push((6 + t, 6));
+        wall.push((6 + t, 45));
+        wall.push((6, 6 + t));
+        wall.push((45, 6 + t));
+    }
+    let field = ground(64, 64, &wall);
+    let (from, to) = ((20u16, 20u16), (20u16, 60u16));
+    let (route, expansions) = field.search_reporting(from, to, SCALE, &[]);
+    let budget = ruage_sim::Ground::estimate(from, to).min(20_000); // the crate-visible copy of `EXPANSION_CAP`;
+    let route = route.expect("a route into the sealed room");
+    let end = *route.last().expect("a route has an end");
+    assert_ne!(end, to, "the goal is outside the sealed room and cannot be reached");
+    assert!(
+        (end.0 as i64 - 20).abs() <= 25 && (end.1 as i64 - 20).abs() <= 25,
+        "a truncated search must answer inside the room it could expand: it answered {end:?}"
+    );
+    assert_eq!(
+        expansions, budget,
+        "the search must spend exactly its budget before answering short: {expansions} of {budget}"
+    );
 }
