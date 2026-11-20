@@ -22,8 +22,9 @@ slice's first task, and it is not deleted here because five fixtures still read 
 
 - `research` (20 tests, including the 400,000-tick banking fixture that the first version of this slice broke): **32.94 s**;
 - `gather_touching` (3): **1.88 s**; `gather_contact` (2): **1.33 s**; the new witness `gather_press_in`: **0.97 s**;
-- the full workspace suite: **896 passed / 12 failed / 21 ignored**, against D292's 893 / 14 / 21 - three names moved from red to
-  green and none the other way. `acceptance_economy` is unchanged in shape from D292's 30.34 s.
+- the full workspace suite: **897 passed / 11 failed / 21 ignored**, against D292's 893 / 14 / 21 - four names moved from red to
+  green and none the other way. (The commit that landed this slice says 896/12: that number was measured one edit earlier, before
+  `gather_contact`'s re-point, and the suite was re-run afterwards to correct it.) `acceptance_economy` is unchanged in shape from D292's 30.34 s.
 
 ## Stability - what the slice broke, and how each was caught
 

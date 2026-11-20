@@ -291,7 +291,7 @@ crosses resource kinds), P2 (the octile tie-break).
    Suite **893 / 14 / 21** against 890 / 17 / 21. The "unexplained" `right_of_way` failure was **not** order-dependent - it
    reproduces on every run - and it was the no-coincidence guard deadlocking the crossing; the guard is withdrawn (the binary has no
    press floor) and the fixture passes.~~
-2. ~~**The gather seat book** - a gatherer presses in: **DONE** (D293). Six fixtures re-pointed, suite 896 / 12 / 21. The book
+2. ~~**The gather seat book** - a gatherer presses in: **DONE** (D293). Six fixtures re-pointed, suite **897 / 11 / 21** (re-measured after the last fixture edit; the slice's commit says 896/12, which was one edit early). The book
    (`standoff_point`, `Standoff`, `gather_place*`) is inert and `#[allow(dead_code)]`; **delete it** as the first task of the next
    slice, after the five fixtures that still read `gather_places()` stop (they are named in the review), which also settles
    `a_man_who_cannot_fit_takes_the_next_source` and the two `overlap`/`gather_ring` ones.~~

@@ -8254,7 +8254,7 @@ stayed jammed **for ever** - measured, `research::a_trebuchet_cannot_be_trained_
 which re-tasked every gatherer forty ticks after he set off (three `gather_touching` fixtures red).
 
 **Measured.** Witness first: `gather_press_in::two_gatherers_on_one_tree_press_in` read **0.960 tiles** between two men on one tree before
-the cut, and presses inside a body's width after it. Suite **896 passed / 12 failed / 21 ignored** against D292's 893 / 14 / 21 - three
+the cut, and presses inside a body's width after it. Suite **897 passed / 11 failed / 21 ignored** against D292's 893 / 14 / 21 - four
 greens, none the other way, one of them a red older than this slice
 (`gather::a_depleted_node_sends_the_villager_to_the_next_one_of_its_kind`). Review:
 `docs/reviews/2026-11-19-d293-gatherers-press-in.md`.
