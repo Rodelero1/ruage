@@ -89,23 +89,17 @@ fn at(x: i64, y: i64) -> (Fixed, Fixed) {
 
 /// **A villager walks the gap and a trebuchet does not plan it.** The path either goes round (which the wall prevents here, so the last
 /// point is short of the goal) or is refused - what it must never do is run through the gap's tile.
-/// **Parked red, deliberately** (D303 step 2). The searches are radius-blind: the flat one asks `blocked(x, y)` and the levelled one asks
-/// the pyramid, neither taking the body's reach. The first attempt at the fix - a `fits` test per node plus a pyramid per radius - made this
-/// fixture pass **and** reddened `straight_line::an_obstacle_across_the_line_forces_the_search` and
-/// `straight_line::a_route_round_a_tree_carries_no_slack` (a 31-point staircase round one tree), because a search that refuses tangent
-/// tiles walks a different lattice than the line test that certified the corners. That pair has to be understood before the radius goes in,
-/// and the attempt was reverted rather than shipped red.
+/// **Both bodies pass the one-tile gap** - which is what the game does. The owner measured it in HD (2026-11-20): a **packed trebuchet**
+/// walks a one-tile hole in a wall, and a one-tile corridor in bamboo, and the scenario editor even places a packed trebuchet in one. The
+/// searches must agree with the game, so the fixture asserts the passage for both a 0.20 and a 0.50 radius body.
 #[test]
-#[ignore = "the searches are radius-blind (D303 step 2); the radius-aware attempt reddened straight_line and was reverted"]
-fn the_gap_is_planned_for_a_villager_and_not_for_a_trebuchet() {
+fn both_bodies_take_the_one_tile_gap() {
     let ground = lane();
     let (from, to) = (at(6, 10), at(26, 10));
 
     let thin = ground
         .route_avoiding(SCALE, from, to, SCALE / 5, &[])
         .expect("a route for a body 0.20 wide");
-    // **The gap is the only passage**, so "reaches the goal" *is* "went through the gap" - a claim about the route's tiles, not about
-    // its corners, and the corners alone never sit in the gap.
     assert_eq!(
         thin.last(),
         Some(&to),
@@ -114,10 +108,10 @@ fn the_gap_is_planned_for_a_villager_and_not_for_a_trebuchet() {
 
     let wide = ground
         .route_avoiding(SCALE, from, to, SCALE / 2, &[])
-        .expect("a route attempt for a body 0.50 wide");
-    assert_ne!(
+        .expect("a route for a body 0.50 wide");
+    assert_eq!(
         wide.last(),
         Some(&to),
-        "a radius-0.50 body must NOT be planned through a gap it cannot fit: its route is {wide:?}"
+        "a radius-0.50 body must ALSO reach the goal through a one-tile gap - measured in HD, and the reason tangency is a passage: {wide:?}"
     );
 }

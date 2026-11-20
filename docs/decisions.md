@@ -8497,3 +8497,24 @@ is the point of asserting a shape. Review: `docs/reviews/2026-11-20-d305-route-s
 
 **Commits us to.** A published number names the mechanism it is attributed to, and a gate that disables the feature it gates is a defect even
 when every test passes.
+
+## D306 - Tangency is a passage, and the radius reaches the searches
+
+**The game settled it.** The owner measured in HD (2026-11-20): a **packed trebuchet walks a one-tile hole** in a wall and a **one-tile
+corridor in bamboo**, and the scenario editor places one inside such a corridor. My earlier inference - 0.5 radius in a 1.0 gap leaves zero
+clearance and the box ruler collides on `<=`, so no passage - is **withdrawn**; the game is the authority, and it is consistent with the step,
+where the depenetration is computed and never applied (D290).
+
+**Ruling.** `Ground::fits` answers `nearest blocked square - reach >= 0` (tangency is a passage), the **flat search** asks it per node and for
+both diagonal side tiles, the **pyramid** is built per radius (`Levels::for_radius`, `Ground::pyramid_for`, cached by reach), and tier 2 of
+`route_with` runs for **any** reach - closing D305's finding that the hierarchy never ran for a unit.
+
+**Gates on the tier, each with its reason**: bodies (`avoid.is_empty()`), granularity (`coarse.level >= 2`), and distance (**≥ 16 tiles** - a
+labelled deviation, because until the refinement matches `FUN_007eeda0`'s tile-boundary rule a coarse chain is a staircase for a short walk;
+measured, 31 points past one tree).
+
+**Measured.** `coarse_route` 5, `radius_route` 1 (both radii take the gap), `route_shape` 1, `straight_line` 4, `walk_line` 2 - green
+together, which the earlier attempt did not manage. Full suite **920 passed / 6 failed / 21 ignored**, red set identical; clippy clean.
+Review: `docs/reviews/2026-11-20-d306-tangency-is-a-passage.md`.
+
+**Commits us to.** When the game and the code disagree, the game wins and the record says which claim was withdrawn.

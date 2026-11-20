@@ -25,6 +25,9 @@
 
 use crate::Ground;
 
+/// **The engine's tile size in raw units** - 20,000, the number the rest of the crate uses.
+const TILE_SCALE: i64 = 20_000;
+
 /// Four levels, as the binary's `iVar7 = 3 .. 0`: level 3 cells are 8×8 tiles, level 0 cells are the tiles themselves.
 pub const DEPTH: usize = 4;
 
@@ -55,13 +58,21 @@ impl Levels {
     /// same information the binary's recursive stamp carries, without the stamping.
     #[must_use]
     pub fn of(ground: &Ground) -> Self {
+        Self::for_radius(ground, 0)
+    }
+
+    /// **The pyramid for a body of `reach`** (D306): a tile is usable when that body fits on it - the original's "shrink the unit to a point,
+    /// grow every obstruction by its radius", with tangency counting as fitting (the owner's HD test, 2026-11-20).
+    #[must_use]
+    pub fn for_radius(ground: &Ground, reach: i64) -> Self {
         let (width, height) = ground.size();
 
         let mut maps = Vec::with_capacity(DEPTH);
         let mut base = vec![false; usize::from(width) * usize::from(height)];
         for y in 0..height {
             for x in 0..width {
-                base[usize::from(y) * usize::from(width) + usize::from(x)] = ground.blocked(x, y);
+                base[usize::from(y) * usize::from(width) + usize::from(x)] =
+                    !ground.fits_for(x, y, TILE_SCALE, reach);
             }
         }
         maps.push(base);

@@ -114,7 +114,7 @@ pub struct Ground {
     /// a tree, a building, a gate - never by a unit, whose body the step pass handles through `objects_touched`. So this cache is warm
     /// across every tick a unit walks and is rebuilt only when something is placed or removed.
     #[serde(skip)]
-    pyramid: std::cell::RefCell<Option<std::rc::Rc<crate::Levels>>>,
+    pyramid: std::cell::RefCell<std::collections::BTreeMap<i64, std::rc::Rc<crate::Levels>>>,
     /// How many times the pyramid has been built: a diagnostic, the way `plan_count` is.
     #[serde(skip)]
     pyramid_builds: std::cell::Cell<u64>,
@@ -139,7 +139,7 @@ impl Ground {
             height: map.height,
             occupants: vec![0; terrain.len()],
             terrain,
-            pyramid: std::cell::RefCell::new(None),
+            pyramid: std::cell::RefCell::new(std::collections::BTreeMap::new()),
             pyramid_builds: std::cell::Cell::new(0),
         }
     }
@@ -157,12 +157,21 @@ impl Ground {
     /// build is a cache, not a mutation of the ground's meaning.
     #[must_use]
     pub fn pyramid(&self) -> std::rc::Rc<crate::Levels> {
-        if let Some(levels) = self.pyramid.borrow().as_ref() {
+        self.pyramid_for(0)
+    }
+
+    /// **The pyramid for a body of this reach** (D306): the search's own question, since the original grows every obstruction by the mover's
+    /// radius. Keyed by reach, so the few radii the dat carries cost one build each per ground change and nothing per search.
+    #[must_use]
+    pub fn pyramid_for(&self, reach: i64) -> std::rc::Rc<crate::Levels> {
+        if let Some(levels) = self.pyramid.borrow().get(&reach) {
             return std::rc::Rc::clone(levels);
         }
-        let built = std::rc::Rc::new(crate::Levels::of(self));
+        let built = std::rc::Rc::new(crate::Levels::for_radius(self, reach));
         self.pyramid_builds.set(self.pyramid_builds.get() + 1);
-        self.pyramid.replace(Some(std::rc::Rc::clone(&built)));
+        self.pyramid
+            .borrow_mut()
+            .insert(reach, std::rc::Rc::clone(&built));
         built
     }
 
@@ -176,6 +185,47 @@ impl Ground {
     #[must_use]
     pub fn coarse_route(&self, from: (u16, u16), to: (u16, u16)) -> Option<crate::CoarseRoute> {
         self.pyramid().coarse_route(from, to)
+    }
+
+    /// **May a body of this reach stand centred on this tile?** The original grows every obstruction by the mover's radius inside the
+    /// search (`FUN_008000d0` registers the radius, `FUN_007f0be0` stamps with it, and the AoC note states the rule as *"shrink the unit to
+    /// a point, expand every obstruction"*).
+    ///
+    /// **Tangency is a passage**, not a collision: measured in HD by the owner (2026-11-20), a **packed trebuchet walks a one-tile gap** in
+    /// a wall and through a one-tile corridor in bamboo, and the scenario editor even places a packed trebuchet in one. A body 1.0 tile wide
+    /// in a 1.0-tile gap has *zero* clearance and still passes, which is consistent with the step, where the depenetration is computed and
+    /// never applied (D290). So the test is `>= 0`, and `reach == 0` is the plain tile question.
+    fn fits(&self, x: u16, y: u16, scale: i64, reach: i64) -> bool {
+        if !self.walkable(x, y) {
+            return false;
+        }
+        if reach == 0 {
+            return true;
+        }
+        let half = scale / 2;
+        let (px, py) = (i64::from(x) * scale + half, i64::from(y) * scale + half);
+        let mut nearest = i64::MAX;
+        for dy in -1i64..=1 {
+            for dx in -1i64..=1 {
+                let (nx, ny) = (i64::from(x) + dx, i64::from(y) + dy);
+                let (Ok(nx), Ok(ny)) = (u16::try_from(nx), u16::try_from(ny)) else {
+                    continue;
+                };
+                if !self.blocked(nx, ny) {
+                    continue;
+                }
+                let (left, top) = (i64::from(nx) * scale, i64::from(ny) * scale);
+                let gap_x = (left - px).max(px - (left + scale)).max(0);
+                let gap_y = (top - py).max(py - (top + scale)).max(0);
+                nearest = nearest.min(crate::integer_sqrt(gap_x * gap_x + gap_y * gap_y));
+            }
+        }
+        nearest == i64::MAX || nearest - reach >= 0
+    }
+
+    /// **`fits` for the pyramid's builder**, which works in tiles and has no scale of its own.
+    pub(crate) fn fits_for(&self, x: u16, y: u16, scale: i64, reach: i64) -> bool {
+        self.fits(x, y, scale, reach)
     }
 
     /// Is something standing on this tile? A caller that has already asked `contains` wants the obstacle half alone.
@@ -195,7 +245,7 @@ impl Ground {
         {
             *count = count.saturating_add(1);
             // The pyramid describes where objects stand, so it is stale from this moment (D301).
-            self.pyramid.replace(None);
+            self.pyramid.borrow_mut().clear();
         }
     }
 
@@ -205,7 +255,7 @@ impl Ground {
             && let Some(count) = self.occupants.get_mut(at)
         {
             *count = count.saturating_sub(1);
-            self.pyramid.replace(None);
+            self.pyramid.borrow_mut().clear();
         }
     }
 
@@ -532,18 +582,32 @@ impl Ground {
         // The chain's legality is by construction: every cell in it is open, and two adjacent open cells share a boundary whose two
         // centres lie inside them. What is *not* by construction is the first and last leg - a body may sit in a corner of its cell with
         // an object between it and the cell's centre - so both are certified here and the whole tier is abandoned if either fails.
+        // **Long walks only** (D306): the hierarchy's answer is a chain at `2^level` tiles, and until the refinement matches the binary's
+        // (a tile on the boundary, #5 of the crosscheck) a coarse chain is the right answer for a long walk and a staircase for a short one -
+        // measured, a walk past a single tree became 31 points. Sixteen tiles is two level-3 cells, below which the flat search's corners are
+        // cheaper and finer.
+        let long_walk = (i64::from(start.0) - i64::from(goal.0)).abs()
+            + (i64::from(start.1) - i64::from(goal.1)).abs()
+            >= 16;
         if avoid.is_empty()
-            && reach == 0
-            && let Some(coarse) = self.coarse_route(start, goal)
+            && long_walk
+            && let Some(coarse) = self.pyramid_for(reach).coarse_route(start, goal)
+            && coarse.level >= 2
         {
-            let centres = self.pyramid().refine(&coarse, scale);
+            let centres = self.pyramid_for(reach).refine(&coarse, scale);
             if centres.len() > 1 {
                 let mut points: Vec<(Fixed, Fixed)> = centres.iter().skip(1).copied().collect();
                 points.push(to);
                 let mut previous = (from.0.raw(), from.1.raw());
                 let mut clear = true;
                 for point in &points {
-                    if !self.leg_is_clear(scale, previous, (point.0.raw(), point.1.raw()), 0, &[]) {
+                    if !self.leg_is_clear(
+                        scale,
+                        previous,
+                        (point.0.raw(), point.1.raw()),
+                        reach,
+                        &[],
+                    ) {
                         clear = false;
                         break;
                     }
@@ -554,7 +618,7 @@ impl Ground {
                 }
             }
         }
-        let steps = self.search(start, goal, scale, avoid)?;
+        let steps = self.search_reporting(start, goal, scale, reach, avoid).0?;
         let end = steps.last().copied().unwrap_or(start);
         let pulled = self.pull(
             (from.0.raw(), from.1.raw()),
@@ -706,7 +770,7 @@ impl Ground {
         scale: i64,
         avoid: &[Clear],
     ) -> Option<Vec<(u16, u16)>> {
-        self.search_reporting(start, goal, scale, avoid).0
+        self.search_reporting(start, goal, scale, 0, avoid).0
     }
 
     /// **The same search, reporting what it spent.**
@@ -724,6 +788,7 @@ impl Ground {
         start: (u16, u16),
         goal: (u16, u16),
         scale: i64,
+        reach: i64,
         avoid: &[Clear],
     ) -> (Option<Vec<(u16, u16)>>, u32) {
         let width = usize::from(self.width);
@@ -779,7 +844,7 @@ impl Ground {
                 let (Ok(nx), Ok(ny)) = (u16::try_from(nx), u16::try_from(ny)) else {
                     continue;
                 };
-                if !self.walkable(nx, ny) || self.inside_a_body(scale, (nx, ny), avoid) {
+                if !self.fits(nx, ny, scale, reach) || self.inside_a_body(scale, (nx, ny), avoid) {
                     continue;
                 }
                 // **No corner cutting.** A diagonal enters two tiles; both must be free, or the body clips the corner of
@@ -791,8 +856,8 @@ impl Ground {
                     ) else {
                         continue;
                     };
-                    if !self.walkable(sx, y)
-                        || !self.walkable(x, sy)
+                    if !self.fits(sx, y, scale, reach)
+                        || !self.fits(x, sy, scale, reach)
                         || self.inside_a_body(scale, (sx, y), avoid)
                         || self.inside_a_body(scale, (x, sy), avoid)
                     {
