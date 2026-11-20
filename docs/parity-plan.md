@@ -213,9 +213,10 @@ on every tick the walker presses him, so the 4576 is the pair **mid-exchange**, 
 
 **What that changes:** the old forty-tick finish did not so much protect the collision rules as *end the exchange before it pressed
 this deep*. So the P5 slice is smaller than the re-plumbing note above made out - the press-through guard does not need inventing -
-and its first task is to decide, with the game in hand, how deep two friends may press: the fixture's `>= reach` no longer holds
-once a walker is allowed to keep his order, and the measured 4576 raw (**0.23 of a tile**, i.e. 0.17 of a footprint deeper than
-touching) is the number to judge against the original, not against our own old rule.
+and its first task was to decide, with the game in hand, how deep two friends may press - **the binary answered (D290,
+`docs/press-depth-evidence.md`): there is no floor.** `FUN_008aa990` computes a full depenetration and its only caller never reads
+the result back into the unit's position; what stops a unit is the pause and the re-path. So the fixture's `>= reach` is replaced by
+"friends may press", and the quarter-footprint floor proposed before the reading is withdrawn.
 
 ## The order the next session should follow
 

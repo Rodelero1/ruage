@@ -8166,3 +8166,26 @@ ordered to one tile - reported **0.800 tiles** between the closest pair before t
 it, the men pressed inside half a tile. Its claim is the game's own description, not a number of ours.
 
 **Commits us to.** Parity first, comfort second: a mechanism that spreads units out for looks goes before one that the original has.
+
+## D290 - There is no press floor: friends may overlap, and only the pause and the re-path act (owner, 2026-11-19)
+
+**Question.** How deep may two friends press? Our `group_overlap` fixture measured a walker **4576 raw** inside an **8000 raw**
+footprint (0.23 of a tile) once D200's forty-tick order-finish stopped ending his walk.
+
+**Answered from the binary**, not chosen: `FUN_008aa990` is a full depenetration - per collider it computes the overlap on both axes,
+takes the **smaller** (separating axis), moves the candidate out by it, snaps to full separation when the fraction is `>= 1.0`, and
+writes the result into the candidate position (`*param_2 = local_14`). Its only caller is `FUN_008a4360` (`move_obj.cpp`
+0x127d-0x12b2), which passes `local_64` - and `local_64` is **never read back into the unit's position**: it is declared, filled,
+logged at 0x11df and handed to the resolver, and that is all. So the game computes the separation and **discards it**, which is D210's
+finding from the other end. What stops a unit is the **pause** (`setPause` 0.25-1.50 s, `0x8a8141`) and the **re-path**
+(`0x12b2`, colliders added to the ignore list at `0x1265`).
+
+**Ruled.** No press floor is added - not the quarter-footprint this project proposed an hour earlier, and not touching. Friends may
+overlap to any depth, which is what the players see and what our own simultaneous-step artefact already produces (4576 raw is
+*less* than the game permits).
+
+**Basis and the unknown.** `docs/press-depth-evidence.md`; the corpus functions named above. Whether the resolver is dead in a
+retail build or live in an earlier one is not established, and neither is the pause roll's distribution - neither changes the ruling.
+
+**Commits us to.** Before adding a physical floor, find the binary's own; if its answer is computed and thrown away, ours is not to be
+invented.
