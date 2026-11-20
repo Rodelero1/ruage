@@ -291,12 +291,10 @@ crosses resource kinds), P2 (the octile tie-break).
    Suite **893 / 14 / 21** against 890 / 17 / 21. The "unexplained" `right_of_way` failure was **not** order-dependent - it
    reproduces on every run - and it was the no-coincidence guard deadlocking the crossing; the guard is withdrawn (the binary has no
    press floor) and the fixture passes.~~
-2. **The gather seat book** (the rest of P8, and now unambiguous under D290/D291): delete `standoff_point`'s taken list and the
-   `touching_places` seat search; a gatherer walks to the node he was given, presses in, and only D204's same-kind re-target moves
-   him. Re-points: `two_woodcutters_on_one_tree_both_touch_it_and_stand_a_body_apart`,
-   `three_gatherers_all_work_the_same_square_on_its_ring`, `ten_men_work_one_bush_a_body_apart`, `six_settled_men_hold_their_places`,
-   `a_settled_man_is_not_displaced_by_a_later_arrival`, `villagers_never_come_closer_than_one_diameter`,
-   `a_man_who_cannot_fit_takes_the_next_source`, `a_man_who_cannot_get_his_square_takes_the_next_tree`.
+2. ~~**The gather seat book** - a gatherer presses in: **DONE** (D293). Six fixtures re-pointed, suite 896 / 12 / 21. The book
+   (`standoff_point`, `Standoff`, `gather_place*`) is inert and `#[allow(dead_code)]`; **delete it** as the first task of the next
+   slice, after the five fixtures that still read `gather_places()` stop (they are named in the review), which also settles
+   `a_man_who_cannot_fit_takes_the_next_source` and the two `overlap`/`gather_ring` ones.~~
 3. **The same-kind re-target and the reseed payment** - `gather::a_depleted_node_sends_the_villager_to_the_next_one_of_its_kind`,
    `reseed::a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot`,
    `reseed::auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out`. All three were red before D289 and are untouched by it;

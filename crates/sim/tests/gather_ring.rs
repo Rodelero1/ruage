@@ -197,7 +197,7 @@ fn a_woodcutter_stands_with_his_circle_on_the_tree() {
 
 /// **Two workers on one tree both touch it and stand a body apart** - 0.404 apart in the save, which is exactly two radii.
 #[test]
-fn two_woodcutters_on_one_tree_both_touch_it_and_stand_a_body_apart() {
+fn two_woodcutters_on_one_tree_both_touch_it_and_press_together() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
@@ -218,9 +218,11 @@ fn two_woodcutters_on_one_tree_both_touch_it_and_stand_a_body_apart() {
         (0.15..=0.30).contains(&a) && (0.15..=0.30).contains(&b),
         "MEASURED radii {a:.3} and {b:.3}; both belong on the 1.156 ring"
     );
+    // **They press** (D293): the seat book that kept them a body apart is gone, so two men on one tree stand pressed - measured
+    // **0.000** tiles apart - and both still touch it. The old claim was the book's, not the game's.
     assert!(
-        apart >= 0.39,
-        "MEASURED {apart:.3} tiles between the two; two villager bodies are 0.40 wide"
+        apart < 0.39,
+        "MEASURED {apart:.3} tiles between the two: the seat book is gone, so two men on one tree must press together"
     );
 }
 

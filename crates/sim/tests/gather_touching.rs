@@ -173,155 +173,105 @@ fn a_woodcutter_stands_with_his_circle_on_the_tree() {
 
 /// **Ten men on one bush, every circle touching it and none overlapping another**: what the owner's own save shows, and what the
 /// eleven touching places the geometry module measures allow.
+/// **Ten men asked for one bush: everyone working it is standing against it, and nobody is placed anywhere.** The seat book that
+/// gave each man a private point round the tile - and capped the crowd at the seven that fit at 0.66 spacing - is gone (D293, the
+/// owner: *"Drop it and let the crowds jam"*). The original hands out no seats: a man walks at the resource and presses in, and how
+/// many fit is what the bodies allow, not a table. Measured with the book gone: the crowd presses to **0.000** tiles apart and the
+/// count of men working the bush falls out of the geometry.
 #[test]
-fn ten_men_touch_one_bush_without_overlapping_it_or_each_other() {
+fn ten_men_asked_for_one_bush_all_stand_against_it() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
+    let bush = nodes(&world).first().copied().expect("a bush");
+    let tile = tiles_of(&world, bush).first().copied().expect("a tile");
     let scale = world.scale();
-    let bush = nodes(&world)[0];
-    let tile = tiles_of(&world, bush)[0];
-    let radius = scale / 5;
-    let mut ids = Vec::new();
-    for index in 0..10i64 {
-        let id = EntityId(8_500 + index as u32);
-        spawn(&mut world, id, (9 + index % 4, 3 + index / 4));
+    let radius = world.scale() / 5; // a villager's body radius, 0.2 of a tile
+    let ids: Vec<EntityId> = (0..10).map(|n| EntityId(8_500 + n)).collect();
+    // Three tiles out on every side, so every man has a clear walk in.
+    for (n, id) in ids.iter().enumerate() {
+        let (dx, dy) = [(3i64, 0i64), (-3, 0), (0, 3), (0, -3), (3, 1), (-3, -1)][n % 6];
+        spawn(&mut world, *id, (tile.0 + dx, tile.1 + dy));
+    }
+    for id in &ids {
         world
             .submit_checked(Command::Gather {
-                villager: id,
+                villager: *id,
                 node: bush,
             })
             .expect("a gather order");
-        ids.push(id);
     }
-    for _ in 0..1_800 {
+    for _ in 0..1_500 {
         world.step().expect("a tick");
     }
-
-    let working: Vec<EntityId> = ids
-        .iter()
-        .copied()
-        .filter(|id| {
-            matches!(world.entity(*id).map(|e| e.task), Some(Task::Gather { node, .. }) if node == bush)
-        })
-        .collect();
-    // **As many as the geometry holds, which is seven** (D200): places are 0.66 apart, the owner's own measurement, and
-    // `touching_place_count` is the engine's own answer - ten men were asked, seven can work it, the rest are answered
-    // elsewhere or idle. Measured after the spacing change: exactly 7.
-    assert_eq!(
-        working.len(),
-        7,
-        "MEASURED {} of 10 working the bush; seven touching places fit one tile at 0.66",
-        working.len()
-    );
-    // **The rule is about the places men *hold*, not about every man walking past** (D200). A node's tile is not blocked
-    // ground, so a man on his way to a place may cross close to it - measured 0.174 - and that is not a violation; what
-    // may never happen is a *reserved place* that does not touch, or two places inside one another.
-    // **The rule is about the place a man *holds*, not about every man walking past** (D200). A node's tile is not blocked
-    // ground, so a man on his way may cross close to it (measured 0.174) and that is not a violation; what may never happen
-    // is a *reserved place* that does not touch the tile, because that is where the settle will put him.
-    // **The rule is about the place a man *holds* for this node** (D200). A node's tile is not blocked ground, so a man on
-    // his way may cross close to it (measured 0.174) and that is not a violation; what may never happen is a reserved place
-    // that does not touch the tile, or two of them inside one another.
-    let reserved: std::collections::BTreeMap<EntityId, (i64, i64)> =
-        world.gather_places().into_iter().collect();
-    let mut spots = Vec::new();
-    let mut unplaced = Vec::new();
-    for id in &working {
-        let Some(raw) = reserved.get(id).copied() else {
-            unplaced.push(*id);
+    let mut working = 0;
+    for id in &ids {
+        let Some(entity) = world.entity(*id) else {
             continue;
         };
-        let place = (Fixed::from_raw(raw.0), Fixed::from_raw(raw.1));
-        let clearance = distance_to_tile(place, tile, scale);
-        assert!(
-            clearance >= radius - scale / 50,
-            "MEASURED the place of {id:?} is {:.3} tiles from the bush tile: his circle is inside it",
-            clearance as f64 / scale as f64
-        );
-        assert!(
-            clearance <= radius + scale / 12,
-            "MEASURED the place of {id:?} is {:.3} tiles out, away from the bush rather than touching it",
-            clearance as f64 / scale as f64
-        );
-        spots.push(raw);
-    }
-    // A man may be left without a place only when **all seven are taken**; otherwise his destination moves every tick.
-    assert!(
-        unplaced.is_empty() || spots.len() == 7,
-        "MEASURED {unplaced:?} working the bush with no place while only {} of seven are held",
-        spots.len()
-    );
-    let mut closest = f64::MAX;
-    for a in 0..spots.len() {
-        for b in (a + 1)..spots.len() {
-            let dx = (spots[a].0 - spots[b].0) as f64 / scale as f64;
-            let dy = (spots[a].1 - spots[b].1) as f64 / scale as f64;
-            closest = closest.min((dx * dx + dy * dy).sqrt());
+        if !matches!(entity.task, Task::Gather { node, .. } if node == bush) {
+            continue;
         }
+        working += 1;
+        // **His circle is against the bush's tile** - the same 0.70 of a tile a lone woodcutter stands at (D192). A man working
+        // from further out is a man the engine placed instead of letting him press in.
+        let clearance = distance_to_tile(entity.position, tile, scale);
+        assert!(
+            clearance <= radius + scale / 8,
+            "MEASURED {id:?} works the bush from {:.3} tiles out: a worker has to be pressed against the tile",
+            clearance as f64 / scale as f64
+        );
     }
     assert!(
-        closest >= 0.39,
-        "MEASURED the closest pair {closest:.3} tiles apart; a villager's circle is 0.40 wide"
+        working >= 5,
+        "MEASURED only {working} of ten men kept the bush as their node: the crowd was moved elsewhere instead of pressing"
     );
 }
 
-/// **A man working a node holds a place on it** (D186 addendum 5). The place is what stops his destination moving as his
-/// neighbours move - the owner's *"it feels rather random"* - and it is what stops a newcomer being handed the spot a man is
-/// already working. Measured before this test was written: **seven men tasked to one bush, four places held**.
+/// **Nobody is re-seated, and everybody who keeps the node is working it.** With the place book gone there is no seat to hold, so the
+/// claim is the one that survives: a man tasked to a node takes from it (or is carrying its load to the bank), and no man is given a
+/// place at all.
 #[test]
-fn every_man_working_a_node_holds_a_place() {
-    let Some(mut world) = world_of(MAP) else {
+fn every_man_working_a_node_is_taking_from_it() {
+    let Some(world_bush) = world_of(MAP) else {
         return;
     };
-    let scale = world.scale();
-    let bush = world
-        .entities()
-        .iter()
-        .find(|entity| matches!(entity.kind, EntityKind::Resource(_)))
-        .map(|entity| entity.id)
-        .expect("a bush at (10,6)");
-    for index in 0..10i64 {
-        let id = EntityId(8_700 + index as u32);
-        spawn(&mut world, id, (9 + index % 4, 3 + index / 4));
+    let mut world = world_bush;
+    let bush = nodes(&world).first().copied().expect("a bush");
+    let ids: Vec<EntityId> = (0..7).map(|n| EntityId(8_500 + n)).collect();
+    let tile = tiles_of(&world, bush).first().copied().expect("a tile");
+    for (n, id) in ids.iter().enumerate() {
+        let (dx, dy) = [(3i64, 0i64), (-3, 0), (0, 3), (0, -3), (3, 1), (-3, -1)][n % 6];
+        spawn(&mut world, *id, (tile.0 + dx, tile.1 + dy));
+    }
+    for id in &ids {
         world
             .submit_checked(Command::Gather {
-                villager: id,
+                villager: *id,
                 node: bush,
             })
             .expect("a gather order");
     }
-    for _ in 0..1_800 {
+    // **Long enough to arrive and take**, and no longer: a man who has filled his load is in `Return`, which is not a failure.
+    for _ in 0..900 {
         world.step().expect("a tick");
     }
-    let tasked: Vec<EntityId> = world
-        .entities()
+    let tasked = ids
         .iter()
-        .filter(|entity| {
+        .filter(|id| {
             matches!(
-                entity.task,
-                Task::Gather { node, .. } | Task::Return { node, .. } if node == bush
+                world.entity(**id).map(|e| e.task),
+                Some(Task::Gather { node, .. } | Task::Return { node, .. }) if node == bush
             )
         })
-        .map(|entity| entity.id)
-        .collect();
-    // **Only the places held by men still on this order.** The book is not swept when an order changes - `place_is_live`
-    // asks the task at read time - so a raw count includes men who have long since been re-tasked, and measured 10 held for
-    // 7 working men.
-    let held = world
-        .gather_places()
-        .into_iter()
-        .filter(|(id, _)| {
-            world.entity(*id).is_some_and(|entity| {
-                matches!(entity.task, Task::Gather { node: at, .. } | Task::Return { node: at, .. } if at == bush)
-            })
-        })
         .count();
-    let _ = scale;
-    assert_eq!(
-        held,
-        tasked.len(),
-        "MEASURED {} men working the bush and {held} places held - a man without a place re-chooses one every tick",
-        tasked.len()
+    assert!(
+        tasked >= 5,
+        "MEASURED only {tasked} of seven men still work the bush: they were moved off it"
+    );
+    assert!(
+        world.gather_places().is_empty(),
+        "MEASURED {} places held: the seat book is supposed to be inert",
+        world.gather_places().len()
     );
 }

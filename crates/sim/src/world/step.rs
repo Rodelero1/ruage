@@ -1687,7 +1687,7 @@ impl World {
                     // The trigger is therefore "near the node and not on the ring, with no route left", which is stable for
                     // the whole walk out and costs one decision per arrival rather than one per tick.
                     let settle_reach = 4 * self.scale;
-                    let near_node = ring_squared <= settle_reach * settle_reach;
+                    let _near_node = ring_squared <= settle_reach * settle_reach;
                     // **Two triggers, both bounded**: a worker standing *beside* the node (the walk's last waypoint is the
                     // blocked tile, so it sits there with a waypoint it can never spend), and a worker near the node whose
                     // route is spent. Both stop firing the moment it is on the ring.
@@ -1705,7 +1705,7 @@ impl World {
                     // wherever he crossed 1.156 - measured, ten men packed **0.144** apart at the same angle with their places
                     // 0.408 apart and unclaimed.
                     let owned_place = self.gather_place_of(entity.id, node);
-                    let off_place = owned_place.is_some_and(|place| {
+                    let _off_place = owned_place.is_some_and(|place| {
                         let (px, py) = (
                             place.0.raw() - entity.position.0.raw(),
                             place.1.raw() - entity.position.1.raw(),
@@ -1729,7 +1729,7 @@ impl World {
                     // A twentieth of a tile is a fifth of a villager's step: close enough to call "on his place", which is
                     // what the 0.011-tile drift measured at tick 11 is.
                     let near_enough = self.scale / 20;
-                    let on_own_place = owned_place.is_some_and(|place| {
+                    let _on_own_place = owned_place.is_some_and(|place| {
                         (place.0.raw() - entity.position.0.raw()).abs() <= near_enough
                             && (place.1.raw() - entity.position.1.raw()).abs() <= near_enough
                     });
@@ -1739,105 +1739,46 @@ impl World {
                     // **Near the node, off his place** (D279): the walk-to-his-place has to fire from a few tiles out, or a
                     // man who stops short never resumes - but it must not fire from across the map, because the place search
                     // also decides whether the ring is re-laid, and re-laying moves every man's seat.
-                    let settling = ring_open && near_node && !on_own_place && off_place;
-                    // **The walk to the ring and the walk to the node must not both be taken.** The `else` branch below steps
-                    // toward the node's own tile; the settle steps *away* from it, so a worker with both ran on the spot -
-                    // measured, a woodcutter frozen at 0.984 tiles with the tree's 20 hit points untouched for 15 s.
-                    if is_resource && settling {
-                        // **A place already owned is walked to, not re-chosen** (D186 addendum 5). This is the fix for the whole
-                        // family of two-men-one-spot failures: the settle used to ask `standoff_point` afresh every tick, so a
-                        // man's destination moved as his neighbour moved and the two of them swapped places - measured 0.001,
-                        // 0.20 and 0.243 tiles apart in three fixtures. A place taken once is taken for as long as the order
-                        // stands, and `place_is_live` releases it the moment the man is re-tasked.
-                        // **A place a body now stands on is stale** (D200). The place is a property of the order, but a neighbour
-                        // who has since walked onto it cannot be walked through: keeping it made a man settle **0.094** tiles
-                        // inside him. A held place with a body within the gather spacing is released and re-chosen from the ring.
-                        let owned = owned_place.filter(|place| {
-                            !self.entities.iter().any(|other| {
-                                other.id != entity.id && other.kind == EntityKind::Unit && {
-                                    // **A place is stale only when a body's box covers it** (D286): the point the man's centre
-                                    // stands on, against the other body's own box - the game's measure, no slack. The old test
-                                    // was the pair's reach plus a twentieth of a tile, which is a *centre* distance: with bodies
-                                    // now coming to rest at box contact, a neighbour on the diagonal sits nearer by the centres
-                                    // than that slack allows, so a man at work lost his place to a newcomer - measured,
-                                    // `a_newcomer_does_not_move_the_working_gatherers`.
-                                    self.box_gap_sq(
-                                        (
-                                            other.position.0,
-                                            other.position.1,
-                                            self.body_radius(other.unit).max(0),
-                                        ),
-                                        (place.0, place.1, 0),
-                                    ) == 0
+                    // **No seat is walked to any more** (D293, owner 2026-11-19: *"Drop it and let the crowds jam"*). The settle
+                    // arm used to walk a gatherer the last half tile onto a private place round the node, one man per point, so no
+                    // two men ever pressed. The original hands out no seats: a man goes to the resource he was given, the bodies are
+                    // solid, and friends press into each other with no floor at all (D290). `at_node` (the box gap against the step,
+                    // D285) is what entitles him to take.
+                    //
+                    // **And the crowd is still spread, by the rule that spread it in the game** (D204, kept by D291: the engine may
+                    // re-target within a kind, never across). With the seat book gone this is the only thing that moves a man off a
+                    // node that will not seat him, and its trigger is now the **refusal count itself** - a seat that never existed
+                    // cannot refuse him. `STALLED_TICKS` keeps it from being the per-tick re-plan D182 measured at 35 s -> 400 s.
+                    // **Refused means arrived and still not taking**, not merely on the way: a man walking in has nothing to look at
+                    // yet, and counting his walk would re-task every gatherer 40 ticks after he set off (measured: three of three
+                    // `gather_touching` fixtures red for exactly that).
+                    let arrived = self
+                        .paths
+                        .get(&entity.id)
+                        .is_none_or(|route| route.points.is_empty());
+                    if is_resource && arrived && !at_node {
+                        let waited = self
+                            .square_refused
+                            .get(&entity.id)
+                            .copied()
+                            .filter(|(at, _)| *at == node)
+                            .map_or(0, |(_, count)| count);
+                        if waited >= Self::STALLED_TICKS {
+                            match self.nearest_like_free(entity.position, node, entity.id) {
+                                Some(next) => {
+                                    work.square_refusals.push((entity.id, None));
+                                    work.retasks.push((entity.id, next));
                                 }
-                            })
-                        });
-                        let found = match owned {
-                            Some(place) => Some(crate::Standoff::Point(place)),
-                            None => {
-                                let taken: Vec<(EntityId, (Fixed, Fixed))> =
-                                    work.settles.iter().map(|(id, at, _)| (*id, *at)).collect();
-                                self.standoff_point(
-                                    entity.position,
-                                    target,
-                                    node,
-                                    entity.id,
-                                    &taken,
-                                    false,
-                                )
+                                // **Nowhere else has room**: he stands and looks again after the same wait.
+                                None => work.square_refusals.push((entity.id, Some((node, 0)))),
                             }
-                        };
-                        // **A `Standoff::NoRoom` is not an error here** (D182): the worker keeps trying from where it stands rather
-                        // than being re-tasked in this arm. Re-tasking here fires **every tick** a worker cannot reach its side, and
-                        // each attempt re-plans a route: the acceptance run went from 35 s to over 400 s with that loop in place. The
-                        // owner's rule is applied where it is cheap and deterministic - when the order is given (`start_gather`) -
-                        // and the ring is only the fallback.
-                        if found.is_none_or(|answer| matches!(answer, crate::Standoff::NoRoom))
-                            && owned.is_none()
-                        {
-                            // **A man who cannot get his square looks at the next tile of the same resource** (D204, the
-                            // owner: *"I want instead to look for another free place at next tile with same resource instead
-                            // of fighting over the place at the same tile"*). The count is what keeps this from being the
-                            // per-tick re-plan D182 measured at 35 s -> 400 s: a man passing through a crowd does nothing,
-                            // and one who has stood here refused for `STALLED_TICKS` - the wait the displacement rule used
-                            // to spend before shoving somebody - looks once, and waits again when there is nowhere to go.
-                            //
-                            // Measured on the crowded-tree fixture: the thirteenth man stood beside it with **progress 0**
-                            // for 2,000 ticks while the tree of the same column five tiles east was untouched, and one
-                            // member of the crowd was nudged **0.15** tiles off his place.
-                            let waited = self
-                                .square_refused
-                                .get(&entity.id)
-                                .copied()
-                                .filter(|(at, _)| *at == node)
-                                .map_or(0, |(_, count)| count);
-                            if waited >= Self::STALLED_TICKS {
-                                match self.nearest_like_free(entity.position, node, entity.id) {
-                                    Some(next) => {
-                                        work.square_refusals.push((entity.id, None));
-                                        work.retasks.push((entity.id, next));
-                                    }
-                                    // **Nowhere else has a place**: he stands down and waits, and looks again after the
-                                    // same wait - a node frees up when its own crowd goes home to eat.
-                                    None => work.square_refusals.push((entity.id, Some((node, 0)))),
-                                }
-                            } else {
-                                work.square_refusals
-                                    .push((entity.id, Some((node, waited.saturating_add(1)))));
-                            }
-                        } else if self.square_refused.contains_key(&entity.id) {
-                            // He has a square: the count of refusals belongs to the node he has left.
-                            work.square_refusals.push((entity.id, None));
+                        } else {
+                            work.square_refusals
+                                .push((entity.id, Some((node, waited.saturating_add(1)))));
                         }
-                        if let Some(crate::Standoff::Point(stand)) = found {
-                            // The ring's centre travels with the place: a man whose straight line to it is blocked steps **round
-                            // the ring** instead of standing still (D188). Without it a crowd arriving from one side leaves men
-                            // stranded outside the band - measured 1.962 tiles from the bush, never working.
-                            work.settles.push((entity.id, stand, Some(centre)));
-                            if owned.is_none() {
-                                work.places.push((entity.id, node, stand));
-                            }
-                        }
+                    } else if self.square_refused.contains_key(&entity.id) {
+                        // He is on his node, or away from it: the count belongs to the node he has left.
+                        work.square_refusals.push((entity.id, None));
                     }
 
                     // A herdable animal is walked to the drop site by the villager working it (D70). The

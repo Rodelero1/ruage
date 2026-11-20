@@ -531,31 +531,11 @@ impl World {
             carry_cap,
             progress: Fixed::ZERO,
         };
-        // **His place on the ring, taken now, kept until he is re-tasked** (D186 addendum 5). The owner's words for what went
-        // wrong: *"it feels rather random"* - and it was, because the settle re-chose a place every tick, so a man's
-        // destination moved as his neighbour moved. A place is a property of the order: chosen when the order lands (here),
-        // released when the order changes (`place_is_live` asks the task, so nothing needs sweeping).
-        if matches!(
-            self.find(node).map(|entity| entity.kind),
-            Some(EntityKind::Resource(_))
-        ) {
-            // **A place, taken when the order lands** (D188): the geometry decides it, exactly as the settle would, so two men
-            // ordered in the same tick cannot both be given the same spot.
-            if let Some(crate::Standoff::Point(place)) =
-                self.standoff_point(from, to, node, villager, &[], false)
-            {
-                self.reserve_gather_place(villager, node, place);
-                // **The place is the route's last waypoint** (D279). The plan above ends at the *node's* tile, which is
-                // blocked ground, so it settles on the nearest tile centre - about a tile short of the ring. Walking the
-                // route and then the place is the whole approach: the tile chain to get there, and the last few tenths of a
-                // tile to stand on.
-                if let Some(route) = self.paths.get_mut(&villager)
-                    && route.points.last() != Some(&place)
-                {
-                    route.points.push(place);
-                }
-            }
-        }
+        // **No place is taken, and none is pushed onto the route** (D293, owner 2026-11-19: *"Drop it and let the crowds jam"*).
+        // The order used to end on a private seat round the node (`standoff_point`), which is what kept two men a body apart for
+        // ever. The original hands out no seats: the route ends at the resource, the bodies are solid, and a man presses in until his
+        // box is against the node's (D285) - which is what entitles him to take. `standoff_point` and the place book survive only
+        // until the next cut removes them; nothing calls this one any more.
         // The load is the villager's, not the node's: re-tasking onto the next tree (or the next sheep) must not spill
         // what is already in its hands. It used to be zeroed here, which was invisible until a worker could move on by
         // itself.

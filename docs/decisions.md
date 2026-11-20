@@ -8239,3 +8239,27 @@ floor at all (D290), so the fixtures ask for **convergence**, not separation.
 
 **Commits us to.** The engine may refuse a step and pause a body; it may never rewrite a player's order. A man who cannot arrive
 stands, with his route intact, until the player re-tasks him.
+
+## D293 - A gatherer presses in; the seat book stops being read (owner, 2026-11-19)
+
+**Ruling.** The gather arm hands out no seats. `start_gather` stops calling `standoff_point` and stops pushing a private place onto the
+route; the settle walk is off; a man goes to the node he was given and takes from it when his box is against it (D285). The reasoning is
+D290's - the original computes a depenetration and discards it, so its bodies press to any depth - and D288's, that the taken list is
+ours.
+
+**What replaces the seat as a spreader.** D204's same-kind re-target, kept by D291, with a **new trigger**: the refusal count itself. It
+used to fire only on `Standoff::NoRoom`, which no longer exists, so with the seats gone nobody was ever re-targeted and a jammed crowd
+stayed jammed **for ever** - measured, `research::a_trebuchet_cannot_be_trained_before_the_imperial_age` could not bank 400 wood in
+400,000 ticks (bank at 210). The trigger now counts a man whose **route is spent** and who is still not taking - not a man walking in,
+which re-tasked every gatherer forty ticks after he set off (three `gather_touching` fixtures red).
+
+**Measured.** Witness first: `gather_press_in::two_gatherers_on_one_tree_press_in` read **0.960 tiles** between two men on one tree before
+the cut, and presses inside a body's width after it. Suite **896 passed / 12 failed / 21 ignored** against D292's 893 / 14 / 21 - three
+greens, none the other way, one of them a red older than this slice
+(`gather::a_depleted_node_sends_the_villager_to_the_next_one_of_its_kind`). Review:
+`docs/reviews/2026-11-19-d293-gatherers-press-in.md`.
+
+**Left standing, deliberately.** `standoff_point`, `Standoff` and the `gather_place` book are inert and marked `#[allow(dead_code)]`:
+deleting them is the next slice's first task, because five fixtures still read `gather_places()` and must stop first.
+
+**Commits us to.** An engine rule may order a man to a node; it may not decide where round that node he stands.

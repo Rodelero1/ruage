@@ -216,18 +216,25 @@ fn a_newcomer_does_not_move_the_working_gatherers() {
             )
         })
         .collect();
-    let held: Vec<(EntityId, (i64, i64))> = world
-        .gather_places()
-        .into_iter()
-        .filter(|(worker, _)| working.contains(worker))
-        .collect();
+    // **The witness is a working man, not a place** (D293): the place book is gone, so "at work" is `progress > 0` on the node
+    // itself, which is the claim this fixture has always been about.
     // **One man at work is enough to witness the rule** (D279): a crowd of eight converging on one tile is slow under the
     // original's pause-on-collision model - measured, only one of the eight had started taking after 1,200 ticks - and this
-    // fixture is about a *seat* being preserved, not about how many men a tree seats in 20 seconds.
+    // fixture is about a working man not being moved, not about how many men a tree seats in 20 seconds.
     assert!(
-        !held.is_empty(),
-        "at least one gatherer should be **at work** before the newcomer arrives; held {held:?}"
+        !working.is_empty(),
+        "at least one gatherer should be **at work** before the newcomer arrives; working {working:?}"
     );
+    // **Where each working man stands, before the newcomer exists** (D293): the place book is gone, so the claim is measured on
+    // the thing the owner actually sees - a working man's position.
+    let before: Vec<(EntityId, (i64, i64))> = working
+        .iter()
+        .filter_map(|id| {
+            world
+                .position(*id)
+                .map(|at| (*id, (at.0.raw(), at.1.raw())))
+        })
+        .collect();
 
     // **A ninth man, placed beside the node** so he settles straight away: the re-lay only fires for a man who is at the ring
     // and refuses to sit, which a newcomer still walking to the node never is.
@@ -244,21 +251,21 @@ fn a_newcomer_does_not_move_the_working_gatherers() {
         world.step().expect("a tick");
     }
 
-    let after: Vec<(EntityId, (i64, i64))> = world
-        .gather_places()
-        .into_iter()
-        .filter(|(worker, _)| working.contains(worker))
-        .collect();
-    for (worker, place) in &held {
-        let now = after
-            .iter()
-            .find(|(id, _)| id == worker)
-            .map(|(_, place)| *place);
+    for (worker, was) in &before {
+        let now = world.position(*worker).map(|at| (at.0.raw(), at.1.raw()));
+        // A man who has finished his load is walking to the bank, which is not being moved off his work.
+        if !world
+            .entity(*worker)
+            .is_some_and(|e| matches!(e.task, Task::Gather { .. }))
+        {
+            continue;
+        }
         assert_eq!(
             now,
-            Some(*place),
-            "villager {} lost the place it was working when a newcomer arrived at the node (was {place:?}, now {now:?})",
-            worker.0
+            Some(*was),
+            "villager {} was moved off the ground he was working when a newcomer arrived at the node (was {:?}, now {now:?})",
+            worker.0,
+            was
         );
     }
 }

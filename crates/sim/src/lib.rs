@@ -1344,6 +1344,7 @@ pub(crate) fn applies_to(modifier: &ruage_data::Modifier, unit: &Unit) -> bool {
 /// What `standoff_point` found: a place to stand, or **no room on the ring** (D182) - the owner's *"if there is no space at half diameter from
 /// another villager and the resource try another nearest resource of the same kind"*.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // D293: the book is inert; its deletion is the next slice's first task.
 pub(crate) enum Standoff {
     /// A point on the ring: the two bodies touch there and no other body holds it.
     Point((Fixed, Fixed)),
@@ -3697,6 +3698,7 @@ impl World {
     /// A candidate must pass: **walkable ground**; **not on a foundation**; **one diameter clear** of every body and every reserved
     /// place; and **no further than `GATHER_WALK_SLACK_MILLI` beyond walking straight at the node**, because the owner's answer to a
     /// place on the far side was *"take next tree instead"*. `NoRoom` is an answer, not a failure: the caller sends the man on.
+    #[allow(dead_code)] // D293: inert - nothing consults it since the seat book stopped being read.
     pub(crate) fn standoff_point(
         &self,
         from: (Fixed, Fixed),
