@@ -270,22 +270,39 @@ happened. It needs one session with the economy fixtures and the withdrawal path
 **Where the work stands:** everything in the slice is known and measured; the tree is left at `9a8800f` with the plan, two witness
 drafts under `docs/`, and no engine change from this attempt.
 
-## The order the next session should follow
+## What is done, what is next (rewritten 2026-11-19, after D289/D290/D291)
 
-0. ~~**P8a** - the re-lay (`maybe_respread`, `respread_at`, the `respreads` bucket): **DONE**, D287, `docs/reviews/2026-11-19-p8a-the-relay-goes.md`.
-   Measured as a no-behaviour-change deletion (888 / 18 / 21, no name moved), because D246 had already frozen working seats and
-   `NoRoom` is not reachable in any scene the suite can build. The witness it leaves behind - `working_men_never_move::a_working_man_is_never_moved`
-   - is the line the rest of P8 must not cross.~~
-1. **P8** - cut the seat book (ring places, `reserve_places`, `respread`, `settle_workers`, `standoff_point`), let collisions and
-   pauses spread the crowd, re-point `overlap`, `gather_ring`, `gather_spread`, `gather_standoff` and the four jam fixtures above.
-   This is the step everything else waits on, and it is the owner's own instruction ("cut the book entirely").
-2. **P5** - the order-finish **and** the route-done arm go, plus the D204 re-task; the witness needs a body that enters the
-   lane *after* the order (see the P5 note above), and the five fixtures listed there are re-pointed in the same commit.
-3. **P4** - the re-plan throttle goes with the goal fallback it sat beside - **but see P8b**: the off-grid goal point
-   survives P8, so this needs its own design (make the goal a *tile*, as the search's answer already is, before the fallback can go).
-4. **P3** - touching collides, in one slice with the plan/step agreement (`leg_is_clear` as strict as the step), then re-point
-   `building_passage::a_big_unit_walks_through_a_one_tile_gap` to the game's answer (D117 withdrawn).
-5. **P11** - the levelled search; then **P1** (the budget) lands with it.
+**Done and pushing the engine toward the original:** D285/D286 (one box ruler; a click names its object), D287/P8a (the node re-lay
+deleted), D289 (a crowd goes to the tile it was ordered to - D271 withdrawn), D290 (no press floor anywhere), D291 (the engine never
+crosses resource kinds), P2 (the octile tie-break).
+
+**Next, in this order.** Each item names the fixtures that carry it, so "done" is visible in the suite.
+
+1. **P5 again, now that D291 has landed** - cut `beside` + `finish_blocked_orders`, with the pause guard (a running pause is not
+   re-armed) and the no-coincidence guard (two bodies never share a point). Three of the four reds it caused are already re-pointed
+   and proven; the fourth, `right_of_way::the_higher_id_pauses_for_a_quarter_to_one_and_a_half_seconds_and_keeps_its_route`, failed
+   once in a full run and has never been reproduced - settle that first, by running its file repeatedly against the cut.
+2. **The gather seat book** (the rest of P8, and now unambiguous under D290/D291): delete `standoff_point`'s taken list and the
+   `touching_places` seat search; a gatherer walks to the node he was given, presses in, and only D204's same-kind re-target moves
+   him. Re-points: `two_woodcutters_on_one_tree_both_touch_it_and_stand_a_body_apart`,
+   `three_gatherers_all_work_the_same_square_on_its_ring`, `ten_men_work_one_bush_a_body_apart`, `six_settled_men_hold_their_places`,
+   `a_settled_man_is_not_displaced_by_a_later_arrival`, `villagers_never_come_closer_than_one_diameter`,
+   `a_man_who_cannot_fit_takes_the_next_source`, `a_man_who_cannot_get_his_square_takes_the_next_tree`.
+3. **The same-kind re-target and the reseed payment** - `gather::a_depleted_node_sends_the_villager_to_the_next_one_of_its_kind`,
+   `reseed::a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot`,
+   `reseed::auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out`. All three were red before D289 and are untouched by it;
+   they are the economy's own parity holes and they are cheap.
+4. **P4** - the terrain re-plan throttle goes, then the goal fallback it sat beside. That second half needs the order's goal to be a
+   **tile**, as the search's answer already is, so it lands in two steps rather than one.
+5. **P3** - touching collides, in one slice with the plan/step agreement (`leg_is_clear` as strict as the step), then re-point
+   `building_passage::a_big_unit_walks_through_a_one_tile_gap` to the game's answer (D117 already withdrawn by the owner).
+6. **P11 then P1** - the levelled search, and the budget lands with it (measured: a flat search at `h = 25 x tiles` truncates a
+   legitimate detour).
+7. **The AI layer** - now a *requirement*, not a nicety: D291 took cross-kind repurposing out of the engine, so idle villagers are
+   re-tasked by the AI or not at all. That is the layer the game ships `sn-retask-gather-amount` for, and it needs its own evidence
+   from the AI scripts before a line is written.
+8. **Left over, unexplained, and not to be forgotten**: `both_sides_field_an_army`, `the_skirmish_only_refuses_what_the_fight_has_taken`,
+   `a_walled_off_wood_is_tried_once_and_then_left_alone`, `a_villager_drops_only_within_half_a_diameter_of_the_drop_site`.
 
 ## The fork that the owner has already ruled (P3, kept for the record)
 
@@ -302,19 +319,6 @@ So the two cannot both stand:
   that is the one place in the pathing where his ruling overrides the binary - it must then be written as such, in D117.
 
 P4, P5 and P6/P7 do not depend on the answer.
-
-## The sequence
-
-1. **P1 + P2** - the budget and the tie-break, one slice: both are inside `Ground::search`, and P1's bound is what makes P4
-   affordable.
-2. **P3** - touching collides, with the cut landing a raw unit short. Small, and it changes the step everywhere, so it lands
-   before the throttle comes off.
-3. **P4 + P5** - cut the throttle and the forty-tick finish, together: both are "ours" rules that exist to paper over a slow
-   search, and with P1 in place the honest measurement is possible.
-4. **P6 + P7** - the object query and the shared tile, one slice: both replace the tile-as-obstacle assumption.
-5. **P11** - the hierarchy, when it is priced (needs the HD read).
-6. **P12** - read `zone_spatial_pyramid_check_tile` in HD, then adopt or cut.
-7. **P8, P9** - his call, then whatever he decides.
 
 ## What "proved" means here, every step
 
