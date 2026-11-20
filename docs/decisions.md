@@ -8146,3 +8146,23 @@ five-tile figure is a third-party model's, not the binary's.
 
 **Commits us to.** Before cutting any of the book, ask what the game's players see; and never cite a sibling project's approach
 planner as evidence about the game.
+
+## D289 - A crowd is sent to the tile it was ordered to, and it jams there (owner, 2026-11-19)
+
+**Ruling.** The owner, asked whether D271's fan-out stays (every follower given a ring place of its own) or goes: *"Drop it and let
+the crowds jam. I want the start as close to the game as sensible. Upgrades may only come later."*
+
+**What that means.** `start_walk` no longer searches for a place per follower: **every man's goal is the tile that was ordered**,
+the bodies are solid, and a crowd that does not fit stands pressed together. `crowd_ring_point` and the `already_heading` count it
+was fed by are deleted (D271 withdrawn on the moving side; its gather-side remnants are P8's business).
+
+**Why the game wins here.** The original gives no man a private place: its own players describe men piling onto one tree and
+standing pressed (*"If you send them to different trees within the same tile, they will usually stand still"*,
+`docs/gather-seating-evidence.md`), and D271 was a smoothing of exactly that which the owner had asked for before the parity
+order.
+
+**Measured.** The witness was written first and watched failing: `crowd_piles_up::a_crowd_ordered_to_one_tile_piles_up` - three men
+ordered to one tile - reported **0.800 tiles** between the closest pair before the cut (one tile each, D271's ring) and passes after
+it, the men pressed inside half a tile. Its claim is the game's own description, not a number of ours.
+
+**Commits us to.** Parity first, comfort second: a mechanism that spreads units out for looks goes before one that the original has.

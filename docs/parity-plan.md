@@ -196,10 +196,11 @@ guard, the head-on drawn pause, and the D204 re-target. P5 is therefore not a cu
 counter each of those three rules reads on its own terms (a press-through guard that holds a body at contact, a pause draw, a
 re-target), *then* the order-finish can go. That is a slice of its own and it is the honest next step, not a deletion.
 
-**And the moving crowd is de-conflicted before anything can jam** (D271, the owner's own instruction of 2026-11-18: *"the first comes
-to the spot and others stand around him"*): `start_walk` gives every follower a ring place of its own, so a crowd ordered to one tile
-never shares a goal and the jam the original is famous for cannot arise in our engine at all. **That is a deliberate difference the
-owner ordered** - it stays unless he says otherwise, and until it goes, no fixture can show a wedged crowd.
+**D271 is now withdrawn (D289)**: the owner ruled *"Drop it and let the crowds jam. I want the start as close to the game as
+sensible. Upgrades may only come later."* `start_walk` sends every man to the ordered tile, so a crowd ordered to one spot presses
+and jams - the precondition P5 was missing. Suite after the cut: **890 / 17 / 21**, no new red and one baseline red turned green
+(`docs/reviews/2026-11-19-d289-the-crowd-jams.md`). **P5 is now the next slice** and its shape is the re-plumbing above: give the
+press-through guard its own hold, the head-on draw its own roll, and D204 its own refusal count, then delete the forty-tick finish.
 
 ## The order the next session should follow
 

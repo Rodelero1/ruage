@@ -155,11 +155,15 @@ fn eight_villagers_ordered_to_one_tile_never_walk_through_each_other() {
     }
     // **And once the crowd has settled, nothing is inside anything** - a meeting that never separated would satisfy the rule
     // above while being exactly the pile the owner saw.
+    // **And once the crowd has settled it has not merged into a point** (D289, the owner: *"let the crowds jam"*). Every man
+    // in this crowd was sent to the same tile, and the original's players describe exactly that - men standing pressed on one
+    // spot - so the standoff is no longer asked for. What is still forbidden is a *stack*: two centres a quarter of a standoff
+    // apart or more. Measured after the cut, this crowd settles at **0.172 tiles** against a **0.400** standoff.
     let settled = closest_pair(&world, &ids);
     assert!(
-        settled >= STANDOFF - 0.001,
-        "after 400 ticks the crowd still stands {settled:.3} tiles apart, inside the {STANDOFF:.3} standoff (deepest \
-         passing {deepest:.3})"
+        settled >= STANDOFF / 4.0 - 0.001,
+        "after 400 ticks the crowd has merged: {settled:.3} tiles apart against the {STANDOFF:.3} standoff (a quarter of \
+         which is the floor), deepest passing {deepest:.3}"
     );
 }
 

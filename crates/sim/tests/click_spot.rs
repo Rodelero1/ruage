@@ -145,8 +145,8 @@ fn a_single_unit_stops_on_the_spot_it_was_sent_to() {
     );
 }
 
-/// **Three units, one click**: the first takes the spot, the others stand **round him** - each within a tile of the spot (the
-/// ring is `4 x radius`, 0.8 of a tile for a villager), and never inside one another.
+/// **Three units, one click**: somebody takes the spot and the others close on it, pressed against him (D289). D271's ring -
+/// each follower given a place of his own round the first man - is withdrawn: *"Drop it and let the crowds jam."*
 #[test]
 fn a_crowd_stands_round_the_unit_that_took_the_spot() {
     let Some(mut world) = common::fresh() else {
@@ -181,18 +181,24 @@ fn a_crowd_stands_round_the_unit_that_took_the_spot() {
         world.step().expect("step");
     }
 
-    let first = crowd[0];
-    let off = span_to(&world, first, spot);
+    // **Somebody takes the spot, and the rest stand pressed behind him** (D289). Every man of the crowd was sent to the same
+    // point, so which one arrives is a race, not an assignment; the original's own players describe men standing pressed on one
+    // spot, so the claim is "someone is on it and nobody is left across the map".
+    let closest = crowd
+        .iter()
+        .map(|man| span_to(&world, *man, spot))
+        .min()
+        .expect("a crowd");
     assert!(
-        off <= scale / 20,
-        "the first villager stopped {off} raw units from the spot ({})",
+        closest <= scale / 20,
+        "nobody took the spot: the nearest villager stopped {closest} raw units from it ({})",
         scale / 20
     );
-    for other in crowd.iter().skip(1) {
+    for other in crowd.iter() {
         let ring = span_to(&world, *other, spot);
         assert!(
-            ring <= scale,
-            "a follower stands {ring} raw units from the spot: he was sent to a square's middle, not round the man on it"
+            ring <= 2 * scale,
+            "a follower stands {ring} raw units from the spot: the crowd must close on the point it was sent to"
         );
     }
     for (n, one) in crowd.iter().enumerate() {

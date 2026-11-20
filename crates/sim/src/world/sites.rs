@@ -670,28 +670,12 @@ impl World {
             }
             None => self.walk_goal(unit, from, to)?,
         };
-        // Crowd slots are **tiles** (a place to stand), so the point becomes a tile for the slot search and survives as
-        // the goal when this unit takes the clicked tile itself (A).
-        let wanted = self.tile_of(to);
-        // A crowd ordered to one tile is a crowd ordered to a *place*: each unit takes a tile of its own
-        // near the one that was clicked, in the order the orders arrive. Without this they all aim at one
-        // tile, and with the last-step rule (D52) all but one stop a step short of it (D53).
-        let already_heading = self
-            .entities
-            .iter()
-            .filter(|entity| entity.id != unit)
-            .filter(|entity| matches!(self.goal_of(entity), Some((tile, true)) if tile == wanted))
-            .count();
-        // **The first man takes the spot; the others stand round him** (D271, the owner, 2026-11-18: *"If multiple villagers
-        // are chosen, then the first comes to the spot and others stand around him"*). This used to give a follower
-        // `tile_centre(slot)` - the middle of a square the ring search picked, and `slot_for` scans from `(-1, -1)` outwards,
-        // so every follower landed up and to the left: measured **25,455 raw (1.27 tiles)** from the click.
-        let goal = if already_heading == 0 {
-            to
-        } else {
-            let radius = self.body_radius(self.find(unit).and_then(|entity| entity.unit));
-            self.crowd_ring_point(to, radius, from, already_heading, unit)
-        };
+        // **Every man is sent to the tile that was ordered** (D289, the owner, 2026-11-19: *"Drop it and let the crowds jam. I
+        // want the start as close to the game as sensible."*). D271 gave each follower a ring place of its own so a crowd spread
+        // itself around the click; the original does not - its players' own reports are men piling onto one tree and standing
+        // pressed against each other (`docs/gather-seating-evidence.md`) - so the goal is the ordered tile for every man, and the
+        // bodies are solid. A crowd that cannot all fit therefore jams, which is the behaviour being asked for.
+        let goal = to;
         let goal = self.check_order_at(unit, goal, target.is_some())?;
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
         let route = self.plan_path_for(unit, entity.position, goal)?;
