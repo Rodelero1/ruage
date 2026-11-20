@@ -8475,3 +8475,25 @@ fails with it; restored, all four pass.
 both; the cap row is the independent one. Review: `docs/reviews/2026-11-20-d304-the-budget-goes-live.md`.
 
 **Commits us to.** A test that is un-parked after its cause is fixed needs a row proving it still bites, or it is decoration.
+
+## D305 - The hierarchy is not running for units, and D302's 32% cannot be attributed to it
+
+**Finding.** `route_with`'s tier 2 is gated on `reach == 0`, and every unit route carries a non-zero reach (`plan_path_for` uses
+`body_radius`, `plan_path` uses `reach_at`). **So the levelled search never answers a unit's route** - only the callers that plan with no
+body at the point. **D302's "acceptance 33.74 s -> 22.96 s, a 32% cut" is therefore not attributable to the hierarchy for units.** The
+number was measured twice and is real; the cause is unestablished, and the attribution is withdrawn until it is re-measured.
+
+**Why the gate is wrong.** `avoid.is_empty()` is the right test - a coarse cell knows where objects stand and nothing about bodies, so a
+route that must keep clear of a friend cannot come from the hierarchy. But `reach` is the **walker's own width**, not a body list; refusing
+to plan a wide unit's long walk coarsely is a hole, not a parity choice.
+
+**The fix, one line**: drop `reach == 0`, keep `avoid.is_empty()`, and certify the chain's legs with `leg_is_clear(..., reach, ...)`. It is
+exactly what the radius attempt did and it was reverted for a **different** reason - the `fits` tangency change that reddened
+`straight_line` - so the two must be separated: the gate is free, the tangency is contested (owner's HD test pending).
+
+**Also landed here.** `route_shape::cluttered_ground_is_answered_at_tile_level` closes D302's coverage gap: every waypoint but the last on a
+tile centre, in ground cluttered enough that the hierarchy must abstain. **1 passed / 0.00 s**, and it stays valid after the gate fix, which
+is the point of asserting a shape. Review: `docs/reviews/2026-11-20-d305-route-shape-and-a-finding.md`.
+
+**Commits us to.** A published number names the mechanism it is attributed to, and a gate that disables the feature it gates is a defect even
+when every test passes.
