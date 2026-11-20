@@ -21,10 +21,13 @@ its unit-movement and formation files are 16-47-line stubs (`docs/prior-art.md`)
 
 1. **D291's basis was overstated** (above): the radius is the owner's D149 ruling, not a binary measurement. The decision stands; the
    sentence in `docs/decisions.md` does not, and is corrected.
-2. **"No pushing allowed" is a live divergence of ours.** The same first-party deck line says the original never pushes a body; our
-   engine still has a **0.15-tile nudge** after forty refusals (`world/step.rs`, the gather arm's displacement rule, D200). It is
-   exactly the sort of rule D292 and D290 have been removing one at a time, and it is not on the plan's list yet - it should be, as
-   part of the gather seat slice, since that is where it fires.
+2. **"No pushing allowed" - checked, and we already comply.** The first draft of this note claimed our engine still nudges a body 0.15
+   tiles after forty refusals, quoting `world/step.rs:1807`. **That claim was wrong**: the line is a *comment recording a historical
+   measurement*, not code. The audit that settles it: **no assignment to an entity's position exists anywhere outside the movement
+   pass** (`grep '\.position = (' crates/sim/src` returns nothing), the only `scale / 20` left is a tolerance for "on his own place",
+   and `no_pushing::a_crowd_at_a_tree_is_never_pushed` - which asserts exactly "nobody in the crowd is moved" - is green. The nudge
+   was removed when D204 replaced it with "take the next node", and the comment outlived it. Nothing to do; the plan entry that this
+   note added is withdrawn.
 3. **A staleness to watch:** `docs/behaviour-diff.md` row 20 still describes the path-ignore list's ending as *"ours ends the
    exemption only when the route is dropped"*, while D281's re-test is in the code. Not one of today's rulings, but the same audit
    will be run over that file next, and it should not be trusted until it is.

@@ -271,13 +271,13 @@ happened. It needs one session with the economy fixtures and the withdrawal path
 drafts under `docs/`, and no engine change from this attempt.
 
 
-## Found by the 2026-11-19 crosscheck: our engine still pushes bodies, the original never does
+## Found by the 2026-11-19 crosscheck, and then withdrawn: there is no nudge left to remove
 
-`docs/crosscheck-2026-11-19-rulings.md` re-read the six rulings against the binary and the decomp. Five hold; the sixth (D291) was
-corrected in place. The audit also found a **live divergence that is not yet on this list**: the gather arm's **0.15-tile nudge**
-after forty refusals (`world/step.rs`, D200's displacement rule) *pushes a body*, and the game's own first-party deck says the
-opposite in as many words - *"Units bump into others, stop and repath around. **No pushing allowed.** Formations allow for some
-friendly overlap"* (`docs/pathfinding-from-the-talk.md`). It goes in the **gather seat slice** (step 2), where it fires, not later.
+The crosscheck's first draft claimed the gather arm still pushes a body 0.15 tiles after forty refusals (quoting a *comment* at
+`world/step.rs:1807`). **It does not**: no assignment to an entity's position exists outside the movement pass, the only `scale / 20`
+left is a tolerance for "on his own place", and `no_pushing::a_crowd_at_a_tree_is_never_pushed` - which asserts that nobody in the
+crowd is moved - is green. D204 removed the nudge; the comment outlived it. `docs/crosscheck-2026-11-19-rulings.md` carries the
+correction.
 
 ## What is done, what is next (rewritten 2026-11-19, after D289/D290/D291)
 
