@@ -202,6 +202,21 @@ and jams - the precondition P5 was missing. Suite after the cut: **890 / 17 / 21
 (`docs/reviews/2026-11-19-d289-the-crowd-jams.md`). **P5 is now the next slice** and its shape is the re-plumbing above: give the
 press-through guard its own hold, the head-on draw its own roll, and D204 its own refusal count, then delete the forty-tick finish.
 
+
+### P5 re-plumbing, first probe: the press-through diagnosis is wrong
+
+Cutting `beside` + `finish_blocked_orders` again (now with D289 landed) reproduces the same four reds. The most alarming one -
+`group_overlap::a_mate_who_is_stopped_becomes_solid`, *"a stopped body was walked over: he came **4576 raw** from him, inside the
+**8000** reach"* - is **not a pass-through**, and the probe says so: with a trace on both skip clauses of `refusal`
+(`is_mate` and `is_past`) in that fixture, **neither fires even once** (`ZZSKIP` count zero on a full run). The stopped mate blocks
+on every tick the walker presses him, so the 4576 is the pair **mid-exchange**, not the walker inside a ghost.
+
+**What that changes:** the old forty-tick finish did not so much protect the collision rules as *end the exchange before it pressed
+this deep*. So the P5 slice is smaller than the re-plumbing note above made out - the press-through guard does not need inventing -
+and its first task is to decide, with the game in hand, how deep two friends may press: the fixture's `>= reach` no longer holds
+once a walker is allowed to keep his order, and the measured 4576 raw (**0.23 of a tile**, i.e. 0.17 of a footprint deeper than
+touching) is the number to judge against the original, not against our own old rule.
+
 ## The order the next session should follow
 
 0. ~~**P8a** - the re-lay (`maybe_respread`, `respread_at`, the `respreads` bucket): **DONE**, D287, `docs/reviews/2026-11-19-p8a-the-relay-goes.md`.
