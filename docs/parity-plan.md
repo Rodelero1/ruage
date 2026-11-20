@@ -153,6 +153,24 @@ and `collision::a_walker_never_ends_a_tick_inside_a_friend` (whose monotone-sepa
 up: with the cut the pair presses **781 raw** deeper, against an **800 raw** step - one step is the whole allowance, and the claim
 becomes "no deeper than the step that was already being taken").
 
+
+### P5 measured again: three rules end a walk, and arrival is generous
+
+The crowded-goal witness (eight men ordered to one tile, `docs/p5-witness-draft-crowd.rs`) **bites on the unmodified engine** -
+`ZZREACHED EntityId(9103) tick 94` and `ZZFINISHED tick 94` - and it shows there are **three** ways a walk ends, not two:
+
+1. **`beside`** (D200) - ours, cut.
+2. **`finish_blocked_orders`** (D200) - ours, cut.
+3. **`reaches(position, to, one step)`** - the arrival test, which is **generous**: a man *within one step* of the goal counts as
+   arrived, so in a crowd several men satisfy it and the order completes legitimately. With 1 and 2 cut the fixture stayed red and
+   the man it named had **reached** at tick 94 - while an earlier run had shown him `Idle` at 86, i.e. **something re-issues his
+   order** after the engine stood him down.
+
+**So P5 is blocked on one question**: who re-issues a finished order, and should the arrival test be exact (`reaches` with a raw
+tolerance, not a step) now that `beside` is gone? Both are answered by the same probe - instrument every writer of `entity.task` for
+one crowded scene and read the order of events - and that is the next session's first move. Until then, `beside` and
+`finish_blocked_orders` stay in the engine: cutting them alone makes the suite worse without proving anything.
+
 ## The order the next session should follow
 
 0. ~~**P8a** - the re-lay (`maybe_respread`, `respread_at`, the `respreads` bucket): **DONE**, D287, `docs/reviews/2026-11-19-p8a-the-relay-goes.md`.
