@@ -1,59 +1,50 @@
-# OPEN - P11 (the levelled search hierarchy), after the gather seat model was finished (D295, 2026-11-19)
+# OPEN - P1 (the search budget), then route-shape coverage, then the six reds
 
-**Where this branch stands, measured (`blunt-port`, `395a732`).** The gather seat model is finished end to end (D287, D289, D290,
-D291, D293, D294, D295) and P11's first two pieces are landed (D296 the level maps, D297 the descent): **the suite is 907 passed /
-6 failed / 21 ignored** - from 893 / 14 / 21 at the start of the day. The six reds are at
-the foot of this file.
+**Where this branch stands, measured (`blunt-port`, `8073007`).** P11 is **done**: the levelled search is the land-unit default behind the
+straight line and in front of the flat search (D296-D302), cached per ground change (D301), and it took **acceptance from 33.74 s to
+22.96 s**. The suite is **918 passed / 6 failed / 21 ignored**, plus `radius_route` parked (D303). The six reds are at the foot of this file.
 
-## Where the parity work stands
+## Ready to start now - no evidence needed
 
-- **P8 (the gather seat book) is finished, end to end.** D287 (no re-lay), D289 (every man is sent to the tile he was ordered to), D290 (there is
-  no press floor), D291 (the engine re-targets within a kind only), D293 (a gatherer presses in) and D294 (the book is deleted).
-  D294 deleted the book and D295 accepts a gather on the tile a man already stands on (it was refused as a walled-off node, and the
-  refusal is remembered for the match). Evidence: `docs/press-depth-evidence.md`, `docs/gather-seating-evidence.md`, and the reviews.
-- **The crowd spreads by the game's own rule**: D204's same-kind re-target, now triggered by the **refusal count** for a man whose
-  route is spent (`world/step.rs`), because the old trigger (`Standoff::NoRoom`) no longer exists.
+1. **P1, the search budget.** The witnesses already exist and are `#[ignore]`d only because a *flat* search could not afford them:
+   `crates/conformance/tests/budget.rs::a_hopeless_search_is_bounded_by_its_own_estimate` and the 20,000-cap row. Long walks now start on the
+   levelled search, which is what D279 said the budget needed. Un-ignore them, enforce `estimate` / `EXPANSION_CAP` in `search_reporting`,
+   and the truncation that parked them ("a villager one tile from its sheep answered a node fifteen tiles east") should no longer be
+   reachable.
+2. **Route-shape coverage.** D302's own review flagged it: no fixture asserts a *per-tile polyline* any more, so the red-set diff cannot see
+   that blocked routes are now coarse chains. Two fixtures: the flat fallback answers tile-level corners; the hierarchy answers cell centres.
+3. **The six reds**, named at the foot of this file - two `reseed` economy ones, the drop-site invariant, walled-off wood,
+   `both_sides_field_an_army`, and the skirmish refusal.
 
-## The next slice, in order
+## Ready after one short read each
 
-0. **NEXT, and it is a modelling step, not a search tweak** (D300 step 1, read in `docs/pathfinding-levels-evidence.md`): **split
-   `Ground`'s occupancy into static blockers and bodies.** `blocked()` folds units and obstacles together and `block`/`unblock` fire on
-   every unit step, so any cached pyramid would be stale every tick; the original keeps **static obstacles in the level maps** and
-   **bodies as a cost row (2000)** read live at expansion. The split (a) makes the pyramid cacheable, (b) removes the engine's current
-   approximation that a friend's tile is *blocked* where the game prices it at 2000 - a behavioural change needing its own witness first.
-1. **P11 - the levelled hierarchy.** Crosschecked (`docs/pathfinding-levels-evidence.md`): the levelled search **is** the land-unit
-   default (`FUN_008000d0` → `FUN_007ee980`), and the machine is a **quadtree** - four level maps, masked neighbour walks
-   (`FUN_007ed600`), a quadtree ray toward the goal (`FUN_007ee600`), a node pool (`FUN_007ef170`) - not a heap-based A\*.
-   **11a landed** (D296, the four maps), **11b landed** (D297, the descent), and **11c's witness is written and red**
-   (`the_original_solves_a_long_walk_in_its_hierarchy` fails with *"a 58-tile walk came back as 1 waypoint(s)"*).
-   **11c is blocked on one read**: the coarse step cost `g`. `FUN_007ed8f0`'s `|dx| + |dy|` is the descent's child score and
-   `FUN_007ef950`'s flood carries `g = 0`, so neither is it; the driver is one of `FUN_007efec0` (272 lines), `FUN_007f0650` (208),
-   `FUN_007ed280` (116), `FUN_007ed600` (121), `FUN_007edf00` (143), and the question to answer in each is **what is passed as
-   `FUN_007ef170`'s 4th argument (g) and 6th (parent)**. Not guessed: a guessed `g` is a deliberate difference.
-2. **P1 - the search budget**, against `FUN_007f9d80` / `FUN_008007f0`, once P11 lands.
-3. **P4 - the re-plan throttle** and the off-grid goal fallback it leans on; then **P3** (the plan agreeing with the step about
-   touching - a certified route currently asks for a landing that touches two blocked tiles and the body waits in `WaitGround`).
-4. **The two `reseed` fixtures** (`auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out`,
-   `a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot`) - economy, not movement.
+4. **`FUN_007f0da0`** - the function that stamps grown obstacles into the level-3 cells. It decides the **granularity** of the radius growth,
+   and therefore whether a one-tile gap survives at all (D303's parked witness). It also settles difference #1's window, #3's distance term
+   and #4's h, because `FUN_007f0be0` already gave the window its shape: the **goal's box grown by `h + radius`**.
+5. **`FUN_007eeda0`** - refinement of an edge to a **tile on the boundary** (#5): the fix that stops our coarse routes being 8-tile spaced.
+6. **The straight-line tier** (#10): trace `FUN_008a4360` / `FUN_008a39a0` / `FUN_008a3a20` for a pre-search line test - if there is none,
+   tier 1 is ours alone and should be named as such.
+7. **The re-path's ignore list** (#8): four entities, cap 255, `0x1265`. We have `plan_path_avoiding`; the cap and the choice of entries are
+   the missing pieces.
+
+## Needs the owner
+
+8. **The trebuchet-in-a-gap test in HD** (his, "later"). If a packed trebuchet passes a one-tile gap, the fix is `fits` from `> 0` to
+   `>= 0` - the game's depenetration is computed and discarded (D290), so tangency is a passage - and D303's witness flips to assert the
+   passage. If it does not pass, the growth has to match `FUN_007f0da0`'s granularity instead.
+9. **Bodies priced at 2000** (#6). The game's behaviour is known; the decision is whether a crowd's own routes should stop routing round
+   itself. Changes every crowd route.
+10. **A terrain cost class** (#2's 100/600 rows): needs a `config/` and a map-format change, not an engine one.
+
+## What is *not* owed
+
+- Any further work on the levelled search itself: four levels, the descent, the cost table, the chain and the refinement are all landed,
+  measured and gated.
+- The tile search's parity: octile table, `25 x euclid` budget, 20,000 cap, tie-break and best-settled fallback all match.
 
 ## The six reds, verbatim
 
 ```
-a_man_who_cannot_fit_takes_the_next_source
-a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot
-a_settled_man_is_not_displaced_by_a_later_arrival
-a_villager_drops_only_within_half_a_diameter_of_the_drop_site
-a_walled_off_wood_is_tried_once_and_then_left_alone
-auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out
-both_sides_field_an_army
-six_settled_men_hold_their_places
-ten_men_work_one_bush_a_body_apart
-the_skirmish_only_refuses_what_the_fight_has_taken
-three_gatherers_all_work_the_same_square_on_its_ring
-```
-
-*Their files: run `cargo test --workspace --offline --no-fail-fast` - the full list with test binaries is in
-`/opt/data/cache/scratch/suite-book1.log`.*```
 a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot
 a_villager_drops_only_within_half_a_diameter_of_the_drop_site
 a_walled_off_wood_is_tried_once_and_then_left_alone
@@ -61,18 +52,3 @@ auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out
 both_sides_field_an_army
 the_skirmish_only_refuses_what_the_fight_has_taken
 ```
-a_man_who_cannot_fit_takes_the_next_source
-a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot
-a_settled_man_is_not_displaced_by_a_later_arrival
-a_villager_drops_only_within_half_a_diameter_of_the_drop_site
-a_walled_off_wood_is_tried_once_and_then_left_alone
-auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out
-both_sides_field_an_army
-six_settled_men_hold_their_places
-ten_men_work_one_bush_a_body_apart
-the_skirmish_only_refuses_what_the_fight_has_taken
-three_gatherers_all_work_the_same_square_on_its_ring
-```
-
-*Their files: run `cargo test --workspace --offline --no-fail-fast` - the full list with test binaries is in
-`/opt/data/cache/scratch/suite-book1.log`.*
