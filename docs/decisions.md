@@ -8594,3 +8594,32 @@ is `local_404[255]` (`0x1265`) and stops filling at `0xfe`.
 **So the state is**: the avoid list exists and is used (D281), its *length* is unbounded, and that is a recorded difference rather than a defect
 that hides - a crowd of more than 255 bodies within a line's span is where the two engines can differ, and the game will be the one that gives
 up first.
+
+## D311 - The two reseed reds fail at the same place: the plot is paid for and never raised
+
+**Crosscheck (item 3, first pair).** Both `reseed` fixtures fail on the **same assertion**, and it is not the one their names suggest:
+
+```
+a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot   line 169
+auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out    line 235
+```
+
+Both are `assert!(replaced.is_some(), ...)` after **1,200 ticks** - i.e. **no farm is raised on the spent plot's ground**. Everything before that
+passes, and it is a lot:
+
+- the queue entry is taken and **one farm's 60 wood is committed** (`stock(1, wood) == before - 60`, `reseed_of(1).queued == 1`);
+- the toggle **costs nothing** and is remembered (`reseed_of(1).auto` is true, stock unchanged);
+- the two neighbouring rows pass: `only_a_finished_mill_may_queue_or_toggle` and
+  `without_a_queue_or_the_toggle_nothing_is_reseeded`.
+
+**So the trigger, the payment and the setting all work; the farm is never placed.** That narrows the fault to one of two places, and they are
+distinguishable with one probe:
+
+1. **the reseed arm is never reached** - the spent plot is not being detected (the farm's "ran out" state), so nothing tries to place; or
+2. **the placement is refused** - the arm runs and `place` says no, on ground that was a farm a moment ago.
+
+**Next probe, written down rather than guessed**: instrument the reseed arm to print on entry and on refusal, and run the fixture - the answer is
+which of the two it is, in one run. That is the shape every other diagnosis in this project has taken, and it is cheaper than reading the
+economy code end to end.
+
+**What this note is not**: a fix. The two fixtures are still red, and the suite stands at **920 / 6 / 21**.
