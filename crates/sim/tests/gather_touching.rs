@@ -269,9 +269,4 @@ fn every_man_working_a_node_is_taking_from_it() {
         tasked >= 5,
         "MEASURED only {tasked} of seven men still work the bush: they were moved off it"
     );
-    assert!(
-        world.gather_places().is_empty(),
-        "MEASURED {} places held: the seat book is supposed to be inert",
-        world.gather_places().len()
-    );
 }

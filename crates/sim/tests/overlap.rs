@@ -316,14 +316,24 @@ fn a_passer_by_does_not_move_the_seated_gatherers() {
     for _ in 0..500 {
         world.step().expect("a tick");
     }
-    let seated: Vec<(EntityId, (i64, i64))> = world
-        .gather_places()
-        .into_iter()
-        .filter(|(worker, _)| gatherers.contains(worker))
+    // **The ground each working man stands on** (D293): the place book is gone, so "seated" is a position - and for a man who is
+    // taking from the node, that position must not change while somebody walks past.
+    let seated: Vec<(EntityId, (i64, i64))> = gatherers
+        .iter()
+        .filter(|id| {
+            world.entity(**id).is_some_and(
+                |e| matches!(e.task, Task::Gather { progress, .. } if progress.raw() > 0),
+            )
+        })
+        .filter_map(|id| {
+            world
+                .position(*id)
+                .map(|at| (*id, (at.0.raw(), at.1.raw())))
+        })
         .collect();
     assert!(
         !seated.is_empty(),
-        "no gatherer was seated beside the node before the passer-by; the fixture measures nothing"
+        "no gatherer was at work beside the node before the passer-by; the fixture measures nothing"
     );
 
     // A fourth man walks **through** the ring: from one side of the node to the other.
@@ -353,20 +363,19 @@ fn a_passer_by_does_not_move_the_seated_gatherers() {
             continue;
         }
         walking_ticks += 1;
-        let now: Vec<(EntityId, (i64, i64))> = world
-            .gather_places()
-            .into_iter()
-            .filter(|(worker, _)| gatherers.contains(worker))
-            .collect();
         for (worker, place) in &seated {
-            let held = now
-                .iter()
-                .find(|(id, _)| id == worker)
-                .map(|(_, place)| *place);
+            // A man who has filled his load walks to the bank; that is the economy, not a shuffle.
+            if !world
+                .entity(*worker)
+                .is_some_and(|e| matches!(e.task, Task::Gather { .. }))
+            {
+                continue;
+            }
+            let held = world.position(*worker).map(|at| (at.0.raw(), at.1.raw()));
             assert_eq!(
                 held,
                 Some(*place),
-                "villager {} was moved off its square at tick {} while a man was walking past the ring (was {place:?}, \
+                "villager {} was moved off the ground it was working at tick {} while a man was walking past (was {place:?}, \
                  now {held:?})",
                 worker.0,
                 world.tick()
