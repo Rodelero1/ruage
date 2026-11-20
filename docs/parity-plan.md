@@ -243,6 +243,33 @@ because the pause is written after the pass (`pauses` vec) and `pause_remaining`
 both checks (`other.pause_remaining == 0 && !pauses.contains(&other.id)`); without it a head-on's loser never resumes. It was
 reverted with the rest of the slice, so it is **not in the tree** - it has to go in with P5.
 
+
+### P5, third attempt: five fixtures re-pointed and green, two economy reds left
+
+The slice was carried far enough today to know its exact shape. With both cuts in, a profile guard (a pause that is running is not
+re-armed) and a no-coincidence guard (two bodies may never share one point - the binary's own resolver exists to prevent exactly
+that, even though its result is discarded), **five fixtures went green and stayed green**:
+
+- `head_on::the_loser_stands_for_the_drawn_pause` - rewritten as **two knights in a one-tile corridor** (0.25 + 0.25 is exactly the
+  width, so a pair cannot slip past). It measures the drawn stand correctly once the window starts *after* the contact tick, and it
+  passes: the loser stands inside **0.25-1.50 s**.
+- `group_overlap`, `collision`, `no_pushing`, `overlap`, `click_spot`, `group_move` - re-pointed to the press model the binary
+  actually has.
+
+**Two economy reds remain, and they are the real blocker:**
+
+| fixture | what it says |
+| --- | --- |
+| `retarget::a_forager_whose_bush_is_finished_goes_to_a_farm` | after the bush is spent the man is in `Return` (a *carrier*, `slot: 1`) and never reaches the farm inside 3,000 ticks |
+| `head_on::the_higher_id_pauses_for_a_quarter_to_one_and_a_half_seconds_and_keeps_its_route` | passes alone and reddened in the full run - **order-dependent**, not yet explained |
+
+The first is the interesting one: neither cut touches the `Return` arm, whose arrival is `footprint_gap <= radius + step`
+(D246/D248), so the carrier's failure is a *consequence* - the man gathered, went to bank, and the retarget to the farm never
+happened. It needs one session with the economy fixtures and the withdrawal path, not a guess.
+
+**Where the work stands:** everything in the slice is known and measured; the tree is left at `9a8800f` with the plan, two witness
+drafts under `docs/`, and no engine change from this attempt.
+
 ## The order the next session should follow
 
 0. ~~**P8a** - the re-lay (`maybe_respread`, `respread_at`, the `respreads` bucket): **DONE**, D287, `docs/reviews/2026-11-19-p8a-the-relay-goes.md`.
