@@ -5,7 +5,23 @@ by it on the project-sized map (64×65) over 200 runs.*
 
 ## Performance
 
-The numbers, from `crates/sim/tests/levels_cost.rs -- --nocapture`:
+**Corrected 2026-11-19, same day: the first table was a DEBUG build and I published it without saying so.** `cargo test` compiles without
+optimisation, so every figure below is roughly 30× its real cost. Both builds are given, because the comparison is only fair within one
+of them:
+
+| operation | debug | **release** |
+| --- | --- | --- |
+| build the four level maps | 543 µs | **16.9 µs** |
+| the descent | 129 ns | **9 ns** |
+| the coarse A\* (56-tile diagonal, 15 cells) | 139 µs | **4.6 µs** |
+| the flat tile search, same walk | 11.4 µs | **408 ns** |
+
+**The conclusion survives the correction and the ratio does not shrink**: 16.9 + 4.6 = **21.5 µs** against **408 ns** is still **~52×**,
+so a per-call pyramid remains unaffordable. What changes is the scale of the problem - tens of microseconds, not hundreds - and the fact
+that on a 480×480 map the pyramid's area grows ~56× (≈1 ms) while the flat search stays bounded by its expansion budget.
+
+The numbers in the table first published (543 µs / 139 µs / 11.4 µs) were real measurements of a debug build; they are kept here rather
+than deleted, because the mistake was not the measurement but the missing label.
 
 | operation | cost |
 | --- | --- |

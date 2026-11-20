@@ -8382,9 +8382,10 @@ its own witnesses, and the flat search still answers `Ground::route`.
 
 ## D300 - The hierarchy is correct and 60x too slow; the switch waits for a cached pyramid
 
-**Ruling.** `Levels::coarse_route` is **not** wired into `Ground::route`. Measured on the project-sized map (64×65, 200 runs each):
-**build 543 µs**, descent **129 ns**, coarse A\* **139 µs** for a 56-tile diagonal, against a **flat tile search of 11.4 µs** on the same
-walk. The search is correct (D296-D299, and the conformance row parked since D279 is green) and it is **60× too slow**, almost entirely
+**Ruling.** `Levels::coarse_route` is **not** wired into `Ground::route`. Measured on the project-sized map (64×65, 200 runs each), in
+**release**: **build 16.9 µs**, descent **9 ns**, coarse A\* **4.6 µs** for a 56-tile diagonal, against a **flat tile search of 408 ns** on
+the same walk - **~52×**. (The first figures published here, 543 µs / 139 µs / 11.4 µs, were a **debug** build published without that
+label; both are in the review, because the mistake was the label, not the measurement.) The search is correct (D296-D299, and the conformance row parked since D279 is green) and it is **60× too slow**, almost entirely
 because the pyramid is built per call where the binary holds it and only re-stamps it.
 
 **11d is therefore three steps, in this order**: (1) a **cached pyramid** on `Ground`, invalidated by the dirty flag `block`/`unblock`
