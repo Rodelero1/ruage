@@ -118,3 +118,29 @@ hierarchy"**. It is un-ignored first and watched failing, then the hierarchy is 
    the same fixtures that pin the flat search today.
 
 Nothing above is implemented yet; this document is the crosscheck that decides the shape.
+
+## Reading further: the machine is a quadtree, and the driver is still not pinned (2026-11-19, later)
+
+Following the node pool out of `FUN_007ee760` turned up more of the machine and **not** the function that drives the coarse search. What is
+now established, each with its call site:
+
+| function | what it does | evidence |
+| --- | --- | --- |
+| `FUN_007ef170` | node allocator from a pool: `[0]=cell byte, [1]=x, [2]=y, [3]=level, [4],[5]=goal, [6]=f, [7]=g, [8]=next, [9]=parent` | 32 lines, called with a parent as its 6th argument by the searches below, with `0` by `FUN_007ee760` (the start has no parent) |
+| `FUN_007ee760` | opens **one** node - the start of the route - and pushes it; returns it | 86 lines; its node's parent is `0`, so the chain it returns is length 1 |
+| `FUN_007ed600` | the **masked quadtree neighbour walk**: recurses down `(level+1, x>>1, y>>1)` while a cell is not open, and searches up to four children gated by a direction mask (`param_6 & 3`, `& 5`, `& 10`, `& 0xc`), linking through `+0x24` | 121 lines |
+| `FUN_007ee600` | the ray down the quadtree: from a cell toward the goal, picks the best of four children by `FUN_007ed8f0` and returns the first cell where the path stops being clear | 79 lines |
+| `FUN_007ed8f0` | the child test: `-1` unless a cell's second byte has all four low bits set and byte 0 is non-zero, else `abs(dx) + abs(dy)` | 50 lines |
+| `FUN_007ef950` | opens **8 neighbours at level 0** with `g = h = 0` and pushes them - a reachability flood, not a cost search | 202 lines, 8 calls to `FUN_007ef170(..., 0, 0, 0, 0, 0, 0, 0)` |
+
+**So the levelled machine is a quadtree with masked neighbour walks and a node pool, not the heap/priority-queue A\* the decompilation's
+`find_path` describes.** The driver that assembles a *coarse route* out of those pieces - the one that would set a node's parent and `g` -
+is one of `FUN_007ef950`, `FUN_007efec0` (272 lines), `FUN_007f0650` (208), `FUN_007ed280` (116), `FUN_007ed600` (121) or `FUN_007edf00`
+(143), and **none of them has been read far enough to say which**, because each mixes the search with its caller's bookkeeping.
+
+**What this blocks.** 11c's coarse step cost (`g`). `FUN_007ed8f0`'s `|dx| + |dy|` is the *descent's* child score, and the flood in
+`FUN_007ef950` carries `g = 0`, so neither is the A\* cost. Building 11c on a guessed `g` would be a deliberate difference, which the
+owner's rule forbids - so 11c waits for that one read, and everything up to it (11a, 11b, the witness) is landed and measured.
+
+**The next read, in order:** `FUN_007efec0` (the largest of the six), then `FUN_007f0650`; in each, the question is *what is passed as
+`FUN_007ef170`'s 4th argument (`g`) and 6th (`parent`)*, because whatever that is, it is the coarse A\*'s cost.

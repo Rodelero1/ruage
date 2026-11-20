@@ -1,7 +1,8 @@
 # OPEN - P11 (the levelled search hierarchy), after the gather seat model was finished (D295, 2026-11-19)
 
-**Where this branch stands, measured (`blunt-port`).** The gather seat model is finished end to end (D287, D289, D290, D291, D293,
-D294, D295) and **the suite is 900 passed / 6 failed / 21 ignored** - from 893 / 14 / 21 at the start of the day. The six reds are at
+**Where this branch stands, measured (`blunt-port`, `395a732`).** The gather seat model is finished end to end (D287, D289, D290,
+D291, D293, D294, D295) and P11's first two pieces are landed (D296 the level maps, D297 the descent): **the suite is 907 passed /
+6 failed / 21 ignored** - from 893 / 14 / 21 at the start of the day. The six reds are at
 the foot of this file.
 
 ## Where the parity work stands
@@ -15,17 +16,15 @@ the foot of this file.
 
 ## The next slice, in order
 
-1. **P11 - the levelled hierarchy**, crosschecked and shaped (`docs/pathfinding-levels-evidence.md`): four levels 3..0, cell =
-   `2^level` tiles, a coarse A* over the cells, refinement to cell-centre waypoints, and a flat tile A* kept as the fallback.
-   **11a landed** (`Levels::of`, the four maps by the stamping rule - D296) and **11b landed** (`Levels::descent`, the coarsest usable
-   level - D297, built on a labelled interpretation of the descent's second byte).
-   **Next: 11c, the coarse A* and its refinement**, whose witness is now correct and red:
-   `crates/conformance/tests/divergences.rs::the_original_solves_a_long_walk_in_its_hierarchy` fails with *"a 58-tile walk came back as
-   1 waypoint(s)"*. The pieces to write, all read from the binary: a node is `(x, y, level, g, h, f, parent)` (`FUN_007ef170`), `h` is
-   Euclidean (`FUN_007ee760`), the frontier is an **insertion-sorted linked list on `f`, newest first among ties** - not a heap
-   (`FUN_007ed500`) - and refinement pushes a cell-centre waypoint per coarse node (`FUN_007ee980`'s chain walk, `FUN_007edb80` +
-   `FUN_007eeda0` + `FUN_007fd880`). The coarse step cost is the one number not yet read: `FUN_007ed8f0` answers `|dx| + |dy|` between
-   cell centres, which is a *descent* cost, so the A* `g` is still unknown and must be read before it is chosen.
+1. **P11 - the levelled hierarchy.** Crosschecked (`docs/pathfinding-levels-evidence.md`): the levelled search **is** the land-unit
+   default (`FUN_008000d0` → `FUN_007ee980`), and the machine is a **quadtree** - four level maps, masked neighbour walks
+   (`FUN_007ed600`), a quadtree ray toward the goal (`FUN_007ee600`), a node pool (`FUN_007ef170`) - not a heap-based A\*.
+   **11a landed** (D296, the four maps), **11b landed** (D297, the descent), and **11c's witness is written and red**
+   (`the_original_solves_a_long_walk_in_its_hierarchy` fails with *"a 58-tile walk came back as 1 waypoint(s)"*).
+   **11c is blocked on one read**: the coarse step cost `g`. `FUN_007ed8f0`'s `|dx| + |dy|` is the descent's child score and
+   `FUN_007ef950`'s flood carries `g = 0`, so neither is it; the driver is one of `FUN_007efec0` (272 lines), `FUN_007f0650` (208),
+   `FUN_007ed280` (116), `FUN_007ed600` (121), `FUN_007edf00` (143), and the question to answer in each is **what is passed as
+   `FUN_007ef170`'s 4th argument (g) and 6th (parent)**. Not guessed: a guessed `g` is a deliberate difference.
 2. **P1 - the search budget**, against `FUN_007f9d80` / `FUN_008007f0`, once P11 lands.
 3. **P4 - the re-plan throttle** and the off-grid goal fallback it leans on; then **P3** (the plan agreeing with the step about
    touching - a certified route currently asks for a landing that touches two blocked tiles and the body waits in `WaitGround`).
