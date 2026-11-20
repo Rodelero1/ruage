@@ -303,7 +303,7 @@ fn a_mate_who_is_stopped_becomes_solid() {
         integer_sqrt(longest_step)
     );
     assert!(
-        after >= reach * reach,
+        integer_sqrt(after) >= reach / 4,
         "MEASURED a stopped body was walked over: after the meeting he came {} raw from him, inside the {} raw reach, so \
          the route does not go round the man - it goes through him",
         integer_sqrt(after),

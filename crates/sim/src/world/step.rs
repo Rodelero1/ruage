@@ -44,7 +44,6 @@ impl World {
         // closes is solid for them.
         self.step_gates();
         self.move_bodies(std::mem::take(&mut work.deltas))?;
-        self.finish_blocked_orders();
         // **Settle onto the work** (D169): a worker that has arrived walks the last third of a tile onto the point where its
         // body and the node's touch. It is a placement, not a walk, because the movement rules only call a route finished on a
         // tile centre - a route ending 0.7 of a tile out is a route a worker never finishes.
@@ -924,52 +923,6 @@ impl World {
     /// that a walker who can get round does get round - which is every case the evasion tests already cover, and why they
     /// keep passing - and short enough that a man who cannot is not lost for the match.
     const STALLED_TICKS: u32 = 40;
-
-    /// **An order that a standing body makes impossible is finished where the man stands** (D200). A `Move` onto a tile a
-    /// friend holds can never complete: the walker stops at the pair's reach, `reaches` is never true, and the order stays
-    /// live for ever (measured: still `Move` after 600 ticks, 1.011 tiles out). After the same forty refused ticks the nudge
-    /// waits for, the order is done - he is as close as his own side of the tile allows, which is what the player asked for
-    /// in a game where friends are solid.
-    fn finish_blocked_orders(&mut self) {
-        let done: Vec<EntityId> = self
-            .stalled
-            .iter()
-            .filter(|(_, waited)| **waited >= Self::STALLED_TICKS)
-            .map(|(id, _)| *id)
-            .filter(|id| {
-                matches!(
-                    self.find(*id).map(|entity| entity.task),
-                    Some(Task::Move { .. })
-                )
-            })
-            // **Only when the man in the way is going nowhere.** Two villagers crossing head-on block each other for a few
-            // ticks and then pass; finishing the order there stranded one of them three tiles short (measured). The order is
-            // only finished when the body in reach has **no route of its own** - a body at rest, which cannot move aside.
-            .filter(|id| {
-                let Some(here) = self.find(*id).map(|entity| entity.position) else {
-                    return false;
-                };
-                let reach = self.reach_between(*id, *id).raw() + self.scale / 20;
-                self.entities.iter().any(|other| {
-                    other.id != *id
-                        && other.kind == EntityKind::Unit
-                        && (other.position.0.raw() - here.0.raw()).pow(2)
-                            + (other.position.1.raw() - here.1.raw()).pow(2)
-                            <= reach * reach
-                        && self
-                            .paths
-                            .get(&other.id)
-                            .is_none_or(|route| route.points.is_empty())
-                })
-            })
-            .collect();
-        for id in done {
-            if let Some(entity) = self.find_mut(id) {
-                entity.task = Task::Idle;
-            }
-            self.stalled.remove(&id);
-        }
-    }
 
     /// **A worker who has to be put on his place is given the place as a route** (D279).
     ///
@@ -2035,28 +1988,13 @@ impl World {
                     // is how a builder failed to "arrive" at a site and a barracks was never finished (2026-11-04).
                     // Arrival is exact here; an order that a standing body makes impossible is finished by
                     // `finish_blocked_orders`, which knows *why* it cannot arrive rather than guessing from distance.
-                    // **Arrived beside a held goal** (D200): within a quarter tile of the neighbouring tile centre, when the
-                    // goal itself holds a body. `reaches` alone never fires there, because no step can get through.
-                    let pair = self.reach_raw(entity.unit, entity.unit);
-                    let held = self.entities.iter().any(|other| {
-                        other.id != entity.id && other.kind == EntityKind::Unit && {
-                            let reach = self.reach_raw(entity.unit, other.unit).max(pair);
-                            let (gx, gy) = (
-                                other.position.0.raw() - to.0.raw(),
-                                other.position.1.raw() - to.1.raw(),
-                            );
-                            gx * gx + gy * gy <= reach * reach
-                        }
-                    });
-                    let beside = held && {
-                        let (gx, gy) = (
-                            entity.position.0.raw() - to.0.raw(),
-                            entity.position.1.raw() - to.1.raw(),
-                        );
-                        let limit = self.scale + self.scale / 4;
-                        gx * gx + gy * gy <= limit * limit
-                    };
-                    if reaches(entity.position, to, delta.raw()) || beside {
+                    // **Arrival is the reach, and nothing else** (P5, 2026-11-19). Two of our own rules used to end this walk:
+                    // `beside` (finished within 1.25 tiles of a goal that holds a body, D200) and the forty-tick
+                    // `finish_blocked_orders` (D200). The original has neither - wedged villagers never resolve
+                    // (`docs/gather-seating-evidence.md`) and its press depth is unbounded because the separation it computes is
+                    // discarded (`docs/press-depth-evidence.md`, D290) - so a walk that cannot arrive stands, its route intact,
+                    // until the player re-tasks.
+                    if reaches(entity.position, to, delta.raw()) {
                         work.finished.push(entity.id);
                     }
                     (Fixed::from_raw(dx), Fixed::from_raw(dy))

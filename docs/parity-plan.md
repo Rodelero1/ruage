@@ -278,10 +278,10 @@ crosses resource kinds), P2 (the octile tie-break).
 
 **Next, in this order.** Each item names the fixtures that carry it, so "done" is visible in the suite.
 
-1. **P5 again, now that D291 has landed** - cut `beside` + `finish_blocked_orders`, with the pause guard (a running pause is not
-   re-armed) and the no-coincidence guard (two bodies never share a point). Three of the four reds it caused are already re-pointed
-   and proven; the fourth, `right_of_way::the_higher_id_pauses_for_a_quarter_to_one_and_a_half_seconds_and_keeps_its_route`, failed
-   once in a full run and has never been reproduced - settle that first, by running its file repeatedly against the cut.
+1. ~~**P5** - cut `beside` + `finish_blocked_orders`: **DONE** (D292), `docs/reviews/2026-11-19-d292-orders-are-never-given-up.md`.
+   Suite **893 / 14 / 21** against 890 / 17 / 21. The "unexplained" `right_of_way` failure was **not** order-dependent - it
+   reproduces on every run - and it was the no-coincidence guard deadlocking the crossing; the guard is withdrawn (the binary has no
+   press floor) and the fixture passes.~~
 2. **The gather seat book** (the rest of P8, and now unambiguous under D290/D291): delete `standoff_point`'s taken list and the
    `touching_places` seat search; a gatherer walks to the node he was given, presses in, and only D204's same-kind re-target moves
    him. Re-points: `two_woodcutters_on_one_tree_both_touch_it_and_stand_a_body_apart`,

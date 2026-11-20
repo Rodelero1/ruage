@@ -12,10 +12,6 @@ use ruage_sim::{Command, EntityId, EntityKind, Task, World};
 
 mod common;
 
-fn fresh() -> Option<World> {
-    common::fresh()
-}
-
 fn next_id(world: &World) -> EntityId {
     EntityId(
         world

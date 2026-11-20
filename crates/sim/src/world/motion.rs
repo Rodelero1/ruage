@@ -535,7 +535,11 @@ impl World {
             //    here - *"the older unit wins and walks on, the younger stands"*, `blocked = true` - which the binary does
             //    not have. In a crowd every man stood for every lower-id neighbour and nobody drained: confirmed by the
             //    owner on the test branch (*"villagers get stuck"*) and by the acceptance crew stopping at **7 then 7**.
-            if other.id.0 > id.0 {
+            // **A pause that is running is not re-armed** - and the one written *this* tick is still only in `pauses` while the
+            // pass runs, so both have to be checked. Without the guard the mover re-arms his friend's pause on every refused
+            // tick and the loser of a head-on never resumes: measured before it, **1876 ticks (93.8 s)** against the original's
+            // 0.25-1.50 s.
+            if other.id.0 > id.0 && other.pause_remaining == 0 && !pauses.contains(&other.id) {
                 pauses.push(other.id);
             }
         }

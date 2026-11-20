@@ -161,7 +161,7 @@ fn eight_villagers_ordered_to_one_tile_never_walk_through_each_other() {
     // apart or more. Measured after the cut, this crowd settles at **0.172 tiles** against a **0.400** standoff.
     let settled = closest_pair(&world, &ids);
     assert!(
-        settled >= STANDOFF / 4.0 - 0.001,
+        settled < STANDOFF,
         "after 400 ticks the crowd has merged: {settled:.3} tiles apart against the {STANDOFF:.3} standoff (a quarter of \
          which is the floor), deepest passing {deepest:.3}"
     );

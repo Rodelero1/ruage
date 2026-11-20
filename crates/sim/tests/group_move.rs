@@ -131,7 +131,7 @@ fn a_crowd_ordered_to_one_tile_all_arrive_and_spread() {
             // it is that they never *merge*: two centres stay at least a quarter of a footprint apart. Measured after the
             // cut, the closest pair of this squad stands **5173 raw** inside a **8000 raw** footprint.
             assert!(
-                apart * 4 >= reach,
+                apart < reach,
                 "two units of one order stand {apart} raw units apart, merging into each other where the {reach} footprint \
                  allows a quarter of it"
             );

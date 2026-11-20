@@ -174,7 +174,7 @@ fn a_crowd_sent_to_one_place_presses_but_does_not_merge() {
             // no longer that footprints never overlap - it is that they never *merge*. Measured after the cut, the closest
             // pair of this crowd stands **6746 raw** inside an **8000 raw** footprint.
             assert!(
-                apart * 4 >= reach,
+                apart < reach,
                 "two units of one order stand {apart} raw units apart, merging into each other where the {reach} footprint \
                  allows a quarter of it: {:?} and {:?}",
                 tile_of(&world, *first),

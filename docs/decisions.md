@@ -8214,3 +8214,27 @@ farm by itself: Gather { node: 130 }`), then passes: `a_forager_whose_bush_is_fi
 
 **Commits us to.** An engine rule may only order a worker to a node of the **same kind**; anything that moves a man between resource
 types belongs to the AI layer (D17: the engine knows kinds, not particulars), and it must be built there, with its own evidence.
+
+## D292 - No rule of ours ever stands a man down on its own: `beside` and the forty-tick finish go (owner, 2026-11-19)
+
+**Ruling, in the owner's words.** *"No engine help: the order stays live and the man stands; only sliding and the pause rule act"* -
+chosen from the binary when the fork was put to him, and applied here.
+
+**Cut.** `beside` (a `Move` whose goal held a body was finished within 1.25 tiles of it) and `finish_blocked_orders` (forty refusals
+and the order became `Idle`). Both were D200's and both were ours: the binary pauses a body (`getMaxVelFwd` returns exactly `0.0`) and
+re-paths it, and nothing replaces an order because a body was in the way - which is why a wedged villager is the game's most-reported
+bug.
+
+**Added, because the cut exposed it.** A mover re-armed his friend's pause on every refused tick (the pause is written after the
+movement pass, so `pause_remaining` is still zero while it runs): measured **1,876 ticks (93.8 s)** of standing against the original's
+0.25-1.50 s. The guard now checks both the running pause and the one queued this tick.
+
+**Tried and withdrawn.** A "no two bodies on one point" guard: D289's shared goals let a crowd press to **0 raw** apart, the guard
+refused it, and `right_of_way::the_higher_id_pauses_...` then **never finished its crossing in 2,499 ticks**. The binary has no press
+floor at all (D290), so the fixtures ask for **convergence**, not separation.
+
+**Measured.** Full suite **893 passed / 14 failed / 21 ignored** against D291's 890/17/21 - three reds turned green, none the other way.
+`acceptance_economy` runs in **30.34 s** (was 34.25 s). Review: `docs/reviews/2026-11-19-d292-orders-are-never-given-up.md`.
+
+**Commits us to.** The engine may refuse a step and pause a body; it may never rewrite a player's order. A man who cannot arrive
+stands, with his route intact, until the player re-tasks him.

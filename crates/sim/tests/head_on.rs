@@ -63,6 +63,101 @@ fn open_row(world: &World, span: u16) -> Option<(u16, u16)> {
     None
 }
 
+/// **A corridor one tile wide**, with forest above and below: no route round a body exists, so a meeting has to be settled by the
+/// original's own means - pause the higher id, classify the collision "past", let the winner walk through (D210).
+const CORRIDOR: &str = r#"
+schema = 1
+[map]
+width = 24
+height = 22
+terrain = [
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "FFFFFFFFFFFFFFFFFFFFFFFF",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "FFFFFFFFFFFFFFFFFFFFFFFF",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+  "GGGGGGGGGGGGGGGGGGGGGGGG",
+]
+[[map.town_center]]
+player = 1
+x = 1
+y = 1
+[[map.town_center]]
+player = 2
+x = 22
+y = 20
+"#;
+
+fn corridor_world() -> Option<World> {
+    if !head_on_repo("config/gamedata/units.toml").exists() {
+        return None;
+    }
+    let resources = common::present(
+        &head_on_repo("config/resources.toml"),
+        ruage_data::load_resources_file,
+    );
+    let settings = common::present(&head_on_repo("config/sim.toml"), ruage_data::load_sim_file);
+    let map = common::must(
+        "load_map_str",
+        ruage_data::load_map_str(CORRIDOR, "corridor.toml", &resources),
+    );
+    let economy = common::present(
+        &head_on_repo("config/economy.toml"),
+        ruage_data::load_economy_file,
+    );
+    let units = common::must(
+        "load_units_file",
+        ruage_data::load_units_file(&head_on_repo("config/gamedata/units.toml")),
+    );
+    let mut world = common::must("World::new", World::new(&settings, 7));
+    common::must("seed_from", world.seed_from(&map, &economy, &units));
+    common::must("load_resources", world.load_resources(&resources));
+    Some(world)
+}
+
+fn head_on_repo(rel: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(rel)
+}
+
+/// A knight: radius **0.25**, so two of them are exactly the width of a one-tile corridor - there is no room to slip past.
+fn spawn_knight(world: &mut World, id: EntityId, x: u16, y: u16) {
+    let unit = world.role_unit("knight").expect("a knight role");
+    let scale = world.scale();
+    world
+        .submit_checked(Command::Spawn {
+            id,
+            player: 1,
+            kind: EntityKind::Unit,
+            unit: Some(unit),
+            position: (
+                Fixed::from_raw(i64::from(x) * scale + scale / 2),
+                Fixed::from_raw(i64::from(y) * scale + scale / 2),
+            ),
+            speed: Fixed::parse("1.35", scale).expect("a knight's speed"),
+            hp: 100,
+            amount: 0,
+        })
+        .expect("a knight can be placed");
+}
+
 fn tile_of(world: &World, id: EntityId) -> (i64, i64) {
     let scale = world.scale();
     let (x, y) = world.position(id).expect("the entity has a position");
@@ -144,34 +239,36 @@ fn two_men_meeting_head_on_pass_each_other() {
 /// freeze this slice exists to remove, and a stand shorter than a quarter second is not the game's rule either.
 #[test]
 fn the_loser_stands_for_the_drawn_pause() {
-    let Some(mut world) = fresh() else {
+    let Some(mut world) = corridor_world() else {
         return;
     };
-    let Some((x, y)) = open_row(&world, 8) else {
-        return;
-    };
-    let a = next_id(&world);
-    let b = EntityId(a.0 + 1);
-    spawn_villager(&mut world, a, x, y);
-    spawn_villager(&mut world, b, x + 6, y);
+    // **Two knights in a one-tile corridor, each ordered to the other's tile.** Knights are radius 0.25, so a pair is exactly the
+    // corridor's width: no route round exists and no room to slip past, which is the scene the original's pause rule is for.
+    // (Villagers would fit side by side - 0.2 + 0.2 is 0.8 of a tile - and the pair would pass without ever touching.)
+    let a = EntityId(9_500);
+    let b = EntityId(9_501);
+    spawn_knight(&mut world, a, 6, 11);
+    spawn_knight(&mut world, b, 14, 11);
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
         target: None,
         unit: a,
-        to: (x + 6, y),
+        to: (14, 11),
     });
     world.step().expect("a tick between the orders");
     world.submit(Command::Move {
         target: None,
         unit: b,
-        to: (x, y),
+        to: (6, 11),
     });
 
-    // **The first stand**, from the moment they first touch until the loser moves again - not the longest one, which would
-    // be his idle time at his goal afterwards (that mistake measured 1,779 ticks / 89 s on the first run of this test).
+    // **The first stand *after* contact.** The contact tick is not a stand: the loser moves in it (the pause is written after the
+    // pass, so it cannot hold him on the very tick he collides), and the measured run begins with the first tick he does not move
+    // after that - undone at the first tick he moves again. Counting from contact measured 0 for exactly that reason.
     let reach = world.reach_between(a, b).raw();
     let mut touching = false;
+    let mut stand = 0u32;
     let mut first_stand = 0u32;
     let mut last = world.position(b).expect("b has a position");
     for _ in 0..2_000 {
@@ -182,11 +279,16 @@ fn the_loser_stands_for_the_drawn_pause() {
         if apart(&world, a, b) <= reach * reach {
             touching = true;
         }
-        if touching {
-            if moved {
+        if !touching {
+            continue;
+        }
+        if moved {
+            if stand > 0 {
+                first_stand = stand;
                 break;
             }
-            first_stand += 1;
+        } else {
+            stand += 1;
         }
     }
     let seconds = f64::from(first_stand) / f64::from(world.tick_rate_hz());

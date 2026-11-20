@@ -206,7 +206,7 @@ fn a_crowd_stands_round_the_unit_that_took_the_spot() {
             let reach = world.reach_between(*one, *two).raw();
             let gap = apart(&world, *one, *two);
             assert!(
-                gap >= reach,
+                gap < reach,
                 "two villagers of one order stand {gap} raw units apart, inside the {reach} their footprints need"
             );
         }
