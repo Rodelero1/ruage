@@ -91,14 +91,13 @@ impl World {
         let reach = self.gather_reach(worker);
         let unit = source.unit;
         let family = unit.and_then(|unit| self.units.as_ref().map(|units| units.root(unit)));
-        // A farm is a **building** that fills the same column a bush does, so "the next source of food" has to cross the
-        // two kinds. Without this a forager whose berries are gone has nowhere to go: eighteen of them stood on the empty
-        // berry patch at 2,400 s and the match never spent another stick of wood.
-        let farm_slot = self
-            .economy
-            .as_ref()
-            .and_then(|economy| economy.farm.resource.as_deref())
-            .and_then(|name| self.slot_of(name));
+        // **No crossing of kinds** (D291, the owner, 2026-11-19: *"The game code itself should never hardcode such move. That
+        // should be handled by AI to repurpose idle villagers. Is it the case?"* - it is). The engine's own answer to "which
+        // source is next" is the nearest node of the **same kind** within the worker's reach, which is what a spent tree uses to
+        // find the next tree; repurposing a man across resource *types* is the AI's job, and the game ships AI parameters for
+        // exactly that (`sn-retask-gather-amount`, `sn-max-retask-gather-amount`) plus a technology that improves it
+        // (`up-retask-gatherers`). A forager with no bush in reach therefore **stands** - the idle villager the player (or the
+        // AI) then re-tasks.
         // **Cheap first, expensive last, and only for the nearest few** (D280). Reachability costs a path search, and the
         // picker is asked every time a node runs out - so the order of the questions *is* the cost. Before this rule the
         // loop below asked `node_workable` of **every resource on the map** before it had sorted them: measured on the
@@ -134,12 +133,8 @@ impl World {
                 (EntityKind::Resource(slot), EntityKind::Resource(other)) => {
                     slot == other && entity.amount.raw() > 0
                 }
-                // ... and a finished farm, for the column a farm fills.
-                (EntityKind::Resource(slot), EntityKind::Building) => {
-                    farm_slot == Some(slot)
-                        && entity.construction.is_none()
-                        && entity.amount.raw() > 0
-                }
+                // A finished farm is **not** a bush (D291): the engine does not cross resource types, and the AI re-tasks.
+                (EntityKind::Resource(_), EntityKind::Building) => false,
                 (EntityKind::Unit, EntityKind::Unit) => {
                     // Another animal of the same family, and still alive: a carcass is not something to hunt.
                     entity.hp > 0

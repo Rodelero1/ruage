@@ -63,27 +63,29 @@ fn spawn(world: &mut World, kind: EntityKind, unit: u32, at: (u16, u16), amount:
 /// bush, walks to the farm, and the food column rises. The parked sentence did not say which change was missing, and this
 /// audit did not bisect it: what is claimed is only what was run, `--include-ignored`, today. It is un-parked so the suite
 /// keeps it that way.
+/// **A forager whose bush is spent does not walk to a farm.** The engine's own answer to "which source is next" is the nearest
+/// node of the **same kind** within the worker's reach - the binary's radius is line of sight plus five tiles (D149) and it is what
+/// a spent tree uses to find the next tree. Repurposing a man across resource *types* is the **AI's** job, not the engine's: the game
+/// ships AI parameters for exactly that (`sn-retask-gather-amount`, `sn-max-retask-gather-amount`) and even a technology that
+/// improves it (`up-retask-gatherers`). So with no bush left in reach, the forager **stands**, and the fixture says so.
+///
+/// Owner, 2026-11-19: *"The game code itself should never hardcode such move. That should be handled by AI to repurpose idle
+/// villagers. Is it the case?"* - it is.
 #[test]
-fn a_forager_whose_bush_is_finished_goes_to_a_farm() {
+fn a_forager_whose_bush_is_finished_stands_rather_than_walking_to_a_farm() {
     let Some(mut world) = fresh() else {
         return;
     };
     let food = world.slot_of("food").expect("a food column");
     let farm_role = world.role_unit("farm").expect("a farm role");
     let villager_role = world.role_unit("villager").expect("a villager role");
-
-    // Both on open grass well clear of the town centre and the map's own resources.
     let bush = spawn(&mut world, EntityKind::Resource(food), 0, (18, 13), 10);
     let farm = spawn(&mut world, EntityKind::Building, farm_role, (17, 12), 250);
-    // `Spawn` with a building unit id is not a real build; the engine may mark it a foundation, so make sure the farm is
-    // finished - a farm still going up cannot be worked (and the test says so, rather than pretending).
     assert!(
         world.entity(farm).is_some_and(|e| e.construction.is_none()),
-        "the farm should be finished: {:?}",
-        world.entity(farm).map(|e| e.construction)
+        "the farm should be finished"
     );
     let villager = spawn(&mut world, EntityKind::Unit, villager_role, (18, 14), 0);
-
     world
         .submit_checked(Command::Gather {
             villager,
@@ -91,24 +93,27 @@ fn a_forager_whose_bush_is_finished_goes_to_a_farm() {
         })
         .expect("the bush can be worked");
 
-    let mut on_farm = false;
+    // **Long enough for the bush to run out and for any retarget to have happened** - and for a farm beside him to have been taken
+    // if the engine were willing to cross kinds.
+    let mut ever_on_farm = false;
     for _ in 0..3_000 {
         world.step().expect("stepping");
         if world
             .entity(villager)
             .is_some_and(|e| matches!(e.task, Task::Gather { node, .. } if node == farm))
         {
-            on_farm = true;
+            ever_on_farm = true;
             break;
         }
     }
+    let task = world.entity(villager).map(|e| e.task);
     assert!(
-        on_farm,
-        "the villager should move to the farm once the bush is spent, not stand on the empty bush: {:?}",
-        world.entity(villager).map(|e| e.task)
+        !ever_on_farm,
+        "the engine sent the forager to a farm by itself: {task:?} - reassigning across resource types is the AI's job, and the\
+         game ships `sn-retask-gather-amount` for it"
     );
     assert!(
-        world.stock(1, food) > 0,
-        "and the farm should be feeding the stockpile"
+        !matches!(task, Some(Task::Gather { .. })),
+        "with no bush left in reach the forager must not be gathering anything: {task:?}"
     );
 }

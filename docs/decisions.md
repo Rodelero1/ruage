@@ -8189,3 +8189,28 @@ retail build or live in an earlier one is not established, and neither is the pa
 
 **Commits us to.** Before adding a physical floor, find the binary's own; if its answer is computed and thrown away, ours is not to be
 invented.
+
+## D291 - The engine retargets within a kind; repurposing across kinds is the AI's job (owner, 2026-11-19)
+
+**The owner's question.** *"How is the retarget::a_forager_whose_bush_is_finished_goes_to_a_farm handled by the game? The game code
+itself should never hardcode such move. That should be handled by AI to repurpose idle villagers. Is it the case?"*
+
+**It is the case, and our code did the opposite.** `World::nearest_like_in` matched a bush (`Resource(food)`) to a **farm**
+(`Building`) on purpose, with a comment explaining why: *"A farm is a building that fills the same column a bush does, so 'the next
+source of food' has to cross the two kinds. Without this a forager whose berries are gone has nowhere to go."* The evidence says the
+original does not do that:
+
+- the engine's next-source search is a **same-kind** search inside a radius - the binary's radius is the worker's line of sight plus
+  five tiles (D149), which is how a spent tree finds the next tree; the replay-derived model of DE uses the same shape
+  (`aoe2mc`: 8 tiles for trees, 5 for the rest);
+- reassigning a man across resource **types** is the **AI's** work, and the game ships parameters for exactly that -
+  `sn-retask-gather-amount`, `sn-max-retask-gather-amount`, `sn-food-gatherer-percentage`, `sn-percent-civilian-gatherers` - plus a
+  technology whose only job is to improve it, `up-retask-gatherers`;
+- the decomp contributes nothing either way (no gather code at all).
+
+**Ruled and done.** The cross-kind arm is cut: a forager whose bush is spent and who has no bush in reach **stands** - he is the idle
+villager the player or the AI then re-tasks. The fixture was re-pointed first and watched failing (`the engine sent the forager to a
+farm by itself: Gather { node: 130 }`), then passes: `a_forager_whose_bush_is_finished_stands_rather_than_walking_to_a_farm`.
+
+**Commits us to.** An engine rule may only order a worker to a node of the **same kind**; anything that moves a man between resource
+types belongs to the AI layer (D17: the engine knows kinds, not particulars), and it must be built there, with its own evidence.
