@@ -8200,9 +8200,10 @@ itself should never hardcode such move. That should be handled by AI to repurpos
 source of food' has to cross the two kinds. Without this a forager whose berries are gone has nowhere to go."* The evidence says the
 original does not do that:
 
-- the engine's next-source search is a **same-kind** search inside a radius - the binary's radius is the worker's line of sight plus
-  five tiles (D149), which is how a spent tree finds the next tree; the replay-derived model of DE uses the same shape
-  (`aoe2mc`: 8 tiles for trees, 5 for the rest);
+- the engine's next-source search is a **same-kind** search inside a radius. **The radius is the owner's own ruling, not a
+  measurement** - D149, 2026-11-07: *"the owner chose C - line of sight + 5"* - and the same-kind shape is what a replay-derived model
+  of DE implements (`aoe2mc`: 8 tiles for trees, 5 for the rest). No function in the corpus was found that filters a next-source
+  search by object type, so *this* half of the basis is inference and is labelled as such;
 - reassigning a man across resource **types** is the **AI's** work, and the game ships parameters for exactly that -
   `sn-retask-gather-amount`, `sn-max-retask-gather-amount`, `sn-food-gatherer-percentage`, `sn-percent-civilian-gatherers` - plus a
   technology whose only job is to improve it, `up-retask-gatherers`;

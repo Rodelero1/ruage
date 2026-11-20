@@ -270,6 +270,15 @@ happened. It needs one session with the economy fixtures and the withdrawal path
 **Where the work stands:** everything in the slice is known and measured; the tree is left at `9a8800f` with the plan, two witness
 drafts under `docs/`, and no engine change from this attempt.
 
+
+## Found by the 2026-11-19 crosscheck: our engine still pushes bodies, the original never does
+
+`docs/crosscheck-2026-11-19-rulings.md` re-read the six rulings against the binary and the decomp. Five hold; the sixth (D291) was
+corrected in place. The audit also found a **live divergence that is not yet on this list**: the gather arm's **0.15-tile nudge**
+after forty refusals (`world/step.rs`, D200's displacement rule) *pushes a body*, and the game's own first-party deck says the
+opposite in as many words - *"Units bump into others, stop and repath around. **No pushing allowed.** Formations allow for some
+friendly overlap"* (`docs/pathfinding-from-the-talk.md`). It goes in the **gather seat slice** (step 2), where it fires, not later.
+
 ## What is done, what is next (rewritten 2026-11-19, after D289/D290/D291)
 
 **Done and pushing the engine toward the original:** D285/D286 (one box ruler; a click names its object), D287/P8a (the node re-lay
