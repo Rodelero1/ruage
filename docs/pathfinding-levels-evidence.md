@@ -90,9 +90,15 @@ Two details of the descent are **not** established from the code read so far, an
 1. **The cell entry is two bytes**: the stamper `FUN_007f1100` writes bit `0x20` of the **first** byte, while the descent test in
    `FUN_007ee980` reads bit `0x20` of the **second** byte (`+1 + cell*2`). Two different flags. The first is per-search scratch (stamped
    on, cleared off); the second persists and its producer has not been found yet.
-2. Therefore **which level the descent really lands on** is unknown. Read literally, the loop stops at the first level whose second-byte
-   0x20 is set, coming down from 3 - which would search *coarsely* in cluttered ground and *at tile level* in open ground, and that is
-   backwards from every hierarchy I can justify. Until the second byte's producer is read, 11b stays unbuilt.
+2. Therefore **which level the descent really lands on** came down to what that second byte means. Read as *blocked*, the loop would
+   search coarsely in cluttered ground and at tile level in open ground - backwards from any hierarchy. Read as **usable**, it stops at
+   the coarsest level whose cell is usable, which is the behaviour a hierarchy is supposed to have.
+
+**The evidence for "usable", read further on 2026-11-19:** the descent reads byte 1 while the stamper writes byte 0, so byte 1 cannot be
+the search's own mark; and `FUN_007ed8f0` - the quadtree descent's child test - reads the **same byte** and requires `& 0xf == 0xf`
+("clear in all four directions") plus a non-zero byte before a child counts. So byte 1 is the cell's persistent passability, and bit
+`0x20` of it is the same "this cell is usable" flag at the top of the nibble range. **11b is built on that reading, and the reading is
+labelled an interpretation, not a certainty, in `Levels::descent` and in D297.**
 
 `FUN_007ede40` stamps a rectangle at **level 3 only** (`>> 3`), then `FUN_007f1100` recurses down the pyramid while the cell it is at is
 unmarked, and clips every stamp to the search's own window (`in_ECX[0x42..0x45] >> level`) - so the obstacle grid is per-search and

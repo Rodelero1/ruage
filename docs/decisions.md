@@ -8318,3 +8318,23 @@ forbids.
 
 **Commits us to.** A coarse node is never a place a route may run through when a wall touches it; the level maps are rebuilt from the
 ground, never cached across a change to it.
+
+## D297 - A search starts at the coarsest level whose cell is usable (P11b)
+
+**Ruling.** `Levels::descent(tile)` walks from level 3 down and stops at the first level whose cell holding that tile is unblocked, with
+level 0 as the floor. That is `FUN_007ee980`'s loop, and it is built on one **interpretation** - flagged as such here, in the code and in
+`docs/pathfinding-levels-evidence.md`:
+
+- the loop tests bit `0x20` of a level cell's **second** byte, and the per-search stamper writes the **first** byte - so the second byte
+  is not the search's own mark;
+- the same second byte is what `FUN_007ed8f0` reads for a usable child (`& 0xf == 0xf`, clear in all four directions);
+- so byte 1 is the cell's **persistent passability**, and `0x20` is its "usable" flag. The rejected reading (bit set = blocked) would
+  search coarsely in clutter and finely in the open, which is backwards from any hierarchy, and it is recorded rather than deleted.
+
+**Measured.** Test-first, and the first version of the fixture was **my** error: the wall sat at `(9, 2)`, inside the very 4×4 cell the
+start occupies, so level 2 was correctly blocked and the assertion was wrong. Moved to `(14, 6)` - same 8×8 cell, different 4×4 cell.
+Suite **907 passed / 6 failed / 21 ignored** from 904 / 6 / 21, red set byte-identical; the three fixtures are **3 passed / 0.00 s**.
+Review: `docs/reviews/2026-11-19-p11b-the-descent.md`.
+
+**Commits us to.** The descent is a decision about *granularity*, never about passability: a level's map never says a route is legal where
+the tiles are not.

@@ -121,6 +121,26 @@ impl Levels {
             .unwrap_or(true)
     }
 
+    /// **The coarsest level whose cell holding `tile` is usable** - the binary's descent (`FUN_007ee980`), whose loop walks from level
+    /// 3 down until the cell it is looking at is usable, and which floors at level 0.
+    ///
+    /// The binary tests bit `0x20` of the cell's **second** byte there, and its per-search stamper writes the **first**; that second
+    /// byte is the persistent passability of the cell - the same byte `FUN_007ed8f0` reads for a usable child (`& 0xf == 0xf`, all
+    /// four directions clear). So the test is "is this cell usable", and the descent stops at the first level where it is. Recorded as
+    /// an interpretation in `docs/pathfinding-levels-evidence.md`, because the byte's producer has not been read.
+    #[must_use]
+    pub fn descent(&self, tile: (u16, u16)) -> u8 {
+        let mut level = u8::try_from(DEPTH - 1).unwrap_or(3);
+        while level > 0 {
+            let (cx, cy) = Self::cell_of(level, tile);
+            if !self.blocked(level, cx, cy) {
+                break;
+            }
+            level -= 1;
+        }
+        level
+    }
+
     /// **The cell a tile falls in** at a level: `tile >> level`, which is the binary's own indexing.
     #[must_use]
     pub fn cell_of(level: u8, tile: (u16, u16)) -> (u16, u16) {
