@@ -178,6 +178,29 @@ first move is that probe done by hand: tag each of the nine `entity.task = Task:
 `find_mut` borrow, and read which one fires in this scene. Until it is named, `beside` and `finish_blocked_orders` stay in the
 engine - cutting them alone makes the suite worse without proving anything.
 
+
+### P5 measured a third time: the forty-tick rule carries three other rules on its back
+
+Cutting `beside` and `finish_blocked_orders` together was measured against the seven fixtures that could notice. **Four redden,
+and three of them are not about the cut at all** - they are rules that silently depended on it:
+
+| fixture | what the cut did |
+| --- | --- |
+| `collision::a_walker_never_ends_a_tick_inside_a_friend` | the walker presses **781 raw** deeper after contact, against an **800 raw** step - one step is the whole allowance, so this one is a re-point |
+| `group_overlap::a_mate_who_is_stopped_becomes_solid` | **a stopped body is walked over**: the walker comes **4576 raw** from him, inside an **8000 raw** reach. The old rule ended the walker's order before he could press through; without it the collision rules let friends pass through each other |
+| `head_on::the_loser_stands_for_the_drawn_pause` | the loser's longest stand is now **0 ticks**, against the **0.25-1.50 s** the original draws - the drawn pause fires off `stalled`, and nothing reaches forty any more |
+| `no_pushing::a_man_who_cannot_get_his_square_takes_the_next_tree` | the D204 re-target no longer fires: the man stays at (5.151, 7.199) on a tree with no square for him while the free tree of the same column is untouched |
+
+**So the forty-tick counter is load-bearing for three rules that have nothing to do with finishing an order**: the body press-through
+guard, the head-on drawn pause, and the D204 re-target. P5 is therefore not a cut but a **re-plumbing**: `stalled` must become a
+counter each of those three rules reads on its own terms (a press-through guard that holds a body at contact, a pause draw, a
+re-target), *then* the order-finish can go. That is a slice of its own and it is the honest next step, not a deletion.
+
+**And the moving crowd is de-conflicted before anything can jam** (D271, the owner's own instruction of 2026-11-18: *"the first comes
+to the spot and others stand around him"*): `start_walk` gives every follower a ring place of its own, so a crowd ordered to one tile
+never shares a goal and the jam the original is famous for cannot arise in our engine at all. **That is a deliberate difference the
+owner ordered** - it stays unless he says otherwise, and until it goes, no fixture can show a wedged crowd.
+
 ## The order the next session should follow
 
 0. ~~**P8a** - the re-lay (`maybe_respread`, `respread_at`, the `respreads` bucket): **DONE**, D287, `docs/reviews/2026-11-19-p8a-the-relay-goes.md`.
