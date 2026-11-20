@@ -89,11 +89,14 @@ fn at(x: i64, y: i64) -> (Fixed, Fixed) {
 
 /// **A villager walks the gap and a trebuchet does not plan it.** The path either goes round (which the wall prevents here, so the last
 /// point is short of the goal) or is refused - what it must never do is run through the gap's tile.
-/// **Parked red, deliberately.** It fails today with
-/// `a radius-0.50 body must NOT be planned through a gap it cannot fit: its route is [...]` - the searches do not know the body's width.
-/// The fix is a radius-grown grid feeding both the flat search and the pyramid (D303), and this fixture is its witness.
+/// **Parked red, deliberately** (D303 step 2). The searches are radius-blind: the flat one asks `blocked(x, y)` and the levelled one asks
+/// the pyramid, neither taking the body's reach. The first attempt at the fix - a `fits` test per node plus a pyramid per radius - made this
+/// fixture pass **and** reddened `straight_line::an_obstacle_across_the_line_forces_the_search` and
+/// `straight_line::a_route_round_a_tree_carries_no_slack` (a 31-point staircase round one tree), because a search that refuses tangent
+/// tiles walks a different lattice than the line test that certified the corners. That pair has to be understood before the radius goes in,
+/// and the attempt was reverted rather than shipped red.
 #[test]
-#[ignore = "the searches are radius-blind (D303 step 2); the witness is written and fails on exactly that"]
+#[ignore = "the searches are radius-blind (D303 step 2); the radius-aware attempt reddened straight_line and was reverted"]
 fn the_gap_is_planned_for_a_villager_and_not_for_a_trebuchet() {
     let ground = lane();
     let (from, to) = (at(6, 10), at(26, 10));
