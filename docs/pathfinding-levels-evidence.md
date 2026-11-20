@@ -252,3 +252,34 @@ it - which is what our witness asserts and what our radius-aware attempt reprodu
 recursed down, so a feature narrower than a stamp may be **washed out** of the coarse map entirely rather than resolved to a tile - i.e. the
 game may refuse the *whole neighbourhood* of a narrow gap rather than exactly the gap. Our per-tile `fits` is finer than the stamp and
 therefore never more permissive, but the routes a player sees in the two are not identical. That is the next read: `FUN_007f0da0`.
+
+## `FUN_007f0da0`: the growth is resolved where the obstacle is, not at 8×8 (2026-11-20)
+
+The last open question about the radius - whether growing obstacles at level 3 washes a one-tile gap out of the coarse map - is answered by the
+stamp function itself:
+
+```c
+int FUN_007f0da0(int level, int cx, int cy, float x, float y, float h, float radius, int on) {
+  if (outside the window at this level) return 0;
+  byte *cell = ...;  b = cell[1];                       // the same second byte the descent reads
+  if ((b & 0x20) == 0) {                                // NOT marked as holding an obstacle:
+      if (level > 0) {                                  //   recurse into the four children at level-1
+          return sum of 4 x FUN_007f0da0(level-1, ...);
+      }
+  } else {                                              // the cell DOES hold an obstacle
+      if (FUN_007ed950(level, cx, cy, x, y, h, radius)) //   does the mover's grown box cover it?
+          set/clear bit 0x10 in cell[1];                //   mark it blocked for THIS search
+  }
+  return 0;
+}
+```
+
+- **bit `0x20` of a cell's second byte means "this cell contains an obstacle"** - which is also what the descent tests, and now both readings
+  are the same one: the descent stops at the coarsest level whose cell *has* an obstacle, i.e. the coarsest level that can still see the
+  detail (a correction to the "coarsest usable" wording: usable *for the search*, because it is the level at which the obstacle is resolved);
+- **bit `0x10` is the per-search block**, set by the stamp and cleared at the end of the search (`& 0xf`), which is why it can be reused;
+- **the recursion descends only into cells that contain obstacles**, down to level 0, so the growth is applied at the **finest level where the
+  obstacle actually is**. A one-tile gap between two one-tile obstacles is therefore resolved **per tile**, never blurred into an 8×8 block.
+
+**So the owner's HD result and the binary agree, and our `fits` has the right granularity.** The 8×8 worry was wrong: level 3 is only where the
+stamp *starts*, not where it lands.

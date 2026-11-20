@@ -8518,3 +8518,17 @@ together, which the earlier attempt did not manage. Full suite **920 passed / 6 
 Review: `docs/reviews/2026-11-20-d306-tangency-is-a-passage.md`.
 
 **Commits us to.** When the game and the code disagree, the game wins and the record says which claim was withdrawn.
+
+## D307 - The stamp resolves at the finest level the obstacle occupies (closes D306's caveat)
+
+**Ruling (read, no code).** `FUN_007f0da0` recurses **only into cells whose second byte has bit `0x20`** - "this cell contains an obstacle" -
+down to level 0, and applies the mover's grown box there via `FUN_007ed950`, marking bit `0x10` (the per-search block, cleared at the end).
+So the radius growth is resolved **per tile wherever a one-tile obstacle is**, and a one-tile gap is never washed into an 8×8 block.
+
+**Consequences.** (1) The caveat in D306 - "the game may refuse the gap's whole neighbourhood" - is **withdrawn**; the owner's HD result and the
+binary agree, and our per-tile `FUN_007f0da0`-equivalent (`Ground::fits`) has the right granularity. (2) It also corrects the *descent's*
+wording: it stops at the coarsest level whose cell **holds an obstacle**, which is the level at which the search has something to resolve -
+"coarsest usable" was the same idea from the other side, and the read now supports it directly.
+
+**Still open from this read.** Whether `0x20` is seeded from terrain alone or from terrain *and* buildings (the tree/building case) - the setter
+of `0x20` has not been read; `FUN_007ed950`'s exact box test either, though its arguments are the mover's box (`x, y, h, radius`) and the cell.
