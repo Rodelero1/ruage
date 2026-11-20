@@ -30,7 +30,7 @@ mod roles;
 pub mod tiles;
 mod world;
 pub use ground::Ground;
-pub use levels::Levels;
+pub use levels::{CoarseRoute, Levels};
 pub use metrics::Metrics;
 use ruage_fixed::Fixed;
 

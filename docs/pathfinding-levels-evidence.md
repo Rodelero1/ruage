@@ -38,7 +38,7 @@ local_24 = FUN_007ee760(iVar7, iVar4, iVar6, (int)param_2, (int)param_3);   // c
   sqrt), so the coarse search uses **straight-line h in cells**, not the octile h of the tile search.
 - **refinement walks the chain outwards**: `FUN_007edb80(node, &x, &y)` gives a node's tile, and `FUN_007eeda0(node, &fx, &fy, nextX,
   nextY, ...)` steps from one cell toward the next, and each step that succeeds pushes a waypoint with `FUN_007fd880(&point)` -
-  **cell centres `+ 0.5`, at `2^level` spacing**. So the route handed to the movement code is a **coarse polyline**, not a tile path.
+  **cell centres - `n * 2^level + 2^(level-1)` tiles, which is `+ 0.5` only at level 0**. So the route handed to the movement code is a **coarse polyline**, not a tile path.
 - the search frees its nodes back to three pools (`in_ECX[0xe]`, `[2]`, `[0x19]`) at the end and un-marks each (`*b &= 0xf`).
 
 ## The flat tile search, `FUN_008007f0` (the other branch)

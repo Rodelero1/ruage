@@ -8357,3 +8357,25 @@ impossible `try_from`s became `from`. Review: `docs/reviews/2026-11-19-p11c-the-
 
 **Commits us to.** A cost is a property of the cell being entered, never of the pair; and no row of the table is invented to fill a gap in
 our content model.
+
+## D299 - The coarse A\* runs on four directions, a tuned cost table and a sorted list (P11c)
+
+**Ruling.** `Levels::coarse_route` searches **one level** (the coarsest usable one for the start, never finer than the goal needs), over the
+**four orthogonal directions**, with `g = step + parent's g` from D298's table, `h` = Manhattan between cells, a frontier that is
+**insertion-sorted on `f` with a new node placed before equal `f`** (`FUN_007ed500`'s order, not a heap), closed cells never reopened, and
+a parent chain walked back and refined to **one waypoint per cell at its centre** - `n * 2^level + 2^(level-1)` tiles, which is
+`+ 0.5` only at level 0.
+
+**Two deviations, recorded and both safe.** (1) **No search window**: the binary clips expansions to `in_ECX[0x42..0x45]`, whose padding is
+set where it has not been read; without the clip the search finds routes the clipped one refuses - a superset, never an illegal route.
+(2) `h` is Manhattan because `window_hi - coord` needs the window. Both are in the function's doc comment, here, and in the evidence file.
+
+**Measured.** The conformance row `the_original_solves_a_long_walk_in_its_hierarchy` - `#[ignore]`d since D279 - is **live and green**:
+a 58-tile open walk is **8 cells** at level 3 instead of 58 tiles, on the lattice `n*8+4`, none of them blocked. Suite **914 passed /
+6 failed / 21 ignored** from 910 / 6 / 21, red set byte-identical; clippy clean. **Three errors of mine on the way**, all caught by
+fixtures: a 96-row height declared over 49 written rows, a town centre at `(90, 90)` on a 49-row map, and a lattice check written with the
+tile convention (`n*8+0.5`) for an 8-tile cell centre (`n*8+4`) - the last one had also been copied into the evidence file and is
+corrected there. Review: `docs/reviews/2026-11-19-p11c-the-coarse-astar.md`.
+
+**Commits us to.** The levelled search is the default only once the switch (11d) is built and measured; until then it is a machine with
+its own witnesses, and the flat search still answers `Ground::route`.

@@ -15,30 +15,39 @@ use ruage_conformance::{SCALE, centre, ground};
 /// levelled search (`docs/pathfinding-levels-evidence.md`): 11a the level maps and 11b the descent are landed, 11c is the coarse A\* and
 /// this refinement.
 #[test]
-#[ignore = "P11c not built yet: the coarse A* and its refinement are the next step"]
 fn the_original_solves_a_long_walk_in_its_hierarchy() {
     // A 58-tile walk across open ground, which is the case the hierarchy exists for.
     let field = ground(96, 96, &[]);
-    let route = field
-        .route(SCALE, centre(4, 4), centre(62, 4))
+    let levels = ruage_sim::Levels::of(&field);
+    let route = levels
+        .coarse_route((4, 4), (62, 4))
         .expect("a long walk across open ground");
-    // **The observable of a coarse route**: more than one waypoint, and every waypoint but the last on the 8-tile lattice the level-3
-    // search works on (`n * 8 + 0.5`), because that is where the refined chain puts them.
+    let points = levels.refine(&route, SCALE);
+
+    // **The observable of a coarse route**: more than one waypoint, every one but the last on the 8-tile lattice the level-3 search
+    // works on, and every one of them a cell the search was allowed to enter.
     assert!(
-        route.len() > 1,
+        points.len() > 1,
         "a 58-tile walk came back as {} waypoint(s): the flat search answers one, the levelled one answers the coarse chain",
-        route.len()
+        points.len()
     );
-    for point in &route[..route.len() - 1] {
+    for point in &points[..points.len() - 1] {
         let x = point.0.raw();
         let y = point.1.raw();
-        let scale = i64::from(SCALE);
-        let on_lattice = |raw: i64| (raw - scale / 2) % (8 * scale) == 0;
+        // A level-3 cell is 8 tiles across, so its centre is `n * 8 + 4` tiles - 4 is half of 8, not the half-tile of a
+        // tile centre. My first version of this check used the tile convention and flagged a correct 4.00 as wrong.
+        let on_lattice = |raw: i64| (raw - 4 * SCALE) % (8 * SCALE) == 0;
         assert!(
             on_lattice(x) && on_lattice(y),
             "waypoint ({:.2}, {:.2}) is not on the 8-tile lattice the level-3 search works on",
-            x as f64 / scale as f64,
-            y as f64 / scale as f64
+            x as f64 / SCALE as f64,
+            y as f64 / SCALE as f64
+        );
+    }
+    for cell in &route.cells {
+        assert!(
+            !levels.blocked(route.level, cell.0, cell.1),
+            "the chain runs through blocked cell {cell:?}"
         );
     }
 }
