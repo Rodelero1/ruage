@@ -120,6 +120,14 @@ fixture cannot separate them:
   lane **after** the order is given, which is how D98a's fixtures already force an encounter (`collision::a_walker_never_ends_a_tick_inside_a_friend`
   places the friend once the walker is under way).
 
+**A third rule, found by probe, and the witness's shape.** `Command::Move`'s acceptance already resolves a click onto a tile a
+body holds to a **free neighbouring tile**, so a walk onto a held tile cannot be ordered; the engine sends the man to the tile
+beside it and he arrives. Measured with both cuts in place (`ZZREACHED EntityId(9001) at (249620,209621) to (250000,210000)`).
+So the jam case only arises when a body **moves into the goal after the order** - and a `Command::Spawn` aimed at the goal tile
+is displaced by the placement rules, which is why two attempts at the fixture arrived instead of jamming. The witness must
+therefore make a **body walk in** (`collision::a_walker_never_ends_a_tick_inside_a_friend` does exactly this, placing the stander
+once the walker is under way), and the three cuts go in one commit: `beside`, `finish_blocked_orders`, the D204 re-task.
+
 **The four fixtures the cut reddens, and what each has to become** (all measured with the cut in place): `a_mate_who_is_stopped_becomes_solid`
 (overlap), `the_loser_stands_for_the_drawn_pause` (head_on), `a_man_who_cannot_get_his_square_takes_the_next_tree` (the D204 rule,
 which is also ours and goes in the same slice), `gather_standoff::two_woodcutters_on_one_tree_both_touch_it_and_stand_a_body_apart`,
