@@ -127,6 +127,10 @@ So the jam case only arises when a body **moves into the goal after the order** 
 is displaced by the placement rules, which is why two attempts at the fixture arrived instead of jamming. The witness must
 therefore make a **body walk in** (`collision::a_walker_never_ends_a_tick_inside_a_friend` does exactly this, placing the stander
 once the walker is under way), and the three cuts go in one commit: `beside`, `finish_blocked_orders`, the D204 re-task.
+**A draft of the fixture is `docs/p5-witness-draft.rs`** (not compiled): two orders to one tile, the nearer man ordered a tick
+later. It does **not** jam - the engine's own acceptance resolves both - and the `Idle` at tick ~144 is still unattributed, so
+the next session's first move is to instrument `work.finished` (`step.rs`, the `Task::Move` arm) and `end_walk` (`motion.rs`)
+with the tick and read which arm fired.
 
 **The four fixtures the cut reddens, and what each has to become** (all measured with the cut in place): `a_mate_who_is_stopped_becomes_solid`
 (overlap), `the_loser_stands_for_the_drawn_pause` (head_on), `a_man_who_cannot_get_his_square_takes_the_next_tree` (the D204 rule,
