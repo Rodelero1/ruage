@@ -101,6 +101,32 @@ Reading the remainder of the book against the evidence, before cutting any of it
 does for the engine today - the off-grid goal point each order carries, and the ability of a jam to clear by men abandoning
 orders. Cutting the taken list would not remove either.
 
+
+## P5 - measured once more, and the blocker is not the one we thought (2026-11-19)
+
+The owner chose the original's answer: *"no engine help: the order stays live and the man stands; only sliding and the pause
+rule act."* Cutting `finish_blocked_orders` and measuring it turned up a **second** rule of ours that ends a walk, and the
+fixture cannot separate them:
+
+- a walk whose route is **exhausted** while still short of its goal is ended by the task layer (`Idle`) - the route-done arm,
+  not `finish_blocked_orders`. Two scenes were built to isolate the forty-tick rule and both ended `Idle` **with the cut in
+  place**: (a) a friend standing on the goal tile, (b) a friend standing in the only one-tile gap between two forest blocks with
+  the goal beyond it - in (b) the search answers *the closest reachable tile* (`conformance::obstacles::a_walled_in_goal_is_answered_with_the_closest_tile`),
+  so the route is short, it is consumed, and the order completes legitimately.
+- so P5 is **two cuts in one slice**: the forty-tick order-finish *and* the route-done arm must both be replaced by the original's
+  behaviour (a walk that cannot arrive stands, with its route intact, until the player re-tasks), and the witness has to be a
+  scene where the goal is reachable *by the search* but **not by the body** - a lane exactly one body wide with the goal on the
+  far side is not enough (the search refuses it); the scene needs a blocked-later-by-a-body case, i.e. the friend walks into the
+  lane **after** the order is given, which is how D98a's fixtures already force an encounter (`collision::a_walker_never_ends_a_tick_inside_a_friend`
+  places the friend once the walker is under way).
+
+**The four fixtures the cut reddens, and what each has to become** (all measured with the cut in place): `a_mate_who_is_stopped_becomes_solid`
+(overlap), `the_loser_stands_for_the_drawn_pause` (head_on), `a_man_who_cannot_get_his_square_takes_the_next_tree` (the D204 rule,
+which is also ours and goes in the same slice), `gather_standoff::two_woodcutters_on_one_tree_both_touch_it_and_stand_a_body_apart`,
+and `collision::a_walker_never_ends_a_tick_inside_a_friend` (whose monotone-separation claim held only *because* some walker gave
+up: with the cut the pair presses **781 raw** deeper, against an **800 raw** step - one step is the whole allowance, and the claim
+becomes "no deeper than the step that was already being taken").
+
 ## The order the next session should follow
 
 0. ~~**P8a** - the re-lay (`maybe_respread`, `respread_at`, the `respreads` bucket): **DONE**, D287, `docs/reviews/2026-11-19-p8a-the-relay-goes.md`.
@@ -110,7 +136,8 @@ orders. Cutting the taken list would not remove either.
 1. **P8** - cut the seat book (ring places, `reserve_places`, `respread`, `settle_workers`, `standoff_point`), let collisions and
    pauses spread the crowd, re-point `overlap`, `gather_ring`, `gather_spread`, `gather_standoff` and the four jam fixtures above.
    This is the step everything else waits on, and it is the owner's own instruction ("cut the book entirely").
-2. **P5** - the order-finish goes, its witness restored from this note's description.
+2. **P5** - the order-finish **and** the route-done arm go, plus the D204 re-task; the witness needs a body that enters the
+   lane *after* the order (see the P5 note above), and the five fixtures listed there are re-pointed in the same commit.
 3. **P4** - the re-plan throttle goes with the goal fallback it sat beside - **but see P8b**: the off-grid goal point
    survives P8, so this needs its own design (make the goal a *tile*, as the search's answer already is, before the fallback can go).
 4. **P3** - touching collides, in one slice with the plan/step agreement (`leg_is_clear` as strict as the step), then re-point
