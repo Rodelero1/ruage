@@ -83,6 +83,21 @@ the original is the *fallback*, so a land unit rarely meets it. That is why "the
 node covers `<< level` tiles" was the right diagnosis in `docs/parity-plan.md` - but the mechanism is a **second search**, not a
 different h.
 
+## What is still unknown, and is not being guessed
+
+Two details of the descent are **not** established from the code read so far, and will not be invented:
+
+1. **The cell entry is two bytes**: the stamper `FUN_007f1100` writes bit `0x20` of the **first** byte, while the descent test in
+   `FUN_007ee980` reads bit `0x20` of the **second** byte (`+1 + cell*2`). Two different flags. The first is per-search scratch (stamped
+   on, cleared off); the second persists and its producer has not been found yet.
+2. Therefore **which level the descent really lands on** is unknown. Read literally, the loop stops at the first level whose second-byte
+   0x20 is set, coming down from 3 - which would search *coarsely* in cluttered ground and *at tile level* in open ground, and that is
+   backwards from every hierarchy I can justify. Until the second byte's producer is read, 11b stays unbuilt.
+
+`FUN_007ede40` stamps a rectangle at **level 3 only** (`>> 3`), then `FUN_007f1100` recurses down the pyramid while the cell it is at is
+unmarked, and clips every stamp to the search's own window (`in_ECX[0x42..0x45] >> level`) - so the obstacle grid is per-search and
+windowed, which is the AoC note's "scratch, cleared and refilled per search" in this binary's own words.
+
 ## The step, and its witness
 
 The witness already exists and is red: `crates/conformance/tests/budget.rs` row 28 (`#[ignore]`d) - **"a 58-tile walk answers from the

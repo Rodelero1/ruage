@@ -15,9 +15,11 @@ the foot of this file.
 
 ## The next slice, in order
 
-1. **P11 - levelled hierarchy** (`crates/sim/src/...` search): P1 cannot land without it. At `h = 25 x tiles` a flat search truncates a
-   legitimate detour: measured, a villager one tile from its sheep was answered the best settled node **fifteen tiles east** and walked
-   into a wall. A coarse node covering `<< level` tiles is the only way the binary affords that budget.
+1. **P11 - the levelled hierarchy**, crosschecked and shaped (`docs/pathfinding-levels-evidence.md`): four levels 3..0, cell =
+   `2^level` tiles, a coarse A* with Euclidean h over the cells, refinement to cell-centre waypoints, and a flat tile A* kept as the
+   fallback. Order: **11a the four level maps** (unambiguous, next), then 11c the coarse A* and refinement, then 11b the descent - which
+   is **blocked on one unknown**: the descent reads bit 0x20 of a cell's *second* byte while the per-search stamper writes the *first*,
+   and the second byte's producer has not been found. Not guessed.
 2. **P1 - the search budget**, against `FUN_007f9d80` / `FUN_008007f0`, once P11 lands.
 3. **P4 - the re-plan throttle** and the off-grid goal fallback it leans on; then **P3** (the plan agreeing with the step about
    touching - a certified route currently asks for a landing that touches two blocked tiles and the body waits in `WaitGround`).
