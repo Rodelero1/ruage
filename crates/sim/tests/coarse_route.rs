@@ -209,3 +209,47 @@ fn a_walled_off_goal_has_no_coarse_route() {
         "a goal whose cell is walled off has no coarse route"
     );
 }
+
+/// **A long walk the straight line cannot take is answered by the hierarchy** (D301's second tier): the route comes back as a chain of
+/// level-3 cell centres, not as a per-tile polyline. The control in the same fixture is the open walk, which stays a single waypoint
+/// because the line reaches it.
+#[test]
+fn a_blocked_walk_is_answered_by_the_hierarchy() {
+    let mut ground = open();
+    // A wall from the top of the map down through the walk's own band, with a gap at the bottom: the line cannot pass, so a search must.
+    for y in 0..28u16 {
+        ground.block(32, y);
+    }
+    let scale = 20_000i64;
+    let at = |x: i64, y: i64| {
+        (
+            ruage_fixed::Fixed::from_raw(x * scale + scale / 2),
+            ruage_fixed::Fixed::from_raw(y * scale + scale / 2),
+        )
+    };
+
+    let blocked = ground
+        .route(scale, at(4, 4), at(60, 4))
+        .expect("a walk round the wall");
+    assert!(
+        blocked.len() > 1,
+        "a blocked walk must come back as a chain, not {} waypoint(s)",
+        blocked.len()
+    );
+    // Every point but the last is a level-3 cell centre: `n * 8 + 4` tiles.
+    for point in &blocked[..blocked.len() - 1] {
+        let on_lattice = |raw: i64| (raw - 4 * scale) % (8 * scale) == 0;
+        assert!(
+            on_lattice(point.0.raw()) && on_lattice(point.1.raw()),
+            "waypoint ({}, {}) is not a level-3 cell centre",
+            point.0.raw(),
+            point.1.raw()
+        );
+    }
+
+    // The control: the same walk with no wall is one waypoint, because the straight line reaches it.
+    let clear = open()
+        .route(scale, at(4, 4), at(60, 4))
+        .expect("an open walk");
+    assert_eq!(clear.len(), 1, "an open walk is still one waypoint");
+}

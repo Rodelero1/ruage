@@ -8420,3 +8420,22 @@ cached route **4.8 µs**, descent **11 ns**. Review: `docs/reviews/2026-11-19-d3
 
 **Commits us to.** A cache is invalidated in the mutator, never at the call site; and a performance claim names the case it measured,
 because this one was measured on the case where the fast path does not run.
+
+## D302 - A route is a line, then the hierarchy, then the tile search (P11 done)
+
+**Ruling.** `Ground::route_with` answers in three tiers: the **straight line** (477 ns, one waypoint), then the **levelled search** (the
+binary's land-unit default, D299 + D301's cache), then the **flat tile search**. The hierarchy runs only when `avoid` is empty and
+`reach == 0` - a coarse cell knows where objects stand and nothing about bodies, so a body-aware route stays the flat search's job - and
+the tier certifies its **first and last legs** with the same `leg_is_clear` the tier above uses, falling back entirely if either fails.
+
+**Measured.** The acceptance suite drops from **33.74 s to 22.96 s - 32%** - with the same 31 tests green. The witness was written with the
+tier **disabled** and failed on the claim it exists for (`waypoint (630000, 570000) is not a level-3 cell centre`), then passed: a blocked
+walk is a chain of `n*8+4` centres and the open control is still one waypoint. Full suite **918 passed / 6 failed / 21 ignored**, red set
+byte-identical. Review: `docs/reviews/2026-11-20-d302-the-three-tier-route.md`.
+
+**Named limits.** No measurement yet of a hundred units planning in one tick, nor of a 480×480 map (≈1.2 ms per ground change, unmeasured).
+And the red-set diff cannot see that blocked routes are now **coarser** - no fixture asserted a per-tile polyline, which is the suite's
+coverage being thin on this subject, said out loud rather than implied.
+
+**Commits us to.** A faster search may change the *shape* of a route only where the game's own search would; and any tier that cannot see
+bodies never answers a route that was asked to avoid them.

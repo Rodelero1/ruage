@@ -525,6 +525,35 @@ impl Ground {
         {
             return Some(vec![to]);
         }
+        // **Tier 2: the levelled search** (D301, D299). The binary's land-unit default is the coarse search over 8-tile cells; it is
+        // tried here on the walks the straight line could not take, and only when nothing about bodies is being avoided - a coarse cell
+        // knows where objects stand, not where the bodies are, so a route that must keep clear of a friend is the flat search's job.
+        //
+        // The chain's legality is by construction: every cell in it is open, and two adjacent open cells share a boundary whose two
+        // centres lie inside them. What is *not* by construction is the first and last leg - a body may sit in a corner of its cell with
+        // an object between it and the cell's centre - so both are certified here and the whole tier is abandoned if either fails.
+        if avoid.is_empty()
+            && reach == 0
+            && let Some(coarse) = self.coarse_route(start, goal)
+        {
+            let centres = self.pyramid().refine(&coarse, scale);
+            if centres.len() > 1 {
+                let mut points: Vec<(Fixed, Fixed)> = centres.iter().skip(1).copied().collect();
+                points.push(to);
+                let mut previous = (from.0.raw(), from.1.raw());
+                let mut clear = true;
+                for point in &points {
+                    if !self.leg_is_clear(scale, previous, (point.0.raw(), point.1.raw()), 0, &[]) {
+                        clear = false;
+                        break;
+                    }
+                    previous = (point.0.raw(), point.1.raw());
+                }
+                if clear {
+                    return Some(points);
+                }
+            }
+        }
         let steps = self.search(start, goal, scale, avoid)?;
         let end = steps.last().copied().unwrap_or(start);
         let pulled = self.pull(
