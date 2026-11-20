@@ -218,6 +218,31 @@ and its first task was to decide, with the game in hand, how deep two friends ma
 the result back into the unit's position; what stops a unit is the pause and the re-path. So the fixture's `>= reach` is replaced by
 "friends may press", and the quarter-footprint floor proposed before the reading is withdrawn.
 
+
+### P5 attempted with D289 + D290 in hand: three of four reds are re-points, the fourth is a scene problem
+
+Cutting `beside` and `finish_blocked_orders` with the crowd now jamming (D289) and no press floor anywhere (D290) reddens four
+fixtures. **Three are re-points, measured and applied in the attempt:**
+
+- `group_overlap::a_mate_who_is_stopped_becomes_solid` -> *pressed into, not walked past*: the walker comes **4576 raw** from the
+  stopped man inside an **8000 raw** reach, and the claim that survives is "he never ends up on the far side" - the binary has no
+  press floor to hold him further out.
+- `collision::a_crowd_sent_to_one_place_*` -> *presses together*: with the order-finish gone the closest pair presses to **0 raw**,
+  and the claim becomes "the crowd converges", not "it never merges".
+- `no_pushing::a_man_who_cannot_get_his_square_takes_the_next_tree` -> *a man who can press in keeps the node he was given*: with no
+  press floor, "no square for him" is not a reason to move him; the D204 re-target is for a man who cannot reach the node at all.
+
+**The fourth is the scene, not the rule.** `head_on::the_loser_stands_for_the_drawn_pause` measures the loser's *first stand* between
+first contact and his next move. Sent past each other, the pair never touches - our re-plan goes round the body
+(`replan_around_bodies`), measured **0 ticks**. Sent to the **same** tile (D289's own rule), whoever arrives first is **idle at his
+goal** and the stand measured is 93.8 s of idling, not a pause. The scene that can measure it is a pair whose bodies **exactly fill**
+the gap - knights (radius 0.25, so two of them are 1.0 of a 1-tile corridor) - and that fixture is the next session's first job.
+
+**A real defect found on the way, and fixed in the attempt:** a mover re-arms his friend's pause on **every** tick he is refused,
+because the pause is written after the pass (`pauses` vec) and `pause_remaining` is still zero while the pass runs. The guard wants
+both checks (`other.pause_remaining == 0 && !pauses.contains(&other.id)`); without it a head-on's loser never resumes. It was
+reverted with the rest of the slice, so it is **not in the tree** - it has to go in with P5.
+
 ## The order the next session should follow
 
 0. ~~**P8a** - the re-lay (`maybe_respread`, `respread_at`, the `respreads` bucket): **DONE**, D287, `docs/reviews/2026-11-19-p8a-the-relay-goes.md`.
