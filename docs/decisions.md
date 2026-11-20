@@ -8439,3 +8439,22 @@ coverage being thin on this subject, said out loud rather than implied.
 
 **Commits us to.** A faster search may change the *shape* of a route only where the game's own search would; and any tier that cannot see
 bodies never answers a route that was asked to avoid them.
+
+## D303 - The radius reaches the line test and the step, not the searches
+
+**Ruling (crosscheck, step 1 of #7).** Before building a radius into the planner, the record was checked and **corrected**: `plan_path_for`
+passes `reach = body_radius(entity.unit)` into `route_with`, the **line tier** hands it to `leg_is_clear`, and the **step** applies it in
+`clearance_at`. So a straight-line route *is* radius-aware. What is blind is the two **searches** - the flat tile search asks
+`blocked(x, y)` and the levelled search asks the pyramid, neither of which takes the reach.
+
+**Measured, differential.** `radius_route::the_gap_is_planned_for_a_villager_and_not_for_a_trebuchet` (a wall with a one-tile gap and a
+stub that forces a search): the villager reaches the goal through the gap, the packed trebuchet is also planned through it -
+`[(210000, 190000), (310000, 190000), (310000, 210000), (530000, 210000)]`, ending on the goal. Parked `#[ignore]`d with that
+measurement, so the suite stays at **918 / 6 / 21 + 1 parked** and the gap stays visible.
+
+**The fix, and its price, known from D301/D302's own measurements**: one **radius-grown grid** per radius class (0.20 / 0.25 / 0.40 / 0.50
+from the dat), each ~21 µs at 64×65 **once per ground change**, feeding both the flat search's passability test and the pyramid's cells; the
+pyramid cache is keyed by radius as well as by generation.
+
+**Commits us to.** A register entry is a claim like any other and gets checked before it is built on - this one was half wrong, and the
+correction narrowed the work rather than widening it.
