@@ -8379,3 +8379,21 @@ corrected there. Review: `docs/reviews/2026-11-19-p11c-the-coarse-astar.md`.
 
 **Commits us to.** The levelled search is the default only once the switch (11d) is built and measured; until then it is a machine with
 its own witnesses, and the flat search still answers `Ground::route`.
+
+## D300 - The hierarchy is correct and 60x too slow; the switch waits for a cached pyramid
+
+**Ruling.** `Levels::coarse_route` is **not** wired into `Ground::route`. Measured on the project-sized map (64×65, 200 runs each):
+**build 543 µs**, descent **129 ns**, coarse A\* **139 µs** for a 56-tile diagonal, against a **flat tile search of 11.4 µs** on the same
+walk. The search is correct (D296-D299, and the conformance row parked since D279 is green) and it is **60× too slow**, almost entirely
+because the pyramid is built per call where the binary holds it and only re-stamps it.
+
+**11d is therefore three steps, in this order**: (1) a **cached pyramid** on `Ground`, invalidated by the dirty flag `block`/`unblock`
+already imply - no scan; (2) the coarse search measured again against 11.4 µs, with the O(n) frontier insert and the four lookups per
+`step_cost` as the named suspects (a heap would fix the insert and break D299's ordering, so the fix is bounded insertion or buckets);
+(3) only then the switch, gated on the full suite and the acceptance run.
+
+**Measured, not asserted.** Review: `docs/reviews/2026-11-19-p11d-the-pyramid-costs.md`. This is the third hand-counted map-height error
+of the session, caught by the loader again; the fixture now derives its height from its rows.
+
+**Commits us to.** A rule that is correct but unaffordable does not ship; the number decides, and the number is written down with what was
+measured and how.
