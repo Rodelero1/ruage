@@ -8301,3 +8301,20 @@ Narrowed to gather validation: **900 passed / 6 failed / 21 ignored**.
 
 **Commits us to.** Every acceptance rule that refuses an order needs a scene where the game accepts it - a `NoPath` on a
 zero-length route is never right, and neither is a general rule that changes walking to fix gathering.
+
+## D296 - The level maps are the binary's stamping rule, not a choice (P11a)
+
+**Ruling.** `Levels::of(&Ground)` builds the four maps the levelled pathfinder searches over: level `L`'s cell is `2^L` tiles per side,
+indexed `tile >> L`, and **a cell is blocked when any tile under it is blocked** - which is what `FUN_007ede40` stamping an obstacle
+rectangle at level 3 and `FUN_007f1100` recursing *down* the pyramid actually does. Anything off the map answers blocked.
+
+**Measured.** Test-first, three failures deep: unresolved import, then a fixture that was not a game (no town centres), then green -
+**4 passed / 0.00 s**. The suite is **904 passed / 6 failed / 21 ignored** with the red set byte-identical to before, so the maps change
+no existing rule. Review: `docs/reviews/2026-11-19-p11a-the-four-levels.md`, evidence: `docs/pathfinding-levels-evidence.md`.
+
+**Not decided here.** The level **descent** (11b) stays unbuilt: the descent reads bit `0x20` of a cell's *second* byte while the
+stamper writes the *first*, and the second byte's producer is unread. Guessing it would be the kind of deliberate difference the owner
+forbids.
+
+**Commits us to.** A coarse node is never a place a route may run through when a wall touches it; the level maps are rebuilt from the
+ground, never cached across a change to it.

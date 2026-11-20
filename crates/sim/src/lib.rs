@@ -24,11 +24,13 @@ use ruage_data::{
 };
 
 mod ground;
+mod levels;
 mod metrics;
 mod roles;
 pub mod tiles;
 mod world;
 pub use ground::Ground;
+pub use levels::Levels;
 pub use metrics::Metrics;
 use ruage_fixed::Fixed;
 
