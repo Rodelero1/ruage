@@ -144,3 +144,47 @@ owner's rule forbids - so 11c waits for that one read, and everything up to it (
 
 **The next read, in order:** `FUN_007efec0` (the largest of the six), then `FUN_007f0650`; in each, the question is *what is passed as
 `FUN_007ef170`'s 4th argument (`g`) and 6th (`parent`)*, because whatever that is, it is the coarse A\*'s cost.
+
+## FOUND: the coarse A\*'s node opener and its cost table (`FUN_007ed280`)
+
+Read 2026-11-19, last of the six candidates. `FUN_007ed280(level, x, y, direction, extra)` opens one neighbour of a coarse node:
+
+```c
+// the search window first - a cell outside in_ECX[0x42..0x45] is refused outright
+if (param_1 < in_ECX[0x42] || in_ECX[0x44] < param_1 || param_2 < in_ECX[0x43] || in_ECX[0x45] < param_2) return;
+iVar2 = *(int *)(*(int *)*in_ECX + param_1 * 4);          // the level's grid
+if ((*(byte *)(iVar2 + param_2 * 2) & 0x10) != 0) return;  // closed (0x10) - already done
+
+// ... iVar6 = the STEP COST, by direction param_4 (1, 2, 4, 8 = the four directions) ...
+
+if (*(char *)(param_2 + *(int *)(in_ECX[0x4d] + param_1 * 4)) != '\0') iVar6 = 2000;  // a body stands here
+uVar5 = FUN_007ef170(param_1, param_2, 0,                    // level pinned to 0 here: a tile node
+                    (float)(iVar6 + (int)*(float *)(param_3 + 0x1c)),   // g = step + parent's g
+                    (float)iVar4,                            // h = distance to the goal ALONG ONE AXIS
+                    param_3, 0, 0, 0);                       // parent = the node it came from
+FUN_007ed500(uVar5, 0);                                      // sorted insert into the frontier list
+*pcVar1 = *pcVar1 + '\x10';                                 // close the cell
+```
+
+**The step cost table**, exactly as the code branches:
+
+| situation | cost |
+| --- | --- |
+| on the map border or the window's edge | **10** |
+| an open cell whose four orthogonal neighbours are all clear | **10**, plus `(coord - window_lo) + 10` (directions 1/2) or `(window_hi - coord) + 10` (4/8) - **farther from the edge you are leaving costs more** |
+| an open cell with a blocked orthogonal neighbour | **300** |
+| a cell that is blocked but `FUN_00773bf0` says a body may cross | **100**, or **300** if `FUN_00773c80` says otherwise |
+| a cell where a body may not cross | **600** (+10 if `param_5`) |
+| **a body standing on the cell** | **2000** |
+| the neighbour is the window's far edge in the direction of travel | `-100` (a sentinel: it skips the cost, `LAB_007ed468`) |
+
+**h is one-dimensional**: `iVar4 = (window_hi - coord)` along whichever axis the direction moves on - not Euclidean. Euclidean h is used
+only for the *start* node in `FUN_007ee760`. And the frontier is `FUN_007ed500`'s **insertion-sorted linked list** on `f`, with
+`f = g + h` stored as a float at `0x18`.
+
+So the levelled search is a **4-directional A\* over coarse cells with a heavy non-uniform cost table** (a cell body: 2000; hugging an
+obstacle: 300; open ground: 10 plus a distance-from-the-edge term), a **1-D heuristic**, and a sorted linked-list frontier. It is not an
+8-directional grid A\* and it is not admissible in the textbook sense - it is tuned, and the tuning is the game's behaviour.
+
+**11c is therefore buildable exactly**, and the order is: the cost table (a fixture per row, since each row is a `300`-scale difference),
+then the coarse A\* with its window and its 4 directions, then the refinement to cell centres.
