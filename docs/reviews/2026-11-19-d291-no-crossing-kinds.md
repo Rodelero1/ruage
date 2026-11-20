@@ -28,9 +28,21 @@ at all, so it is silent either way.
 
 ## Stability
 
-**Test-first, in the right direction.** The fixture was re-pointed before the cut and watched failing:
-`the engine sent the forager to a farm by itself: Some(Gather { node: EntityId(130), ... })`. It passes after the cut, and its name
-now states the rule (`a_forager_whose_bush_is_finished_stands_rather_than_walking_to_a_farm`).
+**Test-first, in the right direction, and then made honest twice.** The fixture was re-pointed before the cut and watched failing:
+`the engine sent the forager to a farm by itself: Some(Gather { node: EntityId(130), ... })`. It passes after the cut.
+
+Then two weaknesses were found in the fixture itself, both fixed:
+
+1. **It ran on the seeded map**, which carries berry patches of its own, so the spent bush's same-kind search found one of them -
+   measured, the forager moved to the map's bush `EntityId(105)` at **step 2,200**, and the fixture was testing the map rather than the
+   rule. It now builds a map with **exactly one bush** and a farm beside it.
+2. **"Not gathering" is true of a man stuck in `Return`**, which is exactly the failure mode the P5 attempt had shown, so the
+   assertion could have hidden it. It now also requires that he is not in `Return` and that the bush's ten food reached the
+   stockpile - a man who never delivered would redden.
+
+**The pair re-measured after the fixes**: with the pre-D291 engine checked out for `crates/sim/src/world/gather.rs` the fixture is
+**red**; with the cut it is **green**. (The first attempt at that check was invalid - `git stash -- crates/sim/src` had nothing to
+revert because the cut was already committed, so it "passed without the cut" while still running the cut.)
 
 **Consequence the owner should know:** a forager whose patch runs out with no bush in reach now **stands idle** until the player or
 the AI re-tasks him. That is the game's behaviour and it needs the AI layer (D17: the engine knows kinds, not particulars) to be
