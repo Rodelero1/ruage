@@ -8388,8 +8388,10 @@ the same walk - **~52×**. (The first figures published here, 543 µs / 139 µs 
 label; both are in the review, because the mistake was the label, not the measurement.) The search is correct (D296-D299, and the conformance row parked since D279 is green) and it is **60× too slow**, almost entirely
 because the pyramid is built per call where the binary holds it and only re-stamps it.
 
-**11d is therefore three steps, in this order**: (1) a **cached pyramid** on `Ground`, invalidated by the dirty flag `block`/`unblock`
-already imply - no scan; (2) the coarse search measured again against 11.4 µs, with the O(n) frontier insert and the four lookups per
+**11d is therefore three steps, in this order**: (1) a **cached pyramid** - which, read against `Ground`, turns out to need a **modelling
+change first**: `blocked()` folds units and obstacles together and `block`/`unblock` fire on every unit step, so a cache would be stale
+every tick. The original keeps static obstacles in the level maps and **bodies as a live cost row (2000)**, so the step is to split
+`Ground`'s occupancy into **static blockers** and **bodies** (see `docs/pathfinding-levels-evidence.md`); (2) the coarse search measured again against 11.4 µs, with the O(n) frontier insert and the four lookups per
 `step_cost` as the named suspects (a heap would fix the insert and break D299's ordering, so the fix is bounded insertion or buckets);
 (3) only then the switch, gated on the full suite and the acceptance run.
 

@@ -16,6 +16,11 @@ the foot of this file.
 
 ## The next slice, in order
 
+0. **NEXT, and it is a modelling step, not a search tweak** (D300 step 1, read in `docs/pathfinding-levels-evidence.md`): **split
+   `Ground`'s occupancy into static blockers and bodies.** `blocked()` folds units and obstacles together and `block`/`unblock` fire on
+   every unit step, so any cached pyramid would be stale every tick; the original keeps **static obstacles in the level maps** and
+   **bodies as a cost row (2000)** read live at expansion. The split (a) makes the pyramid cacheable, (b) removes the engine's current
+   approximation that a friend's tile is *blocked* where the game prices it at 2000 - a behavioural change needing its own witness first.
 1. **P11 - the levelled hierarchy.** Crosschecked (`docs/pathfinding-levels-evidence.md`): the levelled search **is** the land-unit
    default (`FUN_008000d0` → `FUN_007ee980`), and the machine is a **quadtree** - four level maps, masked neighbour walks
    (`FUN_007ed600`), a quadtree ray toward the goal (`FUN_007ee600`), a node pool (`FUN_007ef170`) - not a heap-based A\*.

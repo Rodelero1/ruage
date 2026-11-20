@@ -188,3 +188,31 @@ obstacle: 300; open ground: 10 plus a distance-from-the-edge term), a **1-D heur
 
 **11c is therefore buildable exactly**, and the order is: the cost table (a fixture per row, since each row is a `300`-scale difference),
 then the coarse A\* with its window and its 4 directions, then the refinement to cell centres.
+
+## The pyramid cannot be cached until bodies and blockers are told apart (2026-11-19, D300 step 1)
+
+D300's first step was "cache the pyramid on `Ground`, invalidated by the dirtied flag". Reading `Ground` to do it showed why that is not a
+cache problem:
+
+- `Ground::blocked(x, y)` is `!walkable(x, y)`, and `walkable` is terrain **and** `occupants == 0`;
+- `block`/`unblock` are called by **every unit** as it steps on and off a tile, so `occupants` changes on almost every tick;
+- therefore **any** pyramid built from `blocked()` is stale after every unit move, and a dirty flag on it fires constantly. The cache would
+  almost always miss.
+
+**The binary does not have this problem because it separates the two kinds of occupancy**: static obstacles are stamped into the level maps
+(`FUN_007ede40` / `FUN_007f1100`, per search and clipped to the window), while **bodies** are a *cost row* read live during expansion
+(`FUN_007ed280` scores a cell with a body on it **2000** and lets the search through it). Two structures, two lifetimes.
+
+Our `Ground` has one: `occupants` counts trees, buildings and units together. So D300's step 1 is really a **modelling** step:
+
+1. split `Ground`'s occupancy into **static blockers** (terrain, trees, building footprints) and **bodies** (units), which is the
+   distinction the original keeps and the one the `step_cost` 2000 row already assumes;
+2. build the pyramid from the static side, invalidated only when a static block changes (a building placed or destroyed, a tree felled);
+3. pass the body set to the coarse search as the **cost row**, not as blocked cells - which is `FUN_007ed280`'s shape exactly.
+
+**That also removes two of the engine's current approximations**: the flat search treats a unit's tile as blocked (so a crowd plans round
+its own friends), where the original prices it at 2000 and lets a route exist. It is a behavioural change as much as a performance one, and
+it needs its own witness before it lands.
+
+**Nothing is implemented for this yet.** It is written down because it is the actual next step, and because a "cached pyramid" bolted onto
+`Ground` as it stands would have been a cache that never hits.
