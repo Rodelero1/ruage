@@ -8263,3 +8263,22 @@ greens, none the other way, one of them a red older than this slice
 deleting them is the next slice's first task, because five fixtures still read `gather_places()` and must stop first.
 
 **Commits us to.** An engine rule may order a man to a node; it may not decide where round that node he stands.
+
+## D294 - The seat book is gone (completes D293's cleanup)
+
+**Ruling.** The book that kept one man per place round a node is **deleted**, not left inert: `standoff_point`, `Standoff`,
+`place_is_live`, `gather_places`, `gather_place_public`, `gather_place_of`, `reserve_gather_place`, `release_gather_place`,
+`reserve_places`, the `gather_place` field, the `GATHER_WALK_SLACK_MILLI` constant it was scored against, and the release call in
+`world/sites.rs`. Nothing read it after D293; the last readers were fixtures, which came off it in the commit before this one.
+
+**What a gatherer aims at now.** The node's own tile, and beside it the last waypoint of the order's route. Two aims that used to
+prefer "his place" (`match ... place.unwrap_or(point)`) are now the plain waypoint and the plain target - a change of **no** behaviour,
+because `place` was already `None` everywhere after D293.
+
+**Measured.** The suite is **895 passed / 11 failed / 21 ignored** before and after the deletion, with the red set **byte-identical**
+(`diff` of the sorted names reports no lines), which is what "inert" has to mean: a deletion that moves a test is a deletion that was
+still doing something. Clippy is clean at `-D warnings` across the workspace and all targets. Review:
+`docs/reviews/2026-11-19-d294-the-book-is-gone.md`.
+
+**Commits us to.** No code path may keep a per-man record of *where round a node he stands*; if a future rule needs one it has to
+argue against D290 (the original has no press floor) first.

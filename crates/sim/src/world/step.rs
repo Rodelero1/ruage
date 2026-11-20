@@ -77,7 +77,6 @@ impl World {
         // The split ran before any turn; by the time this one comes, an earlier player's blow may have killed one of
         // its actors - and the original's walk would not find him either, because he was destroyed in his own turn.
         turn.keep_the_standing(self);
-        self.reserve_places(turn.places);
         // **Before the re-tasks** (D204): a man the ring has refused for long enough is sent to another node this same
         // tick, so the count that decides it and the order that answers it are read from the same state.
         self.count_refused_squares(turn.square_refusals);
@@ -911,14 +910,6 @@ impl World {
     /// tile - measured at **15,600 raw units in one tick** where its speed allows 1,000. It now takes the step the body could take:
     /// as far as its speed allows, straight at the standoff, and exactly onto it when the remainder fits in one step. The worker is
     /// at its tree one or two ticks later and never moves faster than it can walk.
-    /// **Keep the places the settle chose this tick** (D186 addendum 5). One place per man, taken when he first walks onto a
-    /// ring, held until his order changes - which is what makes two men unable to fight over the same spot.
-    fn reserve_places(&mut self, places: Vec<(EntityId, EntityId, (Fixed, Fixed))>) {
-        for (worker, node, point) in places {
-            self.reserve_gather_place(worker, node, point);
-        }
-    }
-
     /// **How long a body must be refused before the body in its way is nudged** (D200). Two seconds at 20 Hz: long enough
     /// that a walker who can get round does get round - which is every case the evasion tests already cover, and why they
     /// keep passing - and short enough that a man who cannot is not lost for the match.
@@ -1704,7 +1695,7 @@ impl World {
                     // the man is *on his place*, not merely on the ring's radius. Gating it on the radius alone let a man stop
                     // wherever he crossed 1.156 - measured, ten men packed **0.144** apart at the same angle with their places
                     // 0.408 apart and unclaimed.
-                    let owned_place = self.gather_place_of(entity.id, node);
+                    let owned_place: Option<(Fixed, Fixed)> = None; // D293: no man owns a place any more.
                     let _off_place = owned_place.is_some_and(|place| {
                         let (px, py) = (
                             place.0.raw() - entity.position.0.raw(),
@@ -1876,13 +1867,11 @@ impl World {
                         // sends the man at a wall for ever: measured, a woodcutter pressed against the tree's tile with
                         // **clearance 528** and his own place 0.03 tiles away, re-planning 5,214 times in 400,000 ticks and
                         // never moving. His place is walkable ground beside the node, which is where the order points.
-                        let place = self.gather_place_of(entity.id, node);
                         let next = match self.next_waypoint(entity.id) {
-                            Some(point) if self.tile_of(point) == self.tile_of(target) => {
-                                place.unwrap_or(point)
-                            }
+                            // **The order points at the node** (D293): there is no place beside it to prefer.
+                            Some(point) if self.tile_of(point) == self.tile_of(target) => point,
                             Some(point) => point,
-                            None => place.unwrap_or(target),
+                            None => target,
                         };
                         let (dx, dy) = step_towards(entity.position, next, delta.raw());
                         (Fixed::from_raw(dx), Fixed::from_raw(dy))

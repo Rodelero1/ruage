@@ -17,7 +17,7 @@ use std::path::PathBuf;
 
 use ruage_data::{Economy, Map, Sim as Settings, Units};
 use ruage_fixed::Fixed;
-use ruage_sim::{Command, EntityId, EntityKind, Task, World};
+use ruage_sim::{Command, EntityId, EntityKind, World};
 
 mod common;
 
@@ -32,14 +32,6 @@ fn clearance(world: &World, node: EntityId, position: (Fixed, Fixed)) -> f64 {
                 / scale as f64
         })
         .fold(f64::MAX, f64::min)
-}
-
-/// Distance between two points, in tiles.
-fn gap(world: &World, a: (Fixed, Fixed), b: (Fixed, Fixed)) -> f64 {
-    let scale = world.scale() as f64;
-    let dx = a.0.raw() as f64 / scale - b.0.raw() as f64 / scale;
-    let dy = a.1.raw() as f64 / scale - b.1.raw() as f64 / scale;
-    (dx * dx + dy * dy).sqrt()
 }
 
 fn repo(rel: &str) -> PathBuf {
