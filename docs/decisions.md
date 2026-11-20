@@ -8338,3 +8338,22 @@ Review: `docs/reviews/2026-11-19-p11b-the-descent.md`.
 
 **Commits us to.** The descent is a decision about *granularity*, never about passability: a level's map never says a route is legal where
 the tiles are not.
+
+## D298 - A coarse step costs 10, 300 or 2000 (P11c's table)
+
+**Ruling.** `Levels::step_cost` answers the original's `FUN_007ed280` table where our content can express it: a **blocked** cell is not
+enterable (`None`), a cell with a **body** on it costs **2000**, an open cell touching a blocked orthogonal neighbour costs **300**, and
+an open cell clear on all four sides costs **10**. The distance-from-the-edge term the original adds (`(coord - window_lo) + 10` in the
+direction of travel) belongs to the search that knows the window, not to the table.
+
+**Named gap, not a silent one.** The original's **100** ("blocked but a body may cross") and **600** rows need "crossable but slow"
+terrain; our tiles are walkable or not. Treating every blocked tile as unenterable makes our coarse routes *more conservative* than the
+game's on rough ground - the safe direction to be wrong in.
+
+**Measured.** Test-first (`E0599` then three green: **3 passed / 0.00 s**), and the fixture's first version was my error twice over in the
+same way as D297's: I asked the level-3 cell of `(16, 16)` about a wall at `(16, 15)`, which is a different cell, and read a correct 300
+as a bug. Suite **910 passed / 6 failed / 21 ignored** from 907 / 6 / 21, red set byte-identical; clippy clean at `-D warnings` after two
+impossible `try_from`s became `from`. Review: `docs/reviews/2026-11-19-p11c-the-cost-table.md`.
+
+**Commits us to.** A cost is a property of the cell being entered, never of the pair; and no row of the table is invented to fill a gap in
+our content model.

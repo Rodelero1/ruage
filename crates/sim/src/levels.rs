@@ -121,6 +121,45 @@ impl Levels {
             .unwrap_or(true)
     }
 
+    /// **What it costs to step into a cell** - `FUN_007ed280`'s table, with the two rows our content cannot express named rather than
+    /// invented:
+    ///
+    /// | cell | cost |
+    /// | --- | --- |
+    /// | blocked | `None` - the search never enters it |
+    /// | a body standing on it | **2000** |
+    /// | open, but with a blocked orthogonal neighbour | **300** |
+    /// | open, all four orthogonal neighbours clear | **10** |
+    ///
+    /// The original's **100** ("blocked but a body may cross") and **600** ("not crossable, and the search still opens it") need terrain
+    /// costs this content model does not carry: our tiles are walkable or not, with no cost between. When terrain costs land, those two
+    /// rows are where they go.
+    ///
+    /// The distance-from-the-edge term (`(coord - window_lo) + 10` in the direction of travel) is **not** part of this answer: it belongs
+    /// to the search, which knows the window, and it is added there.
+    #[must_use]
+    pub fn step_cost(&self, level: u8, cx: u16, cy: u16, body: bool) -> Option<i32> {
+        if self.blocked(level, cx, cy) {
+            return None;
+        }
+        if body {
+            return Some(2000);
+        }
+        // The four orthogonal neighbours in the level's own cells; a neighbour off the map counts as clear, because nothing can be
+        // walked into out there and the original's own border row costs the plain 10.
+        let snug = [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)]
+            .iter()
+            .any(|(dx, dy)| {
+                let nx = i32::from(cx) + dx;
+                let ny = i32::from(cy) + dy;
+                match (u16::try_from(nx), u16::try_from(ny)) {
+                    (Ok(nx), Ok(ny)) => self.blocked(level, nx, ny),
+                    _ => false,
+                }
+            });
+        Some(if snug { 300 } else { 10 })
+    }
+
     /// **The coarsest level whose cell holding `tile` is usable** - the binary's descent (`FUN_007ee980`), whose loop walks from level
     /// 3 down until the cell it is looking at is usable, and which floors at level 0.
     ///
