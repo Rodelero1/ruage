@@ -8550,3 +8550,24 @@ once (D249's reverted sweep).
 
 **Commits us to.** A refinement rule is a route-shape rule: it changes every coarse waypoint, so it lands with fixtures that assert the shape on
 both sides of the boundary, not with a suite that merely stays green.
+
+## D309 - No pre-search line test has been found; our first tier stays unverified
+
+**Read (crosscheck #10).** Three probes into the move code's path request:
+
+- `FUN_008000d0` - the wrapper that chooses the planner - does bounds checks and then goes **straight to the registry** (`FUN_007ef140`):
+  levelled (`FUN_007ee980`) if the object has a handler, flat (`FUN_008007f0`) if not. **No line test before the search.**
+- `FUN_008a4360` - the move function - calls `FUN_007fdf80` and `FUN_007ffae0`; the first, read in full (20 lines), **walks to the tail of a
+  list** and returns it, which is a queue/waypoint accessor, not a line test.
+- `FUN_008a3a20` calls `FUN_007fffe0` inside a `FUN_007fd4b0(0xffffffff)` bracket - the same "begin/end a search" shape - and nothing that
+  looks like a straight-line clearance check.
+
+**Therefore: no evidence of a straight-line short-circuit, and some evidence against one.** Our tier 1 - a clear leg answers with one waypoint in
+477 ns - is therefore **unverified as parity**, and if the binary truly always searches, it is a **deliberate speed difference** that should be
+declared rather than left in the register as "possibly ours alone".
+
+**Why it was not changed tonight.** A line test changes the shape of every open-ground route (one waypoint instead of a searched polyline), and
+every fixture that pins a route's end point would need re-reading. That is a step with its own witness, not a footnote to a read.
+
+**What would settle it**: trace the caller of `FUN_008000d0` (the object that owns the path request) and see whether anything tests the leg
+before calling it - `FUN_007ffae0`'s result is the place to look, since the move code reads it repeatedly around the request.
