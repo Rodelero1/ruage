@@ -82,7 +82,21 @@ becomes "men stand touching the node, a body apart from each other"), plus the f
 overlapping; a man who is working does not move; the acceptance match's time is within the +1.1 s measured for P4+P5.
 
 
-## P8b - what is left of the book is *the game's own design* (measured 2026-11-19, needs the owner's word)
+## P8b - CORRECTED 2026-11-19: the taken list is *ours*, and the game re-targets (see `docs/gather-seating-evidence.md`)
+
+**This section was wrong when it was written**, and the crosscheck the owner asked for overturned it. It said the taken list is the
+game's mechanism, quoting a *neighbouring open-source project's* approach planner. The game's own players say otherwise:
+*"If you send them to different trees within the same tile, they will usually stand still. This will also happen if you send 3
+villagers to the same tree"* (Capoch's build-order guide), and a blocked gatherer is **re-targeted to the nearest usable resource**
+(*"if a villager collides with an object near its target it will retarget to something else"*, Age of Empires forum 289465;
+*"the vills go to nearest available tree if they can't path to an assigned one"*, r/aoe2). So:
+
+- **our `standoff_point` taken list is a deliberate difference** - it fans men out so that nobody ever bumps, which the game has
+  never done - and keeping it is a choice, not parity;
+- **D204 stays**: re-targeting a blocked gatherer is the game's rule, not ours. `finish_blocked_orders` and `beside` still go,
+  because the game's best-reported bug is wedged villagers that never resolve.
+
+**Old text, kept so the error is visible:** what is left of the book is *the game's own design*
 
 Reading the remainder of the book against the evidence, before cutting any of it:
 

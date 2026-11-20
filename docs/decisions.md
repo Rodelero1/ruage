@@ -8125,3 +8125,24 @@ scene this suite can build (fourteen men on one tree included). The cut is a **d
 suite confirms it: 888 passed / 18 failed / 21 ignored, the same 18 reds and no name changed (`docs/reviews/2026-11-19-p8a-the-relay-goes.md`).
 
 **Commits us to.** The witness stays as the line P8's remaining cuts (the place registry, the angular ring) must not cross.
+
+## D288 - The taken list is ours, not the game's; the walk stands, the gather re-targets (owner, 2026-11-19)
+
+**How it arose.** The owner asked for Q1 - whether our gather seat *taken list* is the game's own mechanism - to be
+crosschecked against the game or the internet. It is **not**: the game sends every man to the resource he was given, the bodies are
+solid, men bump and stand (`docs/gather-seating-evidence.md` quotes the player reports and the guide), and a man who cannot get
+there is **re-targeted to the nearest usable resource of the same kind**.
+
+**Ruled, on that evidence.** `World::standoff_point`'s taken list is a **deliberate difference** and stays only as a choice;
+`finish_blocked_orders` and `beside` are cut (the game's best-reported bug is wedged villagers that never resolve); **the D204
+re-task is the game's own rule and stays**. This reverses the previous hour's assumption, which had D204 in the cut set.
+
+**Basis.** `docs/gather-seating-evidence.md`: the corpus (`FUN_004aaea0` for `act_gath.cpp`, `FUN_004b90f0` for `tact_gth.cpp`) has
+no seat picker; Capoch's guide; Age of Empires forum 289465 and 78029; r/aoe2 "Am I imagining this villager pathing bug?";
+`aoe2mc` #4063 (`NEXT = 5`). The decomp has no gather code at all.
+
+**Unknown, and said so.** The original's re-target radius and its tie-break among equally near candidates are not established; the
+five-tile figure is a third-party model's, not the binary's.
+
+**Commits us to.** Before cutting any of the book, ask what the game's players see; and never cite a sibling project's approach
+planner as evidence about the game.
