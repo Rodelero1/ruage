@@ -8532,3 +8532,21 @@ wording: it stops at the coarsest level whose cell **holds an obstacle**, which 
 
 **Still open from this read.** Whether `0x20` is seeded from terrain alone or from terrain *and* buildings (the tree/building case) - the setter
 of `0x20` has not been read; `FUN_007ed950`'s exact box test either, though its arguments are the mover's box (`x, y, h, radius`) and the cell.
+
+## D308 - A coarse edge refines to the tile where the passage is, not to a cell centre
+
+**Ruling (read; port not yet written).** `FUN_007eeda0` expands a coarse cell to the **tile span it covers** (`x << level .. ((x+1) << level)
+- 1`), scans the shared edge **tile by tile** along the step's direction (bit `bVar1` of the tile's four-bit passability mask), and returns the
+**first tile where that direction is interrupted**, with a linear interpolation for the other coordinate. So the game's route is refined to
+waypoints **on tile boundaries at the crossing point**, which is why its short walks are fine where ours are 8-tile staircases.
+
+**What that implies for us.** `Levels::refine` must walk each edge rather than emit cell centres; then the **16-tile gate** D306 added as a
+labelled deviation comes out, and coarse routes become the game's shape at any distance. Witnesses already exist: the two `straight_line`
+fixtures that reddened the first radius attempt, and `route_shape`, which asserts tile-level waypoints in cluttered ground.
+
+**Why this is a read and not a patch tonight.** The edge walk needs its own fixture before it changes any route, and the gate is the thing
+keeping the suite green in the meantime - replacing both in one step without a witness would be the trade this project has already paid for
+once (D249's reverted sweep).
+
+**Commits us to.** A refinement rule is a route-shape rule: it changes every coarse waypoint, so it lands with fixtures that assert the shape on
+both sides of the boundary, not with a suite that merely stays green.

@@ -283,3 +283,40 @@ int FUN_007f0da0(int level, int cx, int cy, float x, float y, float h, float rad
 
 **So the owner's HD result and the binary agree, and our `fits` has the right granularity.** The 8×8 worry was wrong: level 3 is only where the
 stamp *starts*, not where it lands.
+
+## `FUN_007eeda0`: an edge is refined to the tile where the passage is (2026-11-20, crosscheck #5)
+
+Read far enough to state the rule. `FUN_007eeda0(node, &fx, &fy, toX, toY, margin, flag)` walks one edge of the coarse chain:
+
+```c
+iVar4 = *(int *)(node + 0x24);          // the PARENT node
+iVar9 = *(int *)(node + 0xc);           // this node's level
+local_10 = *(int *)(iVar4 + 0xc);       // the parent's level
+bVar1 = *(byte *)(node + 0x28);         // the DIRECTION of the step: 1, 2, 4 or 8
+
+// the tile span this cell covers, at its level
+local_14 = (x << level);  iVar9 = ((x + 1) << level) - 1;
+local_10 = (px << plevel); iVar10 = ((px + 1) << plevel) - 1;
+
+// walk the shared edge ONE TILE AT A TIME, along the direction of travel
+do {
+  if ((tile_mask[local_18][param_1] & bVar1) != 0) {   // the direction bit for this tile
+      local_8 = param_6;  iVar10 = param_6 - local_18; break;   // the first tile where it is clear
+  }
+  param_6++;
+} while (param_6 <= iVar9);
+```
+
+- **the cell is expanded to the tile span it covers** (`x << level` .. `((x+1) << level) - 1`);
+- the edge is scanned **tile by tile** along the direction of travel (bit `bVar1` of the tile's four-bit passability mask, the same mask
+  `zone_spatial_pyramid_check_tile` describes), and the function returns the **first tile where that direction is interrupted**;
+- there is a linear interpolation of the other coordinate along the edge (`(delta * b) / a + c`), i.e. the crossing point, not the cell centre;
+- everything is clipped to the search window (`in_ECX[0x40]`, `[0x41]`).
+
+**So the game's coarse route is refined to waypoints on tile boundaries**, at the crossing point, which is why its short walks are fine and ours
+are 8-tile staircases.
+
+**What to port, in order.** (1) `Levels::refine` gains an edge walk: for each consecutive pair of cells, find the shared boundary and the first
+tile along the direction where the passage is open, and emit **that tile's centre** instead of the cell centre; (2) the 16-tile gate in
+`route_with` then comes out (D306's labelled deviation); (3) the witnesses are the two `straight_line` fixtures that reddened the first radius
+attempt plus `route_shape`, which already asserts tile-level waypoints in cluttered ground.
