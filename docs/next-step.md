@@ -49,8 +49,9 @@ the script could not previously reach now happens. **Suite 930 / 0 / 19.**
 
 ## Ready now - no evidence needed
 
-1. **An evenly mirrored skirmish** (named by D315): player 2's opening is at 70 s where player 1's is at 320 s. It no longer decides a test,
-   but the file calls that section a mirror.
+1. **An evenly mirrored skirmish** (named by D315): player 2's barracks order is at 70 s where player 1's is at 320 s, and the file's own
+   comment explains why (player 1's opening funds the order at 320 s). Making it a mirror is **not** a no-evidence step - it is a designed
+   opening that has to be measured for affordability, and the current asymmetry no longer decides a test.
 2. **Seven dangling ids** (`D115, D122b, D124, D125b, D126, D136, D190`) - referenced by history files and defined nowhere. `decisions.py`
    reports them; D283-D285 were the same rot and were backfilled from their review files in D324.
 3. **Two stale stashes** from earlier sessions (`WIP on main: a7de0b6`, `On main: d207-wip`) - inspect, then drop or apply.
