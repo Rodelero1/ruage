@@ -9408,3 +9408,56 @@ and one), re-paths 40,127, wall 15.93 s median of three - the match changes, the
 zero: disc 4,681 of 251,681 (1.86%), box 3,156 of 153,061 (2.06%), because the pockets it counts are pairs the engine exempts
 (past 17,517), not landings the disc allowed. What the box does move is the body-step census: **251,681 -> 153,061** in 36,000
 ticks (-39%), stricter blocks meaning fewer bodies get to walk.
+
+## D340 - sequence step 5 read, not landed: the substitution has no stand to answer
+
+**Crosscheck.** `FUN_008a4360` (`move_obj.cpp`, HD 5.7) asks the mover's reach test (`[vtbl+0x2c8]`) how the current
+waypoint stands and branches three ways:
+
+- **2** - *"We've reached our current sub waypoint, setting cIncrementWaypointNextUpdate"* (`0x11e7`);
+- **1** - *"We will reach our current waypoint next time, setting cIncrementWaypointNextUpdate"* (`0x11f7`) - advance
+  deferred one update;
+- **neither, and `2 < in_ECX[0x52]`** - *"We won't reach our waypoint either this or the next update, but we have a
+  mConsecutiveSubstituteCount count of %d, faking it"* (`0x1203`) - which jumps to the **same** advance label as the
+  `== 1` arm.
+
+So the counter is the mover's `+0x148` (`0x52 * 4`), the threshold is **the third consecutive failure** (`> 2`), and
+"substituting" is the deferred advance the `== 1` arm already performs. `FUN_007ff650(bit, set)` - read this branch -
+sets or clears a bit in a **path** object's flags word at `+0x30`, walking up the parent chain when the bit asked for
+is 2; it is the path's own "advance the waypoint next update" flag, not a position write. The older twin of the same
+loop (`FUN_007f4330`, `motion.cpp:0x4d6`/`0x4e2`) carries the two reach arms and **no** substitute arm, which is
+HD 5.7's `move_obj` adding it.
+
+**Independent corroboration** (a first-party engineer, different kind of source): Rich Geldreich (Forgotten Empires),
+*On Age DE's pathing/movement*, 2018-02-28 - *"Waypoints along a path can be skipped if a unit can safely move from its
+current position to the next waypoint"*, and *"Age1's waypoint detection code was very janky ... Age1's code would
+sometimes cause units to oscillate around their current waypoint until it figured out it was ok to go to the next
+one."*
+
+**Why it does not land here.** The rule is about a mover that **stands because it cannot reach a waypoint**. Our mover
+almost never does:
+
+- `refusal()` (`world/motion.rs:479-611`) returns `WaitTarget` (the order's own target) or `WaitGround` (terrain).
+  A **body** never refuses the step: the collider joins `blockers`, the higher id is paused, and the mover walks on
+  (D279 rule 4, D281). `StepDecision::WaitBlocked` is therefore constructed **nowhere** in `crates/` - the enum
+  offers an answer no code path gives (`grep -rn WaitBlocked crates/sim/src`: only the `is_a_wait` list).
+- So `stalled` (`motion.rs:150-160`), which is exactly "consecutive updates without reaching the waypoint", counts
+  **ground** refusals only. Measured (`crates/sim/tests/substitute_probe.rs`, both scenes named in its header): beside
+  the seeded base a walker touching another body re-plans **196 times in 200 ticks** and **never stands**; in a clear
+  lane the same catch-up gives **0 re-plans in 260 ticks**. The pathology step 5 was written for is a **re-plan storm
+  while walking**, which the game's predicate ("won't reach it this update or the next") does not describe, so
+  substituting a waypoint cannot reach it.
+- The tree's only substitution is `replan_after_ground`'s off-grid fallback to the aim's tile centre, at
+  `REPLAN_TICKS` (20). Its comment says *"Refused twice in a row, the aim falls back"* while the code needs 20 -
+  the stated rule and the implemented one disagree, and 20 is ours, not the game's.
+
+**Not landed, deliberately.** Moving the off-grid fallback from 20 to the game's 3 was drafted and dropped: no fixture
+in hand produces a walk that stands on an **off-grid** aim for three ticks (a move order to a body ends on contact in
+~50 ticks; a builder beside its site is *adjacent* and working, which is a legitimate zero delta; the sampled stalls in
+those scenes are 1-19 ticks), so the change would have been a constant without a witness. **The wall this leaves is the
+one step 6 removes**: `standing_bodies` (`lib.rs:1991-2030`) skips every body that *has a route*, while the binary's
+test is velocity zero (`FUN_007f9d80:45`, `[vtbl+0x2a0] == 0`) - so a walker standing still with a route on its books is
+invisible to the planner, and that, not the waypoint index, is what makes the re-plan fire.
+
+**Instrumentation kept:** `crates/sim/tests/substitute_probe.rs` (ignored, prints the two scenes' re-plan counts), and
+the reach-arm reading above, so the next session does not re-derive them.

@@ -1,51 +1,70 @@
-# OPEN - the tier and the body box are the game's (D338, D339); next is waypoint substitution
+# OPEN - step 5 is read and refuted (D340); next is step 6, the search's body visibility
 
-**Where this stands (D339, `blunt-port`):** suite **217 result lines, 936 passed, 0 failed, 21 ignored**; conformance
-**21 / 0 / 0**; acceptance `36ceb342bd94acc9`, 134 entities, **both players alive at 48,000**, 40,127 re-paths, **15.93 s** median
-of three. The *order* to 100% conformance is **`docs/conformance-sequence.md`** - read it first; this file is the immediate step
-and the outstanding forks.
+**Where this stands:** suite **217 result lines, 936 passed, 0 failed, 21 ignored**; conformance **21 / 0 / 0**; acceptance
+`36ceb342bd94acc9`, 134 entities, **both players alive at 48,000**, 40,127 re-paths, **15.93 s** median of three. The
+*order* to 100% conformance is **`docs/conformance-sequence.md`**; this file is the immediate step and the outstanding
+forks.
 
-**Landed in this session:** sequence steps 1-4. P15 (the cap's witness, D336), P13 (the key is `g + octile`, D337), P14 (D338 -
-the tier's avoid gate is gone; **the clause that actually binds is D303's descent floor**, 127 of 185 long walks), P16 (D339 - a
-body collides as a box; the match changes and the probe's pocket census does not fall to zero, because those pockets are
-*exempt* pairs).
+**Step 5 (waypoint substitution) is finished as a read, not as code** (D340, `docs/reviews/2026-11-21-d340-the-substitution-has-no-stand.md`).
+The rule is read to the end - `FUN_008a4360`'s three arms, the counter at the mover's `+0x148`, the threshold `> 2`, and
+`FUN_007ff650` decoded as a bit in the *path's* `+0x30` flags word - and it does not land, because **a body never
+refuses our mover's step** (`refusal()` answers `WaitTarget`/`WaitGround` only; `StepDecision::WaitBlocked` is dead
+code), so the game's "cannot reach the waypoint" count only ever sees ground. Measured: beside the base, contact costs
+**196 re-plans in 200 ticks with the walker walking throughout**; in a clear lane the same catch-up costs **0 in 260**.
+The off-grid fallback's threshold (20, ours) was drafted down to the game's 3 and dropped - no fixture produces a
+three-tick stand on an off-grid aim. Probe kept: `crates/sim/tests/substitute_probe.rs` (ignored, prints).
 
-## The next step: 5 - waypoint substitution (P17)
+## The next step: 6 - a body that is not moving is an obstacle, even with a route
 
-**Prior implementation: none.** `grep -r substit crates/` finds a comment and nothing else. What happens today: a mover whose
-waypoint cannot be reached re-plans (`world/motion.rs`, the collision arm around `:571`, `replan_around_bodies`), and the re-plan
-keeps returning the same waypoint, so the man re-plans for ever - a stuck unit with a live order. Pinned by `stall`, `stuck`,
-`replan`, `immediate_replan`, `right_of_way`; none of them asserts a waypoint being **skipped**.
+**Prior implementation: `standing_bodies` (`crates/sim/src/lib.rs:1991-2030`).** A body is skipped by every plan when it
+*has a route and its pause is over*:
 
-**The rule, read** (`FUN_008a4360`, `move_obj.cpp:0x1203`, HD 5.7):
+```rust
+let moving = self.paths.get(&other.id).is_some_and(|route| !route.points.is_empty());
+if moving && other.pause_remaining == 0 { continue; }
+```
 
-- `iVar6 == 1` -> *"We will reach our current waypoint next time, setting cIncrementWaypointNextUpdate"* - the advance is
-  deferred by one update.
-- `else if (2 < in_ECX[0x52])` -> *"We won't reach our waypoint either this or the next update, but we have a
-  mConsecutiveSubstituteCount count of %d, faking it"*, and then the **same** block as the reachable case: `FUN_007ff650(0,1)` /
-  `(1,1)`, i.e. the waypoint is advanced anyway.
-- So the counter is at `+0x148` (`0x52 * 4`), the threshold is **> 2** - the **third consecutive** failure substitutes - and
-  "faking it" is the game's own name for what we are about to implement.
+So a villager working beside a site, or one standing where ground refused him, is **invisible to the search** while a
+route is on his books - the plan certifies legs through him, and the step then walks through him (D279 rule 4 takes the
+step). Pinned by `planning_round_bodies`, `stall`, `body_boxes`, `collision`, `crowd_piles_up`; none of them asserts a
+*standing* body with a route being planned round.
 
-**Still unread:** where the counter is incremented and cleared (`iVar6`'s producer) and what `FUN_007ff650`'s two flags do
-besides advancing. One read each; the witness needs the first.
+**The rule, read** (`FUN_007f9d80:27-56`, HD 5.5.7 `pathfinding.cpp`): for each object in the route's list the search
+includes it as a grown box **unless** its id is in the mover's ignore list **and** it is not moving:
 
-**Witness owed:** a walk whose waypoint is blocked re-plans and then **moves past** it. Today it re-plans for ever; the fixture
-must show the third consecutive failed approach advancing the waypoint instead of re-planning again.
+```c
+if (((local_10 <= iVar4) && (iVar4 = (**(code **)(*piVar3 + 0x2a0))(), iVar4 == 0)) || iVar6 < param_6) { ... insert ... }
+```
+
+`local_10 <= iVar4` is "not found in the ignore list"; `[vtbl+0x2a0]` is the same `isMoving` `FUN_008a4360` logs as
+`isMoving = %d`; the box is the object's own `+0x34`/`+0x38` radii grown by `param_2` (the mover's radius) and inserted
+through `FUN_007f6ff0(&box, 1)`. **A body with a route but zero velocity is an obstruction.** openage's note agrees from
+the other side: the high-level search *"ignores moving objects, e.g. units or wildlife"* - the exemption is *moving*, not
+*ordered*.
+
+**Our equivalent of velocity** is the tick's own movement: `entity.last_moved` is written at the end of `move_bodies` for
+every body that took a step. The test to write is `self.tick.saturating_sub(1) <= entity.last_moved` - moved on the
+previous tick - and `velocity` is **not** it (it is a fixture-only field for idle drift, `lib.rs:2313`).
+
+**Witness owed:** a builder standing at work beside his site (a live `Build` task, a live route, zero motion - the state
+measured at `(15,15)` with `route=[(14.5,15.5)]` for 400 ticks) and a third man ordered past him: today the third man's
+route runs through the builder's box, with the cut it bends round. Assert on the route's points against the builder's
+grown box, and then on the walk (he passes *beside*, not through).
+
+**Cost to watch:** the acceptance match has many working men, so this makes plans stricter everywhere - re-paths,
+entity count, hash and wall all move. One variable, full A/B.
 
 ## Also ready, independent of that
 
-- **A waiting walker is an obstacle** (step 6): `standing_bodies` skips any body with a route; the binary's test is velocity zero
-  (`FUN_007f9d80:45`, `[vtbl+0x2a0] == 0`).
-- **The 300 row** (step 7) and **the refinement's scan direction** (step 8): both reads done, each a small slice. Step 8 is also
-  what would let the 16-tile floor fall (D338's re-test).
+- **A waiting walker is the same rule** (this step covers it): the binary's test is velocity zero, so a walker paused at a
+  crossing is already an obstacle here; a walker *jammed* without a pause is not.
+- **The 300 row** (step 7) and **the refinement's scan direction** (step 8): both reads done, each a small slice. Step 8 is
+  also what would let the 16-tile floor fall (D338's re-test).
 - **The level floor** (D303): the clause that keeps the tier off in a wooded map. Route-wide; needs its own A/B.
-- **The mate rule (step 11) is already the game's**, and the sequence doc is stale on it: `stamp_group` (`world/step.rs:110-144`)
-  gives mates only to **military** units and a villager is never one, with the owner's rule of 2026-11-16 quoted in the comment.
-  The evidence: openage ("villagers ... will not be part of any formation"), the talk ("formations allow for some friendly
-  overlap"), the bug threads (villagers blocking each other), and the collision block's own per-body **ignore list**
-  (`FUN_00840830:43-54` - count at `+0x24c`, ids at `+0x254`). What is left is a *formation model* for military units - a gap of
-  its own, not a villager-crowd problem.
+- **The substitution threshold** (D340): the game's `> 2` against our `REPLAN_TICKS` (20) in `replan_after_ground`, waiting
+  for a fixture that stands on an off-grid aim for three ticks.
+- **The mate rule (step 11) is already the game's**: `stamp_group` (`world/step.rs:110-144`) gives mates only to **military**
+  units; villagers never join one. What is left is a *formation model* for soldiers - a gap of its own.
 
 ## Needs the owner
 
