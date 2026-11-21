@@ -171,7 +171,7 @@ impl World {
             let route = self
                 .find(id)
                 .map(|entity| entity.position)
-                .and_then(|from| self.plan_path(from, other).ok());
+                .and_then(|from| self.plan_path(Some(id), from, other).ok());
             match route {
                 Some(route) => {
                     self.put_route(
@@ -205,7 +205,7 @@ impl World {
             let route = self
                 .find(id)
                 .map(|entity| entity.position)
-                .and_then(|from| self.plan_path(from, post).ok());
+                .and_then(|from| self.plan_path(Some(id), from, post).ok());
             match route {
                 Some(route) => {
                     self.put_route(
@@ -555,7 +555,7 @@ impl World {
                     self.find(node).map(|entity| entity.position),
                 );
                 let route = match ends {
-                    (Some(here), Some(there)) => self.plan_path(here, there).ok(),
+                    (Some(here), Some(there)) => self.plan_path(Some(id), here, there).ok(),
                     _ => None,
                 };
                 if let Some(route) = route {
@@ -833,7 +833,7 @@ impl World {
                     let route = self
                         .find(id)
                         .map(|entity| entity.position)
-                        .and_then(|from| self.plan_path(from, to).ok());
+                        .and_then(|from| self.plan_path(Some(id), from, to).ok());
                     match route {
                         Some(route) => {
                             self.put_route(
@@ -1172,10 +1172,14 @@ impl World {
                 // draw), so the approach is a fallback for the case that used to fail outright - a drop site whose near
                 // side is built over - and not a new route for every trip.
                 let route = match ends {
-                    (Some(from), Some(to)) => self.plan_path(from, to).ok().or_else(|| {
-                        self.approach_tile(self.tile_of(from), drop)
-                            .and_then(|stand| self.plan_path(from, self.tile(stand)).ok())
-                    }),
+                    (Some(from), Some(to)) => {
+                        self.plan_path(Some(id), from, to).ok().or_else(|| {
+                            self.approach_tile(self.tile_of(from), drop)
+                                .and_then(|stand| {
+                                    self.plan_path(Some(id), from, self.tile(stand)).ok()
+                                })
+                        })
+                    }
                     _ => None,
                 };
                 if let Some(route) = route {

@@ -1856,7 +1856,9 @@ impl World {
     /// the closest tile it can reach, so "a route exists" is true for a place inside a sealed room. The answer is the route's
     /// own end - within one tile of the place - which is also what a worker needs in order to work it.
     pub fn can_reach(&self, from: (Fixed, Fixed), to: (Fixed, Fixed)) -> bool {
-        let Ok(route) = self.plan_path(from, to) else {
+        // **No body named**: the runner asks whether *a* villager could get there, so the mover is nobody and every body in the span is
+        // an obstacle. When a body *is* named (an order), the planner is given its id and skips it exactly.
+        let Ok(route) = self.plan_path(None, from, to) else {
             return false;
         };
         // **Two tiles, not one** (D279): a node's own tile is blocked, so the closest tile a route can end on is a
@@ -1948,11 +1950,12 @@ impl World {
     /// it can reach and the route ends there, which is the original's "come as close as you can".
     pub(crate) fn plan_path(
         &self,
+        mover: Option<EntityId>,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let reach = self.reach_at(from);
-        let clear = self.standing_bodies(from, to, reach);
+        let clear = self.standing_bodies(mover, from, to, reach);
         self.plan_path_with(from, to, reach, &clear)
     }
 
@@ -1979,6 +1982,7 @@ impl World {
     /// through everyone and only ever learned about a body when a step was refused.
     fn standing_bodies(
         &self,
+        mover: Option<EntityId>,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
         reach: i64,
@@ -1986,18 +1990,13 @@ impl World {
         if self.ground.is_none() {
             return Vec::new();
         }
-        // The mover stands where he plans from: his own body is skipped, or every plan would start inside its own clearance.
-        let own = self.scale / 4;
+        // **The mover is the only body skipped, and by id** (D331, `docs/parity-plan.md` P7). This used to skip every body within a quarter
+        // tile of the mover in both axes, which hid a friend the mover was standing inside - and two bodies standing in one place is a state
+        // this engine reaches on purpose (D289 sends every man to the tile he was ordered to; D290 leaves no press floor), so the plan
+        // certified legs the step then refused. The original's search includes every stander the mover does not ignore (`FUN_007f9d80`).
         let mut clear = Vec::new();
         for other in &self.entities {
-            if other.kind != EntityKind::Unit || other.hp <= 0 {
-                continue;
-            }
-            let (dx, dy) = (
-                other.position.0.raw() - from.0.raw(),
-                other.position.1.raw() - from.1.raw(),
-            );
-            if dx.abs() <= own && dy.abs() <= own {
+            if other.kind != EntityKind::Unit || other.hp <= 0 || Some(other.id) == mover {
                 continue;
             }
             let moving = self
@@ -2060,12 +2059,13 @@ impl World {
     /// *past*. The original re-plans at that moment and hands the search the tiles its own bodies hold.
     pub(crate) fn plan_path_avoiding(
         &self,
+        mover: Option<EntityId>,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
         avoid: &[ground::Clear],
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let reach = self.reach_at(from);
-        let mut clear = self.standing_bodies(from, to, reach);
+        let mut clear = self.standing_bodies(mover, from, to, reach);
         for one in avoid {
             if !clear.iter().any(|already| already.at == one.at) {
                 clear.push(*one);
@@ -2086,7 +2086,7 @@ impl World {
         let reach = self
             .find(id)
             .map_or(0, |entity| self.body_radius(entity.unit));
-        let clear = self.standing_bodies(from, to, reach);
+        let clear = self.standing_bodies(Some(id), from, to, reach);
         self.plan_path_with(from, to, reach, &clear)
     }
 
@@ -2217,7 +2217,7 @@ impl World {
         // **A walk is always accepted** (D134): the answer is the nearest tile the route reaches, and the caller walks
         // there. Reachability is asked by the orders that name a *thing* - a build site (`check_build_inner`) and a gather
         // node (`start_gather`) - because those are the ones that would pay for work never done.
-        let route = self.plan_path(entity.position, to)?;
+        let route = self.plan_path(Some(entity.id), entity.position, to)?;
         Ok(route.last().copied().unwrap_or(to))
     }
 
@@ -2262,14 +2262,14 @@ impl World {
     /// those have to keep - a tree behind a wall is a refusal, not a walk to the fence (item 9's rule).
     fn walk_goal(
         &self,
-        _unit: EntityId,
+        unit: EntityId,
         from: (Fixed, Fixed),
         to: (Fixed, Fixed),
     ) -> Result<(Fixed, Fixed), SimError> {
         // **One plan, and its end is the place** (D249): the search answers the reachable tile nearest the click, so the
         // order walks where the ground allows instead of a helper picking a tile and the route being planned a second time
         // - that second plan could fail on a tile the first had already accepted.
-        let route = self.plan_path(from, to)?;
+        let route = self.plan_path(Some(unit), from, to)?;
         Ok(route.last().copied().unwrap_or(to))
     }
 
@@ -2428,7 +2428,7 @@ impl World {
                 entry.chasing = false;
             }
             self.stand_down(id);
-            match self.plan_path(position, entry.home) {
+            match self.plan_path(Some(id), position, entry.home) {
                 Ok(route) => {
                     self.put_route(
                         id,
@@ -3634,7 +3634,7 @@ impl World {
             }
             let position = self.tile(tile);
             // Free is not the same as reachable: a free tile inside a wall is no place to stand.
-            self.plan_path(from, position).ok().map(|_| position)
+            self.plan_path(None, from, position).ok().map(|_| position)
         })
     }
 

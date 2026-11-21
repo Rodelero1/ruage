@@ -216,7 +216,7 @@ impl World {
             return;
         };
         let goal = self.tile_centre(to);
-        let Ok(route) = self.plan_path(from, goal) else {
+        let Ok(route) = self.plan_path(Some(id), from, goal) else {
             self.resuming.insert(id, resumable);
             self.aside_retry
                 .insert(id, self.tick.saturating_add(ASIDE_RETRY_TICKS));
@@ -266,7 +266,7 @@ impl World {
                     if !empty && !self.tile_walkable(x, y) {
                         continue;
                     }
-                    if self.plan_path(position, self.tile_centre(at)).is_ok() {
+                    if self.plan_path(None, position, self.tile_centre(at)).is_ok() {
                         return Some(at);
                     }
                 }
@@ -427,7 +427,7 @@ impl World {
             // and the builder stalls one step short (measured: a farm that never started, 600 ticks of jitter at 4.78).
             let position = self.tile_centre(tile);
             // Free is not the same as reachable: a free tile inside a wall is no place to stand.
-            self.plan_path(from, position).ok().map(|_| position)
+            self.plan_path(None, from, position).ok().map(|_| position)
         })
     }
 
@@ -612,7 +612,7 @@ impl World {
         candidates.sort_by_key(|(distance, tile)| (*distance, *tile));
         candidates.into_iter().find_map(|(_, tile)| {
             let position = self.tile(tile);
-            self.plan_path(from, position).ok().map(|_| position)
+            self.plan_path(None, from, position).ok().map(|_| position)
         })
     }
 
@@ -624,7 +624,7 @@ impl World {
             return;
         };
         let mut target = None;
-        if let Ok(route) = self.plan_path(from, to) {
+        if let Ok(route) = self.plan_path(Some(unit), from, to) {
             self.put_route(
                 unit,
                 Route {
@@ -653,7 +653,7 @@ impl World {
                             continue;
                         }
                         let candidate = self.tile_centre((cx, cy));
-                        if let Ok(route) = self.plan_path(from, candidate) {
+                        if let Ok(route) = self.plan_path(Some(unit), from, candidate) {
                             self.put_route(
                                 unit,
                                 Route {

@@ -9167,3 +9167,26 @@ them.
 
 **Measured**: no behaviour - acceptance `c7191f531bd81b1b`, suite **931 / 0 / 19**. What the step bought is that the next session cannot be
 sent to re-cut P5 or re-land P1, which is exactly what the previous register did.
+
+## D331 - P7: the planner sees a body the mover is standing inside
+
+**`docs/parity-plan.md` P7, landed.** `standing_bodies` skipped every body within a quarter tile of the planning origin in both axes, where the
+original's search starts on the mover's own tile and puts **every stander the mover does not ignore** into it (`FUN_007f9d80`). Two bodies in
+one place is a state this engine reaches on purpose - D289 sends every man to the tile he was ordered to, D290 leaves no press floor - so the
+plan certified legs the step then refused.
+
+**Landed**: the skip is now **by id** (`plan_path`, `plan_path_avoiding` and `plan_path_for` carry the mover as `Option<EntityId>`, fourteen
+call sites updated). `None` is for the three predicates that genuinely have no body to name (`can_reach`, `work_position`, `exit_tile` /
+`approach_footprint`), and each says so. The moving-friend exemption is untouched (the binary's `isMoving` gate, D284).
+
+**Witness**: `planning_round_bodies::a_body_the_mover_overlaps_is_still_planned_round`, red first with *"the route past a body the mover is
+standing inside is one straight leg (1 point(s), the friend 0 raw away)"*. The scene reaches the state the way the game does, because
+`Command::Spawn`'s placement **separates** bodies (measured: a spawn asked for `410400` landed at `419600`): both are ordered to one point,
+pressed to **0 raw**, then one walks past the other.
+
+**Measured** (two trees, `--report 600`, same generated `config/gamedata/`): stockpile at 2,400 s **1,362/724/510 -> 1,949/960/130**
+(wood +43%, food +33%), re-paths **7,125 -> 1,918** (-73%), acceptance **12.93 s -> 10.18/10.35 s**, hash `c7191f53` -> `bef8b77b`. Entities
+at 48,000 ticks fall 141 -> 127 **because the match ends 2,348.6 s** (*"the match is over: no further orders are accepted"*), which is a
+match-length artefact rather than an economy signal - the stockpile line above is the one that answers that question.
+
+**Suite 932 / 0 / 19** (one more test, nothing joined), conformance **21 / 0 / 0**, all eleven movement suites green.

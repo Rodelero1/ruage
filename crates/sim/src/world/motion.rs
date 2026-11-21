@@ -358,7 +358,7 @@ impl World {
         let Some(from) = self.position(id) else {
             return;
         };
-        if let Ok(points) = self.plan_path(from, goal) {
+        if let Ok(points) = self.plan_path(Some(id), from, goal) {
             self.put_route(
                 id,
                 crate::Route {
@@ -397,7 +397,7 @@ impl World {
         let Some(from) = self.position(id) else {
             return;
         };
-        if let Ok(points) = self.plan_path_avoiding(from, goal, blockers) {
+        if let Ok(points) = self.plan_path_avoiding(Some(id), from, goal, blockers) {
             self.put_route(
                 id,
                 crate::Route {

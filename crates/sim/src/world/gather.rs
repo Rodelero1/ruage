@@ -541,14 +541,14 @@ impl World {
             Vec::new()
         } else if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
             match self.work_position(from, to) {
-                Some(stand) => self.plan_path(from, stand)?,
-                None => self.plan_path(from, to)?,
+                Some(stand) => self.plan_path(Some(villager), from, stand)?,
+                None => self.plan_path(Some(villager), from, to)?,
             }
         } else {
             // The walk still ends at the neighbouring tile's centre - a route that ends anywhere else is a route the movement
             // rules may never call *arrived*, and a worker that never arrives never works. The last third of a tile is closed
             // by `settle` in the gather arm instead (D169).
-            self.plan_path(from, to)?
+            self.plan_path(Some(villager), from, to)?
         };
         // **A node behind a wall is refused, not walked at** (D241, kept by D279): the search answers an unreachable goal
         // with the nearest tile it settled on, so a route always exists - the question is whether it ends at the node's
