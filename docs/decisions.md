@@ -9318,3 +9318,15 @@ levelled search's border/distance cost term.
 **Measured:** no code change - acceptance `e248486298910e28`, suite 933 / 0 / 20, conformance 21 / 0 / 0, unchanged. The order
 and the crosscheck are the deliverable; the first two steps are a conformance-only witness (P15) and the route-wide key change
 (P13).
+
+## D336 - P15: the 20,000 cap's row is a witness now
+
+**Crosscheck:** `FUN_008007f0:198` has two clauses - the estimate (`iVar20`, 25 x euclid) and the hard cap (`20000 <
+local_46c`). The cap binds only when the estimate is larger, i.e. `euclid > 800`, a map past ~1,130 tiles a side. The old row
+used a 480 x 480 map (estimate 16,850, spent 642 expansions) and could not fail: `EXPANSION_CAP = u32::MAX` left it green
+(D334).
+
+**Landed (conformance only):** the row now builds a 1,200 x 1,200 map (`25 x 1,692 = 42,300`), seals the goal in a 3x3 ring,
+asserts the estimate exceeds the cap as a *precondition*, and asserts `expansions == 20_000` exactly. **Mutation-proved**: with
+`EXPANSION_CAP = u32::MAX` it fails *"the cap is the budget on this map: 42300 of 20,000 (estimate 42300)"*. Four budget rows in
+0.10 s debug, 17 MB of search arrays per call. No engine line changed; acceptance unchanged.

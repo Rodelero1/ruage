@@ -68,13 +68,45 @@ fn a_hopeless_search_is_bounded_by_its_own_estimate() {
     );
 }
 
-/// RULE: the 20,000 cap, which bounds even the worst map - the same rule as the row above, at the cliff edge.
+/// RULE: **the 20,000 cap is what stops a far search, not its estimate** - `20000 < local_46c` at `0x800d57`, the second
+/// clause of the same guard as the row above.
+///
+/// **The old scene could not see this rule** (D336). It walked a 480 x 480 map corner to corner, whose own estimate is
+/// `25 x 674 = 16,850` - already below the cap - and spent **642** expansions; the row asserted `642 <= 20_000` and stayed
+/// green with `EXPANSION_CAP` set to `u32::MAX`. The cap binds only when `25 x euclid > 20,000`, i.e. a diagonal walk past
+/// ~800 tiles: this map is 1,200 a side (`25 x 1,692 = 42,300` measured) and the goal is sealed, so the cap is the only thing that
+/// can stop the search. The assertion is on the **count**, not on a bound recomputed from `estimate`, so a wrong cap fails it.
 #[test]
 fn the_budget_never_exceeds_twenty_thousand() {
-    let field = ground(480, 480, &[]);
-    let (from, to) = ((1u16, 1u16), (478u16, 478u16));
-    let (_route, expansions) = field.search_reporting(from, to, SCALE, 0, &[]);
-    assert!(expansions <= 20_000, "the search spent {expansions}");
+    // A 3x3 ring round the goal: (1198,1198) is walkable, its eight neighbours are not, so the search settles beside it and
+    // must spend everything it is allowed to try.
+    let mut sealed = Vec::new();
+    for dx in -1i64..=1 {
+        for dy in -1i64..=1 {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            sealed.push((
+                u16::try_from(1198 + dx).expect("x fits"),
+                u16::try_from(1198 + dy).expect("y fits"),
+            ));
+        }
+    }
+    let field = ground(1_200, 1_200, &sealed);
+    let (from, to) = ((1u16, 1u16), (1198u16, 1198u16));
+    let estimate = ruage_sim::Ground::estimate(from, to);
+    assert!(
+        estimate > 20_000,
+        "the scene must ask for more than the cap, or it tests nothing: estimate {estimate}"
+    );
+    let (route, expansions) = field.search_reporting(from, to, SCALE, 0, &[]);
+    let route = route.expect("a sealed goal is answered, not refused");
+    let end = *route.last().expect("a route has an end");
+    assert_ne!(end, (to.0, to.1), "the goal is sealed and cannot be reached");
+    assert_eq!(
+        expansions, 20_000,
+        "the cap is the budget on this map: {expansions} of 20,000 (estimate {estimate})"
+    );
 }
 
 /// RULE: **the bound bites** - a search that runs out of budget answers with a point short of the goal, and spends its budget. This is the
