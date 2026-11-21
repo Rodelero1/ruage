@@ -8050,6 +8050,45 @@ that fixture stages.
 **Commits us to.** Planning for the body's distance rather than the tile it stands on, and to a pause that is as long as the
 draw that set it.
 
+## D283 - "Never step deeper" bounds the overlap at the contact and freezes the crowd (reverted)
+
+*Row written from its review file (`docs/reviews/2026-11-19-d283-never-deeper-reverted.md`), which is the evidence; the row itself was lost
+when the log was reflowed.*
+
+**Tried, measured, reverted.** The rule the game's shape implies - take **one** step into a collider and answer it with a re-plan and a
+pause, never driving an overlap deeper - **does** bound the overlap: two men meeting head-on came **4,478 raw** inside an 8,000 raw reach
+before it and **7,728 raw** with it (8,000 minus the 272 raw contact step). It also makes `a_mate_who_is_stopped_becomes_solid`'s second
+assertion arithmetically unsatisfiable, so that assertion was restated to *"never deeper than the meeting"*.
+
+**Why it is not landable**: in a crowd a body stands inside **several** clearances at once, and a hard per-collider veto refuses every one
+of them at the same time, so the man has no legal step. The acceptance match said so in one line - `the crew did not grow between 400 s and
+800 s: 7 then 7` - and its 26.26 s runtime is that early failure, not a win. A rule that works here needs a **net** answer (deeper into
+one, further from another) or the game's single radius query.
+
+## D284 - The self-brake D279 invented is removed, and the ignore list is gated on `isMoving`
+
+*Row written from its review file (`docs/reviews/2026-11-19-d284-our-brake-removed.md`).* Owner: *"Please do not invent own stuff and remove
+extra whatever compared to original game and decomp in pathfinding and obstacle avoidance. I do not want new stuff to be invented. I asked
+for blunt copy/conversion to rust."*
+
+**Two subtractions.** (1) **`blocked = true`** - the mover refusing his own step against a lower-id collider - is gone: the binary's
+epilogue never writes a position (`0x8a7fe7` discards the radius retraction; no store to `+0x104` anywhere in `FUN_008a4360`), so the step
+is always taken and the only thing that stops a body is a pause someone else handed it. In a crowd that brake stood every man for every
+lower-id neighbour (`"villagers get stuck"`). (2) The **mate exemption is gated on `isMoving`** (`+0x2a0`), as the binary gates its
+path-ignore list: a stopped mate is not ignored and blocks. Acceptance **passes** in 55.25 s where the braked branch failed at 7-then-7;
+the cost is that every collision buys a re-plan, which is the original's behaviour.
+
+## D285 - "At the node" is the game's box gap, and four of our distance rules go
+
+*Row written from its review file (`docs/reviews/2026-11-19-d285-box-gap-arrival.md`).* Owner: *"remove/adjust all rules on pathfinding in
+this branch that are not aligned with original game and decomp."*
+
+**The rule, ported**: `func_002690E0` (`compute_distance_sq`) subtracts **both bodies' sizes from each axis** and clamps at zero, so the
+number is border to border and an overlap is exactly **0**; motion compares it with the order's `rangeDistance` and a job with range 0
+arrives when the boxes **touch**. `World::box_gap_sq` is that function and `World::node_radius` gives a node its box. **Deleted**, because
+the game has one distance and these were four approximations of it: `touching` and its `touch_tolerance`, and three more arrival
+predicates. Acceptance **passes** in 52.52 s (55.25 s before) and nothing was added to the tick.
+
 ### D286 - An order names a target, and one box ruler decides every distance (owner, 2026-11-19)
 
 **The ruling.** Asked how to close the last gap between our approach rule and the original's, the owner: *"follow the
@@ -8977,3 +9016,26 @@ here so the next reader knows it was seen and priced.
 binary has no such input - its list is an **ignore** list that makes bodies *passable* (`FUN_00801a20`), and its answer to a standing body is
 the collision epilogue's pause + repath. Removing our avoidance would make villagers plan through each other, which is what the game does and
 what the owner will see; it is his call, made with the numbers.
+
+## D324 - The body avoidance is not an invention: the removal is faster, reddens two fixtures, and is reverted
+
+**Tried and reverted.** D323 left open whether `standing_bodies` (bodies added to the search as obstacles) was ours, since the binary's
+list is an *ignore* list. The variant - every planning call given an empty clear list - measured: acceptance **140 entities, 8,861 re-paths,
+8.4 s** against **141 / 7,125 / 12.6 s**, hash `d818560cf7bfe824`, suite **928 / 2 / 19**. The reds:
+`evasion::a_blocked_unit_goes_round_a_standing_body_and_arrives` (*"the walker came 4619 raw units from the body, standoff 8000"*) and
+`build::a_content_pack_with_our_own_resources_loads_and_spends` (*"an own-content house must be built to full hp: left None, right
+Some(550)"*).
+
+**Why the premise was wrong**: `FUN_00801a20` returns **passable only when every body on the tile is in the path-ignore list**, and that list
+holds self, the target, and the route's objects **whose `isMoving` answers 1**. So the binary's passability is **fail-closed**: a **moving**
+group member's tile is free ground, a **stopped** body's tile is blocked - the route goes through one and round the other. That is our
+`standing_bodies` in the opposite inventory (it subtracts the mover and moving friends and hands the rest to the search). The binary has no
+"avoid" array because its test is fail-closed.
+
+**Kept, and now sourced.** The 33% speed-up the variant buys is real and is what a levelled search with no body awareness would give - it is
+recorded so it is not rediscovered as an optimisation, and it is not taken, because it removes a clearance from a walking body and costs a
+builder his house.
+
+**Housekeeping in the same commit**: D283, D284 and D285 were referenced by the corpus and defined nowhere - their review files existed and
+their rows were lost when the log was reflowed. The three rows are written from those review files, marked as such, and `decisions.py`
+reports **7 dangling ids** where it reported 10.
