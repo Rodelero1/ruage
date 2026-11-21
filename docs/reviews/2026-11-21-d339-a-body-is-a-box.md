@@ -74,8 +74,9 @@ get to move - the "crowds are stricter" cost the sequence warned about, visible 
 
 ## The AI review (OCR, D209), and what was taken
 
-`make ai-review` read 2 files (it **cut the rest for budget** - the docs were read by hand) and found two real defects, both in
-the fixture, both accepted:
+`make ai-review` read 2 files and **cut `crates/sim/src/world/motion.rs` for budget** - the one engine line this slice changed was
+not reviewed by it, so that line was re-read by hand against `FUN_00840830` and the two design mistakes below are the fixture's.
+It found two real defects there, both accepted:
 
 1. **`repaths()` is cumulative, and the collision fired on the stander's landing tick** - not on the tick the assertion named. The
    fixture was proving a bump it had already caused one step earlier.
