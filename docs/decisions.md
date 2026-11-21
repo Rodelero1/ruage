@@ -8840,3 +8840,33 @@ has a correction section and this row supersedes the row's sentence. **D314 and 
 **The lesson, for the next reviewer of my own work**: an entity count is not a throughput figure, and "smaller economy" is a claim about
 *delivered* resources. `--report` prints the stockpile at each interval and costs one run; the estimate that replaced it was wrong by a factor
 of two in the opposite direction.
+
+## D319 - The conformance gate was dead, and one divergence row was stale
+
+**The owner asked whether conformance tests are still skipped. The answer was worse than yes: the crate did not compile, so none of its
+rows had run since D306.**
+
+```
+error[E0061]: this method takes 5 arguments but 4 arguments were supplied
+   --> tests/budget.rs:63:38, 76:38, 95:37
+```
+
+`Ground::search_reporting` gained a `reach` argument in D306 and `budget.rs` still passed four. The crate is its own workspace (D247) so
+that a **red** rule can never block a commit - the right call - but nothing in `make check` so much as **built** it, so a signature change
+in `crates/sim` silently took the whole set out of service. Its own comment, "no test in it is `#[ignore]`d", was false too.
+
+**Landed.** `budget.rs` passes `reach = 0` (the tile search's own value, which is what those three rows are about). The one `#[ignore]`d
+divergence - *"the radius lives in the step, not in the planner"* - was made false by D303-D306 and is now a live conformance row,
+`the_search_grows_obstacles_by_the_bodys_radius`: a body a tile wide is planned **through** a one-tile gap (tangency is a passage, the
+owner's trebuchet measurement) and a body 1.2 tiles wide is **not**. Both halves were watched: with `reach = 0` substituted for the wide
+body the row fails with *"a body 1.2 tiles wide was planned through a one-tile gap"*. The hierarchy row's doc no longer says "not ported
+yet" - it landed in D296-D302. **And `make check` now compiles the conformance tests** (`conformance-build`, `--no-run`) without running
+them, so D247's hazard stays shut while the staleness cannot recur.
+
+**Measured.** Conformance set **21 tests, 21 pass, 0 ignored** (was: does not compile; before that 19/1 with two rows parked). The build
+step costs ~9 s cold, under a second warm. The main workspace is untouched: **928 / 0 / 21** stands.
+
+**Still ignored, named rather than hidden**: the main workspace keeps **21** `#[ignore]`s - **19 instruments** (perf and measurement
+probes that print, plus the two four-hour determinism runs) and **2 real gaps**, `a_passer_by_does_not_move_the_seated_gatherers` (D238)
+and `a_stopped_friend_is_not_walked_through` (R1b). Neither is a fixture the owner asked for; both are ours, with their causes written
+down.

@@ -3,6 +3,10 @@
 //! D279 ports the original's *shape*: a grid, one A\*, the four collision refusals, one whole step. What it does not carry is
 //! everything the original layers **on top** of that shape for speed or precision. Each one is `#[ignore]`d with what it
 //! would cost and the decision that parked it, so `cargo test -p ruage-conformance -- --ignored` prints the gap.
+//!
+//! **Two rows that were parked here have since landed** (the levelled search in D296-D302, the radius in D303-D306) and are now
+//! ordinary conformance rows rather than divergences: an `#[ignore]` whose cause is fixed is decoration, and one of them had been
+//! counting as a live divergence for two weeks after the engine caught up.
 
 use ruage_conformance::{SCALE, centre, ground};
 
@@ -11,9 +15,8 @@ use ruage_conformance::{SCALE, centre, ground};
 /// (`FUN_007edb80` for the node's tile, `FUN_007eeda0` to step toward the next, `FUN_007fd880` to push the point), so the waypoints
 /// land on **cell centres of the level the search started at** - `n * 2^level + 0.5` tiles.
 ///
-/// **Not ported yet**: this search is a flat A\* over every tile and answers a long open walk with **one** waypoint. P11 is building the
-/// levelled search (`docs/pathfinding-levels-evidence.md`): 11a the level maps and 11b the descent are landed, 11c is the coarse A\* and
-/// this refinement.
+/// **Ported** in D296-D302: `Levels::coarse_route` is the coarse A\* and `Levels::refine` the chain, and the land unit's route takes
+/// that tier for walks past the flat search's useful range.
 #[test]
 fn the_original_solves_a_long_walk_in_its_hierarchy() {
     // A 58-tile walk across open ground, which is the case the hierarchy exists for.
@@ -53,22 +56,34 @@ fn the_original_solves_a_long_walk_in_its_hierarchy() {
 }
 
 /// RULE: the original plans for **the boundaries of where this unit's radii will go** - its search treats every obstruction
-/// as grown by the mover's radius, so it can thread a gap narrower than a tile
+/// as grown by the mover's radius, so a body is planned by its width and not by a point
 /// (`zone_spatial_pyramid_check_cell_step.cpp`, and the Forgotten Empires talk's "shrink the unit to a point, expand the
-/// obstruction").
+/// obstruction"). **Tangency is a passage**: the owner measured a packed trebuchet walking a one-tile hole in a wall and a
+/// one-tile corridor between bamboo (2026-11-20), so a body whose diameter *is* the gap is planned through it.
 ///
-/// **Not ported** (D279): the search asks tiles, and the body's radius is applied by the **step** (`World::clearance_at`).
-/// The consequence is real and visible: a body whose radius will not fit down a one-tile lane is planned through it and
-/// refuses its steps there, where the original would have planned round. Every route in this engine is therefore a route a
-/// *point* could walk.
+/// **Ported** in D303-D306 - this row was `#[ignore]`d as "the radius lives in the step, not in the planner" until then:
+/// `Ground::route_avoiding` carries the reach into the search, `Ground::fits` allows zero clearance, and the pyramid is built per radius. The
+/// engine's own witnesses are `radius_route` and `straight_line`.
 #[test]
-#[ignore = "tile search on purpose (D279): the radius lives in the step, not in the planner"]
-fn the_original_plans_for_the_body_radius() {
-    // A one-tile gap: a radius-1/5 body fits, a radius-2/5 body does not.
+fn the_search_grows_obstacles_by_the_bodys_radius() {
+    // A one-tile gap at (6, 6) in a wall down x = 6: a body a tile wide fits with zero clearance, one wider does not.
     let wall: Vec<(u16, u16)> = (0..=12).filter(|y| *y != 6).map(|y| (6, y)).collect();
     let field = ground(14, 14, &wall);
-    let route = field
-        .route(SCALE, centre(3, 6), centre(9, 6))
-        .expect("the gap is a tile wide");
-    assert_eq!(route.len(), 1, "the gap is a straight line on the tiles");
+    let (from, to) = (centre(3, 6), centre(9, 6));
+
+    let narrow = field
+        .route_avoiding(SCALE, from, to, SCALE / 2, &[])
+        .expect("a route toward the gap");
+    assert_eq!(
+        narrow.last().copied(),
+        Some(to),
+        "a body exactly one tile wide was not planned through a one-tile gap: {narrow:?}"
+    );
+
+    let wide = field.route_avoiding(SCALE, from, to, SCALE * 6 / 10, &[]);
+    let reached = wide.as_ref().and_then(|route| route.last().copied()) == Some(to);
+    assert!(
+        !reached,
+        "a body 1.2 tiles wide was planned through a one-tile gap: {wide:?}"
+    );
 }

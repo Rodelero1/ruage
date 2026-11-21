@@ -60,7 +60,7 @@ fn a_hopeless_search_is_bounded_by_its_own_estimate() {
     }
     let field = ground(64, 64, &sealed);
     let (from, to) = ((2u16, 2u16), (10u16, 10u16));
-    let (_route, expansions) = field.search_reporting(from, to, SCALE, &[]);
+    let (_route, expansions) = field.search_reporting(from, to, SCALE, 0, &[]);
     let budget = ruage_sim::Ground::estimate(from, to);
     assert!(
         expansions <= budget,
@@ -73,7 +73,7 @@ fn a_hopeless_search_is_bounded_by_its_own_estimate() {
 fn the_budget_never_exceeds_twenty_thousand() {
     let field = ground(480, 480, &[]);
     let (from, to) = ((1u16, 1u16), (478u16, 478u16));
-    let (_route, expansions) = field.search_reporting(from, to, SCALE, &[]);
+    let (_route, expansions) = field.search_reporting(from, to, SCALE, 0, &[]);
     assert!(expansions <= 20_000, "the search spent {expansions}");
 }
 
@@ -92,7 +92,7 @@ fn a_search_that_runs_out_of_budget_stops_short_of_the_goal() {
     }
     let field = ground(64, 64, &wall);
     let (from, to) = ((20u16, 20u16), (20u16, 60u16));
-    let (route, expansions) = field.search_reporting(from, to, SCALE, &[]);
+    let (route, expansions) = field.search_reporting(from, to, SCALE, 0, &[]);
     let budget = ruage_sim::Ground::estimate(from, to).min(20_000); // the crate-visible copy of `EXPANSION_CAP`;
     let route = route.expect("a route into the sealed room");
     let end = *route.last().expect("a route has an end");
