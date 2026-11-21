@@ -473,11 +473,12 @@ impl World {
         //
         // 1. a landing that touches an object tile the body does **not** already touch is refused;
         // 2. a landing that takes the body **deeper** into one it does touch is refused too, so it may slide out but not in.
-        // **PENDING A RULING** (`docs/parity-plan.md` P3): the binary's test collides on **touching** (`FUN_00840830`, four
-        // `<=`), and `Ground::touches_object` is that test, pinned by `conformance::contact`. It is not what this clause does,
-        // because touching-as-collision says a body of radius half a tile cannot thread a one-tile gap - its box exactly fills
-        // the lane - and D117 (the owner, 2026-11-04) says the opposite: *"a one-tile gap is a gap, whatever the circle"*.
-        // Until he says which wins, the step keeps the strict-overlap test it had.
+        // **The ruling is in, and the step does not follow it yet** (`docs/parity-plan.md` P3, D330): the binary's test collides on
+        // **touching** (`FUN_00840830`, four `<=`), while this clause refuses only a landing that *penetrates* a new object. D306 settled
+        // the apparent contradiction - the owner measured a packed trebuchet threading a one-tile hole, so touching-as-collision and a
+        // passable one-tile gap are both true - which means the box this test grows is **not** the body's nominal radius: a body whose
+        // radius is half a tile still has to fit a lane one tile wide. P3 therefore lands with the plan/step agreement, and the
+        // one-tile-gap fixture has to stay green through it.
         if let Some(ground) = self.ground.as_ref() {
             let landing_depth =
                 ground.object_depth(self.scale, (landing.0.raw(), landing.1.raw()), own);

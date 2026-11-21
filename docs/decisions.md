@@ -9141,3 +9141,29 @@ The cap stays unimplemented; what remains unfaithful is only the **selection ord
 which matters exactly as much as the cap does - not at all below 255.
 
 **Cost of finding out**: one probe, seven body counts, two builds, four minutes - less than the paragraph that had deferred it since D310.
+
+## D330 - "Blunt copy": the parity register re-verified, and its two forks forfeited to the original
+
+**Owner, 2026-11-21**: *"Please remove all deviations. I want this to be blunt copy."* That settles the two rows the register had marked
+**FORK** - places where his own earlier rulings ordered behaviour the game does not have - in favour of the game: **P9** (arrival "beside a
+held goal", D200, and the crowd ring point, D271) becomes a **live row to cut**, not a fork to discuss.
+
+**The register was verified row by row, by symbol**, and five rows had drifted in **both** directions:
+
+- **done but still written open**: **P1**, **P2** (budget, octile tie-break), **P5** (`finish_blocked_orders` and `beside` are gone),
+  **P8** (no seat book), the levelled half of **P11**;
+- **P4** written *"BLOCKED on P8"* - and P8 is cut, so it is **unblocked and untouched**;
+- **P3** written as *pending a ruling* in `motion.rs` **after D306 had ruled**, and its own ruling note claiming *"a half-tile body stops at
+  a one-tile gap"*, which is the opposite of the passage the owner measured.
+
+**Landed**: a status column per row (**DONE / LIVE / LIVE, unblocked / LIVE - forks forfeited / HALF / UNREAD / KEEP**), the two classes of
+unreachable row stated in the row itself (the 100/600 cost rows need a binary this box does not have, D327; P12 and P11's polygon pathfinder
+need reads the corpus may not hold), and the `motion.rs` comment now carrying both the ruling and the constraint it puts on P3 - if touching
+collides **and** a one-tile gap is passable, the box that test grows is **not** the body's nominal radius.
+
+**Work order recorded**: P7, P4, P3, P6, P9, P12 (read first), then P11's polygon pathfinder as a project. The small alignments (search
+window D299, refinement interpolation D322, descent's start-only test D323, body-list order and cap D329) ride with whichever step touches
+them.
+
+**Measured**: no behaviour - acceptance `c7191f531bd81b1b`, suite **931 / 0 / 19**. What the step bought is that the next session cannot be
+sent to re-cut P5 or re-land P1, which is exactly what the previous register did.

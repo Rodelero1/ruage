@@ -3,6 +3,10 @@
 > *"I want no deliberate differences to original game. If there is any, I want that adjusted to meet the original or cut off.
 > Please plan the sequence of implementation steps to reach parity with original game and decomp."*
 
+> **Reaffirmed 2026-11-21**: *"Please remove all deviations. I want this to be blunt copy."* The answer for every row below is the
+> **original's behaviour**, including the rows that were marked FORK because they encoded the owner's own earlier rulings - he has now
+> ruled the other way (D330). Where a row cannot be reached from this box, that is said in the row rather than in a note.
+
 This file is the register of every place this engine's pathing and obstacle avoidance is **ours** rather than the game's, what the
 original does there (with its address or module), and which of the two answers the owner's rule takes: **adopt the original**, or
 **cut ours**. Each row is a step with a proof - a conformance row or a fixture watched failing - and a measurement.
@@ -13,22 +17,56 @@ ordered behaviour the game does not have, so "meet the original" and "the rule I
 
 ## The register
 
-| # | ours today | the original | answer | source | proof |
-|---|---|---|---|---|---|
-| P1 | ~~a search with **no budget**~~ **DONE 2026-11-19**: a hopeless goal expands every reachable tile | stops at **`h` expansions** (25 x Euclidean tile distance) and never past **20,000**, then answers the **best node it settled** - it pushes that node with cost 0 and the caller walks the parents from it | **adopt** | `FUN_008007f0_008007f0.c` (REA corpus), guard `0x800d4f`, tail `0x801855`-`0x80189d`, read 2026-11-19 | conformance: a sealed room's expansion count ≤ `h`, and the answer is the closest tile |
-| P2 | ~~the nearest-cell answer picks by **(weighted h, g)**, later node wins ties~~ **DONE 2026-11-19** | picks by **octile distance to the goal**, `strict <` so the **first** node found wins | **adopt** | `FUN_008007f0`, `if (iVar21 < local_468)` where `iVar21 = FUN_007ffc80(node, goal)` | conformance: two equally-near cells, the one the search settles first answers |
-| P3 | ~~a step is refused only on **strict overlap** (`<`)~~ **BLOCKED, measured**: the plan certifies a leg the step then refuses, so P3 lands with a plan/step agreement about touching - and the owner has ruled for the game (`<=`, D117 withdrawn) | the box test collides on **touching** (`<=`) | **adopt**: collide on `<=`, and let the target cut land one raw unit short of the face so a body can never be wedged by exactness | `FUN_00840830` (`<=`, `+0x268`) | fixture: a body pressed against a wall can still walk along it; the two clicks still end at the radius |
-| P4 | a **terrain** refusal buys a new route once a second (`REPLAN_TICKS = 20`) - **BLOCKED on P8**: the off-grid gather/attack goal points need the fallback that sat beside the throttle | re-plans on **every** terrain collision, every update | **cut** ours: re-plan on every refusal | `0x122f`, `0x128b` (*"We have %d non-past collisions and %d terrain collisions, repathing"*) | measurement: acceptance fixture and the wall-press fixture (a man against a wall is the worst case) |
-| P5 | an order blocked for **40 ticks** is finished (`finish_blocked_orders`) | no such rule: a walk that cannot advance **stands**; the pause is the only brake | **cut** ours | `0x12b2` (*"Don't know what to do about my collision(s)"*), and nothing in the epilogue ends an order | the fixtures that relied on it re-pointed, then the acceptance fixture |
-| P6 | the ground holds a **count** per tile and treats a blocked tile as one **whole tile wide** | an object carries its own **radius pair** from the dat, and the query is a **radius over the objects on a tile** (`obj + 0x20 + index*4`) | **adopt**: per-object boxes in the ground's tile index, built from the pack's radii | `FUN_00844310` (the query), `FUN_00840830` (the box) | conformance: a tree smaller than a tile leaves the rest of the tile walkable; a body radius above half a tile is planned round |
-| P7 | the plan's avoid list **skips a body the mover already overlaps**, so two bodies on one tile cannot be planned round | the search starts on the shared tile and **every stander the mover does not ignore is in it** | **adopt**: no skip; the shared tile's occupants are in the avoid list | `FUN_007f9d80`, D282's note | `a_mate_who_is_stopped_becomes_solid` green at its 8,000 raw standoff |
-| P8 | a **seat book**: ring places, `respread`, `settle`, `standoff_point`, `gather_place` | no seat book at all: gatherers spread by **collision and pause** only | **FORK** - the book implements the owner's own ruling (*"villager is never to be nudged to leave place he is working at"*), which the game has no equivalent of | `FUN_008a4360`'s epilogue (no placement of a working body) vs the owner 2026-11-19 | - |
-| P9 | arrival **"beside a held goal"** within a quarter tile (`D200`), and a crowd **ring point** for a group move (`D271`) | the game sends a group to **formation slots** around the clicked point; there is no "beside a body holding the goal" rule | **FORK** - D271 is the owner's ruling (*"the first comes to the spot and others stand around him"*), and formations are a feature we do not have | `zone_spatial_entity_adjust_heading_step` neighbours; formation slots are unread in HD | - |
-| P10 | the pause duration is drawn from **our** seeded stream | the game's own `rand()` wrapper, which its own comment calls *"not considered sync safe"* | **keep** - same interval (0.25-1.50 s), reproducible | `0x8a80ff`-`0x8a8141`, `setPause` | already pinned by `the_loser_stands_for_the_drawn_pause` |
-| P11 | one flat A* over every tile | **three** pathfinders: a levelled/mip-mapped route, a tile short-range one, and a polygonal one for combat | **adopt, priced**: the levelled search is a speed layer whose HD addresses are not read - the AoC decomp's `zone_spatial_pyramid_*` is the only source | `docs/pathfinding-conformance.md` row 28 (red, `#[ignore]`d) | conformance: a 58-tile walk answers from the hierarchy |
-| P12 | no per-edge passage: a tile is walkable or it is not | the AoC decomp gives a tile a **four-bit N/S/W/E neighbour mask** - a step is legal per **edge** | **unread for HD**: no HD address pins the mask. Reading it is the step before adopting or cutting | `zone_spatial_pyramid_check_tile.cpp` (`func_001D29F0`) | - |
+| # | status | ours today | the original | step |
+|---|---|---|---|---|
+| P1 | **DONE** | a search with a budget: `h` expansions, hard cap 20,000, then the best settled node answers | same | landed; conformance row green |
+| P2 | **DONE** | the nearest-cell answer picks by octile distance, first node found wins ties | same | landed; conformance row green |
+| P3 | **LIVE** | `object_depth > 0`: a landing that **penetrates** a new object is refused, and one that touches an already-touched object may stay or slide out but not go deeper | `FUN_00840830` collides on **touching** (`<=`, four times), with no exception | collide on `<=`, in one slice with the plan/step agreement; the one-tile-gap fixture (D306, the owner measured a packed trebuchet through one) must stay green, which constrains the box: a body's collision box is not its nominal radius |
+| P4 | **LIVE, unblocked** | a **ground** refusal buys a new route at most once a second (`REPLAN_TICKS = 20`) | re-plans on **every** terrain collision (`0x122f`, `0x128b`) | re-plan on every refusal, then measure a man pressed against a wall - a refusal every tick is a search every tick |
+| P5 | **DONE** | no order is abandoned for being blocked (`finish_blocked_orders` and `beside` are both gone) | the original has no such rule; the pause is the only brake | landed (D292), with the seat book (P8) and the no-coincidence guard behind it |
+| P6 | **LIVE** | `Ground` holds `occupants: Vec<u16>` - a **count** per tile - so a blocked tile is one whole tile wide | per-object **radius pairs** from the dat, and a radius query over the tile's objects (`FUN_00844310`, `FUN_00840830`) | the ground's index holds boxes, not counts, built from the pack's radii |
+| P7 | **LIVE** | `standing_bodies` **skips** every body within a quarter tile of the mover in both axes | the search starts on the shared tile and includes **every stander the mover does not ignore** (`FUN_007f9d80`) | drop the skip; two bodies on one tile become plannable |
+| P8 | **DONE** | no seat book: gatherers spread by collision and pause only | the original has no seat book | cut (D293/D294), fixtures re-pointed |
+| P9 | **LIVE - forks forfeited** | arrival "beside a held goal" within a quarter tile (D200), and a crowd **ring point** for a group move (D271) | a group is sent to the **clicked point**; no "beside a body holding the goal" rule, and the game's formations are a feature we do not have | cut both: a group move ends at the point, and a body holding a goal is not special. **The owner's own earlier rulings, withdrawn at his instruction** |
+| P10 | **KEEP** | the pause is drawn from our seeded stream, 0.25-1.50 s | the game's `rand()`, whose own comment calls it *"not considered sync safe"* | same interval, same distribution; only the random *source* differs, and a reproducible one is what makes the acceptance hash possible |
+| P11 | **HALF** | one flat A* for short/medium walks, and the levelled search for long routes | **three**: levelled, tile short-range, and a **polygonal** one for combat (dynamic convex hulls) | the levelled one landed (D296-D302, D322). The polygonal one is **not built** - there is no hull code in the tree - and it is a project, not a step |
+| P12 | **UNREAD** | a tile is walkable or not; no per-edge passage | a **four-bit N/S/W/E neighbour mask**: a step is legal per **edge** (`zone_spatial_pyramid_check_tile.cpp`, `func_001D29F0`) | no HD address pins the mask, so the first move is a **read**, not a patch |
 
-## Rulings and blockers, as measured tonight
+**Rows this box cannot finish, said here rather than at the bottom**: the **100/600 cost rows** (D327) need the terrain descriptor table, and
+this install's `AoK HD.exe` is **a different build** from the decompiled corpus (the table's address is outside its image, and the corpus's
+strings sit `0x8346` lower, non-constantly). **P12's mask** and **P11's polygon pathfinder** both need reads the corpus may not hold.
+
+## Status, verified against the code on 2026-11-21 (D330)
+
+Five rows had gone stale in **both directions** - marked open after the work landed, and marked ruled where the code still carried the old rule.
+Each line below was checked by symbol, not from memory:
+
+- **Done since the register was written**: P1, P2 (budget and octile tie-break), P5 (`finish_blocked_orders` and `beside` no longer exist),
+  P8 (no seat book), and the levelled half of P11.
+- **Live and unblocked**: P4 (its blocker was the seat book, cut by D293), P6 (`occupants: Vec<u16>` is still a per-tile count), P7 (the
+  quarter-tile skip is still in `standing_bodies`), P9 (both fork rules are still in the engine).
+- **Live and blocked on a read**: P12, and P11's third pathfinder.
+- **Stale comment fixed at the same time**: `motion.rs` still said *"PENDING A RULING (parity-plan P3)"* after D306 had ruled; it now carries
+  the ruling and the constraint the ruling puts on P3's implementation.
+
+## Work order (owner's directive, 2026-11-21)
+
+Cheapest first, each with its own proof:
+
+1. **P7** - the skip (small; `a_mate_who_is_stopped_becomes_solid` is the fixture that notices);
+2. **P4** - the throttle (measure the wall-press worst case first);
+3. **P3** - the touch rule with the plan/step agreement and the one-tile-gap fixture;
+4. **P6** - per-object boxes: the largest of the four, and the one that changes how wide forests feel;
+5. **P9** - the two forfeited forks, cut at his instruction;
+6. **P12** - the read, then the mask;
+7. **P11's polygon pathfinder** - a project, scoped separately.
+
+Small alignments that ride with whichever step touches them: the **search window** (D299), the **refinement's interpolation** (D322), the
+**descent's start-only test** (D323), and the **body list's order and 255 cap** (D329).
+
+## History: rulings and blockers as measured 2026-11-19
+
+*Kept for the record. Several are now superseded - see the status table above.*
 
 - **P3's fork is ruled**: *"the game wins (a): adopt `<=`, a half-tile body stops at a one-tile gap, and D117 is withdrawn."*
   D117 no longer stands; `building_passage::a_big_unit_walks_through_a_one_tile_gap` must be re-pointed to the game's answer
