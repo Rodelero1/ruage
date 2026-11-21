@@ -8953,3 +8953,27 @@ on this map comes back at **level 0**, which `level >= 2` rejects. The tier is g
 **Next**: tier 2 cannot matter until those two call-site facts change - the binary's avoidance pass is the thing to trace (D309's caller of
 `FUN_008000d0`), and the descent's collapse to level 0 on a cluttered map is D303's gate biting at the root rather than a refinement
 problem.
+
+## D323 - Tier 2 is dormant in a match because the descent is anchored on the start, in the binary too
+
+**No production change.** Measured while trying to make D322's hierarchy pay for itself: over 48,000 acceptance ticks, 11,042 route calls,
+**1,677** long ones, **0** answered by the hierarchy. Two explanations tested, one survives:
+
+- **`avoid` is not the cause**: dropping `avoid.is_empty()` from the tier-2 condition leaves the match byte-identical (`c7191f531bd81b1b`,
+  141 / 7,125, 12.7 s). Restored, because the conservative reading costs nothing measurable.
+- **The descent is**: 1,603 of 1,677 long calls have `descent(start) = 0` with the goal at 1-3 - gatherers stand beside their resource, an
+  8x8 cell holding a villager *and* his forest is blocked, and every coarser cell above it is blocked too.
+
+**The binary's own rule, read from `FUN_007ee980`'s head**: it starts at level 3, indexes **the start point's own cell**, and stops at the
+first level whose cell carries bit **`0x20`** (level 0 always stops it). **The goal is never consulted.** So the dormancy is **parity**: the
+game's hierarchy is for walks that begin on open ground, and a chopper is pitched to tile level in the original as well. Already pinned by
+`descent::a_wall_in_the_coarse_cell_drops_the_start_one_level` and `descent::a_one_tile_corridor_starts_at_level_zero`.
+
+**One shape difference left standing, and why**: ours takes `descent(from).min(descent(to))`; the binary takes the start's alone. They differ
+only if the goal's descent is smaller - which happened in **0 of 1,677** calls - so the `.min()` is harmless and is not churned. Recorded
+here so the next reader knows it was seen and priced.
+
+**Left open, and it is a fork rather than a step**: our `standing_bodies` **adds** standing bodies to the search as `Clear` obstacles. The
+binary has no such input - its list is an **ignore** list that makes bodies *passable* (`FUN_00801a20`), and its answer to a standing body is
+the collision epilogue's pause + repath. Removing our avoidance would make villagers plan through each other, which is what the game does and
+what the owner will see; it is his call, made with the numbers.
