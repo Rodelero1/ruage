@@ -15,9 +15,18 @@ Suite **925 passed / 2 failed / 21 ignored**. Acceptance: hash `89ff37d844cfd11f
 
 ## Ready now - no evidence needed
 
-1. **The skirmish pair** - the last two reds, both in `crates/sim/tests/skirmish.rs`:
-   `both_sides_field_an_army` (line 91) and `the_skirmish_only_refuses_what_the_fight_has_taken` (line 147). Red since before this
-   work, so **re-diagnose from the failure messages, not from any older note**.
+1. **The skirmish pair** - the last two reds, both in `crates/sim/tests/skirmish.rs`, and **both failure messages point at one cause**:
+
+   ```
+   both_sides_field_an_army                     line 91:  player 1 never fielded infantry: the skirmish is one-sided
+   the_skirmish_only_refuses_what_the_fight_has_taken  line 147: the skirmish hit a script error: ["player 1 has no unit militia"]
+   ```
+
+   The scene is `config/skirmish.toml` played through `Runner::due`; the first test counts entities whose `unit` is
+   `economy.role["militia"]` (so that role exists), and the second reports a **step-resolution** error naming "militia" - i.e. the
+   script's own unit lookup, not the engine's. **Start there**: read `resolve`'s unit-name path in `crates/script/src/lib.rs`
+   (the `train` arm) and check what it maps a name to, then whether `player 1` can legally field militia at all (a prerequisite or
+   a civ gate would answer "has no unit" the same way). Nothing else in the suite depends on this scenario.
 2. **A unit fixture for D314's rule**: a gather on a node behind a wall is refused **at the order**, not at the tick. Today the rule
    is pinned only through the rule runner (`gather_pick`), which is a longer path than the rule needs.
 3. **`work_position` chooses a stand by compass order** (D312 finding 2): the ring starts north-west and it skips the tile the man
