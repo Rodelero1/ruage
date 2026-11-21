@@ -46,11 +46,12 @@ Same tree, one variable, three runs each side, back to back:
 | acceptance hash | `1e1fcc3cf2b05a4c` | **`1e1fcc3cf2b05a4c`** |
 | entities / players alive at 48,000 | 133 / 1 | 133 / 1 |
 | re-paths | 36,567 | 36,567 |
-| wall, median of three | 12.01 s (12.01 / 11.91 / 12.16) | 12.07 s (12.09 / 12.05 / 12.07) |
+| wall, median of three | **11.94 s** and 12.01 s in two batches (11.94 / 11.68 / 12.19; 12.01 / 11.91 / 12.16) | 12.07 s (12.09 / 12.05 / 12.07) |
 
 **Bit-identical, and that is the measurement**: the refinement only runs inside the levelled tier, and on this map the tier
-answers **0 of 61,276** routes (D338), so no match can see this change either. The 0.06 s is the band - the same binary has
-measured 11.4 s and 12.0 s on different batches when the box was busier. What the slice is for is the rule, and the rule's
+answers **0 of 61,276** routes (D338), so no match can see this change either. The baseline is quoted as **two batches**
+because two runs of the same un-cut binary gave medians 0.07 s apart (11.94 and 12.01); against that band the cut's
+12.07 s is the top of it, not a regression - and the same binary has measured 11.4 s on a batch when the box was quieter. What the slice is for is the rule, and the rule's
 number is the witness above.
 
 ## Stability
