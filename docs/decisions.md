@@ -8760,3 +8760,34 @@ inert everywhere else. clippy and `fmt` clean. Review: `docs/reviews/2026-11-20-
 
 **Named and not done:** player 2's opening is still much faster than player 1's (barracks 70 s against 320 s). It no longer decides the test,
 but the mirror is not even, and evening it is a content decision with a balance question behind it.
+
+## D316 - A farmer beside a plot still walks at it: the stand was half the story
+
+**Crosscheck of D312 finding 2, and the reading is the step.** Two changes were built to make a man work from where he stands:
+`work_position` choosing the **nearest** free ring tile instead of walking a compass order from the north-west, and his own tile
+counting as a stand (`gather_route` giving an empty route for it, because `plan_path(from, from)` is `NoPath`). The witness, written
+first:
+
+```
+a_man_beside_a_plot_stays_where_he_stands_and_works_it
+  the farmer walked off the tile he was standing on instead of working from it:
+  was (780000, 820000), now (785660, 814340)
+```
+
+**He still walks, and the stand is not why.** With the stand answered as his own position, the gather arm's own arrival test decides he
+is **not at the plot**: `at_node` is the box gap against `node_radius(node)` - a **one-tile box at the node's anchor point** - and a 3x3
+plot's anchor corner is a tile away from a man standing beside the plot. So the arm falls to its else-branch and steps him at the
+node's *position*, which is the same point-versus-footprint mistake D312 fixed in the reach test, one function over.
+
+**So the farmer's wart is two changes, not one, and they need one witness each:**
+1. the stand is the **nearest** ring tile, his own tile included (`work_position`);
+2. a **building** node is "at" by its **footprint**, not by a one-tile box at its anchor (`at_node` in the gather arm - `gap_to_footprint`
+   already computes the right answer).
+
+**Reverted, per the half-fix rule**: the witness still failed with change 1 in, so neither change lands alone. What was measured while it
+was in: `farm` 7 of 8 green and **only** the new witness red; `gather` unchanged. Suite stands at **927 / 0 / 21**; the tree is clean.
+
+**Why this is a step and not a footnote**: it is the last piece of the "a man works from where he stands" rule the owner stated as
+invariant 4 (*"If villager gathers from the resource, resource is not empty, villager is not at 100% carry capacity and changes position
+-> FAIL"*) - the invariant holds today only because the settle finds a man a place *before* he starts taking, which is why the
+`(19, 18) -> (19, 17)` walk in D312 was invisible to it.

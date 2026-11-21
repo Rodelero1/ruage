@@ -17,10 +17,17 @@ defect is closed:
 
 ## Ready now - no evidence needed
 
-1. **`work_position` chooses a stand by compass order** (D312 finding 2): its ring starts north-west and it skips the tile the man
-   already stands on, because `plan_path(from, from)` is `NoPath` - measured, a man beside a plot at `(19, 18)` walked to
-   `(19, 17)`. `approach_footprint` (the builder's) already picks the **nearest**; the two should agree. Every gather order goes
-   through it, so it wants its own witness and its own review.
+1. **A farmer works from where he stands** - two changes, **one witness each**, and the first was built and reverted in D316 because
+   its witness still failed with it in:
+   1. the stand is the **nearest** free ring tile, the tile he is on included (`work_position`; it walks a compass order from the
+      north-west today, and skips his own tile because `plan_path(from, from)` is `NoPath`). Witness: a man beside a plot at
+      `(19, 18)` must not walk to `(19, 17)`.
+   2. a **building** node is "at" by its **footprint**, not by a one-tile box at its anchor (`at_node` in the gather arm;
+      `gap_to_footprint` already computes it). Only with both does the D316 witness pass:
+      `a_man_beside_a_plot_stays_where_he_stands_and_works_it` - measured failing at
+      `was (780000, 820000), now (785660, 814340)`.
+   This is the last piece of the owner's invariant 4 ("a working man does not move"); it holds today only because the settle seats a
+   man before he starts taking.
 2. **A unit fixture for D314's rule**: a gather on a node behind a wall is refused **at the order**, not at the tick. Today the rule
    is pinned only through the rule runner (`gather_pick`), which is a longer path than the rule needs.
 3. **The delivered totals per column, both trees** (owed by D313): `headless --report` prints them, and they turn D313's "+9% wall
