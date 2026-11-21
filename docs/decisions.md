@@ -9493,3 +9493,41 @@ player alive at 48,000** (was 134 and two), re-paths **36,567** (was 40,127, -9%
 15.60 s). The wall falls, but not cleanly: the scenario diverges - player 2 no longer survives - and a dead player is
 work the tick never does again, so the 27% is not a cost claim for the same match. Suite 219 result lines, 937 passed, 0
 failed, 22 ignored; conformance 21 / 0 / 0.
+
+## D342 - sequence step 7 landed: the 300 row is a mine, and the tier cannot see it yet
+
+**Crosscheck, three kinds.** `FUN_007ed280` prices an empty cell at **10**, and jumps to **300** only when
+`FUN_007f11f0` answers 1 for the cell or one of its four orthogonal neighbours. `FUN_007f11f0` walks the tile's object
+list and answers 1 only for an object whose **class** is **8** or **0x20**. Three independent readings name those two:
+
+- the function itself: `sVar3 = *(short *)(*(int *)(*(int *)(iVar1 + 0x18) + i * 4) + 0xc) + 0x16; if (sVar3 == 8 || sVar3 == 0x20) return 1;`
+  - the same `+0x16` short that `FUN_008a4360` compares with `0x27` for a gate, which is the gate's **class** (39);
+- the dat this tree's install ships: class 8 is `STONM`/`ROCKSX`, class 32 is `GOLDM`/`ROCKGX`
+  (`config/gamedata/units.toml`, and `type` values in this dat are only 10/20/25/30/60/70/80 - neither 8 nor 32 - so the
+  field is the class, not the type);
+- the published class list (Genie Editor): *8 - Stone Mine*, *32 - Gold Mine*.
+
+So the row is **gold or stone mines**, not "a blocked neighbour": a cell beside a tree, a wall or a cliff is the plain 10.
+Ours charged 300 to every cell with a blocked orthogonal neighbour.
+
+**Landed.** The pack names which of its own resources are the expensive neighbours - `snug = true` on gold and stone in
+`config/resources.toml`, with the class provenance in the comment - so `crates/` learns neither the dat's class nor the
+id (D17). `Ground` carries the mark and drops it when the mine is spent; `Levels` builds the same OR-reduced pyramid over
+it, and `step_cost` charges 300 when the cell or one of its four orthogonal neighbours is a mine.
+
+**Witness, red first:** `snug_cost::a_mine_is_expensive_to_walk_beside_and_a_tree_is_not` - on the seeded map, the open
+tile beside a gold mine must be 300 and the open tile beside a tree 10. Red on the un-cut tree with `Some(300)` for the
+tree cell; green after.
+
+**The row the old fixture pinned is withdrawn.** `coarse_cost::a_cell_beside_an_obstacle_costs_three_hundred` asserted
+the 300 **beside a wall**, which is the reading the decomp denies; it is now
+`a_cell_beside_a_wall_is_ten_and_beside_a_mine_is_three_hundred` on the same plate, one `mark_snug` apart.
+
+**The census, and the reason no match moves:** on the acceptance map, level 0 has **3,970** open tiles, of which **247**
+were 300 under the old rule and **32** are under the game's - 215 cells the search stops pricing. And the acceptance
+match itself is **bit-identical**: hash `1e1fcc3cf2b05a4c`, 133 entities, 36,567 re-paths, both sides. That is D338's
+finding showing up as a number: the levelled tier answers **0 of 61,276** routes on this map, so the row it prices is
+never read. The next lever is the level floor (D303), not this constant.
+
+**Wall, median of three:** 11.79 s (11.84 / 11.79 / 11.90) against the un-cut **11.56 s** (11.56 / 11.47 / 11.56) - the
+same match to the hash, so the 2% is the band, not the change.

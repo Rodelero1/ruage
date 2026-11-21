@@ -45,6 +45,9 @@ pub struct CoarseRoute {
 pub struct Levels {
     /// `maps[level][cy * cells_wide + cx]`, `true` = a blocked cell.
     maps: Vec<Vec<bool>>,
+    /// **The cells whose neighbour costs 300** (D342): the same pyramid over the pack's mines, so a coarse cell is
+    /// "expensive to be beside" when any of its tiles is a mine - the binary's own per-cell test, applied at that level.
+    snug: Vec<Vec<bool>>,
     /// The tile size of the map the levels were built from.
     width: u16,
     height: u16,
@@ -77,6 +80,17 @@ impl Levels {
         }
         maps.push(base);
 
+        // The 300 row's own mask, built the same way: a mine on level 0, OR-reduced up (D342).
+        let mut snug = Vec::with_capacity(DEPTH);
+        let mut snug_base = vec![false; usize::from(width) * usize::from(height)];
+        for y in 0..height {
+            for x in 0..width {
+                snug_base[usize::from(y) * usize::from(width) + usize::from(x)] =
+                    ground.is_snug(x, y);
+            }
+        }
+        snug.push(snug_base);
+
         for level in 1..DEPTH {
             let below_level = u8::try_from(level - 1).expect("a level fits a u8");
             let this_level = u8::try_from(level).expect("a level fits a u8");
@@ -106,10 +120,35 @@ impl Levels {
                 }
             }
             maps.push(map);
+            // The same OR-reduction over the mine mask.
+            let below_snug = &snug[level - 1];
+            let mut mine_map = vec![false; usize::from(wide) * usize::from(tall)];
+            for cy in 0..tall {
+                for cx in 0..wide {
+                    let mut mine = false;
+                    for dy in 0..2u16 {
+                        for dx in 0..2u16 {
+                            let child_x = cx * 2 + dx;
+                            let child_y = cy * 2 + dy;
+                            if child_x >= below_w || child_y >= below_h {
+                                continue;
+                            }
+                            if below_snug
+                                [usize::from(child_y) * usize::from(below_w) + usize::from(child_x)]
+                            {
+                                mine = true;
+                            }
+                        }
+                    }
+                    mine_map[usize::from(cy) * usize::from(wide) + usize::from(cx)] = mine;
+                }
+            }
+            snug.push(mine_map);
         }
 
         Levels {
             maps,
+            snug,
             width,
             height,
         }
@@ -361,18 +400,28 @@ impl Levels {
         if self.blocked(level, cx, cy) {
             return None;
         }
-        // The four orthogonal neighbours in the level's own cells; a neighbour off the map counts as clear, because nothing can be
-        // walked into out there and the original's own border row costs the plain 10.
-        let snug = [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)]
+        // **The cell and its four orthogonal neighbours, for a mine** (D342): `FUN_007f11f0` answers 1 only for an
+        // object of class 8 or 32, so a cell beside a tree, a wall or a cliff is the plain 10 and only a mine is 300.
+        // Before this the test was "any blocked neighbour", which priced every wall the search had to pass.
+        // A neighbour off the map counts as clear: nothing can be walked into out there, and the binary's own border row
+        // costs the plain 10.
+        // The bound is the level's own cell grid, not `u16`: a cell one past the right edge is a valid `u16` and an
+        // out-of-range index (measured - ten conformance fixtures died on `the len is 72 but the index is 72`).
+        let (wide, tall) = self.cells(level);
+        let mine = |x: i32, y: i32| -> bool {
+            let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
+                return false;
+            };
+            if x >= wide || y >= tall {
+                return false;
+            }
+            self.snug
+                .get(usize::from(level))
+                .is_some_and(|map| map[usize::from(y) * usize::from(wide) + usize::from(x)])
+        };
+        let snug = [(0i32, 0i32), (-1, 0), (1, 0), (0, -1), (0, 1)]
             .iter()
-            .any(|(dx, dy)| {
-                let nx = i32::from(cx) + dx;
-                let ny = i32::from(cy) + dy;
-                match (u16::try_from(nx), u16::try_from(ny)) {
-                    (Ok(nx), Ok(ny)) => self.blocked(level, nx, ny),
-                    _ => false,
-                }
-            });
+            .any(|(dx, dy)| mine(i32::from(cx) + dx, i32::from(cy) + dy));
         Some(if snug { 300 } else { 10 })
     }
 

@@ -4,8 +4,8 @@
 //!
 //! | situation | cost |
 //! | --- | --- |
-//! | an open cell whose four orthogonal neighbours are all clear | **10** (plus a distance-from-the-edge term the caller adds) |
-//! | an open cell with a blocked orthogonal neighbour | **300** |
+//! | an open cell whose four orthogonal neighbours hold no mine | **10** (plus a distance-from-the-edge term the caller adds) |
+//! | an open cell beside a **gold or stone mine** (`FUN_007f11f0`: class 8 or 32) | **300** |
 //! | (no row: the binary's 2000 keys on a direction-run grid, not on bodies - D328) |
 //! | blocked and not crossable | **600** - and refused outright when the cell is outside the search window |
 //!
@@ -101,23 +101,43 @@ fn clear_ground_is_ten() {
     }
 }
 
-/// **An open cell with a blocked orthogonal neighbour costs 300**: the cell you are entering is clear, but hugging an obstacle is
-/// expensive, which is the whole point of the row.
+/// **A wall beside a cell is the plain 10; a mine beside it is 300** (D342). The row used to be keyed on "any blocked
+/// orthogonal neighbour", which made every wall the search passed expensive; `FUN_007f11f0` answers 1 only for an object
+/// of class 8 (stone mine) or 32 (gold mine), and `FUN_007ed280` charges the plain 10 otherwise.
+///
+/// This fixture used to assert the 300 **beside a wall**, which is the reading the decomp denies - so the guard it
+/// carried ("hugging an obstacle is expensive") is withdrawn here, and the row is pinned on the pack's own mark instead:
+/// the same two ground states, one boolean apart.
 #[test]
-fn a_cell_beside_an_obstacle_costs_three_hundred() {
+fn a_cell_beside_a_wall_is_ten_and_beside_a_mine_is_three_hundred() {
     let mut ground = open();
     ground.block(16, 15);
     let levels = Levels::of(&ground);
-    // Level 0: the tile beside the wall.
+    // Level 0: the tile beside the wall is clear ground, and a wall is not a mine.
     assert_eq!(
         levels.step_cost(0, 16, 16),
-        Some(300),
-        "the tile below the wall is open but touches it"
+        Some(10),
+        "the tile below the wall is open, and only a mine makes a neighbour expensive"
     );
     assert_eq!(
         levels.step_cost(0, 17, 16),
         Some(10),
         "a tile two steps from the wall is clear on all four sides"
+    );
+    // The same tile, one mark apart: this is what a mine does.
+    let mut with_mine = open();
+    with_mine.block(16, 15);
+    with_mine.mark_snug(16, 15);
+    let levels = Levels::of(&with_mine);
+    assert_eq!(
+        levels.step_cost(0, 16, 16),
+        Some(300),
+        "a gold or stone mine beside the cell is the 300 row"
+    );
+    assert_eq!(
+        levels.step_cost(0, 17, 16),
+        Some(10),
+        "and the row does not reach two steps out"
     );
     // Level 3: the 8x8 cell that holds the wall is blocked outright, so it is not enterable at all. It is the cell of the *wall*
     // (16, 15), not of the tile below it - my first version asked the wrong cell and got a correct 300.

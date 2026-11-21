@@ -111,6 +111,12 @@ pub struct Ground {
     height: u16,
     terrain: Vec<bool>,
     occupants: Vec<u16>,
+    /// **The tiles whose neighbour the search charges 300 for** (D342): a gold or stone mine, named by the pack. Kept
+    /// apart from `occupants` because it is not "blocked" - a felled mine unblocks and this goes with it - and because
+    /// the binary's row is the object's *class*, which the engine may not know (D17).
+    /// `serde(default)` so a `Ground` serialised before D342 still loads, with every tile at the plain 10.
+    #[serde(default)]
+    snug: Vec<bool>,
     /// **The level pyramid, built on demand and dropped when the ground changes** (D301). `occupants` is touched only by *objects* -
     /// a tree, a building, a gate - never by a unit, whose body the step pass handles through `objects_touched`. So this cache is warm
     /// across every tick a unit walks and is rebuilt only when something is placed or removed.
@@ -143,6 +149,7 @@ impl Ground {
             width: map.width,
             height: map.height,
             occupants: vec![0; terrain.len()],
+            snug: vec![false; terrain.len()],
             terrain,
             pyramid: std::cell::RefCell::new(std::collections::BTreeMap::new()),
             pyramid_builds: std::cell::Cell::new(0),
@@ -249,6 +256,33 @@ impl Ground {
     fn index(&self, x: u16, y: u16) -> Option<usize> {
         (x < self.width && y < self.height)
             .then(|| usize::from(y) * usize::from(self.width) + usize::from(x))
+    }
+
+    /// **Something worth walking round now stands on this tile** (D342): the pack's own mark for the 300 row. It does
+    /// not block - `block` does that - and it is taken back with `unmark_snug` when the node is spent.
+    pub fn mark_snug(&mut self, x: u16, y: u16) {
+        if let Some(at) = self.index(x, y)
+            && let Some(flag) = self.snug.get_mut(at)
+        {
+            *flag = true;
+            self.pyramid.borrow_mut().clear();
+        }
+    }
+
+    /// The node that made this tile expensive is gone.
+    pub fn unmark_snug(&mut self, x: u16, y: u16) {
+        if let Some(at) = self.index(x, y)
+            && let Some(flag) = self.snug.get_mut(at)
+        {
+            *flag = false;
+            self.pyramid.borrow_mut().clear();
+        }
+    }
+
+    /// **Is this tile one the 300 row is about** - a mine, as the pack named it (D342).
+    #[must_use]
+    pub fn is_snug(&self, x: u16, y: u16) -> bool {
+        self.index(x, y).is_some_and(|at| self.snug[at])
     }
 
     /// Something now stands on this tile.

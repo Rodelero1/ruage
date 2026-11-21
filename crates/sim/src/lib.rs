@@ -3693,6 +3693,16 @@ impl World {
         )
     }
 
+    /// **What the levelled search charges to enter a tile** (the `FUN_007ed280` row this tree implements), at level 0 -
+    /// the level a short walk is answered on. `None` means the search never enters it.
+    ///
+    /// An instrument, like `clearance_at`: the row is a constant of the search and a fixture has to be able to read it
+    /// without walking a route and inferring the price from its shape.
+    #[must_use]
+    pub fn step_cost_at(&self, tile: (u16, u16)) -> Option<i32> {
+        self.ground.as_ref()?.pyramid().step_cost(0, tile.0, tile.1)
+    }
+
     /// **How much room a body has**, in raw units: the distance from `position` to the nearest **blocked tile**, minus `radius`.
     /// Zero is "touching the wall", negative is "inside it" - and the movement rule of D176 is that it never goes negative.
     ///
@@ -3972,6 +3982,8 @@ impl World {
                 let tile = self.tile_of(entity.position);
                 if let Some(walk) = self.ground.as_mut() {
                     walk.unblock(tile.0, tile.1);
+                    // The 300 row goes with the node that made it (D342).
+                    walk.unmark_snug(tile.0, tile.1);
                 }
             }
             self.entities.retain(|entity| entity.id != node);
@@ -4609,6 +4621,31 @@ impl World {
             .map(|entry| (entry.radius * scale as f64).round() as i64)
             .collect();
         self.resources = Some(resources.clone());
+        // **The 300 row's marks are applied here, not at seeding** (D342): the map is seeded before the resource table
+        // arrives (`world.seed_from` then `world.load_resources`, the order every fixture and `ruage-headless` use), so
+        // at insert time the pack cannot say which of its resources is a mine. Nothing has searched yet, so the level
+        // pyramids are still cold and no cache has to be dropped.
+        let snug_slots: Vec<usize> = (0..resources.count())
+            .filter(|slot| resources.slot_is_snug(*slot))
+            .collect();
+        if !snug_slots.is_empty() {
+            let tiles: Vec<(u16, u16)> = self
+                .entities
+                .iter()
+                .filter(|entity| entity.amount.raw() > 0)
+                .filter_map(|entity| match entity.kind {
+                    EntityKind::Resource(slot) if snug_slots.contains(&slot) => {
+                        Some(self.tile_of(entity.position))
+                    }
+                    _ => None,
+                })
+                .collect();
+            if let Some(walk) = self.ground.as_mut() {
+                for (x, y) in tiles {
+                    walk.mark_snug(x, y);
+                }
+            }
+        }
         // The pack is what turns a name in `[start] stock` into a column, so this is the earliest
         // point the opening stockpile can be applied when the pack is loaded after seeding.
         self.apply_start_stock()?;
