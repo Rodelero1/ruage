@@ -8870,3 +8870,43 @@ step costs ~9 s cold, under a second warm. The main workspace is untouched: **92
 probes that print, plus the two four-hour determinism runs) and **2 real gaps**, `a_passer_by_does_not_move_the_seated_gatherers` (D238)
 and `a_stopped_friend_is_not_walked_through` (R1b). Neither is a fixture the owner asked for; both are ours, with their causes written
 down.
+
+## D320 - The re-plan takes a fresh stamp, and the past rule finishes its chain (owner: *"C, proceed"*)
+
+**The owner chose C over leaving it, over solid seated men alone (a measured lane deadlock) and over the seat-rule hybrid (a measured
+0.204-tile pile). C was described to him as "the bounded pause with a resume plus the past stamp".**
+
+**Crosscheck first, and it changed the plan**: the pause and the past rule **already exist** (D279's step pass, refined by D281 and
+D290). What was missing was one line - and the reason the chain never completed is a timestamp.
+
+**The original's chain, completed.** A non-past collider means **re-path and pause the loser**. The new path carries a **new
+`createdAt`**; a body that has stood still since *that* moment is **past** (`path->createdAt >= other->lastMoveTime`) and is walked
+through. We re-planned but kept the old route's stamp, so a man who had stopped stayed non-past **for ever**: the walker re-planned on
+every tick it touched him, got the same route straight through him, and sank until their centres coincided - `the walker went 0 raw from a
+friend standing still at tick 176`, with **600 re-plans in 600 ticks**.
+
+**Landed:** `replan_around_bodies` stamps `created: self.tick`. Nothing else about the step, the pause or the route changes.
+
+**Witness** - the fixture that had been ignored *as the specification for this slice* since D242, re-specified rather than deleted and
+renamed with its pair stated (`a_stopped_friend_is_only_walked_through_after_the_replan`). It asserts the chain: the friend **becomes
+past** after the re-plan; the walker is inside a non-past friend for **at most 60 ticks** (the 1.5 s pause) where it was 600; and it
+re-plans **at most 4 times** in 600 ticks. **Mutation-proved**: restoring `created = route.created` fails it on the first assertion.
+
+**Measured** (acceptance, release, seed 7, idle; parent `25cb1a8` against this change):
+
+| ticks | before: entities / repaths / wall | after |
+|---|---|---|
+| 12,000 | 153 / 2,229 / 1.60 s | 154 / **732** / **1.53 s** |
+| 24,000 | 158 / 5,481 / 5.18 s | 159 / **2,645** / **4.84 s** |
+| 48,000 | 129 / 10,026 / 9.30 s | 141 / **7,125** / **13.01 s** |
+
+Re-paths fall 67% / 52% and the first half of the match is **7% faster**; the full match is **40% slower** and its state changes
+(`c7191f531bd81b1b`, 141 entities, **`players=1`** - the fight now resolves). The gap is entirely in the second half, so it is the
+**combat** the script could not previously reach, not the villagers. Suite **929 / 0 / 20** from **928 / 0 / 21**, nothing joined.
+
+**Own error, stated**: the first timing A/B was run while the full suite held both cores and read 19.5 s against 13.5 s - both were
+contention. The table is idle and sequential.
+
+**Still open, and next**: the seat shuffle (`overlap::a_passer_by_does_not_move_the_seated_gatherers`) is untouched and now fails its own
+precondition (*"no gatherer was at work beside the node"*), so it measures nothing. D238's verdict that the shuffle is *load-bearing* was
+measured **before** this chain existed; re-measuring it is the step that this one makes meaningful.

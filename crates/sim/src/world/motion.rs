@@ -373,9 +373,17 @@ impl World {
 
     /// **Plan the same goal again, round the bodies that refused the step** (D281).
     ///
-    /// The goal is the route's own last point, so the re-plan does not drift toward a tile centre, and the route keeps its
-    /// creation time - it is the *past* test's only input. A search that fails leaves the old route in place and the man
-    /// stands, which is the original's answer to a wall of bodies he cannot get round, and what the pause is for.
+    /// The goal is the route's own last point, so the re-plan does not drift toward a tile centre. A search that fails leaves the
+    /// old route in place and the man stands, which is the original's answer to a wall of bodies he cannot get round, and what the
+    /// pause is for.
+    ///
+    /// **The re-plan takes a FRESH stamp** (D320). `path->createdAt` is the past test's only input, and in the original a re-plan
+    /// is a **new path**, so a collider that has not moved since *that* plan is past and is walked through.
+    ///
+    /// Keeping the old stamp made a stopped man permanently non-past: the walker re-planned on every tick it touched him, got the
+    /// same route straight through him, and ended **0 raw** from the man it was passing (measured at tick 176 of
+    /// `replan::a_stopped_friend_is_only_walked_through_after_the_replan`), which reads to a player as one villager standing inside
+    /// another for ever.
     fn replan_around_bodies(&mut self, id: EntityId, blockers: &[crate::ground::Clear]) {
         let Some(route) = self.paths.get(&id) else {
             return;
@@ -383,7 +391,8 @@ impl World {
         let Some(goal) = route.points.last().copied() else {
             return;
         };
-        let created = route.created;
+        // A new path, so a new stamp: a body that has stood still since this moment is past (`path->createdAt >= lastMoveTime`).
+        let created = self.tick;
         let mates = route.mates.clone();
         let Some(from) = self.position(id) else {
             return;
