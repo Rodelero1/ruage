@@ -2007,11 +2007,21 @@ impl World {
             if other.kind != EntityKind::Unit || other.hp <= 0 || Some(other.id) == mover {
                 continue;
             }
-            let moving = self
+            // **A body is an obstacle unless it MOVED on the previous tick** (step 6, D341). The binary's test is
+            // `[vtbl+0x2a0] == 0` - velocity zero - in `FUN_007f9d80:45`: the object's grown box goes into the search
+            // unless the mover ignores it *and* it is moving. "Has a route" stood in for that, which certified legs
+            // straight through a man standing at work beside his site with a route still on his books: measured, a
+            // second walker spent 19 ticks inside that builder's box (closest axis gap 0 raw).
+            // **Both halves are needed.** `velocity` is not the field - it is a fixture-only drift for idle bodies
+            // (`lib.rs:2313`) - so the movement is read from `last_moved`, which the movement pass writes for every
+            // body that took a step. The route half is what keeps a body that has *just been placed* an obstacle:
+            // `last_moved` starts at the tick it appeared, so a spawn would otherwise read as motion for one tick.
+            let has_route = self
                 .paths
                 .get(&other.id)
                 .is_some_and(|route| !route.points.is_empty());
-            if moving && other.pause_remaining == 0 {
+            let moved = self.tick.saturating_sub(1) <= other.last_moved;
+            if has_route && moved {
                 continue;
             }
             // **The box is the other body's, the reach is the mover's** (D286): `FUN_00840830` grows the query box by the

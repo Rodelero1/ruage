@@ -9461,3 +9461,35 @@ invisible to the planner, and that, not the waypoint index, is what makes the re
 
 **Instrumentation kept:** `crates/sim/tests/substitute_probe.rs` (ignored, prints the two scenes' re-plan counts), and
 the reach-arm reading above, so the next session does not re-derive them.
+
+## D341 - sequence step 6 landed: a body is an obstacle unless it moved
+
+**Crosscheck.** `FUN_007f9d80` (`pathfinding.cpp`, HD 5.7) walks the route's object list and inserts each one as a box
+grown by the mover's radius **unless** its id is in the mover's ignore list **and** `[vtbl+0x2a0]` - the same `isMoving`
+`FUN_008a4360` logs - answers non-zero:
+
+```c
+if (((local_10 <= iVar4) && (iVar4 = (**(code **)(*piVar3 + 0x2a0))(), iVar4 == 0)) || iVar6 < param_6) { ... FUN_007f6ff0(&box, 1); }
+```
+
+So the exemption is **velocity**, not a route: a unit standing at work with a path on its books is still an obstruction.
+openage's note agrees from the other side - the high-level search *"ignores moving objects, e.g. units or wildlife"*.
+
+**Prior implementation.** `standing_bodies` (`lib.rs:1991`) skipped every body with `route.points` non-empty and no
+pause. That certified legs straight through a man standing at work: a builder whose site is beside it answers "adjacent"
+from the first tick and never spends its route, so it stands with a live route for as long as the site takes.
+
+**Landed.** `has_route && moved` - both halves, where `moved` is `self.tick - 1 <= other.last_moved` (the movement pass
+writes `last_moved` for every body that took a step). `velocity` is not the field: it is a fixture-only drift for idle
+bodies (`lib.rs:2313`). The route half is load-bearing - `last_moved` starts at the tick a body appeared, so without it
+a freshly placed body reads as moving for one tick; the first cut dropped it and `evasion` and `gather_ring` went red.
+
+**Witness, red first:** `moving_bodies::a_standing_body_with_a_route_is_planned_round` - a builder at work beside a site
+one tile east (live `Build`, live route, zero motion) and a second man ordered past him through his tile centre. Un-cut:
+**19 ticks inside the builder's box, closest axis gap 0 raw**. Cut: **0 ticks, closest gap 30,018 raw** (1.5 tiles).
+
+**Measured, same tree, one variable:** acceptance `1e1fcc3cf2b05a4c` (was `36ceb342bd94acc9`), **133 entities and one
+player alive at 48,000** (was 134 and two), re-paths **36,567** (was 40,127, -9%), wall **11.42 s** median of three (was
+15.60 s). The wall falls, but not cleanly: the scenario diverges - player 2 no longer survives - and a dead player is
+work the tick never does again, so the 27% is not a cost claim for the same match. Suite 219 result lines, 937 passed, 0
+failed, 22 ignored; conformance 21 / 0 / 0.

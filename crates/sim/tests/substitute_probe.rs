@@ -19,7 +19,13 @@ use ruage_sim::{Command, EntityId, EntityKind, World};
 mod common;
 
 fn next_id(world: &World) -> u32 {
-    world.entities().iter().map(|entity| entity.id.0).max().unwrap_or(0) + 1
+    world
+        .entities()
+        .iter()
+        .map(|entity| entity.id.0)
+        .max()
+        .unwrap_or(0)
+        + 1
 }
 
 /// A stretch of clear ground with a lane, away from the seeded base.
@@ -27,7 +33,10 @@ fn lane(world: &World) -> ((i64, i64), (i64, i64)) {
     for y in 40..54u16 {
         for x in 30..48u16 {
             if (0..12).all(|d| world.is_free_ground(x + d - 2, y)) {
-                return ((i64::from(x), i64::from(y)), (i64::from(x) + 10, i64::from(y)));
+                return (
+                    (i64::from(x), i64::from(y)),
+                    (i64::from(x) + 10, i64::from(y)),
+                );
             }
         }
     }
