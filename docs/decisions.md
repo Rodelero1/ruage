@@ -8697,8 +8697,7 @@ catches a deliberate shove - a mutation that displaces a working man while leavi
 
 **Measured.** Acceptance match (release, seed 7, 48,000 ticks) **9.28 s / 9.54 s** against **8.53 s / 8.81 s** on `373902f`
 (**+9% to +12%**), and the outcome **changed**, as it must: hash `89ff37d844cfd11f` against `3f6c802027ff40fb`,
-**129 entities against 141**, **10,026 repaths against 6,031**. The economy is smaller because a carrier now walks the last ~0.21
-tiles on every trip instead of banking from 0.45 out - the price of the rule, taken on the owner's side of the trade. **Not
+**129 entities against 141**, **10,026 repaths against 6,031**. *(Corrected by D318: the economy is **larger**, not smaller - the stockpile at 2,400 s more than doubles, wood 813 -> 1,831 and food 395 -> 1,503, and the fewer entities are fewer *finished* foundations. The sentence that stood here was written from the entity count alone.)* **Not
 measured:** the delivered totals per column on both trees, which would turn the wall-time figure into a throughput figure. No carrier
 is stuck in `Return` without a route in the 48,000-tick dump. Suite **924 / 3 / 21** from **923 / 4 / 21**, no new red; clippy and
 `fmt` clean. Review: `docs/reviews/2026-11-20-d313-a-load-leaves-at-the-wall.md`.
@@ -8812,3 +8811,32 @@ invariant. Both changes were reverted; the tree is clean and the suite stands at
 **What is still true from D312**: the walk to a stand goes round the plot's corner rather than to the nearest side, and `approach_footprint`
 - the builder's version - already answers "nearest to where he is". Making the two agree is a **tidiness** change with a route-length
 measurement behind it, not a rule fix. Recorded as such in `docs/next-step.md`.
+
+## D318 - D313's economy figure is corrected: the stockpile **doubles**, and the error was mine
+
+**How the error happened.** D313's row (and its review) said "the economy is **smaller** because a carrier now walks the last ~0.21 tiles on
+every trip", with the entity count (141 -> 129) as the only number behind it and an arithmetic estimate standing in for a measurement. The
+owed measurement - the delivered/scheduled totals per column - has now been taken, and it says the opposite.
+
+**Measured**: the same acceptance match, release, seed 7, 48,000 ticks, `--report 600`, three trees (D312 in a worktree at `338b9f8`, D313 at
+`ec9d99c`, and today's `fee9cd8`; the worktrees ran the main tree's generated `config/gamedata/`, which none of these commits changed):
+
+```
+                    600 s            1200 s           1800 s            2400 s        units / buildings
+D312 (338b9f8)   w  22  f  23     w  17  f  133    w  354  f  340    w  813  f  395       36 / 16
+D313 (ec9d99c)   w  17  f   8     w  90  f  227    w 1006  f 1363    w 1831  f 1503       35 / 18
+today (fee9cd8)  w  17  f   8     w  90  f  227    w 1006  f 1363    w 1831  f 1503       35 / 18
+```
+
+**So the stricter bank rule more than doubles the stockpile** (wood 813 -> 1,831, food 395 -> 1,503 at 2,400 s) and the entity count fell
+because **fewer foundations** are standing around (buildings 16 -> 18, units 36 -> 35 - the difference is in what a run has *finished*, not
+in what it has gathered). The guess about the mechanism was wrong in direction: a carrier that banks at the wall is the one that stops
+lingering 0.45 tiles out with its route spent, which is the state the old clause tolerated.
+
+**What this corrects**: D313's row and `docs/reviews/2026-11-20-d313-a-load-leaves-at-the-wall.md` both carry the wrong claim; the review
+has a correction section and this row supersedes the row's sentence. **D314 and D315 move nothing in the acceptance match** - today's tree and
+`ec9d99c` print the same numbers line for line, which is the bit-identical hash seen at D314 confirmed on the economy as well.
+
+**The lesson, for the next reviewer of my own work**: an entity count is not a throughput figure, and "smaller economy" is a claim about
+*delivered* resources. `--report` prints the stockpile at each interval and costs one run; the estimate that replaced it was wrong by a factor
+of two in the opposite direction.

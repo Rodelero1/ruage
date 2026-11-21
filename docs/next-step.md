@@ -25,8 +25,8 @@ defect is closed:
    as the model, and measure the acceptance match's total walking rather than promising a rule.
 2. **A unit fixture for D314's rule**: a gather on a node behind a wall is refused **at the order**, not at the tick. Today the rule
    is pinned only through the rule runner (`gather_pick`), which is a longer path than the rule needs.
-3. **The delivered totals per column, both trees** (owed by D313): `headless --report` prints them, and they turn D313's "+9% wall
-   time" into a throughput figure for the stricter bank rule.
+3. *(Done in D318 - the owed measurement was taken: the stricter bank rule **doubles** the stockpile at 2,400 s, wood 813 -> 1,831 and
+   food 395 -> 1,503; D313's "smaller economy" was my error and is corrected.)*
 4. **An evenly mirrored skirmish** (named by D315): player 2's opening is at 70 s where player 1's is at 320 s. It no longer decides
    a test, but the file calls that section a mirror.
 

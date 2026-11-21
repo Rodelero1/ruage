@@ -46,6 +46,24 @@ working man while leaving others at work was not constructed: one attempt compil
 fixture stayed green with the D246 freeze removed, because a man already at his place has nowhere to step). So the fixture is
 shown live and non-vacuous, not shown to catch a deliberate shove.
 
+## Correction (D318): the economy is **larger**, not smaller - and the wrong figure came from counting entities
+
+The paragraph below was written from the entity count (141 -> 129) with no delivered or stockpile figure behind it. Measured properly
+afterwards, by playing the same acceptance match with `--report 600` on the D312 tree (`338b9f8`), the D313 tree (`ec9d99c`) and
+today's:
+
+```
+                    600 s            1200 s           1800 s            2400 s        units/buildings
+D312 (338b9f8)   w  22  f  23     w  17  f  133    w  354  f  340    w  813  f  395      36 / 16
+D313 (ec9d99c)   w  17  f   8     w  90  f  227    w 1006  f 1363    w 1831  f 1503      35 / 18
+today (fee9cd8)  w  17  f   8     w  90  f  227    w 1006  f 1363    w 1831  f 1503      35 / 18
+```
+
+**So the stricter bank rule more than doubles the stockpile at 2,400 s** (wood 813 -> 1,831, food 395 -> 1,503) and the fewer entities
+are *fewer builders' foundations standing around*, not a starved economy: buildings 16 -> 18, units 36 -> 35. The cause is the opposite
+of what was guessed here - a carrier that banks **at** the wall is not the one that lingers 0.45 tiles out with its route spent. The
+figure below is left standing as the wrong claim it was, and the decision row carries the correction.
+
 ## Performance
 
 - **Acceptance match, release, seed 7, 48,000 ticks**: **9.28 s** and **9.54 s** over two runs, against **8.53 s / 8.81 s** on

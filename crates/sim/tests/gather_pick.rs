@@ -192,6 +192,44 @@ fn far_wood(world: &World) -> i64 {
         .sum()
 }
 
+/// **A node behind a wall is refused at the order, not at the tick** (D314, isolating the rule the fixture above pins through the
+/// runner). The dry run used to plan at the node's *point* and skip the reach test, so `submit_checked` answered `Ok` and the tick
+/// then refused it with the error thrown away - a click that does nothing. Both questions are one function now, so this answer and the
+/// tick's cannot disagree.
+#[test]
+fn a_gather_on_a_walled_node_is_refused_when_it_is_ordered() {
+    let Some(mut world) = world_of(MAP) else {
+        return;
+    };
+    for y in 0..14u16 {
+        segment(&mut world, 9_000 + u32::from(y), 11, y);
+    }
+    world.step().expect("the segments land");
+    let scale = world.scale();
+    // A tree of the **near block**, named directly: the fog rule would otherwise keep it out of the picker's list, and this
+    // fixture is about the refusal, not about who notices what.
+    let node = world
+        .entities()
+        .iter()
+        .find(|entity| {
+            matches!(entity.kind, EntityKind::Resource(_))
+                && entity.position.0.raw().div_euclid(scale) >= 12
+        })
+        .map(|entity| entity.id)
+        .expect("a tree behind the wall");
+    let villager = world
+        .entities()
+        .iter()
+        .find(|entity| entity.player == 1 && entity.kind == EntityKind::Unit)
+        .map(|entity| entity.id)
+        .expect("a villager");
+    let verdict = world.submit_checked(Command::Gather { villager, node });
+    assert!(
+        verdict.is_err(),
+        "the order was accepted by a tree behind a wall - the tick would drop it and the player would see nothing happen: {verdict:?}"
+    );
+}
+
 /// **A honeycomb of single trees** - twenty-four of them, four tiles apart, every one with its whole ring on open ground.
 ///
 /// A wood laid out this way is the expensive shape for a picker: no tree's ring is blocked, so a picker that asks
