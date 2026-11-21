@@ -8733,3 +8733,30 @@ the only evidence the new branch fires. Suite **925 / 2 / 21** from **924 / 3 / 
 
 **Owed:** a unit fixture isolating the rule (a gather on a walled node refused **at the order**), which today is pinned only through
 the rule runner; and `work_position`'s compass-order stand choice (D312 finding 2), still open.
+
+## D315 - The skirmish was one-sided because its clock was stale
+
+**Crosscheck, and the two reds were one fault with a misleading name.** Both said *"player 1 has no unit militia"*; the step list showed the
+cause one pod above it:
+
+```
+500.0s  Refused("player 1 has no finished barracks")
+525.0s  Refused("player 1 has no unit militia")
+```
+
+A probe printing each side's possessions, the foundation's progress and villager 2's health every ten seconds: player 1's barracks
+foundation appears at 320 s at **119 of 1000** build ticks, **never advances**, and villager 2 - its builder - is **dead**: hp 40 -> 37 -> 31
+-> 25 between 260 s and 310 s, gone by 340 s. Player 2's two militia were attacking from **230 s** because its barracks stands at 70 s,
+while player 1's own timeline (measured with player 2's attack held back) is: site 320 s, 422 of 1000 at 350 s, finished before 400 s,
+militia in hand at 525 s.
+
+**So the content was wrong, not the engine**: a five-minute head start in a section the file calls a *mirrored* opening, and its own
+comments already warn that the numbers were measured under older rules. **Landed:** player 2's attack moves **230 s -> 600 s**, with the
+measurement in a comment beside it. No engine code, no assertion touched.
+
+**Measured.** Suite **927 / 0 / 21** - the first fully green run of this work, from **925 / 2 / 21** - and the acceptance match is
+**bit-identical** (`89ff37d844cfd11f`, 129 entities, 10,026 repaths, 9.54 / 9.21 s), which is the check that a change to one scenario is
+inert everywhere else. clippy and `fmt` clean. Review: `docs/reviews/2026-11-20-d315-the-skirmish-clock.md`.
+
+**Named and not done:** player 2's opening is still much faster than player 1's (barracks 70 s against 320 s). It no longer decides the test,
+but the mirror is not even, and evening it is a content decision with a balance question behind it.

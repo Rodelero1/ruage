@@ -1,40 +1,32 @@
-# OPEN - the skirmish pair, then the two stand/reach follow-ups, then the written-up reads
+# OPEN - the suite is green; next are the stand choice, the owed fixtures, and the written-up reads
 
-**Where this branch stands, measured (`blunt-port`, D314).** Four of the six original reds are fixed, and the "click that does
-nothing" defect found in D312 is closed:
+**Where this branch stands, measured (`blunt-port`, D315).** All six original reds are fixed and the "click that does nothing"
+defect is closed:
 
 - **the two `reseed` rows** (D312): the gather was refused by a reach test measured to the plot's *anchor point*
   (`gap_to_footprint`), and the fixture's villager had **speed 0** - a statue was asked to work a plot;
 - **the drop-site invariant** (D313): a carrier banked from up to 0.45 tiles because of a clause written before tangency was
   allowed; it is `radius + one step` and nothing looser;
 - **the walled-off wood** (D314): the dry run planned at the node's *point* and skipped the reach test, so a click on a walled
-  node was accepted and dropped at apply; `gather_route` is now one authority, called by both.
+  node was accepted and dropped at apply; `gather_route` is now one authority, called by both;
+- **the skirmish pair** (D315): not an engine fault at all - player 2's attack at 230 s killed player 1's barracks builder and froze
+  the site at 119 of 1000, so player 1 never fielded militia. Player 2's attack is at 600 s, measured.
 
-Suite **925 passed / 2 failed / 21 ignored**. Acceptance: hash `89ff37d844cfd11f`, 129 entities, 10,026 repaths, 9.27-9.42 s
-(the state matches D313 bit for bit - the stricter bank is the last thing that moved behaviour).
+**Suite 927 passed / 0 failed / 21 ignored** - fully green. Acceptance: hash `89ff37d844cfd11f`, 129 entities, 10,026 repaths,
+9.21-9.54 s.
 
 ## Ready now - no evidence needed
 
-1. **The skirmish pair** - the last two reds, both in `crates/sim/tests/skirmish.rs`, and **both failure messages point at one cause**:
-
-   ```
-   both_sides_field_an_army                     line 91:  player 1 never fielded infantry: the skirmish is one-sided
-   the_skirmish_only_refuses_what_the_fight_has_taken  line 147: the skirmish hit a script error: ["player 1 has no unit militia"]
-   ```
-
-   The scene is `config/skirmish.toml` played through `Runner::due`; the first test counts entities whose `unit` is
-   `economy.role["militia"]` (so that role exists), and the second reports a **step-resolution** error naming "militia" - i.e. the
-   script's own unit lookup, not the engine's. **Start there**: read `resolve`'s unit-name path in `crates/script/src/lib.rs`
-   (the `train` arm) and check what it maps a name to, then whether `player 1` can legally field militia at all (a prerequisite or
-   a civ gate would answer "has no unit" the same way). Nothing else in the suite depends on this scenario.
-2. **A unit fixture for D314's rule**: a gather on a node behind a wall is refused **at the order**, not at the tick. Today the rule
-   is pinned only through the rule runner (`gather_pick`), which is a longer path than the rule needs.
-3. **`work_position` chooses a stand by compass order** (D312 finding 2): the ring starts north-west and it skips the tile the man
+1. **`work_position` chooses a stand by compass order** (D312 finding 2): its ring starts north-west and it skips the tile the man
    already stands on, because `plan_path(from, from)` is `NoPath` - measured, a man beside a plot at `(19, 18)` walked to
    `(19, 17)`. `approach_footprint` (the builder's) already picks the **nearest**; the two should agree. Every gather order goes
    through it, so it wants its own witness and its own review.
-4. **The delivered totals per column, both trees** (owed by D313): `headless --report` prints them, and they turn "+9% wall time"
-   into a throughput figure for the stricter bank rule.
+2. **A unit fixture for D314's rule**: a gather on a node behind a wall is refused **at the order**, not at the tick. Today the rule
+   is pinned only through the rule runner (`gather_pick`), which is a longer path than the rule needs.
+3. **The delivered totals per column, both trees** (owed by D313): `headless --report` prints them, and they turn D313's "+9% wall
+   time" into a throughput figure for the stricter bank rule.
+4. **An evenly mirrored skirmish** (named by D315): player 2's opening is at 70 s where player 1's is at 320 s. It no longer decides
+   a test, but the file calls that section a mirror.
 
 ## Ready after one short read each
 
@@ -58,11 +50,5 @@ Suite **925 passed / 2 failed / 21 ignored**. Acceptance: hash `89ff37d844cfd11f
 - Any further work on the levelled search: four levels, the descent, the cost table, the chain and the refinement are landed,
   measured and gated.
 - The tile search's parity: octile table, `25 x euclid` budget, 20,000 cap, tie-break and best-settled fallback all match.
-- The reseed machinery (D226, D312), the delivery rule (D246, D313) and the gather order's dry run (D314): all landed and pinned.
-
-## The two reds, verbatim
-
-```
-both_sides_field_an_army
-the_skirmish_only_refuses_what_the_fight_has_taken
-```
+- The reseed machinery (D226, D312), the delivery rule (D246, D313), the gather order's dry run (D314) and the skirmish scenario
+  (D315): all landed and pinned.
