@@ -466,34 +466,11 @@ impl World {
             (variant_id, rate_per_tick, carry_cap)
         };
 
-        let from = self
-            .find(villager)
-            .map(|entity| entity.position)
-            .ok_or(SimError::MissingEntity(villager))?;
-        let to = self
-            .find(node)
-            .map(|entity| entity.position)
-            .ok_or(SimError::MissingEntity(node))?;
-        // A building's own tile is blocked, so a worker stands *beside* it. Planning to the centre
-        // would walk the villager into the building, and the walk home would then start from a
-        // blocked tile and never find a route.
-        // **Already standing on the node's tile**: there is nothing to walk, and the search would answer `NoPath` for a start
-        // that is its own goal. That used to be unreachable because the settle walked a man off a node's tile; it is reachable
-        // now, because a crowd presses onto whatever ground is between it and the node.
-        let planned = if self.tile_of(from) == self.tile_of(to) {
-            Ok(Vec::new())
-        } else if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
-            match self.work_position(from, to) {
-                Some(stand) => self.plan_path(from, stand),
-                None => self.plan_path(from, to),
-            }
-        } else {
-            // The walk still ends at the neighbouring tile's centre - a route that ends anywhere else is a route the movement
-            // rules may never call *arrived*, and a worker that never arrives never works. The last third of a tile is closed by
-            // `settle` in the gather arm instead (D169).
-            self.plan_path(from, to)
-        };
-        let route = match planned {
+        // **One question, asked by both the click and the tick** (D314). The route and the reach test live in
+        // `gather_route`, and the dry run calls it rather than its own copy: it used to plan at the node's **point** and skip
+        // the reach test, so a click on a node behind a wall was answered `Ok` and then dropped at apply with the error
+        // discarded - measured on `gather_pick`'s walled block, where the villager stood idle with the order accepted.
+        let route = match self.gather_route(villager, node) {
             Ok(route) => route,
             Err(error) => {
                 // **A node nobody can work is remembered here** (D138). The picker asks nothing - a search per candidate
@@ -504,22 +481,6 @@ impl World {
                 return Err(error);
             }
         };
-        // **A node behind a wall is refused, not walked at** (D241, kept by D279): the search answers an unreachable goal
-        // with the nearest tile it settled on, so a route always exists - the question is whether it ends at the node's
-        // **ground**. The measure is the gap to the footprint, not to the anchor point (D312): a route's points are tile
-        // corners and an entity's position is wherever `Command::Spawn`, a scenario or a save put it, so a point measure
-        // read the first free ring tile of a centre-anchored plot as 1.5 tiles away on *each* axis instead of 1.0 - and
-        // refused a villager sent to a plot standing in the open (measured: 4.5 tile-squared against a 2-tile reach).
-        if let Some(end) = route.last() {
-            let reach = 2 * self.scale;
-            if self.gap_to_footprint(*end, node) > reach * reach {
-                self.share_failed.insert(node, self.tick);
-                return Err(SimError::NoPath {
-                    from: self.tile_of(from),
-                    to: self.tile_of(to),
-                });
-            }
-        }
         self.put_route(
             villager,
             Route {
@@ -547,5 +508,63 @@ impl World {
         // what is already in its hands. It used to be zeroed here, which was invisible until a worker could move on by
         // itself.
         Ok(())
+    }
+
+    /// **Where the walk to `node` ends, and whether that end is the node's ground** (D314).
+    ///
+    /// The whole of the planner's question about a gather order, in one place, because two callers need the same answer: the
+    /// order spends the route, and `Command::Gather`'s dry run only wants to know whether it would be refused. The dry run
+    /// used to keep its own version - it planned at the node's **point** and never asked the reach question - so a click on a
+    /// node behind a wall was answered `Ok` and then dropped at apply with the error thrown away. Measured on `gather_pick`'s
+    /// walled block: the order was taken, and the villager stood idle for ever.
+    ///
+    /// Returns the route's points (empty when the worker is already on the node's tile).
+    pub(crate) fn gather_route(
+        &self,
+        villager: EntityId,
+        node: EntityId,
+    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
+        let from = self
+            .find(villager)
+            .map(|entity| entity.position)
+            .ok_or(SimError::MissingEntity(villager))?;
+        let to = self
+            .find(node)
+            .map(|entity| entity.position)
+            .ok_or(SimError::MissingEntity(node))?;
+        // A building's own tile is blocked, so a worker stands *beside* it. Planning to the centre would walk the villager
+        // into the building, and the walk home would then start from a blocked tile and never find a route.
+        // **Already standing on the node's tile**: there is nothing to walk, and the search would answer `NoPath` for a start
+        // that is its own goal. That used to be unreachable because the settle walked a man off a node's tile; it is reachable
+        // now, because a crowd presses onto whatever ground is between it and the node.
+        let route = if self.tile_of(from) == self.tile_of(to) {
+            Vec::new()
+        } else if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
+            match self.work_position(from, to) {
+                Some(stand) => self.plan_path(from, stand)?,
+                None => self.plan_path(from, to)?,
+            }
+        } else {
+            // The walk still ends at the neighbouring tile's centre - a route that ends anywhere else is a route the movement
+            // rules may never call *arrived*, and a worker that never arrives never works. The last third of a tile is closed
+            // by `settle` in the gather arm instead (D169).
+            self.plan_path(from, to)?
+        };
+        // **A node behind a wall is refused, not walked at** (D241, kept by D279): the search answers an unreachable goal
+        // with the nearest tile it settled on, so a route always exists - the question is whether it ends at the node's
+        // **ground**. The measure is the gap to the footprint, not to the anchor point (D312): a route's points are tile
+        // corners and an entity's position is wherever `Command::Spawn`, a scenario or a save put it, so a point measure
+        // read the first free ring tile of a centre-anchored plot as 1.5 tiles away on *each* axis instead of 1.0 - and
+        // refused a villager sent to a plot standing in the open (measured: 4.5 tile-squared against a 2-tile reach).
+        if let Some(end) = route.last() {
+            let reach = 2 * self.scale;
+            if self.gap_to_footprint(*end, node) > reach * reach {
+                return Err(SimError::NoPath {
+                    from: self.tile_of(from),
+                    to: self.tile_of(to),
+                });
+            }
+        }
+        Ok(route)
     }
 }

@@ -8702,3 +8702,34 @@ tiles on every trip instead of banking from 0.45 out - the price of the rule, ta
 measured:** the delivered totals per column on both trees, which would turn the wall-time figure into a throughput figure. No carrier
 is stuck in `Return` without a route in the 48,000-tick dump. Suite **924 / 3 / 21** from **923 / 4 / 21**, no new red; clippy and
 `fmt` clean. Review: `docs/reviews/2026-11-20-d313-a-load-leaves-at-the-wall.md`.
+
+## D314 - The click asks what the tick will ask
+
+**Crosscheck, and the defect D312 named is the one that closed this red.** `Command::Gather`'s dry run planned at the node's
+**point** and never asked the reach question (D279), while `start_gather` planned at the **work stand** and asked it. When the two
+disagreed the click won and the player lost: `submit_checked` answered `Ok`, the apply returned `Err`, and `step` threw the error
+away. Measured on `gather_pick`'s walled block:
+
+```
+candidate EntityId(11) at (13,6) workable=true
+submit_checked on the nearest candidate: Ok(())
+after 40 ticks: Some("Idle") (idle means the apply refused it)
+```
+
+That is also why `a_walled_off_wood_is_tried_once_and_then_left_alone` was red: its first claim is *"the picker must take the
+nearest node and let the engine refuse it"* and it reads the refusals the runner collected - of which there were none, because the
+refusal happened where no caller could see it. **The picker never pre-filtered**: a probe showed it offering the walled node and
+its tiles workable; the refusal was simply swallowed one layer down.
+
+**Landed:** `World::gather_route` - work stand, plan and footprint-box reach test in one function - called by both
+`start_gather_with` (which then spends the route and keeps its `share_failed` book) and the dry run. One authority, and it is the
+apply's.
+**Witness:** the walled-wood fixture, watched failing with *"it refused nothing, so it pre-filtered"* and green after, **untouched**.
+
+**Measured.** Acceptance `9.42 / 9.27 s` against `9.28 / 9.54 s` on `ec9d99c`, with a **bit-identical** state
+(`89ff37d844cfd11f`, 129 entities, 10,026 repaths) - so no gather order in that match is walled at the click, and the fixture is
+the only evidence the new branch fires. Suite **925 / 2 / 21** from **924 / 3 / 21**; the red set lost the walled-wood row and
+**nothing joined**. clippy and `fmt` clean. Review: `docs/reviews/2026-11-20-d314-the-click-asks-what-the-tick-asks.md`.
+
+**Owed:** a unit fixture isolating the rule (a gather on a walled node refused **at the order**), which today is pinned only through
+the rule runner; and `work_position`'s compass-order stand choice (D312 finding 2), still open.

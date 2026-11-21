@@ -51,10 +51,13 @@ impl World {
                 // answers `NoPath`, and the order was refused as a walled-off node - reachable now that a crowd presses onto a
                 // node's tile (D293). The general planner keeps its rule: a *walk* to a point in one's own tile still plans, so
                 // the walker lands on the point and not on the tile's centre.
+                // **The click asks what the tick will ask** (D314). It used to plan at the node's *point* and skip the reach
+                // test, so a node behind a wall was accepted here and refused at apply - with the error dropped at `step`,
+                // which reads to a player as a click that does nothing. `gather_route` is the one copy of the question.
                 if let Some(position) = self.find(*villager).map(|e| e.position)
                     && self.tile_of(position) != self.tile_of(target.position)
                 {
-                    self.plan_path_for(*villager, position, target.position)?;
+                    self.gather_route(*villager, *node)?;
                 }
             }
             Command::Build { villager, unit, at } => {
