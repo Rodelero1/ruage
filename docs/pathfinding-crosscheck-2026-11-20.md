@@ -26,6 +26,22 @@ differences**. Sources: the REA pseudocode corpus (`/opt/data/tools/rea/pseudo-a
 
 ## Where we differ, flagged
 
+> **Rows #5, #6 and #7 were closed after this file was written (D334, 2026-11-21), each by a later read rather than by a
+> change of mind, and the file is kept as the record of what was believed on 2026-11-20.** Read the table for #1-#4 and
+> #8-#10 only:
+>
+> - **#5, refinement granularity** - fixed by **D322**: `Levels::refine` emits the crossing of each shared edge, not the cell
+>   centre. (The binary scans the span outward from the interpolated point; ours scans from the low end - still a difference,
+>   and a smaller one.)
+> - **#6, bodies priced at 2000** - **refuted by D328**: `[0x4d]` is the eight-direction run-mask grid `FUN_007ef3f0` builds, not
+>   an occupancy grid, and the only body-aware test in the path system (`FUN_00801a20`) is in the flat search. There is no
+>   2000-per-body row to adopt, so this was not a difference from the game at all.
+> - **#7, the radius in the planner** - fixed by **D306**: `Ground::fits`, `pyramid_for(reach)` and `leg_is_clear(..., reach, ...)`
+>   carry the body's width into the plan. What remains of #7 is `P3`'s box inset and the plan/step agreement, not a point planner.
+>
+> The four rows below that are still live are #1 (the search window), #2 (the 100/600 terrain rows), #3 (the window-distance
+> term) and #10 (the straight-line tier); #4 is #5; #8's nudge is gone (D279) and the forty-tick finish with it (D292); #9 is a where-not-when difference.
+
 | # | area | original | ours | why it is there | direction of the error |
 | --- | --- | --- | --- | --- | --- |
 | **1** | **search window** | every expansion clipped to `in_ECX[0x42..0x45]`, a box whose padding is set in code not yet read | no window - the whole ground is searchable | unread padding; refusing to guess it | **superset**: we find routes the game would refuse, never an illegal one |
@@ -50,11 +66,13 @@ differences**. Sources: the REA pseudocode corpus (`/opt/data/tools/rea/pseudo-a
 
 ## The four differences that change what a player sees
 
-1. **#7, radius in the planner** - our units are planned through lanes they then refuse. This is the oldest and most visible one, and it is
-   the conformance register's U25 row.
-2. **#6, bodies priced at 2000** - a crowd's own routes differ: the game routes through a friend and pays, we route around.
-3. **#5, refinement granularity** - our levelled routes are coarser than the game's, at 8 tiles instead of a tile boundary.
-4. **#3, the window-distance term** - routes near a map edge should bend away from the edge; ours do not.
+> **As of D334 this list is down to one and a half**: #7 is closed (D306), #6 was never a difference (D328), #5 is closed
+> (D322). What is left is #3 (routes near a map edge do not bend away from it) and the unverified #10 (our straight-line tier).
+
+1. ~~**#7, radius in the planner**~~ - closed by D306; the plan is no longer a point's plan.
+2. ~~**#6, bodies priced at 2000**~~ - refuted by D328; there is no such row in the binary.
+3. ~~**#5, refinement granularity**~~ - closed by D322; waypoints are on the cell boundary.
+4. **#3, the window-distance term** - routes near a map edge should bend away from the edge; ours do not (`D299`).
 
 Numbers 1, 2 and 4 are all consequences of one unread thing (the window) or one unmodelled thing (terrain cost). Number 7 is a design
 decision this project made under D279 and has never revisited with a measurement.

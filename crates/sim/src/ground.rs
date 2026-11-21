@@ -6,12 +6,12 @@
 //! * **which tiles does a walk cross** - one A\* over that grid, at the original's cost model, whose answer is pulled to
 //!   the corners an obstacle actually forces and handed back as world points.
 //!
-//! **What is deliberately absent.** This replaces `path.rs`'s weighted search and `short.rs`'s visibility graph, and it
-//! carries none of what grew around them: no search window, no level hierarchy, no radius, no avoid set, no expansion
-//! budget, no "closest reachable" flag. The original plans on the tile grid for *"the boundaries of where this unit's
-//! radii will go"* and answers a goal it cannot reach by settling on the nearest cell - which is what this does, always.
-//! The cost of a route is not a gate anywhere in the engine; the fixtures check shape (reached, never crossed, stopped
-//! beside) rather than an optimal length.
+//! **What is deliberately absent.** The search window (`in_ECX[0x42..0x45]`, unread padding - D299) and the polygonal
+//! short-range pathfinder (P11's third solver, a project). Everything else the original's search carries arrived with a
+//! decision: the **levels** and their refinement (D296-D302, D322), the mover's **radius** in the plan (D306), the body list as
+//! **`Clear` rectangles** (D282/D331), the **expansion budget** (D304) - and the **key** is still ours, not the game's (P13,
+//! D334: we order by `g + 25 x euclid`, the binary by `g + octile`). The cost of a route is not a gate anywhere in the
+//! engine; the fixtures check shape (reached, never crossed, stopped beside) rather than an optimal length.
 //!
 //! **Determinism.** The open set is a binary heap ordered by `(f, g, y, x)`, and the predecessor table is an array
 //! indexed by tile, so two runs expand the same nodes in the same order. No hash-map iteration reaches the result.
@@ -93,8 +93,10 @@ impl Clear {
 pub const CARDINAL: u32 = 16;
 /// The same table's diagonal: `16 x sqrt2`, rounded.
 pub const DIAGONAL: u32 = 23;
-/// The estimate's weight: the original scales Euclidean tile distance by 25, so its search is deliberately not admissible
-/// and returns routes slightly longer than the shortest. Kept because it is what the game does, not because it is better.
+/// **The estimate: Euclidean tile distance x 25** - the original's **expansion budget** (`FUN_008007f0` line 198 compares it
+/// with the expansion counter), not its heuristic. The frontier's key in the binary is `g + octile` (line 316); `search_reporting`
+/// uses this value as the key instead, which is a **known divergence** - P13, measured in D334: it makes every search greedy and
+/// costs 28.9 expansions a search against 11.8, with 54% of searches exhausting the budget against 5.8%.
 pub const ESTIMATE: u32 = 25;
 /// **The hard ceiling on expansions** (`20000 < local_46c` at `0x800d57`): the estimate is the budget, and this is the most the
 /// binary will ever spend on one search, whatever the distance asks for.
@@ -578,6 +580,8 @@ impl Ground {
         // **Tier 2: the levelled search** (D301, D299). The binary's land-unit default is the coarse search over 8-tile cells; it is
         // tried here on the walks the straight line could not take, and only when nothing about bodies is being avoided - a coarse cell
         // knows where objects stand, not where the bodies are, so a route that must keep clear of a friend is the flat search's job.
+        // **Measured, and the tier is inert because of that clause** (D334, P14): 121 long walks in one acceptance match, 121 of
+        // them carrying a stander, 0 coarse searches; lift the gate and 6 answer at level 2 with the acceptance hash unchanged.
         //
         // The chain's legality is by construction: every cell in it is open, and two adjacent open cells share a boundary whose two
         // centres lie inside them. What is *not* by construction is the first and last leg - a body may sit in a corner of its cell with
@@ -783,6 +787,11 @@ impl Ground {
     ///
     /// "Best" is the **smallest octile distance to the goal**, first found wins: `if (iVar21 < local_468)` in the binary, with
     /// `iVar21 = FUN_007ffc80(node, goal)`, a strict comparison, so a tie keeps the earlier node.
+    ///
+    /// **Two things this does not match, both measured (D334).** The frontier's key: the binary orders by `g + octile`
+    /// (`FUN_008007f0:312-316`) where this orders by `g + 25 x euclid` - P13, the greedy key, 28.9 expansions a search against
+    /// 11.8. And the **cap**: `EXPANSION_CAP` is unreachable in every fixture that asserts it (642 expansions into a 20,000
+    /// assertion, 480 x 480; `EXPANSION_CAP = u32::MAX` leaves the row green) - P15.
     pub fn search_reporting(
         &self,
         start: (u16, u16),

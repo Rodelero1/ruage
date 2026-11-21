@@ -2,11 +2,10 @@
 //!
 //! Source: `samuelcaldas/age-of-empires-2-decomp`, `zone_spatial_pyramid_find_path.cpp` / `zone_spatial_pyramid_eval_cost.cpp`
 //! and the tree's own `docs/movement-in-the-binary.md` (`FUN_008007f0`): a cardinal step accumulates **16**, a diagonal the
-//! octile table's **23** (`16 x sqrt2`, rounded), and the estimate is Euclidean tile distance scaled by **25** - a weight of
-//! about 1.56, so the search is deliberately not admissible and returns routes slightly longer than the shortest.
-//!
-//! These are the four numbers a re-port can get wrong silently, so each is asserted against the constant it claims rather
-//! than against whatever the engine happens to do today.
+//! octile table's **23** (`16 x sqrt2`, rounded), and the estimate is Euclidean tile distance scaled by **25** - which is the
+//! **expansion budget**, not the frontier's weight (D334; the binary's key is `g + octile`). These are the numbers a re-port can
+//! get wrong silently, so each is asserted against the constant it claims rather than against whatever the engine happens to do
+//! today.
 
 use ruage_conformance::{CARDINAL, DIAGONAL, SCALE, ground, octile};
 

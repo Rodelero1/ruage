@@ -3,7 +3,8 @@
 //! This replaces `collide`'s ten-answer state machine with the original's own answer to every case:
 //!
 //! 1. **the order's own target** - a man sent at a body arrives beside it, and never walks through it;
-//! 2. **the ground** - a step that lands inside a blocked tile is not taken; the body asks for one new route, throttled;
+//! 2. **the ground** - a step that lands inside a blocked tile is not taken; the body asks for one new route **at once**
+//!    (D332; the original re-plans on every terrain collision);
 //! 3. **a body at rest since the route was planned** is *past* (`path+0x10` against `lastMoveTime`) and the mover walks
 //!    on - that is what ends a head-on once the loser has stood for a tick;
 //! 4. **anything else** refuses the step and **pauses the higher id** for 0.25-1.50 s (`setPause`, `0x8a80ed`-`0x8a8141`),
@@ -13,8 +14,9 @@
 //! implemented literally: the body travels exactly `speed / tick_rate` raw units along its polyline, crossing waypoints
 //! inside the step and spending each one as it passes. A step ends early only when a refusal stops it.
 //!
-//! **What is deliberately absent**: the slide, `TakeAtRest`, the avoid set, the re-plan budget, the step fold, the
-//! substituted waypoint and the per-body counters. Every one of them was invented in this tree and withdrawn by D279.
+//! **What is deliberately absent**: the slide, `TakeAtRest`, the avoid set, the step fold, the substituted waypoint and the
+//! per-body counters. Every one of them was invented in this tree and withdrawn by D279. `REPLAN_TICKS` survives for a
+//! different question - the off-grid goal fallback after twenty consecutive refusals - and no longer throttles a re-plan (D332).
 
 use ruage_fixed::Fixed;
 
@@ -120,8 +122,8 @@ impl World {
             if taken != (Fixed::ZERO, Fixed::ZERO) {
                 moved.push(id);
             }
-            // A refusal is a count against the order, and forty of them finish it (`finish_blocked_orders`). Nothing else
-            // is counted: there is no per-route budget left to spend.
+            // A refusal is a count against the order. Nothing ends the order on it any more (`finish_blocked_orders` went in
+            // D292); the count is what the off-grid goal fallback reads after twenty refusals (`replan_after_ground`).
             if taken == (Fixed::ZERO, Fixed::ZERO) && why.is_a_wait() {
                 let waited = self
                     .stalled

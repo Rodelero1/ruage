@@ -1944,10 +1944,12 @@ impl World {
 
     /// **A route between two points**, as the waypoints a body walks, or `NoPath` when there is no ground to plan on.
     ///
-    /// One planner (D279). The original's tile search, ported in `ground.rs`: no radius argument, no second solver, no
-    /// window and no avoid set. A route is about walls; whether the body *fits* somewhere is a movement question, answered
-    /// by the step pass (`world::motion`). A goal that is walled in is not an error: the search settles on the nearest cell
-    /// it can reach and the route ends there, which is the original's "come as close as you can".
+    /// One entry point, and the route is the game's shape: the straight leg when one is clear (tier 1, unverified - D309), the
+    /// levelled chain for a long walk with no standers near it (tier 2, D296-D302; gated, see P14), and the flat tile A\*
+    /// otherwise. **The body's radius goes in** (`reach_at`), and so does every stander it must plan round (`standing_bodies`);
+    /// the earlier note here claimed the opposite of both, which was true under D279 and stopped being true at D306/D282. A goal
+    /// that is walled in is not an error: the search settles on the nearest cell it can reach and the route ends there, which is
+    /// the original's "come as close as you can".
     pub(crate) fn plan_path(
         &self,
         mover: Option<EntityId>,

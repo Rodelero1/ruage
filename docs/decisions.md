@@ -9237,3 +9237,52 @@ is what makes the acceptance hash possible.
 
 **Measured**: no code change - acceptance `e248486298910e28` (127 entities, 1,727 re-paths, 10.2 s), suite **933 / 0 / 19**, conformance
 **21 / 0 / 0**.
+
+## D334 - The pathing review, adversarially: the 25 was the budget, the hierarchy never ran, and the body rule is a disc
+
+**Asked for:** an adversarial review of pathfinding and obstacle avoidance conformance against the original, the decompilation
+and the published sources. Every claim below was checked against a line in `/opt/data/tools/rea/pseudo-aokhd` or against
+`crates/`, not against a decision row. The note is `docs/reviews/2026-11-21-pathfinding-conformance-adversarial.md`.
+
+**The 25 is the expansion budget, not the heuristic's weight.** `FUN_008007f0` computes `iVar20 = (int)euclid * 25` at lines
+186-191, and `iVar20` is read once - line 198, against `local_46c`, the expansion counter. The **frontier's** key is line 316:
+`stored = (stored_current - octile(current, goal)) + octile(neighbour, goal) + step(current, neighbour)`, which is `g + octile`
+because `stored_current` already is `g + octile`. So the original is an **octile A\*** (weight 1), and the sentence in
+`docs/movement-in-the-binary.md` (and D275, the gap register, `cost_model.rs`) that calls it "weighted A\* with a weight of about
+1.56" is a misreading of the budget. `ground.rs` implements the misreading. **Measured A/B**, one variable, seed 7, 48,000 ticks:
+baseline 5,989 searches at **28.9 expansions each, 54% exhausting the budget**, 1,727 re-paths, hash `e248486298910e28`, 10.04 s;
+with `g + octile` 45,088 searches at **11.8 each, 5.8% exhausting**, 41,557 re-paths, hash `9d5fea513f3f8efb`, both players alive
+at the end, 9.92 s. The greedy key is *more* expensive per search and burns its budget on more than half of all searches. **Not
+landed**: it moves every route and owes a witness. Recorded as **P13**.
+
+**The levelled search never runs in a match, and the gate is ours.** `route_with` takes tier 2 only on `avoid.is_empty() &&
+long_walk && level >= 2`. Instrumented over one acceptance match: **121 long walks, 121 with a non-empty `avoid` list** (1 to 36 standers), **0 coarse
+searches**. Lift the gate: 6 coarse searches, 6 answers at level 2, 0 rejected legs, and the **acceptance hash does not move** -
+those six changed nothing. The other 115 are refused by `descent(start) < 2` (78 at 0, 12 at 1) or by `coarse_route` returning
+`None`. D323's account (the descent is the cause) describes the 1,677 long *calls*, most of which tier 1 answers before the gate.
+Both remaining clauses - the 16-tile floor and "no standers in the plan" - are ours and in no register; the binary's land default
+has neither. Recorded as **P14**.
+
+**The 20,000 cap has no witness.** Its row builds a 480 x 480 map whose own estimate is 16,850 and spends **642** expansions;
+`EXPANSION_CAP = u32::MAX` leaves all four budget rows green. The cap binds only past ~800 tiles of diagonal walk, i.e. a map about
+1,140 tiles a side, and nothing builds one. Recorded as **P15**.
+
+**The body rule is a disc where the game's is a box.** `refusal` refuses on centre distance; `FUN_00840830` is four `<=` on boxes.
+New probe: **4,741 of 218,920 body-steps (2.17%)** end in a pose whose boxes overlap on both axes while the discs are clear - a
+collision the original counts and we take. The probe's exemption split (3,568 "neither") is an **upper bound**: it audits the end
+of a tick, so an exemption that lapsed inside the tick reads as unjustified, and the probe says so in its own doc. Recorded as
+**P16**.
+
+**And the register was stale again.** P4 and P7 read LIVE after D332 and D331 landed them with witnesses in the tree; the D330
+"verified" block still lists P4, P6, P7, P9. D330 called this the third occurrence; this is the fourth and fifth.
+
+**Corrected in the same commit, documentation only plus one probe:** the cost-model paragraph in `movement-in-the-binary.md`; the
+counts in `pathfinding-conformance.md` (21 passed / 0 failed / 0 ignored, not "13 green + 3 ignored"); the 2026-11-20 crosscheck's
+rows #5, #6 and #7, each already closed by D322, D328 and D306; and comments in `ground.rs`, `motion.rs` and `lib.rs` that
+describe a port the code has moved past ("no hierarchy, no radius, no avoid set, no expansion budget"; "the re-plan is throttled";
+"`finish_blocked_orders`"; "no radius argument, no second solver, no avoid set" on `plan_path`).
+
+**Measured, final state:** suite **933 / 0 / 19** before the probe row (933 / 0 / 20 after, the probe being `#[ignore]`d),
+conformance **21 / 0 / 0**, acceptance `e248486298910e28`, 127 entities, 1,727 re-paths, 10.04 s median of five on an idle box.
+**My own error, in the note:** a first timing batch read 16.11 s and I nearly charged the difference to the engine; the machine was
+running the suite on the same two cores. Every number was re-taken idle.

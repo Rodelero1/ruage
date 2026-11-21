@@ -298,3 +298,156 @@ fn how_deeply_bodies_still_overlap() {
         world.repaths()
     );
 }
+
+/// **How much of the body rule is a box, and how much is only a disc?** The step refuses a landing whose *centre* is
+/// inside the pair's reach - a **disc** - while the original's query is four `<=` on the two axis-aligned **boxes**
+/// (`FUN_00840830`, `docs/movement-in-the-binary.md`). A disc is inside a box of the same half-extent, so ours can never
+/// refuse something the box would take; the interest is the other way: a landing whose boxes overlap on **both axes**
+/// while the centres are a full reach apart is one the original counts as a collision and this engine takes.
+///
+/// Tangency is excluded from the count by construction: `|dx| < reach` **and** `|dy| < reach` on both axes, with
+/// `dx² + dy² >= reach²`. That state is only reachable off a tile line, and it is what the diagonal pocket looks like.
+///
+/// **It audits the end of a tick, not the instant of the refusal.** A body that moved is judged against the others'
+/// positions after every body has stepped, so a pair whose exemption lapsed *inside* the tick (the other man moved
+/// after the mover) reads as unjustified here while the step itself was legal. The box figure is a state count with
+/// the same caveat and is reported as one; a per-step attribution needs the pass to record it.
+/// Ignored: `--release -- --ignored --nocapture`.
+#[test]
+#[ignore = "measurement, not a rule"]
+fn what_a_box_would_refuse_that_a_disc_takes() {
+    let units_path = repo("config/gamedata/units.toml");
+    if !units_path.exists() {
+        eprintln!("skipping: no units.toml (generated, D8)");
+        return;
+    }
+    let resources = ruage_data::load_resources_file(&repo("config/resources.toml")).expect("pack");
+    let settings = ruage_data::load_sim_file(&repo("config/sim.toml")).expect("sim");
+    let map = ruage_data::load_map_file(&repo("config/map.toml"), &resources).expect("map");
+    let economy = ruage_data::load_economy_file(&repo("config/economy.toml")).expect("economy");
+    let units = ruage_data::load_units_file(&units_path).expect("units");
+    let combat = ruage_data::load_combat_file(&repo("config/combat.toml")).expect("combat");
+    let techs = ruage_data::load_techs_file(&repo("config/gamedata/techs.toml")).expect("techs");
+    let effects =
+        ruage_data::load_effects_file(&repo("config/gamedata/effects.toml")).expect("effects");
+    let civs = ruage_data::load_civs_file(&repo("config/gamedata/civs.toml")).expect("civs");
+    let scenario = load_scenario_file(&repo("config/acceptance.toml")).expect("scenario");
+
+    let mut world = World::new(&settings, 7).expect("world");
+    world.seed_from(&map, &economy, &units).expect("seed");
+    world.load_resources(&resources).expect("pack");
+    world.apply_policy(&scenario.policy);
+    world.load_combat(&combat);
+    world.load_research(&techs, &effects).expect("research");
+    world.load_civs(&civs).expect("civs");
+    let mut runner = Runner::new(&scenario, world.tick_rate_hz()).expect("runner");
+
+    let scale = world.scale();
+    let radius_of = |unit: Option<u32>| {
+        unit.and_then(|id| units.unit(id))
+            .map(|unit| {
+                unit.radius[0]
+                    .resolve(scale, "radius[0]")
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default()
+    };
+
+    let mut before: std::collections::BTreeMap<u32, (i64, i64, i64)> =
+        std::collections::BTreeMap::new();
+    let mut steps: u64 = 0;
+    let mut pocket_steps: u64 = 0;
+    let mut worst: i64 = 0; // the closest a pocket came to a straight face-to-face overlap
+    let mut printed: u64 = 0;
+    // A landing whose *discs* overlap: the step rule should have refused it unless an exemption held **at that
+    // moment**. Split by the exemption the mover actually had, the way the state audit does, so a state left over
+    // after an exemption lapsed cannot be charged to the step that took it.
+    let (mut disc_mate, mut disc_past, mut disc_neither) = (0u64, 0u64, 0u64);
+
+    for _ in 0..36_000u32 {
+        runner.due(&mut world);
+        world.step().expect("step");
+        let bodies: Vec<(u32, i64, i64, i64)> = world
+            .entities()
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::Unit
+                    && !matches!(entity.task, Task::Garrisoned { .. })
+                    && entity.hp > 0
+            })
+            .map(|entity| {
+                (
+                    entity.id.0,
+                    entity.position.0.raw(),
+                    entity.position.1.raw(),
+                    radius_of(entity.variant.or(entity.unit)).raw(),
+                )
+            })
+            .collect();
+        for i in 0..bodies.len() {
+            let (a_id, ax, ay, ar) = bodies[i];
+            // Only a body that actually landed somewhere this tick is a step to judge; a standing body is not.
+            let Some(previous) = before.get(&a_id).copied() else {
+                continue;
+            };
+            if (previous.0, previous.1) == (ax, ay) {
+                continue;
+            }
+            steps += 1;
+            for (b_id, bx, by, br) in &bodies {
+                if *b_id == a_id {
+                    continue;
+                }
+                let reach = ar + br;
+                if reach <= 0 {
+                    continue;
+                }
+                let (dx, dy) = ((ax - bx).abs(), (ay - by).abs());
+                let boxes = dx < reach && dy < reach;
+                let disc = dx * dx + dy * dy < reach * reach;
+                if disc {
+                    let (one, two) = (EntityId(a_id), EntityId(*b_id));
+                    if world.is_mate(one, two) {
+                        disc_mate += 1;
+                    } else if world.is_past(one, two) || world.is_past(two, one) {
+                        disc_past += 1;
+                    } else {
+                        disc_neither += 1;
+                    }
+                }
+                if boxes && !disc {
+                    pocket_steps += 1;
+                    worst = worst.max(dx.min(dy));
+                    if pocket_steps <= 5 {
+                        let tasks = |id: u32| {
+                            world
+                                .entity(EntityId(id))
+                                .map(|entity| format!("{:?}", entity.task))
+                                .unwrap_or_else(|| "gone".to_owned())
+                        };
+                        printed += 1;
+                        println!(
+                            "POCKET EntityId({a_id}) {:?} into EntityId({b_id}) {:?}: dx={dx} dy={dy} reach={reach} at=({ax},{ay})",
+                            tasks(a_id),
+                            tasks(*b_id)
+                        );
+                    }
+                }
+            }
+        }
+        before = bodies
+            .iter()
+            .map(|(id, x, y, r)| (*id, (*x, *y, *r)))
+            .collect();
+    }
+
+    println!(
+        "36,000 ticks: {steps} body-steps ended somewhere new; **{pocket_steps}** of those end-of-tick states have both \
+         boxes overlapping and the discs clear ({:.4}%)\n\
+         closest pocket axis offset {worst} raw units ({:.3} tiles); first offenders printed above: {printed}\n\
+         end-of-tick states whose discs DO overlap, by the exemption still standing: mates {disc_mate}, past \
+         {disc_past}, **neither {disc_neither}** (an upper bound - an exemption can lapse inside the tick)",
+        pocket_steps as f64 * 100.0 / steps.max(1) as f64,
+        worst as f64 / scale as f64
+    );
+}

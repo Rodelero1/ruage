@@ -21,41 +21,64 @@ ordered behaviour the game does not have, so "meet the original" and "the rule I
 |---|---|---|---|---|
 | P1 | **DONE** | a search with a budget: `h` expansions, hard cap 20,000, then the best settled node answers | same | landed; conformance row green |
 | P2 | **DONE** | the nearest-cell answer picks by octile distance, first node found wins ties | same | landed; conformance row green |
-| P3 | **LIVE - blocked on one read** | `object_depth > 0`: a landing that **penetrates** a new object is refused, and one that touches an already-touched object may stay or slide out but not go deeper | `FUN_00840830`: an **inclusive AABB** (`min <= other_max && other_min <= max`, so touching counts) applied to the mover's box - **optionally shrunk on all four sides** by `+0x268` when `+0x266` is set. Read 2026-11-21 | land the inclusive test **with its inset**: without the inset a half-tile body is refused every one-tile gap, contradicting D306 (the owner measured a packed trebuchet through one). **The inset's formula is not in hand**, and its writer is not identified in the corpus |
-| P4 | **LIVE, unblocked** | a **ground** refusal buys a new route at most once a second (`REPLAN_TICKS = 20`) | re-plans on **every** terrain collision (`0x122f`, `0x128b`) | re-plan on every refusal, then measure a man pressed against a wall - a refusal every tick is a search every tick |
+| P3 | **LIVE - blocked on one read** | `object_depth > 0`: a landing that **penetrates** a new object is refused, and one that touches an already-touched object may stay or slide out but not go deeper | `FUN_00840830`: an **inclusive AABB** (`min <= other_max && other_min <= max`, so touching counts) applied to the mover's box - **optionally shrunk on all four sides** by `+0x268` when `+0x266` is set. Read 2026-11-21 | land the inclusive test **with its inset**: without the inset a half-tile body is refused every one-tile gap, contradicting D306 (the owner measured a packed trebuchet through one). **The inset's formula is not in hand**, and its writer is not identified in the corpus. **The set cannot see this row**: `conformance/contact.rs` pins `Ground::touches_object`, which has no production caller (D334) |
+| P4 | **DONE** | re-plans on **every** ground refusal (D332) | re-plans on **every** terrain collision (`0x122f`, `0x128b`) | landed `844d3e7`, witness `immediate_replan::a_wall_in_the_lane_is_replanned_the_tick_it_is_seen`; measured 1,918 -> 1,727 re-paths for -10% |
 | P5 | **DONE** | no order is abandoned for being blocked (`finish_blocked_orders` and `beside` are both gone) | the original has no such rule; the pause is the only brake | landed (D292), with the seat book (P8) and the no-coincidence guard behind it |
 | P6 | **NOMINAL (measured)** | `Ground` holds `occupants: Vec<u16>` - a **count** per tile - so a blocked tile is one whole tile wide | per-object **radius pairs**, and a radius query over the tile's objects (`FUN_00844310`, `FUN_00840830`) | **every object our content carries is a whole tile wide**: all four resource kinds have `radius = 0.5` (a tile's half-extent) and buildings take the dat's radius, which is 1.0, 1.5 or 2.0. A tile-granular index *is* the object's box for this content, so the deviation is nominal; it becomes live the day an object narrower than its tile exists |
-| P7 | **LIVE** | `standing_bodies` **skips** every body within a quarter tile of the mover in both axes | the search starts on the shared tile and includes **every stander the mover does not ignore** (`FUN_007f9d80`) | drop the skip; two bodies on one tile become plannable |
+| P7 | **DONE** | the planner includes every body the mover is not standing on, by id (D331) | the search starts on the shared tile and includes **every stander the mover does not ignore** (`FUN_007f9d80`) | landed `0ca81ba`, witness `planning_round_bodies::a_body_the_mover_overlaps_is_still_planned_round`; measured 1,362/724/510 -> 1,949/960/130 at 2,400 s |
 | P8 | **DONE** | no seat book: gatherers spread by collision and pause only | the original has no seat book | cut (D293/D294), fixtures re-pointed |
 | P9 | **DONE** | nothing: `beside` (D200) was cut in D292 and the crowd ring point (D271) was withdrawn in D289 - `grep` finds neither rule in the tree | a group is sent to the **clicked point**; no "beside a body holding the goal" rule | already cut, at the owner's instruction, before this directive; the row was stale |
 | P10 | **KEEP** | the pause is drawn from our seeded stream, 0.25-1.50 s | the game's `rand()`, whose own comment calls it *"not considered sync safe"* | same interval, same distribution; only the random *source* differs, and a reproducible one is what makes the acceptance hash possible |
 | P11 | **HALF** | one flat A* for short/medium walks, and the levelled search for long routes | **three**: levelled, tile short-range, and a **polygonal** one for combat (dynamic convex hulls) | the levelled one landed (D296-D302, D322). The polygonal one is **not built** - there is no hull code in the tree - and it is a project, not a step |
-| P12 | **UNREAD** | a tile is walkable or not; no per-edge passage | a **four-bit N/S/W/E neighbour mask**: a step is legal per **edge** (`zone_spatial_pyramid_check_tile.cpp`, `func_001D29F0`) | no HD address pins the mask, so the first move is a **read**, not a patch |
+| P12 | **UNREAD** | a tile is walkable or not; no per-edge passage | a **four-bit N/S/W/E neighbour mask**: a step is legal per **edge** (`zone_spatial_pyramid_check_tile.cpp`, `func_001D29F0`) | no HD address pins the mask, so the first move is a **read**, not a patch. **`docs/pathfinding-conformance.md` reads the mask as a derived cache of `!blocked(neighbour)` and says nothing needs porting** - the two files disagree and one of them is stale (D334) |
+| P13 | **LIVE** | the flat search's heap key is `g + 25 x euclid` (`ground.rs`) | the key is `g + octile`; the 25 is the **expansion budget** only (`FUN_008007f0`, lines 177, 198, 312-316) | measured A/B (D334): greedy key 28.9 expansions/search and 54% of searches exhausting the budget, octile key 11.8 and 5.8%; the match itself changes (`players=1` -> `players=2`). Needs a witness and a suite run before it lands |
+| P14 | **LIVE** | tier 2 runs only on `avoid.is_empty() && manhattan >= 16 && level >= 2` | the land default **is** the levelled search (`FUN_008000d0` -> `FUN_007ee980`); no 16-tile floor and no "no bodies" condition in the source read | measured (D334): 121 long walks in the acceptance match, **121 carrying a stander, 0 coarse searches**; lift the gate -> 6 answers and an unchanged hash. The 16-tile floor is D306's, the avoid clause is newer, and neither is in this register |
+| P15 | **LIVE (no witness)** | `EXPANSION_CAP = 20_000`, and no fixture can reach it | `20000 < local_46c` at `0x800d57` | the row builds a 480x480 map whose own estimate is 16,850 and spends **642** expansions; `EXPANSION_CAP = u32::MAX` leaves it green (D334). Needs a scene past ~800 tiles of diagonal walk, or the row is decoration |
+| P16 | **LIVE** | a body refuses a landing whose **centre** is inside the pair's reach - a **disc** (`motion.rs:505`) | four `<=` on two axis-aligned **boxes**, the query grown by the mover's radius (`FUN_00840830`) | measured (D334): 4,741 of 218,920 body-steps (2.17%) end with both boxes overlapping and the discs clear; the original counts those as collisions and answers with the repath and the pause |
 
 **Rows this box cannot finish, said here rather than at the bottom**: the **100/600 cost rows** (D327) need the terrain descriptor table, and
 this install's `AoK HD.exe` is **a different build** from the decompiled corpus (the table's address is outside its image, and the corpus's
 strings sit `0x8346` lower, non-constantly). **P12's mask** and **P11's polygon pathfinder** both need reads the corpus may not hold.
 
-## Status, verified against the code on 2026-11-21 (D330)
+## Status, verified against the code on 2026-11-21 (D330, re-checked by D334)
 
 Five rows had gone stale in **both directions** - marked open after the work landed, and marked ruled where the code still carried the old rule.
 Each line below was checked by symbol, not from memory:
 
 - **Done since the register was written**: P1, P2 (budget and octile tie-break), P5 (`finish_blocked_orders` and `beside` no longer exist),
   P8 (no seat book), and the levelled half of P11.
-- **Live and unblocked**: P4 (its blocker was the seat book, cut by D293), P6 (`occupants: Vec<u16>` is still a per-tile count), P7 (the
-  quarter-tile skip is still in `standing_bodies`), P9 (both fork rules are still in the engine).
-- **Live and blocked on a read**: P12, and P11's third pathfinder.
+- **Done since D330's own check, and the register had not noticed**: **P4** (D332), **P7** (D331), and the two rows D333 closed by measurement
+  (P6 nominal, P9 already cut). D330's bullet list below is kept as written and is now itself out of date - that is the fourth and fifth time a
+  row's status survived the commit that landed it.
+- **Live and unblocked**: P13, P14, P15, P16 - all four found by the D334 review.
+- **Live and blocked on a read**: P3 (one float), P12 (the mask), and P11's third pathfinder.
 - **Stale comment fixed at the same time**: `motion.rs` still said *"PENDING A RULING (parity-plan P3)"* after D306 had ruled; it now carries
   the ruling and the constraint the ruling puts on P3's implementation.
 
+## What D330's status block said (kept as the record of how it went stale)
+
+- **Done since the register was written**: P1, P2 (budget and octile tie-break), P5 (`finish_blocked_orders` and `beside` no longer exist),
+  P8 (no seat book), and the levelled half of P11.
+- **Live and unblocked**: P4 (its blocker was the seat book, cut by D293), P6 (`occupants: Vec<u16>` is still a per-tile count), P7 (the
+  quarter-tile skip is still in `standing_bodies`), P9 (both fork rules are still in the engine).
+- **Live and blocked on a read**: P12, and P11's third pathfinder.
+
 ## Work order (owner's directive, 2026-11-21) - what is left
 
-1. **P3** - needs one read (the inset behind `+0x266`/`+0x268`) before the inclusive test can land without breaking D306's measured
+1. **P13** - the flat search's key: `g + octile` instead of `g + 25 x euclid`. The number is measured; it owes a witness (a route the
+   two keys answer differently) and a suite run. It moves every route, so it is a step, not a constant swap.
+2. **P14** - the levelled tier's two gates. The 16-tile floor and the "no standers in the plan" clause are both ours; with them the
+   hierarchy answered 0 of 121 long walks in a match, and without them 6, for an unchanged hash. Deciding *whether the game plans
+   round standers at coarse level* is the open read here.
+3. **P15** - a witness for the 20,000 cap, or the row is decoration: a scene whose own estimate exceeds the cap (a map about 1,140
+   tiles a side, sealed) and an assertion on the number of expansions, not on a bound recomputed from the same function.
+4. **P16** - the body rule as boxes. Four `<=` where we test one distance; 2.17% of body-steps are in the difference. It lands with
+   the same arrival arithmetic (`reach_between`, `target_contact`) or the fixtures will not converge.
+5. **P3** - needs one read (the inset behind `+0x266`/`+0x268`) before the inclusive test can land without breaking D306's measured
    one-tile passage. Until then our `>` test is the same rule from the other side.
-2. **P12** - the four-bit per-edge mask: a read, then the mask.
-3. **P11's polygon pathfinder** - a project, to be scoped separately; there is no hull code in the tree.
-4. **P10** - kept deliberately: same interval, same distribution, reproducible source. It is the one row where a difference is a
+6. **P12** - the four-bit per-edge mask: a read, then the mask - or `pathfinding-conformance.md`'s reading is right and the row closes.
+7. **P11's polygon pathfinder** - a project, to be scoped separately; there is no hull code in the tree.
+8. **P10** - kept deliberately: same interval, same distribution, reproducible source. It is the one row where a difference is a
    requirement rather than a choice.
 
 Small alignments that ride with whichever step touches them: the **search window** (D299), the **refinement's interpolation** (D322), the

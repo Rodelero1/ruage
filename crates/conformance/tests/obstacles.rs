@@ -66,9 +66,11 @@ fn a_walled_in_goal_is_answered_with_the_closest_tile() {
     }
 }
 
-/// RULE: **bodies are not an obstacle to the search.** The planner has no body layer - a `Ground` cannot hold one - so a
-/// route through a crowd is the same route through open ground. The collision block is what answers a body, and it is the
-/// step pass's job (`tests/motion.rs` in the engine).
+/// RULE: **bodies are not an obstacle the `Ground` knows about.** The planner has no body *layer* - a `Ground` cannot hold
+/// one - so a route through a crowd is the same route through open ground. **The planner does carry bodies**, as `Clear`
+/// rectangles handed to `route_avoiding` (D282, D331: it plans round every stander), and the collision block is what answers a
+/// body the plan could not avoid. The earlier wording here ("the planner has no body layer") was true of `Ground` and false of
+/// the planner since D282 (D334).
 #[test]
 fn the_search_has_no_body_layer() {
     // Two "crowded" tiles are simply not blocked: nothing in the planner can express a unit.

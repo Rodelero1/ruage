@@ -9,6 +9,11 @@
 //! Its partner rule is ours by necessity, not by choice: a body the map *places* inside a box (a fixture spawn, a body left
 //! touching) may walk **out** and along, and may not go deeper. The original never has that case - its placement phase
 //! (`func_002699A0`) keeps bodies out of objects - so the escape rule is the grid's answer to a state the game cannot reach.
+//!
+//! **What these two rows do not test, and cannot** (D334): `touches_object` has **no production caller** - the step asks
+//! `object_depth` and refuses only a landing that goes *deeper* (`motion.rs:486-490`). So this file pins the *query* the game
+//! makes; whether the engine's step makes it is `parity-plan.md` P3, and it is open. A green row here is not evidence that a
+//! landing at the grown face is refused.
 
 use ruage_conformance::{RADIUS, SCALE, centre, ground};
 
