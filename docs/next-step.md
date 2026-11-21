@@ -13,17 +13,26 @@ prices the row answers nothing - D338).
 ## The next step: 8 - the refinement's scan direction
 
 **Prior implementation.** The chain's refinement scans the span **from the low end** and takes the first boundary crossing
-it meets (`crates/sim/src/levels.rs`; grep `crossing`).
+it meets (`crates/sim/src/levels.rs`, `Levels::refine`: `for k in 0..span { ... break }`).
 
-**The rule, read in full** (`FUN_007eeda0`, HD 5.7): for a horizontal move the span is scanned **forward** from the
-interpolated point to the span's end (`local_18 -> iVar9`) and the first crossing found is kept with its distance
-(`iVar10 = param_6 - local_18`); then a **backward** pass walks back from the interpolated point, stopping when
-`iVar10 < 1` - it has walked back as far as the forward crossing was ahead - or when it meets a crossing, which then wins.
-The vertical case is the same code on the other axis. So the binary keeps the crossing **nearest the interpolated
-point**, not the first one from the low end.
+**The rule, read in full** (`FUN_007eeda0`, HD 5.7 - both halves, `0x7eeda0`-`0x7eef09` and the scan below it). Two
+things, and the second is not a scan order:
 
-**Witness owed:** a step whose span crosses **two** boundaries where the near one is not the low one - the route must
-leave through the near crossing, and ours leaves through the low one. Small scene, one variable.
+1. **The point is interpolated, not the low end.** The function is handed the mover's position (`param_6`, `param_7`) and
+   a far point (`param_4`, `param_5`); for a boundary crossed along x it computes
+   `iVar7 = (iVar4 * param_5) / param_4 + param_7` - the straight line's own crossing of the edge, `iVar4` being the
+   distance from the span's edge to the start. Ours has no interpolation at all: it walks the span from `first + 0`.
+2. **Then the span is scanned outward from that point.** Forward from the interpolated point to the span's end, keeping
+   the first crossing and its distance; then a **backward** pass from the same point, stopping when `iVar10 < 1` (it has
+   walked back as far as the forward crossing was ahead) or at a crossing, which then wins. The vertical case is the same
+   code on the other axis.
+
+So the port is **two** changes - thread the mover's position and the far point into `refine`, then scan outward from the
+interpolated crossing - and the second cannot be watched on its own until the first exists.
+
+**Witness owed:** a step whose span crosses **two** boundaries, where the interpolated crossing is the far one - the
+route must leave through the interpolated crossing, and ours leaves through the low one. Small scene, one variable, and
+the size is **M**, not the S the sequence calls it.
 
 **Why it matters beyond itself:** this is what would let the 16-tile floor fall (D338's re-test), and with the floor down
 the coarse tier starts answering routes - the precondition for D342's row and D337's key to change a match at all.
