@@ -254,21 +254,87 @@ impl Levels {
         Some(CoarseRoute { level, cells })
     }
 
-    /// **Refine a coarse route to waypoints**: one point per cell, at its centre - `n * 2^level + 0.5` tiles - which is where
-    /// `FUN_007ee980`'s chain walk makes `FUN_007fd880` push a point, and what the movement code is handed.
+    /// **Refine a coarse route to waypoints: the crossings of the shared edges, not the cell centres** (D322).
+    ///
+    /// `FUN_007ee980` walks the parent chain a coarse node at a time, and `FUN_007eeda0` turns each step into a point on the
+    /// boundary between the two cells: it expands the cell to the **tile span it covers** (`x << level .. ((x + 1) << level) - 1`),
+    /// scans that span **tile by tile** along the direction of travel, and takes the first tile where the direction is passable,
+    /// with the other coordinate interpolated. So a route's waypoints sit where the passage is, on the boundary, and the walker
+    /// follows the corridor the cells describe instead of hopping between their middles.
+    ///
+    /// The first point is the start cell's own centre, which the caller discards (the walk starts where the body stands); the goal
+    /// is the caller's, so no trailing centre is emitted.
     #[must_use]
     pub fn refine(&self, route: &CoarseRoute, scale: i64) -> Vec<(crate::Fixed, crate::Fixed)> {
-        let size = (1i64 << route.level) * scale;
-        route
-            .cells
-            .iter()
-            .map(|cell| {
+        let level = route.level;
+        let span = i64::from(1u32 << level.min(15));
+        let size = span * scale;
+        let centre = |cell: (u16, u16)| {
+            (
+                crate::Fixed::from_raw(i64::from(cell.0) * size + size / 2),
+                crate::Fixed::from_raw(i64::from(cell.1) * size + size / 2),
+            )
+        };
+        let mut points: Vec<(crate::Fixed, crate::Fixed)> = Vec::with_capacity(route.cells.len());
+        let Some(first) = route.cells.first().copied() else {
+            return points;
+        };
+        points.push(centre(first));
+        for pair in route.cells.windows(2) {
+            let (from, to) = (pair[0], pair[1]);
+            // The step is 4-directional (the search opens four neighbours), so the shared edge is one line of `span` tiles: a column
+            // for a step along x, a row for a step along y.
+            let along_x = to.0 != from.0;
+            let (boundary, first) = if along_x {
                 (
-                    crate::Fixed::from_raw(i64::from(cell.0) * size + size / 2),
-                    crate::Fixed::from_raw(i64::from(cell.1) * size + size / 2),
+                    (i64::from(to.0.min(from.0)) + 1) * span,
+                    i64::from(from.1) * span,
                 )
-            })
-            .collect()
+            } else {
+                (
+                    (i64::from(to.1.min(from.1)) + 1) * span,
+                    i64::from(from.0) * span,
+                )
+            };
+            // **The first tile of the span that the step can cross** - what `FUN_007eeda0` returns. Both sides of the edge have to
+            // be standable ground; a span with no crossing at all keeps its middle, which is where the cell centres put it.
+            let mut chosen: Option<i64> = None;
+            for k in 0..span {
+                let tile = first + k;
+                let (Ok(tile), Ok(before), Ok(after)) = (
+                    u16::try_from(tile),
+                    u16::try_from(boundary - 1),
+                    u16::try_from(boundary),
+                ) else {
+                    continue;
+                };
+                let (a, b) = if along_x {
+                    ((before, tile), (after, tile))
+                } else {
+                    ((tile, before), (tile, after))
+                };
+                if !self.blocked(0, a.0, a.1) && !self.blocked(0, b.0, b.1) {
+                    chosen = Some(k);
+                    break;
+                }
+            }
+            let offset = chosen.unwrap_or(span / 2);
+            let point = if along_x {
+                (
+                    crate::Fixed::from_raw(boundary * scale),
+                    crate::Fixed::from_raw((first + offset) * scale + scale / 2),
+                )
+            } else {
+                (
+                    crate::Fixed::from_raw((first + offset) * scale + scale / 2),
+                    crate::Fixed::from_raw(boundary * scale),
+                )
+            };
+            points.push(point);
+        }
+        // No trailing centre: the caller appends the goal it planned to, so a point here would be a waypoint the walker has to
+        // visit before its goal, on ground it may not be able to stand on once the goal's own tile is standable.
+        points
     }
 
     /// **What it costs to step into a cell** - `FUN_007ed280`'s table, with the two rows our content cannot express named rather than

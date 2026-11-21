@@ -8932,3 +8932,24 @@ pile_up` - are green.
 **What the guard is now**: a man taking from a node keeps the point he stands on while someone walks past. It can fail (anything that writes
 a working man's position fails it) but not for D238's reason, because that mechanism no longer exists. Its scene is stated in its doc so the
 next reader knows what it does and does not cover.
+
+## D322 - The chain refines to the crossing of each edge - and tier 2 is dormant in a match
+
+**The refinement now matches the binary's** (`FUN_007eeda0`, D308's item): `Levels::refine` emits, per step, the point **on the boundary
+between the two cells at the first tile of the span the step can pass**, instead of the cells' centres. `coarse_route::the_chain_refines_
+to_the_crossing_of_each_shared_edge` replaces the centre fixture (watched red: centres give one point per cell) and
+`a_blocked_walk_is_answered_by_the_hierarchy` was re-specified from "cell centres" to "a boundary crossing at a tile's middle". No trailing
+centre: the goal is the caller's point.
+
+**The 16-tile gate was tried and is kept**, on a measurement rather than on the old note. Removing it, on a 40x40 open map: a walk 8 / 10 /
+12 tiles past a single tree goes from **2** points to **7 / 7 / 8**, because one tree closes a whole 4-tile cell and the level-2 chain dives
+six tiles down and back up (`(2,1) (2,2) (2,3) (3,3) (4,3) (4,2) (4,1)`). 16 and 24 tiles are unchanged; a wall walk is 3 points either way.
+
+**The acceptance match is bit-identical** (`c7191f531bd81b1b`, 141 entities, 7,125 repaths, 12.6 s) - and that is a finding, not a
+non-result. Instrumented over 48,000 ticks: **11,042** route calls, **1,677** of them >= 16 tiles, **0** answered by the hierarchy, for two
+independent and counted reasons: **every** long call carries a non-empty `avoid` (1,276 with one body, up to 16), and **every** coarse route
+on this map comes back at **level 0**, which `level >= 2` rejects. The tier is green in every fixture and dead in the game loop.
+
+**Next**: tier 2 cannot matter until those two call-site facts change - the binary's avoidance pass is the thing to trace (D309's caller of
+`FUN_008000d0`), and the descent's collapse to level 0 on a cluttered map is D303's gate biting at the root rather than a refinement
+problem.

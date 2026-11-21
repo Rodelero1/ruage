@@ -142,30 +142,71 @@ fn a_long_open_walk_is_a_chain_of_cells() {
     }
 }
 
-/// **The chain is refined to cell centres**: `n * 2^level + 0.5` tiles, which is where `FUN_007fd880` puts the waypoints.
+/// **The chain refines to the crossing of each shared edge** (D322, `FUN_007eeda0`). The refinement does not emit the cells'
+/// middles: it expands each cell to the tile span it covers and crosses the boundary between two cells **on the first tile of that
+/// span the step can pass** - so every waypoint but the first and last sits *on a tile boundary*, at the middle of the crossing
+/// tile, and the walker follows the corridor the cells describe instead of hopping between their centres.
 #[test]
-fn the_chain_refines_to_cell_centres() {
+fn the_chain_refines_to_the_crossing_of_each_shared_edge() {
     let ground = open();
     let levels = Levels::of(&ground);
     let scale = 20_000i64; // the engine's fixed scale, as `ruage_conformance::SCALE`
     let route = levels
         .coarse_route((4, 4), (62, 4))
         .expect("an open walk across the map");
+    assert_eq!(route.level, 3, "an open start descends to level 3");
     let points = levels.refine(&route, scale);
     assert_eq!(
         points.len(),
         route.cells.len(),
-        "one waypoint per cell, as the chain walk emits one per node"
+        "the first cell's centre and one crossing per step; the goal is the caller's"
     );
-    for (point, cell) in points.iter().zip(&route.cells) {
-        let want = (
+    // The ends are the cells' own middles: the caller discards the first (the walk starts where the body stands) and replaces the
+    // last with the goal.
+    let centre = |cell: (u16, u16)| {
+        (
             (i64::from(cell.0) * 8 + 4) * scale,
             (i64::from(cell.1) * 8 + 4) * scale,
-        );
-        assert_eq!(
-            (point.0.raw(), point.1.raw()),
-            want,
-            "cell {cell:?} must refine to its centre at level 3"
+        )
+    };
+    let first = route.cells[0];
+    assert_eq!(
+        (points[0].0.raw(), points[0].1.raw()),
+        centre(first),
+        "the first point is the start cell's centre"
+    );
+    for (nth, pair) in route.cells.windows(2).enumerate() {
+        let (from, to) = (pair[0], pair[1]);
+        let point = points[nth + 1];
+        let (x, y) = (point.0.raw(), point.1.raw());
+        // A crossing sits **on the boundary** between the two cells and at a tile's middle along it.
+        if to.0 != from.0 {
+            let boundary = i64::from(to.0.min(from.0) + 1) * 8 * scale;
+            assert_eq!(
+                x, boundary,
+                "crossing {nth} is not on the column boundary between {from:?} and {to:?}"
+            );
+            assert_eq!(
+                (y - scale / 2) % scale,
+                0,
+                "crossing {nth} is not at a tile's middle along the edge: y = {y}"
+            );
+        } else {
+            let boundary = i64::from(to.1.min(from.1) + 1) * 8 * scale;
+            assert_eq!(
+                y, boundary,
+                "crossing {nth} is not on the row boundary between {from:?} and {to:?}"
+            );
+            assert_eq!(
+                (x - scale / 2) % scale,
+                0,
+                "crossing {nth} is not at a tile's middle along the edge: x = {x}"
+            );
+        }
+        // And both tiles it crosses are standable: an open map, so every one of them is.
+        assert!(
+            !levels.blocked(0, to.0 * 8, to.1 * 8),
+            "the crossing's far side is blocked"
         );
     }
 }
@@ -211,7 +252,7 @@ fn a_walled_off_goal_has_no_coarse_route() {
 }
 
 /// **A long walk the straight line cannot take is answered by the hierarchy** (D301's second tier): the route comes back as a chain of
-/// level-3 cell centres, not as a per-tile polyline. The control in the same fixture is the open walk, which stays a single waypoint
+/// **level-3 edge crossings** (D322 - the cells' middles were the old refinement), not as a per-tile polyline. The control in the same fixture is the open walk, which stays a single waypoint
 /// because the line reaches it.
 #[test]
 fn a_blocked_walk_is_answered_by_the_hierarchy() {
@@ -236,14 +277,15 @@ fn a_blocked_walk_is_answered_by_the_hierarchy() {
         "a blocked walk must come back as a chain, not {} waypoint(s)",
         blocked.len()
     );
-    // Every point but the last is a level-3 cell centre: `n * 8 + 4` tiles.
+    // Every point but the last is **a crossing of a level-3 boundary** (D322): the step's own coordinate sits on the `n * 8` line
+    // between two cells and the other one is at a tile's middle along it.
     for point in &blocked[..blocked.len() - 1] {
-        let on_lattice = |raw: i64| (raw - 4 * scale) % (8 * scale) == 0;
+        let (x, y) = (point.0.raw(), point.1.raw());
+        let on_boundary = |raw: i64| raw % (8 * scale) == 0;
+        let at_middle = |raw: i64| raw % scale == scale / 2;
         assert!(
-            on_lattice(point.0.raw()) && on_lattice(point.1.raw()),
-            "waypoint ({}, {}) is not a level-3 cell centre",
-            point.0.raw(),
-            point.1.raw()
+            (on_boundary(x) && at_middle(y)) || (at_middle(x) && on_boundary(y)),
+            "waypoint ({x}, {y}) is not a crossing of a level-3 boundary"
         );
     }
 
