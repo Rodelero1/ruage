@@ -1,9 +1,9 @@
-# OPEN - the queue is 13 ordered steps in `docs/conformance-sequence.md`; step 1 is a witness, step 2 changes every route
+# OPEN - steps 1 and 2 of the sequence are landed; step 3 is the tier's gate, and the acceptance wall is a named perf item
 
-**Where this stands (D334, `blunt-port`):** the adversarial review landed and is green - suite **933 / 0 / 20**, conformance
-**21 / 0 / 0**, acceptance `e248486298910e28` (127 entities, 1,727 re-paths, **10.04 s** median of five on an idle box).
-Nothing is half-applied. The *order* to 100% conformance, crosschecked against the first-party talk and openage, is
-**`docs/conformance-sequence.md`** - read it first; this file is only the immediate step and the outstanding forks.
+**Where this stands (D337, `blunt-port`):** suite **934 / 0 / 20** over 214 result lines, conformance **21 / 0 / 0**,
+acceptance `527bf4ebb9520fa0` (132 entities, 41,473 re-paths, **15.70 s** median of three on an idle box; the key-only build is
+`9d5fea513f3f8efb` at 9.72-9.88 s). The *order* to 100% conformance, crosschecked against the first-party talk and openage, is
+**`docs/conformance-sequence.md`** - read it first; this file is the immediate step and the outstanding forks.
 
 **What the review established** (details in the note and D334): the binary's frontier is ordered by `g + octile` and the
 `25 x euclid` is its **expansion budget** (six files said otherwise); the levelled search answers **nothing** in a match
@@ -15,19 +15,24 @@ game's coarse search runs *and ignores moving bodies* (`FUN_007ee980`'s body has
 "ignores moving objects, e.g. units or wildlife"); HD's polygonal pather is the **legacy hull algorithm** (slides 21-38), not
 the DE-era edge walk the skill had listed; and the mate exemption belongs to a **formation**, which villagers never join.
 
-## The next three steps, ready now
+## The next three steps
 
-1. **P15 - a witness for the 20,000 cap** (S, no blocker). A ~1,140-tile sealed map so `25 x euclid > 20,000`, asserting the
-   **count** (`expansions == 20_000`), not a bound recomputed from `estimate`. Today the row spends 642 of 20,000 and stays
-   green with `EXPANSION_CAP = u32::MAX`.
-2. **P13 - the frontier's key `g + octile`** (M). Measured A/B: 28.9 expansions/search and 54% of searches exhausting the
-   budget, against 11.8 and 5.8%. It owes a witness - a scene the two keys answer differently, red on the octile key before the
-   change - then the full suite and an acceptance run, because it moves every route and the match changes shape
-   (`players=1` -> `players=2`).
-3. **P14 - drop the tier's `avoid` gate, then re-test the 16-tile floor** (M). With the gate lifted the tier answers 6 of 121
-   long walks and the hash does not move, so the witness must be a `World::plan_path` walk whose route *is* the hierarchy's
-   (the conformance row calls `Levels` directly and cannot see a gate). The 16-tile floor's removal was measured in D322 as a
-   7-point staircase - re-measure after step 2.
+1. ~~P15 - a witness for the 20,000 cap~~ **DONE (D336)**: 1,200 x 1,200, estimate 42,300, `expansions == 20_000` asserted,
+   mutation-proved.
+2. ~~P13 - the frontier's key~~ **DONE (D337)**: `g + octile`, witness 312 -> 294 on one tree, and a mover rounding hole fixed
+   in the same slice (801.295 raw -> within 1 of the step).
+3. **P14 - drop the tier's `avoid` gate, then re-test the 16-tile floor** (M, next). The game's coarse search runs *and ignores
+   bodies* (`FUN_007ee980`'s body has no stander insertion; openage: "it ignores moving objects, e.g. units or wildlife"), so the
+   gate is backwards. With the gate lifted the tier answers 6 of 121 long walks and the hash did not move *then* - re-measure on
+   the new routes, and make the witness a `World::plan_path` walk whose route has a level-3 boundary crossing (the conformance
+   row calls `Levels` directly and cannot see a gate).
+
+## The perf item this slice created
+
+- **The acceptance wall: 15.70 s against 9.72-9.88 s key-only, on a different match** (132 entities, 41,473 re-paths in both
+  cases; the sqrt helpers account for 0.16 s). Profile the 15.7 s run **per pass** before touching anything, and price the
+  per-search allocations at the same time (49 KB a call, ~2.2 GB a match at 45k calls) - the binary's generation-stamped array
+  exists to avoid exactly that.
 
 ## Also ready, independent of those
 

@@ -187,9 +187,15 @@ fn a_woodcutter_stands_with_his_circle_on_the_tree() {
     );
 }
 
-/// **Two workers on one tree both touch it and stand a body apart** - 0.404 apart in the save, which is exactly two radii.
+/// **Two workers on one tree both touch it, and neither stands inside the other** (D337).
+///
+/// The claim here used to be `apart < 0.39` - both men *pressed together*, which measured 0.000 while the seat book routed them
+/// to one standoff point. With the seat book gone (D293) and the game's search key in (D337) they take the faces their own routes
+/// reach, measured **1.018** apart on opposite sides of the tree; that is legal - the rule is that each man touches the node and
+/// that no body overlaps another, not that a crowd must pile on one face. So the assertion is the stronger, rule-based one: both
+/// circles touch the tree's border, and the pair is at least two radii apart.
 #[test]
-fn two_woodcutters_on_one_tree_both_touch_it_and_press_together() {
+fn two_woodcutters_on_one_tree_both_touch_it_and_never_overlap() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
@@ -210,11 +216,13 @@ fn two_woodcutters_on_one_tree_both_touch_it_and_press_together() {
         (0.15..=0.30).contains(&a) && (0.15..=0.30).contains(&b),
         "MEASURED radii {a:.3} and {b:.3}; both belong on the 1.156 ring"
     );
-    // **They press** (D293): the seat book that kept them a body apart is gone, so two men on one tree stand pressed - measured
-    // **0.000** tiles apart - and both still touch it. The old claim was the book's, not the game's.
+    // **And neither is inside the other** (D337): two radii is 0.400, so 0.39 admits the rounding and refuses an overlap. The
+    // old `apart < 0.39` was the seat book's trace - it required both men on one face - and measured 0.000 when they were
+    // routed to a shared standoff point. Opposite faces are measured legal here (1.018), which is what a crowd does when each
+    // man's route is his own.
     assert!(
-        apart < 0.39,
-        "MEASURED {apart:.3} tiles between the two: the seat book is gone, so two men on one tree must press together"
+        apart >= 0.39,
+        "MEASURED {apart:.3} tiles between the two: two bodies must never overlap (two radii = 0.400)"
     );
 }
 

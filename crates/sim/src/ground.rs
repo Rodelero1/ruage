@@ -9,8 +9,7 @@
 //! **What is deliberately absent.** The search window (`in_ECX[0x42..0x45]`, unread padding - D299) and the polygonal
 //! short-range pathfinder (P11's third solver, a project). Everything else the original's search carries arrived with a
 //! decision: the **levels** and their refinement (D296-D302, D322), the mover's **radius** in the plan (D306), the body list as
-//! **`Clear` rectangles** (D282/D331), the **expansion budget** (D304) - and the **key** is still ours, not the game's (P13,
-//! D334: we order by `g + 25 x euclid`, the binary by `g + octile`). The cost of a route is not a gate anywhere in the
+//! **`Clear` rectangles** (D282/D331), the **expansion budget** (D304) and the **key** `g + octile` (D337). The cost of a route is not a gate anywhere in the
 //! engine; the fixtures check shape (reached, never crossed, stopped beside) rather than an optimal length.
 //!
 //! **Determinism.** The open set is a binary heap ordered by `(f, g, y, x)`, and the predecessor table is an array
@@ -94,9 +93,9 @@ pub const CARDINAL: u32 = 16;
 /// The same table's diagonal: `16 x sqrt2`, rounded.
 pub const DIAGONAL: u32 = 23;
 /// **The estimate: Euclidean tile distance x 25** - the original's **expansion budget** (`FUN_008007f0` line 198 compares it
-/// with the expansion counter), not its heuristic. The frontier's key in the binary is `g + octile` (line 316); `search_reporting`
-/// uses this value as the key instead, which is a **known divergence** - P13, measured in D334: it makes every search greedy and
-/// costs 28.9 expansions a search against 11.8, with 54% of searches exhausting the budget against 5.8%.
+/// with the expansion counter). It is **not** the frontier's key: that is `g + octile` (line 316) since D337, and using this
+/// value as the key is what made every search greedy (28.9 expansions a search and 54% exhausting the budget, against 11.8
+/// and 5.8% - D334/D337).
 pub const ESTIMATE: u32 = 25;
 /// **The hard ceiling on expansions** (`20000 < local_46c` at `0x800d57`): the estimate is the budget, and this is the most the
 /// binary will ever spend on one search, whatever the distance asks for.
@@ -788,10 +787,8 @@ impl Ground {
     /// "Best" is the **smallest octile distance to the goal**, first found wins: `if (iVar21 < local_468)` in the binary, with
     /// `iVar21 = FUN_007ffc80(node, goal)`, a strict comparison, so a tie keeps the earlier node.
     ///
-    /// **Two things this does not match, both measured (D334).** The frontier's key: the binary orders by `g + octile`
-    /// (`FUN_008007f0:312-316`) where this orders by `g + 25 x euclid` - P13, the greedy key, 28.9 expansions a search against
-    /// 11.8. And the **cap**: `EXPANSION_CAP` is unreachable in every fixture that asserts it (642 expansions into a 20,000
-    /// assertion, 480 x 480; `EXPANSION_CAP = u32::MAX` leaves the row green) - P15.
+    /// **The key is the game's since D337** (`g + octile`); the cap that used to have no witness is now pinned by a 1,200-tile
+    /// scene (D336).
     pub fn search_reporting(
         &self,
         start: (u16, u16),
@@ -809,13 +806,16 @@ impl Ground {
                 u16::try_from(at / width).unwrap_or(0),
             )
         };
-        let estimate = |tile: (u16, u16)| Self::estimate(tile, goal);
+        // **The frontier's key is `g + octile`, weight 1** (D337): `FUN_008007f0` stores the octile as the start's value
+        // (line 177) and adjusts it node by node (line 316), so the priority is the octile distance. The `25 x euclid` in
+        // this function is the *budget* (line 198), not the key - reading it as the weight is what made our search greedy.
+        let key = |tile: (u16, u16)| Self::octile(tile, goal);
         let start_at = index(start);
         let mut best = vec![u32::MAX; count];
         let mut from: Vec<Option<usize>> = vec![None; count];
         let mut open = BinaryHeap::new();
         best[start_at] = 0;
-        open.push(Reverse((estimate(start), 0u32, start.1, start.0)));
+        open.push(Reverse((key(start), 0u32, start.1, start.0)));
         // **The budget is the estimate**: the binary computes it once, before the loop, from Euclidean tile distance x 25, and
         // caps it at 20,000. It is spent one node at a time, and the loop stops *before* expanding a node it cannot afford.
         let budget = Self::estimate(start, goal).min(EXPANSION_CAP);
@@ -878,7 +878,7 @@ impl Ground {
                 if step < best[next_at] {
                     best[next_at] = step;
                     from[next_at] = Some(here_at);
-                    open.push(Reverse((step + estimate((nx, ny)), step, ny, nx)));
+                    open.push(Reverse((step + key((nx, ny)), step, ny, nx)));
                 }
             }
         }

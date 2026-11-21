@@ -339,7 +339,9 @@ original's flat search is an **octile A\***, weight **1**, and `h = 25 x euclid`
 greedy where the game's is not. Measured on the acceptance match (one variable, seed 7, 48,000 ticks, D334): the greedy key costs
 **28.9 expansions per search and exhausts its budget on 54% of them**, against **11.8 and 5.8%** with `g + octile` - the greedy
 key is *more* expensive here, because the budget is generous enough that it spends all of it. Route shapes differ everywhere, so
-adopting the octile key needs a witness and a suite run before it lands (`docs/parity-plan.md` P13).
+adopting the octile key needs a witness and a suite run before it lands (`docs/parity-plan.md` P13). **Landed 2026-11-21 (D337)**: the key is
+`g + octile`, the witness is a single tree at (8,8) where the greedy key paid 312 and the octile key pays 294, and the acceptance
+match is a longer match at a smaller wall (both players alive to 48,000 ticks, 9.87 s against 10.04 s).
 
 **The frontier is a heap too, and the note that said otherwise is corrected.** The loop keeps a **frontier array** of
 `(x, y, cost)` triples at `0x119414 + n*8` with its length at `0x2db41c`, and calls **`FUN_00801e90(index)`** on every push -

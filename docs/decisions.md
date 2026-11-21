@@ -9330,3 +9330,29 @@ used a 480 x 480 map (estimate 16,850, spent 642 expansions) and could not fail:
 asserts the estimate exceeds the cap as a *precondition*, and asserts `expansions == 20_000` exactly. **Mutation-proved**: with
 `EXPANSION_CAP = u32::MAX` it fails *"the cap is the budget on this map: 42300 of 20,000 (estimate 42300)"*. Four budget rows in
 0.10 s debug, 17 MB of search arrays per call. No engine line changed; acceptance unchanged.
+
+## D337 - P13 landed: the key is `g + octile`, and it exposed a rounding hole in the mover
+
+**Crosscheck:** `FUN_008007f0` line 177 stores the octile as the start's frontier value, lines 312-316 keep it up to date node by
+node (`g + octile`), and the `25 x euclid` at 186-191 is read only at line 198 - the expansion guard. The key is the octile,
+weight 1; the 25 is the budget.
+
+**Landed:** the flat search's heap key is the octile. Witness, red first: `search_key::a_walk_round_one_tree_costs_what_the
+octile_key_pays` - 16 x 16 open ground, (2,2) -> (14,14), one tree at (8,8); the greedy key paid **312**, the octile key pays
+**294** (bound 276). A probe over 400 sampled maps showed the keys disagree on the chain in **3,973 of 4,001** scenes.
+
+**The second defect, found by the first:** the key change reddened the owner's `whole_steps` fixture at **801.295 raw** where a
+step is 800 - a pre-existing hole, not a consequence. `integer_sqrt` floors, so a (566,566) step (800.44 raw) read as exactly
+the step and was never rescaled; the "never longer" trim used the same floored root (a (1,1) leg, 1.41 raw, passed as 1); and
+the budget was charged `take` rather than what was walked. Fixed with squared over-step tests, `ceil_sqrt` for the trim,
+`round_sqrt` for the charge, and the final leg landing exactly on its waypoint. Two of my three attempts were wrong in opposite
+directions (801.295, then 798.77) and are recorded in the review.
+
+**Re-pointed, with its reason:** `gather_ring::two_woodcutters_on_one_tree_both_touch_it_and_press_together` asserted
+`apart < 0.39` - the seat book's last trace. Each man's route is now his own, so they take opposite faces (**1.018** apart, both
+touching the tree); the fixture is `..._and_never_overlap` and asserts `apart >= 0.39` (two radii = 0.400).
+
+**Measured:** key only `9d5fea513f3f8efb`, 133/2, 41,557 re-paths, **9.72-9.88 s**; with the exact steps `527bf4ebb9520fa0`,
+132/1, 41,473, **15.70 s** and stockpile 1,446/852/655 at 2,400 s. **The 60% wall rise is unattributed**: same entity and
+re-path counts, a different match, and the sqrt helpers account for 0.16 s of it - so it is the next perf item (profile per
+pass, and price the per-search allocations) rather than a claim.

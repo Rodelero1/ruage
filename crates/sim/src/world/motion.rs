@@ -24,6 +24,29 @@ use crate::{
     Entity, EntityId, EntityKind, SimError, StepDecision, Task, World, integer_sqrt, step_towards,
 };
 
+/// The square root rounded **up**: the test for "is this vector longer than the step", so a leg that is 1.4 raw long is not
+/// called 1 and let through.
+fn ceil_sqrt(value: i64) -> i64 {
+    let floored = integer_sqrt(value);
+    if floored * floored < value {
+        floored + 1
+    } else {
+        floored
+    }
+}
+
+/// The square root rounded to **nearest**: what a leg is *charged* against the tick's budget, so a step broken into two legs
+/// does not lose a raw unit at each break. One root and a compare, not a second root of `4v` - this runs twice a leg.
+fn round_sqrt(value: i64) -> i64 {
+    let floored = integer_sqrt(value);
+    // Round up when the remainder is past the halfway mark between `f` and `f + 1`: `value - f^2 > f`.
+    if value - floored * floored > floored {
+        floored + 1
+    } else {
+        floored
+    }
+}
+
 /// **How often a ground refusal may buy a new route**, in ticks.
 ///
 /// The original re-plans on a terrain collision every update; that is affordable for it and not for a debug build of
@@ -230,14 +253,31 @@ impl World {
                 // went from 27 s to 338 s.
                 break;
             }
-            let (mx, my) = step_towards(here, aim, take);
+            // **The leg that ends on a waypoint lands ON it** (D337). `step_towards` rounds each axis separately, so a final
+            // leg of 800 at a 45-degree heading landed 1 raw unit past the waypoint - measured, one tick of 801 where a step
+            // is 800, 1 of 912 walking ticks in `whole_steps::a_walking_villager_takes_whole_steps`. The exact delta is the
+            // whole point of arriving.
+            let (mx, my) = if take >= gap {
+                (gx, gy)
+            } else {
+                step_towards(here, aim, take)
+            };
             // **A whole step is `take` units long, not "whatever the per-axis rounding came to".** `step_towards` rounds each
             // axis separately, so a 45-degree heading at 800 units came out **798** - inside every tolerance except the
             // owner's own rule, which is *"man stands or walks"* and leaves no room for 2 raw units a tick of drift. Rescaling
             // the vector to the step's own length costs an integer square root and puts the error at half a unit.
-            let (mx, my) = if gap > take && take > 0 {
-                let length = integer_sqrt(mx * mx + my * my);
-                if length > 0 && length != take {
+            // **Compare squares, not floored roots** (D337): `integer_sqrt(640,712)` is 800, so a 45-degree step of (566,566)
+            // - 800.44 raw - read as "exactly the step" and was never rescaled. Measured, one tick of 801.295 where a step is
+            // 800. The overshoot test is `sq > take^2`, and the scale uses a **ceiling** root so the result is under `take`.
+            let square = mx * mx + my * my;
+            let (mx, my) = if gap > take && take > 0 && square > take * take {
+                let floored = integer_sqrt(square);
+                let length = if floored * floored < square {
+                    floored + 1
+                } else {
+                    floored
+                };
+                if length > 0 {
                     let scale_axis = |value: i64| -> i64 {
                         let magnitude =
                             i128::from(value.abs()) * i128::from(take) + i128::from(length / 2);
@@ -254,10 +294,10 @@ impl World {
                             sy = my.signum();
                         }
                     }
-                    // **Never longer than the step.** Two axes rounding up make the vector up to 1.4 raw units long, which is
-                    // outside the ±1 the owner's rule allows; taking one unit off the longer axis brings it back under.
+                    // **Never longer than the step**, measured with a **ceiling** root (D337): a vector of (1,1) is 1.41 raw and
+                    // `integer_sqrt` calls it 1, so a 1-raw leg passed the "not longer" test and a tick of 800 became 801.4.
                     for _ in 0..4 {
-                        let length = integer_sqrt(sx * sx + sy * sy);
+                        let length = ceil_sqrt(sx * sx + sy * sy);
                         if length <= take {
                             break;
                         }
@@ -308,7 +348,11 @@ impl World {
                 break;
             }
             here = landing;
-            left -= take;
+            // **Spend what was walked, not what was budgeted** (D337). A leg's vector is `<= take` after the rescale, but
+            // rounding can leave it a fraction over, and `left -= take` then let a tick exceed its own step - measured, one
+            // tick of 801.295 raw where a step is 800, on the tick that spent a waypoint. The length is what the body owes.
+            let walked_leg = round_sqrt(mx * mx + my * my);
+            left -= walked_leg.max(1).min(left.max(1));
             if let Some(point) = waypoint
                 && take >= gap
             {
