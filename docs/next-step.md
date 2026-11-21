@@ -47,29 +47,39 @@ the script could not previously reach now happens. **Suite 930 / 0 / 19.**
 
 **Suite 931 / 0 / 19.** Acceptance `c7191f531bd81b1b`, 141 entities, 7,125 repaths, 12.6 s.
 
+## Closed by the crosscheck you asked for (D327-D329)
+
+- **D327 - the cost table read in full.** `FUN_007ed280` gives five rows: 10, 300 (an object of type 8 or `0x20` on the cell or beside it),
+  100/300 (terrain flag bit 3), 600 (bit 6), 2000 (a per-tile grid override). My D298 note had two of them wrong and both are corrected in
+  place.
+- **D328 - the 2000 row was not bodies.** `[0x4d]` is a grid of **eight one-bit direction masks** built by `FUN_007ef3f0` into maximal
+  straight runs; the only body-aware test (`FUN_00801a20`) is in the flat search. `step_cost` loses its `body` parameter and its 2000 branch -
+  no caller ever passed `true`, so it was a rule the original does not have. Acceptance **bit-identical**.
+- **D329 - the 255 cap is unobservable.** Route hashes with and without a 255-entry truncation: identical at 0/100/200/255/256/300/400
+  bodies. The cap binds only in a scene no player can build; the match's largest list is 17.
+- **The 100/600 rows are blocked on a binary this box does not have**: the install's `AoK HD.exe` is a different build from the decompiled
+  corpus (the descriptor table's address is outside its image and the corpus's strings sit `0x8346` lower). Nothing more can be named from
+  the sources in hand, and both rows are unreachable for a land-only unit anyway.
+
+**Suite 931 / 0 / 19.** Conformance **21 / 0 / 0**. Acceptance `c7191f531bd81b1b`, 141 entities, 7,125 repaths, 12.9 s.
+
 ## Ready now - no evidence needed
 
-1. **An evenly mirrored skirmish** (named by D315): player 2's barracks order is at 70 s where player 1's is at 320 s, and the file's own
-   comment explains why (player 1's opening funds the order at 320 s). Making it a mirror is **not** a no-evidence step - it is a designed
-   opening that has to be measured for affordability, and the current asymmetry no longer decides a test.
-2. **Seven dangling ids** (`D115, D122b, D124, D125b, D126, D136, D190`) - referenced by history files and defined nowhere. `decisions.py`
-   reports them; D283-D285 were the same rot and were backfilled from their review files in D324.
-3. **Two stale stashes** from earlier sessions (`WIP on main: a7de0b6`, `On main: d207-wip`) - inspect, then drop or apply.
+1. **Seven dangling ids** (`D115, D122b, D124, D125b, D126, D136, D190`) - all already recorded in `docs/dangling.toml` with their reason, so
+   the checker accepts them; nothing to do unless one gets written.
+2. **Two stale stashes** from earlier sessions (`WIP on main: a7de0b6` - a `config/gamedata` symlink; `On main: d207-wip` - seven files,
+   83 insertions). Both need a decision from the owner before they are dropped.
 
 ## Ready after one short read each
 
-4. **The straight-line tier** (#10): D309 read `FUN_008000d0`, `FUN_008a4360` and `FUN_008a3a20` and found **no pre-search line test** - so
-   our tier 1 is unverified as parity. What settles it is the caller of `FUN_008000d0`: the object that owns the path request, and whether
-   anything tests the leg before it. **D322-D323 did not touch this.**
-5. **The re-path's ignore list** (#8): D310 read it - we build the avoid list from every live body within a span of the line, **with no cap**
-   and in **id order**, where the binary fills colliders first and stops at 255. The witness that would make the cap a step is a wall of 255
-   villagers plus a route that must go round the 256th; D310's reason for not adding it (our selection would be ours, not the game's) still
-   stands.
+3. **The straight-line tier** (#10): D309 read `FUN_008000d0`, `FUN_008a4360` and `FUN_008a3a20` and found **no pre-search line test**, so our
+   tier 1 is unverified as parity. What settles it is the **caller** of `FUN_008000d0` - the object that owns the path request - and that read
+   is blocked by the same build mismatch D328 found, unless the caller is inside the corpus (it may be: grep `007ef140` callers).
 
-## Parked behind D323 - a decision that cannot be measured until the hierarchy answers in a match
+## Needs the owner
 
-6. **Bodies priced at 2000** (#6): the cost table has the row (D298), and it is inert while tier 2 never answers.
-7. **A terrain cost class** (#2's 100/600 rows): a `config/` and map-format change, not an engine one - also inert for the same reason.
+4. **An evenly mirrored skirmish**: player 2's barracks order is at 70 s where player 1's is at 320 s, and the file's own comment explains why
+   (player 1's opening funds the order then). A mirror is a **designed opening** to be measured for affordability, not a tidy.
 
 ## What is *not* owed
 
