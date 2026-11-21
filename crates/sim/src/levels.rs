@@ -214,7 +214,7 @@ impl Levels {
                 if nx >= wide || ny >= tall || closed[index((nx, ny))] {
                     continue;
                 }
-                let Some(step) = self.step_cost(level, nx, ny, false) else {
+                let Some(step) = self.step_cost(level, nx, ny) else {
                     continue;
                 };
                 let next_g = g + i64::from(step);
@@ -337,32 +337,29 @@ impl Levels {
         points
     }
 
-    /// **What it costs to step into a cell** - `FUN_007ed280`'s table, with the two rows our content cannot express named rather than
-    /// invented:
+    /// **What it costs to step into a cell** - the two rows of `FUN_007ed280`'s table this content can express:
     ///
     /// | cell | cost |
     /// | --- | --- |
     /// | blocked | `None` - the search never enters it |
-    /// | a body standing on it | **2000** |
     /// | open, but with a blocked orthogonal neighbour | **300** |
     /// | open, all four orthogonal neighbours clear | **10** |
     ///
-    /// The original's **100** and **600** rows are keyed on the **tile's terrain object**, not on a passability class (D327): bit 3 of its
-    /// flag byte `+0x28` turns the 100 into a 300, bit 6 gives the 600. Naming those two bits is a terrain-table lookup, not a rule to
-    /// invent, and our content carries no terrain cost field yet - so the rows stay unstated here rather than guessed.
+    /// **The three rows that are not here, and why** (D327, D328):
     ///
-    /// **`body` is never passed true**: `coarse_route` has no body knowledge and calls this with `false`, so the 2000 row is dead code in
-    /// our engine (D327). The binary's own 2000 override reads a per-tile mark grid (`[0x4d]`), not a list of standing bodies.
+    /// - **100/600** are keyed on the **tile's terrain object**: bit 3 of its flag byte `+0x28` turns a 100 into a 300, bit 6 gives the
+    ///   600. Our install is a different build from the decompiled binary - the same string sits 0x8346 lower in its image and the table the
+    ///   function indexes (`DAT_00af541c`) lies outside it - so the two bits cannot be named from the sources in hand.
+    /// - **2000** is an override keyed on a per-tile grid (`[0x4d]`) of **eight-direction run masks** built by `FUN_007ef3f0`, not on
+    ///   standing bodies. The only body-aware test in the path system (`FUN_00801a20`) is in the **flat** search. A `body` parameter used
+    ///   to price this row here and **no caller ever passed it true**, so it was a rule the original does not have (D328).
     ///
     /// The distance-from-the-edge term (`(coord - window_lo) + 10` in the direction of travel) is **not** part of this answer: it belongs
     /// to the search, which knows the window, and it is added there.
     #[must_use]
-    pub fn step_cost(&self, level: u8, cx: u16, cy: u16, body: bool) -> Option<i32> {
+    pub fn step_cost(&self, level: u8, cx: u16, cy: u16) -> Option<i32> {
         if self.blocked(level, cx, cy) {
             return None;
-        }
-        if body {
-            return Some(2000);
         }
         // The four orthogonal neighbours in the level's own cells; a neighbour off the map counts as clear, because nothing can be
         // walked into out there and the original's own border row costs the plain 10.

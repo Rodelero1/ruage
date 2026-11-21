@@ -6,7 +6,7 @@
 //! | --- | --- |
 //! | an open cell whose four orthogonal neighbours are all clear | **10** (plus a distance-from-the-edge term the caller adds) |
 //! | an open cell with a blocked orthogonal neighbour | **300** |
-//! | a body standing on the cell | **2000** |
+//! | (no row: the binary's 2000 keys on a direction-run grid, not on bodies - D328) |
 //! | blocked and not crossable | **600** - and refused outright when the cell is outside the search window |
 //!
 //! Two rows of the original's table - **100** ("blocked but crossable") and **600** ("not crossable but the search still opens it") - need
@@ -81,23 +81,22 @@ fn open() -> Ground {
     Ground::from_map(&map)
 }
 
-/// **Open ground costs 10**, at every level, and a body on the cell costs 2000 - the two rows of the table that need nothing but the
-/// level maps.
+/// **Open ground costs 10**, at every level - the row of the table that needs nothing but the level maps.
+///
+/// **The 2000 row is not here, and it is not about bodies** (D328). `FUN_007ed280` overrides any cost to 2000 when the per-tile grid at
+/// `[0x4d]` is non-zero, and `FUN_007ef3f0` builds that grid as **eight-direction run masks** (`0x01 << n` per side, walked into maximal
+/// straight runs) - not a list of standing bodies. The only body-aware test in the path system is `FUN_00801a20`, and it is in the **flat**
+/// search. So our `body` parameter priced a rule the original does not have, and it was never passed `true` by any caller.
 #[test]
-fn clear_ground_is_ten_and_a_body_is_two_thousand() {
+fn clear_ground_is_ten() {
     let ground = open();
     let levels = Levels::of(&ground);
     for level in 0..Levels::DEPTH as u8 {
         let (cx, cy) = Levels::cell_of(level, (16, 16));
         assert_eq!(
-            levels.step_cost(level, cx, cy, false),
+            levels.step_cost(level, cx, cy),
             Some(10),
             "an open cell at level {level} costs ten"
-        );
-        assert_eq!(
-            levels.step_cost(level, cx, cy, true),
-            Some(2000),
-            "a cell with a body on it costs two thousand, at level {level}"
         );
     }
 }
@@ -111,12 +110,12 @@ fn a_cell_beside_an_obstacle_costs_three_hundred() {
     let levels = Levels::of(&ground);
     // Level 0: the tile beside the wall.
     assert_eq!(
-        levels.step_cost(0, 16, 16, false),
+        levels.step_cost(0, 16, 16),
         Some(300),
         "the tile below the wall is open but touches it"
     );
     assert_eq!(
-        levels.step_cost(0, 17, 16, false),
+        levels.step_cost(0, 17, 16),
         Some(10),
         "a tile two steps from the wall is clear on all four sides"
     );
@@ -128,7 +127,7 @@ fn a_cell_beside_an_obstacle_costs_three_hundred() {
         "the level 3 cell holding the wall must be blocked for this test to mean anything"
     );
     assert_eq!(
-        levels.step_cost(3, wx, wy, false),
+        levels.step_cost(3, wx, wy),
         None,
         "a cell that contains the wall is blocked and cannot be entered"
     );
@@ -140,13 +139,9 @@ fn a_blocked_cell_is_not_enterable() {
     let mut ground = open();
     ground.block(16, 16);
     let levels = Levels::of(&ground);
+    assert_eq!(levels.step_cost(0, 16, 16), None, "the wall tile itself");
     assert_eq!(
-        levels.step_cost(0, 16, 16, false),
-        None,
-        "the wall tile itself"
-    );
-    assert_eq!(
-        levels.step_cost(3, 2, 2, false),
+        levels.step_cost(3, 2, 2),
         None,
         "the 8x8 cell holding the wall"
     );

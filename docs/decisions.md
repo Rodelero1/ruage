@@ -9095,3 +9095,29 @@ its doc says so now instead of implying it is live.
 
 **Answers "can these be crosschecked?" - yes, and the reading changed the questions**: the terrain item is a naming task against the terrain
 table; the 2000 item needs one more function read (`[0x4d]`'s writer) and is moot until a caller passes a body.
+
+## D328 - The 2000 row priced a rule the original does not have; the two terrain bits need a binary this box does not have
+
+**Two reads, both answering "no, not what I said", and one removal.**
+
+**Read 1 - `[0x4d]` is a run grid, not bodies.** `FUN_007ed280` overrides any cost to **2000** when the per-tile grid at `[0x4d]` is
+non-zero. `FUN_007ef3f0` (157 lines) fills `[0x4c]` with ones and zeroes it as runs are consumed, and `[0x4d]` with **eight one-bit direction
+masks**, walking **maximal straight runs** in each direction and allocating one node per run. The only body-aware test in the path system is
+`FUN_00801a20`, and it is called from the **flat** search. So the 2000 row is **not** a body penalty, and D298's sentence saying so is wrong.
+
+**Read 2 - the terrain bits, and the wall.** `FUN_0076f430` indexes a **per-terrain-id descriptor table** at `DAT_00af541c`, which makes bits
+3 and 6 of `+0x28` **terrain** flags (and `FUN_00842bf0` classifies tiles with exactly those bits: `& 7` → 1, `& 0x18` → 2, bit 5 → 4, a
+four-way terrain class). Naming them needs that table, and **this box's `AoK HD.exe` is a different build from the decompiled binary**: the
+table's VA `0xaf541c` lies outside its image (`.data` ends `0x9e3044`), and the same string constants sit **0x8346** lower in its address
+space, a shift that is not constant. So the rows stay unstated, now with the reason "wrong binary" rather than "unknown rule".
+
+**Landed**: `Levels::step_cost` loses its `body: bool` parameter and its 2000 branch - **no caller ever passed it true**, so it was a rule the
+original does not have, dead since it was written. The fixture `clear_ground_is_ten_and_a_body_is_two_thousand` becomes `clear_ground_is_ten`,
+its retired assertion replaced by the read that retired it; removing the parameter then broke **five** call sites (`E0061`) before the
+production edit, which is what a removal should look like.
+
+**Measured**: acceptance **bit-identical** (`c7191f531bd81b1b`, 141 entities, 7,125 repaths, 12.9 s) - the proof the branch was dead. Suite
+**931 / 0 / 19**, conformance **21 / 0 / 0**. One branch per expansion removed, nothing added.
+
+**Commits us to**: no row of the cost table is stated without either a caller that uses it or a read that names it. The three unstated rows
+and what each needs are in `step_cost`'s doc.
