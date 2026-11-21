@@ -2102,3 +2102,31 @@ change mid-walk? It cannot answer it, and the search is recorded so the next ses
 - Its addresses are **AoC 1.0c / AoK 2.0a / the PS2 ELF**, not HD 5.7 (no licence, all rights reserved: read for behaviour,
   never transcribed). The movement answers in this tree come from `AoK HD.exe` itself -
   `docs/movement-in-the-binary.md`, "The maximum forward velocity, read".
+
+## openage on the three pathfinders and on formations (read 2026-11-21)
+
+Found while crosschecking the conformance sequence against online sources. `SFTtech/openage` (GPL-3.0: facts, never code) keeps a
+reverse-engineering note that cites the Ensemble postmortem, Pottinger's GDC 2000 talk and the official AoK strategy guide -
+three independent descriptions behind one page, which is why it is worth a citation even though it is a sibling project.
+
+**`doc/reverse_engineering/game_mechanics/pathfinding.md`**, verbatim where it matters:
+
+- *"Age of Empires 2 uses three different algorithms for pathfinding plus two obstruction systems."* The high-level one *"uses
+  mip-mapping to create a general route across the map. Criteria for the mip-map subdivision is passability. **It ignores moving
+  objects, e.g. units or wildlife**, though it takes 'static' object like buildings into account. Whenever a building is
+  constructed the pathfinder gets notified and updates the corresponding mip-map chains."*
+- *"The other two pathfinders are for short and medium distances. One uses tile-based pathfinding while the other one is a
+  polygonal pathfinder that dynamically generates convex hulls. These are used in combat situations or when units cross paths."*
+
+**`.../formations.md`:**
+
+- *"Units within the same formation don't collide with each other when the formation is established."*
+- *"Villagers, trade carts and fishing ships will not be part of any formation ... each of them takes their own path."*
+- A marching formation is used when the order lands more than **10 tiles** away.
+
+**What this settles for us, and what it does not.** It corroborates the three-solver shape the register carries as P11 and it
+settles the direction of P14: a coarse tier that refuses to run when bodies are near is backwards, because the game's coarse
+tier runs *and* ignores them (the corpus agrees independently - `FUN_007ee980`'s body has no call to the stander inserter). It
+also makes the mate exemption a **formation's**, which villagers never have - our same-tick rule is broader than the game on
+both counts. It does **not** give a constant: no radius, no speed, no cost, no mip-map padding, and no statement about HD 5.7's
+own build (openage describes the classic engine). Those still come from the install - `docs/movement-in-the-binary.md`.

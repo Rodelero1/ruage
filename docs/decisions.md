@@ -9286,3 +9286,35 @@ describe a port the code has moved past ("no hierarchy, no radius, no avoid set,
 conformance **21 / 0 / 0**, acceptance `e248486298910e28`, 127 entities, 1,727 re-paths, 10.04 s median of five on an idle box.
 **My own error, in the note:** a first timing batch read 16.11 s and I nearly charged the difference to the engine; the machine was
 running the suite on the same two cores. Every number was re-taken idle.
+
+## D335 - The road to 100%: the sequence, and the three things the online crosscheck changed
+
+**Asked for:** the order of steps to reach 100% conformance on pathfinding and obstacle avoidance, crosschecked against online
+sources. The answer is `docs/conformance-sequence.md`: thirteen steps, ordered by dependency and then by blast radius (the step
+that moves **every** route first, so each later measurement is against a settled base), each with its source, the witness it
+owes, its size and its blocker. **"100%" is defined in three classes**: R (read and implementable from the sources in hand -
+ten steps), B (needs the matching binary or the running game - P3's inset, the 100/600 terrain bits, the octile table) and U
+(undefined or deliberately different - bit-exact routes, the pause's random source). Conformance is every R step landed and
+witnessed, every B step unblocked or recorded out of reach, and the **"unit stuck" class test** green; it is not route
+equality with the binary.
+
+**Three corrections the crosscheck forced**, each with a source:
+
+- **P14's gate is backwards.** openage's pathfinding note (citing the Ensemble postmortem and Pottinger's talk) says the
+  high-level mip-map *"ignores moving objects, e.g. units or wildlife"*; the corpus agrees independently - `FUN_007ee980`'s
+  body has no call to the stander inserter (`FUN_007f9d80` is reached from `FUN_007f96b0`/`FUN_007fbab0`, not the levelled
+  search). The game runs the coarse tier and ignores bodies; ours drops to the flat search instead. Step 3.
+- **P11 targets the legacy algorithm.** The talk's fixed-point edge walk is the **modern** replacement; HD 5.7 is the AoK/AoC
+  engine, so its polygonal pather is slides 21-38 - AABBs, gift-wrapped hulls, cardinal rays, edge walk, 64-iteration cap,
+  smoothing. The skill's movement reference had the DE design listed as "the design to implement" and is corrected. Step 12.
+- **The mate exemption is a formation's, and villagers never join one** (openage `formations.md`, and the talk's "formations
+  allow for some friendly overlap" against "no pushing allowed"). Our same-tick rule is broader than the game on both counts;
+  closing it is step 11 and the one fork left that the sources cannot settle.
+
+**Also rowed, because the superseded gap register listed them and no live row carried them**: **P17** waypoint substitution
+(`mConsecutiveSubstituteCount`), **P18** the order's path vocabulary (forced waypoint, teleport-to-waypoint), **P19** the
+levelled search's border/distance cost term.
+
+**Measured:** no code change - acceptance `e248486298910e28`, suite 933 / 0 / 20, conformance 21 / 0 / 0, unchanged. The order
+and the crosscheck are the deliverable; the first two steps are a conformance-only witness (P15) and the route-wide key change
+(P13).
