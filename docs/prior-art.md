@@ -535,6 +535,16 @@ Published-value cross-checks for open questions:
 
 Later steps:
 - `SiegeEngineers/rms-check`, `SiegeEngineers/rms-doc` — the random map script language.
+- `aesaganda/aoe2-on-browser` — **watched for its method, not its code.** The Conquerors (2000, `age2_x1.exe`)
+  statically recompiled x86→C by `pcrecomp` (MIT), with a Win32/DirectX shim, a native Linux build and a WebAssembly
+  build; four phases done, multiplayer over a WebSocket relay. **The part that matters to us:** its oracle is the
+  recording, not a person — an AoC recording carries a world checksum about every 40 s of game time, a replay compares
+  each against its own world, and their harness (`tools/oracle/replay_check.sh`) drives the menus under gdb and exits
+  0/1/2 on in-sync/out-of-sync/inconclusive. Their claim is 10/10 checksums matching on a 403 s game, both directions.
+  That is the *shape* of the certificate D87 left open, and the `pcrecomp` route is the one mechanical alternative to
+  reading HD by hand if a `needs-oracle` row ever has to be settled. Licence: **none stated** — all rights reserved, so
+  read for facts and never lift code (same rule as genie, strictly applied). Targets AoC, not HD 5.7.2: rules transfer,
+  balance values do not.
 - `Divy1211/AoE2DE_UGC_Guide` — RM scripting and data modding, and it states it covers older versions.
   The only candidate from the first discovery sweep (2026-10-31) worth adding: the rest were replay
   viewers, a LAN server, an iPad port and a rating chart.

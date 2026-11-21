@@ -80,6 +80,7 @@ WATCHLIST: list[tuple[str, str]] = [
     ("librematch/genie", "active deterministic reimplementation and format readers"),
     ("Zaydme/openaok", "from-scratch AoK engine: fixed tick, pather, dat 5.7 reader"),
     ("yanfengliu/aoe2", "TypeScript replica on its own civ-engine: original art, LLM playtest loop, DE-shaped spec"),
+    ("aesaganda/aoe2-on-browser", "AoC statically recompiled to Linux/WASM with a checksum-matching replay oracle: the method, not the code"),
     ("SiegeEngineers/genie-rs", "crate-level model of the dat format"),
     ("SiegeEngineers/genieutils-py", "independent reading of the same format"),
     ("SiegeEngineers/sld-extractor", "DE sprite extraction"),
