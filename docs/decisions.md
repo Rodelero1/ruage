@@ -9121,3 +9121,23 @@ production edit, which is what a removal should look like.
 
 **Commits us to**: no row of the cost table is stated without either a caller that uses it or a read that names it. The three unstated rows
 and what each needs are in `step_cost`'s doc.
+
+## D329 - The binary's 255-entry body-list cap is unobservable in any scene the game makes
+
+**D310's second reason for not adding the cap - "no witness can see it" - was an argument, so it was measured.** A 64x64 open map, a wall
+of villagers in column 32 (layered when the count exceeds the rows), a walker at (20, 30) ordered through it to (40, 30), and the route
+compared by a hash of its points **with and without a 255-entry truncation inside `standing_bodies`**:
+
+| bodies | points | hash | with the cap |
+|---|---|---|---|
+| 0 / 100 / 200 / 255 / 256 | 1 / 2 / 2 / 2 / 2 | `1253b82b…` / `a4eec65f…` x4 | identical |
+| 300 / 400 | 3 / 3 | `7947ee1a…` | identical |
+
+**Not one route changed.** The point count moves at 300 because the wall is five layers of bodies there, not because of the list.
+
+**Therefore**: the cap can only bind when the body that decides the route is the one past entry 255 - 255 bodies inside the span of the line
+with the decisive one behind them and a higher id, which no player can produce. The acceptance match's largest list is **17** entries (D323).
+The cap stays unimplemented; what remains unfaithful is only the **selection order** (ours is id order, the binary's is colliders first),
+which matters exactly as much as the cap does - not at all below 255.
+
+**Cost of finding out**: one probe, seven body counts, two builds, four minutes - less than the paragraph that had deferred it since D310.
