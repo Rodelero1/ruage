@@ -328,17 +328,18 @@ impl World {
         ))
     }
 
-    /// **Plan the same goal again from where the body stands**, at most once every `REPLAN_TICKS`.
+    /// **Plan the same goal again from where the body stands**, on the tick the ground refused him - no throttle (P4, D332).
     ///
-    /// The goal is the route's own last point, so a re-plan does not drift toward a tile centre; a search that fails leaves
-    /// the old route in place, and the man stands - which is the original's answer to ground it cannot get round.
+    /// The original's epilogue re-plans on **every** terrain collision (`0x122f`, `0x128b`), so a wall that appears in a walker's lane is
+    /// answered at once. This used to refuse a re-plan until the route was `REPLAN_TICKS` old, which left a man standing for up to a second
+    /// while the search he needed waited out a timer; the cost of removing it is measured, not assumed.
+    ///
+    /// The goal is the route's own last point, so a re-plan does not drift toward a tile centre; a search that fails leaves the old route in
+    /// place, and the man stands - which is the original's answer to ground it cannot get round.
     fn replan_after_ground(&mut self, id: EntityId) {
         let Some(route) = self.paths.get(&id) else {
             return;
         };
-        if self.tick.saturating_sub(route.created) < REPLAN_TICKS {
-            return;
-        }
         let Some(mut goal) = route.points.last().copied() else {
             return;
         };

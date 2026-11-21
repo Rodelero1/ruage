@@ -9190,3 +9190,27 @@ at 48,000 ticks fall 141 -> 127 **because the match ends 2,348.6 s** (*"the matc
 match-length artefact rather than an economy signal - the stockpile line above is the one that answers that question.
 
 **Suite 932 / 0 / 19** (one more test, nothing joined), conformance **21 / 0 / 0**, all eleven movement suites green.
+
+## D332 - P4: ground that refuses a step is re-planned at once, not a second later
+
+**`docs/parity-plan.md` P4, landed.** `replan_after_ground` refused a re-plan until the route was `REPLAN_TICKS` (20) old, so a wall that
+appeared in a walker's lane left him standing for up to a second while the search he needed waited out a timer. The original re-plans on the
+collision itself: *"We have %d non-past collisions and %d terrain collisions, repathing"* (`0x128b`).
+
+**Landed**: the early return goes. The **stall** threshold that shares the constant - D279's fall-back to the tile centre after 20 consecutive
+refusals of an off-grid goal - stays, and the doc comment now distinguishes the two questions, because one constant was doing both jobs.
+
+**Witness**: `immediate_replan::a_wall_in_the_lane_is_replanned_the_tick_it_is_seen` - a one-leg open route, a palisade placed in the tile
+ahead, then the fixture walks him **one tick at a time** until his position stops and asks what the plan did on that tick. Red first: *"on tick
+4 ground refused him and the route was not re-planned (0 -> 0 re-paths)"*; green with the gate gone; **mutation-proved** by putting the gate
+back, which reddens it at the same tick.
+
+**Two errors of mine in the fixture, both caught by it refusing to pass**: the wall was first placed four tiles ahead (a hundred ticks out of
+reach, so nothing was ever refused), and the refusal was then checked in a three-tick window from placement, where the queued palisade lands
+only on the next tick and the walker needs ten to reach it.
+
+**Measured** (two trees, same generated `config/gamedata/`, release, seed 7, idle): re-paths **1,918 -> 1,727** (-10%), acceptance wall
+10.18/10.35 s -> **10.26/10.30 s** (inside the run-to-run spread), stockpile at 2,400 s 1,949/960/130 -> **1,961/960/130**, entities 127 -> 127,
+hash `bef8b77b` -> `e2484862`. **The cost the throttle was protecting against did not appear**: re-planning at once produces a route that is no
+longer refused, so the throttle was paying for repeat searches of a route that had already gone stale. Suite **933 / 0 / 19**, conformance
+**21 / 0 / 0**.
