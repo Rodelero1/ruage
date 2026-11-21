@@ -38,6 +38,14 @@ small scene, so the fixture cannot pass by giving every neighbour the same row.
 
 ## Needs the owner
 
+- **Step 7's predicate needs a content field the pack does not carry.** `FUN_007f11f0` is exact: it walks the tile's object
+  list and answers 1 only for an object whose type is **8** or **0x20**; `FUN_007ed280` charges **300** to a clear cell
+  whose own type test and four orthogonal neighbours' all answer 0. Our pack has no per-unit `type` (the generated
+  `units.toml` carries `class`, not that field), and the importer lives in its own repository (D12), so the two values
+  cannot be named or emitted from this tree. Options: (a) extend the importer to emit the dat's unit type and key the 300
+  row on 8/0x20 exactly; (b) keep the current predicate - *any* blocked orthogonal neighbour, terrain included - and
+  record it as a deliberate widening; (c) key it on a property our content vocabulary does have (an object's footprint
+  versus terrain) and record the difference. (a) is the game's; (b) is what ships today.
 - **An evenly mirrored skirmish**: player 2's barracks order is at 70 s where player 1's is at 320 s. D341 now leaves
   player 2 eliminated by 48,000 as well, so the imbalance is worth fixing before the next acceptance comparison.
 
