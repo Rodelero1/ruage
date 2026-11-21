@@ -9039,3 +9039,20 @@ builder his house.
 **Housekeeping in the same commit**: D283, D284 and D285 were referenced by the corpus and defined nowhere - their review files existed and
 their rows were lost when the log was reflowed. The three rows are written from those review files, marked as such, and `decisions.py`
 reports **7 dangling ids** where it reported 10.
+
+## D325 - The stand is chosen for buildings only, so the compass order is not observable for a tree
+
+**No production change.** Ran the acceptance to a measured close rather than the promised route-length change, and the measurement says
+there is nothing to change: `work_position` has three call sites and **only one moves anybody** - `gather.rs:543`, and only for
+`EntityKind::Building`. For a resource the gather route is planned **to the node's own position** and the man stops when the box gap says he
+is in reach (`settle` D169, `gap_to_footprint` D312); the other two call sites (`gather.rs:184`, `lib.rs:3794/3973`) answer *questions*
+("is this node workable", "can he reach it"), where any free ring tile says yes. A mid-tile-anchored footprint has every ring tile of its
+anchor inside itself, so `work_position` answers `None` and the route falls back to the anchor where `gap_to_footprint` closes the last third.
+
+**Witness**: `stand::a_man_who_comes_from_the_east_works_the_tree_from_the_east` - one tree, a man four tiles due east, 600 ticks, standing
+tile asserted to be `(tree.x + 1, tree.y)`. **Mutation-proved**: routing a resource through `work_position` reddens it (the man walks round
+to the north-west); reverted, production unchanged. Suite **931 / 0 / 19**, acceptance unchanged (`c7191f531bd81b1b`).
+
+**Closes next-step item 1** ("the compass-order stand is a tidiness fix"): for a resource it is not observable at all, and for a building
+it is either harmless or unreachable. It stays as it is. Confirms D317 from the other side: the man there did not walk off his plot because
+the stand he was sent to was the anchor and he was already in reach of it.
