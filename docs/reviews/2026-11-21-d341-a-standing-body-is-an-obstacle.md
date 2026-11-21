@@ -45,12 +45,14 @@ Same pack, seed 7, 48,000 ticks, release, idle box, three runs each side.
 | acceptance hash | `36ceb342bd94acc9` | **`1e1fcc3cf2b05a4c`** |
 | entities / players alive at 48,000 | 134 / 2 | **133 / 1** |
 | re-paths | 40,127 | **36,567** (-9%) |
-| wall, median of three | 15.60 s (15.68 / 16.20 / 15.60) | **11.42 s** (11.58 / 11.32 / 11.42) |
+| wall, median of three | **15.60 s** and 15.82 s in two batches (15.68 / 16.20 / 15.60; 15.93 / 15.82 / 15.62) | **11.42 s** (11.58 / 11.32 / 11.42) |
 
-**The wall falls 27% and that number is not a cost claim.** The scenario diverges: player 2 no longer survives to
-48,000, so the last part of the match is a world with one player's objects instead of two. Re-paths per tick of a live
-match is the honest figure (40,127 -> 36,567, -9%), and even that is measured over two different matches. What the slice
-is *for* is the rule, and the rule's own number is the witness above.
+**The wall falls 27% and that number is not a cost claim.** The scenario diverges: player 2 is **eliminated at ~2350 s**
+(the harness's first *"the match is over: no further orders are accepted"* is at 2355.2 s), so the last quarter of the
+match runs with one player's objects instead of two. Re-paths per tick of a live match is the honest figure (40,127 ->
+36,567, -9%), and even that is measured over two different matches. The baseline is quoted as a **band of two batches**
+because two runs of the same un-cut binary gave medians 0.2 s apart - inside that, the "27%" would be 25% or 29%
+depending on the batch. What the slice is *for* is the rule, and the rule's own number is the witness above.
 
 ## Stability
 
