@@ -1491,17 +1491,14 @@ impl World {
                     let radius = self.body_radius_of(entity.id);
                     let gap = self.footprint_gap(entity.position, drop);
                     let _ = (here, there, drop_unit);
-                    // **The wall, or as close as the ground allows** (D246). A carrier whose route is exhausted and who is
-                    // within half a tile of the footprint banks there: a crowd at one building, or a yard whose neighbour
-                    // tiles are built over, leaves him no wall to stand at - measured, a carrier that never banked at all in
-                    // 400,000 ticks (`research::two_players_can_be_different_civilisations`, 890 of 900). Anything further
-                    // out than that is refused, which is what the old tile-adjacency test let through at 0.281 tiles.
+                    // **The wall, and nothing looser** (D246, D313). The old second clause - bank from anywhere within
+                    // `radius + a quarter tile` once the route ran out - was written to rescue a carrier whose neighbouring
+                    // tile was taken, and it did: measured, one never banked at all in 400,000 ticks
+                    // (`research::two_players_can_be_different_civilisations`, 890 of 900). But it also licensed a bank from
+                    // 0.45 tiles, which is past the owner's own rule, and the rescue is no longer needed now that a step may
+                    // **touch** a wall (D306): the carrier walks the last stretch below and banks at it.
                     let at_the_wall = gap.is_some_and(|gap| gap <= radius + delta.raw());
-                    let as_close_as_the_ground = gap
-                        .is_some_and(|gap| gap <= radius + self.scale / 4)
-                        && self.next_waypoint(entity.id).is_none();
-                    let touching = at_the_wall || as_close_as_the_ground;
-                    if touching {
+                    if at_the_wall {
                         work.deposits.push(entity.id);
                         (Fixed::ZERO, Fixed::ZERO)
                     } else {

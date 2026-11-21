@@ -186,13 +186,24 @@ fn a_newcomer_does_not_move_the_working_gatherers() {
     // **The node is packed to capacity**, which is what makes the newcomer *refused* and the ring re-laid: with a free place
     // the newcomer simply takes it and no incumbent is touched, which is why the first version of this fixture passed on the
     // buggy engine.
+    // **The eight stand on the node's own ring** (D313): scattered three tiles apart they took so long to converge that only
+    // one man was ever *working* at the snapshot, and he filled his load and left at tick 13 - so the after-check could only
+    // judge a vacuous set, or a man who had gone home for his own reasons. On the ring, four of the eight are taking by
+    // tick 1,200 and the witnesses outlive the window.
+    let ring = world.resource_tiles(node)[0];
     let mut gatherers = Vec::new();
     for nth in 0..8u32 {
-        let id = a_villager(
-            &mut world,
-            9_800 + nth,
-            (28 + i64::from(nth % 4) * 3, 28 + i64::from(nth / 4) * 3),
-        );
+        let spot = match nth {
+            0 => (i64::from(ring.0) - 1, i64::from(ring.1) - 1),
+            1 => (i64::from(ring.0), i64::from(ring.1) - 1),
+            2 => (i64::from(ring.0) + 1, i64::from(ring.1) - 1),
+            3 => (i64::from(ring.0) - 1, i64::from(ring.1)),
+            4 => (i64::from(ring.0) + 1, i64::from(ring.1)),
+            5 => (i64::from(ring.0) - 1, i64::from(ring.1) + 1),
+            6 => (i64::from(ring.0), i64::from(ring.1) + 1),
+            _ => (i64::from(ring.0) + 2, i64::from(ring.1)),
+        };
+        let id = a_villager(&mut world, 9_800 + nth, spot);
         world
             .submit_checked(Command::Gather { villager: id, node })
             .expect("a gather order");
@@ -251,12 +262,17 @@ fn a_newcomer_does_not_move_the_working_gatherers() {
         world.step().expect("a tick");
     }
 
+    let mut judged = 0;
     for (worker, was) in &before {
         let now = world.position(*worker).map(|at| (at.0.raw(), at.1.raw()));
-        // A man who has finished his load is walking to the bank, which is not being moved off his work.
+        // **Only a man still taking from the node is a witness** - the same test that chose `before` (D313). A man who has
+        // filled his load and is walking to the bank, or has banked and is walking back, carries `Gather` with `progress 0`
+        // and is legitimately somewhere else: measured, villager 9803 was at the town centre with **nothing in his hands and
+        // progress 0** - just banked, walking back - when a tighter bank rule (D313) shifted his cycle by a few ticks. The
+        // claim is about a man **at work**, so the exclusion has to be the one the selection used, not "is his task a gather".
         if !world
             .entity(*worker)
-            .is_some_and(|e| matches!(e.task, Task::Gather { .. }))
+            .is_some_and(|e| matches!(e.task, Task::Gather { progress, .. } if progress.raw() > 0))
         {
             continue;
         }
@@ -267,7 +283,14 @@ fn a_newcomer_does_not_move_the_working_gatherers() {
             worker.0,
             was
         );
+        judged += 1;
     }
+    // **A loop that skips everyone judges nothing.** With the exclusion sharpened above, the witness can now be vacuous - so
+    // say so out loud rather than pass on an empty set.
+    assert!(
+        judged > 0,
+        "no man from the before-set was still taking from the node when the newcomer arrived: the fixture judged nothing"
+    );
 }
 
 /// **A man walking past must not move the men who are seated** (D238). This is the owner's report of 2026-11-16, after D237:

@@ -8672,3 +8672,33 @@ scenario and the limit of the measurement. Clippy clean, `fmt` clean. Review: `d
 2. **`work_position` picks a stand by compass order, not by proximity** - its ring starts north-west and it skips the tile the man stands on,
    because `plan_path(from, from)` is `NoPath`. Measured: a man beside a plot at `(19, 18)` was sent to `(19, 17)`. `approach_footprint`, the
    builder's version, already picks the nearest; the two should agree.
+
+## D313 - A load leaves at the wall, and nothing looser
+
+**Crosscheck: the owner's rule 3 was being broken by a clause written to work around an older defect.** The invariant
+(`invariants.rs`, his words: *"If villager drops resource when further from the drop site than 1/2 diameter -> FAIL"*) was red at
+**0.420 tiles**, inside the engine's `as_close_as_the_ground` clause - `gap <= radius + a quarter tile` = **0.45** - and outside the
+rule. That clause dates from before **D306**: touching a wall used to be a *collision*, so a carrier whose neighbouring tile was taken
+could not get to the wall and never banked (measured once at 400,000 ticks, `research::two_players_can_be_different_civilisations`,
+890 of 900). Tangency is a passage now, so he walks the last stretch to `wall_point` and the rescue is dead weight.
+**The number never changed - `radius + one step` stands - the number of clauses did.**
+
+**Landed:** the clause is deleted from `Task::Return`; `at_the_wall` (`gap <= radius + one step`) is the only test.
+**Witness:** the owner's own invariant, watched failing at 0.420 tiles and green after; the fixture was not touched.
+
+**A fixture had to give, and the reviewer should know what it gave.** The suite swapped one red for another:
+`overlap::a_newcomer_does_not_move_the_working_gatherers` went red, and not because a rule was broken - the man who "moved" had
+**filled his load and gone home**. Its before-set was chosen by `progress > 0` and its after-check excluded only "task is not a
+gather", and a man who has banked and is walking back is still `Gather` with `progress 0`. Repaired by making the exclusion the one
+the selection uses, adding a **`judged > 0` guard** (the sharper exclusion could otherwise skip everybody and pass on nothing - it was
+one frame from doing so), and placing the eight gatherers on the node's ring so four of eight are working by tick 1,200 instead of
+one. **Proven:** the position comparison fires (that is the red above) and the fixture is no longer vacuous. **Not proven:** that it
+catches a deliberate shove - a mutation that displaces a working man while leaving others at work was not constructed.
+
+**Measured.** Acceptance match (release, seed 7, 48,000 ticks) **9.28 s / 9.54 s** against **8.53 s / 8.81 s** on `373902f`
+(**+9% to +12%**), and the outcome **changed**, as it must: hash `89ff37d844cfd11f` against `3f6c802027ff40fb`,
+**129 entities against 141**, **10,026 repaths against 6,031**. The economy is smaller because a carrier now walks the last ~0.21
+tiles on every trip instead of banking from 0.45 out - the price of the rule, taken on the owner's side of the trade. **Not
+measured:** the delivered totals per column on both trees, which would turn the wall-time figure into a throughput figure. No carrier
+is stuck in `Return` without a route in the 48,000-tick dump. Suite **924 / 3 / 21** from **923 / 4 / 21**, no new red; clippy and
+`fmt` clean. Review: `docs/reviews/2026-11-20-d313-a-load-leaves-at-the-wall.md`.
