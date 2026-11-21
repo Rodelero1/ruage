@@ -546,7 +546,14 @@ impl World {
                 other.position.0.raw() - landing.0.raw(),
                 other.position.1.raw() - landing.1.raw(),
             );
-            if dx * dx + dy * dy >= reach * reach {
+            // **A box, not a disc** (P16, D339): the binary's query is four `<=` on the two bodies' grown axis-aligned boxes
+            // (`FUN_00840830`: the mover's `max_x + inset` against the candidate's own box at `+0x20 + idx*4`), and the talk
+            // says the unit is shrunk to a point and everything else grown - a box. `reach` is the two halves summed, so one
+            // comparison per axis is the same test. A disc is strictly smaller than the box of the same half-extent, so the
+            // disc took landings the original counts as collisions: measured over an acceptance match, **4,741 of 218,920**
+            // body-steps (2.17%) sat in the difference (`collision_probe`). Overlap is strict, not touching: the inclusive
+            // `<=` and the inset are P3's slice (`+0x268`, blocked on the matching binary).
+            if dx.abs() >= reach || dy.abs() >= reach {
                 continue;
             }
             // **The path-ignore list** (`0x1242`, *"That's a path ignore unit"*): the mover's own group, and only while

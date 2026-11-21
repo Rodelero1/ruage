@@ -9386,3 +9386,25 @@ refinement for short spans is unread (sequence step 8), and it is re-tested then
 
 **Instrumentation:** `Ground::tier_answers` / `World::tier_answers` (never hashed), and the ignored probe
 `crates/sim/tests/tier_probe.rs`, so the next slice can say how often the tier fires instead of arguing it must have.
+
+## D339 - P16 landed: a body collides as a box, and the probe's 4,741 stay
+
+**Crosscheck:** `FUN_00840830` compares four grown axis-aligned extents (`<=`), the talk says "shrink the unit to a point and grow
+everything else", and nothing in the corpus or openage gives two bodies a disc. Ours tested squared distance against the summed
+radii. Everything downstream was already a box (`solid_boxes`, `target_contact`, `entry_parameter`, `body_touches`, the plan's
+`Clear`), so the arrival arithmetic did not move.
+
+**Landed:** the step's body test is `dx.abs() >= reach || dy.abs() >= reach` -> continue. Strict overlap: the binary's inclusive
+`<=` and the `+0x268` inset are P3 (blocked on the matching binary), kept out to hold one variable on this branch.
+
+**Witness:** `body_boxes::a_step_that_lands_in_the_box_pocket_is_refused` - a stander dropped in the pocket (0.350 on both axes,
+inside the box, outside the disc) after the mover's plan (a collider standing at plan time is *past* and exempt). Measured on the
+same tree, one variable: disc `repaths 0` (the landing is taken, 0.378/0.378); box `repaths 1` (collision counted, route re-made,
+step sideways). Two earlier fixture designs were thrown away - one passed for the exempt-collider reason, one asserted a freeze
+that would be the congelation D290 recorded; both are in the review.
+
+**Measured:** acceptance `36ceb342bd94acc9` (was `527bf4ebb9520fa0`), 134 entities and **both players alive at 48,000** (was 132
+and one), re-paths 40,127, wall 15.93 s median of three - the match changes, the wall does not. The probe does **not** fall to
+zero: disc 4,681 of 251,681 (1.86%), box 3,156 of 153,061 (2.06%), because the pockets it counts are pairs the engine exempts
+(past 17,517), not landings the disc allowed. What the box does move is the body-step census: **251,681 -> 153,061** in 36,000
+ticks (-39%), stricter blocks meaning fewer bodies get to walk.
