@@ -9214,3 +9214,26 @@ only on the next tick and the walker needs ten to reach it.
 hash `bef8b77b` -> `e2484862`. **The cost the throttle was protecting against did not appear**: re-planning at once produces a route that is no
 longer refused, so the throttle was paying for repeat searches of a route that had already gone stale. Suite **933 / 0 / 19**, conformance
 **21 / 0 / 0**.
+
+## D333 - Two parity rows closed by measurement, and P3 narrowed to one number
+
+**P9 was already done**: its two halves - arrival "beside a held goal" (D200) and the crowd ring point (D271) - went with D292 and D289 at the
+owner's own instruction, and `grep` finds neither in the tree. The row said "forks forfeited" for work that had already been cut; third time
+this register has pointed the next step at ground already covered.
+
+**P6 is nominal, measured**: the ground's per-tile `occupants` count only differs from the game's per-object boxes when an object is **narrower
+than its tile**, and every object this content carries is exactly a tile wide - all four resource kinds have `radius = 0.5` (a tile's
+half-extent) and blocking buildings take dat radii of 1.0, 1.5 or 2.0. The row now says what would reopen it.
+
+**P3 is blocked on one float.** `FUN_00840830` read in full: the overlap test is an **inclusive AABB** (`min <= other_max && other_min <=
+max`, so touching counts, the `<=` the register quoted), applied to a box that is **shrunk on all four sides** by `+0x268` when the flag at
+`+0x266` is set. That inset is what makes D306 possible - a half-tile body still fits a one-tile gap because the query box is inset - so the
+inclusive test cannot land without it, and the inset's formula is not in the corpus. **Our `object_depth > 0` is the same rule from the other
+side**: refusing penetration into a box is refusing touching of a box inset by a hair.
+
+**What is left of "remove all deviations" is not code**: P3 needs one number, P12 needs the per-edge mask read, and P11's polygon pathfinder is
+a project with no hull code in the tree. Everything else is done, nominal, or - P10 - deliberately kept, because a reproducible random source
+is what makes the acceptance hash possible.
+
+**Measured**: no code change - acceptance `e248486298910e28` (127 entities, 1,727 re-paths, 10.2 s), suite **933 / 0 / 19**, conformance
+**21 / 0 / 0**.

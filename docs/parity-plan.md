@@ -21,13 +21,13 @@ ordered behaviour the game does not have, so "meet the original" and "the rule I
 |---|---|---|---|---|
 | P1 | **DONE** | a search with a budget: `h` expansions, hard cap 20,000, then the best settled node answers | same | landed; conformance row green |
 | P2 | **DONE** | the nearest-cell answer picks by octile distance, first node found wins ties | same | landed; conformance row green |
-| P3 | **LIVE** | `object_depth > 0`: a landing that **penetrates** a new object is refused, and one that touches an already-touched object may stay or slide out but not go deeper | `FUN_00840830` collides on **touching** (`<=`, four times), with no exception | collide on `<=`, in one slice with the plan/step agreement; the one-tile-gap fixture (D306, the owner measured a packed trebuchet through one) must stay green, which constrains the box: a body's collision box is not its nominal radius |
+| P3 | **LIVE - blocked on one read** | `object_depth > 0`: a landing that **penetrates** a new object is refused, and one that touches an already-touched object may stay or slide out but not go deeper | `FUN_00840830`: an **inclusive AABB** (`min <= other_max && other_min <= max`, so touching counts) applied to the mover's box - **optionally shrunk on all four sides** by `+0x268` when `+0x266` is set. Read 2026-11-21 | land the inclusive test **with its inset**: without the inset a half-tile body is refused every one-tile gap, contradicting D306 (the owner measured a packed trebuchet through one). **The inset's formula is not in hand**, and its writer is not identified in the corpus |
 | P4 | **LIVE, unblocked** | a **ground** refusal buys a new route at most once a second (`REPLAN_TICKS = 20`) | re-plans on **every** terrain collision (`0x122f`, `0x128b`) | re-plan on every refusal, then measure a man pressed against a wall - a refusal every tick is a search every tick |
 | P5 | **DONE** | no order is abandoned for being blocked (`finish_blocked_orders` and `beside` are both gone) | the original has no such rule; the pause is the only brake | landed (D292), with the seat book (P8) and the no-coincidence guard behind it |
-| P6 | **LIVE** | `Ground` holds `occupants: Vec<u16>` - a **count** per tile - so a blocked tile is one whole tile wide | per-object **radius pairs** from the dat, and a radius query over the tile's objects (`FUN_00844310`, `FUN_00840830`) | the ground's index holds boxes, not counts, built from the pack's radii |
+| P6 | **NOMINAL (measured)** | `Ground` holds `occupants: Vec<u16>` - a **count** per tile - so a blocked tile is one whole tile wide | per-object **radius pairs**, and a radius query over the tile's objects (`FUN_00844310`, `FUN_00840830`) | **every object our content carries is a whole tile wide**: all four resource kinds have `radius = 0.5` (a tile's half-extent) and buildings take the dat's radius, which is 1.0, 1.5 or 2.0. A tile-granular index *is* the object's box for this content, so the deviation is nominal; it becomes live the day an object narrower than its tile exists |
 | P7 | **LIVE** | `standing_bodies` **skips** every body within a quarter tile of the mover in both axes | the search starts on the shared tile and includes **every stander the mover does not ignore** (`FUN_007f9d80`) | drop the skip; two bodies on one tile become plannable |
 | P8 | **DONE** | no seat book: gatherers spread by collision and pause only | the original has no seat book | cut (D293/D294), fixtures re-pointed |
-| P9 | **LIVE - forks forfeited** | arrival "beside a held goal" within a quarter tile (D200), and a crowd **ring point** for a group move (D271) | a group is sent to the **clicked point**; no "beside a body holding the goal" rule, and the game's formations are a feature we do not have | cut both: a group move ends at the point, and a body holding a goal is not special. **The owner's own earlier rulings, withdrawn at his instruction** |
+| P9 | **DONE** | nothing: `beside` (D200) was cut in D292 and the crowd ring point (D271) was withdrawn in D289 - `grep` finds neither rule in the tree | a group is sent to the **clicked point**; no "beside a body holding the goal" rule | already cut, at the owner's instruction, before this directive; the row was stale |
 | P10 | **KEEP** | the pause is drawn from our seeded stream, 0.25-1.50 s | the game's `rand()`, whose own comment calls it *"not considered sync safe"* | same interval, same distribution; only the random *source* differs, and a reproducible one is what makes the acceptance hash possible |
 | P11 | **HALF** | one flat A* for short/medium walks, and the levelled search for long routes | **three**: levelled, tile short-range, and a **polygonal** one for combat (dynamic convex hulls) | the levelled one landed (D296-D302, D322). The polygonal one is **not built** - there is no hull code in the tree - and it is a project, not a step |
 | P12 | **UNREAD** | a tile is walkable or not; no per-edge passage | a **four-bit N/S/W/E neighbour mask**: a step is legal per **edge** (`zone_spatial_pyramid_check_tile.cpp`, `func_001D29F0`) | no HD address pins the mask, so the first move is a **read**, not a patch |
@@ -49,17 +49,14 @@ Each line below was checked by symbol, not from memory:
 - **Stale comment fixed at the same time**: `motion.rs` still said *"PENDING A RULING (parity-plan P3)"* after D306 had ruled; it now carries
   the ruling and the constraint the ruling puts on P3's implementation.
 
-## Work order (owner's directive, 2026-11-21)
+## Work order (owner's directive, 2026-11-21) - what is left
 
-Cheapest first, each with its own proof:
-
-1. **P7** - the skip (small; `a_mate_who_is_stopped_becomes_solid` is the fixture that notices);
-2. **P4** - the throttle (measure the wall-press worst case first);
-3. **P3** - the touch rule with the plan/step agreement and the one-tile-gap fixture;
-4. **P6** - per-object boxes: the largest of the four, and the one that changes how wide forests feel;
-5. **P9** - the two forfeited forks, cut at his instruction;
-6. **P12** - the read, then the mask;
-7. **P11's polygon pathfinder** - a project, scoped separately.
+1. **P3** - needs one read (the inset behind `+0x266`/`+0x268`) before the inclusive test can land without breaking D306's measured
+   one-tile passage. Until then our `>` test is the same rule from the other side.
+2. **P12** - the four-bit per-edge mask: a read, then the mask.
+3. **P11's polygon pathfinder** - a project, to be scoped separately; there is no hull code in the tree.
+4. **P10** - kept deliberately: same interval, same distribution, reproducible source. It is the one row where a difference is a
+   requirement rather than a choice.
 
 Small alignments that ride with whichever step touches them: the **search window** (D299), the **refinement's interpolation** (D322), the
 **descent's start-only test** (D323), and the **body list's order and 255 cap** (D329).
