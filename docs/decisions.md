@@ -8791,3 +8791,24 @@ was in: `farm` 7 of 8 green and **only** the new witness red; `gather` unchanged
 invariant 4 (*"If villager gathers from the resource, resource is not empty, villager is not at 100% carry capacity and changes position
 -> FAIL"*) - the invariant holds today only because the settle finds a man a place *before* he starts taking, which is why the
 `(19, 18) -> (19, 17)` walk in D312 was invisible to it.
+
+## D317 - D316's inference is withdrawn: the man in that scene was a tile away, and walking was right
+
+**The check that found it.** D316 concluded that "the stand was half the story" - that with the nearest-stand fix in, a farmer beside a
+plot still walked because the gather arm's `at_node` box is a one-tile box at the node's anchor. Building that second change (a building
+is "at" by its **footprint**: `footprint_gap <= radius + one step`, the delivery rule's own shape) and then **re-running the witness
+against the un-fixed tree** showed the witness **passing on both trees**: it no longer discriminated anything.
+
+**Why.** The scene in D312/D316 puts the man at a tile **corner** one tile west of the plot - `Spawn` anchors a point, and a corner is
+the far edge of its own tile, so he stood **a whole tile** from the plot's footprint. Walking there was correct: he was not beside the
+plot, he was a tile away. Placed where a man actually comes to rest - his disc **against the plot's wall** at the footprint's vertical
+middle - he works it **without moving on either tree**, which means the engine already keeps the owner's invariant 4 (*"a working man
+does not move"*) for a farm, and the at-node term needed no change.
+
+**So the compass-order wart is narrower than D316 said**: `work_position`'s fixed north-west ring does choose *which* tile a man walks to,
+but a man who is already in reach is not moved first, so the cost is at most a longer **initial** walk - not a lost place and not a broken
+invariant. Both changes were reverted; the tree is clean and the suite stands at **927 / 0 / 21**.
+
+**What is still true from D312**: the walk to a stand goes round the plot's corner rather than to the nearest side, and `approach_footprint`
+- the builder's version - already answers "nearest to where he is". Making the two agree is a **tidiness** change with a route-length
+measurement behind it, not a rule fix. Recorded as such in `docs/next-step.md`.
