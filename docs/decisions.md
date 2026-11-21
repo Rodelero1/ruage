@@ -8385,9 +8385,10 @@ enterable (`None`), a cell with a **body** on it costs **2000**, an open cell to
 an open cell clear on all four sides costs **10**. The distance-from-the-edge term the original adds (`(coord - window_lo) + 10` in the
 direction of travel) belongs to the search that knows the window, not to the table.
 
-**Named gap, not a silent one.** The original's **100** ("blocked but a body may cross") and **600** rows need "crossable but slow"
-terrain; our tiles are walkable or not. Treating every blocked tile as unenterable makes our coarse routes *more conservative* than the
-game's on rough ground - the safe direction to be wrong in.
+**Named gap, not a silent one.** The original's **100** and **600** rows need "crossable but slow" terrain; our tiles are walkable or not.
+Treating every blocked tile as unenterable makes our coarse routes *more conservative* than the game's on rough ground - the safe direction
+to be wrong in. *(Corrected by D327: the two rows are keyed on the **tile's terrain object** - flag byte `+0x28` bit 3 turns 100 into 300,
+bit 6 gives 600 - so this is a terrain flag to name, not a passability class to invent; and the 2000 row is **not** "a body on the cell".)*
 
 **Measured.** Test-first (`E0599` then three green: **3 passed / 0.00 s**), and the fixture's first version was my error twice over in the
 same way as D297's: I asked the level-3 cell of `(16, 16)` about a wall at `(16, 15)`, which is a different cell, and read a correct 300
@@ -9071,3 +9072,26 @@ other one at a tile's middle - and the cell-not-blocked check stays. Conformance
 **What I take from it**: the conformance set is a separate workspace and is **not in the pre-commit gate** by design (`make conformance` is
 run by hand), so a shape change can land with the main suite green. From now on, a change to `Levels`, `refine` or `coarse_route` runs
 `make conformance` and reads its **totals**, not its line count.
+
+## D327 - The cost table read straight: the 100/600 rows are terrain flags and the 2000 row is not bodies
+
+**Read, not guessed, and it corrects my own D298 in two directions.** `FUN_007ed280` (116 lines) is the coarse search's expansion cost, and
+in its own order it charges: **10** for an open cell clear on four sides (plus the distance-from-the-edge term, which is the search's and
+D298 was right about that); **300** when **this cell or one of its four neighbours holds an object whose type is 8 or 0x20**
+(`FUN_007f11f0` walks the tile's object array); **100 or 300** when the cell's own byte is set and bit **3** of the terrain object's flag
+byte `+0x28` decides which (`FUN_00773c80`); **600** when bit **6** of that same byte is set (`FUN_00773bf0`); and it overrides any of them to
+**2000** when the per-tile grid at `[0x4d]` is non-zero.
+
+**Correction 1**: the 100 and 600 rows are not "crossable but slow" terrain classes - they are **two bits on the terrain object**, so naming
+them is a terrain-table lookup (the dat's entries, or the editor's labels), not a cost class to invent. The open question is smaller than
+D298 made it and is answerable from the sources we have.
+
+**Correction 2**: the 2000 row is **not** "a body standing on the cell". It reads `[0x4d]`, which `FUN_007ef3f0` builds as per-direction
+marks (`0x01 << n`, compared with neighbours and with the tile's blocked byte) - and `FUN_00801a20`, the only function known to look at
+standing bodies, is in the **flat** search. D298's sentence is corrected inline and the row stays unclaimed until `[0x4d]`'s writer is read.
+
+**Also**: our `step_cost` is called with `body = false` from the only call site, so the 2000 branch has **never run** - it is dead code, and
+its doc says so now instead of implying it is live.
+
+**Answers "can these be crosschecked?" - yes, and the reading changed the questions**: the terrain item is a naming task against the terrain
+table; the 2000 item needs one more function read (`[0x4d]`'s writer) and is moot until a caller passes a body.

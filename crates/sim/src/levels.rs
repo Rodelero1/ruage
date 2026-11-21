@@ -347,9 +347,12 @@ impl Levels {
     /// | open, but with a blocked orthogonal neighbour | **300** |
     /// | open, all four orthogonal neighbours clear | **10** |
     ///
-    /// The original's **100** ("blocked but a body may cross") and **600** ("not crossable, and the search still opens it") need terrain
-    /// costs this content model does not carry: our tiles are walkable or not, with no cost between. When terrain costs land, those two
-    /// rows are where they go.
+    /// The original's **100** and **600** rows are keyed on the **tile's terrain object**, not on a passability class (D327): bit 3 of its
+    /// flag byte `+0x28` turns the 100 into a 300, bit 6 gives the 600. Naming those two bits is a terrain-table lookup, not a rule to
+    /// invent, and our content carries no terrain cost field yet - so the rows stay unstated here rather than guessed.
+    ///
+    /// **`body` is never passed true**: `coarse_route` has no body knowledge and calls this with `false`, so the 2000 row is dead code in
+    /// our engine (D327). The binary's own 2000 override reads a per-tile mark grid (`[0x4d]`), not a list of standing bodies.
     ///
     /// The distance-from-the-edge term (`(coord - window_lo) + 10` in the direction of travel) is **not** part of this answer: it belongs
     /// to the search, which knows the window, and it is added there.
