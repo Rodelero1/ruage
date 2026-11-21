@@ -9056,3 +9056,18 @@ to the north-west); reverted, production unchanged. Suite **931 / 0 / 19**, acce
 **Closes next-step item 1** ("the compass-order stand is a tidiness fix"): for a resource it is not observable at all, and for a building
 it is either harmless or unreachable. It stays as it is. Confirms D317 from the other side: the man there did not walk off his plot because
 the stand he was sent to was the anchor and he was already in reach of it.
+
+## D326 - The conformance row for the hierarchy was pinning the shape D322 replaced
+
+**A miss of mine, found by running the gate instead of counting its lines.** D322 changed `Levels::refine` from cell centres to **edge
+crossings** and I checked `make conformance` by counting `test result` lines (9, as usual) without reading pass/fail. It was **10 passed /
+1 failed**: `the_original_solves_a_long_walk_in_its_hierarchy` asserted that every waypoint sits on the `n * 8 + 4` cell lattice, which is
+exactly what the change removed. The row's own RULE paragraph already cited `FUN_007eeda0` ("to step toward the next") as the thing that
+decides the point, so the **assertion** was the stale half and the **text** was already right.
+
+**Fixed**: every point after the first must be a **crossing of a level-3 boundary** - the step's own coordinate on the `n * 8` line and the
+other one at a tile's middle - and the cell-not-blocked check stays. Conformance **21 passed / 0 failed / 0 ignored**.
+
+**What I take from it**: the conformance set is a separate workspace and is **not in the pre-commit gate** by design (`make conformance` is
+run by hand), so a shape change can land with the main suite green. From now on, a change to `Levels`, `refine` or `coarse_route` runs
+`make conformance` and reads its **totals**, not its line count.
