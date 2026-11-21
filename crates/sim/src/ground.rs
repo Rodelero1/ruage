@@ -119,6 +119,10 @@ pub struct Ground {
     /// How many times the pyramid has been built: a diagnostic, the way `plan_count` is.
     #[serde(skip)]
     pyramid_builds: std::cell::Cell<u64>,
+    /// **How many routes the levelled tier answered** (D338): instrumentation like `plan_count`, never hashed, so a slice that
+    /// changes the tier's gate can say how often it fired instead of arguing that it must have. Zero on a map with no obstacles.
+    #[serde(skip)]
+    tier_answers: std::cell::Cell<u64>,
 }
 
 impl Ground {
@@ -142,11 +146,19 @@ impl Ground {
             terrain,
             pyramid: std::cell::RefCell::new(std::collections::BTreeMap::new()),
             pyramid_builds: std::cell::Cell::new(0),
+            tier_answers: std::cell::Cell::new(0),
         }
     }
 
     pub fn size(&self) -> (u16, u16) {
         (self.width, self.height)
+    }
+
+    /// **How many routes the levelled tier has answered** (D338). A diagnostic: the tier's gate is judged by this count, not by
+    /// an argument that it must have fired.
+    #[must_use]
+    pub fn tier_answers(&self) -> u64 {
+        self.tier_answers.get()
     }
 
     /// Is this tile on the map at all?
@@ -576,11 +588,12 @@ impl Ground {
         {
             return Some(vec![to]);
         }
-        // **Tier 2: the levelled search** (D301, D299). The binary's land-unit default is the coarse search over 8-tile cells; it is
-        // tried here on the walks the straight line could not take, and only when nothing about bodies is being avoided - a coarse cell
-        // knows where objects stand, not where the bodies are, so a route that must keep clear of a friend is the flat search's job.
-        // **Measured, and the tier is inert because of that clause** (D334, P14): 121 long walks in one acceptance match, 121 of
-        // them carrying a stander, 0 coarse searches; lift the gate and 6 answer at level 2 with the acceptance hash unchanged.
+        // **Tier 2: the levelled search** (D301, D299). The binary's land-unit default is the coarse search over 8-tile cells, and
+        // it **ignores moving bodies**: `FUN_007ee980` calls no stander inserter, and openage's note says the mip-map "ignores
+        // moving objects, e.g. units or wildlife". So the tier is asked on every long walk, bodies or not (D338) - it used to be
+        // gated on `avoid.is_empty()`, which is the opposite of the game's rule and, measured, left it answering **0 of 121** long
+        // walks in one acceptance match (D334: every one of them carried a stander). What the coarse tier cannot see, the step pass
+        // answers the original's way: the mover bumps, the collider joins the plan's avoid list, and the route is re-made.
         //
         // The chain's legality is by construction: every cell in it is open, and two adjacent open cells share a boundary whose two
         // centres lie inside them. What is *not* by construction is the first and last leg - a body may sit in a corner of its cell with
@@ -592,32 +605,44 @@ impl Ground {
         let long_walk = (i64::from(start.0) - i64::from(goal.0)).abs()
             + (i64::from(start.1) - i64::from(goal.1)).abs()
             >= 16;
-        if avoid.is_empty()
-            && long_walk
-            && let Some(coarse) = self.pyramid_for(reach).coarse_route(start, goal)
-            && coarse.level >= 2
-        {
-            let centres = self.pyramid_for(reach).refine(&coarse, scale);
-            if centres.len() > 1 {
-                let mut points: Vec<(Fixed, Fixed)> = centres.iter().skip(1).copied().collect();
-                points.push(to);
-                let mut previous = (from.0.raw(), from.1.raw());
-                let mut clear = true;
-                for point in &points {
-                    if !self.leg_is_clear(
-                        scale,
-                        previous,
-                        (point.0.raw(), point.1.raw()),
-                        reach,
-                        &[],
-                    ) {
-                        clear = false;
-                        break;
+        if long_walk {
+            // **The descent first, the search second** (D338): `coarse_route` derives its level as the lower of the two ends'
+            // descents (`levels.rs:162`), so level < 2 is knowable without searching. On the acceptance map that is 127 of 185
+            // long walks - the flat search answers them anyway, so the search would be pure cost. Both live inside the
+            // `long_walk` arm: `pyramid_for` builds the pyramid on a cold cache, and a short walk must not pay for it.
+            let levels = self.pyramid_for(reach);
+            if levels.descent(start).min(levels.descent(goal)) >= 2
+                && let Some(coarse) = levels.coarse_route(start, goal)
+            {
+                let centres = levels.refine(&coarse, scale);
+                if centres.len() > 1 {
+                    let mut points: Vec<(Fixed, Fixed)> = centres.iter().skip(1).copied().collect();
+                    points.push(to);
+                    let mut previous = (from.0.raw(), from.1.raw());
+                    let mut clear = true;
+                    for point in &points {
+                        if !self.leg_is_clear(
+                            scale,
+                            previous,
+                            (point.0.raw(), point.1.raw()),
+                            reach,
+                            // **The chain is certified against the same avoid list the flat search uses** (D338). The game's
+                            // coarse search never sees bodies, but this certification is ours, and `route_avoiding` publishes a
+                            // promise the whole cage depends on: a route planned to keep clear of a friend must not be handed back
+                            // through him - the re-plan after a bump would then mark the collider *past* (D320) and the mover
+                            // would walk through the man he was told to avoid. Measured, honouring it costs nothing in the
+                            // acceptance match (0 answers either way) and it keeps the fixture's witnessed route.
+                            avoid,
+                        ) {
+                            clear = false;
+                            break;
+                        }
+                        previous = (point.0.raw(), point.1.raw());
                     }
-                    previous = (point.0.raw(), point.1.raw());
-                }
-                if clear {
-                    return Some(points);
+                    if clear {
+                        self.tier_answers.set(self.tier_answers.get() + 1);
+                        return Some(points);
+                    }
                 }
             }
         }

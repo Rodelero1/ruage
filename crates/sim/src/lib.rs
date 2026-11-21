@@ -1716,6 +1716,12 @@ impl World {
         self.plan_count.get()
     }
 
+    /// **How many of them the levelled tier answered** (D338). Instrumentation: the tier's gate used to switch it off for every
+    /// caller and no fixture noticed, so the count is what says whether it runs.
+    pub fn tier_answers(&self) -> u64 {
+        self.ground.as_ref().map_or(0, ground::Ground::tier_answers)
+    }
+
     /// **What the movement pass decided for this body on the last tick it was asked** (D196): `None` if there is no such entity.
     pub fn last_step(&self, id: EntityId) -> Option<StepDecision> {
         self.find(id).map(|entity| entity.last_step)

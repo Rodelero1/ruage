@@ -9356,3 +9356,33 @@ touching the tree); the fixture is `..._and_never_overlap` and asserts `apart >=
 132/1, 41,473, **15.70 s** and stockpile 1,446/852/655 at 2,400 s. **The 60% wall rise is unattributed**: same entity and
 re-path counts, a different match, and the sqrt helpers account for 0.16 s of it - so it is the next perf item (profile per
 pass, and price the per-search allocations) rather than a claim.
+
+## D338 - P14 landed: the tier's `avoid` gate is dropped, and the clause that binds is the descent
+
+**Crosscheck:** `FUN_007ee980`'s body calls no stander inserter (`FUN_007f9d80`'s only callers are `FUN_007f96b0` and
+`FUN_007fbab0`), openage's pathfinding note says the mip-map "ignores moving objects, e.g. units or wildlife", and the talk says
+units "bump into others, stop and repath around". Three sources, one rule: the coarse tier runs in a crowd and does not see
+bodies. Ours refused to run it whenever a body was in the plan's avoid list.
+
+**Landed:** `Ground::route_with` no longer carries `avoid.is_empty()` - the tier is asked on every long walk, bodies or not.
+The tier's *leg certification* keeps the avoid list, so a chain that would walk through a friend is refused and the flat search
+answers instead: the game's search is blind to bodies, but our `route_avoiding` promise is not, and handing a route back
+through the man it was told to avoid would let D320's "past" stamp walk the mover through him. Measured: 0 answers either way
+in the acceptance match, so honouring the promise costs nothing. The substitution this replaces - "the coarse tier must not run
+at all when a body is near" - is gone.
+
+**Witness, red first:** `tier_ignores_bodies::a_long_walk_past_a_stander_comes_from_the_hierarchy` - a `World::plan_path` walk
+through the order path, 56 tiles, one stander two tiles off the corridor; the route's interior waypoints must be cell-edge
+crossings (a coordinate that is an exact multiple of the scale), which no tile-centre route can produce. Red on the un-cut tree
+with two tile-centre waypoints.
+
+**The finding:** with the gate gone the tier still answers **0 of 61,276** routes in the acceptance match, and the binding
+clause is D303's descent floor (`coarse.level >= 2`): 127 of 185 long walks start on a tile whose 4-tile cell is not usable, so
+the flat search answers - which is also the game's answer at level 0. Loosening the level floor to 1 answers 13 routes, to 0
+answers 108, and each rewrites the match (hashes `69a548722252b27e` / `d700295118db1114`); lowering the distance floor to 8 or 0
+answers 7 and rewrites it too (`2e4e7c4e306a2d67`). So the avoid gate was never the constraint in a wooded map, and the next
+lever is the level floor - its own slice, since it moves every route. The 16-tile floor is **kept**: it exists because the
+refinement for short spans is unread (sequence step 8), and it is re-tested then.
+
+**Instrumentation:** `Ground::tier_answers` / `World::tier_answers` (never hashed), and the ignored probe
+`crates/sim/tests/tier_probe.rs`, so the next slice can say how often the tier fires instead of arguing it must have.
