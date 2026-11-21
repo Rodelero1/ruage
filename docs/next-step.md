@@ -1,4 +1,4 @@
-# OPEN - the suite is green; next are the stand choice, the owed fixtures, and the written-up reads
+# OPEN - C is landed; the hierarchy is dormant by parity, and the queue is two fixtures, one read and one mirror
 
 **Where this branch stands, measured (`blunt-port`, D315).** All six original reds are fixed and the "click that does nothing"
 defect is closed:
@@ -12,8 +12,8 @@ defect is closed:
 - **the skirmish pair** (D315): not an engine fault at all - player 2's attack at 230 s killed player 1's barracks builder and froze
   the site at 119 of 1000, so player 1 never fielded militia. Player 2's attack is at 600 s, measured.
 
-**Suite 927 passed / 0 failed / 21 ignored** - fully green. Acceptance: hash `89ff37d844cfd11f`, 129 entities, 10,026 repaths,
-9.21-9.54 s.
+**That block is history** - the numbers below it are the current state: **suite 931 / 0 / 19**, acceptance `c7191f531bd81b1b`, 141
+entities, 7,125 repaths, 12.6 s.
 
 ## C is landed - a standing man is neither shoved nor walked through (D320, D321)
 
@@ -28,37 +28,47 @@ it measured nothing) - the place book it described was deleted by D293, and the 
 48,000 ticks - the first half is **7% faster** than before D320 (re-paths 10,026 -> 7,125 overall), and the second half is where the fight
 the script could not previously reach now happens. **Suite 930 / 0 / 19.**
 
+## Landed since C, measured (D322-D326)
+
+- **D322 - the refinement matches the binary**: `Levels::refine` emits the **crossing of each shared edge** (first tile of the cell's span
+  the step can pass, point on the boundary) instead of cell centres. The 16-tile gate was **tried and kept**: removing it takes an 8-tile
+  walk past one tree from 2 points to 7. Acceptance bit-identical (`c7191f531bd81b1b`).
+- **D323 - why tier 2 never answers**: 11,042 route calls in a match, 1,677 long, **0** by the hierarchy. `avoid` is not the cause (removing
+  the condition changes nothing); the **descent** is - 1,603 of 1,677 long calls have `descent(start) = 0` because a gatherer stands beside
+  his resource. `FUN_007ee980`'s head does the same (level 3 first, the **start** point's cell only, stop at bit `0x20`), so this is
+  **parity**.
+- **D324 - the body avoidance is not an invention**: `FUN_00801a20` is **fail-closed** - a tile is passable only if every body on it is in
+  the ignore list, and that list holds only moving members. A stopped body's tile is blocked. Removing our avoidance is 33% faster and
+  reddens two fixtures; reverted.
+- **D325 - the compass-order stand is not observable**: `work_position` moves anybody only for `EntityKind::Building`; a resource walk is
+  planned at the node and stops in reach. New guard `stand::a_man_who_comes_from_the_east_works_the_tree_from_the_east`, mutation-proved.
+- **D326 - the conformance row was stale**: the hierarchy row still asserted cell centres after D322. Fixed; **conformance 21 / 0**. A
+  `Levels` change must run `make conformance` and read the totals - it is outside the pre-commit gate.
+
+**Suite 931 / 0 / 19.** Acceptance `c7191f531bd81b1b`, 141 entities, 7,125 repaths, 12.6 s.
+
 ## Ready now - no evidence needed
 
-1. **The compass-order stand is a *tidiness* fix, not a rule fix** (D317, which withdraws D316's reading). `work_position` picks the
-   first free ring tile from the north-west rather than the nearest, so a man who must walk to a tree or a plot walks a longer first
-   leg than he needs to - measured: a man a tile west of a centre-anchored plot is sent to its north-west corner instead of its west
-   side. He works the node once he arrives either way, and **a man already at the node is not moved**, which is the owner's invariant
-   4 and is kept. If it is worth doing, do it as a **route-length** change with `approach_footprint` (the builder's "nearest" answer)
-   as the model, and measure the acceptance match's total walking rather than promising a rule.
-2. **A unit fixture for D314's rule**: a gather on a node behind a wall is refused **at the order**, not at the tick. Today the rule
-   is pinned only through the rule runner (`gather_pick`), which is a longer path than the rule needs.
-3. *(Done in D318 - the owed measurement was taken: the stricter bank rule **doubles** the stockpile at 2,400 s, wood 813 -> 1,831 and
-   food 395 -> 1,503; D313's "smaller economy" was my error and is corrected.)*
-4. **An evenly mirrored skirmish** (named by D315): player 2's opening is at 70 s where player 1's is at 320 s. It no longer decides
-   a test, but the file calls that section a mirror.
+1. **An evenly mirrored skirmish** (named by D315): player 2's opening is at 70 s where player 1's is at 320 s. It no longer decides a test,
+   but the file calls that section a mirror.
+2. **Seven dangling ids** (`D115, D122b, D124, D125b, D126, D136, D190`) - referenced by history files and defined nowhere. `decisions.py`
+   reports them; D283-D285 were the same rot and were backfilled from their review files in D324.
+3. **Two stale stashes** from earlier sessions (`WIP on main: a7de0b6`, `On main: d207-wip`) - inspect, then drop or apply.
 
 ## Ready after one short read each
 
-5. **`FUN_007eeda0`** - refinement of an edge to a **tile on the boundary** (#5): the fix that stops our coarse routes being 8-tile
-   spaced, and the one that lets D306's **16-tile gate** go. Recorded in D308 with its port order.
-6. **The straight-line tier** (#10): D309 read `FUN_008000d0`, `FUN_008a4360` and `FUN_008a3a20` and found **no pre-search line
-   test** - so our tier 1 is unverified as parity. What settles it is the caller of `FUN_008000d0`: the object that owns the path
-   request, and whether anything tests the leg before it.
-7. **The re-path's ignore list** (#8): four entities, cap 255 at `0x1265`. D310 read it: we build the avoid list from every live body
-   within a span of the line, **with no cap** and in **id order**, where the binary fills colliders first and stops at 255. The
-   witness that would make the cap a step is a wall of 255 villagers plus a route that must go round the 256th.
+4. **The straight-line tier** (#10): D309 read `FUN_008000d0`, `FUN_008a4360` and `FUN_008a3a20` and found **no pre-search line test** - so
+   our tier 1 is unverified as parity. What settles it is the caller of `FUN_008000d0`: the object that owns the path request, and whether
+   anything tests the leg before it. **D322-D323 did not touch this.**
+5. **The re-path's ignore list** (#8): D310 read it - we build the avoid list from every live body within a span of the line, **with no cap**
+   and in **id order**, where the binary fills colliders first and stops at 255. The witness that would make the cap a step is a wall of 255
+   villagers plus a route that must go round the 256th; D310's reason for not adding it (our selection would be ours, not the game's) still
+   stands.
 
-## Needs the owner
+## Parked behind D323 - a decision that cannot be measured until the hierarchy answers in a match
 
-8. **Bodies priced at 2000** (#6). The game's behaviour is known; the decision is whether a crowd's own routes should stop routing
-   round itself. Changes every crowd route.
-9. **A terrain cost class** (#2's 100/600 rows): a `config/` and map-format change, not an engine one.
+6. **Bodies priced at 2000** (#6): the cost table has the row (D298), and it is inert while tier 2 never answers.
+7. **A terrain cost class** (#2's 100/600 rows): a `config/` and map-format change, not an engine one - also inert for the same reason.
 
 ## What is *not* owed
 
