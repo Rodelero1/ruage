@@ -9531,3 +9531,30 @@ never read. The next lever is the level floor (D303), not this constant.
 
 **Wall, median of three:** 11.79 s (11.84 / 11.79 / 11.90) against the un-cut **11.56 s** (11.56 / 11.47 / 11.56) - the
 same match to the hash, so the 2% is the band, not the change.
+
+## D343 - sequence step 8 landed: the refined waypoint is the crossing the line makes
+
+**Crosscheck.** `FUN_007eeda0` is the chain's refinement, and its first act is an **interpolation**: handed the mover's
+position and a far point, for a boundary crossed along x it computes `iVar7 = (iVar4 * param_5) / param_4 + param_7` -
+the straight line's own crossing of the edge - and only then looks at tiles. The scan runs **outward from that tile**:
+forward to the span's end (first crossing kept, with its distance `iVar10`), then backward from the same point, breaking
+when `iVar10 < 1` or at a crossing, which wins because it is strictly nearer. The vertical case is the same code on the
+other axis. The first-party talk (`25+ Years of Pathfinding Problems with C++`) covers the three-solver architecture and
+the legacy hull algorithm in its text layer; its levelled-search slides are images, so **the refinement's interpolation is
+not corroborated outside the binary** - the deck's absence is said plainly rather than counted as agreement.
+
+**Prior implementation.** `Levels::refine` walked each span from `first + 0` and took the first crossing it met, with no
+line and no interpolation - so on an edge with two crossings it left through the bottom one however the walk was shaped.
+
+**Landed.** `refine` takes the plan's two endpoints, interpolates where the walk's line crosses each shared edge
+(`across.0 + (edge - along) * (across.1 - across.0) / travel`, integer arithmetic like the binary's), and scans outward:
+the first crossing forward at distance `d`, then back over `0..d`, where a nearer crossing wins.
+
+**Witness, red first:** `refine_crossing::the_refined_point_is_the_crossing_the_line_makes` - a level-2 plate whose shared
+edge has crossings at rows 0 and 2 and a walk along row 2. Un-cut the waypoint came out at `(4.000, 0.500)`; with the cut,
+`(4.000, 2.500)`.
+
+**Measured, same tree, one variable:** acceptance `1e1fcc3cf2b05a4c`, 133 entities, one player, 36,567 re-paths - **both
+sides, bit-identical**, because the tier that uses the refinement answers **0 of 61,276** routes on this map (D338). Wall:
+cut 12.07 s median of three against un-cut **12.01 s**, back to back, so the difference is the band. Suite **221 result
+lines, 939 passed, 0 failed, 23 ignored**.

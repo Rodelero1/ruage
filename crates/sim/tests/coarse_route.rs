@@ -155,7 +155,10 @@ fn the_chain_refines_to_the_crossing_of_each_shared_edge() {
         .coarse_route((4, 4), (62, 4))
         .expect("an open walk across the map");
     assert_eq!(route.level, 3, "an open start descends to level 3");
-    let points = levels.refine(&route, scale);
+    // A straight walk along row 4, in raw units: the refinement interpolates this line across each shared edge (D343).
+    let from = (4 * scale + scale / 2, 4 * scale + scale / 2);
+    let to = (62 * scale + scale / 2, 4 * scale + scale / 2);
+    let points = levels.refine(&route, scale, from, to);
     assert_eq!(
         points.len(),
         route.cells.len(),

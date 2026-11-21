@@ -304,7 +304,13 @@ impl Levels {
     /// The first point is the start cell's own centre, which the caller discards (the walk starts where the body stands); the goal
     /// is the caller's, so no trailing centre is emitted.
     #[must_use]
-    pub fn refine(&self, route: &CoarseRoute, scale: i64) -> Vec<(crate::Fixed, crate::Fixed)> {
+    pub fn refine(
+        &self,
+        route: &CoarseRoute,
+        scale: i64,
+        from: (i64, i64),
+        to: (i64, i64),
+    ) -> Vec<(crate::Fixed, crate::Fixed)> {
         let level = route.level;
         let span = i64::from(1u32 << level.min(15));
         let size = span * scale;
@@ -320,43 +326,64 @@ impl Levels {
         };
         points.push(centre(first));
         for pair in route.cells.windows(2) {
-            let (from, to) = (pair[0], pair[1]);
+            let (here, next) = (pair[0], pair[1]);
             // The step is 4-directional (the search opens four neighbours), so the shared edge is one line of `span` tiles: a column
             // for a step along x, a row for a step along y.
-            let along_x = to.0 != from.0;
+            let along_x = next.0 != here.0;
             let (boundary, first) = if along_x {
                 (
-                    (i64::from(to.0.min(from.0)) + 1) * span,
-                    i64::from(from.1) * span,
+                    (i64::from(next.0.min(here.0)) + 1) * span,
+                    i64::from(here.1) * span,
                 )
             } else {
                 (
-                    (i64::from(to.1.min(from.1)) + 1) * span,
-                    i64::from(from.0) * span,
+                    (i64::from(next.1.min(here.1)) + 1) * span,
+                    i64::from(here.0) * span,
                 )
             };
-            // **The first tile of the span that the step can cross** - what `FUN_007eeda0` returns. Both sides of the edge have to
-            // be standable ground; a span with no crossing at all keeps its middle, which is where the cell centres put it.
-            let mut chosen: Option<i64> = None;
-            for k in 0..span {
-                let tile = first + k;
+            // **Where the straight line crosses this edge** (D343). `FUN_007eeda0` is handed the mover's position and a far
+            // point, and computes `(distance to the edge) * delta_across / delta_along + start` - the line's own crossing -
+            // before it looks at a single tile. Ours scanned from the span's low end, so on an edge with two crossings it
+            // left through the bottom one however the walk was shaped.
+            let start = {
+                let (travel, across) = if along_x {
+                    (to.0 - from.0, (from.1, to.1))
+                } else {
+                    (to.1 - from.1, (from.0, to.0))
+                };
+                if travel == 0 {
+                    span / 2
+                } else {
+                    let edge = boundary * scale;
+                    let along = if along_x { from.0 } else { from.1 };
+                    let value = across.0 + (edge - along) * (across.1 - across.0) / travel;
+                    (value.div_euclid(scale) - first).clamp(0, span - 1)
+                }
+            };
+            // **The nearest crossing to that point, forward first** - the binary's order: it keeps the first crossing
+            // forward at distance `d`, then walks back over distances `0..d`, and a crossing found there wins because it is
+            // strictly nearer. With no forward crossing it walks the whole span back.
+            let crossable = |k: i64| -> bool {
                 let (Ok(tile), Ok(before), Ok(after)) = (
-                    u16::try_from(tile),
+                    u16::try_from(first + k),
                     u16::try_from(boundary - 1),
                     u16::try_from(boundary),
                 ) else {
-                    continue;
+                    return false;
                 };
                 let (a, b) = if along_x {
                     ((before, tile), (after, tile))
                 } else {
                     ((tile, before), (tile, after))
                 };
-                if !self.blocked(0, a.0, a.1) && !self.blocked(0, b.0, b.1) {
-                    chosen = Some(k);
-                    break;
-                }
-            }
+                !self.blocked(0, a.0, a.1) && !self.blocked(0, b.0, b.1)
+            };
+            let forward = (start..span).find(|k| crossable(*k));
+            let budget = forward.map_or(span, |k| k - start);
+            let backward = (0..budget.min(start + 1))
+                .map(|d| start - d)
+                .find(|k| crossable(*k));
+            let chosen = backward.or(forward);
             let offset = chosen.unwrap_or(span / 2);
             let point = if along_x {
                 (

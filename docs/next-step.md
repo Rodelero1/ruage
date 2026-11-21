@@ -1,54 +1,50 @@
-# OPEN - step 7 landed (D342: the 300 row is a mine); next is step 8, the refinement's scan direction
+# OPEN - steps 5-8 landed (D340-D343); next is the level floor (D303), the lever that makes the tier answer
 
-**Where this stands:** suite **220 result lines, 938 passed, 0 failed, 23 ignored**; conformance **21 / 0 / 0**; acceptance
-`1e1fcc3cf2b05a4c`, 133 entities, one player alive at 48,000, 36,567 re-paths, **11.8 s** median of three. The *order* to
+**Where this stands:** suite **221 result lines, 939 passed, 0 failed, 23 ignored**; conformance **21 / 0 / 0**; acceptance
+`1e1fcc3cf2b05a4c`, 133 entities, one player alive at 48,000, 36,567 re-paths, **12.0 s** median of three. The *order* to
 100% conformance is **`docs/conformance-sequence.md`**; this file is the immediate step and the outstanding forks.
 
-**Landed in this session:** step 5 as a read (D340 - the substitution has no stand to answer, because a body never refuses
-our mover's step), step 6 (D341 - `standing_bodies` skips a body only when it has a route **and** moved on the previous
-tick; a builder standing at work was 19 ticks walked through and is now gone round), step 7 (D342 - the 300 row is a cell
-beside a **gold or stone mine**, named by the pack with `snug = true`; the match is **bit-identical** because the tier that
-prices the row answers nothing - D338).
+**Landed in this session:** step 5 as a read (D340 - the substitution has no stand to answer: a body never refuses our
+mover's step), step 6 (D341 - a body is an obstacle unless it moved on the previous tick; a builder at work was 19 ticks
+walked through and is now gone round), step 7 (D342 - the 300 row is a cell beside a **gold or stone mine**, named by the
+pack with `snug = true`), step 8 (D343 - the refined waypoint is the crossing the walk's own line makes, then the scan
+outward from it).
 
-## The next step: 8 - the refinement's scan direction
+**All three of 6-8 are bit-identical in the acceptance match**, and for one reason: the levelled tier answers **0 of
+61,276** routes on this map (D338), so nothing it prices or refines is ever read. That is the next step's whole subject.
 
-**Prior implementation.** The chain's refinement scans the span **from the low end** and takes the first boundary crossing
-it meets (`crates/sim/src/levels.rs`, `Levels::refine`: `for k in 0..span { ... break }`).
+## The next step: the level floor (D303) - let the tier answer
 
-**The rule, read in full** (`FUN_007eeda0`, HD 5.7 - both halves, `0x7eeda0`-`0x7eef09` and the scan below it). Two
-things, and the second is not a scan order:
+**Prior implementation.** `Ground::plan_path_with`'s tier arm (`ground.rs:640-660`) asks the hierarchy only when
+`long_walk` (16 tiles, D306) **and** `levels.descent(start).min(levels.descent(goal)) >= 2`. `Levels::descent` walks the
+pyramid from level 3 down and stops at the first level whose cell is usable. On the acceptance map that floor rejects
+**127 of 185** long walks: their start tile's 4-tile cell is blocked, so the tier never runs.
 
-1. **The point is interpolated, not the low end.** The function is handed the mover's position (`param_6`, `param_7`) and
-   a far point (`param_4`, `param_5`); for a boundary crossed along x it computes
-   `iVar7 = (iVar4 * param_5) / param_4 + param_7` - the straight line's own crossing of the edge, `iVar4` being the
-   distance from the span's edge to the start. Ours has no interpolation at all: it walks the span from `first + 0`.
-2. **Then the span is scanned outward from that point.** Forward from the interpolated point to the span's end, keeping
-   the first crossing and its distance; then a **backward** pass from the same point, stopping when `iVar10 < 1` (it has
-   walked back as far as the forward crossing was ahead) or at a crossing, which then wins. The vertical case is the same
-   code on the other axis.
+**The rule, read** (`FUN_007ee980`, and the corpus's own descent loop): the binary walks the levels down and **floors at
+level 0**, where the search is the flat tile search - it does not refuse to answer because the start cell is coarse. Its
+mid-level attempts are *tried* and, when they fail, it falls through to the low-level path (`0xf98`: *"Looking for a LOW
+LEVEL path (mid-level path failed)"*). So "no coarse answer" is a fall-through, not a gate.
 
-So the port is **two** changes - thread the mover's position and the far point into `refine`, then scan outward from the
-interpolated crossing - and the second cannot be watched on its own until the first exists.
+**This is a measurement slice, not a port.** The lever is the `>= 2` floor, and D338 already priced the neighbours of it:
+level `>= 1` answers **13** routes, `>= 0` answers **108**, and each rewrites the match (hashes `69a548722252b27e` and
+`d700295118db1114`). What has not been measured is the tier with **D342's row and D343's refinement in it**, and whether
+a route the tier answers is *better* than the flat search's on the same walk - which is the acceptance, not the hash.
 
-**Witness owed:** a step whose span crosses **two** boundaries, where the interpolated crossing is the far one - the
-route must leave through the interpolated crossing, and ours leaves through the low one. Small scene, one variable, and
-the size is **M**, not the S the sequence calls it.
-
-**Why it matters beyond itself:** this is what would let the 16-tile floor fall (D338's re-test), and with the floor down
-the coarse tier starts answering routes - the precondition for D342's row and D337's key to change a match at all.
+**Witness owed:** one long walk on the seeded map whose tier route differs from the flat route, with the two routes and
+their costs side by side; then the match's A/B at floor `>= 1` (13 answers) and at `>= 0` (108). If the tier's routes are
+worse, the finding is the numbers and the floor stays.
 
 ## Also ready, independent of that
 
-- **The level floor** (D303): the clause that keeps the tier off in a wooded map (`coarse.level >= 2`; 127 of 185 long
-  walks start on a tile whose 4-tile cell is unusable). Route-wide, needs its own A/B, and it is the single lever that
-  makes D342 and D337 visible in a match.
 - **The substitution threshold** (D340): the game's `> 2` against our `REPLAN_TICKS` (20) in `replan_after_ground`, waiting
   for a fixture that stands on an off-grid aim for three ticks.
 - **A body on a tile corner blocks no planned tile** (found while staging D341): the search asks `still_inside` of *tile
   centres* (`ground.rs`, `inside_a_body`), so a body standing on a corner - which is where the map's own seeding places
-  villagers - excludes nothing. Its own slice; the step-side test is exact, so the plan and the step disagree there.
+  villagers - excludes nothing. Its own slice; the step-side test is exact, so plan and step disagree there.
 - **The mate rule (step 11) is already the game's**: `stamp_group` (`world/step.rs:110-144`) gives mates only to **military**
   units, and a villager is never one. What is left is a *formation model* for soldiers - a gap of its own.
+- **The 16-tile floor** (D306): re-test it once the tier answers - it was justified by "the refinement is unread", which
+  D343 has just ended.
 
 ## Needs the owner
 

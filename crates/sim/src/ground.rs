@@ -648,7 +648,14 @@ impl Ground {
             if levels.descent(start).min(levels.descent(goal)) >= 2
                 && let Some(coarse) = levels.coarse_route(start, goal)
             {
-                let centres = levels.refine(&coarse, scale);
+                // The refinement interpolates the walk's own line across each shared edge (D343), so it needs the two
+                // points the plan was asked for, not just the cells.
+                let centres = levels.refine(
+                    &coarse,
+                    scale,
+                    (from.0.raw(), from.1.raw()),
+                    (to.0.raw(), to.1.raw()),
+                );
                 if centres.len() > 1 {
                     let mut points: Vec<(Fixed, Fixed)> = centres.iter().skip(1).copied().collect();
                     points.push(to);
