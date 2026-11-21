@@ -8910,3 +8910,25 @@ contention. The table is idle and sequential.
 **Still open, and next**: the seat shuffle (`overlap::a_passer_by_does_not_move_the_seated_gatherers`) is untouched and now fails its own
 precondition (*"no gatherer was at work beside the node"*), so it measures nothing. D238's verdict that the shuffle is *load-bearing* was
 measured **before** this chain existed; re-measuring it is the step that this one makes meaningful.
+
+## D321 - The seat shuffle was measuring its own grave
+
+**After D320 completed the past chain, D238's fixture was re-checked - and it passes.** D238 diagnosed the owner's *"villager still pushes
+another villager"* as the **seat shuffle** and called it *load-bearing*: removing it let villagers stand **0.204** tiles apart, because a
+walker still walked through a seated man's square. Both halves of that reasoning have since gone: the **place book itself was deleted**
+(D293, the owner: *"Drop it and let the crowds jam"*), so there is no square to give up; and the walker's **past** rule now completes its
+chain (D320), so a passer-by is resolved by the pause and the re-plan, not by displacement.
+
+**Landed:** `overlap::a_passer_by_does_not_move_the_seated_gatherers` off `#[ignore]`, with its **scene repaired** - three men **on the
+node's ring**, one of them actually taking (`progress > 0`), a fourth crossing the ring for 300 ticks, positions compared on every tick the
+walker moves. It failed its own precondition before (*"no gatherer was at work beside the node; the fixture measures nothing"*), which is the
+second time in two days that an `#[ignore]`d fixture turned out to be measuring nothing (the first was D315's skirmish clock).
+
+**Nothing in `crates/sim/src` changed**: this is test-only, so the acceptance match is byte-for-byte D320's (`c7191f531bd81b1b`, 141
+entities, 7,125 repaths). Suite **930 / 0 / 19** from **929 / 0 / 20**, nothing joined. The two fixtures that would show the 0.204 pile if
+the shuffle's absence still hurt - `invariants::villagers_never_close_into_one_body` and `gather_motion::three_gatherers_on_one_bush_do_not_
+pile_up` - are green.
+
+**What the guard is now**: a man taking from a node keeps the point he stands on while someone walks past. It can fail (anything that writes
+a working man's position fails it) but not for D238's reason, because that mechanism no longer exists. Its scene is stated in its doc so the
+next reader knows what it does and does not cover.

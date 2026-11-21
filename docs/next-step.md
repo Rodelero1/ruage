@@ -15,22 +15,18 @@ defect is closed:
 **Suite 927 passed / 0 failed / 21 ignored** - fully green. Acceptance: hash `89ff37d844cfd11f`, 129 entities, 10,026 repaths,
 9.21-9.54 s.
 
-## In flight - C: a standing man is neither shoved nor walked through (owner, 2026-11-21)
+## C is landed - a standing man is neither shoved nor walked through (D320, D321)
 
-**Landed (D320): the past chain's missing link.** `replan_around_bodies` now stamps the new route with `self.tick`; in the original a
-re-plan is a **new path**, so a man who has stood still since then is *past* and is walked through. Without it a stopped man stayed
-non-past for ever and a walker sank into him (0 raw, 600 re-plans in 600 ticks). Witness: `replan::a_stopped_friend_is_only_walked_through_after_the_replan`,
-off ignore and re-specified to the chain. Acceptance: re-paths **10,026 -> 7,125** at 48,000 ticks, first half **7% faster**, full match
-**40% slower** with **`players=1`** - the fight now resolves, and the gap is entirely in the combat half.
+**D320**: `replan_around_bodies` stamps the new route with `self.tick`. In the original a re-plan is a **new path**, so a man who has stood
+still since then is *past* and is walked through - without it a stopped man stayed non-past for ever and a walker sank into him (0 raw, 600
+re-plans in 600 ticks). Witness: `replan::a_stopped_friend_is_only_walked_through_after_the_replan`, mutation-proved.
+**D321**: with the chain complete, D238's seat-shuffle fixture **passes** once its scene is rebuilt (its gatherers were still walking in, so
+it measured nothing) - the place book it described was deleted by D293, and the pile it was protecting against does not appear
+(`invariants::villagers_never_close_into_one_body` and `gather_motion::three_gatherers_on_one_bush_do_not_pile_up` are green).
 
-**Next in this slice: re-measure D238 with the chain in place.** `overlap::a_passer_by_does_not_move_the_seated_gatherers` is still
-`#[ignore]`d and now fails its own precondition (*"no gatherer was at work beside the node"*), so it measures nothing. Its verdict - that
-the seat shuffle is **load-bearing** because a walker walks through a seated man - was measured **before** the pause, the past rule and
-D281's "a stopped body blocks" existed, and before D320 completed the chain. Rebuild the fixture so it seats a man who is actually taking
-(`progress > 0`), watch it fail, then re-run D238's three refuted variants (ignore walkers; ignore non-ring bodies; release a seat only
-for a body at rest) against today's numbers. **Gate**: acceptance entities and re-paths against the D320 baseline (**141 / 7,125**), the
-suite red set unchanged, and `invariants::villagers_never_close_into_one_body` still green - that invariant is what the shuffle was
-protecting.
+**Acceptance now** (`e90fb4c`, release, seed 7, idle): **141 entities, 7,125 repaths, `players=1`, hash `c7191f531bd81b1b`**, 13.0 s at
+48,000 ticks - the first half is **7% faster** than before D320 (re-paths 10,026 -> 7,125 overall), and the second half is where the fight
+the script could not previously reach now happens. **Suite 930 / 0 / 19.**
 
 ## Ready now - no evidence needed
 

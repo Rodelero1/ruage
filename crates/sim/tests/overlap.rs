@@ -298,25 +298,19 @@ fn a_newcomer_does_not_move_the_working_gatherers() {
 /// seated man who **gives up his square** - and a walker passes inside the reach of every square he goes by, which is why the
 /// measurement is taken **while he is still walking**. Once he stops, his place in the ring is a standing body's and a
 /// re-choice is the ring working (a man parked on your square is not a man walking past).
-/// **Ignored: the seat shuffle is load-bearing** (D238). The fixture is red on today's engine - at tick 756, worker 9901 gives
-/// up a seat it was working and re-reserves one **0.52 tiles** away, because two neighbours (`Gather` on the same node, still
-/// walking to their own squares) pass within reach of it. That is the owner's *"villager still pushes another villager"*: no
-/// position is written, a seated man gives up his square and walks to another, which reads as a shove.
+/// **Was `#[ignore]`d, and it was measuring its own grave** (D321). D238 diagnosed the owner's *"villager still pushes another
+/// villager"* as the **seat shuffle** - a working man giving up his square because a neighbour walked within reach of it - and
+/// found it *load-bearing*: removing it let villagers stand **0.204** tiles apart, because a walker still walked through a seated
+/// man's square. Both halves of that have since gone:
 ///
-/// Three fixes were tried and measured, and each failed for a *different* reason rather than by guesswork:
-/// * **ignore bodies with a route** (a walker is going somewhere): the acceptance match fell to **126 entities** and
-///   `gather_motion::three_gatherers_on_one_bush_do_not_pile_up` reported villagers **0.204** tiles apart, because the churn
-///   was what kept them apart;
-/// * **ignore only bodies that are not ring members**: 154 entities and **380** repaths (better than 497), but the same 0.204
-///   overlap - a ring member in transit still churns his neighbours' seats;
-/// * **held seats excluded from new choices + release only for a body at rest**: the honest version of the rule, and the same
-///   0.204, which locates the remaining overlap in the **collision** rules rather than the seats (D210's "past" clause and
-///   "a body already inside is not an obstruction"), not in this filter.
+/// * the **place book itself is gone** (D293, the owner: *"Drop it and let the crowds jam"*), so there is no square to give up; and
+/// * the walker's **past** rule completes its chain (D320): a collider who has stood still since the route was re-planned is walked
+///   through, and the pause is what stops the pair meeting again - no displacement is needed to resolve a passer-by.
 ///
-/// So the shuffle cannot be removed before villagers stop walking through each other's squares, and that is the next slice:
-/// `docs/next-step.md` carries the order and the numbers.
+/// So this is a **guard** now, not a gap: a man who is taking from a node keeps the point he is standing on while a fourth man walks
+/// through the ring. It is not vacuous - the scene now seats three men **on the node's ring** and asserts one of them is actually
+/// taking (`progress > 0`), and it counts the walker's own moving ticks so a passer-by who never crossed cannot pass it either.
 #[test]
-#[ignore = "D238: the seat churn is load-bearing until walk-through is fixed; see docs/next-step.md"]
 fn a_passer_by_does_not_move_the_seated_gatherers() {
     let Some(pack) = pack() else { return };
     let mut world = a_world(&pack);
@@ -328,15 +322,42 @@ fn a_passer_by_does_not_move_the_seated_gatherers() {
         .expect("a resource node");
     let tile = world.resource_tiles(node)[0];
 
+    // **They must arrive and start taking** (D321). The scene used to spawn them three tiles away in a row and step 500 ticks, which
+    // after D312-D315 left them still walking in: the fixture then failed its own precondition (*"no gatherer was at work"*) and
+    // measured nothing at all. Free tiles **on the node's ring** are found rather than assumed - the forest's own tiles are not
+    // ground anyone can stand on.
+    let stands: Vec<(i64, i64)> = [
+        (1i64, 0i64),
+        (0, 1),
+        (-1, 0),
+        (0, -1),
+        (1, 1),
+        (-1, 1),
+        (1, -1),
+        (-1, -1),
+    ]
+    .iter()
+    .filter_map(|(dx, dy)| {
+        let x = i64::from(tile.0) + dx;
+        let y = i64::from(tile.1) + dy;
+        let (Ok(x16), Ok(y16)) = (u16::try_from(x), u16::try_from(y)) else {
+            return None;
+        };
+        world.is_free_ground(x16, y16).then_some((x, y))
+    })
+    .take(3)
+    .collect();
+    assert_eq!(stands.len(), 3, "three free tiles on the node's ring");
     let mut gatherers = Vec::new();
-    for nth in 0..3u32 {
-        let id = a_villager(&mut world, 9_900 + nth, (28 + i64::from(nth), 28));
+    for (nth, stand) in stands.iter().enumerate() {
+        let nth = u32::try_from(nth).unwrap_or(0);
+        let id = a_villager(&mut world, 9_900 + nth, *stand);
         world
             .submit_checked(Command::Gather { villager: id, node })
             .expect("a gather order");
         gatherers.push(id);
     }
-    for _ in 0..500 {
+    for _ in 0..400 {
         world.step().expect("a tick");
     }
     // **The ground each working man stands on** (D293): the place book is gone, so "seated" is a position - and for a man who is
