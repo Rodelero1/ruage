@@ -49,15 +49,42 @@ fn how_many_routes_the_tier_answers() {
     let rate = world.tick_rate_hz();
     let mut runner = Runner::new(&scenario, rate).expect("runner");
 
+    // **The comparison this probe exists for** (D344): every tier answer is priced against the flat search's answer for the
+    // same walk, so "the tier answered" comes with "and its route was this much longer, in this many points".
+    world.compare_tier_routes(true);
+
     for _ in 0..48_000 {
         runner.due(&mut world);
         world.step().expect("step");
     }
+    let shadow = world.tier_shadow();
     println!(
         "tier answers {} of {} routes; {} re-paths; hash {:016x}",
         world.tier_answers(),
         world.routes_planned(),
         world.repaths(),
         world.state_hash()
+    );
+    println!(
+        "tier vs flat, same walks: {} walks, tier {} points / {} raw, flat {} points / {} raw, flat missing {}",
+        shadow.walks,
+        shadow.tier_points,
+        shadow.tier_length,
+        shadow.flat_points,
+        shadow.flat_length,
+        shadow.flat_missing
+    );
+    let funnel = world.tier_funnel();
+    println!(
+        "funnel: {} long walks, {} refused by the floor, {} with no coarse route, {} one-cell chains, {} legs refused",
+        funnel.long_walks,
+        funnel.floor_refused,
+        funnel.no_coarse,
+        funnel.one_cell,
+        funnel.legs_refused
+    );
+    println!(
+        "refused legs by reason: {} body, {} object, {} tiles",
+        funnel.legs_refused_body, funnel.legs_refused_object, funnel.legs_refused_tiles
     );
 }

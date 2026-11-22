@@ -274,12 +274,23 @@ int FUN_007f0da0(int level, int cx, int cy, float x, float y, float h, float rad
 }
 ```
 
-- **bit `0x20` of a cell's second byte means "this cell contains an obstacle"** - which is also what the descent tests, and now both readings
-  are the same one: the descent stops at the coarsest level whose cell *has* an obstacle, i.e. the coarsest level that can still see the
-  detail (a correction to the "coarsest usable" wording: usable *for the search*, because it is the level at which the obstacle is resolved);
+- **bit `0x20` of a cell's second byte means "this cell is passable"** (read again 2026-11-22, and the 2026-11-20 "contains an obstacle"
+  wording above is withdrawn): the cell this branch runs on is the one the grown box is tested against and then **blocked** (bit `0x10`
+  set), and blocking a cell that already holds an obstacle would be a no-op, while blocking the passable cell the mover's radius now
+  covers is the whole point of the growth. `FUN_007f1100` reads the same bit the same way: it descends *through* cells without it and
+  stamps the per-search block on the first cell that has it, i.e. the passable cell an obstacle rectangle covers. So the descent of
+  `FUN_007ee980` stops at the **coarsest passable** level - the hierarchy's normal rule, coarse in the open and fine in clutter - which
+  is what `Levels::descent` already implements (D297);
 - **bit `0x10` is the per-search block**, set by the stamp and cleared at the end of the search (`& 0xf`), which is why it can be reused;
-- **the recursion descends only into cells that contain obstacles**, down to level 0, so the growth is applied at the **finest level where the
-  obstacle actually is**. A one-tile gap between two one-tile obstacles is therefore resolved **per tile**, never blurred into an 8×8 block.
+- **the recursion descends through cells that are not passable**, down to level 0, so the growth is applied at the **finest level where a
+  passable cell can still be reached**. A one-tile gap between two one-tile obstacles is therefore resolved **per tile**, never blurred
+  into an 8×8 block.
+
+**The 2026-11-20 entry read the branch backwards** (`(b & 0x20) == 0` as "not marked", where the marked cells are the passable ones), and
+the consequence was a proposed inversion of `Levels::descent` that would have searched coarsely in clutter and finely in the open. The
+three readers now agree: `FUN_007f0da0` blocks the passable cell, `FUN_007f1100` stamps the passable cell, and `FUN_007ee760` refuses to
+open a start node whose cell has no passable direction (`byte0 == 0`). Reported because a correction that is itself wrong is worse than
+the reading it replaced.
 
 **So the owner's HD result and the binary agree, and our `fits` has the right granularity.** The 8×8 worry was wrong: level 3 is only where the
 stamp *starts*, not where it lands.

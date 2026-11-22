@@ -21,6 +21,8 @@ use std::collections::BinaryHeap;
 use ruage_data::Map;
 use ruage_fixed::Fixed;
 
+use crate::integer_sqrt;
+
 /// **An obstacle the plan must keep clear of** (D282, D286): the object's **box**, and the mover's own reach.
 ///
 /// The original puts a stopped object into the search as a rectangle **grown by the mover's radius** (`FUN_007f9d80`) and
@@ -39,6 +41,90 @@ pub struct Clear {
     pub half: (i64, i64),
     /// The mover's own reach: how far its body stands from that box.
     pub reach: i64,
+}
+
+/// **What a tier route costs against the flat search's answer for the same walk** (D344). Measurement only: nothing reads it,
+/// it is never hashed, and it exists because "the tier answered" says nothing about whether the route it answered with is
+/// better. Lengths are raw units along the polyline from the walk's start through the route's points, so they compare like for
+/// like; `flat_missing` counts answers the flat search could not produce at all.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TierShadow {
+    pub walks: u64,
+    pub tier_points: u64,
+    pub tier_length: u64,
+    pub flat_points: u64,
+    pub flat_length: u64,
+    pub flat_missing: u64,
+}
+
+/// **Why the tier did not answer** (D344), counted where the tier stands: a long walk that never reached the arm, one the floor
+/// refused, one whose `coarse_route` was `None`, one whose chain was a single cell, and one whose legs failed the avoid
+/// certification. Without these, "the tier answered 0" is a number with no mechanism behind it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TierFunnel {
+    pub long_walks: u64,
+    pub floor_refused: u64,
+    pub no_coarse: u64,
+    pub one_cell: u64,
+    pub legs_refused: u64,
+    /// Of the refused legs: a body in the plan's avoid list, an object's grown box, or a tile the grid calls blocked.
+    pub legs_refused_body: u64,
+    pub legs_refused_object: u64,
+    pub legs_refused_tiles: u64,
+}
+
+/// **Which question refused a leg** (D344), so a refused chain names its reason instead of its count.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LegVerdict {
+    Clear,
+    Body,
+    Object,
+    Tiles,
+}
+
+/// **One plan request**, bundled so the tier, its certification and the flat fallback all read the same seven values instead of
+/// passing them one by one (D344).
+#[derive(Clone, Copy)]
+struct Walk<'a> {
+    from: (Fixed, Fixed),
+    to: (Fixed, Fixed),
+    start: (u16, u16),
+    goal: (u16, u16),
+    scale: i64,
+    reach: i64,
+    avoid: &'a [Clear],
+}
+
+impl Ground {
+    /// **The tier's answer beside the flat search's for the same walk** (D344): run it here, where the route, the two tiles and
+    /// the plan's avoid list are all still in hand.
+    fn record_shadow(&self, walk: Walk<'_>, tier: &[(Fixed, Fixed)]) {
+        let from = walk.from;
+        let mut shadow = self.tier_shadow.get();
+        shadow.walks += 1;
+        shadow.tier_points += u64::try_from(tier.len()).unwrap_or(u64::MAX);
+        shadow.tier_length += route_length(from, tier);
+        match self.flat_route(walk) {
+            Some(flat) => {
+                shadow.flat_points += u64::try_from(flat.len()).unwrap_or(u64::MAX);
+                shadow.flat_length += route_length(from, &flat);
+            }
+            None => shadow.flat_missing += 1,
+        }
+        self.tier_shadow.set(shadow);
+    }
+}
+
+/// The polyline's length in raw units, from `from` through every point. Integer arithmetic, like everything the tick does.
+fn route_length(from: (Fixed, Fixed), points: &[(Fixed, Fixed)]) -> u64 {
+    let mut total = 0i64;
+    let mut previous = (from.0.raw(), from.1.raw());
+    for point in points {
+        let (dx, dy) = (point.0.raw() - previous.0, point.1.raw() - previous.1);
+        total += integer_sqrt(dx * dx + dy * dy);
+        previous = (point.0.raw(), point.1.raw());
+    }
+    u64::try_from(total).unwrap_or(u64::MAX)
 }
 
 impl Clear {
@@ -129,6 +215,16 @@ pub struct Ground {
     /// changes the tier's gate can say how often it fired instead of arguing that it must have. Zero on a map with no obstacles.
     #[serde(skip)]
     tier_answers: std::cell::Cell<u64>,
+    /// **Measurement only** (D344): when a probe turns this on, every tier answer is priced beside the flat search's answer
+    /// for *the same walk* - same ground, same start, same goal, same avoid list. That comparison is the only way to say
+    /// whether the tier's route is better, and it cannot be reconstructed afterwards because the avoid list is a snapshot of
+    /// the bodies standing there at plan time. Off by default; the normal path pays one `Cell` read per tier answer.
+    #[serde(skip)]
+    compare_tier: std::cell::Cell<bool>,
+    #[serde(skip)]
+    tier_shadow: std::cell::Cell<TierShadow>,
+    #[serde(skip)]
+    tier_funnel: std::cell::Cell<TierFunnel>,
 }
 
 impl Ground {
@@ -154,6 +250,9 @@ impl Ground {
             pyramid: std::cell::RefCell::new(std::collections::BTreeMap::new()),
             pyramid_builds: std::cell::Cell::new(0),
             tier_answers: std::cell::Cell::new(0),
+            compare_tier: std::cell::Cell::new(false),
+            tier_shadow: std::cell::Cell::new(TierShadow::default()),
+            tier_funnel: std::cell::Cell::new(TierFunnel::default()),
         }
     }
 
@@ -166,6 +265,31 @@ impl Ground {
     #[must_use]
     pub fn tier_answers(&self) -> u64 {
         self.tier_answers.get()
+    }
+
+    /// **Turn on the tier-vs-flat comparison** (D344). A probe's switch: it costs a second search per tier answer, so it is off
+    /// unless a measurement asks for it.
+    pub fn compare_tier_routes(&self, on: bool) {
+        self.compare_tier.set(on);
+    }
+
+    /// What the comparison has seen so far, summed over every tier answer since it was switched on.
+    #[must_use]
+    pub fn tier_shadow(&self) -> TierShadow {
+        self.tier_shadow.get()
+    }
+
+    /// **Why the tier did not answer**: the funnel, counted only while the comparison is on.
+    #[must_use]
+    pub fn tier_funnel(&self) -> TierFunnel {
+        self.tier_funnel.get()
+    }
+
+    /// Add one to a funnel counter. Reads and writes the whole struct, because `Cell` cannot hand out a reference.
+    fn bump_funnel(&self, change: impl FnOnce(&mut TierFunnel)) {
+        let mut funnel = self.tier_funnel.get();
+        change(&mut funnel);
+        self.tier_funnel.set(funnel);
     }
 
     /// Is this tile on the map at all?
@@ -641,13 +765,28 @@ impl Ground {
             >= 16;
         if long_walk {
             // **The descent first, the search second** (D338): `coarse_route` derives its level as the lower of the two ends'
-            // descents (`levels.rs:162`), so level < 2 is knowable without searching. On the acceptance map that is 127 of 185
-            // long walks - the flat search answers them anyway, so the search would be pure cost. Both live inside the
-            // `long_walk` arm: `pyramid_for` builds the pyramid on a cold cache, and a short walk must not pay for it.
+            // descents (`levels.rs:200`), so the level is knowable without searching, and the search would be pure cost when
+            // the answer is "the flat search will answer anyway". Both live inside the `long_walk` arm: `pyramid_for` builds
+            // the pyramid on a cold cache, and a short walk must not pay for it.
+            //
+            // **The floor is 1, not 2** (D344). The binary refuses nothing: `FUN_007ee980` walks the levels down and floors at
+            // 0, and a mid-level attempt that fails *falls through* to the low-level path (`0xf98`: "Looking for a LOW LEVEL
+            // path (mid-level path failed)"). With the old floor - the start's 4-tile cell had to be passable - the tier
+            // answered 0 of 61,276 routes on a wooded acceptance map (D338), so every rule landed on top of it was unread.
+            // Level 0 is still refused here, as a labelled deviation: there the binary's own search is a four-directional
+            // tile A* whose Manhattan staircase our octile flat search answers better, and D338 priced that answer (108
+            // routes, a different match).
             let levels = self.pyramid_for(reach);
-            if levels.descent(start).min(levels.descent(goal)) >= 2
-                && let Some(coarse) = levels.coarse_route(start, goal)
-            {
+            let watched = self.compare_tier.get();
+            if watched {
+                self.bump_funnel(|f| f.long_walks += 1);
+            }
+            let floor = levels.descent(start).min(levels.descent(goal));
+            if floor == 0 {
+                if watched {
+                    self.bump_funnel(|f| f.floor_refused += 1);
+                }
+            } else if let Some(coarse) = levels.coarse_route(start, goal) {
                 // The refinement interpolates the walk's own line across each shared edge (D343), so it needs the two
                 // points the plan was asked for, not just the cells.
                 let centres = levels.refine(
@@ -662,7 +801,7 @@ impl Ground {
                     let mut previous = (from.0.raw(), from.1.raw());
                     let mut clear = true;
                     for point in &points {
-                        if !self.leg_is_clear(
+                        let verdict = self.leg_verdict(
                             scale,
                             previous,
                             (point.0.raw(), point.1.raw()),
@@ -674,19 +813,74 @@ impl Ground {
                             // would walk through the man he was told to avoid. Measured, honouring it costs nothing in the
                             // acceptance match (0 answers either way) and it keeps the fixture's witnessed route.
                             avoid,
-                        ) {
+                        );
+                        if verdict != LegVerdict::Clear {
                             clear = false;
+                            if watched {
+                                self.bump_funnel(|f| match verdict {
+                                    LegVerdict::Body => f.legs_refused_body += 1,
+                                    LegVerdict::Object => f.legs_refused_object += 1,
+                                    LegVerdict::Tiles | LegVerdict::Clear => {
+                                        f.legs_refused_tiles += 1
+                                    }
+                                });
+                            }
                             break;
                         }
                         previous = (point.0.raw(), point.1.raw());
                     }
                     if clear {
                         self.tier_answers.set(self.tier_answers.get() + 1);
+                        if watched {
+                            self.record_shadow(
+                                Walk {
+                                    from,
+                                    to,
+                                    start,
+                                    goal,
+                                    scale,
+                                    reach,
+                                    avoid,
+                                },
+                                &points,
+                            );
+                        }
                         return Some(points);
                     }
+                    if watched {
+                        self.bump_funnel(|f| f.legs_refused += 1);
+                    }
+                } else if watched {
+                    self.bump_funnel(|f| f.one_cell += 1);
                 }
+            } else if watched {
+                self.bump_funnel(|f| f.no_coarse += 1);
             }
         }
+        self.flat_route(Walk {
+            from,
+            to,
+            start,
+            goal,
+            scale,
+            reach,
+            avoid,
+        })
+    }
+
+    /// **The flat search's answer, as a plan's points** (the tail of `route_with`, extracted so the tier-vs-flat comparison can
+    /// ask it for the same walk it just answered - D344). Behaviour unchanged: the search, the pull, tile centres for every
+    /// interior waypoint, and the exact clicked point when the walk ends on the goal's tile.
+    fn flat_route(&self, walk: Walk<'_>) -> Option<Vec<(Fixed, Fixed)>> {
+        let Walk {
+            from,
+            to,
+            start,
+            goal,
+            scale,
+            reach,
+            avoid,
+        } = walk;
         let steps = self.search_reporting(start, goal, scale, reach, avoid).0?;
         let end = steps.last().copied().unwrap_or(start);
         let pulled = self.pull(
@@ -733,25 +927,42 @@ impl Ground {
         reach: i64,
         avoid: &[Clear],
     ) -> bool {
+        self.leg_verdict(scale, from, to, reach, avoid) == LegVerdict::Clear
+    }
+
+    /// **Which of the three questions refused the leg** (D344): the certification is a measurement as much as a guard, and
+    /// "18 legs refused" says nothing until it says whether a body, an object's box or a blocked tile refused them.
+    fn leg_verdict(
+        &self,
+        scale: i64,
+        from: (i64, i64),
+        to: (i64, i64),
+        reach: i64,
+        avoid: &[Clear],
+    ) -> LegVerdict {
         if avoid.iter().any(|clear| clear.crossed_by(from, to)) {
-            return false;
+            return LegVerdict::Body;
         }
         if reach > 0 && self.crosses_an_object(scale, from, to, reach) {
-            return false;
+            return LegVerdict::Object;
         }
         let (Ok(fx), Ok(fy)) = (
             u16::try_from(from.0.div_euclid(scale)),
             u16::try_from(from.1.div_euclid(scale)),
         ) else {
-            return false;
+            return LegVerdict::Tiles;
         };
         let (Ok(tx), Ok(ty)) = (
             u16::try_from(to.0.div_euclid(scale)),
             u16::try_from(to.1.div_euclid(scale)),
         ) else {
-            return false;
+            return LegVerdict::Tiles;
         };
-        self.line_clear_with((fx, fy), (tx, ty), scale, 0, &[])
+        if self.line_clear_with((fx, fy), (tx, ty), scale, 0, &[]) {
+            LegVerdict::Clear
+        } else {
+            LegVerdict::Tiles
+        }
     }
 
     /// **Is this tile's centre inside a body's clearance?** A tile the mover cannot stand on without touching the body it is

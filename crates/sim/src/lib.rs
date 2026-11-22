@@ -29,7 +29,7 @@ mod metrics;
 mod roles;
 pub mod tiles;
 mod world;
-pub use ground::Ground;
+pub use ground::{Ground, TierFunnel, TierShadow};
 pub use levels::{CoarseRoute, Levels};
 pub use metrics::Metrics;
 use ruage_fixed::Fixed;
@@ -1720,6 +1720,27 @@ impl World {
     /// caller and no fixture noticed, so the count is what says whether it runs.
     pub fn tier_answers(&self) -> u64 {
         self.ground.as_ref().map_or(0, ground::Ground::tier_answers)
+    }
+
+    /// **Turn on the tier-vs-flat comparison for a probe** (D344). Off unless asked: it runs a second search per tier answer.
+    pub fn compare_tier_routes(&self, on: bool) {
+        if let Some(ground) = self.ground.as_ref() {
+            ground.compare_tier_routes(on);
+        }
+    }
+
+    /// The comparison's running totals, or an empty set when no ground exists yet.
+    pub fn tier_shadow(&self) -> TierShadow {
+        self.ground
+            .as_ref()
+            .map_or_else(TierShadow::default, ground::Ground::tier_shadow)
+    }
+
+    /// Why the tier did not answer, counted only while the comparison is on.
+    pub fn tier_funnel(&self) -> TierFunnel {
+        self.ground
+            .as_ref()
+            .map_or_else(TierFunnel::default, ground::Ground::tier_funnel)
     }
 
     /// **What the movement pass decided for this body on the last tick it was asked** (D196): `None` if there is no such entity.
