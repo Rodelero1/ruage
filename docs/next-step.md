@@ -20,16 +20,21 @@
   flat search. Measured: **92 of 50,652** routes answered (75 at level 0, 17 coarser), **4,175 raw waypoints -> 637
   smoothed**, **+2.8% ground** against the flat search on the same walks, 134 entities and 12.12 s.
 - **D348** - a read, no code: `FUN_007f0be0` sets the search window to a box of half-extent (radius sum + **the caller's
-  margin**) around one point, and both the order-level planner and the mover pass a margin of **zero**. So `FUN_007ee980` is
-  a **one-cell local refinement**, and the mover's ladder is mid-level -> *"Looking for a STRAIGHT LINE path"* -> *"Looking
-  for a TILE-BASED path"*, **per waypoint** of a path the mover already holds.
+  margin**) around one point. The **mover** passes a margin of **zero** (`path+0x20`, which the allocator initialises), so its
+  mid-level search is a one-cell refinement and its ladder is mid-level -> *"Looking for a STRAIGHT LINE path"* -> *"Looking for
+  a TILE-BASED path"*, **per waypoint** of a path it already holds. The **order-level** planner forwards its own margin, and the
+  call sites read pass **0**, **1.0** and a **per-unit virtual value** - so its window's scale is **unread**.
 
-**What that means for our tier:** it is not the binary's mid-level search; it is a stand-in for the **unread high-level
-driver** that chooses the waypoints. The surviving +2.8% is the coarse guide's shape (corners on cell crossings rather than
-on obstacle vertices), not a defect in `FUN_007ed280`'s cost rows.
+**What that means for our tier:** it is a stand-in for the **unread high-level driver** that chooses the waypoints, and whether
+it is *faithful* to the order-level planner depends on that per-unit margin (`+0x12c`). The surviving +2.8% is the coarse
+guide's shape (corners on cell crossings rather than on obstacle vertices), not a defect in `FUN_007ed280`'s cost rows.
 
-## The next step: read the driver (a read, not a slice)
+## The next step: the margin and the driver (a read, not a slice)
 
+0. **What does the virtual method at vtable `+0x12c` return?** The order-level planner's window is `radius + radius + margin`,
+   and the margin is 0 in one call site, `1.0` in another and this virtual call in two more (`FUN_00529590:193`,
+   `FUN_0052ff40:333`). Its scale decides whether an order's long route is planned in a few tiles or across the map - and
+   therefore whether our whole-walk tier is faithful or a stand-in. **This is the read to do first.**
 1. **Who fills the mover's waypoint array** before `FUN_008a4360` asks for a mid-level path? The path object is
    `FUN_007fd4b0`-allocated, filled by `FUN_007fd880`/`FUN_007fd750`; what decides its points is the gap D297 named. The
    candidates: `FUN_007ed600` (masked quadtree neighbour walk), `FUN_007ee600` (the quadtree ray), and **the callers of

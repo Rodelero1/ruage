@@ -9737,7 +9737,7 @@ next person who wants to reopen it.
 **Commits us to.** A gate justified by a cost is a claim about a mechanism, and a mechanism measured without the pass that
 follows it is half a mechanism - twice now, in the same subsystem.
 
-## D348 - the levelled search is a local refinement, and our tier is a stand-in for a driver nobody has read
+## D348 - the window is a per-unit margin we have not read, and our tier is a stand-in for a driver nobody has read
 
 **The question this started from.** The tier's routes are still +2.8% longer than the flat search's on the same walks (D347).
 The candidates were the coarse cost rows or the four-directional expansion at level 0. Both are `FUN_007ed280`'s, and reading
@@ -9746,16 +9746,21 @@ padding is unread" since P11 landed.
 
 **What the window is.** `FUN_007f0be0(x, y, h, margin, on)` sets `in_ECX[0x42..0x45]` to a box of **half-extent `h + margin`
 around one point** - the point the search measures its h from - and `FUN_007ed280` refuses every cell outside it. In
-`FUN_007ee980` that point is the *goal of the call*, and `h` is the mover's radius plus the target's. So the margin is what
-decides whether the search is local or global, and **both callers that matter pass zero**:
+`FUN_007ee980` that point is the *goal of the call*, and `h` is the mover's radius plus the target's. So the margin decides
+whether the search is local or global - **and it is a caller's number, not a constant of the machine**:
 
-- the **order-level planner** `FUN_008000d0` passes its 9th argument through as the margin; the caller
-  `FUN_00528650:63` passes **0** (`(..., 0, 0, 0xffffffff, 0xffffffff, 0, 0, 0)`);
-- the **mover** `FUN_008a4360:808` passes `path + 0x20`, and the path allocator `FUN_007fd4b0` initialises `+0x20 = 0`
-  (`+0x28` is the count, `+0x2c` the capacity, `+0x30` the points).
+| caller | margin |
+|---|---|
+| the **mover's own repath** (`FUN_008a4360:808`) | `path + 0x20`, and `FUN_007fd4b0` initialises `+0x20 = 0` (`+0x28` count, `+0x2c` capacity, `+0x30` points) |
+| the order path at `FUN_00528650:63` | **0** |
+| the order path at `FUN_00533da0:102` | **`0x3f800000`**, i.e. `1.0` |
+| `FUN_00529590:193` and `FUN_0052ff40:333` | `(float)` of a **virtual call at vtable `+0x12c`**, so a per-unit value |
+| `FUN_005130d0:160`, `FUN_0052a250:115` | a variable from the same neighbourhood |
 
-With a margin of zero the window is the single cell holding that point. **The levelled search is a local refinement, not a
-long-walk planner.**
+So **the mover's mid-level search is local** (margin 0 - one cell), and **the order-level planner's window is whatever the
+unit says it is**, through a virtual method whose implementations are unread. D348 first claimed "both real callers pass zero"
+on the strength of two call sites; that was too strong and is withdrawn here - the honest statement is that the two call sites
+*read* pass 0 and 1.0, and two more take a per-unit float whose scale nobody has read.
 
 **What the mover does with it, in the binary's own order of log lines** (`move_obj.cpp`, read from `FUN_008a4360`):
 
@@ -9768,16 +9773,20 @@ That ladder is **per waypoint**, and the waypoints come from a "high level path"
 tests `HighLevel`/`MidLevel`/`LowLevel`). **The driver that builds that high-level path is still unread** - it is the same gap
 D297 recorded ("the driver that assembles a coarse route out of those pieces ... none of them has been read far enough").
 
-**What that makes our tier.** Not the binary's mid-level search - that one is one cell wide, and ours is a whole-walk A\* over
-the pyramid. Ours is a **stand-in for the unread high-level driver**: it chooses the coarse waypoints, and then the route we
-hand over is those waypoints walked straight (which is what the binary's straight-line step does per leg) with D346's
-smoothing pass on top (which is what the binary does to the mid-level result). The **+2.8% is therefore the coarse guide's
-shape, not a defect in the cost rows** - the guide's corners sit on cell crossings rather than on obstacle vertices, and a
-route through them is a little longer than a visibility-optimised one.
+**What that makes our tier, stated as far as the evidence goes.** Two of its parts are now firmly wrong or unknown:
 
-**So the next read is the driver, and it is one function plus its call site**: which routine fills the path object's waypoint
-array before `FUN_008a4360` measures "HighLevel=%d", and with what granularity. Until it is read, no change to the cost rows
-can be judged, because the rows are walked at a granularity we invented.
+- **The mover's mid-level search is local** (margin 0), so it is *not* what answers a long walk in the binary; ours does.
+- **The order-level planner's window is a per-unit margin** (0, 1.0, and a virtual value in the call sites read), so it is
+  *either* a local approach or a coarse route depending on a number we have not read. If a villager's margin turns out to be
+  large, our whole-walk A\* is faithful to the order-level planner and the tier is right; if it is small, the order-level
+  planner is local too and the game's long route comes from somewhere else entirely.
+
+Either way the route we hand over - coarse waypoints walked straight, smoothed by D346's pass - is the *shape* both
+mechanisms produce, and the **+2.8% is the coarse guide's shape rather than a defect in the cost rows**.
+
+**So the next read is the vtable method at `+0x12c`** (what margin a unit returns, and how it is computed), and behind it the
+routines the path's waypoint array comes from (`FUN_007ed600`, `FUN_007ee600`, the `FUN_007f4330` path-state machine). Until
+the margin is known, no change to the cost rows can be judged, because the window it is walked in is unknown.
 
 **What changed in code: nothing.** The tier's activation (D346/D347), its smoothing pass and its level split stand as landed;
 this row records what they model and what they stand in for. The three candidate repairs on the table - restoring the floor,
@@ -9785,5 +9794,7 @@ pricing the cost rows, or waiting for the driver - are now ordered: waiting for 
 measure a route shape whose source is unread.
 
 **Commits us to.** When a port's window is unread, the port is a stand-in and has to be named as one - "the levelled search" in
-our docs had been standing for a search the binary uses locally, and three decisions (D344, D346, D347) were measured against
-a mechanism we had mis-sized.
+our docs had been standing for a search whose window nobody had read, and three decisions (D344, D346, D347) were measured
+against it. And a claim of the form "both callers pass X" needs *every* caller read, not the first two: this row's own first
+version asserted zero for the order-level planner on one call site, and two more call sites later in the alphabet pass 1.0 and
+a per-unit float.

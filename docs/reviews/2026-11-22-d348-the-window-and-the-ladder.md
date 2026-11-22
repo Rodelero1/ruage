@@ -41,6 +41,11 @@ Nothing to attack - no code. What was attacked is the *argument*, and this is ho
    initialiser was two functions away and would have settled it then.
 3. The decomp's argument mapping is unreliable for `FUN_008000d0`'s 15-parameter call, so the "9th argument" attribution is
    the weakest link in the chain - it is named as such rather than presented as certain.
+4. **The first version of this row claimed "both real callers pass zero".** It read two call sites and generalised. Two more
+   order paths in the same corpus pass `0x3f800000` (1.0) and a float from a **virtual call at vtable `+0x12c`**, so the margin
+   is a per-unit number and the order-level window's scale is unread. The row, the evidence section and `next-step` are
+   corrected in the same commit; the claim "the mover's mid-level search is one cell" survives, because the mover's margin is
+   `path+0x20` and the allocator writes 0 there.
 
 **Not attacked**: which routine builds the high-level path (the next read), and whether the high-level path's granularity is
 8 tiles or something else.

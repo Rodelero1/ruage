@@ -349,12 +349,18 @@ In `FUN_007ee980(x0, y0, x1, y1, radius_sum, margin, flags, 0, rectangles, count
 
 | caller | margin it passes |
 |---|---|
-| `FUN_008000d0` (order-level planner), as forward by `FUN_00528650:63` | **0** |
 | `FUN_008a4360:808` (the mover's own path) | `path + 0x20`, and `FUN_007fd4b0` initialises `+0x20 = 0` |
+| `FUN_00528650:63` (an order path) | **0** |
+| `FUN_00533da0:102` (an order path) | **`0x3f800000`** = `1.0` |
+| `FUN_00529590:193`, `FUN_0052ff40:333` (order paths) | `(float)` of a **virtual call at vtable `+0x12c`** - a per-unit value |
+| `FUN_005130d0:160`, `FUN_0052a250:115` | variables from the same neighbourhood |
+| `FUN_008003a0`, `FUN_00801aa0` (other APIs) | their own caller's margin; `FUN_00801aa0` adds `3.0` on one branch |
 
-So for both the order and the mover the window is **the single cell containing the call's goal** - a one-cell local
-refinement, not a long-walk planner. The margin is a real API parameter (`FUN_008003a0` forwards its own, `FUN_00801aa0` adds
-`3.0` to some of its calls), so a caller *can* widen it; the two that matter do not.
+So **the mover's mid-level search is a one-cell refinement** (margin 0), and **the order-level planner's window is a per-unit
+number**: 0 and 1.0 in two call sites, a vtable call in two more. Whether an order's long route is planned in a window of a
+few tiles or of the whole map therefore depends on what that virtual method (`+0x12c`) returns for each unit type - **unread**,
+and the next thing to read. The 2026-11-22 first version of this section said "both real callers pass zero", on two call sites;
+withdrawn.
 
 **The mover's ladder, in its own log order** (`move_obj.cpp`, `FUN_008a4360`):
 
