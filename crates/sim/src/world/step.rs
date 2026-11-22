@@ -1749,9 +1749,44 @@ impl World {
                         work.hunts.push((entity.id, node));
                     }
 
+                    // **A place another body holds is not a place to work from** (2026-11-22). The decomp's only answer to a
+                    // taken spot is `func_002699A0`: step out by the pair's radii plus a hundredth of a tile, on one of four
+                    // sides, and take the first candidate whose obstruction query is clear - and the assembler of those
+                    // candidates (`func_002697C0`) never writes a child onto a spot an earlier child already holds. Ours
+                    // hands every man the same ring tile and the movement pass never refuses a body, so a crowd ordered to
+                    // one node comes to rest on one point: measured, two gatherers of one tree at **0 raw** apart while both
+                    // worked it. The step out is the same ring the place came from, so this is a *re-seat*, not a push.
+                    //
+                    // **D246 is read narrowly here, and this is deliberate.** Its rule is that a working villager is never
+                    // nudged *off a place he holds*: it was written against a **0.011-tile** correction the old settle made.
+                    // A man standing *inside another body* holds no place - the overlap is what the owner is reporting - so
+                    // this moves him, and only while a free ring place exists. If that reading is wrong it is one line.
+                    let crowded = at_node
+                        && is_resource
+                        && !matches!(entity.task, Task::Garrisoned { .. })
+                        && self.body_holds(entity.id, entity.position);
+                    let reseat = crowded
+                        .then(|| self.work_position(entity.position, target, Some(entity.id)))
+                        .flatten()
+                        .filter(|place| {
+                            let (px, py) = (
+                                place.0.raw() - entity.position.0.raw(),
+                                place.1.raw() - entity.position.1.raw(),
+                            );
+                            px * px + py * py > (self.scale / 20) * (self.scale / 20)
+                        });
                     // Standing still at the thing being worked is what entitles a worker to take
                     // from it.
-                    if at_node {
+                    if let Some(place) = reseat {
+                        let delta = entity.speed.div_exact(tick_rate).map_err(|err| {
+                            SimError::Displacement {
+                                id: entity.id,
+                                detail: err.to_string(),
+                            }
+                        })?;
+                        let (dx, dy) = step_towards(entity.position, place, delta.raw());
+                        (Fixed::from_raw(dx), Fixed::from_raw(dy))
+                    } else if at_node {
                         // **A standing tree is chopped down first.** Until its hit points are gone it yields nothing;
                         // when they are, it falls where it stands and is then cut for wood (the owner's rule). A bush or
                         // a mine has no hit points, so this branch never runs for them.

@@ -9881,3 +9881,35 @@ smoothing's bodies and `refine`'s tile span**, then the census.
 **Commits us to.** A fixture can be right and a change right and the pair still red - and that is information about the
 *shape*, not a reason to keep the change. The preserved fixture is the next session's starting point, and the reading above is
 what stops it re-deriving the same three steps.
+
+## D351 - a place another body holds is not a place to work from (branch `d351-reseat`, not landed)
+
+**The ruling this comes from.** The owner, 2026-11-22, on the pile: *"HD definitely doesn't stack up that much. Maybe things
+like that could happen, but never in this scale."* So the scale is the defect, and this row is the measured slice against it.
+
+**What the decomp gives.** `func_002699A0` (`unit_action_resolve.cpp`) is the only "the spot you were given is taken" rule in
+either source: step out by `ext_self + ext_other + 0.01`, on one of four sides with an offset across that side, up to fifty
+tries, **refusing any candidate whose obstruction query is non-zero**; the first accepted point is where the object is written,
+and `func_002697C0` never writes a child onto a point an earlier child already holds. **What it does not give**: a seat picker
+for a *gatherer* - the gather action is a state machine that calls virtuals, and no loop over positions round a resource exists
+in the corpus. So the rule is adopted at the place a worker's standoff resolves, which is where our ring already decides it.
+
+**What changed (code, two places).** `World::work_position` takes the mover and refuses a candidate whose centre lies inside
+another body's box grown by his footprint - the ring is `func_002699A0`'s four-sides-and-offsets in a deterministic order. And
+the gather arm **re-seats** a worker who is standing inside another body while a free ring place exists, because the place is
+otherwise decided once at order time, when the other man may still be walking.
+
+**Measured (36,000 ticks, seed 7, release).** Deepest overlapping group **11 -> 9**; pairs closer than a fifth of a tile
+**317,041 -> 274,054** (-13.6%); overlapping pair-ticks 349,824 -> 324,711; most overlapping pairs in one tick **63 -> 42**;
+re-paths 24,897 -> 10,703. The fixture that was written first - two gatherers of one tree, tracked on every tick both are
+*taking* - read **4,598 raw against the 8,000 their footprints need** and passes.
+
+**Why it is not on `blunt-port`.** It flips **five** fixtures, and four of them assert the press as the intended behaviour:
+`two_gatherers_on_one_tree_press_in`, `two_woodcutters_on_one_tree_share_its_side_and_press`,
+`ten_men_ask_for_one_bush_and_seven_press_into_it`, `two_villagers_on_one_node_cannot_take_more_than_it_holds` - D289/D293, the
+owner's *"drop it and let the crowds jam"* - and `a_working_man_is_never_moved`, which is D246's *"villager is never to be nudged
+to leave place he is working at"*. The stacking in this engine is therefore **pinned by tests that encode his own rulings**, and
+reversing one is his call. The branch is pushed regardless of failure, which is what a change he judges himself gets.
+
+**Commits us to.** A player-visible scale complaint is answered by a *census*, not by a rule: 11 -> 9 bodies is real progress and
+it is not "fixed", and the four press fixtures are the record of a decision that may now be reversed rather than a set of bugs.

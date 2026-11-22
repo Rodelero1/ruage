@@ -3254,6 +3254,29 @@ impl World {
             .map_or(0, |value| value.raw())
     }
 
+    /// **Is this point inside another body's box?** The box the step refuses a landing in (`motion.rs`: the pair's radii on
+    /// both axes, touching excluded), asked of a *place* instead of a step - which is the question the decomp's separation
+    /// rule asks of every candidate (`func_002699A0`'s obstruction query).
+    pub(crate) fn body_holds(&self, mover: EntityId, point: (Fixed, Fixed)) -> bool {
+        let own = self
+            .find(mover)
+            .map_or(0, |entity| self.body_radius(entity.unit));
+        self.entities.iter().any(|other| {
+            if other.kind != EntityKind::Unit || other.hp <= 0 || other.id == mover {
+                return false;
+            }
+            let reach = match own + self.body_radius(other.unit) {
+                0 => self.scale,
+                sum => sum,
+            };
+            let (dx, dy) = (
+                other.position.0.raw() - point.0.raw(),
+                other.position.1.raw() - point.1.raw(),
+            );
+            dx.abs() < reach && dy.abs() < reach
+        })
+    }
+
     /// **Plan a route, stamped with when it was planned** (D212). Every route goes through here so that the *past* test has
     /// something to compare against: the original writes the world clock into `path+0x10` when a search returns, and a
     /// collider whose `lastMoveTime` is newer than that is the one case the collision block re-acts to.
@@ -3651,10 +3674,23 @@ impl World {
             .sum()
     }
 
+    /// **The place a worker stands to work this node** - the first free ring tile a route reaches.
+    ///
+    /// **A place another body holds is not a place to send a man** (`mover`, 2026-11-22). The decomp's only "the spot you were
+    /// given is taken" rule is `func_002699A0`: step out by `ext_self + ext_other + 0.01`, on one of four sides with an offset
+    /// across that side, up to fifty tries, refusing any candidate whose obstruction query is non-zero. Our ring is the same
+    /// search in a deterministic order, and it asked only whether the *ground* was free - `is_free_ground` ignores units on
+    /// purpose, so that a building may be placed beside them - which sent every man to one node to **the same tile centre**:
+    /// measured, two gatherers of one tree standing **0 raw** apart while both were working it.
+    ///
+    /// `mover` is the body the place is for: his own footprint is what the candidate must be clear by, and he is not an
+    /// obstacle to himself. `None` asks the weaker question the *pickers* ask ("is there any place at all"), which must not
+    /// start refusing a node because a man happens to stand on its ring.
     pub(crate) fn work_position(
         &self,
         from: (Fixed, Fixed),
         target: (Fixed, Fixed),
+        mover: Option<EntityId>,
     ) -> Option<(Fixed, Fixed)> {
         let scale = self.scale;
         let x = u16::try_from(target.0.raw() / scale).ok()?;
@@ -3678,6 +3714,11 @@ impl World {
                 return None;
             }
             let position = self.tile(tile);
+            if let Some(mover) = mover
+                && self.body_holds(mover, position)
+            {
+                return None;
+            }
             // Free is not the same as reachable: a free tile inside a wall is no place to stand.
             self.plan_path(None, from, position).ok().map(|_| position)
         })
@@ -3846,7 +3887,7 @@ impl World {
         let Some(position) = self.position(id) else {
             return false;
         };
-        self.work_position(position, position).is_some()
+        self.work_position(position, position, None).is_some()
     }
 
     /// **Husks go** (D122): an empty farm is a picture with a lifetime, and this is the clock.
@@ -4027,7 +4068,7 @@ impl World {
         let (Some(here), Some(there)) = (self.position(from), self.position(node)) else {
             return false;
         };
-        self.work_position(here, there).is_some()
+        self.work_position(here, there, Some(from)).is_some()
     }
 
     /// How many of this player's villagers are **working** the resource in `slot`: a gather task whose node fills that

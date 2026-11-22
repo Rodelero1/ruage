@@ -181,7 +181,7 @@ impl World {
             let workable = if self.tile_walkable(tx, ty) {
                 self.can_reach(from, entity.position)
             } else {
-                self.work_position(from, entity.position)
+                self.work_position(from, entity.position, None)
                     .is_some_and(|place| self.can_reach(from, place))
             };
             if workable {
@@ -540,7 +540,7 @@ impl World {
         let route = if self.tile_of(from) == self.tile_of(to) {
             Vec::new()
         } else if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
-            match self.work_position(from, to) {
+            match self.work_position(from, to, Some(villager)) {
                 Some(stand) => self.plan_path(Some(villager), from, stand)?,
                 None => self.plan_path(Some(villager), from, to)?,
             }
