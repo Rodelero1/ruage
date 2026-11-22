@@ -76,9 +76,8 @@ fn how_many_routes_the_tier_answers() {
     );
     let funnel = world.tier_funnel();
     println!(
-        "funnel: {} long walks, {} refused by the floor, {} with no coarse route, {} one-cell chains",
+        "funnel: {} long walks, {} with no coarse route, {} one-cell chains",
         funnel.long_walks,
-        funnel.floor_refused,
         funnel.no_coarse,
         funnel.one_cell
     );

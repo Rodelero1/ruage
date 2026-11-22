@@ -21,22 +21,34 @@ the measurement that prices the tier against the flat search: `TierShadow`, `Tie
 4. So the floor is **2**, the chain is certified against bodies again, and both witnesses sit in `docs/parked/`
    (`tier-level-floor.rs`, `tier-certification.rs`) with the un-park condition in their headers.
 
-## Landed this step (D346): the game's route, smoothed
+## Landed this session (D346, D347): the game's route end to end
 
-The owner's ruling on U28 was **"follow original game"**, so the floor is the binary's again (nothing refused above level 0)
-and the tier's polyline goes through the original's own smoothing pass, `FUN_008acf20` (`move_obj.cpp:0xf56` ->
-*"Found a valid mid-level path"* -> the pass -> `0xf69` *"After smoothing"*). Measured on the acceptance map: **194 raw
-waypoints -> 57 smoothed**, the tier's answer now has **fewer** waypoints than the flat search's (57 against 76 over the same
-16 walks) and **+4.0% ground** (was +9.8% before the pass), the match runs **11.70 s against 12.18 s** and re-paths fall
-**36,567 -> 17,743**. Bodies are not in the tier's geometry again: the coarse search and the smoothing are both blind to them
-in the binary, and the step's bump/re-plan is what answers a body (D320).
+The owner's ruling on U28 was **"follow original game"**, and the subsystem now does from the search to the polyline:
 
-## The one place we still do not follow the game: level 0
+- **The level floor is gone** (D347): every long walk asks `coarse_route`, and the descent only *chooses* the level -
+  `FUN_007ee980` floors at 0 and searches there, so `descent == 0` is answered by the levelled search at 1-tile resolution,
+  not handed to our flat search.
+- **The polyline is smoothed** (D346) by the original's own pass: `move_obj.cpp:0xf56` *"Found a valid mid-level path"* ->
+  `FUN_008acf20` -> `0xf69` *"After smoothing"*. `Ground::smooth` keeps a last-kept index and a candidate, asks the
+  radius-grown segment test whether the straight line is walkable, and deletes the waypoint in between when it is.
+- **Bodies are out of the tier's geometry**, as they are in the binary's coarse search and its smoothing; the step's
+  past/bump/re-plan (D320) answers a body.
 
-`route_with` refuses `descent == 0` and hands those walks to our octile flat search, where the binary would run its own
-levelled search at level 0 (the same coarse A* over 1-tile cells). That is 55 of the 86 long walks in the acceptance match.
-Elder sibling of this step: measure it by deleting the refusal and comparing - the flat search's octile costs against the
-coarse search's four-directional 10/300 rows at tile resolution, both smoothed. Not started.
+Measured end to end: the tier answers **92 of 50,652** routes, **4,175 raw waypoints -> 637 smoothed**, and on the same 92
+walks it is **+2.8% ground** against the flat search (637 waypoints / 65,242,638 raw against 515 / 63,486,927). Acceptance
+`7782dd38d7557514`, **134 entities**, re-paths 37,204, wall **12.12 s** median of three.
+
+## What is next, and it is a real gap now
+
+- **The length gap is the coarse cost model, not the geometry.** +2.8% ground survives the smoothing pass, because the
+  levelled search moves four-directionally over cells with the `FUN_007ed280` rows (10 plain, 100 terrain, 300 beside a mine,
+  600, 2000) while our flat search is octile. The next slice is to price those rows against the octile ones on the same walks
+  - if the binary's route is longer than its own flat route, +2.8% is the game and nothing is owed; if not, one of the two
+  cost models is wrong. `docs/pathfinding-from-the-talk.md` and the D298 row hold what is read.
+- **The coarse search's eight-neighbour question**: `FUN_007ed280` opens four directions (`param_4` 1, 2, 4, 8); whether the
+  binary's *tile* search at level 0 uses the same four or its own eight is unread, and it is exactly where the +2.8% lives.
+- **`FUN_00840c60`'s flags**: called with `0x40`, its ignore-list branch is off; whether units are in the segment test by
+  default is unread, and it decides whether the original's smoothing keeps slightly more waypoints near bodies than ours.
 
 ## Also ready, independent of that
 

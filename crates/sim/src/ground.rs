@@ -63,7 +63,6 @@ pub struct TierShadow {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TierFunnel {
     pub long_walks: u64,
-    pub floor_refused: u64,
     pub no_coarse: u64,
     pub one_cell: u64,
     /// The chain the refinement emitted, and what the game's smoothing pass left of it (D346): the census that says whether
@@ -778,12 +777,7 @@ impl Ground {
             if watched {
                 self.bump_funnel(|f| f.long_walks += 1);
             }
-            let floor = levels.descent(start).min(levels.descent(goal));
-            if floor == 0 {
-                if watched {
-                    self.bump_funnel(|f| f.floor_refused += 1);
-                }
-            } else if let Some(coarse) = levels.coarse_route(start, goal) {
+            if let Some(coarse) = levels.coarse_route(start, goal) {
                 // The refinement interpolates the walk's own line across each shared edge (D343), so it needs the two
                 // points the plan was asked for, not just the cells.
                 let centres = levels.refine(

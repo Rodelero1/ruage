@@ -9703,3 +9703,36 @@ smoothed) against our octile search is the measurement it owes.
 
 **Commits us to.** "Follow the game" is a rule about the *mechanism*: a port that stops at the search and skips the pass that
 follows it is not the game's route, and the cost of the missing pass was mistaken for the cost of the mechanism.
+
+## D347 - the last gate is the game's: level 0 is answered by the levelled search, not by ours
+
+**The ruling carries.** D346 followed the game's *route* (the smoothing pass) and left one gate ours: `route_with` refused
+`descent == 0` and handed those walks to the octile flat search, where `FUN_007ee980` floors at **0 and then searches** -
+`FUN_007ee760(0, ...)` opens the tile's cell and `FUN_007ed280` expands it four-directionally, the same machine at 1-tile
+resolution. That is 55 of the 86 long walks in the acceptance match, so "follow the game" cannot stop at the pass.
+
+**Prior implementation.** `if floor == 0 { fall through }` - a gate that existed only because the raw chain was worse than
+the flat search (D345), and D346 showed the cost was the missing smoothing, not the level.
+
+**Landed.** The gate is gone: every long walk asks `coarse_route`, and the descent only *chooses the level* (as the binary's
+loop does). Nothing else moved - the refinement, the smoothing pass and the body rule are D346's.
+
+**Witness, red first:** `tier_level_zero::a_walk_from_a_cluttered_cell_is_answered_at_level_zero` - a tree at (8, 41) puts
+the start's 2-tile cell in the blocked set, so `descent(start) == 0` and the goal stays at 3. Un-cut the flat search answered
+(`(730000, 970000), (1290000, 810000)`, tile centres); cut, the chain's crossings sit on tile lines, which no tile-centre
+route can produce.
+
+**Measured, same tree, one variable** (`tier_probe`, 48,000 ticks, release): tier answers **92 of 50,652** routes (was 16 of
+31,256), the waypoint census **4,175 raw -> 637 smoothed** (85% removed), and on the same 92 walks the tier costs **637
+waypoints / 65,242,638 raw** against the flat search's **515 / 63,486,927** - **+2.8% ground** and 1.3 more waypoints a walk.
+Acceptance: hash `7782dd38d7557514`, **134 entities**, one player (the most of any variant measured this session: 133 at the
+pre-D346 baseline, 130 with the floor at 1), re-paths **37,204**, wall **12.12 s** median of three (11.94 / 12.18 / 12.38)
+against 12.18 s at baseline and 11.70 s with level 0 refused. The match still ends at ~1,985 s.
+
+**What that trade says, plainly.** Refusing level 0 was *cheaper in the match* (11.70 s, 17,743 re-paths against 12.12 s and
+37,204) and *worse in bodies* (130 entities against 134). So the number that argues for the deviation is wall time, and the
+number that argues for the game is a surviving entity; the rule the owner gave decides it, and the numbers are here for the
+next person who wants to reopen it.
+
+**Commits us to.** A gate justified by a cost is a claim about a mechanism, and a mechanism measured without the pass that
+follows it is half a mechanism - twice now, in the same subsystem.
