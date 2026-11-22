@@ -120,3 +120,18 @@ and re-path count, one variable per commit.
   **straight-line tier** (the caller of `FUN_008000d0`). The **equal-`f` sift order** is *not* parked - `FUN_00801e90` is in the
   corpus and is one read.
 - **The acceptance wall's attribution** (D337): never profiled per pass.
+
+## Next: the gold the economy outruns (D353's consequence)
+
+The drop-site fix (`D353`) made banking cheaper - re-paths **37,204 -> 12,847**, wall time **12.19 -> 10.10 s** on the acceptance
+scene - and the scene's outcome went from **a win to a draw**. Measured cause: `player 1 has no gold node to gather` (220
+firings), gold **410 -> 10** at 2,400 s, so the army stalls. Two candidate readings, both testable:
+
+1. **The scene's AI never expands to farther gold** - `nearest_like` answers only within the tiles it scans, and once the near
+   gold is gone it answers `None`. Test: give player 1 a gold node 12 tiles out and see whether the economy finds it.
+2. **The mining-camp rule stopped firing** - if miners now drop at the town centre, the camp-spacing rule (`[build]
+   drop_site_spacing`) may never trigger, and mining is the resource whose walk is longest. Test: count camps built per run
+   before/after.
+
+Answer with a measurement, not a choice; the scene's outcome is a metric this tree tracks ("a won match became a draw" has
+already cost one slice, see `apply_switches`).

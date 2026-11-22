@@ -448,6 +448,99 @@ fn a_closer_lumber_camp_wins_over_the_town_center() {
 }
 
 #[test]
+fn a_nearer_wall_wins_over_a_nearer_anchor() {
+    // **The owner's report, 2026-11-22:** *"villagers prioritise dropping wood to lumber camp even town center is closer.
+    // The whole area of town center could be dropped at (impassable center doesn't need to be reached)"*.
+    //
+    // A building's `position` is its **anchor tile**, and a town centre is 4x4 - so its anchor sits two tiles in from its
+    // own wall on every side, and ranking drop sites by the distance to the anchor measures a corner rather than a
+    // building. Here the town centre's **wall** is one tile from the tree while a lumber camp's is two, but the camp's
+    // **anchor** is nearer than the town centre's: before the fix the camp wins on the anchor, after it the town centre
+    // wins on the wall.
+    let Some(fx) = fixture() else { return };
+    let mut world = seeded(&fx);
+    let villager = first_villager(&world);
+    let here = world.position(villager).expect("position");
+    let node = nearest(&world, slot("wood"), here);
+    let node_at = world.position(node).expect("node position");
+    let tile = world.scale();
+
+    // The town centre's footprint ends one tile short of the tree; its anchor is five tiles off.
+    let tc = EntityId(9_100);
+    world
+        .submit_checked(Command::Spawn {
+            id: tc,
+            player: 1,
+            kind: EntityKind::Building,
+            unit: Some(109),
+            position: (
+                Fixed::from_raw(node_at.0.raw() - 5 * tile),
+                Fixed::from_raw(node_at.1.raw()),
+            ),
+            speed: Fixed::ZERO,
+            hp: 2_400,
+            amount: 0,
+        })
+        .expect("spawn a town centre");
+
+    // The lumber camp's anchor is two tiles to the east and one south: nearer than the town centre's anchor, with its wall
+    // two tiles from the tree.
+    let camp = EntityId(9_101);
+    world
+        .submit_checked(Command::Spawn {
+            id: camp,
+            player: 1,
+            kind: EntityKind::Building,
+            unit: Some(562),
+            position: (
+                Fixed::from_raw(node_at.0.raw() + 2 * tile),
+                Fixed::from_raw(node_at.1.raw() + tile),
+            ),
+            speed: Fixed::ZERO,
+            hp: 600,
+            amount: 0,
+        })
+        .expect("spawn a lumber camp");
+
+    // Commands are queued: one tick applies both spawns, so the buildings exist before they are measured.
+    world.step().expect("step");
+
+    // What each site's *wall* costs the carrier, and what its *anchor* cost - printed so a failure says which is which.
+    let tc_wall = world.footprint_gap(node_at, tc).expect("tc gap");
+    let camp_wall = world.footprint_gap(node_at, camp).expect("camp gap");
+    let tc_anchor = world.position(tc).expect("tc at");
+    let camp_anchor = world.position(camp).expect("camp at");
+    let anchor = |at: (Fixed, Fixed)| {
+        let (dx, dy) = (at.0.raw() - node_at.0.raw(), at.1.raw() - node_at.1.raw());
+        dx * dx + dy * dy
+    };
+    assert!(
+        tc_wall < camp_wall,
+        "the scene is wrong: the town centre's wall must be nearer ({tc_wall} vs {camp_wall} raw)"
+    );
+    assert!(
+        anchor(camp_anchor) < anchor(tc_anchor),
+        "the scene is wrong: the camp's anchor must be nearer than the town centre's"
+    );
+
+    world.submit(Command::Gather { villager, node });
+    let mut drop = None;
+    for _ in 0..4_000 {
+        world.step().expect("step");
+        if let Some(ruage_sim::Task::Return { drop: target, .. }) = world.entity(villager).map(|e| e.task) {
+            drop = Some(target);
+            break;
+        }
+    }
+
+    assert_eq!(
+        drop,
+        Some(tc),
+        "a carrier walks to the nearest **wall** ({tc_wall} raw) not the nearest anchor; the camp's wall is {camp_wall} raw"
+    );
+}
+
+#[test]
 fn two_villagers_on_one_node_cannot_take_more_than_it_holds() {
     // Each take is bounded by the node's amount *as read at the start of the tick*, so two
     // villagers working a one-wood tree can each be allowed to take it. That would mint a

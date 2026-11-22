@@ -524,10 +524,17 @@ impl World {
                     drop_sites.contains(&unit) || drop_sites.contains(&root)
                 })
             })
+            // **The nearest *wall*, not the nearest anchor** (the owner's report, 2026-11-22): *"villagers prioritise
+            // dropping wood to lumber camp even town center is closer. The whole area of town center could be dropped
+            // at"*. A building's `position` is its anchor tile, and a town centre is 4x4 - so its anchor sits two tiles in
+            // from its own wall on every side, and a carrier measured to the anchor walks past a nearer town centre to a
+            // lumber camp whose corner happens to be closer. `footprint_gap` is the wall (D246's own measure), so the
+            // ranking is: wall, then anchor distance to break a tie, then id so the choice is a function of the world.
             .min_by_key(|entity| {
                 let dx = entity.position.0.raw() - from.0.raw();
                 let dy = entity.position.1.raw() - from.1.raw();
-                (dx * dx + dy * dy, entity.id.0)
+                let wall = self.wall_gap(entity, from).unwrap_or(i64::MAX);
+                (wall, dx * dx + dy * dy, entity.id.0)
             })
             .map(|entity| entity.id)
     }

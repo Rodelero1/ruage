@@ -4201,7 +4201,13 @@ impl World {
     /// **0.281 tiles** from the town centre. This measures the wall itself.
     #[must_use]
     pub fn footprint_gap(&self, position: (Fixed, Fixed), building: EntityId) -> Option<i64> {
-        let entity = self.find(building)?;
+        self.wall_gap(self.find(building)?, position)
+    }
+
+    /// **The same measurement against an entity already in hand**, so a ranking over many buildings does not pay a linear
+    /// `find` per candidate: `footprint_gap` is this plus the lookup. `None` for anything without a footprint (a unit, or a
+    /// building whose pack row has none).
+    pub(crate) fn wall_gap(&self, entity: &Entity, position: (Fixed, Fixed)) -> Option<i64> {
         let (width, height) = self.footprint_of(entity.unit?)?;
         let scale = self.scale;
         let (left, top) = (entity.position.0.raw(), entity.position.1.raw());

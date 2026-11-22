@@ -9918,3 +9918,22 @@ other thing the tool cannot see: **a row that cites the right address and reads 
 
 **What changes in behaviour: nothing.** This row is a mechanism and a register. The purge it orders is the eleven DEFECT rows,
 one slice each, and the first is D351 (branch `d351-reseat`) with the three plan ports behind it.
+
+## D353 - a drop site is the nearest wall, not the nearest anchor
+
+**Conformance**: GAME `unit_action_distance.cpp` (box-to-box distance; `func_002690E0`/`func_00269190`/`func_00269220`), plus the
+owner's report 2026-11-22 *"villagers prioritise dropping wood to lumber camp even town center is closer. The whole area of town
+center could be dropped at (impassable center doesn't need to be reached)"*.
+
+A building's `position` is its **anchor tile** - the north-west corner of its footprint - so ranking drop sites by the distance
+to it measures a corner. A town centre is 4x4 and its anchor is two tiles in from its own wall on every side; a lumber camp is
+2x2 and one tile in. Measured in `a_nearer_wall_wins_over_a_nearer_anchor`: the town centre's wall **1 tile** from the tree
+against the camp's **2**, and the camp's anchor nearer than the town centre's - the carrier walked past the town centre.
+
+The ranking is `(wall_gap, anchor distance², id)`, where `wall_gap` is `footprint_gap`'s measurement without the lookup (D246's
+own measure, so the delivery test and the choice of site agree). The owner's second clause was already true and is unchanged:
+`at_the_wall` banks from any side and any corner, and the impassable middle is never reached.
+
+**Consequence, reported rather than hidden**: on the acceptance scene (48,000 ticks, seed 7) re-paths fall **37,204 -> 12,847**
+and wall time **12.19 -> 10.10 s**, and the outcome changes from a **win to a draw** - the faster economy mines the reachable
+gold out and the scene's AI cannot reach farther gold (`player 1 has no gold node to gather`, 220 firings, gold 410 -> 10).
