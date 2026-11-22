@@ -66,6 +66,10 @@ fn what_a_radius_rule_binds_that_a_tile_rule_does_not() {
     let mut ticks_with_radius_binding: u64 = 0;
     let mut max_radius_pairs = 0u64;
     let mut unit_ticks: u64 = 0;
+    // **How deep a pile gets** (owner report, 2026-11-22: "5 in the same spot"): the largest connected group of
+    // overlapping bodies in one tick, and how often two bodies sit within a fifth of a tile of each other.
+    let mut max_pile = 0u64;
+    let mut near_coincident: u64 = 0;
 
     for _ in 0..ticks {
         runner.due(&mut world);
@@ -113,6 +117,41 @@ fn what_a_radius_rule_binds_that_a_tile_rule_does_not() {
             ticks_with_radius_binding += 1;
         }
         max_radius_pairs = max_radius_pairs.max(this_tick_radius);
+
+        // The pile: union-find over the overlapping pairs, so "five in one spot" is a size and not an impression.
+        let mut parent: Vec<usize> = (0..bodies.len()).collect();
+        fn root(parent: &mut [usize], mut i: usize) -> usize {
+            while parent[i] != i {
+                parent[i] = parent[parent[i]];
+                i = parent[i];
+            }
+            i
+        }
+        let clue = (scale / 5) * (scale / 5);
+        for i in 0..bodies.len() {
+            for j in (i + 1)..bodies.len() {
+                let (ax, ay, ar, _) = bodies[i];
+                let (bx, by, br, _) = bodies[j];
+                let (dx, dy) = (ax - bx, ay - by);
+                let squared = dx * dx + dy * dy;
+                if squared < clue {
+                    near_coincident += 1;
+                }
+                let reach = ar + br;
+                if reach > 0 && squared < reach * reach {
+                    let (ri, rj) = (root(&mut parent, i), root(&mut parent, j));
+                    if ri != rj {
+                        parent[ri] = rj;
+                    }
+                }
+            }
+        }
+        let mut sizes = vec![0u64; bodies.len()];
+        for i in 0..bodies.len() {
+            let r = root(&mut parent, i);
+            sizes[r] += 1;
+        }
+        max_pile = max_pile.max(sizes.into_iter().max().unwrap_or(0));
     }
 
     println!(
@@ -122,6 +161,9 @@ fn what_a_radius_rule_binds_that_a_tile_rule_does_not() {
     println!(
         "pairs in the same tile (a tile rule binds): {tile_pairs} pair-ticks, {} ticks had any",
         tile_pairs.min(u64::from(ticks))
+    );
+    println!(
+        "deepest pile: {max_pile} bodies in one overlapping group; {near_coincident} pairs closer than a fifth of a tile"
     );
     println!(
         "pairs within both radii (a radius rule binds): {radius_pairs} pair-ticks on {ticks_with_radius_binding} ticks, \

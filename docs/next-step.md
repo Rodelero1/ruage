@@ -45,6 +45,21 @@ guide's shape (corners on cell crossings rather than on obstacle vertices), not 
 3. **The uncapped coarse search** (D347's OCR finding) is downstream of 1: the binary bounds it with the same window, so the
    margin we now know (mostly 0, sometimes `+3.0`) is the constant a cap would use.
 
+## The owner's report, and it is the next obstacle-avoidance step: bodies pile up
+
+Reported 2026-11-22: *"villagers stack on each other a lot (like 5 in the same spot)"*. Measured on the acceptance scene
+(`collision_probe`, 36,000 ticks, seed 7): **the deepest overlapping group is 11 bodies**, **317,041 pairs closer than a fifth
+of a tile**, deepest overlap the full footprint (0.400 tiles), and the same census on the tree before D346/D347 reads
+349,413 against 349,824 pair-ticks - so **not a regression from today's routing**, and not fixed by it either.
+
+What the tree already knows: the D267 classification (**mates 0, past 43,315, neither 61,071**) says more than half of these
+pairs are ones the step should have refused, so it is a defect as well as the crowd rule the owner asked for. Nothing in the
+queue targets it: step 11 is formations for soldiers, step 13 is P3's inset (*touching* collides, which addresses grazing).
+
+**The step to take**: read `FUN_00840830`'s caller - is the body test evaluated **before** the *past* check, and does a past
+body still refuse a step that lands **inside** it - then a slice with the pile census as its witness (deepest group, and the
+count of pairs inside a fifth of a tile, both before and after).
+
 ## Also ready, independent of that
 
 - **The goal-cell refusal in `coarse_route`**: the binary does not refuse a goal whose cell holds an obstacle - it refines
