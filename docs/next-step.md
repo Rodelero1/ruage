@@ -28,19 +28,30 @@ other.
    target, so we're done"* (`0x127d`). Ours cuts at contact **before** the body test, so a friend on the contact point does not
    stop the walk.
 
-## The step to take next: the tile rectangle (item 1)
+## The step to take next: three ports, then the census (D350)
 
-- Prior implementation: `crates/sim/src/ground.rs:1001` `inside_a_body(scale, tile, avoid)` = `clear.still_inside(centre)`, read
-  by the search's expansion (`:1164`, `:1178-1179`) and by `leg_is_clear` (`:674`, `:690-691`). The step's own refusal
-  (`motion.rs`) is already exact (box against the landing point) and does not use it.
-- The change: a tile is blocked when its **square** overlaps the grown box (touching excluded, the same convention as
-  `still_inside`). A body at a tile centre then blocks its own tile - the same as today - and a body anywhere else blocks every
-  tile its box touches.
-- **Fixture first, and it must bite**: a stander on a lattice corner and a walker whose tile path runs past him, asserting the
-  walker's own centre never enters the pair's grown box. A first attempt walked the walker along a **tile row** and did not
-  bite (his line passed 0.5 of a tile from the corner, outside a 0.4-tile box) - the scene has to put the body on the line.
-- Witness: the pile census (deepest group, pairs inside a fifth of a tile, `pile_probe`'s split) plus the acceptance wall and
-  re-path count. **Costs more blocked tiles per plan**, so the wall is the number that decides whether it stays.
+The tile rectangle alone was built, measured and reverted: the route bends and the walker still clips a body, because the clip
+is made in the **refinement**. All three are one slice, and the fixture is already written - it is preserved **outside the tree**
+at `/opt/data/cache/scratch/age2hd-pending-fixtures/body_blocks_its_tiles.rs` (restore it into `crates/sim/tests/` first; it is
+red on the current tree at 7,677 / 7,612 raw against an 8,000 reach):
+
+1. **The tile rectangle** - `crates/sim/src/ground.rs:1004` `inside_a_body` asks the tile's **square** against the grown box
+   instead of its centre (touching excluded). `FUN_007f9d80` grows the stander's box by the mover's radius, clamps it to tile
+   indices (`FUN_007f9b70`) and stamps the rectangle blocked (`FUN_007f6ff0`). Measured in place: the plan bends round a corner
+   body, and the walker still clips.
+2. **The smoothing's bodies** - `ground.rs:975` `smooth` certifies with `leg_is_clear` (bodies, objects, grid) instead of
+   `chain_leg` (objects, grid), and takes the `avoid` list from `route_with`. Grounded on `FUN_008acf20` -> `FUN_00840c60`,
+   which walks the **object system's** buckets (`+0x8c`, the same `+0x266`/`+0x268` state) and so sees units; the coarse
+   *search*'s blindness to bodies (D338) is true of the search, not of the pass after it. Measured in place: the route grows
+   from 1 waypoint to 3 and the clip narrows to 350 raw on one axis.
+3. **The refinement's tile span** - `crates/sim/src/levels.rs:307` `refine`: `FUN_007eeda0` scans the cell's tile span along
+   the direction of travel and takes the first tile where the direction is **passable**, and passable is the tile test that
+   consults the non-ignore objects on the tile (`FUN_00801a20`). Ours interpolates the crossing by geometry alone, so a crossing
+   lands inside a body while every tile of the chain is open - and the smoothing can only delete waypoints, never insert one.
+   **This is the port that closes the clip**; it needs `avoid` passed down from `route_with`.
+
+Then the witness: the pile census (deepest group, pairs inside a fifth of a tile, `pile_probe`'s split) plus the acceptance wall
+and re-path count, one variable per commit.
 
 ## Then: the arrival arm (item 2)
 
@@ -54,6 +65,8 @@ other.
 
 ## Open defects found on the way, with the evidence, no fix landed
 
+- **`Levels::refine` is body-blind** (D350's third port): the crossing it interpolates can land inside a body while every tile
+  of the chain is open, and no later pass can repair it.
 - **A walk whose goal is on the mover's own tile answers `NoPath`** when the straight-line shortcut is refused by a body:
   `route_with` reports a search whose start node *is* its goal as no path, and the order is refused
   (`NoPath { from: (15,14), to: (15,14) }`, seen from two builder fixtures under a stricter plan). The shortcut hides it until a

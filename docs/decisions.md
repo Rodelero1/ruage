@@ -9844,3 +9844,40 @@ hypothesis**: whether the rectangle moves the pile is unknown until it is built.
 a per-exemption split), because "not a regression" and "the rule should have refused it" are different defects. And a comment
 above a rule is not the rule: the binary's expression is read again before a slice is built on what the comment says, or the
 slice ports the comment.
+
+## D350 - the tier's refinement clips a body, and the fix is three ports, not one (read, not landed)
+
+**What was tried.** D349 left the pile as an arrival problem and named `FUN_007f9d80`'s **rectangle** as the next slice: a
+stander blocks every tile its box covers, not only the tile whose centre is inside it. The fixture was written to bite at the
+one place a centre test fails completely - a body on a lattice **corner**, which no tile centre is within 0.4 of, and a
+**diagonal** walk, whose tile-centre line passes exactly through such a corner. It bit: the walker's own centre came within
+**7,677 / 7,612 raw** of the stander's against the **8,000** the pair needs, on a walk from (10,10) to (20,20).
+
+**Three readings, and they compose into one gap.**
+
+1. **`inside_a_body` is a centre test; the binary stamps a rectangle.** `FUN_007f9d80` grows the stander's box by the mover's
+   radius, clamps it to tile indices (`FUN_007f9b70`) and calls `FUN_007f6ff0(rect, 1)` - the *whole* rectangle is blocked. Ported
+   (the tile's square against the grown box, touching excluded) and the fixture's route **still** clipped the body: the plan
+   bent round the corner, so nothing was wrong with the tile test.
+2. **The tier's smoothing was body-blind, and that is a divergence.** `FUN_008acf20`'s segment test is `FUN_00840c60`, which
+   walks the same **object-system** buckets as the collision query (`+0x8c`, the same `+0x266`/`+0x268` inset state) and asks a
+   per-object segment test of each (`FUN_00841020`/`FUN_00841220`) - so **units** are in it. Ours used `chain_leg` (objects and
+   grid, no bodies), on the reading that the coarse search is blind to bodies - true of the **search** (D338,
+   `FUN_007ee980`), false of the pass that follows it. Ported (the pass now certifies with `leg_is_clear`, bodies included), and
+   the route went from **one straight point to three** - and the fixture **still** clipped: **7,650 / 2,355 raw**.
+3. **The refinement is the third place, and it is where the clip is made.** `FUN_007eeda0` scans the cell's tile span **along
+   the direction of travel** and takes the first tile where the direction is passable - *passable* being the tile test, which
+   consults the non-ignore objects on the tile (`FUN_00801a20`). Our `Levels::refine` interpolates the crossing by geometry
+   alone, so a crossing lands inside a body's box while every tile the chain crosses is open; the smoothing can only *delete*
+   waypoints, never insert one, so the clipped leg survives it. **That is the number that decides this row**: after 1 and 2, the
+   polyline was `(15.5,16) -> (16,16.5) -> (20.5,20.5)` - a corner cut, exactly the leg `crossing-by-geometry` produces.
+
+**What did not land, and why.** Both ports (1 and 2) are faithful and were reverted **because their own fixture still failed**:
+a half-fix that leaves the rule broken reads as a fix in the log and is not one. The fixture is preserved **outside the tree**
+at `/opt/data/cache/scratch/age2hd-pending-fixtures/body_blocks_its_tiles.rs` (it asserts both that the walker never enters the
+pair's grown box and that he still arrives), and the three-port slice is `docs/next-step.md`'s next item: **the rectangle, the
+smoothing's bodies and `refine`'s tile span**, then the census.
+
+**Commits us to.** A fixture can be right and a change right and the pair still red - and that is information about the
+*shape*, not a reason to keep the change. The preserved fixture is the next session's starting point, and the reading above is
+what stops it re-deriving the same three steps.
