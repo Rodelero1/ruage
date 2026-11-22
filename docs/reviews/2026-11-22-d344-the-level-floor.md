@@ -1,66 +1,94 @@
-# 2026-11-22 - D344: the level floor moves to 1
+# 2026-11-22 - D344/D345: the level floor, the funnel, and the acceptance that put the floor back
 
-The change: `route_with`'s tier gate `descent(start).min(descent(goal)) >= 2` becomes the floor the binary's own loop has -
-nothing refused above level 0 - plus the measurement machinery that says whether the tier answers at all (`TierShadow`,
-`TierFunnel`, `compare_tier_routes`), the `flat_route` extraction that lets both answers come from the same code, and the
-descent re-read that stopped a wrong "correction" from inverting `Levels::descent`.
+The change that **landed**: measurement only. `TierShadow` (every tier answer priced beside the flat search's answer for the
+same walk - waypoints and polyline length in raw units), `TierFunnel` (why the tier did not answer: long walks, floor
+refusals, no-coarse, one-cell chains, refused legs split body / object / tiles), `Ground::compare_tier_routes` as the probe's
+switch, and `flat_route` extracted from `route_with`'s tail so both answers come from the same code. Probe-only, never hashed.
+
+The change that **did not land**, with its numbers: the level floor moved from 2 to 1 (D344), and the chain's body
+certification was dropped (D345). Both were landed, measured against the acceptance the slice was for, and put back.
 
 ## Performance
 
-**Acceptance match, seed 7, 48,000 ticks, release, median of three, back to back on an idle box** (`ruage-headless`, wall
-clock around the binary):
+**The floor alone is inert** (D344). Acceptance, 48,000 ticks, release, median of three, back to back on an idle box, tier
+forced to each floor by edit on the same tree:
 
-| tree | wall | band | hash | entities / players | re-paths |
+| floor | wall | band | hash | entities / players | re-paths |
 |---|---|---|---|---|---|
-| floor 2 (un-cut) | 12.00 s | 11.90 / 11.90 / 12.09 | `1e1fcc3cf2b05a4c` | 133 / 1 | 36,567 |
-| floor 1 (cut) | 12.16 s | 11.93 / 12.16 / 12.19 | `1e1fcc3cf2b05a4c` | 133 / 1 | 36,567 |
-| floor 0 (priced neighbour) | 11.96 s | 11.85 / 11.96 / 12.14 | `1e1fcc3cf2b05a4c` | 133 / 1 | 36,567 |
+| 2 | 12.00 s | 11.90 / 11.90 / 12.09 | `1e1fcc3cf2b05a4c` | 133 / 1 | 36,567 |
+| 1 | 12.16 s | 11.93 / 12.16 / 12.19 | `1e1fcc3cf2b05a4c` | 133 / 1 | 36,567 |
+| 0 | 11.96 s | 11.85 / 11.96 / 12.14 | `1e1fcc3cf2b05a4c` | 133 / 1 | 36,567 |
 
-The three bands overlap and every counter is identical, so the 0.16 s between the medians is load, not the change. **At no
-floor does the match move** - which withdraws D338's 13/108-answer figures for this tree (D341 changed which routes exist;
-D338 measured before it).
+Bands overlap, every counter identical: **no floor value moves this match**, which withdraws D338's 13/108-answer figures for
+this tree (they predate D341).
 
-**The tier's own probe** (`cargo test --release -p ruage-sim --test tier_probe -- --ignored --nocapture`), 48,000 ticks:
-`tier answers 0 of 49,088 routes; 36,567 re-paths; hash 1e1fcc3cf2b05a4c`, and the funnel:
+**The funnel says why** (`tier_probe`, 48,000 ticks): 91 long walks, floor-refused 60, no coarse route 13, leg refused by a
+body 17, by geometry 1, **answered 0**. So the floor was never the gate - two of our own gates behind it were.
 
-- **91** long walks (16+ tiles and past the tier's arms at all), of which
-- **60** never reached the search at floor 2 (0 at floor 1 - the change is exactly those 60 candidates being *asked*),
-- **13** got no coarse route (`coarse_route` returns `None`: the goal's cell at the search level is occupied),
-- **17** had a leg refused by a **body** in the plan's avoid list, **1** by object geometry, 0 by tiles,
-- **0** answered, so `TierShadow` has no walks to compare - the tier-vs-flat judgement is *not* made by this slice, and it is
-  the next slices that make it possible.
+**With both gates opened** (D345), the tier answered and lost. Same tree, floor 1 and the body veto dropped:
 
-The gate's cost when it refuses is unchanged (one `descent` call per long walk). `compare_tier_routes` is off in production:
-one `Cell` read per tier answer, and the shadow's second search only when a probe asks for it.
+| | tier | flat search, same walks |
+|---|---|---|
+| waypoints | **172** (12.3/walk) | **67** (4.8/walk) |
+| length | **5,180,218 raw** | **4,719,155 raw** |
+| | | tier **+9.8%** ground, **2.6x** the waypoints |
+
+and the match: **13.71 s** median of three (13.48 / 13.71 / 13.76), `2999657a804e913b`, **134 entities**, 1 player, 36,569
+re-paths - against 12.16 s and 133 entities with the floor at 1 but the veto in place. The tier's routes cost **13% of wall**
+for **14 of 50,022** routes, hand the mover 2.6x the waypoints, walk 9.8% further, and change the match by one entity. The
+owner's acceptance - *"is the tier's route better than the flat search's on the same walk ... if it is not better, the finding
+is the numbers and the floor stays at 2"* - is answered **no**, so the floor is 2 and both gates are back.
+
+The instrumentation's own cost: off in production, one `Cell` read per tier answer; the shadow's second search only while a
+probe has asked for it. The wall at floor 2 is unchanged from before the slice, which is the check that the extraction of
+`flat_route` did not move the flat path.
 
 ## Stability
 
 Attacked, and what each attack found:
 
-- **The floor at 0 and at 2**, by edit on the same tree, three acceptance runs each: identical hash, identical counters, wall
-  inside the band. The change cannot move the match through the floor alone.
-- **`flat_route` extraction**: it is the tail of `route_with` moved, not rewritten - the suite's 940 passed / 0 failed
-  includes every route-shape and straight-line fixture, and the acceptance hash is identical to D343's.
-- **The funnel is off**: `watched` is read once per long walk, and every counter is `Cell`, never hashed. The suite's
-  determinism fixtures (`no_float`, `state`, `reseed`) pass unchanged.
-- **A goal in an occupied cell** still falls through to the flat search - the 13 no-coarse walks are the evidence, not an
-  argument; nothing panics or loops.
-- **An open map** still descends to 3 and answers from the hierarchy at level 3 (`descent.rs`'s three rows unchanged;
-  `tier_ignores_bodies` still green), so the floor change did not move the level choice for a start that already passed.
-- **The pyramid cache** is still keyed by reach; the floor change reads `descent` on the same pyramid the search uses, so no
-  new build path was added.
-- **A refused chain leaves no state**: the arm returns nothing and the flat search answers, as before.
+- **Every floor value, by edit**: identical hash and counters at 0, 1 and 2; the wall differences are the band. Nothing to
+  attack in the gate itself.
+- **The two gates, in order**: opening the body veto changed the hash (`2999657a804e913b`), kept 1 player and moved one
+  entity - so the match is sensitivity-tested, not assumed.
+- **`flat_route` extraction**: the tail of `route_with` moved, not rewritten; the acceptance hash at floor 2 is identical to
+  D343's, and every route-shape, straight-line and route-avoiding fixture passes.
+- **The funnel and shadow are off**: `watched` is one `Cell` read per long walk; `no_float`, `state` and `reseed` pass, so
+  nothing leaks into the hash.
+- **A goal in an occupied cell** falls through to the flat search (13 walks) - no panic, no loop.
+- **An open map** still descends to 3 and answers from the hierarchy (`descent.rs`, `tier_ignores_bodies` green), so the
+  floor change did not move the level choice for a start that already passed.
+- **Parked fixtures**: both witnesses are in `docs/parked/` with the un-park condition in a header comment, and the suite
+  does not compile them - the failure mode that parking creates is named where the next session reads it.
 
 **My errors, in the same breath:**
 
-1. The first fixture put the wood resource on a grass tile; the map loader refused it (`"wood" at (11, 43) is not on a
-   forest tile`). Fixed by making the tile forest floor - a forest's floor is walkable and the tree is the obstacle.
-2. The fixture's descent premise read `3` instead of `1` because `Ground::from_map` carries terrain only: resources are
-   stamped by the world's seeding. The premise now stamps every resource tile, the way seeding does.
-3. The first cut of `flat_route`/`record_shadow` had eight arguments each and `clippy -D warnings` refused them; bundled into
-   `Walk`, which is what they always were.
-4. **D338's numbers**, quoted in this tree for a session as the floor's price, do not reproduce after D341 - the row now says
-   so instead of leaving them standing.
+1. The first fixture put a wood resource on grass; the loader refused it (`"wood" at (11, 43) is not on a forest tile`).
+2. The same fixture's descent premise read 3 instead of 1 because `Ground::from_map` carries terrain only - resources are
+   stamped by seeding. The premise now stamps them the way seeding does.
+3. **The witness I first wrote for the body veto could not bite**: a villager's half is 0.5 of a tile, so his grown box
+   (0.7) always contains a tile centre near him; my "box clips the line, no tile does" scene was refused by both models. The
+   witness was rewritten to a stander on the corridor - a case where the two models genuinely disagree.
+4. **D338's answer counts**, quoted in this tree for a session as the floor's price, do not reproduce after D341. The rows
+   now say so.
+5. The first cut of the instrumentation had eight arguments per function and `clippy -D warnings` refused it; bundled into
+   `Walk`.
 
-Not attacked: the two gates that actually refuse the tier (the occupied goal cell, the body certification). They are named
-above with their counts and are the next slices.
+**The landed tree, after the withdrawal**: acceptance `1e1fcc3cf2b05a4c`, 133 entities, 1 player, 36,567 re-paths, wall
+**12.18 s** median of three (11.94 / 12.18 / 12.21) - bit-identical to the tree before the slice, which is the proof that what
+landed is instrumentation and an extraction, not a behaviour.
+
+**The AI review (OCR, D209), and what I did with it.** `make ai-review` on `7acffe6` ran 3m8s and returned **two findings and
+a cut**: it hit the 700k-token budget after four files, so `crates/sim/src/lib.rs` and `crates/sim/tests/tier_probe.rs` were
+**not read** - both are thin pass-throughs and a print, reviewed by hand instead, and said so here rather than implied.
+
+- **Accepted**: the parked fixture would have **panicked** on a tree without the generated pack (`common::present` refuses a
+  load error, and `config/gamedata/units.toml` only exists after `cargo xtask gamedata`, D8) instead of skipping as
+  `tests/common/mod.rs`'s first rule says. Both parked files now check the marker file and return.
+- **Accepted**: `LegVerdict::Clear` was folded into the `Tiles` counter in a block only entered on a refusal - an impossible
+  state that would have counted a clear leg as a blocked tile if the guard ever moved. It is its own arm now, with the reason.
+- **Refused**: nothing.
+
+**Not attacked, and named**: the game's coarse *costs* (`FUN_007ed280`'s 10/100/300/600 rows) are ours to port but not
+measured against the flat search's octile costs as a route-quality question; that is the fork in `docs/next-step.md`. The
+search window (D299) is still unread, and a windowed search would answer fewer walks, not more.

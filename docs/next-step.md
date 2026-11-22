@@ -1,72 +1,67 @@
-# OPEN - the level floor (D303): let the tier answer at level 1, and judge its routes against the flat search's
+# OPEN - the tier answers and loses: make the chain competitive, or decide it should not answer at all
 
-**Where this stands:** suite **221 result lines, 939 passed, 0 failed, 23 ignored**; conformance **21 / 0 / 0**; acceptance
+**Where this stands:** suite **939 result lines, 938 passed, 0 failed, 23 ignored**; conformance **21 / 0 / 0**; acceptance
 `1e1fcc3cf2b05a4c`, 133 entities, one player alive at 48,000, 36,567 re-paths, **~12.0 s** median of three. The *order* to
 100% conformance is **`docs/conformance-sequence.md`**; this file is the immediate step and the outstanding forks.
 
-**Landed in the last session:** step 5 as a read (D340), step 6 (D341 - a body is an obstacle unless it moved), step 7
-(D342 - the 300 row is a gold or stone mine), step 8 (D343 - the refined waypoint is the crossing the walk's line makes).
-All three of 6-8 are bit-identical in the acceptance match, because the levelled tier answers **0 of 61,276** routes on
-this map (D338).
+**Landed in the last session (D344, D345):** the descent's polarity re-read and corrected in the evidence file (bit `0x20` of
+a cell's second byte means **passable** - the 2026-11-20 "contains an obstacle" correction was backwards, no code changed), and
+the measurement that prices the tier against the flat search: `TierShadow`, `TierFunnel`, `compare_tier_routes`, and
+`flat_route` extracted from `route_with`'s tail. Floor-level changes were tried and **put back**; their witnesses are parked.
 
-## Crosscheck done before this step (2026-11-22) - and it corrected the record, not the code
+## What the last session established, with numbers
 
-The descent's polarity was re-read, because the 2026-11-20 entry in `docs/pathfinding-levels-evidence.md` had "corrected"
-bit `0x20` of the cell's second byte to "this cell contains an obstacle" - which would have inverted `Levels::descent` and
-made the tier run coarsely in clutter and finely in the open. **That correction was backwards.** `FUN_007f0da0` tests the
-grown box against the cells that *have* the bit and then **blocks** them (bit `0x10`): blocking a cell that already holds an
-obstacle is a no-op, blocking the passable cell the radius now covers is the growth's whole point. `FUN_007f1100` reads the
-same bit the same way - it descends through cells without it and stamps the first cell that has it. `FUN_007ee760` refuses
-to open a start node whose cell has no passable direction. So the bit means **passable**, the descent stops at the coarsest
-**passable** level, and `Levels::descent` is already the game's rule. The evidence file now says so and withdraws the
-2026-11-20 wording. No code changed for it.
+1. **The floor was never the gate.** No floor value (0, 1, 2) moves the acceptance match at all. D338's priced neighbours
+   (13 and 108 answers) do not reproduce after D341.
+2. **The funnel**: of 91 long walks, 60 floor-refused, 13 got no coarse route (`coarse_route` refuses a goal whose cell at
+   the search level is occupied), 17 had a leg refused by a body in the plan's avoid list, 1 by geometry, **0 answered**.
+3. **Opening both gates makes the tier answer, and its routes lose**: 14 of 50,022 routes, **172 waypoints against 67** and
+   **5,180,218 raw against 4,719,155** (+9.8%) on the same walks, at **13.71 s against 12.16 s** of wall (13% slower), 134
+   entities against 133.
+4. So the floor is **2**, the chain is certified against bodies again, and both witnesses sit in `docs/parked/`
+   (`tier-level-floor.rs`, `tier-certification.rs`) with the un-park condition in their headers.
 
-## The step: the level floor
+## The fork this needs the owner for
 
-**Prior implementation.** `Ground::plan_path_with`'s tier arm (`crates/sim/src/ground.rs:616-700`, the gate at
-`ground.rs:646`) asks the hierarchy only when the walk is **long** (16 tiles, D306) **and**
-`levels.descent(start).min(levels.descent(goal)) >= 2` (D303). `Levels::descent` (`crates/sim/src/levels.rs:463`) walks the
-OR-reduced pyramid from level 3 down and stops at the first **passable** cell, flooring at 0; `coarse_route`
-(`levels.rs:200`) then searches at `min(descent(start), descent(goal))`. Pinned by `crates/sim/tests/descent.rs` (3 rows),
-`coarse_route.rs` (6), `tier_ignores_bodies.rs` (1). Today it answers **0 of 61,276** routes: on this map 127 of 185 long
-walks start on a tile whose 4-tile cell is not passable, so the gate refuses.
+The tier is the game's mechanism (a coarse mip-map route, refined to a crossing per cell edge) and it is losing to our own
+flat search on every measure. Three ways forward, and they are a decision, not a measurement:
 
-**The rule, read** (`FUN_007ee980`, `docs/pathfinding-levels-evidence.md`): the binary walks the levels down and floors at
-level 0, where the search *is* the tile search - it does not refuse to answer because the start cell is coarse. If the
-mid-level attempt fails it falls through to the low-level path (`0xf98`: *"Looking for a LOW LEVEL path (mid-level path
-failed)"*). So "no coarse answer" is a fall-through, not a gate.
+- **(a) Pull the chain before handing it back.** The binary smooths its waypoint list; our flat route is pulled to the corners
+  obstacles force, the tier's is not pulled at all, so the comparison is between a smoothed route and a staircase. This is
+  the cheapest experiment: `pull` already exists and its doc says the original smooths the same way. It may recover most of
+  the 2.6x waypoints, and the length gap is the part it cannot recover.
+- **(b) Price the coarse costs against the octile ones.** `FUN_007ed280`'s rows (10 plain, 100 terrain, 300 beside a mine,
+  600 blocked-ish, 2000 for something) are a 4-directional cost model; our flat search is 8-directional octile. A faithful
+  4-directional search is *structurally* longer on a diagonal-heavy map. If the game's own coarse route is longer than its
+  own flat route, then "the tier is worse" is the game's behaviour and the question becomes fidelity, not quality.
+- **(c) Let the tier stay unread in the match.** It costs 14 routines' worth of work (D341-D345) that no match reads. That is
+  a legitimate answer only if the coarse route is a fidelity goal; nothing else in the tree needs it.
 
-**The change, one predicate:** `>= 2` becomes `>= 1`. Level 0 is **not** taken: there the coarse search is a
-four-directional tile A* whose Manhattan staircase is strictly worse than our octile flat search, which already answers
-that case - a labelled deviation, and D338's own numbers price it (level 0 answers 108 routes with a different hash).
-
-**Witness owed, red first:** one long walk on a small seeded map whose **4-tile cell holds a blocker outside the start's
-2-tile cell**, so `descent(start) == 1`; the plan's interior waypoints must sit on **2-tile** boundaries (`n * 2 * scale`),
-which no tile-centre route can produce. Red on the un-cut tree, where the flat search answers.
-
-**The judgement, and it is the acceptance:** with D341-D343 underneath, at floor 1 the tier answers 13 routes and the
-match changes (D338: hash `69a548722252b27e`). The step is only done when the numbers say whether **the tier's route is
-better than the flat search's on the same walk** - point count, length, and what the match does (entities, re-paths, wall)
-- and if it is not better, the finding is the numbers and the floor stays at 2.
+The recommendation is **(a) first** - it is a small, testable change to the answer we already produce, and if it closes most of
+the gap the rest is a fidelity argument the owner can price. (b) needs the coarse costs re-derived against the binary's own
+tables before it can be argued at all.
 
 ## Also ready, independent of that
 
-- **The level-0 question** (D338): floor 0 answers 108 routes, hash `d700295118db1114`. It is measured in the same run as
-  the shadow comparison, so the decision has both numbers even if the answer is "1, not 0".
+- **The goal-cell refusal in `coarse_route`** (13 long walks): the binary does not refuse a goal whose cell holds an obstacle -
+  it refines the last leg to the point and lets the step stop at contact. Opening it was the other half of the funnel and is
+  not yet measured on its own.
 - **The substitution threshold** (D340): the game's `> 2` against our `REPLAN_TICKS` (20) in `replan_after_ground`, waiting
   for a fixture that stands on an off-grid aim for three ticks.
 - **A body on a tile corner blocks no planned tile** (found while staging D341): the search asks `still_inside` of *tile
-  centres* (`ground.rs`, `inside_a_body`), so a body standing on a corner - which is where the map's own seeding places
-  villagers - excludes nothing. Its own slice; the step-side test is exact, so plan and step disagree there.
-- **The mate rule (step 11) is already the game's**: `stamp_group` (`world/step.rs:110-144`) gives mates only to
-  **military** units, and a villager is never one. What is left is a *formation model* for soldiers - a gap of its own.
-- **The 16-tile floor** (D306): re-test it once the tier answers - it was justified by "the refinement is unread", which
-  D343 has just ended.
+  centres* (`ground.rs`, `inside_a_body`), so a body standing on a corner excludes nothing. Its own slice; the step-side test
+  is exact, so plan and step disagree there.
+- **The 16-tile floor** (D306): it was justified by "the refinement is unread", which D343 ended; re-test it only after the
+  fork above is decided, or it re-measures a route nobody takes.
+- **`make decisions` is broken for D283 onward** (60 decisions have no area in `docs/decision-areas.toml`), so
+  `docs/site/index.html` is stale. A filing pass, not a mechanism.
 
 ## Needs the owner
 
+- **The fork above** (a / b / c).
 - **An evenly mirrored skirmish**: player 2's barracks order is at 70 s where player 1's is at 320 s, and player 2 is
-  eliminated at ~2,350 s in the acceptance match. The imbalance is worth fixing before the next acceptance comparison.
+  eliminated at ~2,350 s in the acceptance match, so every acceptance comparison after that point is between two different
+  matches.
 
 ## Parked on what this box does not have
 

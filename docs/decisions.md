@@ -9559,7 +9559,7 @@ sides, bit-identical**, because the tier that uses the refinement answers **0 of
 cut 12.07 s median of three against un-cut **12.01 s**, back to back, so the difference is the band. Suite **221 result
 lines, 939 passed, 0 failed, 23 ignored**.
 
-## D344 - the level floor moves to 1, and the funnel says the floor was never the binding gate
+## D344 - the level floor moved to 1 and was put back: the tier's routes are worse than the flat search's
 
 **Crosscheck, and it corrected the record rather than the code.** The descent's polarity was re-read because the 2026-11-20
 entry had "corrected" bit `0x20` of a cell's second byte to *"this cell contains an obstacle"*, which would have inverted
@@ -9575,28 +9575,31 @@ says that and withdraws the 2026-11-20 wording. No code changed for it.
 start's 4-tile cell had to be passable. On the acceptance map that refused 127 of 185 long walks (D338), so the tier answered
 nothing and D341-D343 were unread.
 
-**Landed.** The floor is **1**. The binary refuses nothing - `FUN_007ee980` walks the levels down and floors at 0 - and a
-mid-level attempt that fails *falls through* to the low-level path (`0xf98`: "Looking for a LOW LEVEL path (mid-level path
-failed)"). Level 0 is still refused, as a labelled deviation: there the binary's own search is a four-directional tile A*
-whose Manhattan staircase our octile flat search answers better.
+**Moved to 1, measured, and withdrawn (D345).** The floor became **1**: the binary refuses nothing - `FUN_007ee980` walks the
+levels down and floors at 0 - and a mid-level attempt that fails *falls through* to the low-level path (`0xf98`). It is back
+at **2** because the owner's acceptance for this slice was *"is the tier's route better than the flat search's on the same
+walk"*, and the answer is no: at floor 1 the tier answered 14 of 50,022 routes and on those walks cost **172 points /
+5,180,218 raw against 67 / 4,719,155**, at 13.71 s against 12.16 s of wall. The numbers and the fork they open are D345's.
 
-**Witness, red first:** `tier_level_floor::a_walk_from_a_cluttered_cell_is_answered_two_tiles_at_a_time` - a walk whose
-4-tile cell holds a tree outside its 2-tile cell, so `descent(start) == 1`. Un-cut the flat search answered (interior
-waypoints `(730000, 970000), (1290000, 810000)`, tile centres); with the cut the chain's waypoints are 2-tile crossings.
+**Witness, red first:** `tier_level_floor::a_walk_from_a_cluttered_cell_is_answered_two_tiles_at_a_time` (now parked in
+`docs/parked/tier-level-floor.rs`) - a walk whose 4-tile cell holds a tree outside its 2-tile cell, so `descent(start) == 1`.
+Un-cut the flat search answered (interior waypoints `(730000, 970000), (1290000, 810000)`, tile centres); with the cut the
+chain's waypoints were 2-tile crossings.
 
-**Measured, and it is inert.** Acceptance `1e1fcc3cf2b05a4c`, 133 entities, one player, 36,567 re-paths, **identical at floor
-1, floor 2 and floor 0** - all three measured by edit on the same tree. Wall (median of three, back to back): floor 2
+**Measured, then, and it was inert.** Acceptance `1e1fcc3cf2b05a4c`, 133 entities, one player, 36,567 re-paths, **identical
+at floor 1, floor 2 and floor 0** - all three measured by edit on the same tree. Wall (median of three, back to back): floor 2
 **12.00 s** (11.90 / 11.90 / 12.09), floor 1 **12.16 s** (11.93 / 12.16 / 12.19), floor 0 **11.96 s** (11.85 / 11.96 / 12.14) -
-the bands overlap, so the differences are load. Suite **222 result lines, 940 passed, 0 failed, 23 ignored**.
+the bands overlap. Inert because the floor was not the gate (the funnel below); once the two gates behind it were reached, the
+tier answered and the routes were worse (D345). Suite at the landing **222 result lines, 940 passed, 0 failed, 23 ignored**.
 
 **The finding: D338's priced neighbours do not reproduce, and the floor was never the binding gate.** D338 measured floor 1 at
 13 answers and floor 0 at 108, each rewriting the match (`69a548722252b27e`, `d700295118db1114`). On this tree no floor value
 answers anything: the acceptance hash is unchanged even at floor 0. Instrumentation says why - of **91** long walks in the
-match, the floor refuses 60 (0 at floor 1), **13** get no coarse route, **17** have a leg refused by a **body** in the plan's
-avoid list and **1** by geometry, and **none** reaches an answer. So the gates between the tier and an answer are our own two
-downstream of the floor - the refusal of a goal whose cell is occupied, and the segment-level body certification - and those
-are the next slices, not the floor. The correction is D338's numbers, which were measured before D341 changed which routes
-exist; the mechanism they were attributed to did change.
+match, the floor refused 60 (0 at floor 1), **13** got no coarse route, **17** had a leg refused by a **body** in the plan's
+avoid list and **1** by geometry, and **none** reached an answer. So the gates between the tier and an answer were our own two
+downstream of the floor - the refusal of a goal whose cell is occupied, and the segment-level body certification - which is
+D345's subject. The correction is D338's numbers, which were measured before D341 changed which routes exist; the mechanism
+they were attributed to did change.
 
 **Instrumentation, off by default.** `Ground::compare_tier_routes` (a probe's switch) records `TierShadow` - every tier
 answer beside the flat search's answer for the same walk: points and polyline length in raw units - and `TierFunnel` - long
@@ -9606,3 +9609,46 @@ production path pays one `Cell` read per tier answer.
 
 **Commits us to.** A published answer count is measured again whenever the routes under it change, and a gate is priced
 before it is loosened: the floor was the *named* lever for a session and moved nothing.
+
+## D345 - the tier answers, and its routes lose: the floor goes back to 2 and both gates stay
+
+**What this measured.** D344's funnel left two of our own gates between the tier and an answer: `coarse_route` refusing a goal
+whose cell holds an obstacle (**13** long walks), and the chain's certification refusing a leg that crosses a **body**'s box
+(**17**). Both were opened, in order, and the tier finally answered - then lost on the acceptance the slice was for.
+
+**The body certification (opened, measured, withdrawn).** The plan's avoid list is built by `World::standing_bodies`, which
+*skips* every body whose route has moved - so it holds the bodies that are **standing**, and D320 walks through a standing body
+once the route is newer than his last move (*past*). The veto therefore refused exactly the bodies the step resolves, and the
+binary's coarse search inserts no body at all (`FUN_007ee980` calls no stander inserter; D338's crosscheck). Dropping it from
+the **chain** certification (the direct-walk test at the top of `route_with` kept its half) moved the funnel to: **130** long
+walks, 110 floor-refused, 6 no coarse route, 0 legs refused, **14 answered**. Witness, red first:
+`tier_certification::a_stander_in_the_corridor_does_not_refuse_the_chain` (parked in `docs/parked/tier-certification.rs`) -
+a stander on the tile centre the chain crosses; un-cut the flat search answered, cut it was a 2-tile chain.
+
+**The acceptance, and it is why both are back.** Same tree, floor 1 and the certification open:
+
+| | tier's route | flat search's route, same 14 walks |
+|---|---|---|
+| waypoints | **172** (12.3 a walk) | **67** (4.8 a walk) |
+| length | **5,180,218 raw** | **4,719,155 raw** (+9.8% for the tier) |
+
+and the match at floor 1 with the veto still in (12.16 s, `1e1fcc3cf2b05a4c`, 133 entities) against floor 1 without it
+(**13.71 s** median of three, 13.48 / 13.71 / 13.76, `2999657a804e913b`, **134 entities**, 36,569 re-paths). So the tier's
+answer is 2.6x the waypoints, 9.8% more ground and **13% slower** than the flat search's on the same walks. The owner's
+acceptance for the floor - *"is the tier's route better than the flat search's on the same walk ... if it is not better, the
+finding is the numbers and the floor stays at 2"* - is answered: it is not.
+
+**What is back, and what is not.** The floor is **2**; the chain is certified against bodies again; both witnesses are parked in
+`docs/parked/` with the un-park condition named, and `docs/next-step.md` carries the fork. What landed is the **measurement**:
+`TierShadow` (points and polyline length for the tier's answer and the flat search's, on the same walk), `TierFunnel` (long
+walks, floor refusals, no-coarse, one-cell chains, refused legs by reason) and `flat_route` extracted from `route_with`'s tail
+so both answers come from the same code - probe-only, never hashed, one `Cell` read per tier answer when off.
+
+**The shape of the loss, said plainly.** The game's coarse route is a four-directional staircase over 2-tile cells refined to a
+crossing per edge, and the binary hands that polyline to the movement code; our flat search is octile, pulled to corners, and at
+1-tile resolution. At every level the floor allows, the coarse answer is a worse route *and* a slower match - our tier is not
+the game's tier, because what we compare it against is better than what the game compares its own against.
+
+**Commits us to.** A port of a rule is not a port of its cost: the game's coarse search is the right rule and a losing route
+here, and the two have to be measured separately before a gate is opened. And a fixture parked for a reason names the reason in
+its header, or the next session un-parks it into a red suite.

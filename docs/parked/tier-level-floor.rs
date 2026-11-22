@@ -1,3 +1,6 @@
+// PARKED, NOT IN THE SUITE (D345). Copy back to `crates/sim/tests/` only after the tier answers with a route the flat
+// search does not beat - see `docs/next-step.md`, "Make the chain competitive". While the level floor is 2 this scene is
+// answered by the flat search and the fixture fails, which is correct: it asserts a route the engine does not produce.
 //! **The level floor: a cluttered start still gets a chain** (D303, D344).
 //!
 //! `route_with` used to ask the hierarchy only when `descent(start).min(descent(goal)) >= 2` - the start's *4-tile* cell
@@ -121,6 +124,12 @@ fn a_villager(world: &mut World, id: u32, tile: (i64, i64)) -> EntityId {
 /// **A long walk whose 4-tile cell is cluttered is answered at level 1.**
 #[test]
 fn a_walk_from_a_cluttered_cell_is_answered_two_tiles_at_a_time() {
+    // **The generated pack may be absent** (D8): `common::present` panics on a load error, and the pack is absent
+    // until `cargo xtask gamedata` has run - so the fixture skips, as `tests/common/mod.rs`'s first rule says.
+    if !repo("config/gamedata/units.toml").exists() {
+        eprintln!("skipping: no units.toml (generated, D8)");
+        return;
+    }
     let mut world = world_of(&cluttered_start_map());
     let walker = a_villager(&mut world, 900, (8, 40));
 

@@ -782,7 +782,16 @@ impl Ground {
                 self.bump_funnel(|f| f.long_walks += 1);
             }
             let floor = levels.descent(start).min(levels.descent(goal));
-            if floor == 0 {
+            // **The floor stays at 2, and this is the measurement that keeps it** (D345). With the floor at 1 the tier
+            // answered 14 of 50,022 routes - and on those same walks its routes cost **172 points / 5,180,218 raw against
+            // the flat search's 67 / 4,719,155**, i.e. 2.6x the waypoints and 9.8% more ground, at 13.71 s against 12.16 s
+            // of wall and one more entity alive (134 against 133). The game's own coarse route is not our route: its
+            // refinement hands back a crossing per cell edge with no pull, and our octile flat search beats it on both
+            // counts, so the gate is the only thing that keeps the worse answer out. D344's reasoning - the binary floors at
+            // 0, so nothing may be refused for being fine-grained - is right about the *rule* and wrong about the *cost*,
+            // and the owner's acceptance ("if it is not better, the finding is the numbers and the floor stays at 2")
+            // decides it. Un-parking the floor means first making the chain competitive; `docs/next-step.md` holds that fork.
+            if floor < 2 {
                 if watched {
                     self.bump_funnel(|f| f.floor_refused += 1);
                 }
@@ -806,12 +815,11 @@ impl Ground {
                             previous,
                             (point.0.raw(), point.1.raw()),
                             reach,
-                            // **The chain is certified against the same avoid list the flat search uses** (D338). The game's
-                            // coarse search never sees bodies, but this certification is ours, and `route_avoiding` publishes a
-                            // promise the whole cage depends on: a route planned to keep clear of a friend must not be handed back
-                            // through him - the re-plan after a bump would then mark the collider *past* (D320) and the mover
-                            // would walk through the man he was told to avoid. Measured, honouring it costs nothing in the
-                            // acceptance match (0 answers either way) and it keeps the fixture's witnessed route.
+                            // **The chain is certified against the same avoid list the flat search uses** (D338, kept by
+                            // D345): the game's coarse search never sees bodies, but this certification is ours, and
+                            // `route_avoiding` publishes a promise the whole cage depends on. Dropping it was measured -
+                            // 17 more chains answered - and withdrawn with the floor, because the routes those chains
+                            // priced were worse than the flat search's on every count (`chain_leg` in the parked patch).
                             avoid,
                         );
                         if verdict != LegVerdict::Clear {
@@ -820,9 +828,12 @@ impl Ground {
                                 self.bump_funnel(|f| match verdict {
                                     LegVerdict::Body => f.legs_refused_body += 1,
                                     LegVerdict::Object => f.legs_refused_object += 1,
-                                    LegVerdict::Tiles | LegVerdict::Clear => {
-                                        f.legs_refused_tiles += 1
-                                    }
+                                    LegVerdict::Tiles => f.legs_refused_tiles += 1,
+                                    // Unreachable: this arm runs only on a refusal, and `Clear` is the only verdict that
+                                    // is not one. Named rather than folded into `Tiles` so a change to the guard cannot
+                                    // silently count a clear leg as a blocked tile - which would skew the measurement
+                                    // this funnel exists for.
+                                    LegVerdict::Clear => {}
                                 });
                             }
                             break;
@@ -930,8 +941,8 @@ impl Ground {
         self.leg_verdict(scale, from, to, reach, avoid) == LegVerdict::Clear
     }
 
-    /// **Which of the three questions refused the leg** (D344): the certification is a measurement as much as a guard, and
-    /// "18 legs refused" says nothing until it says whether a body, an object's box or a blocked tile refused them.
+    /// **Which question refused the leg** (D344): the certification is a measurement as much as a guard, and "18 legs
+    /// refused" says nothing until it says whether a body, an object's box or a blocked tile refused them.
     fn leg_verdict(
         &self,
         scale: i64,
@@ -943,6 +954,16 @@ impl Ground {
         if avoid.iter().any(|clear| clear.crossed_by(from, to)) {
             return LegVerdict::Body;
         }
+        self.chain_leg(scale, from, to, reach)
+    }
+
+    /// **What the chain is certified against** (D338, kept by D345): an **object's** grown box on the segment the body
+    /// walks, and the tiles the segment crosses. **Bodies are not asked here** - the caller asks them first, in
+    /// `leg_verdict`. Dropping that half was measured (17 more chains answered, D345) and withdrawn with the floor: the
+    /// routes those chains produced were worse than the flat search's on every count.
+    fn chain_leg(&self, scale: i64, from: (i64, i64), to: (i64, i64), reach: i64) -> LegVerdict {
+        // **The objects first, on the segment the body walks** (D306): a leg between two clear tile centres can still pass
+        // inside a building's box, which is the corner a body was seen cutting.
         if reach > 0 && self.crosses_an_object(scale, from, to, reach) {
             return LegVerdict::Object;
         }
