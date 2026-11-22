@@ -1,6 +1,3 @@
-// PARKED, NOT IN THE SUITE (D345). Copy back to `crates/sim/tests/` only after the tier answers with a route the flat
-// search does not beat - see `docs/next-step.md`, "Make the chain competitive". While the level floor is 2 this scene is
-// answered by the flat search and the fixture fails, which is correct: it asserts a route the engine does not produce.
 //! **A body does not refuse the chain** (D345) - the game's coarse search is blind to bodies.
 //!
 //! `plan_path_with` hands the planner every body near the line (`World::standing_bodies`: the bodies that are *not* walking),

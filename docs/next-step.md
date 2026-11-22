@@ -21,25 +21,22 @@ the measurement that prices the tier against the flat search: `TierShadow`, `Tie
 4. So the floor is **2**, the chain is certified against bodies again, and both witnesses sit in `docs/parked/`
    (`tier-level-floor.rs`, `tier-certification.rs`) with the un-park condition in their headers.
 
-## The fork this needs the owner for
+## Landed this step (D346): the game's route, smoothed
 
-The tier is the game's mechanism (a coarse mip-map route, refined to a crossing per cell edge) and it is losing to our own
-flat search on every measure. Three ways forward, and they are a decision, not a measurement:
+The owner's ruling on U28 was **"follow original game"**, so the floor is the binary's again (nothing refused above level 0)
+and the tier's polyline goes through the original's own smoothing pass, `FUN_008acf20` (`move_obj.cpp:0xf56` ->
+*"Found a valid mid-level path"* -> the pass -> `0xf69` *"After smoothing"*). Measured on the acceptance map: **194 raw
+waypoints -> 57 smoothed**, the tier's answer now has **fewer** waypoints than the flat search's (57 against 76 over the same
+16 walks) and **+4.0% ground** (was +9.8% before the pass), the match runs **11.70 s against 12.18 s** and re-paths fall
+**36,567 -> 17,743**. Bodies are not in the tier's geometry again: the coarse search and the smoothing are both blind to them
+in the binary, and the step's bump/re-plan is what answers a body (D320).
 
-- **(a) Pull the chain before handing it back.** The binary smooths its waypoint list; our flat route is pulled to the corners
-  obstacles force, the tier's is not pulled at all, so the comparison is between a smoothed route and a staircase. This is
-  the cheapest experiment: `pull` already exists and its doc says the original smooths the same way. It may recover most of
-  the 2.6x waypoints, and the length gap is the part it cannot recover.
-- **(b) Price the coarse costs against the octile ones.** `FUN_007ed280`'s rows (10 plain, 100 terrain, 300 beside a mine,
-  600 blocked-ish, 2000 for something) are a 4-directional cost model; our flat search is 8-directional octile. A faithful
-  4-directional search is *structurally* longer on a diagonal-heavy map. If the game's own coarse route is longer than its
-  own flat route, then "the tier is worse" is the game's behaviour and the question becomes fidelity, not quality.
-- **(c) Let the tier stay unread in the match.** It costs 14 routines' worth of work (D341-D345) that no match reads. That is
-  a legitimate answer only if the coarse route is a fidelity goal; nothing else in the tree needs it.
+## The one place we still do not follow the game: level 0
 
-The recommendation is **(a) first** - it is a small, testable change to the answer we already produce, and if it closes most of
-the gap the rest is a fidelity argument the owner can price. (b) needs the coarse costs re-derived against the binary's own
-tables before it can be argued at all.
+`route_with` refuses `descent == 0` and hands those walks to our octile flat search, where the binary would run its own
+levelled search at level 0 (the same coarse A* over 1-tile cells). That is 55 of the 86 long walks in the acceptance match.
+Elder sibling of this step: measure it by deleting the refusal and comparing - the flat search's octile costs against the
+coarse search's four-directional 10/300 rows at tile resolution, both smoothed. Not started.
 
 ## Also ready, independent of that
 

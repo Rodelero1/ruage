@@ -1,6 +1,3 @@
-// PARKED, NOT IN THE SUITE (D345). Copy back to `crates/sim/tests/` only after the tier answers with a route the flat
-// search does not beat - see `docs/next-step.md`, "Make the chain competitive". While the level floor is 2 this scene is
-// answered by the flat search and the fixture fails, which is correct: it asserts a route the engine does not produce.
 //! **The level floor: a cluttered start still gets a chain** (D303, D344).
 //!
 //! `route_with` used to ask the hierarchy only when `descent(start).min(descent(goal)) >= 2` - the start's *4-tile* cell

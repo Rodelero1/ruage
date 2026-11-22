@@ -66,11 +66,10 @@ pub struct TierFunnel {
     pub floor_refused: u64,
     pub no_coarse: u64,
     pub one_cell: u64,
-    pub legs_refused: u64,
-    /// Of the refused legs: a body in the plan's avoid list, an object's grown box, or a tile the grid calls blocked.
-    pub legs_refused_body: u64,
-    pub legs_refused_object: u64,
-    pub legs_refused_tiles: u64,
+    /// The chain the refinement emitted, and what the game's smoothing pass left of it (D346): the census that says whether
+    /// the pass is doing the job the `move_obj.cpp` log lines say it does.
+    pub waypoints_raw: u64,
+    pub waypoints_smoothed: u64,
 }
 
 /// **Which question refused a leg** (D344), so a refused chain names its reason instead of its count.
@@ -765,33 +764,22 @@ impl Ground {
             >= 16;
         if long_walk {
             // **The descent first, the search second** (D338): `coarse_route` derives its level as the lower of the two ends'
-            // descents (`levels.rs:200`), so the level is knowable without searching, and the search would be pure cost when
-            // the answer is "the flat search will answer anyway". Both live inside the `long_walk` arm: `pyramid_for` builds
-            // the pyramid on a cold cache, and a short walk must not pay for it.
+            // descents (`levels.rs:200`), so the level is knowable without searching. Both live inside the `long_walk` arm:
+            // `pyramid_for` builds the pyramid on a cold cache, and a short walk must not pay for it.
             //
-            // **The gate refuses levels 0 and 1, and that is a labelled deviation from a rule we measured** (D344, D345). The
-            // binary refuses nothing: `FUN_007ee980` walks the levels down to 0, and a mid-level attempt that fails *falls
-            // through* to the low-level path (`0xf98`: "Looking for a LOW LEVEL path (mid-level path failed)"). D344 lowered
-            // this gate to 1 for exactly that reason; D345 put it back, because the answers it let through were worse than the
-            // flat search's on the same walks (the measurement is in the block below). So the rule is the game's and the
-            // floor is ours: what it keeps out is an answer we have measured to be worse, and `docs/next-step.md` holds the
-            // fork that would un-park it.
+            // **The floor is the game's again** (D346, after the owner's *"follow original game"*). `FUN_007ee980` walks the
+            // levels down to 0 and a mid-level attempt that fails *falls through* to the low-level path (`0xf98`), so nothing
+            // is refused here for being fine-grained. D345 put a floor of 2 back on a *cost* measurement - the raw chain was
+            // worse than the flat search's - and the cost had a cause: the polyline was handed over unsmoothed, which the
+            // original never does (`move_obj.cpp:0xf56` -> `FUN_008acf20` -> `0xf69`, *"After smoothing"*). With `smooth` in
+            // place the chain is the game's route, and its cost is no longer a reason to refuse the game's own mechanism.
             let levels = self.pyramid_for(reach);
             let watched = self.compare_tier.get();
             if watched {
                 self.bump_funnel(|f| f.long_walks += 1);
             }
             let floor = levels.descent(start).min(levels.descent(goal));
-            // **The floor stays at 2, and this is the measurement that keeps it** (D345). With the floor at 1 the tier
-            // answered 14 of 50,022 routes - and on those same walks its routes cost **172 points / 5,180,218 raw against
-            // the flat search's 67 / 4,719,155**, i.e. 2.6x the waypoints and 9.8% more ground, at 13.71 s against 12.16 s
-            // of wall and one more entity alive (134 against 133). The game's own coarse route is not our route: its
-            // refinement hands back a crossing per cell edge with no pull, and our octile flat search beats it on both
-            // counts, so the gate is the only thing that keeps the worse answer out. D344's reasoning - the binary floors at
-            // 0, so nothing may be refused for being fine-grained - is right about the *rule* and wrong about the *cost*,
-            // and the owner's acceptance ("if it is not better, the finding is the numbers and the floor stays at 2")
-            // decides it. Un-parking the floor means first making the chain competitive; `docs/next-step.md` holds that fork.
-            if floor < 2 {
+            if floor == 0 {
                 if watched {
                     self.bump_funnel(|f| f.floor_refused += 1);
                 }
@@ -805,62 +793,32 @@ impl Ground {
                     (to.0.raw(), to.1.raw()),
                 );
                 if centres.len() > 1 {
-                    let mut points: Vec<(Fixed, Fixed)> = centres.iter().skip(1).copied().collect();
-                    points.push(to);
-                    let mut previous = (from.0.raw(), from.1.raw());
-                    let mut clear = true;
-                    for point in &points {
-                        let verdict = self.leg_verdict(
-                            scale,
-                            previous,
-                            (point.0.raw(), point.1.raw()),
-                            reach,
-                            // **The chain is certified against the same avoid list the flat search uses** (D338, kept by
-                            // D345): the game's coarse search never sees bodies, but this certification is ours, and
-                            // `route_avoiding` publishes a promise the whole cage depends on. Dropping it was measured -
-                            // 17 more chains answered - and withdrawn with the floor, because the routes those chains
-                            // priced were worse than the flat search's on every count (`chain_leg` in the parked patch).
-                            avoid,
-                        );
-                        if verdict != LegVerdict::Clear {
-                            clear = false;
-                            if watched {
-                                self.bump_funnel(|f| match verdict {
-                                    LegVerdict::Body => f.legs_refused_body += 1,
-                                    LegVerdict::Object => f.legs_refused_object += 1,
-                                    LegVerdict::Tiles => f.legs_refused_tiles += 1,
-                                    // Unreachable: this arm runs only on a refusal, and `Clear` is the only verdict that
-                                    // is not one. Named rather than folded into `Tiles` so a change to the guard cannot
-                                    // silently count a clear leg as a blocked tile - which would skew the measurement
-                                    // this funnel exists for.
-                                    LegVerdict::Clear => {}
-                                });
-                            }
-                            break;
-                        }
-                        previous = (point.0.raw(), point.1.raw());
-                    }
-                    if clear {
-                        self.tier_answers.set(self.tier_answers.get() + 1);
-                        if watched {
-                            self.record_shadow(
-                                Walk {
-                                    from,
-                                    to,
-                                    start,
-                                    goal,
-                                    scale,
-                                    reach,
-                                    avoid,
-                                },
-                                &points,
-                            );
-                        }
-                        return Some(points);
-                    }
+                    // The chain, then **the game's smoothing pass over it** (D346). The refinement emits a crossing per cell
+                    // edge; `FUN_008acf20` keeps only the ones the straight segment test cannot skip, so what the mover is
+                    // handed is the polyline's corners.
+                    let mut raw: Vec<(Fixed, Fixed)> = centres.iter().skip(1).copied().collect();
+                    raw.push(to);
+                    let points = self.smooth(from, &raw, scale, reach);
+                    self.tier_answers.set(self.tier_answers.get() + 1);
                     if watched {
-                        self.bump_funnel(|f| f.legs_refused += 1);
+                        self.bump_funnel(|f| {
+                            f.waypoints_raw += u64::try_from(raw.len()).unwrap_or(u64::MAX);
+                            f.waypoints_smoothed += u64::try_from(points.len()).unwrap_or(u64::MAX);
+                        });
+                        self.record_shadow(
+                            Walk {
+                                from,
+                                to,
+                                start,
+                                goal,
+                                scale,
+                                reach,
+                                avoid,
+                            },
+                            &points,
+                        );
                     }
+                    return Some(points);
                 } else if watched {
                     self.bump_funnel(|f| f.one_cell += 1);
                 }
@@ -984,6 +942,52 @@ impl Ground {
         } else {
             LegVerdict::Tiles
         }
+    }
+
+    /// **The original's smoothing pass on the levelled route** (D346): `FUN_008acf20` walks the polyline with two indices -
+    /// the last **kept** waypoint and a candidate further along - and asks the radius-grown segment test `FUN_00840c60`
+    /// whether the straight line between them is walkable. Clear: the waypoint in between is deleted and the same candidate is
+    /// tried again. Blocked: the in-between waypoint is kept and both indices advance. The `move_obj.cpp` log says what it is
+    /// for - `"        Found a valid mid-level path with %d waypoints"` (`0xf56`) becomes
+    /// `"          After smoothing, path has %d waypoints"` (`0xf69`).
+    ///
+    /// **What is ported and what is ours.** The order, the anchor and the delete-then-retry are the binary's; the segment
+    /// test is `chain_leg`, so the geometry is the engine's own (objects' boxes and the grid, at the mover's reach). Bodies
+    /// are not in the test, which matches the coarse search being blind to them (D338) and leaves them to the step's bump and
+    /// re-plan (D320). The pass never refuses a route - a blocked segment simply keeps its waypoint - so it cannot turn an
+    /// answer into a fall-through the binary would not have had.
+    fn smooth(
+        &self,
+        from: (Fixed, Fixed),
+        route: &[(Fixed, Fixed)],
+        scale: i64,
+        reach: i64,
+    ) -> Vec<(Fixed, Fixed)> {
+        // The binary's path starts with the unit's own position - `FUN_007ee980` pushes it last, and the refinement walks the
+        // chain outward from there - so the first anchor is the mover, not the first crossing.
+        let mut points: Vec<(Fixed, Fixed)> = Vec::with_capacity(route.len() + 1);
+        points.push(from);
+        points.extend_from_slice(route);
+        if points.len() < 3 {
+            points.remove(0);
+            return points;
+        }
+        let mut anchor = 0usize;
+        let mut candidate = 2usize;
+        while candidate < points.len() {
+            let (ax, ay) = (points[anchor].0.raw(), points[anchor].1.raw());
+            let (cx, cy) = (points[candidate].0.raw(), points[candidate].1.raw());
+            if self.chain_leg(scale, (ax, ay), (cx, cy), reach) == LegVerdict::Clear {
+                // The waypoint in between is one the straight line does not need. The array shifts, so the same candidate
+                // index is now the next original point - which is the binary's `do` loop, unchanged.
+                points.remove(anchor + 1);
+            } else {
+                anchor += 1;
+                candidate += 1;
+            }
+        }
+        points.remove(0);
+        points
     }
 
     /// **Is this tile's centre inside a body's clearance?** A tile the mover cannot stand on without touching the body it is

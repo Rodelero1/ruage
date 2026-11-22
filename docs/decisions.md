@@ -9652,3 +9652,54 @@ the game's tier, because what we compare it against is better than what the game
 **Commits us to.** A port of a rule is not a port of its cost: the game's coarse search is the right rule and a losing route
 here, and the two have to be measured separately before a gate is opened. And a fixture parked for a reason names the reason in
 its header, or the next session un-parks it into a red suite.
+
+## D346 - the owner's ruling: follow the game - the chain is smoothed, and the tier answers for real
+
+**The ruling.** U28 offered three doors (pull the chain, price the coarse costs, leave the tier unread). The owner answered
+**"Please follow original game"**, so the question stopped being "which route is better" and became "which route is the
+game's". That settles both halves: the level floor is the binary's (nothing refused above 0, D344's read), and the polyline
+the tier hands over is the one the original hands over.
+
+**Crosscheck, and it found the missing pass.** `move_obj.cpp` logs the mid-level path, calls `FUN_008acf20`, and logs it
+again: `0xf56` *"        Found a valid mid-level path with %d waypoints"*, then `0xf69` *"          After smoothing, path has
+%d waypoints"*. `FUN_008acf20(object, path)` is a **visibility pass over the polyline**: it keeps two indices - the last kept
+waypoint (`param_1`, starting at 0, the unit's own position) and a candidate (`iVar8`, starting at 2) - and calls the
+radius-grown segment test `FUN_00840c60` (`FUN_00841400` seeds the query with the object's movement class, `+0x6e`;
+`FUN_00843410(1, radius)` gives it the mover's radius, the same `+0x268` inset query our `fits` follows). Blocked: the
+in-between waypoint is kept and both indices advance. Clear: it is **deleted** (`FUN_007feb80(param_1 + 1)`) and the same
+candidate is tried again from the same anchor, so a straight run collapses to its ends. The pass never refuses a route.
+Prior art could not settle it - the deck's smoothing slide is about the *polygonal* solver - so the port rests on the
+binary's own log line and body, said plainly rather than implied.
+
+**Prior implementation.** The tier returned `Levels::refine`'s crossings verbatim - a waypoint on every cell edge - and the
+floor of 2 kept the whole tier out of the match (D344/D345). Measured before this change: 12.3 waypoints a walk against the
+flat search's 4.8, and 1.6 tiles of extra ground per walk.
+
+**Landed.** `Ground::smooth` is the binary's two-index pass, with `chain_leg` as its segment test (objects' grown boxes and
+the grid, at the mover's reach). The chain is smoothed before it is returned; the per-leg certification loop is gone because
+the pass tests every kept segment by construction; bodies are not in the tier's geometry (the coarse search and the pass are
+both blind to them in the binary, D338), and the step's bump/re-plan answers a body as D320 always did. The floor is **1**
+(the binary's).
+
+**Witnesses, each red first.**
+- `tier_smoothing::the_levelled_route_is_smoothed_before_it_is_handed_over` - a 56-tile walk round a wood: the raw chain came
+  out at **10 waypoints** `[(320000, 810000), (480000, 810000), (570000, 960000), ..., (1370000, 960000), (1290000, 810000)]`,
+  including a 4-tile overshoot past the goal; smoothed it is the corners.
+- `tier_level_floor::a_walk_from_a_cluttered_cell_is_answered_two_tiles_at_a_time` and
+  `tier_certification::a_stander_in_the_corridor_does_not_refuse_the_chain` were un-parked from `docs/parked/` and pass
+  unchanged - the floor and the body rule were right, only the polyline was missing its pass.
+
+**Measured, same tree, one variable** (`tier_probe`, 48,000 ticks, release): tier answers **16 of 31,256** routes; the waypoint
+census is **194 raw -> 57 smoothed**; and on the same 16 walks the tier now costs **57 waypoints / 5,460,841 raw** against the
+flat search's **76 / 5,251,895** - **fewer waypoints than the flat search** and **+4.0% ground**, where before the pass it was
+172 against 67 and +9.8%. Acceptance: hash `28aa6caa2747f9db`, **130 entities**, one player, re-paths **17,743** (was
+36,567), wall **11.70 s** median of three (11.62 / 11.70 / 11.77) against 12.18 s - **4% faster**, with the match now ending
+at ~1,977 s rather than ~2,350 s.
+
+**What is still ours, and named** (`docs/next-step.md`): `route_with` refuses `descent == 0` and hands those walks to our
+octile flat search, where the binary would run its own levelled search over 1-tile cells - 55 of the 86 long walks in the
+match. That is the last gate and its own slice; the coarse costs at tile resolution (10/300 rows, four-directional, then
+smoothed) against our octile search is the measurement it owes.
+
+**Commits us to.** "Follow the game" is a rule about the *mechanism*: a port that stops at the search and skips the pass that
+follows it is not the game's route, and the cost of the missing pass was mistaken for the cost of the mechanism.

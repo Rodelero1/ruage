@@ -76,15 +76,14 @@ fn how_many_routes_the_tier_answers() {
     );
     let funnel = world.tier_funnel();
     println!(
-        "funnel: {} long walks, {} refused by the floor, {} with no coarse route, {} one-cell chains, {} legs refused",
+        "funnel: {} long walks, {} refused by the floor, {} with no coarse route, {} one-cell chains",
         funnel.long_walks,
         funnel.floor_refused,
         funnel.no_coarse,
-        funnel.one_cell,
-        funnel.legs_refused
+        funnel.one_cell
     );
     println!(
-        "refused legs by reason: {} body, {} object, {} tiles",
-        funnel.legs_refused_body, funnel.legs_refused_object, funnel.legs_refused_tiles
+        "waypoints: {} raw -> {} smoothed by the game's pass",
+        funnel.waypoints_raw, funnel.waypoints_smoothed
     );
 }
