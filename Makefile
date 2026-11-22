@@ -26,7 +26,7 @@ PACK = --config $(CONFIG)/sim.toml \
        --effects $(CONFIG)/gamedata/effects.toml \
        --civs $(CONFIG)/gamedata/civs.toml
 
-.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check next-step-check plan-check ai-review conformance conformance-build
+.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check next-step-check plan-check ai-review conformance conformance-build conformance-audit
 
 help:
 	@echo "make build      - build everything, release"
@@ -97,6 +97,11 @@ plan-check:
 
 decisions-check:
 	python3 tools/decisions.py --check
+
+# **The conformance burn-down** (D352): rows that claim something about the original game while pointing at no source. A list,
+# not a gate - a gate here would teach a fake `**Conformance**` line, which is the failure it exists to prevent.
+conformance-audit:
+	python3 tools/conformance_audit.py
 
 # The tools' own tests, including the gate above. Cheap, and they are what keeps a tool honest.
 tools-test:

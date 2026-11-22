@@ -4,6 +4,10 @@
 acceptance `7782dd38d7557514`, **134 entities**, 37,204 re-paths, **12.17 s** median of three. The order to 100% conformance
 is **`docs/conformance-sequence.md`**; this file is the immediate step and the outstanding forks.
 
+**The one list of what we do differently is `docs/divergence-register.md`** (D352): two verdicts only - DEFECT (read, ours,
+with the source and the step that closes it) and OURS (deliberate, with what the game does instead). Eleven defects and five
+ours as of 2026-11-22. The three plan ports and the arrival's place below are defects 1-4 of that register.
+
 ## The owner's report, sized and attributed (2026-11-22)
 
 *"villagers stack on each other a lot (like 5 in the same spot)"*. On the acceptance scene (`collision_probe`, 36,000 ticks,
