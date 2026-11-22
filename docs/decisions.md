@@ -3739,6 +3739,8 @@ return to where it gathered last time and only then look for another tree. If 2,
 
 ## D151 - The AI leaves the binary: nine choices enumerated, placement first
 
+**Conformance**: OURS - the owner's instruction of 2026-11-07 (quoted below), with the inventory in `docs/ai-extraction.md`.
+
 *2026-11-07. The owner: "By extract AI I mean removing all the AI controls from the binary and moving it exclusively into ai
 files. Do this first." And: "every unit control should be removed from game code and moved to AI." Answers given to the ten
 questions: translation of the game's `.per` files is allowed; the default/base AI is the target; the share table follows the
@@ -4156,6 +4158,8 @@ does not carry areas, so a reviewer's disagreement with a filing has to be said 
 
 ## D166 - A unit's marker is clipped to its own tile
 
+**Conformance**: OURS - a rendering choice, and the row says itself that the overlap it fixes was never reproduced in a test.
+
 *2026-11-08. Fifth round on the same report. The marker is now drawn pixel by pixel and clipped to the diamond of the tile its centre is in, for
 all three silhouettes - so no marker pixel can land on a neighbouring tile, and a unit standing beside a building can no longer paint inside it.*
 
@@ -4469,6 +4473,9 @@ building over tile with neutral/enemy in"**.*
   route (D183 §1). An enemy who **walks onto** a site afterwards still stalls it, because he has no reason to leave: that stays as accepted.
 
 ## D184 - The reproducer does not reproduce here, and the tree model is why
+
+**Conformance**: UNVERIFIED - the accident needs the object-on-grass model (scattered trees) this tree does not have yet; the
+row is a guard on the eviction, not a claim about the original's eviction.
 
 *2026-11-08. The owner: **"I noticed that scout stopped near the forest, then villager placed there a lumber camp colliding with
 his position, that pushed scout to the forrest. So reproducer: put scout as near to forest as possible, place lumber camp where
@@ -9881,3 +9888,33 @@ smoothing's bodies and `refine`'s tile span**, then the census.
 **Commits us to.** A fixture can be right and a change right and the pair still red - and that is information about the
 *shape*, not a reason to keep the change. The preserved fixture is the next session's starting point, and the reading above is
 what stops it re-deriving the same three steps.
+
+## D352 - Conformance is a line on every ruling, and the divergence register is the one list of what we do differently
+
+**The owner's instruction, 2026-11-22, and the frustration behind it, verbatim**: *"Could you please FFS purge our rulings which
+are not conformant with original game, decomp or online sources once and for all? It is bloody touring [tiring] having to repeat
+over and over that the original game and decomp are to be followed only to find out they were not..."*
+
+**What the bank actually looked like, measured rather than assumed.** 238 decision rows; **3** talked about the game while
+pointing at no source (all three honest: D151 quotes the owner and `docs/ai-extraction.md`, D166 is a rendering choice and says
+so, D184 says its accident needs a model we do not have). So the *provenance* of the bank is not the disease. The disease is the
+other thing the tool cannot see: **a row that cites the right address and reads it wrong** - D348's "the margin is zero", D341's
+`has_route && moved` standing in for `isMoving`, my own D349 misreading of `FUN_007f9d80`'s `&&` this evening, D267 reading
+`func_002699A0` as group placement only. Each was corrected by **re-reading the expression**, and each cost a slice first.
+
+**What this row establishes, in three parts.**
+
+1. **A conformance line on a ruling.** Any row may carry
+   `**Conformance**: GAME - <pointer>` / `OURS - <why>` / `UNVERIFIED - <what would settle it>`, and a row that talks about the
+   game carries one or a source pointer. `tools/conformance_audit.py` lists the ones that do neither; it is a **burn-down list,
+   not a gate**, because a wrong gate teaches a fake line (`0%` taught exactly that, D209).
+2. **One register of divergences**: `docs/divergence-register.md`. Two verdicts only - **DEFECT** (read, ours, with the source
+   and the step that closes it) and **OURS** (deliberate, with what the game does instead). Eleven defects and five ours as of
+   today, every one with its pointer. **A claim about the game that is in neither section is a claim waiting for a source**, and
+   it goes in `next-step.md` as a read, not into code.
+3. **The supersession order, restated because it is the sentence he keeps having to repeat**: the original game (binary, dat,
+   install) > the decomp > the neighbour projects > published sources > **our own rulings, including his** > our convenience. A
+   ruling of ours that contradicts a reading is not "a decision we follow" - it is a **DEFECT** row, and the reading wins.
+
+**What changes in behaviour: nothing.** This row is a mechanism and a register. The purge it orders is the eleven DEFECT rows,
+one slice each, and the first is D351 (branch `d351-reseat`) with the three plan ports behind it.
