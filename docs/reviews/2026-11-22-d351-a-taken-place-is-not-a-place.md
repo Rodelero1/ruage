@@ -69,3 +69,20 @@ nothing else.
 **What is not measured**: whether the remaining 9-body group is the same mechanism at coarser scale (the plan ports in
 `docs/next-step.md` are untouched here), and what the acceptance wall does - the branch is not priced there until the fixtures
 are settled.
+
+## The capacity regression the purge found, and what it means for the next attempt
+
+Reading the five reds rather than patching them turned up a defect in **this branch's own rule**:
+
+- `ten_men_ask_for_one_bush_and_seven_press_into_it` now measures **5 of 10 men working the bush against the geometry's 7**.
+
+The cause is the re-seat's *target*: it walks a crowded man to a **ring tile centre**, and a ring tile is 1.0 tile from the
+node's centre - 0.5 from its box face - while taking requires the boxes to **touch** (`at_node`, D285). So a man re-seated to a
+tile centre is no longer at the node and stops working. The decomp's rule steps out from the crowded *coordinate* by
+`ext_a + ext_b + 0.01` (`func_002699A0`), i.e. **along the face he is already on**, not to a grid tile, which is why the original
+keeps both the separation and the capacity.
+
+So the next attempt is named and it is smaller than this branch: keep the place test (`work_position`'s body filter, which is
+right), and replace the re-seat's *aim* with a step out **along the node's face** - tangent to the contact ring - falling back to
+the other side when that side is held, and only then to a ring tile. **Not measured, not attempted here**: the branch is left as
+the measurement of why the ring is the wrong target.
