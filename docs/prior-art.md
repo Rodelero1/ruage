@@ -2205,3 +2205,40 @@ tier runs *and* ignores them (the corpus agrees independently - `FUN_007ee980`'s
 also makes the mate exemption a **formation's**, which villagers never have - our same-tick rule is broader than the game on
 both counts. It does **not** give a constant: no radius, no speed, no cost, no mip-map padding, and no statement about HD 5.7's
 own build (openage describes the classic engine). Those still come from the install - `docs/movement-in-the-binary.md`.
+
+## openaok's pathfinding, read 2026-11-22 (MIT - facts, never code)
+
+Asked by the owner (*"Can we get any info on pathfinding here?"*), cloned shallow to `/opt/data/tools/src/openaok` (28 MB,
+`LICENSE` = MIT, "Zaydme8 and the OpenAoK contributors"). It is a **peer's choice**, not the original - and two of its choices
+are the opposite of the binary's, which is the point of reading it.
+
+**What it does, with the file:line:**
+
+- **A crowd is a soft cost, not a wall.** `Pathfinder.cpp:555` `kPastStanding = 40` and `:989`
+  `step += kPastStanding * standing_on(neighbour)`: a step onto a tile a unit stands on costs +40 over a plain step, "so a route
+  goes round a standing crowd when the way round is short, and through it when it is not". `kBesideClosed = 4` keeps routes a
+  little off walls and trees. Our plan hard-blocks the tiles a stander covers; the binary stamps them (`FUN_007f6ff0`). openaok
+  chose a third thing, and says so.
+- **Two tiers of body, by what the search already crossed.** `Pathfinder.cpp:633-670`: a body whose tile the search walked
+  across is `passed` and the smoothing may cross it again; every other stander is a `blocking` box grown by **half the walker's
+  radius** ("a body brushing past a standing unit's box by half its own width is passing it, not going through it"). That is a
+  cleaner statement of the rule our `smooth`/`pull` enforce with an exact segment test.
+- **The group exemption is order-scoped, like the binary's.** `Navigation.h:59-64` `Marching(group)`: the members of a group sent
+  off together are left out of each other's obstacle set **while their routes are planned** - not a permanent squad list. Same
+  shape as `FUN_007f9d80`'s ignore list and as our D237.
+- **A body survey every tick, before anything plans or steps** (`Navigation.h:56-59` `Survey`), filed by tile: the same
+  `standing_bodies` list ours rebuilds per plan, but built once.
+- **An unreachable order point resolves to the nearest tile of the unit's own ground within 32 tiles** (`Navigation.cpp:266-300`,
+  `Toward`): their "come as close as you can", terrain-only.
+- **It pushes.** `systems/MovementSystem.cpp:132-194` `KeptApart`: a walker is pushed out of the boxes it would stand over, and
+  a push that would send it back is turned **aside** instead. That is the slide the Forgotten Empires talk rules out for AoE2
+  (*"No pushing allowed"*, slide 9) - so its movement is not evidence about the original, and neither is its crowd behaviour.
+
+**What it cannot settle, and one place its own comment is wrong.** `Navigation.h:34-36` says `CanStand` asks that the ground is
+free "and **nothing stands on it**", and `Navigation.cpp:39-44` checks only `grid.Passable(...)` - **no body is consulted**. So
+openaok's *place* query has the same hole ours had (D351's finding), with a comment claiming otherwise; it is the same trap the
+owner keeps paying for, in someone else's tree. **Nothing here closes a DEFECT row in `docs/divergence-register.md`**; what it
+adds is two shapes worth copying (the `passed`/`blocking` smoothing rule and the 32-tile `Toward`), and one confirmation that
+the group exemption is order-scoped.
+
+**Licence.** MIT: read, quote in fragments, nothing crosses into `crates/`.
