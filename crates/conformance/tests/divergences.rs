@@ -29,7 +29,11 @@ fn the_original_solves_a_long_walk_in_its_hierarchy() {
     let route = levels
         .coarse_route((4, 4), (62, 4))
         .expect("a long walk across open ground");
-    let points = levels.refine(&route, SCALE);
+    // D343 gave `refine` the walk's own endpoints: the crossing it takes is the one *this* line makes, so the caller's two
+    // points are an input and not just the scale.
+    let from = (4 * SCALE + SCALE / 2, 4 * SCALE + SCALE / 2);
+    let to = (62 * SCALE + SCALE / 2, 4 * SCALE + SCALE / 2);
+    let points = levels.refine(&route, SCALE, from, to);
 
     // **The observable of a coarse route**: more than one waypoint, every one but the last on the 8-tile lattice the level-3 search
     // works on, and every one of them a cell the search was allowed to enter.

@@ -322,6 +322,13 @@ impl World {
             // target ends the order, and the cut keeps the body at the game's contact distance instead of up to one step
             // short of it - which is what makes a gatherer's box gap zero (he is *at* the node) and a walk end exactly at
             // the radius the owner's saves measure.
+            //
+            // **Open item, read 2026-11-22 and not yet landed**: the binary's arrival arm is gated on the *whole* collision
+            // list - `if ((DAT_00de1998 != 1) || (local_dc != 1))` re-paths, and only a list of **exactly one entry, the
+            // target** reaches this cut (`0x127d`). So a friend standing on the contact point should not end the walk here.
+            // This cut fires only for a landing strictly *inside* the target's grown box, which no acceptance-scene walk
+            // does (`pile_probe`: the census is bit-identical with the condition in and out), so it has no witness yet and
+            // stays in `docs/next-step.md` rather than in the tree.
             if let Some(target) = self.find(id).and_then(Self::order_target)
                 && target != id
                 && let Some(entity) = self.find(id)
@@ -432,15 +439,16 @@ impl World {
     /// `replan::a_stopped_friend_is_only_walked_through_after_the_replan`), which reads to a player as one villager standing inside
     /// another for ever.
     fn replan_around_bodies(&mut self, id: EntityId, blockers: &[crate::ground::Clear]) {
-        let Some(route) = self.paths.get(&id) else {
-            return;
-        };
-        let Some(goal) = route.points.last().copied() else {
+        let Some(goal) = self.replan_goal(id) else {
             return;
         };
         // A new path, so a new stamp: a body that has stood still since this moment is past (`path->createdAt >= lastMoveTime`).
         let created = self.tick;
-        let mates = route.mates.clone();
+        let mates = self
+            .paths
+            .get(&id)
+            .map(|route| route.mates.clone())
+            .unwrap_or_default();
         let Some(from) = self.position(id) else {
             return;
         };
@@ -454,6 +462,28 @@ impl World {
                 },
             );
             self.repath_count += 1;
+        }
+    }
+
+    /// **The point a re-plan aims at**: the route's last waypoint, or - when the route is spent - the point the task is still
+    /// walking to.
+    ///
+    /// A body with no waypoints is not a body with no goal. `move_bodies` walks a `Task::Move` whose route is empty along the
+    /// task layer's own direction, one whole step a tick, so a spent route still drives a man at his `to`; a re-plan that bailed
+    /// on the empty route therefore left him walking straight through friends with nothing to steer round. Measured on
+    /// `contact_needs_one_collision`: two men sent at one target from the same side ended **0 raw** apart, and every tick of
+    /// the approach recorded the friend as a blocker with **0 re-plans**.
+    fn replan_goal(&self, id: EntityId) -> Option<(Fixed, Fixed)> {
+        if let Some(point) = self
+            .paths
+            .get(&id)
+            .and_then(|route| route.points.last().copied())
+        {
+            return Some(point);
+        }
+        match self.find(id)?.task {
+            Task::Move { to, .. } | Task::Hunt { to } => Some(to),
+            _ => None,
         }
     }
 

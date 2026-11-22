@@ -2028,11 +2028,12 @@ impl World {
             if other.kind != EntityKind::Unit || other.hp <= 0 || Some(other.id) == mover {
                 continue;
             }
-            // **A body is an obstacle unless it MOVED on the previous tick** (step 6, D341). The binary's test is
-            // `[vtbl+0x2a0] == 0` - velocity zero - in `FUN_007f9d80:45`: the object's grown box goes into the search
-            // unless the mover ignores it *and* it is moving. "Has a route" stood in for that, which certified legs
-            // straight through a man standing at work beside his site with a route still on his books: measured, a
-            // second walker spent 19 ticks inside that builder's box (closest axis gap 0 raw).
+            // **A body is an obstacle unless it is MOVING** (step 6, D341). The binary's clause is
+            // `(local_10 <= iVar4) && (isMoving() == 0)` - *not on the mover's own list* **and** *not moving* - so movement
+            // alone drops the box, whoever owns the body; the route's own list (`param_5`) is the second clause and only ever
+            // *adds*. "Has a route" stood in for movement, which certified legs straight through a man standing at work
+            // beside his site with a route still on his books: measured, a second walker spent 19 ticks inside that
+            // builder's box (closest axis gap 0 raw).
             // **Both halves are needed.** `velocity` is not the field - it is a fixture-only drift for idle bodies
             // (`lib.rs:2313`) - so the movement is read from `last_moved`, which the movement pass writes for every
             // body that took a step. The route half is what keeps a body that has *just been placed* an obstacle:

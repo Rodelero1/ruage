@@ -9798,3 +9798,49 @@ our docs had been standing for a search whose window nobody had read, and three 
 against it. And a claim of the form "both callers pass X" needs *every* caller read, not the first two: this row's own first
 version asserted zero for the order-level planner on one call site, and two more call sites later in the alphabet pass 1.0 and
 a per-unit float.
+
+## D349 - a body with a spent route still has a goal, and the plan's ignore clause means what it says
+
+**Where this came from.** The owner, 2026-11-22: *"I noticed in latest build that villagers stack on each other a lot (like 5
+in the same spot). Is there scheduled any step that would address it?"* Nothing in the queue did, so the report was measured
+first (`collision_probe` grows a **pile census**), then traced (`pile_probe` attributes each new overlap to the exemption the
+mover held), then cut.
+
+**What the measurement says.** 11 bodies in one overlapping group, 317,041 pairs closer than a fifth of a tile, on 35,336 of
+36,000 ticks - and only **877** of 349,824 overlapping pair-ticks are *new* on a tick, so the pile is a state the engine
+settles into, entered rarely. Of the 664 landings a single mover can be named for: **mate 0, past 500, neither 164**, and
+every offender is a `Gather`/`Return` pair arriving at the **same raw point** (dx = 0, dy = 7,200 against an 8,000 reach).
+The pile is the **arrival**, not the step: a body collision never refuses a step here (D279's port - the step is taken, the
+higher id is paused, the mover re-plans), which is the binary's own epilogue, and nothing separates two men who stop inside
+each other.
+
+**What landed (code, one change).** `World::replan_goal`: a body-collision re-plan aims at the route's last waypoint **or the
+task's own `to` when the route is spent**. `move_bodies` walks a `Task::Move` with no waypoints along the task layer's
+direction, one whole step a tick - so a spent route still drives a man at his point - and `replan_around_bodies` bailed on the
+empty route, which left him walking straight through friends with nothing to steer round. Witness
+`contact_needs_one_collision::a_walk_ends_at_contact_only_when_the_target_is_all_it_touches`: two men sent at one target from
+the same side ended **0 raw** apart (against an 8,000-raw reach) with the friend recorded as a blocker on every tick and **0
+re-plans**; they now end more than a reach apart, each within a tile of the target.
+
+**What did not land, and why it is written here.** The obvious next move - make every body an obstacle in the plan, on the
+reading that the ignore list is the only way out of `FUN_007f9d80`'s clause - **was written, measured and reverted in the same
+session**. Three fixtures refused their orders (`NoPath { from: (15,14), to: (15,14) }` twice, `(21,14) -> (20,14)` once):
+a crowd's own boxes make the tiles round a man unplannable, which is what the exemption exists to prevent. The clause is
+`(local_10 <= iVar4) && (isMoving() == 0)` - **not on the mover's own list AND not moving** - so **movement alone** drops a
+box, whoever owns it. The engine already did it; the comment above it said the list mattered, and the slice was built on the
+comment. Corrected in the same commit; the pile census is **bit-identical** with the entry cut, which is the other half of
+why it was not kept.
+
+**Why the pile is still there, stated as far as the evidence goes.** A moving body is not an obstacle to the plan, and a
+standing one that has not moved since the route was created is *past* to the step - both are the binary's rules. So men who
+share one destination arrive on the same point and the game has no rule that separates them afterwards (no pushing; no place
+model - D293, the owner's *"drop it and let the crowds jam"*). What the game has and we do not is entirely on the **plan** side:
+`FUN_007f9d80` hands the search a **rectangle of tiles** (the stander's box grown by the mover's radius, clamped to tile indices
+and stamped blocked), while `inside_a_body` asks whether a tile's **centre** is inside that box - the same answer only while a
+body stands near a tile centre. That is the next slice, with the pile census as its witness. **Not measured, stated as a
+hypothesis**: whether the rectangle moves the pile is unknown until it is built.
+
+**Commits us to.** A report of the form *"X happens a lot"* gets a **size** and an **attribution** before a slice (a census and
+a per-exemption split), because "not a regression" and "the rule should have refused it" are different defects. And a comment
+above a rule is not the rule: the binary's expression is read again before a slice is built on what the comment says, or the
+slice ports the comment.
