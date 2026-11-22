@@ -9736,3 +9736,54 @@ next person who wants to reopen it.
 
 **Commits us to.** A gate justified by a cost is a claim about a mechanism, and a mechanism measured without the pass that
 follows it is half a mechanism - twice now, in the same subsystem.
+
+## D348 - the levelled search is a local refinement, and our tier is a stand-in for a driver nobody has read
+
+**The question this started from.** The tier's routes are still +2.8% longer than the flat search's on the same walks (D347).
+The candidates were the coarse cost rows or the four-directional expansion at level 0. Both are `FUN_007ed280`'s, and reading
+them again turned up the thing that mattered more: **the window that search is clipped to**, which D299 has carried as "the
+padding is unread" since P11 landed.
+
+**What the window is.** `FUN_007f0be0(x, y, h, margin, on)` sets `in_ECX[0x42..0x45]` to a box of **half-extent `h + margin`
+around one point** - the point the search measures its h from - and `FUN_007ed280` refuses every cell outside it. In
+`FUN_007ee980` that point is the *goal of the call*, and `h` is the mover's radius plus the target's. So the margin is what
+decides whether the search is local or global, and **both callers that matter pass zero**:
+
+- the **order-level planner** `FUN_008000d0` passes its 9th argument through as the margin; the caller
+  `FUN_00528650:63` passes **0** (`(..., 0, 0, 0xffffffff, 0xffffffff, 0, 0, 0)`);
+- the **mover** `FUN_008a4360:808` passes `path + 0x20`, and the path allocator `FUN_007fd4b0` initialises `+0x20 = 0`
+  (`+0x28` is the count, `+0x2c` the capacity, `+0x30` the points).
+
+With a margin of zero the window is the single cell holding that point. **The levelled search is a local refinement, not a
+long-walk planner.**
+
+**What the mover does with it, in the binary's own order of log lines** (`move_obj.cpp`, read from `FUN_008a4360`):
+
+1. `0xf56` *"Found a valid mid-level path with %d waypoints"* - `FUN_007ee980`, the local search above;
+2. `0xfef` *"Looking for a STRAIGHT LINE path:"* - is the line to the waypoint clear of non-target collisions;
+3. `0x1026` *"Looking for a TILE-BASED path:"* - the flat octile search `FUN_008007f0`.
+
+That ladder is **per waypoint**, and the waypoints come from a "high level path" the mover already holds (`0xeba`
+*"Waiting for path: current waypoint=%d"*, `0xe52` *"We're patrolling, setting waypoint to %d"*, and the `0x2ea`-area
+tests `HighLevel`/`MidLevel`/`LowLevel`). **The driver that builds that high-level path is still unread** - it is the same gap
+D297 recorded ("the driver that assembles a coarse route out of those pieces ... none of them has been read far enough").
+
+**What that makes our tier.** Not the binary's mid-level search - that one is one cell wide, and ours is a whole-walk A\* over
+the pyramid. Ours is a **stand-in for the unread high-level driver**: it chooses the coarse waypoints, and then the route we
+hand over is those waypoints walked straight (which is what the binary's straight-line step does per leg) with D346's
+smoothing pass on top (which is what the binary does to the mid-level result). The **+2.8% is therefore the coarse guide's
+shape, not a defect in the cost rows** - the guide's corners sit on cell crossings rather than on obstacle vertices, and a
+route through them is a little longer than a visibility-optimised one.
+
+**So the next read is the driver, and it is one function plus its call site**: which routine fills the path object's waypoint
+array before `FUN_008a4360` measures "HighLevel=%d", and with what granularity. Until it is read, no change to the cost rows
+can be judged, because the rows are walked at a granularity we invented.
+
+**What changed in code: nothing.** The tier's activation (D346/D347), its smoothing pass and its level split stand as landed;
+this row records what they model and what they stand in for. The three candidate repairs on the table - restoring the floor,
+pricing the cost rows, or waiting for the driver - are now ordered: waiting for the driver first, because the other two
+measure a route shape whose source is unread.
+
+**Commits us to.** When a port's window is unread, the port is a stand-in and has to be named as one - "the levelled search" in
+our docs had been standing for a search the binary uses locally, and three decisions (D344, D346, D347) were measured against
+a mechanism we had mis-sized.

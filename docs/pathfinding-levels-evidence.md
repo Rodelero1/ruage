@@ -331,3 +331,42 @@ are 8-tile staircases.
 tile along the direction where the passage is open, and emit **that tile's centre** instead of the cell centre; (2) the 16-tile gate in
 `route_with` then comes out (D306's labelled deviation); (3) the witnesses are the two `straight_line` fixtures that reddened the first radius
 attempt plus `route_shape`, which already asserts tile-level waypoints in cluttered ground.
+
+## The search window is the caller's margin, and both real callers pass zero (2026-11-22)
+
+D299 has carried "the window's padding is unread" since P11 landed. It is read now, and it changes what the levelled search
+*is*.
+
+`FUN_007f0be0(x, y, h, margin, on)` sets the window `in_ECX[0x42..0x45]` to a box of **half-extent `h + margin` around one
+point**, stores that point in `0x46/0x47` (where the heuristic reads it), and then stamps the grown obstacles over the window
+at level 3, recursing down. `FUN_007ed280` refuses any neighbour outside the window, so the margin is the whole difference
+between a local search and a global one.
+
+In `FUN_007ee980(x0, y0, x1, y1, radius_sum, margin, flags, 0, rectangles, count)`:
+
+- `h` is the mover's radius plus the target's (`FUN_008000d0` passes `*(type+0x34) + *(target_type+0x34)`);
+- the **margin** is `FUN_007f0be0`'s fourth argument, and it is the caller's word:
+
+| caller | margin it passes |
+|---|---|
+| `FUN_008000d0` (order-level planner), as forward by `FUN_00528650:63` | **0** |
+| `FUN_008a4360:808` (the mover's own path) | `path + 0x20`, and `FUN_007fd4b0` initialises `+0x20 = 0` |
+
+So for both the order and the mover the window is **the single cell containing the call's goal** - a one-cell local
+refinement, not a long-walk planner. The margin is a real API parameter (`FUN_008003a0` forwards its own, `FUN_00801aa0` adds
+`3.0` to some of its calls), so a caller *can* widen it; the two that matter do not.
+
+**The mover's ladder, in its own log order** (`move_obj.cpp`, `FUN_008a4360`):
+
+1. `0xf56` *"Found a valid mid-level path with %d waypoints"* - `FUN_007ee980`, the local search above, then `FUN_008acf20`
+   (D346's smoothing pass) and `0xf69` *"After smoothing"*;
+2. `0xfef` *"Looking for a STRAIGHT LINE path:"* - the leg to the waypoint, tested for non-target collisions;
+3. `0x1026` *"Looking for a TILE-BASED path:"* - `FUN_008007f0`, the flat octile search.
+
+And it runs **per waypoint** of a path the mover already holds ("HighLevel/MidLevel/LowLevel", `0xeba`
+*"Waiting for path: current waypoint=%d"*). **Who builds that high-level path is still unread** - the gap D297 named.
+
+**Consequence for us.** Our tier is a whole-walk A* over the pyramid; the binary's `FUN_007ee980` is one cell wide. So the
+tier is a **stand-in for the unread high-level driver**, and the route we hand over (coarse waypoints walked straight, smoothed
+by D346's pass) is the shape that driver plus the straight-line step produce. The surviving +2.8% against the flat search is
+the guide's shape - corners on cell crossings rather than on obstacle vertices - not a defect in `FUN_007ed280`'s cost rows.
