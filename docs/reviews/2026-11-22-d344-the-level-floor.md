@@ -87,6 +87,10 @@ a cut**: it hit the 700k-token budget after four files, so `crates/sim/src/lib.r
   `tests/common/mod.rs`'s first rule says. Both parked files now check the marker file and return.
 - **Accepted**: `LegVerdict::Clear` was folded into the `Tiles` counter in a block only entered on a refusal - an impossible
   state that would have counted a clear leg as a blocked tile if the guard ever moved. It is its own arm now, with the reason.
+- **Accepted** (second pass, `ea5a564`): the comment block above the gate still said *"The floor is 1, not 2"* while the gate
+  refused levels 0 and 1 - two adjacent comments asserting opposite floors, in a file where those blocks **are** the decision
+  record. Rewritten to name both decisions and the measurement, and to call the floor a labelled deviation from a rule we
+  measured rather than the rule itself.
 - **Refused**: nothing.
 
 **Not attacked, and named**: the game's coarse *costs* (`FUN_007ed280`'s 10/100/300/600 rows) are ours to port but not

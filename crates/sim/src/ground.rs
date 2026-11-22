@@ -769,13 +769,13 @@ impl Ground {
             // the answer is "the flat search will answer anyway". Both live inside the `long_walk` arm: `pyramid_for` builds
             // the pyramid on a cold cache, and a short walk must not pay for it.
             //
-            // **The floor is 1, not 2** (D344). The binary refuses nothing: `FUN_007ee980` walks the levels down and floors at
-            // 0, and a mid-level attempt that fails *falls through* to the low-level path (`0xf98`: "Looking for a LOW LEVEL
-            // path (mid-level path failed)"). With the old floor - the start's 4-tile cell had to be passable - the tier
-            // answered 0 of 61,276 routes on a wooded acceptance map (D338), so every rule landed on top of it was unread.
-            // Level 0 is still refused here, as a labelled deviation: there the binary's own search is a four-directional
-            // tile A* whose Manhattan staircase our octile flat search answers better, and D338 priced that answer (108
-            // routes, a different match).
+            // **The gate refuses levels 0 and 1, and that is a labelled deviation from a rule we measured** (D344, D345). The
+            // binary refuses nothing: `FUN_007ee980` walks the levels down to 0, and a mid-level attempt that fails *falls
+            // through* to the low-level path (`0xf98`: "Looking for a LOW LEVEL path (mid-level path failed)"). D344 lowered
+            // this gate to 1 for exactly that reason; D345 put it back, because the answers it let through were worse than the
+            // flat search's on the same walks (the measurement is in the block below). So the rule is the game's and the
+            // floor is ours: what it keeps out is an answer we have measured to be worse, and `docs/next-step.md` holds the
+            // fork that would un-park it.
             let levels = self.pyramid_for(reach);
             let watched = self.compare_tier.get();
             if watched {
