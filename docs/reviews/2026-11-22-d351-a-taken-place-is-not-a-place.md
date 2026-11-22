@@ -86,3 +86,22 @@ So the next attempt is named and it is smaller than this branch: keep the place 
 right), and replace the re-seat's *aim* with a step out **along the node's face** - tangent to the contact ring - falling back to
 the other side when that side is held, and only then to a ring tile. **Not measured, not attempted here**: the branch is left as
 the measurement of why the ring is the wrong target.
+
+## The three re-seat targets measured tonight, and what each does
+
+The re-seat's *target* is the whole question, and the scene answered it three times:
+
+| target | separates the pair? | keeps a node's working capacity? | what it costs |
+|---|---|---|---|
+| a **ring tile centre** (this branch's commit) | **yes** - `one_place_per_man` passes, press fixtures red | **no** - 7 -> 5 men on a bush; a one-unit tree can be left unworked (bank 0) | men walk 0.5 of a tile off the node's face and stop taking |
+| **tangential step at the same radius** (`face_step`) | **no** - the pair still coincided at 0 raw in the small scene | yes - every gather fixture green, D246 green | the re-seat rarely fires: a man reaches `at_node` and takes in the same tick, so `progress == 0` is a window of one tick that the gate almost never sees |
+| the ring place **projected onto the man's own circle** | **partly** - press red, the small scene still 0 | **yes** - capacity, bank and D246 all green | the projection keeps the angle, so when `work_position` picks the same tile for both it is still one point |
+
+So the reading is: **`func_002699A0` steps out from the coordinate it is given and accepts a point that is not a grid tile**, and our
+`work_position` cannot express that - it answers with tiles, and every half-fix either leaves contact or leaves the point shared.
+The next slice is therefore in the *place vocabulary*, not in the re-seat: a gatherer's standoff needs a point (angle on the
+contact circle) rather than a tile, and the crowding test needs to run **before** he takes, on the tick he arrives, without a
+one-tick window.
+
+**Not landed**: all three variants are reverted off the working tree; this branch stands at its committed state (ring place, five
+reds), which is the measurement of the first row.
