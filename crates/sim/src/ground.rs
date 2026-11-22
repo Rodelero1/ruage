@@ -57,9 +57,10 @@ pub struct TierShadow {
     pub flat_missing: u64,
 }
 
-/// **Why the tier did not answer** (D344), counted where the tier stands: a long walk that never reached the arm, one the floor
-/// refused, one whose `coarse_route` was `None`, one whose chain was a single cell, and one whose legs failed the avoid
-/// certification. Without these, "the tier answered 0" is a number with no mechanism behind it.
+/// **Why the tier did not answer** (D344), counted where the tier stands: a long walk that never reached the arm, one whose
+/// `coarse_route` was `None`, one whose chain was a single cell - plus the level the answers came from (D347) and the
+/// waypoint census (D346). Without these, "the tier answered 92" is a number with no mechanism behind it: the level split is
+/// what says whether the match is exercising the game's level-0 search or only its coarse ones.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TierFunnel {
     pub long_walks: u64,
@@ -69,6 +70,10 @@ pub struct TierFunnel {
     /// the pass is doing the job the `move_obj.cpp` log lines say it does.
     pub waypoints_raw: u64,
     pub waypoints_smoothed: u64,
+    /// How many of the answers came from **level 0** (D347): the only way to tell from outside whether a match is exercising
+    /// the game's tile-resolution search or its coarse ones, now that no floor separates them.
+    pub answered_at_level_zero: u64,
+    pub answered_coarse: u64,
 }
 
 /// **Which question refused a leg** (D344), so a refused chain names its reason instead of its count.
@@ -786,6 +791,13 @@ impl Ground {
                     (from.0.raw(), from.1.raw()),
                     (to.0.raw(), to.1.raw()),
                 );
+                if watched {
+                    if coarse.level == 0 {
+                        self.bump_funnel(|f| f.answered_at_level_zero += 1);
+                    } else {
+                        self.bump_funnel(|f| f.answered_coarse += 1);
+                    }
+                }
                 if centres.len() > 1 {
                     // The chain, then **the game's smoothing pass over it** (D346). The refinement emits a crossing per cell
                     // edge; `FUN_008acf20` keeps only the ones the straight segment test cannot skip, so what the mover is

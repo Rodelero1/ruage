@@ -47,6 +47,11 @@ walks it is **+2.8% ground** against the flat search (637 waypoints / 65,242,638
   cost models is wrong. `docs/pathfinding-from-the-talk.md` and the D298 row hold what is read.
 - **The coarse search's eight-neighbour question**: `FUN_007ed280` opens four directions (`param_4` 1, 2, 4, 8); whether the
   binary's *tile* search at level 0 uses the same four or its own eight is unread, and it is exactly where the +2.8% lives.
+- **`coarse_route` has no expansion cap** (OCR, D347): the frontier is an insertion-sorted `Vec` (O(frontier) per expansion)
+  and the `closed` bitmap is allocated per call, so a hopeless walk at level 0 exhausts the whole tile grid before the flat
+  search answers. Measured on the acceptance map: **1.68 ms** a plan, 13 walks, 0.2% of the match - and **unbounded on a larger
+  map** (quadratic in expansions; 480x480 is ~40x the tiles). The game bounds it with its search window (`in_ECX[0x42..0x45]`,
+  padding unread, D299); a cap would be our invention, so the window is the read to do first.
 - **`FUN_00840c60`'s flags**: called with `0x40`, its ignore-list branch is off; whether units are in the segment test by
   default is unread, and it decides whether the original's smoothing keeps slightly more waypoints near bodies than ours.
 
