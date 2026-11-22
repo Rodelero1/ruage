@@ -390,10 +390,10 @@ impl World {
     /// The goal is the route's own last point, so a re-plan does not drift toward a tile centre; a search that fails leaves the old route in
     /// place, and the man stands - which is the original's answer to ground it cannot get round.
     fn replan_after_ground(&mut self, id: EntityId) {
-        let Some(route) = self.paths.get(&id) else {
-            return;
-        };
-        let Some(mut goal) = route.points.last().copied() else {
+        // **The same goal the body-collision re-plan uses** (2026-11-22, from the review): a spent route is not a spent
+        // order, and this path bailing on the empty route left a `Task::Move` walking on its own direction with no terrain
+        // re-plan either. The off-grid fallback below still keys on the route's last point when there is one.
+        let Some(mut goal) = self.replan_goal(id) else {
             return;
         };
         // **A place the body cannot get to is given up for the tile beside it** (D279). The last waypoint of a gather route
@@ -408,7 +408,11 @@ impl World {
         if stalled >= u32::try_from(REPLAN_TICKS).unwrap_or(u32::MAX) && !on_grid {
             goal = self.tile_centre(self.tile_of(goal));
         }
-        let mates = route.mates.clone();
+        let mates = self
+            .paths
+            .get(&id)
+            .map(|route| route.mates.clone())
+            .unwrap_or_default();
         let Some(from) = self.position(id) else {
             return;
         };
@@ -481,6 +485,9 @@ impl World {
         {
             return Some(point);
         }
+        // Only the two tasks that walk on a point of their own need this: `Gather`, `Return` and `Build` have no `to`, and
+        // when their route is spent they do not walk either (`motion_of` answers `next_waypoint` alone, so a spent route is
+        // no delta and the body stands), which leaves nothing for a re-plan to steer.
         match self.find(id)?.task {
             Task::Move { to, .. } | Task::Hunt { to } => Some(to),
             _ => None,

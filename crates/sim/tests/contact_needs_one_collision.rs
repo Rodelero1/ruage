@@ -47,7 +47,13 @@ fn open_map() -> String {
     text
 }
 
-fn world_of(text: &str) -> World {
+fn world_of(text: &str) -> Option<World> {
+    // A generated pack is not committed (D8), so an absent one **skips** rather than fails - the rule
+    // `fixture_rules.rs` states and every pack-dependent scene follows.
+    if !repo("config/gamedata/units.toml").exists() {
+        eprintln!("skipping: no units.toml (generated, D8)");
+        return None;
+    }
     let resources = common::present(
         &repo("config/resources.toml"),
         ruage_data::load_resources_file,
@@ -66,7 +72,7 @@ fn world_of(text: &str) -> World {
     let mut world = common::must("World::new", World::new(&settings, 7));
     common::must("seed_from", world.seed_from(&map, &economy, &units));
     common::must("load_resources", world.load_resources(&resources));
-    world
+    Some(world)
 }
 
 fn spawn(world: &mut World, id: u32, at: (i64, i64)) -> EntityId {
@@ -93,7 +99,9 @@ fn spawn(world: &mut World, id: u32, at: (i64, i64)) -> EntityId {
 fn a_walk_ends_at_contact_only_when_the_target_is_all_it_touches() {
     let scale = 20_000i64;
     let centre = |x: i64, y: i64| (x * scale + scale / 2, y * scale + scale / 2);
-    let mut world = world_of(&open_map());
+    let Some(mut world) = world_of(&open_map()) else {
+        return;
+    };
     let target = spawn(&mut world, 1_001, centre(20, 12));
     world.step().expect("the target lands");
     let first = spawn(&mut world, 1_002, centre(13, 12));
@@ -148,13 +156,20 @@ fn a_walk_ends_at_contact_only_when_the_target_is_all_it_touches() {
         b.0.raw() as f64 / scale as f64,
         b.1.raw() as f64 / scale as f64
     );
-    // And both still have to be *at* the target: a fix that keeps them apart by refusing to walk is not the rule.
+    // And both still have to be **in contact** with it: a fix that keeps them apart by refusing to walk is not the rule.
+    // **Contact is the box, not the circle**: the pair touch when neither axis gap exceeds the two radii summed, so the
+    // bound is one reach on *each* axis (a diagonal contact is a reach and a half away in a straight line).
     for walker in [first, second] {
         let at = world.position(walker).expect("a walker stands");
-        let gap = ((at.0.raw() - aim.0.raw()).abs()).max((at.1.raw() - aim.1.raw()).abs());
+        let (dx, dy) = (
+            (at.0.raw() - aim.0.raw()).abs(),
+            (at.1.raw() - aim.1.raw()).abs(),
+        );
+        let contact = world.reach_between(walker, target).raw();
         assert!(
-            gap <= scale,
-            "MEASURED a walker {gap} raw from the target, more than a tile: he did not arrive at all"
+            dx <= contact && dy <= contact,
+            "MEASURED a walker {dx} / {dy} raw from the target's centre against the {contact} its contact box allows: he did \
+             not arrive"
         );
     }
 }

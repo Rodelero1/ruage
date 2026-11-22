@@ -2034,6 +2034,11 @@ impl World {
             // *adds*. "Has a route" stood in for movement, which certified legs straight through a man standing at work
             // beside his site with a route still on his books: measured, a second walker spent 19 ticks inside that
             // builder's box (closest axis gap 0 raw).
+            // **What the code below actually asks, stated exactly** (2026-11-22, from the review): a body is dropped when it
+            // **has waypoints left AND moved on the previous tick** - not movement alone. The route half is a third clause the
+            // binary does not have, and it is deliberately conservative: a body with a spent route that is still walking (a
+            // `Task::Move` driven by the task layer's own direction, D349) stays an obstacle. Dropping the route half was tried
+            // and measured (`docs/decisions.md`, D349): every crowd's own boxes then made the tiles round a man unplannable.
             // **Both halves are needed.** `velocity` is not the field - it is a fixture-only drift for idle bodies
             // (`lib.rs:2313`) - so the movement is read from `last_moved`, which the movement pass writes for every
             // body that took a step. The route half is what keeps a body that has *just been placed* an obstacle:

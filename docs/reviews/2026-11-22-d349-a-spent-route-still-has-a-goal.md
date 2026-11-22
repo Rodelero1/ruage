@@ -50,6 +50,9 @@ defect the moving-body exemption exists to prevent. Reverted in the same session
 - **before** (`ed064fb`): hash `7782dd38d7557514`, **134 entities**, 37,204 re-paths, **12.12 s** median of three;
 - **after**: hash `7782dd38d7557514`, **134 entities**, 37,204 re-paths, **12.17 / 12.12 / 12.18 s** (median 12.17).
 
+**The review follow-ups are inert on the scene as well** (the re-plan path they touch a spent route, which no acceptance-scene
+body reaches): hash `7782dd38d7557514`, 134 entities, 37,204 re-paths, **12.11 / 12.24 / 11.95 s** (median 12.11) after them.
+
 **Bit-identical**: the hash, the entity count, the re-path count and the wall time are the same, so **the acceptance scene never
 reaches the branch** - it is a fallback for a body whose route is spent, and no body in that scene collides with a friend on the
 one tick its last waypoint is spent. That is the honest reading of a green hash: the witness for this change is the fixture, not
@@ -82,6 +85,27 @@ first.
   point).
 - **`last_step` is only written when step tracing is on** (`record_step` returns early otherwise), which cost an hour of this
   session: a mover that had plainly walked read as `Idle`.
+
+## The AI review (`make ai-review OCR_ARGS="--commit f62b5f5"`), and what was done with it
+
+**partial - 5 files, 5 comments, 873,064 tokens, 3m22s**; `crates/sim/tests/pile_probe.rs` was cut for budget, so the probe went
+unread and the note says so rather than presenting the run as whole-diff.
+
+- **Accepted - `replan_after_ground` bailed on a spent route too.** The sibling path had the same "no waypoints, therefore no
+  goal" dead end against terrain. It now uses `replan_goal` as well.
+- **Accepted - the comment in `standing_bodies` overstated what the code asks.** The binary's clause drops a body on movement
+  alone; our code requires `has_route && moved`, and the route half is a third clause the binary does not have. The comment now
+  states exactly that, with the reason it is kept (dropping it made every crowd's own boxes unplannable - D349's reverted
+  slice).
+- **Accepted - the fixture did not skip on an absent pack.** A generated `units.toml` is never committed (D8), so the
+  `fixture_rules.rs` rule is: an absent pack **skips**, a present pack that will not load fails. It returns `Option<World>` and
+  skips now.
+- **Accepted - the "arrived" half was too loose.** Within a tile let a fix that simply stops men short pass. It is now the
+  contact **box**: neither axis gap may exceed the pair's reach.
+- **Refused - "`Task::Gather`/`Task::Return` with a spent route also keep walking".** They do not: `motion_of` answers
+  `next_waypoint` for both and nothing else, so a spent route is no delta and the body stands (`step.rs`'s
+  `next_waypoint(..).unwrap_or(target)` is the **build** arm, which is a place its own task names). `replan_goal` therefore
+  covers exactly the two tasks that walk on a point of their own, and the comment on it says why.
 
 ## One more thing in this commit: the conformance set did not compile
 
