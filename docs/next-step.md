@@ -65,6 +65,13 @@ and re-path count, one variable per commit.
 
 ## Open defects found on the way, with the evidence, no fix landed
 
+- **The walk onto the working standoff steps straight through a friend** (2026-11-22, from the census's own print). A worker
+  that has arrived on the tile beside his node takes its last 0.3 of a tile *"as far as its speed allows, straight at the
+  standoff"* (`step.rs`, D169/D180) - a **task-layer delta**, so `motion.rs`'s refusal and its body rule never see it, and the
+  caller checks that the point is free **ground**, not that it is free of bodies. The census shows it happening: two men on node
+  `108` close from **7,830 to 5,600 raw** over the ticks one of them works (progress 0 → 1,860), 800 raw a tick, and end inside
+  each other. This is the one mechanism on the list that is *not* a plan question - it is a step with no body test - and it should
+  be checked for its own slice before the three ports.
 - **`Levels::refine` is body-blind** (D350's third port): the crossing it interpolates can land inside a body while every tile
   of the chain is open, and no later pass can repair it.
 - **A walk whose goal is on the mover's own tile answers `NoPath`** when the straight-line shortcut is refused by a body:
