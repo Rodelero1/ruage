@@ -81,10 +81,13 @@ the closest thing to a per-tick oracle that exists in a file.
 
 Two caveats before anyone gets excited:
 
-- It is **DE-only**, and this install holds **zero** `.aoe2record` files (measured with `find`), so
-  it cannot be used yet. One recording made on the Windows machine would test it.
-- Whether HD 5.7 recordings carry the same sync section is untested. If they do, a recorded game
-  becomes a genuine (if coarse) trajectory oracle — cheap to obtain, unlike a driven game.
+- It is **DE-only**. When that paragraph was written this install held **zero** `.aoe2record` files;
+  since 2026-11-01 it holds **four HD 5.8 recordings** (`docs/save-format.md`), so this branch is live.
+- **HD's recordings do carry the sync section** (measured 2026-11-22, `tools/recordings.py`):
+  28 bytes every **500 steps** — the meta block's second word is 500 — holding a world checksum that
+  changes each block, two zero words, a number that only grows, and the world time in ms to the
+  millisecond. What they do **not** carry is a fixed tick: the per-step increment varies (median
+  **79 ms**, 98.6% of 33,879 gaps inside 73–90 ms, **12.64 steps/s**), which is U12's measurement.
 
 Worth noting as a technique rather than a data source: a `.ksy` is a *readable format spec* that
 generates parsers for C#, Python, Java, JS, Go and Rust. For our own future readers

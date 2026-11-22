@@ -31,6 +31,71 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-22 — HD's own recordings step every ~79 ms and declare a checkpoint every 500 steps
+
+**Two projects were due: `SFTtech/openage` moved (`4c04b6be` -> `f6f87f9a`), and `aesaganda/aoe2-on-browser` had never been
+looked at.**
+
+### aoe2-on-browser: the original's code, lifted — and the game's own sync checker as a harness
+
+`aesaganda/aoe2-on-browser` (created 2026-11-18, ~30 commits in three days to `3d5eb6d3`) statically recompiles
+*The Conquerors* 1.0 (`age2_x1.exe`, MSVC 6, 32-bit PE) to C with `pcrecomp` (MIT, submodule) plus a Win32/DirectDraw/
+DirectSound shim, then to WebAssembly; menus, a game and multiplayer over a WebSocket relay run in a browser, and the same
+lifted build plays natively on Linux. It **runs the original's code**, so it is not a second implementation and documents no
+mechanics - but its *harness* is the useful part: a replay driven with `DONTIGNORESYNC` makes the game compare its own world
+checksums and stop on a mismatch ("Out of sync replaying game...", string 9013, raised at `0x5FF53A` in `0x5FF180`), so "did
+400 s of an AI game replay to the same world" is a pass/fail with nobody watching. They report **10 of 10** checksums
+matching across a 403 s game recorded by the original under Wine and replayed by the lifted build, **4 of 4** the other way
+round, and two deliberately corrupted controls that stopped where they should.
+
+**What that implies about the original, checked against our own files.** Their note puts a sync op at "about 80 ms of game
+time" and the 28-byte checksum block at "about every 40 s". Measured in our four HD 5.8 recordings with `tools/recordings.py`
+(it already accumulated these numbers; nobody had looked at the distribution): the longest, `142146`, has **38,880 steps over
+2,681.1 s**, per-step increment **median 79 ms, mean 79.14**, **98.6% inside 73-90**, **295 of 33,879 at exactly 150** (a
+merged double step), **12.64 steps/s**. The meta block's second word is **500**, and the checksum blocks land **every 500
+steps exactly** - first at 38,588 ms, then 76,081, 114,115 - i.e. **39.5 s**, which is their "about 40 s". The block's last
+word is the accumulated step time to the millisecond (38,588); the word three before it is a checksum that changes every
+block (98,225,359 -> 98,516,813 -> 98,451,015), and the word after that is a number that only grows (28,007 -> 28,447 ->
+28,735) whose meaning is unread. The two short recordings (302 and 122 steps) carry no checksum block at all, which is what a
+500-step interval predicts.
+
+**What it means for U12.** The increment is **not a fixed quantum**: 73-90 continuously, with no integral multiple of 50 or
+16 ms anywhere in it. The recording therefore does not carry "the tick rate" - it carries each step's ms, which is what a
+replay needs precisely because the length varies. Two readings survive and the number cannot separate them: one turn per sync
+op (the parsimonious one - 150 is exactly 2x75, a missed turn merged into the next), or several fixed turns per sync op
+(which would put the quantum at an integer fraction, and the continuous spread argues against it). Unread either way, and
+named: **the game speed these four were recorded at** - nothing in our tree parses that field, and U12's own 2026-11-07
+caution says a wall-clock number taken at the wrong rung costs that factor. The register row now carries the measurement.
+
+### openage: a multiplier needs somewhere to live
+
+**`SFTtech/openage`, three commits and a merge (`4c04b6be` -> `f6f87f9a`, PR #1835 "converter-strict-numbers", merged
+21 Nov, two of them authored 14 Nov), 10 files, +139/-25.** nyan - their content format - now separates `int` and `float`
+**strictly**: an INT member rejects a non-integral value and no longer accepts `DIVIDE`, a FLOAT member holds floats and
+refuses division by zero (`openage/nyan/nyan_structs.py:687-713`, `1031-1055`). Six members are retyped to float:
+`Projectile.arc`, the `min_range`/`max_range` of the three ranged ability types, `AttributeSetting.{min,max,starting}_value`,
+`ResourceAmount.amount` and `EntityContainer.slots` (`nyan_api_loader.py`, with the reference docs beside it).
+
+**The defect is at the boundary, not in the operator table.** `libopenage/gamestate/entity_factory.cpp:196-197` now reads
+`starting_value` with `get_float` and rounds once with `std::llround`, under the comment *"attribute settings are floats so
+tech multipliers stay exact"*. Before it, a member declared `int` held a hit-point multiplier of 1.1 written by the converter
+and read by a C++ consumer that asked for an int: content and engine disagreed about what the member was, exactly where a
+tech's fraction crosses between them.
+
+**No divergence - we were already where they now are.** Our pack types by meaning: `MultiplyAttribute { value: MaybeFixed }`
+(`crates/data/src/techs.rs:151-156`) keeps 1.1 as an `f64` (`crates/data/src/lib.rs:172-183`), and health is
+*adds first, then multiply, one round at the end* (`scaled_health`, `crates/sim/src/lib.rs:260-280`), which is the shape
+openage just moved to. The one per-operation rounding in our tree is `multiply_class` on an attack/armour list
+(`crates/sim/src/lib.rs:281-287`), an `i16` list the game itself stores as integers - unavoidable there. Nothing to port; the
+study value is the shape of their two new test files (`openage/nyan/tests.py`, 34 lines, and
+`openage/convert/processor/conversion/aoc/tests.py`, 59 lines), the first converter tests of their kind.
+
+**Licence, and it is worse than GPL here.** openage is GPL-3.0, so nothing of theirs crosses. `aoe2-on-browser` ships **no
+licence at all** (GitHub reports none), which is stricter than GPL: no right to copy, adapt or redistribute anything in it,
+and its shim sources are derived from observation of a 2000 binary - a second reason not to. The one thing taken from it here
+is a *technique* (drive a replay with the game's own checker on), and the numbers behind it were measured in our own files, so
+nothing in this section depends on their code.
+
 ## 2026-11-18 — openage's `last_before` gave two answers to one question, and the hint chose which
 
 **`SFTtech/openage`, two commits (`e3080121` -> `4c04b6be`, PR #1837, merged 17 Nov, authored 14 Nov), 2 files, +41/-4.**
