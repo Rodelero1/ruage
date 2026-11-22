@@ -34,6 +34,13 @@ The probe itself: **20.8 s** for the 36,000-tick census with the change in, agai
 overlaps a friend, and that is where the time goes. Unpriced against a wall that matters yet, and the reason this is a branch
 rather than a commit.
 
+**And the transient overlaps rise with it, which is the trade this branch makes.** `pile_probe`'s attribution, same scene:
+past **500 -> 454**, neither **164 -> 663**, and every added one is a `Gather` into `Gather` (595 of the 663) - men walking
+across each other on their way to a re-seated place, because the movement pass still never refuses a body (D279's port of the
+binary's epilogue: the step is taken, the collider is paused, the mover re-plans). So this buys **fewer persistent deep stacks**
+(11 -> 9 body groups, -13.6% deep pairs) for **more passing through**, and the passing through is what the three plan ports in
+`docs/next-step.md` are for: with routes that do not aim at one point, the men would not have to cross.
+
 New overlaps rise (**877 -> 1,371**), which is the re-seat itself moving men, and the total pair-ticks inspected falls
 (17,340,819 -> 14,220,218) because men stand further apart.
 
