@@ -2,20 +2,20 @@
 
 # Decision index
 
-**344 rows.** `docs/decisions.md` is ~848k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**345 rows.** `docs/decisions.md` is ~851k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
 - **337** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
-- **248** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
-- **8** rows say they are superseded.
+- **249** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
+- **11** rows say they are superseded.
 
 Areas are a keyword heuristic over each row; the point is a page you can scan, not a taxonomy.
 
-## Combat & units (55)
+## Combat & units (54)
 
 - **D32** — Reach is a distance, and it is resolved when the order lands · —
 - **D35** — A shot is an entity, and the tick's shape says where it may be created · —
-- **D36** — Garrison is data, buildings fight, and line of sight still has no consumer · —
+- **D36** — Garrison is data, buildings fight, and line of sight still has no consumer · — · **superseded by D38**
 - **D37** — Correcting D36: a garrison is ejected at 20%, and a building's volley is dps arithmetic · —
 - **D41** — Kind 0 sets a unit's attribute, and population is the first one the engine consumes · —
 - **D42** — An arrow lands where it was aimed, and Ballistics aims further ahead · —
@@ -40,7 +40,6 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D120** — A card in the bottom bar, and the wide health bar is gone · —
 - **D123** — The vocabulary is `names.toml`, and the husk is the dat's own unit · —
 - **D125** — A selected unit wears a ring the size of its own body · —
-- **D149** — "Nearby" is bounded by the worker's sight, and the share table measures from the base · —
 - **D163** — The yard is painted as ground, and a switch that turns the next report into data · —
 - **D166** — A unit's marker is clipped to its own tile · OURS
 - **D168** — Two frames, one conversion: `drawn_at` subtracts half a tile · —
@@ -69,7 +68,7 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D348** — the window is a per-unit margin we have not read, and our tier is a stand-in for a driver nobody has read · —
 - **D44a** — The dead zone is not siege-only, `set` modifiers were being dropped, and it is measured body to body · —
 
-## Economy & gathering (54)
+## Economy & gathering (56)
 
 - **D20** — Eight sides, so four-versus-four · —
 - **D27** — A farm is a building content calls a farm, and workers stand beside what they work · —
@@ -77,7 +76,7 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D40** — A rally point is a place, a resource, or a pocket you cannot enter · —
 - **D51** — A blast is where the stone lands, and the radius is the gate · —
 - **D69** — An animal's meat, its body, and its rot · —
-- **D70** — Herding, meat, and a herdable that changes hands · — · supersedes D116
+- **D70** — Herding, meat, and a herdable that changes hands · — · **superseded by D116**
 - **D73** — The owner's four corrections: hunters, arrows, one blow, and moving on · —
 - **D84** — Terrain is ground; what stands on it blocks (2026-10-31) · —
 - **D106** — The farm ring is content's, and reachability is asked last · —
@@ -88,6 +87,7 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D138** — One picker, and it asks nothing: the script's gather action follows `nodes_of_slot` · — · `gather`, `gather_pick`
 - **D141** — The gather radius bound, adopted and then refused by measurement · —
 - **D148** — A worker only goes where it has looked · —
+- **D149** — "Nearby" is bounded by the worker's sight, and the share table measures from the base · — · **superseded by D150**
 - **D150** — +5 was never the problem: the share table's anchor was · —
 - **D169** — A gatherer stands where the two bodies touch: 0.7 of a tile, not 1.0 · —
 - **D170** — A mine is a *pile per tile*, not one object: so the standoff is measured per tile · —
@@ -125,6 +125,7 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D352** — Conformance is a line on every ruling, and the divergence register is the one list of what we do differently · —
 - **D354** — the rule he remembers is in the engine; the picker that breaks it is the one handing out work · — · `spent_pile`
 - **D357** — The arrival is a placement: the pile halves, the re-plans multiply by eight, and both are reported · GAME · `one_place_per_man`, `one_place_per_man`
+- **D358** — The reach has three numbers in this bank, and the assignment is not the engine's guess · GAME
 
 ## Buildings & construction (62)
 

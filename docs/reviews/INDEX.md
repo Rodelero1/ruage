@@ -2,7 +2,7 @@
 
 # Review notes
 
-**312 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
+**314 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
 
 The files are **not** moved: `docs/decisions.md` cites them by path, and an archive directory would dangle those citations.
 
@@ -10,7 +10,7 @@ The files are **not** moved: `docs/decisions.md` cites them by path, and an arch
 
 - **2026-11-23 - prior-art watch: openage's C++ tracebacks, nothing to act on** — `2026-11-23-prior-art-openage-pytracebacks.md` · Documentation only: 19 lines added to docs/prior-art.md. No crates/, config/, tools/, build/ or Age2HD/ file
 
-## 2026-11-22 (14)
+## 2026-11-22 (16)
 
 - **2026-11-22 - D344/D345: the level floor, the funnel, and the acceptance that put the floor back** — `2026-11-22-d344-the-level-floor.md` · The change that landed: measurement only. TierShadow (every tier answer priced beside the flat search's answer for the
 - **2026-11-22 - D346: follow the game - the chain is smoothed, and the tier answers** — `2026-11-22-d346-follow-the-game-smoothing.md` · The change: the tier's floor becomes the binary's (nothing refused above level 0), the polyline goes through the original's
@@ -23,6 +23,8 @@ The files are **not** moved: `docs/decisions.md` cites them by path, and an arch
 - **The owner's rule was already in the engine — the picker that breaks it is the one handing out work** — `2026-11-22-d354-the-picker-that-breaks-the-rule.md` · I already made such decision."
 - **D355 — the bank becomes a page a session can actually read** — `2026-11-22-d355-the-bank-becomes-a-page.md` · and starting to forget?" → "Proceed"
 - **The collision audit of the owner's pathfinding rulings** — `2026-11-22-d356-the-collision-audit.md` · If yes, please list them and crosscheck with decomp and online sources to decide. If no decision, please ask me like I'm five."
+- **The arrival is a placement: the pile halves, and the re-plans multiply by eight** — `2026-11-22-d357-the-arrival-is-a-placement.md` · idle if there is none" — after "HD definitely doesn't stack up that much ... never in this scale".
+- **The second collision audit: the reach has three numbers, and two dead rows still read as live** — `2026-11-22-d358-the-second-collision-audit.md` · (345 rows), not the movement subset.
 - **The drop site is the nearest **wall**, not the nearest anchor** — `2026-11-22-drop-site-is-the-nearest-wall.md` · World::nearestdropsite ranked candidate drop sites by the distance from the carrier to the building's position,
 - **2026-11-22 - prior-art watch: HD's step is ~79 ms, and openage types a multiplier** — `2026-11-22-prior-art-hd-step-and-openage-numbers.md` · The change is documentation only: a dated section in docs/prior-art.md, a dated paragraph on U12 in
 - **2026-11-22 - the pile census: the owner's "5 in the same spot", measured** — `2026-11-22-the-pile-census.md` · A probe change, no engine change. collisionprobe now prints the deepest pile (the largest connected group of

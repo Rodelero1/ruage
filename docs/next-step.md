@@ -19,9 +19,11 @@ Suite and gates recorded in `docs/reviews/2026-11-22-d357-the-arrival-is-a-place
    next free spot near the same tree/mine", which is the gather case) or whether this is the walk's business - and measure before
    extending it.
 
-**Then the picker (D354):** `crates/script/src/lib.rs:1431` measures the assignment search from the worker with a nine-tile reach
-and this map's gold is **9.6** tiles out (**220** refusals, gold frozen at 10 with 1,011 on the ground); fall back to the base
-anchor. After that, D350's three ports.
+**Then the picker, with D358's reason (not D354's):** `crates/script/src/lib.rs:1431` gives a **quota** rule the worker's own
+reach (`Some(reach)`), while an explicit node gets `None` (`:455`) - so the AI-side assignment is bounded by the engine-side eye,
+which D149.5 itself says is wrong (*"an order is not a guess about what a villager can notice"*). The gold is **9.6** tiles out and
+the reach is **9**, so the quota refuses **220** times with 1,011 gold in four tiles. Fix the *line*, not the number: the engine's
+own search stays the dat's **4** (and the pack should carry `search_radius` for unit 83 - a data job). After that, D350's three ports.
 
 ## The owner's report, sized and attributed (2026-11-22)
 

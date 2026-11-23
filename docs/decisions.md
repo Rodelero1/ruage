@@ -709,6 +709,8 @@ arrow-heavy fights ever show up in a profile.
 
 ## D36 - Garrison is data, buildings fight, and line of sight still has no consumer
 
+**Superseded in part by D38 (2026-11-01):** "any building with a garrison capacity takes any unit standing beside it" is wrong for the five that exist to make units - they accept only a unit they have just trained.
+
 Every unit carries `garrison` in the dat (a town centre 15, a castle 20, a barracks 10) and 55 buildings
 have a real capacity; town centres, towers and castles also carry an `attack` array and a `range`. Both were
 parsed and unused. Now:
@@ -1774,6 +1776,8 @@ side; the rule as stated is what gets implemented, and this note exists so nobod
 follow.
 
 ## D70 - Herding, meat, and a herdable that changes hands
+
+**Superseded in part by D116 (2026-11-05):** the herding movement is gone - a gathered herdable is worked where it stands, and moving livestock is an ordinary order its owner gives. The meat, the roles and the rot stay.
 
 *The sheep-and-boar slice, as the owner specified it over four corrections.*
 
@@ -3688,6 +3692,11 @@ idle."*
 
 *2026-11-07. The owner chose **C - line of sight + 5** when asked how far a depleted worker should look. Measured, that
 number breaks the acceptance match; the shipped constant is sight + 8.*
+
+> **This row's "shipped" line is superseded by D150 (the same day):** the shipped constant is the owner's **5**, not 8 - 8 was
+> shipped only while the share table's *anchor* was wrong. **D175** then replaces both with the dat's own `search_radius`
+> (villager **4.0**) wherever the pack carries it. Three numbers are recorded across these rows - 4, 5 and 8 - and their
+> precedence is stated in **D358**, because until it was written the bank read as if all three were in force at once.
 
 1. **`World::gather_reach(worker)`** = the worker's own line of sight (whole tiles, the dat's `los`) plus a look-around,
    scaled once. `sight_of` answers in **whole tiles** - adding a raw offset to it gives a five-tile reach and looks like a
@@ -10150,3 +10159,40 @@ arrival at a node. That pair is the first question of the next slice; the number
 
 **Accepted cost, per the owner's own priority** (D275: *"fidelity first, and cost is a later question"*). The plan-time price is now
 the **top performance item** in `docs/next-step.md`, and it is a plan-stamp question (D296-D310's port), not an arrival one.
+
+## D358 - The reach has three numbers in this bank, and the assignment is not the engine's guess
+
+**Conformance**: GAME - `task_info.search_radius` is the dat's own per-unit number (villager **4.0**, scout 4.0, cog 6.0, fishing ship
+12.0, trebuchet 17-18, widest 21.0; 750 slots, median 6.0), which is what D175 adopted. OWNER - D149's *"line of sight + 5"* and
+D150's *"the shipped constant is the owner's own 5"*.
+
+**The collision, found by auditing the bank rather than the code.** Three rows answer "how far does a worker look for the next
+source" and none supersedes another:
+
+| row | its number | its own words |
+|---|---|---|
+| D149 | 8 | *"Shipped: sight + 8 = 12 tiles."* |
+| D150 | 5 | *"The shipped constant is the owner's own **5**, not 8."* |
+| D175 | the dat's 4 | *"the dat's `search_radius` per unit"* |
+
+D149 and D150 are the same day and contradict each other on what shipped. The code settles it in silence: `gather_reach` answers
+with the dat's `search_radius` **when the pack carries it**, and falls back to sight + **5** otherwise - and this generated pack
+carries none for unit 83, so the live value is **9**.
+
+**Why it matters, measured** (D354): the acceptance map's gold sits **9.6 tiles** from the town centre, so a worker is never
+offered it - **220** refusals, gold frozen at 10 with **1,011** gold in four tiles. Two different mistakes meet in that number,
+and only one of them is the engine's.
+
+**The precedence, stated once:** the **dat's `search_radius`** is the engine's number for *its own* search (a spent node's
+replacement), and a pack that does not carry it should carry it rather than fall back to a number five tiles larger; sight + 5 is a
+fallback for packs generated before the field existed, not a rule.
+
+**And the assignment is not that search.** D149.5 already draws the line - *"an order is not a guess about what a villager can
+notice"* - and the script keeps it for an explicit node (`nearest_resource(..., None)`, `crates/script/src/lib.rs:455`) while a
+**quota** rule passes the worker's own reach (`Some(reach)`, `:1431`). That is the third number in the collision: a *quota* is the
+AI's business, and the game's AI assigns from the base, not through the villager's four-tile eyes. The stall D354 measured is that
+line, not the reach's value.
+
+**Consequence for the queue.** Fixing the reach alone does not fix the stall (9.6 > 4 either way); the quota rule must stop using
+the worker's eyes, which is the item already in `docs/next-step.md`. The pack should also carry `search_radius` for unit 83 so the
+engine's own search is the game's 4, not our 9 - a data job, and the *smaller* of the two changes.
