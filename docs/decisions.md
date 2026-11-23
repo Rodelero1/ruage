@@ -9889,6 +9889,44 @@ smoothing's bodies and `refine`'s tile span**, then the census.
 *shape*, not a reason to keep the change. The preserved fixture is the next session's starting point, and the reading above is
 what stops it re-deriving the same three steps.
 
+## D351 - a place another body holds is not a place to work from (branch `d351-reseat`, not landed)
+
+**The ruling this comes from.** The owner, 2026-11-22, on the pile: *"HD definitely doesn't stack up that much. Maybe things
+like that could happen, but never in this scale."* So the scale is the defect, and this row is the measured slice against it.
+
+**What the decomp gives.** `func_002699A0` (`unit_action_resolve.cpp`) is the only "the spot you were given is taken" rule in
+either source: step out by `ext_self + ext_other + 0.01`, on one of four sides with an offset across that side, up to fifty
+tries, **refusing any candidate whose obstruction query is non-zero**; the first accepted point is where the object is written,
+and `func_002697C0` never writes a child onto a point an earlier child already holds. **What it does not give**: a seat picker
+for a *gatherer* - the gather action is a state machine that calls virtuals, and no loop over positions round a resource exists
+in the corpus. So the rule is adopted at the place a worker's standoff resolves, which is where our ring already decides it.
+
+**What changed (code, two places).** `World::work_position` takes the mover and refuses a candidate whose centre lies inside
+another body's box grown by his footprint - the ring is `func_002699A0`'s four-sides-and-offsets in a deterministic order. And
+the gather arm **re-seats** a worker who is standing inside another body while a free ring place exists, because the place is
+otherwise decided once at order time, when the other man may still be walking.
+
+**Measured (36,000 ticks, seed 7, release).** Deepest overlapping group **11 -> 9**; pairs closer than a fifth of a tile
+**317,041 -> 274,054** (-13.6%); overlapping pair-ticks 349,824 -> 324,711; most overlapping pairs in one tick **63 -> 42**;
+re-paths 24,897 -> 10,703. The fixture that was written first - two gatherers of one tree, tracked on every tick both are
+*taking* - read **4,598 raw against the 8,000 their footprints need** and passes.
+
+**Why it is not on `blunt-port`.** It flips **five** fixtures, and four of them assert the press as the intended behaviour:
+`two_gatherers_on_one_tree_press_in`, `two_woodcutters_on_one_tree_share_its_side_and_press`,
+`ten_men_ask_for_one_bush_and_seven_press_into_it`, `two_villagers_on_one_node_cannot_take_more_than_it_holds` - D289/D293, the
+owner's *"drop it and let the crowds jam"* - and `a_working_man_is_never_moved`, which is D246's *"villager is never to be nudged
+to leave place he is working at"*. The stacking in this engine is therefore **pinned by tests that encode his own rulings**, and
+reversing one is his call. The branch is pushed regardless of failure, which is what a change he judges himself gets.
+
+**Commits us to.** A player-visible scale complaint is answered by a *census*, not by a rule: 11 -> 9 bodies is real progress and
+it is not "fixed", and the four press fixtures are the record of a decision that may now be reversed rather than a set of bugs.
+
+**Not landed on this branch.** The revive/re-seat work lives on `d351-reseat` (its last commit `100bae9`); what belongs here is
+the reading and the three measured re-seat targets, recorded in `docs/reviews/2026-11-22-d351-a-taken-place-is-not-a-place.md`.
+The register (`docs/divergence-register.md`) cites this row, and a citation of a row that exists only on a side branch is a
+dangling reference the corpus cannot resolve.
+
+
 ## D352 - Conformance is a line on every ruling, and the divergence register is the one list of what we do differently
 
 **The owner's instruction, 2026-11-22, and the frustration behind it, verbatim**: *"Could you please FFS purge our rulings which
@@ -9934,6 +9972,8 @@ The ranking is `(wall_gap, anchor distance², id)`, where `wall_gap` is `footpri
 own measure, so the delivery test and the choice of site agree). The owner's second clause was already true and is unchanged:
 `at_the_wall` banks from any side and any corner, and the impassable middle is never reached.
 
+**Fixture**: `a_nearer_wall_wins_over_a_nearer_anchor` (`crates/sim/tests/gather.rs`), written first and watched failing.
+
 **Consequence, reported rather than hidden**: on the acceptance scene (48,000 ticks, seed 7) re-paths fall **37,204 -> 12,847**
 and wall time **12.19 -> 10.10 s**, and the outcome changes from a **win to a draw** - the faster economy mines the **reachable** gold out,
 and the next pile is **1 tile too far** to be reachable: the nearest remaining gold sits **9.6 tiles** from the town centre
@@ -9956,6 +9996,8 @@ firings**. Wood and food keep flowing, so it is gold alone: `crates/script/src/l
 (`nearest_resource(world, worker, slot, 0, Some(reach))`) measures the search **from the worker**, who is standing at the drop
 site. The script's other call site (`:455`) passes `None` - there the script names a resource, which is an order (D149.5).
 
+**Fixture**: `spent_pile` (pending, outside the tree - see below).
+
 **A fixture for the engine's own path, and why it is not in the tree.** `spent_pile.rs` (preserved at
 `/opt/data/cache/scratch/age2hd-pending-fixtures/spent_pile.rs`) builds a 20x6 map: one gold tile of **1** at `(12,2)`, a patch
 of **400** at `(15,2)` - three tiles from the spent pile, ten from the drop site. On the shipped code he banks **1 gold** and
@@ -9968,3 +10010,31 @@ nothing does not land, and code that halves a match's throughput certainly does 
 **Next.** Two items, in order: (1) why the woodcutters idle under the node anchor - instrument the pick's answer and
 `start_gather`'s refusal for one woodcutter; (2) the assignment picker at `crates/script/src/lib.rs:1431`, which should fall
 back to the **base** anchor when the worker's own reach finds nothing (D149's share-table anchor, D150.4's precedent).
+
+## D355 - the bank becomes a page: 341 rulings in 8k tokens, and the fixture column that names the lies
+
+**Conformance**: OURS (process). The owner, 2026-11-22: *"Is too many decisions causing problems with context being filled and
+starting to forget?"* - and the answer is yes, but not the way the question guessed.
+
+`docs/decisions.md` is **832,998 characters** (~210k tokens), larger than a context window: it cannot be loaded, so a session can
+only grep it, and a ruling it does not already suspect exists is a ruling it will not apply. That is not hypothetical - a session
+on this date wrote **D349-D354** while **D150 already held the owner's pile rule**, and then built a fixture that could not tell
+the rule from its absence. `docs/decision-areas.toml` - the index built for exactly this (D166) - named **2** decisions and left
+**49** (D283-D332, the whole pathfinding run) with no area at all, and `docs/reviews/` held **309** notes with nothing listing
+them.
+
+**So:** `tools/decision_index.py` writes `docs/decision-index.md` - **341 rows, one line each** (claim, verdict, source, fixture,
+area, supersession) in **34k characters / ~8k tokens**, plus the three lists that matter: **claims the game with no source** (5),
+**names no fixture** (**247**, the "believed implemented" list), **superseded** (3). `tools/review_index.py` writes
+`docs/reviews/INDEX.md`: 309 notes, one line each. Both are generated, committed, and neither is a gate.
+
+**The convention that makes the fixture column worth having**: a ruling that rests on a test names it (`Fixture: <name>` in the
+row, or a `tests/<name>.rs` path). A row that names none is the work list - 247 rows long tonight, and emptied one measurement at
+a time, never by inventing a name.
+
+**Also in this slice**: D351's row carried onto this branch read-only (the register cites it, and a citation of a row that exists
+only on `d351-reseat` was a dangling reference `tools/decisions.py` reported); 51 rows given areas; `decisions-check` back to
+**0**; `AGENTS.md` opening with the two indexes and the convention.
+
+**Fixture**: `tools/test_decision_index.py`, 6 cases over a sample bank (title-as-claim, verdict from the `Conformance` line
+only, a declared fixture beating a filename, supersession read both ways, area scored not first-match).

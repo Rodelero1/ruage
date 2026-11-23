@@ -100,13 +100,13 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <header><h1>Decisions</h1>
 <p class="lede">Every rule the corpus states, what it rests on, and what it has not decided yet. Generated from <code>docs/decisions.md</code> and the U-register; nothing on this page is typed by hand, so a wrong label means the classifier is wrong and can be seen to be wrong.</p>
 <ul class="coverage" id="coverage">
-<li data-k="decisions"><b>259</b> decisions</li>
+<li data-k="decisions"><b>360</b> decisions</li>
 <li data-k="amended"><b>12</b> amended</li>
-<li data-k="corrected"><b>4</b> corrected</li>
+<li data-k="corrected"><b>5</b> corrected</li>
 <li data-k="superseded"><b>8</b> superseded</li>
-<li data-k="uncited"><b>42</b> no stated basis</li>
-<li data-k="gaps"><b>31</b> named gaps</li>
-<li data-k="undecided"><b>16</b> undecided questions</li>
+<li data-k="uncited"><b>48</b> no stated basis</li>
+<li data-k="gaps"><b>34</b> named gaps</li>
+<li data-k="undecided"><b>17</b> undecided questions</li>
 <li data-k="dangling"><b>7</b> dangling references</li>
 <li data-k="unclassified"><b>0</b> unclassified</li>
 </ul>
@@ -544,13 +544,18 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </article>
 </div>
 </details>
-<details class="group" id="area-pathfinding-movement" data-area="Pathfinding &amp; movement" data-unfinished="0" data-undecided="4" open>
-<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">45 decisions · 4 undecided · 2 superseded · 3 with no stated basis</span></summary>
+<details class="group" id="area-pathfinding-movement" data-area="Pathfinding &amp; movement" data-unfinished="2" data-undecided="5" open>
+<summary><span class="range">Pathfinding &amp; movement</span> <span class="gcount">124 decisions · 5 undecided · 2 unfinished · 1 corrected · 2 superseded · 9 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U5</span> Are unit speeds in tiles/second, and what is the tile size in world units? Speed 1.35 (knight) is consistent with tiles/s.</li>
 <li><span class="id">U7</span> What pathing algorithm does the game use (A, flow field, something else), and what are its cost weights?</li>
 <li><span class="id">U25</span> Three pathing rules the original keeps and this engine does not - what does the owner want? crates/conformance asserts 33 rules read out of samuelcaldas/age-of-empires-2-decomp and HD&#x27;s own binary; 30 pass, and the three that fail are the three below. (a) The search answers None where the original answers the closest reachable point (deck slide 96: &quot;expand the search area once, otherwise give the </li>
 <li><span class="id">U27</span> Formations: who is exempt from collision, and when? Row 30&#x27;s open half. The original&#x27;s search takes an ignore list - the route&#x27;s own linked array filtered by isMoving, or every member of a group with no per-member test (FUN_008007f0) - and Forgotten Empires&#x27; own docs put villagers, trade carts and fishing ships in no formation. Our stand-in is same-tick mates (D207), and D237 narrowed it to soldie</li>
+<li><span class="id">U28</span> The levelled tier answers and its routes lose - pull the chain, price the costs, or leave it unread? At the level floor the game has (nothing refused above 0) the tier answers 14 of 50,022 routes in the acceptance match, and on those same walks it costs 172 waypoints / 5,180,218 raw against the flat search&#x27;s 67 / 4,719,155 (+9.8%), with the match at 13.71 s against 12.16 s (D345). The coarse route</li>
+</ul></div>
+<div class="kind" data-kind="unfinished"><h4>Not finished</h4><ul class="gaps">
+<li data-decision="D302"><a class="id" href="#d-D302">D302</a> Named limits. No measurement yet of a hundred units planning in one tick, nor of a 480×480 map (≈1.2 ms per ground change, unmeasured). And the red-set diff cannot see that blocked routes are now coarser - no fixture asserted a per-tile polyline, which is the suite&#x27;s coverage being thin on this subject, said out loud rather than implied.</li>
+<li data-decision="D345"><a class="id" href="#d-D345">D345</a> What is back, and what is not. The floor is 2; the chain is certified against bodies again; both witnesses are parked in docs/parked/ with the un-park condition named, and docs/next-step.md carries the fork. What landed is the measurement: TierShadow (points and polyline length for the tier&#x27;s answer and the flat search&#x27;s, on the same walk), TierFunnel (long walks, floor refusals, no-coarse, one-ce</li>
 </ul></div>
 <div class="kind" data-kind="decisions">
 <article class="decision s-decided" id="d-D52" data-id="D52" data-origins="owner" data-unresolved="0" data-status="decided">
@@ -1482,10 +1487,1639 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D253" placeholder="note (saved with the verdict)">
 </div>
 </article>
+<article class="decision s-decided" id="d-D254" data-id="D254" data-origins="owner" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D254</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>following the game on the slide: the rule holds, and the wall is a disagreement (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>What that costs to fix, and why it is not this slice: unifying the two measures touches D176 - the disc rule the owner asked for after seeing a villager with its disc inside a wall - so it needs its own fixtures on both sides (a node approa</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D254">
+<button class="verdict" data-verdict="agree" data-id="D254">agree</button>
+<button class="verdict" data-verdict="question" data-id="D254">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D254">wrong</button>
+<input class="note" data-note="D254" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D255" data-id="D255" data-origins="owner binary" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D255</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>no sliding, and the reason it cannot land yet: a tile is not an object (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>That also corrects an option this project offered the owner: &quot;strict, no part of the body may overlap a blocked tile&quot; is not his rule and not the game&#x27;s - it is D176 applied to the wrong question, the pathfinder&#x27;s grown tile used at steppin</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-binary">binary</span></summary><ul>
+<li>So the next slice is the model, not the mover, and the binary and the decompilation say exactly what it is (docs/movement-in-the-binary.md, section of 2026-11-17): ground is a per-tile test at a point (FUN_008aa480 - no radius anywhere in i</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D255">
+<button class="verdict" data-verdict="agree" data-id="D255">agree</button>
+<button class="verdict" data-verdict="question" data-id="D255">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D255">wrong</button>
+<input class="note" data-note="D255" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D256" data-id="D256" data-origins="owner binary measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D256</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>copy the game: the step now asks the right question, and the route still asks the wrong one (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner: &quot;Copy the game.&quot; Done on the step side in one evening; the reason it cannot land is a second, different site, and it is named exactly.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-binary">binary</span></summary><ul>
+<li>It asks the game&#x27;s two questions instead: the tile under the point (already there - free(landing)), and &quot;does my disc overlap a building&#x27;s footprint box?&quot; (disc_touches_a_building, box distance against footprint_rect, which is compute_dista</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>What it fixed, measured: the sheep family&#x27;s refusal is no longer the coarse tile.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D256">
+<button class="verdict" data-verdict="agree" data-id="D256">agree</button>
+<button class="verdict" data-verdict="question" data-id="D256">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D256">wrong</button>
+<input class="note" data-note="D256" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D257" data-id="D257" data-origins="owner measured decision" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D257</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>copy the game, attempted in full: three pieces built, and the wall is the gather place (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner: &quot;Copy the game.&quot; Three pieces were built and measured in one stretch.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Also measured, for the next reader: with only Piece 1 (step model, tile grid) the no-slide suite is 3 red of 200 binaries (one of them the crowd fixture that already failed) - 197 green.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>Piece 1 - the step&#x27;s two questions. Ground tested at the tile under the point; a building&#x27;s footprint tested as a box against the body&#x27;s radius (depth = radius - distance to the box), with D192&#x27;s rule for a body already touching (it may wal</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D257">
+<button class="verdict" data-verdict="agree" data-id="D257">agree</button>
+<button class="verdict" data-verdict="question" data-id="D257">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D257">wrong</button>
+<input class="note" data-note="D257" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D258" data-id="D258" data-origins="owner dat" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D258</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>proved from the binary: box against box, and our trees are the wrong size (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner: &quot;Proved and follow the original game and decomp.&quot; Three functions read end to end, and they settle the question this project has been circling: the game collides boxes, not tiles, and every object&#x27;s box comes from its own radii.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-dat">dat</span></summary><ul>
+<li>They are not - TREEA carries radius = [0.5, 0.5, 2.0], so a tree&#x27;s box is its tile, and our tile grid agrees with the dat.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D258">
+<button class="verdict" data-verdict="agree" data-id="D258">agree</button>
+<button class="verdict" data-verdict="question" data-id="D258">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D258">wrong</button>
+<input class="note" data-note="D258" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D259" data-id="D259" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D259</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>why every piece so far has failed: the mover walks *at* waypoints, not along the route (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Everything measured tonight, in one place: slide removed alone - 14 red / 8 binaries; step model (point ground + building box) - 3 red; plus disc-aware pull, box-clear places, and route validation - still 3 red, all animals, all one straigh</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D259">
+<button class="verdict" data-verdict="agree" data-id="D259">agree</button>
+<button class="verdict" data-verdict="question" data-id="D259">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D259">wrong</button>
+<input class="note" data-note="D259" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D260" data-id="D260" data-origins="owner" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D260</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>the original turns before it walks, and our mover has no facing (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner asked how the original and the decomp answer the &quot;straight at the waypoint&quot; defect D259 found.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D260">
+<button class="verdict" data-verdict="agree" data-id="D260">agree</button>
+<button class="verdict" data-verdict="question" data-id="D260">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D260">wrong</button>
+<input class="note" data-note="D260" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D261" data-id="D261" data-origins="owner measured decision" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D261</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>plan for the radius, keep the body on the route: five pieces, and the corner that survives them (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner: &quot;Proceed.&quot; Five pieces built and measured together; none landed; the wall is now a single geometric fact, and the next step is named.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>What it does, measured: every fixture green with the slide in place, and the same 3 red in the animals family with the slide out - refused at now=0 next=164: a landing 164 raw (0.008 tiles) inside a building&#x27;s box while clear.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>Box step test - step_is_walkable asks the tile under the point and a building&#x27;s footprint box (building_overlap, depth radius - distance to box), with D192&#x27;s rule for a body already touching. 4.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D261">
+<button class="verdict" data-verdict="agree" data-id="D261">agree</button>
+<button class="verdict" data-verdict="question" data-id="D261">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D261">wrong</button>
+<input class="note" data-note="D261" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D262" data-id="D262" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D262</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>the endpoint is the last uncut corner: 3 red to 1, and the one left is a range (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured: the_villager_follows_the_sheep and the_shepherd_kills_the_sheep_and_the_gathering_resumes_on_the_body go green; a_live_animal_is_a_gather_source stays red, and its message has changed - not &quot;did not reach the sheep&quot; any more, but </li>
+<li>Then a man pushed out of a wall by his own width is still working, because the gap he is measured by is the gap the original measures.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D262">
+<button class="verdict" data-verdict="agree" data-id="D262">agree</button>
+<button class="verdict" data-verdict="question" data-id="D262">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D262">wrong</button>
+<input class="note" data-note="D262" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D263" data-id="D263" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D263</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>two pieces land in the ledger, and the wall is now a place with coordinates (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Neither is in the tree; both are measured, and the failure now has an address.</li>
+<li>Piece that works, measured: projecting the route&#x27;s endpoint out of every building footprint grown by the body&#x27;s radius (push_out_of_buildings, from plan_path&#x27;s finish) takes the animals family from 3 failures to 1.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D263">
+<button class="verdict" data-verdict="agree" data-id="D263">agree</button>
+<button class="verdict" data-verdict="question" data-id="D263">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D263">wrong</button>
+<input class="note" data-note="D263" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D264" data-id="D264" data-origins="owner measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D264</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>the planner was never asked a question it could answer (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner: &quot;Proceed.&quot; One small change, one real defect, and the slide&#x27;s exact role in the ledger.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured: animals 11 of 11 green (they were 3 red at D263), whole_steps 2 green, body_clearance 2 green.</li>
+<li>And the slide, measured rather than argued: then deleted, with the planner now given a legal goal, the animals family goes back to 3 red - a_live_animal_is_a_gather_source, the_villager_follows_the_sheep, the_shepherd_kills_the_sheep_and_th</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D264">
+<button class="verdict" data-verdict="agree" data-id="D264">agree</button>
+<button class="verdict" data-verdict="question" data-id="D264">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D264">wrong</button>
+<input class="note" data-note="D264" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D265" data-id="D265" data-origins="measured decision" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D265</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>the refusal, traced; and a correction to D264&#x27;s explanation (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>What the next measurement is, and it is a measurement: take the route short_range_clear returns for this fixture and walk its legs in order with leg_is_walkable; the first failing leg names the stage that produced it - the grown-corner grap</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>He is standing legally (now &gt;= 0) and every step would take him inside by a hair - which is D192&#x27;s rule firing correctly (next &lt; 0 &amp;&amp; now &gt;= 0).</li>
+<li>The correction: D264 said the animals family fails without the slide because settle_workers keeps a place &quot;to within a fifth of a tile&quot; with nudges under a step.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D265">
+<button class="verdict" data-verdict="agree" data-id="D265">agree</button>
+<button class="verdict" data-verdict="question" data-id="D265">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D265">wrong</button>
+<input class="note" data-note="D265" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D266" data-id="D266" data-origins="owner measured" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D266</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-17</span>
+<h3>the owner&#x27;s two rules are fixtures, and the fixtures are scenes: measured, both rules are broken elsewhere (2026-11-17)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner: &quot;The unit tests disallowing villagers to approach each other closer than to circle radius and to slow down are not followed.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>the owner&#x27;s two rules are fixtures, and the fixtures are scenes: measured, both rules are broken elsewhere (2026-11-17)</li>
+<li>Measured on a real match instead (collision_probe, 36,000 ticks, 15,245,283 pair-ticks inspected):</li>
+<li>Slowdowns, measured (step_speed_probe, 5 villagers, 20,000 body-ticks): partial steps 17 (0.09%), all Take (not the slide), 0.85-0.99 of a step, every one a landing - and the known creep when a step is blocked: 82, 81, 80 raw units a tick, </li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>How the original resolves a seeded stack is unread.</li>
+</ul></details>
+<div class="verdicts" data-for="D266">
+<button class="verdict" data-verdict="agree" data-id="D266">agree</button>
+<button class="verdict" data-verdict="question" data-id="D266">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D266">wrong</button>
+<input class="note" data-note="D266" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D267" data-id="D267" data-origins="owner decision" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D267</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>a body is placed, not dropped: the original&#x27;s separation rule, adopted (2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner: &quot;Please review overlapping rules from original game and decomp and then please adopt them 100%&quot;, and on the fork that followed: &quot;Adopt fully: the newcomer steps aside (trained or scenario).&quot;</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>D52&#x27;s rule - nothing pushes a body - is untouched: the standing body does not move at all.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D267">
+<button class="verdict" data-verdict="agree" data-id="D267">agree</button>
+<button class="verdict" data-verdict="question" data-id="D267">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D267">wrong</button>
+<input class="note" data-note="D267" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D268" data-id="D268" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D268</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>the movement clause the original does not have, tried and refuted by its own numbers (2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The movement half was tried, measured, and put back.</li>
+<li>Measured, 36,000 ticks of the acceptance match (collision_probe):</li>
+<li>Also measured while it was in (and this is the number that says where the work is): of the 104,386 overlapping pair-ticks, mates 0, past 43,315, neither 61,071.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D268">
+<button class="verdict" data-verdict="agree" data-id="D268">agree</button>
+<button class="verdict" data-verdict="question" data-id="D268">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D268">wrong</button>
+<input class="note" data-note="D268" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D269" data-id="D269" data-origins="owner measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D269</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>the standing man a villager walks into: reproduced, two defects measured, the real hole still open (2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>Nothing landed: a change whose own fixture still fails is a half-fix, and the owner&#x27;s rule is strict test-first with no ignored fixtures.</li>
+<li>The owner: &quot;Villagers still try to push through standing villager instead of trying to repath around him.&quot;</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>the standing man a villager walks into: reproduced, two defects measured, the real hole still open (2026-11-18)</li>
+<li>Requiring movement in the last couple of ticks measured 104,386 -&gt; 68,718 overlapping pair-ticks (-34%), 51,676 -&gt; 10,191 deeper than half a footprint (-80%), past-explained 43,315 -&gt; 111. 2.</li>
+<li>Then land the fix with this fixture, plus defects 1 and 2 which are already measured.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D269">
+<button class="verdict" data-verdict="agree" data-id="D269">agree</button>
+<button class="verdict" data-verdict="question" data-id="D269">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D269">wrong</button>
+<input class="note" data-note="D269" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D270" data-id="D270" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D270</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>the three reports: one measured, two not yet reproduced, and one of my probes was malformed (2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>the three reports: one measured, two not yet reproduced, and one of my probes was malformed (2026-11-18)</li>
+<li>Measured, and it is the crowd slot, not the click. A villager alone sent to a point four tenths of the way into a tile comes to rest exactly on it - offset (0, 0, 0) raw.</li>
+<li>Not reproduced yet, and my own probe is to blame. The probe spawned units relative to the first resource entity on the seeded map with a straight line that crossed the base, and both its directions came back NoPath { from: (24, 17), to: (20</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D270">
+<button class="verdict" data-verdict="agree" data-id="D270">agree</button>
+<button class="verdict" data-verdict="question" data-id="D270">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D270">wrong</button>
+<input class="note" data-note="D270" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D271" data-id="D271" data-origins="owner measured decision" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D271</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>the first man takes the spot, the others stand round him (2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner chose (b), and refined it: &quot;Any single unit chosen has to go to the exact spot by moving the center of the circle to that exact spot.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>What was wrong. A single unit already reached the clicked point exactly - measured offset (0, 0, 0) raw.</li>
+<li>A follower got tile_centre(slot), the middle of a square from slot_for&#x27;s ring scan, which starts at (-1, -1): every follower therefore landed up and to the left, measured 25,455 raw (1.27 tiles) from the click, which is the owner&#x27;s &quot;a bit a</li>
+<li>The ring&#x27;s radius is a measurement, not a taste: eight points on a ring of radius r are 0.765  r apart, so at the gather spacing (0.65) two neighbours are 9,950 raw apart - less than the 8,000 their footprints need once they drift, and the </li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>And the &quot;repath out of an overlap&quot; half (his &quot;2c&quot;) was tried and refuted in the same sitting: queueing a repath whenever a step lands inside a body - the answer D268 said was missing - takes the acceptance probe&#x27;s overlaps from 104,386 to 3</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D271">
+<button class="verdict" data-verdict="agree" data-id="D271">agree</button>
+<button class="verdict" data-verdict="question" data-id="D271">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D271">wrong</button>
+<input class="note" data-note="D271" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D272" data-id="D272" data-origins="measured decision" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D272</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>A repath out of an overlap makes it worse (written 2026-11-18, for a cite that had no row)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured on the acceptance probe (collision_probe, 36,000 ticks):</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>What was tried. Queueing a re-plan whenever a step lands inside another body: the answer D268 said was missing, and the original&#x27;s own answer to a non-past collision.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D272">
+<button class="verdict" data-verdict="agree" data-id="D272">agree</button>
+<button class="verdict" data-verdict="question" data-id="D272">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D272">wrong</button>
+<input class="note" data-note="D272" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D275" data-id="D275" data-origins="measured" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D275</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>Port the game&#x27;s pathing: fidelity first, and cost is a later question (owner, 2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>We can think about optimizations later.&quot; Given after D15&#x27;s four options were put to him with their measured costs.</li>
+<li>What it settles. D239 adopted every divergent row of docs/behaviour-diff.md where the game&#x27;s side was read, but each slice stayed free to be refused by measurement - and two were (D242&#x27;s row 29/30, R1a).</li>
+<li>That freedom is withdrawn: a measurement is no longer a reason to keep a divergence.</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>The one unread item is the termination guard: h &lt; local_46c || 20000 &lt; local_46c compares a distance with a count, and the termination rule plus the equal-f tie-break are what a replay depends on them.</li>
+</ul></details>
+<div class="verdicts" data-for="D275">
+<button class="verdict" data-verdict="agree" data-id="D275">agree</button>
+<button class="verdict" data-verdict="question" data-id="D275">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D275">wrong</button>
+<input class="note" data-note="D275" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D276" data-id="D276" data-origins="binary measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D276</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>The ground re-plan cap and the slide both go, and the order is forced (owner, 2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-binary">binary</span></summary><ul>
+<li>Basis. Read from the original&#x27;s binary: FUN_008a4360&#x27;s collision epilogue and &quot;no axis is ever dropped&quot;, FUN_008aa480&#x27;s point test on the ground, FUN_00840830&#x27;s boxes, func_002690E0&#x27;s box distance and mConsecutiveSubstituteCount (all record</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>What makes a cap look necessary is that our re-plan can loop - measured 11,260 attempts of which 11,070 failed, 3.5 ms/tick against 0.3 - and the loop exists because the search returns routes the mover then refuses (the two measures of &quot;wal</li>
+<li>The cap is deleted when row 26 exists, not before: without a stopper, uncapped means the 47.5 s match measured in D135.</li>
+<li>StepDecision::Slide takes a step&#x27;s axis component, so a diagonal aimed mostly along a blocked axis moves a fraction: measured 82, 81, 80...</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D276">
+<button class="verdict" data-verdict="agree" data-id="D276">agree</button>
+<button class="verdict" data-verdict="question" data-id="D276">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D276">wrong</button>
+<input class="note" data-note="D276" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D277" data-id="D277" data-origins="binary measured" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D277</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>The ground is a point and the things are boxes: D117 and D177 are each half of one rule (2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-binary">binary</span></summary><ul>
+<li>Basis. The original&#x27;s binary, read at 2026-11-17 and recorded in docs/movement-in-the-binary.md: FUN_008aa480 (point test), FUN_00840830 (boxes grown by the mover&#x27;s radius, &lt;= collision) and func_002690E0 in the decomp&#x27;s src/unit/unit_actio</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>func_002690E0&#x27;s box distance, max(0, |dx| - r) per axis, is the same rule measured rather than tested, and the owner&#x27;s half a diameter is that function at range zero. 3.</li>
+<li>So an object&#x27;s blocking is a stamped footprint, tile by tile; the radius box is what a body is measured by (D267&#x27;s ext_a + ext_b, func_002690E0&#x27;s box distance).</li>
+<li>Our model already says this - footprint tiles block, a disc is measured against them - which is why D177&#x27;s disc rule and D117&#x27;s tile rule agree once each is put on its own layer.</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>Still unread, and named: type == 5 also sets 0x8000 on every stamped tile, and nothing read says what type 5 is (gate, wall and resource are the candidates).</li>
+<li>The open question, and it closed on a read (2026-11-18, on the owner&#x27;s &quot;follow the game&quot;): a building blocks by its stamped tiles, not by its radius box. zone_spatial_grid_stamp_obstacle_region.cpp (func_001EE5B0) takes a rectangle of tiles</li>
+</ul></details>
+<div class="verdicts" data-for="D277">
+<button class="verdict" data-verdict="agree" data-id="D277">agree</button>
+<button class="verdict" data-verdict="question" data-id="D277">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D277">wrong</button>
+<input class="note" data-note="D277" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D279" data-id="D279" data-origins="owner binary" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D279</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>The movement layer is the original&#x27;s, ported bluntly from the decompilation (owner, 2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner&#x27;s answer is to stop designing: take the original&#x27;s structure whole, at the cost of fidelity where the original&#x27;s structure is still unread.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-binary">binary</span></summary><ul>
+<li>The movement layer is the original&#x27;s, ported bluntly from the decompilation (owner, 2026-11-18)</li>
+<li>Their fixtures go with them. What replaces them is the original&#x27;s own model, read from the decompilation&#x27;s zone/ sources and the tree&#x27;s register:</li>
+<li>Basis. The decompilation at /opt/data/tools/src/aoe2-decomp (the repo he named, cloned): zone_path_eval.cpp, zone_spatial_pyramid_, zone_spatial_entity_; the tree&#x27;s docs/movement-in-the-binary.md for the cost model and the pause block; the </li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>The owner&#x27;s answer is to stop designing: take the original&#x27;s structure whole, at the cost of fidelity where the original&#x27;s structure is still unread.</li>
+</ul></details>
+<div class="verdicts" data-for="D279">
+<button class="verdict" data-verdict="agree" data-id="D279">agree</button>
+<button class="verdict" data-verdict="question" data-id="D279">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D279">wrong</button>
+<input class="note" data-note="D279" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D281" data-id="D281" data-origins="owner measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D281</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>The body collision is the original&#x27;s: the mover re-plans round it, and a route&#x27;s clock is its order&#x27;s (owner, 2026-11-19)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>a_spawn_in_the_same_tick_does_not_move_the_wrong_entities is deleted, on the owner&#x27;s rule: it is a unit test, and the scene it built - two bodies on one spot walking the same direction at the same speed - is unpassable under the game&#x27;s rule</li>
+<li>The ruling. Asked which of three ways to make a crowd behave, the owner: &quot;Follow what does the original game and decomp do.&quot; Then, on the fixture that had made the attempt a half-fix: &quot;Is it unit test or conformance test? If unit test, drop</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured. Acceptance fixture 42.62 s -&gt; 39.59 s (debug, 48,000 ticks); three of D279&#x27;s reds green (a_repath_route_is_pulled_like_a_planned_one, both_sides_field_an_army, the_skirmish_only_refuses_what_the_fight_has_taken); suite 198 binarie</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D281">
+<button class="verdict" data-verdict="agree" data-id="D281">agree</button>
+<button class="verdict" data-verdict="question" data-id="D281">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D281">wrong</button>
+<input class="note" data-note="D281" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D282" data-id="D282" data-origins="measured review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D282</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>A plan keeps a body&#x27;s clearance, not a tile (owner, 2026-11-19)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured. evasion::a_blocked_unit_goes_round_a_standing_body_and_arrives red -&gt; green (the whole point of the slice); head_on::the_loser_stands_for_the_drawn_pause red -&gt; green; the acceptance fixture unchanged at 39.58 s (the clearance sca</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>Suite numbers in the review note.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D282">
+<button class="verdict" data-verdict="agree" data-id="D282">agree</button>
+<button class="verdict" data-verdict="question" data-id="D282">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D282">wrong</button>
+<input class="note" data-note="D282" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D283" data-id="D283" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D283</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>&quot;Never step deeper&quot; bounds the overlap at the contact and freezes the crowd (reverted)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Tried, measured, reverted. The rule the game&#x27;s shape implies - take one step into a collider and answer it with a re-plan and a pause, never driving an overlap deeper - does bound the overlap: two men meeting head-on came 4,478 raw inside a</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D283">
+<button class="verdict" data-verdict="agree" data-id="D283">agree</button>
+<button class="verdict" data-verdict="question" data-id="D283">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D283">wrong</button>
+<input class="note" data-note="D283" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D284" data-id="D284" data-origins="none" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D284</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>The self-brake D279 invented is removed, and the ignore list is gated on `isMoving`</h3></div>
+<div class="basis"><span class="tag tag-none">no stated basis</span></div>
+<div class="verdicts" data-for="D284">
+<button class="verdict" data-verdict="agree" data-id="D284">agree</button>
+<button class="verdict" data-verdict="question" data-id="D284">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D284">wrong</button>
+<input class="note" data-note="D284" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D285" data-id="D285" data-origins="none" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D285</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>&quot;At the node&quot; is the game&#x27;s box gap, and four of our distance rules go</h3></div>
+<div class="basis"><span class="tag tag-none">no stated basis</span></div>
+<div class="verdicts" data-for="D285">
+<button class="verdict" data-verdict="agree" data-id="D285">agree</button>
+<button class="verdict" data-verdict="question" data-id="D285">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D285">wrong</button>
+<input class="note" data-note="D285" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D286" data-id="D286" data-origins="owner dat measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D286</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>An order names a target, and one box ruler decides every distance (owner, 2026-11-19)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The ruling. Asked how to close the last gap between our approach rule and the original&#x27;s, the owner: &quot;follow the game/decomp.&quot; So the game&#x27;s data shape wins over our convenience: an order names the object it is about, and every distance que</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-dat">dat</span></summary><ul>
+<li>A body the dat gives no radius has no box and is walked over, which is how a worker stands on a carcass. 4.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The step&#x27;s box test alone had measured 21.81 s on the acceptance fixture (39.58 s before, main 26.6 s) while turning three green fixtures red - a_villager_walks_round_a_house_rather_than_through_it, a_villager_walks_round_a_half_built_house</li>
+<li>What the port needed beyond the row, all of it measured (docs/reviews/2026-11-19-d286-one-box-ruler.md):</li>
+<li>In reach is box to box in every arm (melee contact, the shepherd&#x27;s blow), and at_node is &quot;within one step&quot;: on a diagonal a body stopped by a box is farther away by its centres than the radii sum, and an equality on a step grid is unreachab</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D286">
+<button class="verdict" data-verdict="agree" data-id="D286">agree</button>
+<button class="verdict" data-verdict="question" data-id="D286">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D286">wrong</button>
+<input class="note" data-note="D286" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D287" data-id="D287" data-origins="measured decision" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D287</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>A node&#x27;s ring is never re-laid (owner, 2026-11-19)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured, not argued. crates/sim/tests/working_men_never_move.rs - a man working (Gather, progress &gt; 0, D246&#x27;s own definition) and still for twenty ticks must not move a raw unit - passes both with the cut and without it, because D246 alrea</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>Measured, not argued. crates/sim/tests/working_men_never_move.rs - a man working (Gather, progress &gt; 0, D246&#x27;s own definition) and still for twenty ticks must not move a raw unit - passes both with the cut and without it, because D246 alrea</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D287">
+<button class="verdict" data-verdict="agree" data-id="D287">agree</button>
+<button class="verdict" data-verdict="question" data-id="D287">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D287">wrong</button>
+<input class="note" data-note="D287" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D288" data-id="D288" data-origins="owner published" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D288</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>The taken list is ours, not the game&#x27;s; the walk stands, the gather re-targets (owner, 2026-11-19)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>How it arose. The owner asked for Q1 - whether our gather seat taken list is the game&#x27;s own mechanism - to be crosschecked against the game or the internet.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-published">published</span></summary><ul>
+<li>Basis. docs/gather-seating-evidence.md: the corpus (FUN_004aaea0 for act_gath.cpp, FUN_004b90f0 for tact_gth.cpp) has no seat picker; Capoch&#x27;s guide; Age of Empires forum 289465 and 78029; r/aoe2 &quot;Am I imagining this villager pathing bug?&quot;;</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>Unknown, and said so. The original&#x27;s re-target radius and its tie-break among equally near candidates are not established; the five-tile figure is a third-party model&#x27;s, not the binary&#x27;s.</li>
+</ul></details>
+<div class="verdicts" data-for="D288">
+<button class="verdict" data-verdict="agree" data-id="D288">agree</button>
+<button class="verdict" data-verdict="question" data-id="D288">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D288">wrong</button>
+<input class="note" data-note="D288" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D289" data-id="D289" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D289</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>A crowd is sent to the tile it was ordered to, and it jams there (owner, 2026-11-19)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured. The witness was written first and watched failing: crowd_piles_up::a_crowd_ordered_to_one_tile_piles_up - three men ordered to one tile - reported 0.800 tiles between the closest pair before the cut (one tile each, D271&#x27;s ring) an</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D289">
+<button class="verdict" data-verdict="agree" data-id="D289">agree</button>
+<button class="verdict" data-verdict="question" data-id="D289">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D289">wrong</button>
+<input class="note" data-note="D289" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D290" data-id="D290" data-origins="measured" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D290</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>There is no press floor: friends may overlap, and only the pause and the re-path act (owner, 2026-11-19)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Question. How deep may two friends press? Our group_overlap fixture measured a walker 4576 raw inside an 8000 raw footprint (0.23 of a tile) once D200&#x27;s forty-tick order-finish stopped ending his walk.</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>Whether the resolver is dead in a retail build or live in an earlier one is not established, and neither is the pause roll&#x27;s distribution - neither changes the ruling.</li>
+</ul></details>
+<div class="verdicts" data-for="D290">
+<button class="verdict" data-verdict="agree" data-id="D290">agree</button>
+<button class="verdict" data-verdict="question" data-id="D290">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D290">wrong</button>
+<input class="note" data-note="D290" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D292" data-id="D292" data-origins="owner measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D292</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>No rule of ours ever stands a man down on its own: `beside` and the forty-tick finish go (owner, 2026-11-19)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>Ruling, in the owner&#x27;s words. &quot;No engine help: the order stays live and the man stands; only sliding and the pause rule act&quot; - chosen from the binary when the fork was put to him, and applied here.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Added, because the cut exposed it. A mover re-armed his friend&#x27;s pause on every refused tick (the pause is written after the movement pass, so pause_remaining is still zero while it runs): measured 1,876 ticks (93.8 s) of standing against t</li>
+<li>Measured. Full suite 893 passed / 14 failed / 21 ignored against D291&#x27;s 890/17/21 - three reds turned green, none the other way. acceptance_economy runs in 30.34 s (was 34.25 s).</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D292">
+<button class="verdict" data-verdict="agree" data-id="D292">agree</button>
+<button class="verdict" data-verdict="question" data-id="D292">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D292">wrong</button>
+<input class="note" data-note="D292" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D296" data-id="D296" data-origins="measured" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D296</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>The level maps are the binary&#x27;s stamping rule, not a choice (P11a)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured. Test-first, three failures deep: unresolved import, then a fixture that was not a game (no town centres), then green - 4 passed / 0.00 s.</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>Guessing it would be the kind of deliberate difference the owner forbids.</li>
+<li>Not decided here. The level descent (11b) stays unbuilt: the descent reads bit 0x20 of a cell&#x27;s second byte while the stamper writes the first, and the second byte&#x27;s producer is unread.</li>
+</ul></details>
+<div class="verdicts" data-for="D296">
+<button class="verdict" data-verdict="agree" data-id="D296">agree</button>
+<button class="verdict" data-verdict="question" data-id="D296">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D296">wrong</button>
+<input class="note" data-note="D296" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D297" data-id="D297" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D297</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>A search starts at the coarsest level whose cell is usable (P11b)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured. Test-first, and the first version of the fixture was my error: the wall sat at (9, 2), inside the very 4×4 cell the start occupies, so level 2 was correctly blocked and the assertion was wrong.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D297">
+<button class="verdict" data-verdict="agree" data-id="D297">agree</button>
+<button class="verdict" data-verdict="question" data-id="D297">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D297">wrong</button>
+<input class="note" data-note="D297" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D298" data-id="D298" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D298</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>A coarse step costs 10, 300 or 2000 (P11c&#x27;s table)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured. Test-first (E0599 then three green: 3 passed / 0.00 s), and the fixture&#x27;s first version was my error twice over in the same way as D297&#x27;s: I asked the level-3 cell of (16, 16) about a wall at (16, 15), which is a different cell, a</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D298">
+<button class="verdict" data-verdict="agree" data-id="D298">agree</button>
+<button class="verdict" data-verdict="question" data-id="D298">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D298">wrong</button>
+<input class="note" data-note="D298" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D299" data-id="D299" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D299</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>The coarse A\* runs on four directions, a tuned cost table and a sorted list (P11c)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured. The conformance row the_original_solves_a_long_walk_in_its_hierarchy - #[ignore]d since D279 - is live and green: a 58-tile open walk is 8 cells at level 3 instead of 58 tiles, on the lattice n8+4, none of them blocked.</li>
+<li>Commits us to. The levelled search is the default only once the switch (11d) is built and measured; until then it is a machine with its own witnesses, and the flat search still answers Ground::route.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D299">
+<button class="verdict" data-verdict="agree" data-id="D299">agree</button>
+<button class="verdict" data-verdict="question" data-id="D299">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D299">wrong</button>
+<input class="note" data-note="D299" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-corrected" id="d-D300" data-id="D300" data-origins="measured published review" data-unresolved="0" data-status="corrected">
+<div class="head">
+<span class="id">D300</span>
+<span class="status corrected">corrected</span>
+<span class="date">2026-11-19</span>
+<h3>The hierarchy is correct and 60x too slow; the switch waits for a cached pyramid</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured on the project-sized map (64×65, 200 runs each), in release: build 16.9 µs, descent 9 ns, coarse A\ 4.6 µs for a 56-tile diagonal, against a flat tile search of 408 ns on the same walk - ~52×.</li>
+<li>The original keeps static obstacles in the level maps and bodies as a live cost row (2000), so the step is to split Ground&#x27;s occupancy into static blockers and bodies (see docs/pathfinding-levels-evidence.md); (2) the coarse search measured</li>
+<li>Measured, not asserted. Review: docs/reviews/2026-11-19-p11d-the-pyramid-costs.md.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-published">published</span></summary><ul>
+<li>(The first figures published here, 543 µs / 139 µs / 11.4 µs, were a debug build published without that label; both are in the review, because the mistake was the label, not the measurement.) The search is correct (D296-D299, and the confor</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>(The first figures published here, 543 µs / 139 µs / 11.4 µs, were a debug build published without that label; both are in the review, because the mistake was the label, not the measurement.) The search is correct (D296-D299, and the confor</li>
+</ul></details>
+</div>
+<p class="links">corrected by D301</p>
+<div class="verdicts" data-for="D300">
+<button class="verdict" data-verdict="agree" data-id="D300">agree</button>
+<button class="verdict" data-verdict="question" data-id="D300">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D300">wrong</button>
+<input class="note" data-note="D300" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D301" data-id="D301" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D301</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>The pyramid is cached, and D300&#x27;s conclusion is withdrawn</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured: 201 routes, 1 build.</li>
+<li>D300&#x27;s number measured the wrong case too. &quot;~52× slower&quot; compared the hierarchy against a straight-line test on open ground (477 ns, no search at all).</li>
+<li>Measured. Test-first (E0599 twice, then 2 green), pyramid_cache.rs 2 passed / 0.00 s, probe 1 passed; build 21.1 µs once, cached route 4.8 µs, descent 11 ns.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D301">
+<button class="verdict" data-verdict="agree" data-id="D301">agree</button>
+<button class="verdict" data-verdict="question" data-id="D301">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D301">wrong</button>
+<input class="note" data-note="D301" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D302" data-id="D302" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D302</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-20</span>
+<h3>A route is a line, then the hierarchy, then the tile search (P11 done)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured. The acceptance suite drops from 33.74 s to 22.96 s - 32% - with the same 31 tests green.</li>
+<li>Named limits. No measurement yet of a hundred units planning in one tick, nor of a 480×480 map (≈1.2 ms per ground change, unmeasured). And the red-set diff cannot see that blocked routes are now coarser - no fixture asserted a per-tile pol</li>
+</ul></details>
+</div>
+<details class="own-gaps"><summary>1 named gap</summary><ul>
+<li>Named limits. No measurement yet of a hundred units planning in one tick, nor of a 480×480 map (≈1.2 ms per ground change, unmeasured). And the red-set diff cannot see that blocked routes are now coarser - no fixture asserted a per-tile polyline, which is the suite&#x27;s coverage being thin on this subject, said out loud rather than implied.</li>
+</ul></details>
+<div class="verdicts" data-for="D302">
+<button class="verdict" data-verdict="agree" data-id="D302">agree</button>
+<button class="verdict" data-verdict="question" data-id="D302">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D302">wrong</button>
+<input class="note" data-note="D302" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D303" data-id="D303" data-origins="dat measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D303</span>
+<span class="status decided">decided</span>
+<h3>The radius reaches the line test and the step, not the searches</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-dat">dat</span></summary><ul>
+<li>The fix, and its price, known from D301/D302&#x27;s own measurements: one radius-grown grid per radius class (0.20 / 0.25 / 0.40 / 0.50 from the dat), each ~21 µs at 64×65 once per ground change, feeding both the flat search&#x27;s passability test a</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured, differential. radius_route::the_gap_is_planned_for_a_villager_and_not_for_a_trebuchet (a wall with a one-tile gap and a stub that forces a search): the villager reaches the goal through the gap, the packed trebuchet is also planne</li>
+<li>Parked #[ignore]d with that measurement, so the suite stays at 918 / 6 / 21 + 1 parked and the gap stays visible.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D303">
+<button class="verdict" data-verdict="agree" data-id="D303">agree</button>
+<button class="verdict" data-verdict="question" data-id="D303">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D303">wrong</button>
+<input class="note" data-note="D303" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D304" data-id="D304" data-origins="measured review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D304</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-20</span>
+<h3>The search budget is live, and a third row proves it bites</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured. crates/conformance/tests/budget.rs: 4 passed / 0.00 s.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>Mutation-proved: with the budget replaced by u32::MAX, that row fails on 1498 of 1000 and the estimate row fails with it; restored, all four pass.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D304">
+<button class="verdict" data-verdict="agree" data-id="D304">agree</button>
+<button class="verdict" data-verdict="question" data-id="D304">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D304">wrong</button>
+<input class="note" data-note="D304" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D305" data-id="D305" data-origins="measured published" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D305</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-20</span>
+<h3>The hierarchy is not running for units, and D302&#x27;s 32% cannot be attributed to it</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>D302&#x27;s &quot;acceptance 33.74 s -&gt; 22.96 s, a 32% cut&quot; is therefore not attributable to the hierarchy for units. The number was measured twice and is real; the cause is unestablished, and the attribution is withdrawn until it is re-measured.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-published">published</span></summary><ul>
+<li>Commits us to. A published number names the mechanism it is attributed to, and a gate that disables the feature it gates is a defect even when every test passes.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D305">
+<button class="verdict" data-verdict="agree" data-id="D305">agree</button>
+<button class="verdict" data-verdict="question" data-id="D305">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D305">wrong</button>
+<input class="note" data-note="D305" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D306" data-id="D306" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D306</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-20</span>
+<h3>Tangency is a passage, and the radius reaches the searches</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The game settled it. The owner measured in HD (2026-11-20): a packed trebuchet walks a one-tile hole in a wall and a one-tile corridor in bamboo, and the scenario editor places one inside such a corridor.</li>
+<li>Gates on the tier, each with its reason: bodies (avoid.is_empty()), granularity (coarse.level &gt;= 2), and distance (≥ 16 tiles - a labelled deviation, because until the refinement matches FUN_007eeda0&#x27;s tile-boundary rule a coarse chain is a</li>
+<li>Measured. coarse_route 5, radius_route 1 (both radii take the gap), route_shape 1, straight_line 4, walk_line 2 - green together, which the earlier attempt did not manage.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D306">
+<button class="verdict" data-verdict="agree" data-id="D306">agree</button>
+<button class="verdict" data-verdict="question" data-id="D306">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D306">wrong</button>
+<input class="note" data-note="D306" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D307" data-id="D307" data-origins="none" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D307</span>
+<span class="status decided">decided</span>
+<h3>The stamp resolves at the finest level the obstacle occupies (closes D306&#x27;s caveat)</h3></div>
+<div class="basis"><span class="tag tag-none">no stated basis</span></div>
+<div class="verdicts" data-for="D307">
+<button class="verdict" data-verdict="agree" data-id="D307">agree</button>
+<button class="verdict" data-verdict="question" data-id="D307">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D307">wrong</button>
+<input class="note" data-note="D307" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D308" data-id="D308" data-origins="none" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D308</span>
+<span class="status decided">decided</span>
+<h3>A coarse edge refines to the tile where the passage is, not to a cell centre</h3></div>
+<div class="basis"><span class="tag tag-none">no stated basis</span></div>
+<div class="verdicts" data-for="D308">
+<button class="verdict" data-verdict="agree" data-id="D308">agree</button>
+<button class="verdict" data-verdict="question" data-id="D308">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D308">wrong</button>
+<input class="note" data-note="D308" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D309" data-id="D309" data-origins="none" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D309</span>
+<span class="status decided">decided</span>
+<h3>No pre-search line test has been found; our first tier stays unverified</h3></div>
+<div class="basis"><span class="tag tag-none">no stated basis</span></div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>No pre-search line test has been found; our first tier stays unverified</li>
+<li>Therefore: no evidence of a straight-line short-circuit, and some evidence against one. Our tier 1 - a clear leg answers with one waypoint in 477 ns - is therefore unverified as parity, and if the binary truly always searches, it is a delib</li>
+</ul></details>
+<div class="verdicts" data-for="D309">
+<button class="verdict" data-verdict="agree" data-id="D309">agree</button>
+<button class="verdict" data-verdict="question" data-id="D309">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D309">wrong</button>
+<input class="note" data-note="D309" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D310" data-id="D310" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D310</span>
+<span class="status decided">decided</span>
+<h3>The avoid list has no 255 cap, and that is left open on purpose</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>No witness can see it. A route with 300 nearby bodies produces a route either way, and the difference only shows in which bodies are avoided - which no fixture can assert without a test-only probe of the list, and a test-only probe would as</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D310">
+<button class="verdict" data-verdict="agree" data-id="D310">agree</button>
+<button class="verdict" data-verdict="question" data-id="D310">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D310">wrong</button>
+<input class="note" data-note="D310" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D320" data-id="D320" data-origins="owner measured review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D320</span>
+<span class="status decided">decided</span>
+<h3>The re-plan takes a fresh stamp, and the past rule finishes its chain (owner: *&quot;C, proceed&quot;*)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner chose C over leaving it, over solid seated men alone (a measured lane deadlock) and over the seat-rule hybrid (a measured 0.204-tile pile).</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The owner chose C over leaving it, over solid seated men alone (a measured lane deadlock) and over the seat-rule hybrid (a measured 0.204-tile pile).</li>
+<li>Measured (acceptance, release, seed 7, idle; parent 25cb1a8 against this change):</li>
+<li>D238&#x27;s verdict that the shuffle is load-bearing was measured before this chain existed; re-measuring it is the step that this one makes meaningful.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>Mutation-proved: restoring created = route.created fails it on the first assertion.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D320">
+<button class="verdict" data-verdict="agree" data-id="D320">agree</button>
+<button class="verdict" data-verdict="question" data-id="D320">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D320">wrong</button>
+<input class="note" data-note="D320" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D321" data-id="D321" data-origins="owner" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D321</span>
+<span class="status decided">decided</span>
+<h3>The seat shuffle was measuring its own grave</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>Both halves of that reasoning have since gone: the place book itself was deleted (D293, the owner: &quot;Drop it and let the crowds jam&quot;), so there is no square to give up; and the walker&#x27;s past rule now completes its chain (D320), so a passer-b</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D321">
+<button class="verdict" data-verdict="agree" data-id="D321">agree</button>
+<button class="verdict" data-verdict="question" data-id="D321">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D321">wrong</button>
+<input class="note" data-note="D321" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D322" data-id="D322" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D322</span>
+<span class="status decided">decided</span>
+<h3>The chain refines to the crossing of each edge - and tier 2 is dormant in a match</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The 16-tile gate was tried and is kept, on a measurement rather than on the old note.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D322">
+<button class="verdict" data-verdict="agree" data-id="D322">agree</button>
+<button class="verdict" data-verdict="question" data-id="D322">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D322">wrong</button>
+<input class="note" data-note="D322" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D323" data-id="D323" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D323</span>
+<span class="status decided">decided</span>
+<h3>Tier 2 is dormant in a match because the descent is anchored on the start, in the binary too</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>No production change. Measured while trying to make D322&#x27;s hierarchy pay for itself: over 48,000 acceptance ticks, 11,042 route calls, 1,677 long ones, 0 answered by the hierarchy.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D323">
+<button class="verdict" data-verdict="agree" data-id="D323">agree</button>
+<button class="verdict" data-verdict="question" data-id="D323">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D323">wrong</button>
+<input class="note" data-note="D323" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D324" data-id="D324" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D324</span>
+<span class="status decided">decided</span>
+<h3>The body avoidance is not an invention: the removal is faster, reddens two fixtures, and is reverted</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The variant - every planning call given an empty clear list - measured: acceptance 140 entities, 8,861 re-paths, 8.4 s against 141 / 7,125 / 12.6 s, hash d818560cf7bfe824, suite 928 / 2 / 19.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D324">
+<button class="verdict" data-verdict="agree" data-id="D324">agree</button>
+<button class="verdict" data-verdict="question" data-id="D324">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D324">wrong</button>
+<input class="note" data-note="D324" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D325" data-id="D325" data-origins="measured review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D325</span>
+<span class="status decided">decided</span>
+<h3>The stand is chosen for buildings only, so the compass order is not observable for a tree</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>No production change. Ran the acceptance to a measured close rather than the promised route-length change, and the measurement says there is nothing to change: work_position has three call sites and only one moves anybody - gather.rs:543, a</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>Mutation-proved: routing a resource through work_position reddens it (the man walks round to the north-west); reverted, production unchanged.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D325">
+<button class="verdict" data-verdict="agree" data-id="D325">agree</button>
+<button class="verdict" data-verdict="question" data-id="D325">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D325">wrong</button>
+<input class="note" data-note="D325" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D326" data-id="D326" data-origins="none" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D326</span>
+<span class="status decided">decided</span>
+<h3>The conformance row for the hierarchy was pinning the shape D322 replaced</h3></div>
+<div class="basis"><span class="tag tag-none">no stated basis</span></div>
+<div class="verdicts" data-for="D326">
+<button class="verdict" data-verdict="agree" data-id="D326">agree</button>
+<button class="verdict" data-verdict="question" data-id="D326">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D326">wrong</button>
+<input class="note" data-note="D326" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D327" data-id="D327" data-origins="dat" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D327</span>
+<span class="status decided">decided</span>
+<h3>The cost table read straight: the 100/600 rows are terrain flags and the 2000 row is not bodies</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-dat">dat</span></summary><ul>
+<li>Correction 1: the 100 and 600 rows are not &quot;crossable but slow&quot; terrain classes - they are two bits on the terrain object, so naming them is a terrain-table lookup (the dat&#x27;s entries, or the editor&#x27;s labels), not a cost class to invent.</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>Read, not guessed, and it corrects my own D298 in two directions. FUN_007ed280 (116 lines) is the coarse search&#x27;s expansion cost, and in its own order it charges: 10 for an open cell clear on four sides (plus the distance-from-the-edge term</li>
+<li>The open question is smaller than D298 made it and is answerable from the sources we have.</li>
+</ul></details>
+<div class="verdicts" data-for="D327">
+<button class="verdict" data-verdict="agree" data-id="D327">agree</button>
+<button class="verdict" data-verdict="question" data-id="D327">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D327">wrong</button>
+<input class="note" data-note="D327" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D328" data-id="D328" data-origins="binary measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D328</span>
+<span class="status decided">decided</span>
+<h3>The 2000 row priced a rule the original does not have; the two terrain bits need a binary this box does not have</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-binary">binary</span></summary><ul>
+<li>Naming them needs that table, and this box&#x27;s AoK HD.exe is a different build from the decompiled binary: the table&#x27;s VA 0xaf541c lies outside its image (.data ends 0x9e3044), and the same string constants sit 0x8346 lower in its address spa</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured: acceptance bit-identical (c7191f531bd81b1b, 141 entities, 7,125 repaths, 12.9 s) - the proof the branch was dead.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D328">
+<button class="verdict" data-verdict="agree" data-id="D328">agree</button>
+<button class="verdict" data-verdict="question" data-id="D328">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D328">wrong</button>
+<input class="note" data-note="D328" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D329" data-id="D329" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D329</span>
+<span class="status decided">decided</span>
+<h3>The binary&#x27;s 255-entry body-list cap is unobservable in any scene the game makes</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>D310&#x27;s second reason for not adding the cap - &quot;no witness can see it&quot; - was an argument, so it was measured. A 64x64 open map, a wall of villagers in column 32 (layered when the count exceeds the rows), a walker at (20, 30) ordered through </li>
+<li>Cost of finding out: one probe, seven body counts, two builds, four minutes - less than the paragraph that had deferred it since D310.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D329">
+<button class="verdict" data-verdict="agree" data-id="D329">agree</button>
+<button class="verdict" data-verdict="question" data-id="D329">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D329">wrong</button>
+<input class="note" data-note="D329" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D331" data-id="D331" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D331</span>
+<span class="status decided">decided</span>
+<h3>P7: the planner sees a body the mover is standing inside</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The scene reaches the state the way the game does, because Command::Spawn&#x27;s placement separates bodies (measured: a spawn asked for 410400 landed at 419600): both are ordered to one point, pressed to 0 raw, then one walks past the other.</li>
+<li>Measured (two trees, --report 600, same generated config/gamedata/): stockpile at 2,400 s 1,362/724/510 -&gt; 1,949/960/130 (wood +43%, food +33%), re-paths 7,125 -&gt; 1,918 (-73%), acceptance 12.93 s -&gt; 10.18/10.35 s, hash c7191f53 -&gt; bef8b77b.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D331">
+<button class="verdict" data-verdict="agree" data-id="D331">agree</button>
+<button class="verdict" data-verdict="question" data-id="D331">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D331">wrong</button>
+<input class="note" data-note="D331" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D332" data-id="D332" data-origins="measured review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D332</span>
+<span class="status decided">decided</span>
+<h3>P4: ground that refuses a step is re-planned at once, not a second later</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured (two trees, same generated config/gamedata/, release, seed 7, idle): re-paths 1,918 -&gt; 1,727 (-10%), acceptance wall 10.18/10.35 s -&gt; 10.26/10.30 s (inside the run-to-run spread), stockpile at 2,400 s 1,949/960/130 -&gt; 1,961/960/130</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>Red first: &quot;on tick 4 ground refused him and the route was not re-planned (0 -&gt; 0 re-paths)&quot;; green with the gate gone; mutation-proved by putting the gate back, which reddens it at the same tick.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D332">
+<button class="verdict" data-verdict="agree" data-id="D332">agree</button>
+<button class="verdict" data-verdict="question" data-id="D332">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D332">wrong</button>
+<input class="note" data-note="D332" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D334" data-id="D334" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D334</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-21</span>
+<h3>The pathing review, adversarially: the 25 was the budget, the hierarchy never ran, and the body rule is a disc</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured A/B, one variable, seed 7, 48,000 ticks: baseline 5,989 searches at 28.9 expansions each, 54% exhausting the budget, 1,727 re-paths, hash e248486298910e28, 10.04 s; with g + octile 45,088 searches at 11.8 each, 5.8% exhausting, 41,</li>
+<li>Measured, final state: suite 933 / 0 / 19 before the probe row (933 / 0 / 20 after, the probe being #[ignore]d), conformance 21 / 0 / 0, acceptance e248486298910e28, 127 entities, 1,727 re-paths, 10.04 s median of five on an idle box. My ow</li>
+<li>The body rule is a disc where the game&#x27;s is a box. refusal refuses on centre distance; FUN_00840830 is four &lt;= on boxes. New probe: 4,741 of 218,920 body-steps (2.17%) end in a pose whose boxes overlap on both axes while the discs are clear</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D334">
+<button class="verdict" data-verdict="agree" data-id="D334">agree</button>
+<button class="verdict" data-verdict="question" data-id="D334">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D334">wrong</button>
+<input class="note" data-note="D334" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D335" data-id="D335" data-origins="measured prior-art" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D335</span>
+<span class="status decided">decided</span>
+<h3>The road to 100%: the sequence, and the three things the online crosscheck changed</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured: no code change - acceptance e248486298910e28, suite 933 / 0 / 20, conformance 21 / 0 / 0, unchanged.</li>
+<li>The answer is docs/conformance-sequence.md: thirteen steps, ordered by dependency and then by blast radius (the step that moves every route first, so each later measurement is against a settled base), each with its source, the witness it ow</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-prior-art">prior-art</span></summary><ul>
+<li>- P14&#x27;s gate is backwards. openage&#x27;s pathfinding note (citing the Ensemble postmortem and Pottinger&#x27;s talk) says the high-level mip-map &quot;ignores moving objects, e.g.</li>
+<li>Step 12. - The mate exemption is a formation&#x27;s, and villagers never join one (openage formations.md, and the talk&#x27;s &quot;formations allow for some friendly overlap&quot; against &quot;no pushing allowed&quot;).</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D335">
+<button class="verdict" data-verdict="agree" data-id="D335">agree</button>
+<button class="verdict" data-verdict="question" data-id="D335">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D335">wrong</button>
+<input class="note" data-note="D335" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D336" data-id="D336" data-origins="review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D336</span>
+<span class="status decided">decided</span>
+<h3>P15: the 20,000 cap&#x27;s row is a witness now</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>Mutation-proved: with EXPANSION_CAP = u32::MAX it fails &quot;the cap is the budget on this map: 42300 of 20,000 (estimate 42300)&quot;.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D336">
+<button class="verdict" data-verdict="agree" data-id="D336">agree</button>
+<button class="verdict" data-verdict="question" data-id="D336">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D336">wrong</button>
+<input class="note" data-note="D336" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D337" data-id="D337" data-origins="measured review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D337</span>
+<span class="status decided">decided</span>
+<h3>P13 landed: the key is `g + octile`, and it exposed a rounding hole in the mover</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured: key only 9d5fea513f3f8efb, 133/2, 41,557 re-paths, 9.72-9.88 s; with the exact steps 527bf4ebb9520fa0, 132/1, 41,473, 15.70 s and stockpile 1,446/852/655 at 2,400 s.</li>
+<li>A probe over 400 sampled maps showed the keys disagree on the chain in 3,973 of 4,001 scenes.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>Two of my three attempts were wrong in opposite directions (801.295, then 798.77) and are recorded in the review.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D337">
+<button class="verdict" data-verdict="agree" data-id="D337">agree</button>
+<button class="verdict" data-verdict="question" data-id="D337">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D337">wrong</button>
+<input class="note" data-note="D337" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D338" data-id="D338" data-origins="measured prior-art" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D338</span>
+<span class="status decided">decided</span>
+<h3>P14 landed: the tier&#x27;s `avoid` gate is dropped, and the clause that binds is the descent</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured: 0 answers either way in the acceptance match, so honouring the promise costs nothing.</li>
+<li>Instrumentation: Ground::tier_answers / World::tier_answers (never hashed), and the ignored probe crates/sim/tests/tier_probe.rs, so the next slice can say how often the tier fires instead of arguing it must have.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-prior-art">prior-art</span></summary><ul>
+<li>Crosscheck: FUN_007ee980&#x27;s body calls no stander inserter (FUN_007f9d80&#x27;s only callers are FUN_007f96b0 and FUN_007fbab0), openage&#x27;s pathfinding note says the mip-map &quot;ignores moving objects, e.g.</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>The 16-tile floor is kept: it exists because the refinement for short spans is unread (sequence step 8), and it is re-tested then.</li>
+</ul></details>
+<div class="verdicts" data-for="D338">
+<button class="verdict" data-verdict="agree" data-id="D338">agree</button>
+<button class="verdict" data-verdict="question" data-id="D338">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D338">wrong</button>
+<input class="note" data-note="D338" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D339" data-id="D339" data-origins="measured prior-art review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D339</span>
+<span class="status decided">decided</span>
+<h3>P16 landed: a body collides as a box, and the probe&#x27;s 4,741 stay</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured on the same tree, one variable: disc repaths 0 (the landing is taken, 0.378/0.378); box repaths 1 (collision counted, route re-made, step sideways).</li>
+<li>Measured: acceptance 36ceb342bd94acc9 (was 527bf4ebb9520fa0), 134 entities and both players alive at 48,000 (was 132 and one), re-paths 40,127, wall 15.93 s median of three - the match changes, the wall does not.</li>
+<li>What the box does move is the body-step census: 251,681 -&gt; 153,061 in 36,000 ticks (-39%), stricter blocks meaning fewer bodies get to walk.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-prior-art">prior-art</span></summary><ul>
+<li>Crosscheck: FUN_00840830 compares four grown axis-aligned extents (&lt;=), the talk says &quot;shrink the unit to a point and grow everything else&quot;, and nothing in the corpus or openage gives two bodies a disc.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>Two earlier fixture designs were thrown away - one passed for the exempt-collider reason, one asserted a freeze that would be the congelation D290 recorded; both are in the review.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D339">
+<button class="verdict" data-verdict="agree" data-id="D339">agree</button>
+<button class="verdict" data-verdict="question" data-id="D339">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D339">wrong</button>
+<input class="note" data-note="D339" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D340" data-id="D340" data-origins="measured decision" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D340</span>
+<span class="status decided">decided</span>
+<span class="date">2018-02-28</span>
+<h3>sequence step 5 read, not landed: the substitution has no stand to answer</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured (crates/sim/tests/substitute_probe.rs, both scenes named in its header): beside the seeded base a walker touching another body re-plans 196 times in 200 ticks and never stands; in a clear lane the same catch-up gives 0 re-plans in </li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>- refusal() (world/motion.rs:479-611) returns WaitTarget (the order&#x27;s own target) or WaitGround (terrain). A body never refuses the step: the collider joins blockers, the higher id is paused, and the mover walks on (D279 rule 4, D281).</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D340">
+<button class="verdict" data-verdict="agree" data-id="D340">agree</button>
+<button class="verdict" data-verdict="question" data-id="D340">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D340">wrong</button>
+<input class="note" data-note="D340" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D341" data-id="D341" data-origins="measured prior-art" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D341</span>
+<span class="status decided">decided</span>
+<h3>sequence step 6 landed: a body is an obstacle unless it moved</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured, same tree, one variable: acceptance 1e1fcc3cf2b05a4c (was 36ceb342bd94acc9), 133 entities and one player alive at 48,000 (was 134 and two), re-paths 36,567 (was 40,127, -9%), wall 11.42 s median of three (was 15.60 s).</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-prior-art">prior-art</span></summary><ul>
+<li>So the exemption is velocity, not a route: a unit standing at work with a path on its books is still an obstruction. openage&#x27;s note agrees from the other side - the high-level search &quot;ignores moving objects, e.g.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D341">
+<button class="verdict" data-verdict="agree" data-id="D341">agree</button>
+<button class="verdict" data-verdict="question" data-id="D341">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D341">wrong</button>
+<input class="note" data-note="D341" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D342" data-id="D342" data-origins="dat measured published" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D342</span>
+<span class="status decided">decided</span>
+<h3>sequence step 7 landed: the 300 row is a mine, and the tier cannot see it yet</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-dat">dat</span></summary><ul>
+<li>- the function itself: sVar3 = (short )((int )((int )(iVar1 + 0x18) + i  4) + 0xc) + 0x16; if (sVar3 == 8 || sVar3 == 0x20) return 1; - the same +0x16 short that FUN_008a4360 compares with 0x27 for a gate, which is the gate&#x27;s class (39); - </li>
+<li>Landed. The pack names which of its own resources are the expensive neighbours - snug = true on gold and stone in config/resources.toml, with the class provenance in the comment - so crates/ learns neither the dat&#x27;s class nor the id (D17).</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The census, and the reason no match moves: on the acceptance map, level 0 has 3,970 open tiles, of which 247 were 300 under the old rule and 32 are under the game&#x27;s - 215 cells the search stops pricing.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-published">published</span></summary><ul>
+<li>Var3 == 0x20) return 1; - the same +0x16 short that FUN_008a4360 compares with 0x27 for a gate, which is the gate&#x27;s class (39); - the dat this tree&#x27;s install ships: class 8 is STONM/ROCKSX, class 32 is GOLDM/ROCKGX (config/gamedata/units.to</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D342">
+<button class="verdict" data-verdict="agree" data-id="D342">agree</button>
+<button class="verdict" data-verdict="question" data-id="D342">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D342">wrong</button>
+<input class="note" data-note="D342" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D343" data-id="D343" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D343</span>
+<span class="status decided">decided</span>
+<h3>sequence step 8 landed: the refined waypoint is the crossing the line makes</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured, same tree, one variable: acceptance 1e1fcc3cf2b05a4c, 133 entities, one player, 36,567 re-paths - both sides, bit-identical, because the tier that uses the refinement answers 0 of 61,276 routes on this map (D338).</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D343">
+<button class="verdict" data-verdict="agree" data-id="D343">agree</button>
+<button class="verdict" data-verdict="question" data-id="D343">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D343">wrong</button>
+<input class="note" data-note="D343" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D344" data-id="D344" data-origins="measured published" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D344</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-20</span>
+<h3>the level floor moved to 1 and was put back: the tier&#x27;s routes are worse than the flat search&#x27;s</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Moved to 1, measured, and withdrawn (D345). The floor became 1: the binary refuses nothing - FUN_007ee980 walks the levels down and floors at 0 - and a mid-level attempt that fails falls through to the low-level path (0xf98).</li>
+<li>Measured, then, and it was inert. Acceptance 1e1fcc3cf2b05a4c, 133 entities, one player, 36,567 re-paths, identical at floor 1, floor 2 and floor 0 - all three measured by edit on the same tree.</li>
+<li>The finding: D338&#x27;s priced neighbours do not reproduce, and the floor was never the binding gate. D338 measured floor 1 at 13 answers and floor 0 at 108, each rewriting the match (69a548722252b27e, d700295118db1114).</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-published">published</span></summary><ul>
+<li>Commits us to. A published answer count is measured again whenever the routes under it change, and a gate is priced before it is loosened: the floor was the named lever for a session and moved nothing.</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>On the acceptance map that refused 127 of 185 long walks (D338), so the tier answered nothing and D341-D343 were unread.</li>
+</ul></details>
+<div class="verdicts" data-for="D344">
+<button class="verdict" data-verdict="agree" data-id="D344">agree</button>
+<button class="verdict" data-verdict="question" data-id="D344">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D344">wrong</button>
+<input class="note" data-note="D344" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D345" data-id="D345" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D345</span>
+<span class="status decided">decided</span>
+<h3>the tier answers, and its routes lose: the floor goes back to 2 and both gates stay</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>What this measured. D344&#x27;s funnel left two of our own gates between the tier and an answer: coarse_route refusing a goal whose cell holds an obstacle (13 long walks), and the chain&#x27;s certification refusing a leg that crosses a body&#x27;s box (1</li>
+<li>The body certification (opened, measured, withdrawn). The plan&#x27;s avoid list is built by World::standing_bodies, which skips every body whose route has moved - so it holds the bodies that are standing, and D320 walks through a standing body </li>
+<li>Commits us to. A port of a rule is not a port of its cost: the game&#x27;s coarse search is the right rule and a losing route here, and the two have to be measured separately before a gate is opened.</li>
+</ul></details>
+</div>
+<details class="own-gaps"><summary>1 named gap</summary><ul>
+<li>What is back, and what is not. The floor is 2; the chain is certified against bodies again; both witnesses are parked in docs/parked/ with the un-park condition named, and docs/next-step.md carries the fork. What landed is the measurement: TierShadow (points and polyline length for the tier&#x27;s answer and the flat search&#x27;s, on the same walk), TierFunnel (long walks, floor refusals, no-coarse, one-ce</li>
+</ul></details>
+<div class="verdicts" data-for="D345">
+<button class="verdict" data-verdict="agree" data-id="D345">agree</button>
+<button class="verdict" data-verdict="question" data-id="D345">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D345">wrong</button>
+<input class="note" data-note="D345" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D346" data-id="D346" data-origins="owner measured prior-art" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D346</span>
+<span class="status decided">decided</span>
+<h3>the owner&#x27;s ruling: follow the game - the chain is smoothed, and the tier answers for real</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner answered &quot;Please follow original game&quot;, so the question stopped being &quot;which route is better&quot; and became &quot;which route is the game&#x27;s&quot;.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured before this change: 12.3 waypoints a walk against the flat search&#x27;s 4.8, and 1.6 tiles of extra ground per walk.</li>
+<li>Measured, same tree, one variable (tier_probe, 48,000 ticks, release): tier answers 16 of 31,256 routes; the waypoint census is 194 raw -&gt; 57 smoothed; and on the same 16 walks the tier now costs 57 waypoints / 5,460,841 raw against the fla</li>
+<li>That is the last gate and its own slice; the coarse costs at tile resolution (10/300 rows, four-directional, then smoothed) against our octile search is the measurement it owes.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-prior-art">prior-art</span></summary><ul>
+<li>The pass never refuses a route. Prior art could not settle it - the deck&#x27;s smoothing slide is about the polygonal solver - so the port rests on the binary&#x27;s own log line and body, said plainly rather than implied.</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>The ruling. U28 offered three doors (pull the chain, price the coarse costs, leave the tier unread).</li>
+</ul></details>
+<div class="verdicts" data-for="D346">
+<button class="verdict" data-verdict="agree" data-id="D346">agree</button>
+<button class="verdict" data-verdict="question" data-id="D346">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D346">wrong</button>
+<input class="note" data-note="D346" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D347" data-id="D347" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D347</span>
+<span class="status decided">decided</span>
+<h3>the last gate is the game&#x27;s: level 0 is answered by the levelled search, not by ours</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured, same tree, one variable (tier_probe, 48,000 ticks, release): tier answers 92 of 50,652 routes (was 16 of 31,256), the waypoint census 4,175 raw -&gt; 637 smoothed (85% removed), and on the same 92 walks the tier costs 637 waypoints /</li>
+<li>cks, release): tier answers 92 of 50,652 routes (was 16 of 31,256), the waypoint census 4,175 raw -&gt; 637 smoothed (85% removed), and on the same 92 walks the tier costs 637 waypoints / 65,242,638 raw against the flat search&#x27;s 515 / 63,486,9</li>
+<li>Commits us to. A gate justified by a cost is a claim about a mechanism, and a mechanism measured without the pass that follows it is half a mechanism - twice now, in the same subsystem.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D347">
+<button class="verdict" data-verdict="agree" data-id="D347">agree</button>
+<button class="verdict" data-verdict="question" data-id="D347">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D347">wrong</button>
+<input class="note" data-note="D347" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D348" data-id="D348" data-origins="measured" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D348</span>
+<span class="status decided">decided</span>
+<h3>the window is a per-unit margin we have not read, and our tier is a stand-in for a driver nobody has read</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Commits us to. When a port&#x27;s window is unread, the port is a stand-in and has to be named as one - &quot;the levelled search&quot; in our docs had been standing for a search whose window nobody had read, and three decisions (D344, D346, D347) were me</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>Both are FUN_007ed280&#x27;s, and reading them again turned up the thing that mattered more: the window that search is clipped to, which D299 has carried as &quot;the padding is unread&quot; since P11 landed.</li>
+<li>So the mover&#x27;s mid-level search is local (margin 0 - one cell), and the order-level planner&#x27;s window is whatever the unit says it is, through a virtual method whose implementations are unread.</li>
+<li>The driver that builds that high-level path is still unread - it is the same gap D297 recorded (&quot;the driver that assembles a coarse route out of those pieces ...</li>
+<li>The three candidate repairs on the table - restoring the floor, pricing the cost rows, or waiting for the driver - are now ordered: waiting for the driver first, because the other two measure a route shape whose source is unread.</li>
+</ul></details>
+<div class="verdicts" data-for="D348">
+<button class="verdict" data-verdict="agree" data-id="D348">agree</button>
+<button class="verdict" data-verdict="question" data-id="D348">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D348">wrong</button>
+<input class="note" data-note="D348" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D349" data-id="D349" data-origins="measured" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D349</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-22</span>
+<h3>a body with a spent route still has a goal, and the plan&#x27;s ignore clause means what it says</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Is there scheduled any step that would address it?&quot; Nothing in the queue did, so the report was measured first (collision_probe grows a pile census), then traced (pile_probe attributes each new overlap to the exemption the mover held), then</li>
+<li>What did not land, and why it is written here. The obvious next move - make every body an obstacle in the plan, on the reading that the ignore list is the only way out of FUN_007f9d80&#x27;s clause - was written, measured and reverted in the sam</li>
+<li>Not measured, stated as a hypothesis: whether the rectangle moves the pile is unknown until it is built.</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>Not measured, stated as a hypothesis: whether the rectangle moves the pile is unknown until it is built.</li>
+</ul></details>
+<div class="verdicts" data-for="D349">
+<button class="verdict" data-verdict="agree" data-id="D349">agree</button>
+<button class="verdict" data-verdict="question" data-id="D349">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D349">wrong</button>
+<input class="note" data-note="D349" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D350" data-id="D350" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D350</span>
+<span class="status decided">decided</span>
+<h3>the tier&#x27;s refinement clips a body, and the fix is three ports, not one (read, not landed)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The fixture is preserved outside the tree at /opt/data/cache/scratch/age2hd-pending-fixtures/body_blocks_its_tiles.rs (it asserts both that the walker never enters the pair&#x27;s grown box and that he still arrives), and the three-port slice is</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D350">
+<button class="verdict" data-verdict="agree" data-id="D350">agree</button>
+<button class="verdict" data-verdict="question" data-id="D350">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D350">wrong</button>
+<input class="note" data-note="D350" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D351" data-id="D351" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D351</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-22</span>
+<h3>a place another body holds is not a place to work from (branch `d351-reseat`, not landed)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Maybe things like that could happen, but never in this scale.&quot; So the scale is the defect, and this row is the measured slice against it.</li>
+<li>Measured (36,000 ticks, seed 7, release). Deepest overlapping group 11 -&gt; 9; pairs closer than a fifth of a tile 317,041 -&gt; 274,054 (-13.6%); overlapping pair-ticks 349,824 -&gt; 324,711; most overlapping pairs in one tick 63 -&gt; 42; re-paths 2</li>
+<li>Not landed on this branch. The revive/re-seat work lives on d351-reseat (its last commit 100bae9); what belongs here is the reading and the three measured re-seat targets, recorded in docs/reviews/2026-11-22-d351-a-taken-place-is-not-a-plac</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D351">
+<button class="verdict" data-verdict="agree" data-id="D351">agree</button>
+<button class="verdict" data-verdict="question" data-id="D351">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D351">wrong</button>
+<input class="note" data-note="D351" placeholder="note (saved with the verdict)">
+</div>
+</article>
 </div>
 </details>
 <details class="group" id="area-economy" data-area="Economy" data-unfinished="3" data-undecided="5" open>
-<summary><span class="range">Economy</span> <span class="gcount">34 decisions · 5 undecided · 3 unfinished · 1 superseded · 2 with no stated basis</span></summary>
+<summary><span class="range">Economy</span> <span class="gcount">47 decisions · 5 undecided · 3 unfinished · 1 superseded · 2 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U14</span> resource_in codes for gathering tasks. Read from dat.unit_data.tasks (see below): 0 food, 1 wood, 2 stone, 3 gold are confirmed by the variant that carries them; 15, 16, 17 and 56 are pseudo-resources whose meanings are inferred but not proven — VMHUN uses 15, VMFOR and VMFAR use 16, VMFIS uses 17, VMMIN also lists 56.</li>
 <li><span class="id">U20</span> How much food does a farm hold, and where does the number come from? The base is 175 — resource 36, the same in every playable civ&#x27;s row — and the three farm techs are kind-1 adds to that line: Horse Collar [1, 36, 1, -1, 75], Heavy Plow +125, Crop Rotation +175, the Chinese team bonus +45. 175 + 75 = 250, the published figure we had taken as the base.</li>
@@ -2244,6 +3878,269 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D245" placeholder="note (saved with the verdict)">
 </div>
 </article>
+<article class="decision s-decided" id="d-D280" data-id="D280" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D280</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>The picker asks the cheap questions first, and the expensive one of the nearest eight (2026-11-19)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured, on the acceptance fixture, after the port. 760,946 route plans by tick 14,400, 157 a tick, and 198.6 s of 225.9 s spent inside them: 114 path questions per pick and 13 ms of a tick, while the match&#x27;s own new work was under 30 s.</li>
+<li>Basis. The measurement above (nine_times_the_wood_does_not_cost_nine_times_the_pick: 66 routes to name one tree on a map of 66, 6 on a map of 6; after the rule, 2 and 2), the phase probe over World::step, and nearest_like&#x27;s own D138 comment</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D280">
+<button class="verdict" data-verdict="agree" data-id="D280">agree</button>
+<button class="verdict" data-verdict="question" data-id="D280">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D280">wrong</button>
+<input class="note" data-note="D280" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D291" data-id="D291" data-origins="owner" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D291</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>The engine retargets within a kind; repurposing across kinds is the AI&#x27;s job (owner, 2026-11-19)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner&#x27;s question. &quot;How is the retarget::a_forager_whose_bush_is_finished_goes_to_a_farm handled by the game? The game code itself should never hardcode such move.</li>
+<li>The radius is the owner&#x27;s own ruling, not a measurement - D149, 2026-11-07: &quot;the owner chose C - line of sight + 5&quot; - and the same-kind shape is what a replay-derived model of DE implements (aoe2mc: 8 tiles for trees, 5 for the rest).</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D291">
+<button class="verdict" data-verdict="agree" data-id="D291">agree</button>
+<button class="verdict" data-verdict="question" data-id="D291">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D291">wrong</button>
+<input class="note" data-note="D291" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D293" data-id="D293" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D293</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>A gatherer presses in; the seat book stops being read (owner, 2026-11-19)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>It used to fire only on Standoff::NoRoom, which no longer exists, so with the seats gone nobody was ever re-targeted and a jammed crowd stayed jammed for ever - measured, research::a_trebuchet_cannot_be_trained_before_the_imperial_age could</li>
+<li>Measured. Witness first: gather_press_in::two_gatherers_on_one_tree_press_in read 0.960 tiles between two men on one tree before the cut, and presses inside a body&#x27;s width after it.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D293">
+<button class="verdict" data-verdict="agree" data-id="D293">agree</button>
+<button class="verdict" data-verdict="question" data-id="D293">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D293">wrong</button>
+<input class="note" data-note="D293" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D294" data-id="D294" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D294</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-19</span>
+<h3>The seat book is gone (completes D293&#x27;s cleanup)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured. The suite is 895 passed / 11 failed / 21 ignored before and after the deletion, with the red set byte-identical (diff of the sorted names reports no lines), which is what &quot;inert&quot; has to mean: a deletion that moves a test is a dele</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D294">
+<button class="verdict" data-verdict="agree" data-id="D294">agree</button>
+<button class="verdict" data-verdict="question" data-id="D294">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D294">wrong</button>
+<input class="note" data-note="D294" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D295" data-id="D295" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D295</span>
+<span class="status decided">decided</span>
+<h3>A gather on the tile a man already stands on is accepted (owner rule: nothing may refuse an order the game takes)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The wrong fix, measured and reverted. The first version put the same-tile rule in plan_path_with, the planner every walk uses. Suite 897 passed / 9 failed with three new reds: a_point_inside_its_own_tile_is_still_reached (a walk to a point </li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D295">
+<button class="verdict" data-verdict="agree" data-id="D295">agree</button>
+<button class="verdict" data-verdict="question" data-id="D295">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D295">wrong</button>
+<input class="note" data-note="D295" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D311" data-id="D311" data-origins="measured" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D311</span>
+<span class="status decided">decided</span>
+<h3>The two reseed reds fail at the same place: the plot is paid for and never raised</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>So the trigger, the payment and the setting all work; the farm is never placed. That narrows the fault to one of two places, and they are distinguishable with one probe:</li>
+<li>Next probe, written down rather than guessed: instrument the reseed arm to print on entry and on refusal, and run the fixture - the answer is which of the two it is, in one run.</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>Next probe, written down rather than guessed: instrument the reseed arm to print on entry and on refusal, and run the fixture - the answer is which of the two it is, in one run.</li>
+</ul></details>
+<div class="verdicts" data-for="D311">
+<button class="verdict" data-verdict="agree" data-id="D311">agree</button>
+<button class="verdict" data-verdict="question" data-id="D311">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D311">wrong</button>
+<input class="note" data-note="D311" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D312" data-id="D312" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D312</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-20</span>
+<h3>The two reseed reds were a statue, and the reach was measured to the anchor point</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The two reseed reds were a statue, and the reach was measured to the anchor point</li>
+<li>Fault 1, the engine: the reach was measured to a point. D279&#x27;s test compared the route&#x27;s last point with the node&#x27;s position.</li>
+<li>The number does not change: 2 tiles stays, the thing it is measured to does not (the FORM of a rule, references/game-rule-to-engine.md).</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D312">
+<button class="verdict" data-verdict="agree" data-id="D312">agree</button>
+<button class="verdict" data-verdict="question" data-id="D312">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D312">wrong</button>
+<input class="note" data-note="D312" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D313" data-id="D313" data-origins="owner measured review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D313</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-20</span>
+<h3>A load leaves at the wall, and nothing looser</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>Crosscheck: the owner&#x27;s rule 3 was being broken by a clause written to work around an older defect. The invariant (invariants.rs, his words: &quot;If villager drops resource when further from the drop site than 1/2 diameter -&gt; FAIL&quot;) was red at </li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>That clause dates from before D306: touching a wall used to be a collision, so a carrier whose neighbouring tile was taken could not get to the wall and never banked (measured once at 400,000 ticks, research::two_players_can_be_different_ci</li>
+<li>Measured. Acceptance match (release, seed 7, 48,000 ticks) 9.28 s / 9.54 s against 8.53 s / 8.81 s on 373902f (+9% to +12%), and the outcome changed, as it must: hash 89ff37d844cfd11f against 3f6c802027ff40fb, 129 entities against 141, 10,0</li>
+<li>The sentence that stood here was written from the entity count alone.) Not measured: the delivered totals per column on both trees, which would turn the wall-time figure into a throughput figure.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>Not proven: that it catches a deliberate shove - a mutation that displaces a working man while leaving others at work was not constructed.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D313">
+<button class="verdict" data-verdict="agree" data-id="D313">agree</button>
+<button class="verdict" data-verdict="question" data-id="D313">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D313">wrong</button>
+<input class="note" data-note="D313" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D316" data-id="D316" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D316</span>
+<span class="status decided">decided</span>
+<h3>A farmer beside a plot still walks at it: the stand was half the story</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>What was measured while it was in: farm 7 of 8 green and only the new witness red; gather unchanged.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D316">
+<button class="verdict" data-verdict="agree" data-id="D316">agree</button>
+<button class="verdict" data-verdict="question" data-id="D316">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D316">wrong</button>
+<input class="note" data-note="D316" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D317" data-id="D317" data-origins="measured decision" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D317</span>
+<span class="status decided">decided</span>
+<h3>D316&#x27;s inference is withdrawn: the man in that scene was a tile away, and walking was right</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Making the two agree is a tidiness change with a route-length measurement behind it, not a rule fix.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>Why. The scene in D312/D316 puts the man at a tile corner one tile west of the plot - Spawn anchors a point, and a corner is the far edge of its own tile, so he stood a whole tile from the plot&#x27;s footprint.</li>
+<li>So the compass-order wart is narrower than D316 said: work_position&#x27;s fixed north-west ring does choose which tile a man walks to, but a man who is already in reach is not moved first, so the cost is at most a longer initial walk - not a lo</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D317">
+<button class="verdict" data-verdict="agree" data-id="D317">agree</button>
+<button class="verdict" data-verdict="question" data-id="D317">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D317">wrong</button>
+<input class="note" data-note="D317" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D318" data-id="D318" data-origins="measured review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D318</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-20</span>
+<h3>D313&#x27;s economy figure is corrected: the stockpile **doubles**, and the error was mine</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured: the same acceptance match, release, seed 7, 48,000 ticks, --report 600, three trees (D312 in a worktree at 338b9f8, D313 at ec9d99c, and today&#x27;s fee9cd8; the worktrees ran the main tree&#x27;s generated config/gamedata/, which none of </li>
+<li>How the error happened. D313&#x27;s row (and its review) said &quot;the economy is smaller because a carrier now walks the last ~0.21 tiles on every trip&quot;, with the entity count (141 -&gt; 129) as the only number behind it and an arithmetic estimate sta</li>
+<li>The owed measurement - the delivered/scheduled totals per column - has now been taken, and it says the opposite.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>What this corrects: D313&#x27;s row and docs/reviews/2026-11-20-d313-a-load-leaves-at-the-wall.md both carry the wrong claim; the review has a correction section and this row supersedes the row&#x27;s sentence.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D318">
+<button class="verdict" data-verdict="agree" data-id="D318">agree</button>
+<button class="verdict" data-verdict="question" data-id="D318">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D318">wrong</button>
+<input class="note" data-note="D318" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D353" data-id="D353" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D353</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-22</span>
+<h3>a drop site is the nearest wall, not the nearest anchor</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured in a_nearer_wall_wins_over_a_nearer_anchor: the town centre&#x27;s wall 1 tile from the tree against the camp&#x27;s 2, and the camp&#x27;s anchor nearer than the town centre&#x27;s - the carrier walked past the town centre.</li>
+<li>The ranking is (wall_gap, anchor distance², id), where wall_gap is footprint_gap&#x27;s measurement without the lookup (D246&#x27;s own measure, so the delivery test and the choice of site agree).</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D353">
+<button class="verdict" data-verdict="agree" data-id="D353">agree</button>
+<button class="verdict" data-verdict="question" data-id="D353">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D353">wrong</button>
+<input class="note" data-note="D353" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D354" data-id="D354" data-origins="measured decision review" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D354</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-07</span>
+<h3>the rule he remembers is in the engine; the picker that breaks it is the one handing out work</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>The scene, measured (48,000 ticks, seed 7, --dump at the end): gold sits at 10 from ~1,200 s to 2,400 s with 1,011 gold in four tiles at (24.5,11.5), 9.6 tiles from the town centre against a gather reach of 9 (sight 4 + the 5-tile look-arou</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>Not diagnosed, so not shipped (D223/D217&#x27;s rule: code a mutation cannot distinguish from nothing does not land, and code that halves a match&#x27;s throughput certainly does not).</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-review">review</span></summary><ul>
+<li>Not diagnosed, so not shipped (D223/D217&#x27;s rule: code a mutation cannot distinguish from nothing does not land, and code that halves a match&#x27;s throughput certainly does not).</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D354">
+<button class="verdict" data-verdict="agree" data-id="D354">agree</button>
+<button class="verdict" data-verdict="question" data-id="D354">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D354">wrong</button>
+<input class="note" data-note="D354" placeholder="note (saved with the verdict)">
+</div>
+</article>
 </div>
 </details>
 <details class="group" id="area-buildings-construction" data-area="Buildings &amp; construction" data-unfinished="7" data-undecided="0" open>
@@ -2596,7 +4493,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D183" placeholder="note (saved with the verdict)">
 </div>
 </article>
-<article class="decision s-decided" id="d-D184" data-id="D184" data-origins="owner" data-unresolved="0" data-status="decided">
+<article class="decision s-decided" id="d-D184" data-id="D184" data-origins="owner" data-unresolved="1" data-status="decided">
 <div class="head">
 <span class="id">D184</span>
 <span class="status decided">decided</span>
@@ -2607,6 +4504,9 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li>The owner: &quot;I noticed that scout stopped near the forest, then villager placed there a lumber camp colliding with his position, that pushed scout to the forrest.</li>
 </ul></details>
 </div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>Conformance: UNVERIFIED - the accident needs the object-on-grass model (scattered trees) this tree does not have yet; the row is a guard on the eviction, not a claim about the original&#x27;s eviction.</li>
+</ul></details>
 <div class="verdicts" data-for="D184">
 <button class="verdict" data-verdict="agree" data-id="D184">agree</button>
 <button class="verdict" data-verdict="question" data-id="D184">question</button>
@@ -3418,7 +5318,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </div>
 </details>
 <details class="group" id="area-ui" data-area="UI" data-unfinished="2" data-undecided="0" open>
-<summary><span class="range">UI</span> <span class="gcount">16 decisions · 2 unfinished · 6 with no stated basis</span></summary>
+<summary><span class="range">UI</span> <span class="gcount">19 decisions · 2 unfinished · 6 with no stated basis</span></summary>
 <div class="kind" data-kind="unfinished"><h4>Not finished</h4><ul class="gaps">
 <li data-decision="D97"><a class="id" href="#d-D97">D97</a> What is committed and what is not. config/names.toml is ours - a list of identifiers - and is committed. The extracted tables beside it stay out of git under D8, unchanged for now (the owner chose &quot;C now&quot;: pin and verify, ship later). The owner&#x27;s plan is no reimport: once the configuration no longer needs the dat&#x27;s numbering, the tables become hand-maintained content and can be committed, because </li>
 <li data-decision="D156"><a class="id" href="#d-D156">D156</a> 1. ruage_view::placement::Placement holds the whole rule with no window in it - a winit loop cannot be driven from a test, so the first click starts (returns None), the second places (returns the command), hover lengthens, and segments answers per tile with valid. Before the first click nothing is drawn, because there is no run. 2. The ghost is the order: tiles() calls World::wall_line - there is </li>
@@ -3707,6 +5607,66 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <button class="verdict" data-verdict="question" data-id="D187">question</button>
 <button class="verdict" data-verdict="wrong" data-id="D187">wrong</button>
 <input class="note" data-note="D187" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D273" data-id="D273" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D273</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>the click was half a tile out, and the half was the view&#x27;s (2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured, the click round trip was 24 pixels out at tile_pixels = 96: the half diamond, exactly, and not a rounding error.</li>
+<li>The single-unit fixture passed all along because it measured the sim, and the sim was right.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D273">
+<button class="verdict" data-verdict="agree" data-id="D273">agree</button>
+<button class="verdict" data-verdict="question" data-id="D273">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D273">wrong</button>
+<input class="note" data-note="D273" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D274" data-id="D274" data-origins="owner decision" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D274</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>the cross and the circle land on the click too (2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner: &quot;Wherever I click, the yellow cross appears lower then were I click.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>the selection circle, raised by its own half-height (D179&#x27;s rule), so its centre sat above the ground point.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D274">
+<button class="verdict" data-verdict="agree" data-id="D274">agree</button>
+<button class="verdict" data-verdict="question" data-id="D274">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D274">wrong</button>
+<input class="note" data-note="D274" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D314" data-id="D314" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D314</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-20</span>
+<h3>The click asks what the tick will ask</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured on gather_pick&#x27;s walled block:</li>
+<li>Measured. Acceptance 9.42 / 9.27 s against 9.28 / 9.54 s on ec9d99c, with a bit-identical state (89ff37d844cfd11f, 129 entities, 10,026 repaths) - so no gather order in that match is walled at the click, and the fixture is the only evidence</li>
+<li>The picker never pre-filtered: a probe showed it offering the walled node and its tiles workable; the refusal was simply swallowed one layer down.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D314">
+<button class="verdict" data-verdict="agree" data-id="D314">agree</button>
+<button class="verdict" data-verdict="question" data-id="D314">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D314">wrong</button>
+<input class="note" data-note="D314" placeholder="note (saved with the verdict)">
 </div>
 </article>
 </div>
@@ -4225,11 +6185,14 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </article>
 </div>
 </details>
-<details class="group" id="area-simulation-core" data-area="Simulation core" data-unfinished="0" data-undecided="2" open>
-<summary><span class="range">Simulation core</span> <span class="gcount">13 decisions · 2 undecided · 2 superseded · 3 with no stated basis</span></summary>
+<details class="group" id="area-simulation-core" data-area="Simulation core" data-unfinished="1" data-undecided="2" open>
+<summary><span class="range">Simulation core</span> <span class="gcount">14 decisions · 2 undecided · 1 unfinished · 2 superseded · 3 with no stated basis</span></summary>
 <div class="kind" data-kind="undecided"><h4>Not decided yet</h4><ul class="unknowns">
 <li><span class="id">U12</span> Simulation tick rate for 5.7. No public source states it. librematch/genie reproduces DE build 158041 bit-for-bit and must therefore know its step interval — that code is the first place to look (see prior-art note in docs/decisions.md). Checked 2026-10-23: openage does not model a fixed tick at all — its time subsystem is a millisecond-resolution clock on its own thread driving an event queue, wi</li>
 <li><span class="id">U18</span> What is the intra-tick order of object updates, and can two units kill each other in one tick? librematch/genie&#x27;s world/step.rs says a call on another object &quot;takes effect at once&quot;, and the game reads the world&#x27;s and players&#x27; fields live, so the original&#x27;s tick is a sequence (Gaia, then players 1–8, each player&#x27;s objects in slot order) in which a unit killed earlier in the tick does not swing late</li>
+</ul></div>
+<div class="kind" data-kind="unfinished"><h4>Not finished</h4><ul class="gaps">
+<li data-decision="D315"><a class="id" href="#d-D315">D315</a> Named and not done: player 2&#x27;s opening is still much faster than player 1&#x27;s (barracks 70 s against 320 s). It no longer decides the test, but the mirror is not even, and evening it is a content decision with a balance question behind it.</li>
 </ul></div>
 <div class="kind" data-kind="decisions">
 <article class="decision s-superseded" id="d-D9" data-id="D9" data-origins="none" data-unresolved="0" data-status="superseded">
@@ -4495,6 +6458,29 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <button class="verdict" data-verdict="question" data-id="D232">question</button>
 <button class="verdict" data-verdict="wrong" data-id="D232">wrong</button>
 <input class="note" data-note="D232" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D315" data-id="D315" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D315</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-20</span>
+<h3>The skirmish was one-sided because its clock was stale</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Player 2&#x27;s two militia were attacking from 230 s because its barracks stands at 70 s, while player 1&#x27;s own timeline (measured with player 2&#x27;s attack held back) is: site 320 s, 422 of 1000 at 350 s, finished before 400 s, militia in hand at </li>
+<li>So the content was wrong, not the engine: a five-minute head start in a section the file calls a mirrored opening, and its own comments already warn that the numbers were measured under older rules.</li>
+<li>Measured. Suite 927 / 0 / 21 - the first fully green run of this work, from 925 / 2 / 21 - and the acceptance match is bit-identical (89ff37d844cfd11f, 129 entities, 10,026 repaths, 9.54 / 9.21 s), which is the check that a change to one sc</li>
+</ul></details>
+</div>
+<details class="own-gaps"><summary>1 named gap</summary><ul>
+<li>Named and not done: player 2&#x27;s opening is still much faster than player 1&#x27;s (barracks 70 s against 320 s). It no longer decides the test, but the mirror is not even, and evening it is a content decision with a balance question behind it.</li>
+</ul></details>
+<div class="verdicts" data-for="D315">
+<button class="verdict" data-verdict="agree" data-id="D315">agree</button>
+<button class="verdict" data-verdict="question" data-id="D315">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D315">wrong</button>
+<input class="note" data-note="D315" placeholder="note (saved with the verdict)">
 </div>
 </article>
 </div>
@@ -5057,7 +7043,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </div>
 </details>
 <details class="group" id="area-project-process" data-area="Project process" data-unfinished="1" data-undecided="0" open>
-<summary><span class="range">Project process</span> <span class="gcount">27 decisions · 1 unfinished · 1 superseded · 3 with no stated basis</span></summary>
+<summary><span class="range">Project process</span> <span class="gcount">32 decisions · 1 unfinished · 1 superseded · 3 with no stated basis</span></summary>
 <div class="kind" data-kind="unfinished"><h4>Not finished</h4><ul class="gaps">
 <li data-decision="D18"><a class="id" href="#d-D18">D18</a> Not yet done, deliberately: there is no renderer. The headless run is the harness, and a renderer is a large piece of work that buys nothing until the simulation is worth watching. &quot;Ready for replacement&quot; is therefore written as a schema and a boundary, not as a graphics engine.</li>
 </ul></div>
@@ -5645,23 +7631,136 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <input class="note" data-note="D249" placeholder="note (saved with the verdict)">
 </div>
 </article>
+<article class="decision s-decided" id="d-D278" data-id="D278" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D278</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-18</span>
+<h3>The acceptance floor is the win, not an entity count (owner, 2026-11-18)</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Basis. Measured in this tree: main 131 entities / players=1 / b5292af5a6072d57; the D250 build 137 / won at 2,381 s; the control 154 / never resolves; d276-no-slide 153 / players=2 with the food wall from 2,387 s.</li>
+<li>Where the win cannot be read, the floor goes back to its old job: a pure movement probe (a crowd, a corridor, a march) has no match to win, and its own fixture is the gate.</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D278">
+<button class="verdict" data-verdict="agree" data-id="D278">agree</button>
+<button class="verdict" data-verdict="question" data-id="D278">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D278">wrong</button>
+<input class="note" data-note="D278" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D319" data-id="D319" data-origins="owner measured" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D319</span>
+<span class="status decided">decided</span>
+<h3>The conformance gate was dead, and one divergence row was stale</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-owner">owner</span></summary><ul>
+<li>The owner asked whether conformance tests are still skipped.</li>
+<li>Neither is a fixture the owner asked for; both are ours, with their causes written down.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>Measured. Conformance set 21 tests, 21 pass, 0 ignored (was: does not compile; before that 19/1 with two rows parked).</li>
+<li>The one #[ignore]d divergence - &quot;the radius lives in the step, not in the planner&quot; - was made false by D303-D306 and is now a live conformance row, the_search_grows_obstacles_by_the_bodys_radius: a body a tile wide is planned through a one-</li>
+<li>Still ignored, named rather than hidden: the main workspace keeps 21 #[ignore]s - 19 instruments (perf and measurement probes that print, plus the two four-hour determinism runs) and 2 real gaps, a_passer_by_does_not_move_the_seated_gathere</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>Still ignored, named rather than hidden: the main workspace keeps 21 #[ignore]s - 19 instruments (perf and measurement probes that print, plus the two four-hour determinism runs) and 2 real gaps, a_passer_by_does_not_move_the_seated_gathere</li>
+</ul></details>
+<div class="verdicts" data-for="D319">
+<button class="verdict" data-verdict="agree" data-id="D319">agree</button>
+<button class="verdict" data-verdict="question" data-id="D319">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D319">wrong</button>
+<input class="note" data-note="D319" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D330" data-id="D330" data-origins="measured" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D330</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-21</span>
+<h3>&quot;Blunt copy&quot;: the parity register re-verified, and its two forks forfeited to the original</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>finish_blocked_orders and beside are gone), P8 (no seat book), the levelled half of P11; - P4 written &quot;BLOCKED on P8&quot; - and P8 is cut, so it is unblocked and untouched; - P3 written as pending a ruling in motion.rs after D306 had ruled, and</li>
+<li>Measured: no behaviour - acceptance c7191f531bd81b1b, suite 931 / 0 / 19.</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>Landed: a status column per row (DONE / LIVE / LIVE, unblocked / LIVE - forks forfeited / HALF / UNREAD / KEEP), the two classes of unreachable row stated in the row itself (the 100/600 cost rows need a binary this box does not have, D327; </li>
+</ul></details>
+<div class="verdicts" data-for="D330">
+<button class="verdict" data-verdict="agree" data-id="D330">agree</button>
+<button class="verdict" data-verdict="question" data-id="D330">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D330">wrong</button>
+<input class="note" data-note="D330" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D333" data-id="D333" data-origins="measured" data-unresolved="0" data-status="decided">
+<div class="head">
+<span class="id">D333</span>
+<span class="status decided">decided</span>
+<h3>Two parity rows closed by measurement, and P3 narrowed to one number</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>P6 is nominal, measured: the ground&#x27;s per-tile occupants count only differs from the game&#x27;s per-object boxes when an object is narrower than its tile, and every object this content carries is exactly a tile wide - all four resource kinds ha</li>
+<li>Measured: no code change - acceptance e248486298910e28 (127 entities, 1,727 re-paths, 10.2 s), suite 933 / 0 / 19, conformance 21 / 0 / 0.</li>
+<li>Two parity rows closed by measurement, and P3 narrowed to one number</li>
+</ul></details>
+</div>
+<div class="verdicts" data-for="D333">
+<button class="verdict" data-verdict="agree" data-id="D333">agree</button>
+<button class="verdict" data-verdict="question" data-id="D333">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D333">wrong</button>
+<input class="note" data-note="D333" placeholder="note (saved with the verdict)">
+</div>
+</article>
+<article class="decision s-decided" id="d-D352" data-id="D352" data-origins="measured published decision" data-unresolved="1" data-status="decided">
+<div class="head">
+<span class="id">D352</span>
+<span class="status decided">decided</span>
+<span class="date">2026-11-22</span>
+<h3>Conformance is a line on every ruling, and the divergence register is the one list of what we do differently</h3></div>
+<div class="basis">
+<details class="tagbox"><summary><span class="tag tag-measured">measured</span></summary><ul>
+<li>What the bank actually looked like, measured rather than assumed. 238 decision rows; 3 talked about the game while pointing at no source (all three honest: D151 quotes the owner and docs/ai-extraction.md, D166 is a rendering choice and says</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-published">published</span></summary><ul>
+<li>The supersession order, restated because it is the sentence he keeps having to repeat: the original game (binary, dat, install) &gt; the decomp &gt; the neighbour projects &gt; published sources &gt; our own rulings, including his &gt; our convenience.</li>
+</ul></details>
+<details class="tagbox"><summary><span class="tag tag-decision">decision</span></summary><ul>
+<li>What the bank actually looked like, measured rather than assumed. 238 decision rows; 3 talked about the game while pointing at no source (all three honest: D151 quotes the owner and docs/ai-extraction.md, D166 is a rendering choice and says</li>
+</ul></details>
+</div>
+<details class="unresolved"><summary>unresolved language</summary><ul>
+<li>A conformance line on a ruling. Any row may carry Conformance: GAME - &lt;pointer&gt; / OURS - &lt;why&gt; / UNVERIFIED - &lt;what would settle it&gt;, and a row that talks about the game carries one or a source pointer.</li>
+</ul></details>
+<div class="verdicts" data-for="D352">
+<button class="verdict" data-verdict="agree" data-id="D352">agree</button>
+<button class="verdict" data-verdict="question" data-id="D352">question</button>
+<button class="verdict" data-verdict="wrong" data-id="D352">wrong</button>
+<input class="note" data-note="D352" placeholder="note (saved with the verdict)">
+</div>
+</article>
 </div>
 </details>
 </section>
 <section id="dangling"><h2>Referenced but never written</h2>
 <p class="note">Ids named in the docs or the code that no decision section defines. Each is either a missing decision or a typo in a citation; both are cheap to fix and neither is visible in a prose read.</p>
 <ul class="refs">
-<li><span class="id">D115</span> <code>SPEC.md:693</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D115</span> <code>SPEC.md:719</code> | 2026-11-08 | v1.129 - **the yard is not wall, and the outline goes outside (D161)**, with research in `docs/building-collision.md`: the game&#x27;s collision is th</li>
-<li><span class="id">D115</span> <code>crates/sim/tests/animals.rs:310</code> // any movement rule, and the test only ever passed because a body&#x27;s centre could stand on the core&#x27;s corner (D115).</li>
-<li><span class="id">D115</span> <code>crates/view/src/lib.rs:1180</code> /// The renderer needs it because a building is not always solid all over: the town centre keeps a **yard** (D115), whose tiles a</li>
+<li><span class="id">D115</span> <code>SPEC.md:717</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D115</span> <code>SPEC.md:743</code> | 2026-11-08 | v1.129 - **the yard is not wall, and the outline goes outside (D161)**, with research in `docs/building-collision.md`: the game&#x27;s collision is th</li>
+<li><span class="id">D115</span> <code>crates/sim/tests/animals.rs:311</code> // any movement rule, and the test only ever passed because a body&#x27;s centre could stand on the core&#x27;s corner (D115).</li>
+<li><span class="id">D115</span> <code>crates/view/src/lib.rs:1194</code> /// The renderer needs it because a building is not always solid all over: the town centre keeps a **yard** (D115), whose tiles a</li>
 <li><span class="id">D115</span> <code>crates/view/tests/virtual_fence.rs:7</code> //! The engine has enforced exactly that since D115 - the town centre is a **4-tile core plus a walkable yard**, and the walk grid refuses</li>
 <li><span class="id">D115</span> <code>crates/view/tests/virtual_fence.rs:130</code> assert_eq!(core, 4, &quot;the town centre&#x27;s core is four tiles (D115)&quot;);</li>
 <li><span class="id">D115</span> <code>docs/building-collision.md:23</code> The town centre is the case that matters. Ours keeps a **solid core with a walkable yard around it** (D115,</li>
 <li><span class="id">D115</span> <code>docs/building-collision.md:46</code> 1. The engine blocks the footprint&#x27;s **solid** tiles only, and the yard stays walkable (D115).</li>
 <li><span class="id">D115</span> <code>docs/dangling.toml:9</code> D115 = &quot;cited for the town centre&#x27;s walkable **yard** inside its footprint: the footprint is not all solid&quot;</li>
-<li><span class="id">D115</span> <code>docs/decisions.md:3976</code> house 2x2, wall 1x1); the footprint is **not all solid** - the town centre keeps a walkable **yard** (D115, and aoe2mc&#x27;s *&quot;let units</li>
-<li><span class="id">D115</span> <code>docs/decisions.md:4025</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
+<li><span class="id">D115</span> <code>docs/decisions.md:3978</code> house 2x2, wall 1x1); the footprint is **not all solid** - the town centre keeps a walkable **yard** (D115, and aoe2mc&#x27;s *&quot;let units</li>
+<li><span class="id">D115</span> <code>docs/decisions.md:4027</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D115</span> <code>docs/history/next-step-2026-11-12.md:265</code> &gt; in the numbering four documents still reference), **D115, D124, D126, D136**, and the lettered **D122b, D125b**.</li>
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-08-the-fence-was-there.md:19</code> the diamond&quot;) is *precisely* what D115 built. The report was right about what he **saw** and wrong about what the engine does - because the</li>
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-08-the-yard-was-painted-as-wall.md:14</code> (`the_town_centre_keeps_its_solid_core_and_its_yard`, D115), and the same thing is visible in an independent project that converts</li>
@@ -5672,22 +7771,22 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-15-prior-art-watch.md:51</code> (`D115` at `SPEC.md:661` → `:662`, and its neighbours) because `7e052a5`, which last touched `SPEC.md`, did not re-render</li>
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:55</code> `decisions.py --check` **0 findings, 239 decisions, 13 open questions, 7 dangling ids** (D115, D122b, D124, D125b, D126,</li>
 <li><span class="id">D115</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:18</code> **256 decisions, 14 open questions, 42 with no stated basis, 7 dangling ids** (D115, D122b, D124, D125b, D126, D136,</li>
-<li><span class="id">D122b</span> <code>SPEC.md:693</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D122b</span> <code>SPEC.md:757</code> | 2026-11-05 | v1.91 - **the adversarial review of the panel and the farm (D122b).** Owner: *&quot;Please do complete adversarial review on performance and stability</li>
+<li><span class="id">D122b</span> <code>SPEC.md:717</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D122b</span> <code>SPEC.md:781</code> | 2026-11-05 | v1.91 - **the adversarial review of the panel and the farm (D122b).** Owner: *&quot;Please do complete adversarial review on performance and stability</li>
 <li><span class="id">D122b</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
 <li><span class="id">D122b</span> <code>docs/dangling.toml:10</code> D122b = &quot;part of the D121-D126 sequence the corpus lists as never written down&quot;</li>
-<li><span class="id">D122b</span> <code>docs/decisions.md:4025</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
+<li><span class="id">D122b</span> <code>docs/decisions.md:4027</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D122b</span> <code>docs/history/next-step-2026-11-12.md:265</code> &gt; in the numbering four documents still reference), **D115, D124, D126, D136**, and the lettered **D122b, D125b**.</li>
 <li><span class="id">D122b</span> <code>docs/reviews/2026-11-09-decision-index.md:175</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
 <li><span class="id">D122b</span> <code>docs/reviews/2026-11-12-design-and-architecture.md:174</code> `D82`, `D115`, `D122b`, `D124`, `D125b`, `D126`, `D136`, `D192`). D192 is the parked standoff and belongs to a branch; the rest are</li>
 <li><span class="id">D122b</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D122b</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:55</code> `decisions.py --check` **0 findings, 239 decisions, 13 open questions, 7 dangling ids** (D115, D122b, D124, D125b, D126,</li>
 <li><span class="id">D122b</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:18</code> **256 decisions, 14 open questions, 42 with no stated basis, 7 dangling ids** (D115, D122b, D124, D125b, D126, D136,</li>
-<li><span class="id">D124</span> <code>SPEC.md:693</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D124</span> <code>SPEC.md:755</code> | 2026-11-05 | v1.93 - **a husk is a farm crossed out (D124).** Owner: *&quot;As of now, husk can get the same pictogram as farm but crossed over.&quot;* A spent farm&#x27;s c</li>
+<li><span class="id">D124</span> <code>SPEC.md:717</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D124</span> <code>SPEC.md:779</code> | 2026-11-05 | v1.93 - **a husk is a farm crossed out (D124).** Owner: *&quot;As of now, husk can get the same pictogram as farm but crossed over.&quot;* A spent farm&#x27;s c</li>
 <li><span class="id">D124</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
 <li><span class="id">D124</span> <code>docs/dangling.toml:11</code> D124 = &quot;part of the D121-D126 sequence the corpus lists as never written down&quot;</li>
-<li><span class="id">D124</span> <code>docs/decisions.md:4025</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
+<li><span class="id">D124</span> <code>docs/decisions.md:4027</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D124</span> <code>docs/history/next-step-2026-11-12.md:265</code> &gt; in the numbering four documents still reference), **D115, D124, D126, D136**, and the lettered **D122b, D125b**.</li>
 <li><span class="id">D124</span> <code>docs/history/next-step-2026-11-12.md:813</code> &gt; # Session 23, 2026-11-05 - the husk is drawn as its farm, crossed out (D124)</li>
 <li><span class="id">D124</span> <code>docs/reviews/2026-11-09-decision-index.md:175</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
@@ -5695,11 +7794,11 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D124</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D124</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:55</code> `decisions.py --check` **0 findings, 239 decisions, 13 open questions, 7 dangling ids** (D115, D122b, D124, D125b, D126,</li>
 <li><span class="id">D124</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:18</code> **256 decisions, 14 open questions, 42 with no stated basis, 7 dangling ids** (D115, D122b, D124, D125b, D126, D136,</li>
-<li><span class="id">D125b</span> <code>SPEC.md:693</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D125b</span> <code>SPEC.md:753</code> | 2026-11-05 | v1.95 - **the ring is a curve, not a diamond (D125b).** Owner, on the rendered frame: *&quot;I see a diamond, not elipse in the example&quot;* - correct, a</li>
+<li><span class="id">D125b</span> <code>SPEC.md:717</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D125b</span> <code>SPEC.md:777</code> | 2026-11-05 | v1.95 - **the ring is a curve, not a diamond (D125b).** Owner, on the rendered frame: *&quot;I see a diamond, not elipse in the example&quot;* - correct, a</li>
 <li><span class="id">D125b</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
 <li><span class="id">D125b</span> <code>docs/dangling.toml:12</code> D125b = &quot;part of the D121-D126 sequence the corpus lists as never written down&quot;</li>
-<li><span class="id">D125b</span> <code>docs/decisions.md:4025</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
+<li><span class="id">D125b</span> <code>docs/decisions.md:4027</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D125b</span> <code>docs/history/next-step-2026-11-12.md:265</code> &gt; in the numbering four documents still reference), **D115, D124, D126, D136**, and the lettered **D122b, D125b**.</li>
 <li><span class="id">D125b</span> <code>docs/history/next-step-2026-11-12.md:774</code> &gt; # Session 25, 2026-11-05 - the ring is a curve, not a diamond (D125b)</li>
 <li><span class="id">D125b</span> <code>docs/reviews/2026-11-09-decision-index.md:175</code> - **10 ids cited and never written**: D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136. D78-D82 are a hole in</li>
@@ -5707,8 +7806,8 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D125b</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:32</code> 3. **`docs/dangling.toml` and a ratchet.** The seven that remain (D115, D122b, D124, D125b, D126, D136, D190) are recorded with what</li>
 <li><span class="id">D125b</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:55</code> `decisions.py --check` **0 findings, 239 decisions, 13 open questions, 7 dangling ids** (D115, D122b, D124, D125b, D126,</li>
 <li><span class="id">D125b</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:18</code> **256 decisions, 14 open questions, 42 with no stated basis, 7 dangling ids** (D115, D122b, D124, D125b, D126, D136,</li>
-<li><span class="id">D126</span> <code>SPEC.md:693</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D126</span> <code>SPEC.md:752</code> | 2026-11-05 | v1.96 - **the minimap&#x27;s crossing lines were seams (D126).** Owner: *&quot;Minimap has 2 crossing lines artifact.&quot;* The minimap painted one diamond per</li>
+<li><span class="id">D126</span> <code>SPEC.md:717</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D126</span> <code>SPEC.md:776</code> | 2026-11-05 | v1.96 - **the minimap&#x27;s crossing lines were seams (D126).** Owner: *&quot;Minimap has 2 crossing lines artifact.&quot;* The minimap painted one diamond per</li>
 <li><span class="id">D126</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
 <li><span class="id">D126</span> <code>docs/dangling.toml:5</code> # Four of them (D122b, D124, D125b, D126) are named by the corpus&#x27;s own note as &quot;never written down&quot; - the D121-D126 sequence answered</li>
 <li><span class="id">D126</span> <code>docs/dangling.toml:10</code> D122b = &quot;part of the D121-D126 sequence the corpus lists as never written down&quot;</li>
@@ -5716,7 +7815,7 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D126</span> <code>docs/dangling.toml:12</code> D125b = &quot;part of the D121-D126 sequence the corpus lists as never written down&quot;</li>
 <li><span class="id">D126</span> <code>docs/dangling.toml:13</code> D126 = &quot;part of the D121-D126 sequence the corpus lists as never written down&quot;</li>
 <li><span class="id">D126</span> <code>docs/dangling.toml:13</code> D126 = &quot;part of the D121-D126 sequence the corpus lists as never written down&quot;</li>
-<li><span class="id">D126</span> <code>docs/decisions.md:4025</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
+<li><span class="id">D126</span> <code>docs/decisions.md:4027</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D126</span> <code>docs/history/next-step-2026-11-12.md:265</code> &gt; in the numbering four documents still reference), **D115, D124, D126, D136**, and the lettered **D122b, D125b**.</li>
 <li><span class="id">D126</span> <code>docs/history/next-step-2026-11-12.md:753</code> &gt; # Session 26, 2026-11-05 - the minimap&#x27;s crossing lines were seams (D126)</li>
 <li><span class="id">D126</span> <code>docs/reviews/2026-11-05-a-broken-test-shipped.md:3</code> *Standing correction to D126. The commit `d2cad09` shipped `crates/view/tests/minimap_seams.rs` with a **compile error**: a</li>
@@ -5727,20 +7826,19 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 <li><span class="id">D126</span> <code>docs/reviews/2026-11-13-four-decisions-the-index-could-not-see.md:45</code> - **The ratchet is a ratchet, not a mute**: recording a gap requires a note, so the next session reads *why* D126 has no decision rather</li>
 <li><span class="id">D126</span> <code>docs/reviews/2026-11-16-prior-art-watch.md:55</code> `decisions.py --check` **0 findings, 239 decisions, 13 open questions, 7 dangling ids** (D115, D122b, D124, D125b, D126,</li>
 <li><span class="id">D126</span> <code>docs/reviews/2026-11-17-prior-art-watch.md:18</code> **256 decisions, 14 open questions, 42 with no stated basis, 7 dangling ids** (D115, D122b, D124, D125b, D126, D136,</li>
-<li><span class="id">D136</span> <code>SPEC.md:693</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
-<li><span class="id">D136</span> <code>SPEC.md:735</code> | 2026-11-07 | v1.113 - **`lib.rs` 8,731 -&gt; 4,106 (D145).** The owner: *&quot;Go ahead if it is still more than 5000 lines file.&quot;* Twelve more mechanical moves - `wo</li>
-<li><span class="id">D136</span> <code>SPEC.md:736</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
-<li><span class="id">D136</span> <code>SPEC.md:736</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
+<li><span class="id">D136</span> <code>SPEC.md:717</code> | 2026-11-09 | v1.131 - **the decision index (D168)**: `tools/decisions.py` reads `docs/decisions.md` and the U-register in `docs/mechanics/README.md` and write</li>
+<li><span class="id">D136</span> <code>SPEC.md:759</code> | 2026-11-07 | v1.113 - **`lib.rs` 8,731 -&gt; 4,106 (D145).** The owner: *&quot;Go ahead if it is still more than 5000 lines file.&quot;* Twelve more mechanical moves - `wo</li>
+<li><span class="id">D136</span> <code>SPEC.md:760</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
+<li><span class="id">D136</span> <code>SPEC.md:760</code> | 2026-11-07 | v1.112 - **four more subjects out of `lib.rs` (D144).** The owner: *&quot;It is still around 10000 lines.&quot;* Stage 1 of D136 continues: `world/seed.rs`</li>
 <li><span class="id">D136</span> <code>crates/sim/src/world/gather.rs:3</code> //! Moved out of `lib.rs` unchanged in D136. `nearest_like` is the replacement search - it asks whether a node can actually</li>
 <li><span class="id">D136</span> <code>crates/sim/src/world/memory.rs:3</code> //! Moved out of `lib.rs` unchanged in D136. The anti-cheat is the point of the file: a rule may ask what its player has</li>
-<li><span class="id">D136</span> <code>crates/sim/src/world/movement.rs:3</code> //! Moved out of `lib.rs` unchanged (D136). `collide` is the only entry point the tick uses; everything else answers one</li>
 <li><span class="id">D136</span> <code>docs/dangling.toml:14</code> D136 = &quot;cited as the `lib.rs` split (&#x27;stage 1 of D136 continues&#x27;); the work is recorded in docs/reviews, not as a decision&quot;</li>
 <li><span class="id">D136</span> <code>docs/dangling.toml:14</code> D136 = &quot;cited as the `lib.rs` split (&#x27;stage 1 of D136 continues&#x27;); the work is recorded in docs/reviews, not as a decision&quot;</li>
 <li><span class="id">D136</span> <code>docs/decisions.md:3566</code> *2026-11-07. The owner: &quot;Please split lib.rs into smaller files. It is still around 10000 lines.&quot; Stage 1 of D136 continues.*</li>
 <li><span class="id">D136</span> <code>docs/decisions.md:3576</code> 3. **The compiler wrote the visibility list**, as in D136: fourteen methods and four free functions (`collect_modifiers`,</li>
 <li><span class="id">D136</span> <code>docs/decisions.md:3585</code> D136&#x27;s stage 2, named phases. The remaining stage-1 candidates, in order: `orders` (`apply` 223 + `validate` 101),</li>
 <li><span class="id">D136</span> <code>docs/decisions.md:3598</code> `world/shares.rs` 220, `world/report.rs` 221, `world/livestock.rs` 182, `world/garrison.rs` 108 - with D136&#x27;s three and</li>
-<li><span class="id">D136</span> <code>docs/decisions.md:4025</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
+<li><span class="id">D136</span> <code>docs/decisions.md:4027</code> never written down: **D78, D79, D81, D82, D115, D122b, D124, D125b, D126, D136**. Three decisions live at `###`</li>
 <li><span class="id">D136</span> <code>docs/history/next-step-2026-11-12.md:265</code> &gt; in the numbering four documents still reference), **D115, D124, D126, D136**, and the lettered **D122b, D125b**.</li>
 <li><span class="id">D136</span> <code>docs/history/next-step-2026-11-12.md:518</code> &gt; **Two things, both pushed.** (1) **D136**: `lib.rs` split, three slices - `world/movement.rs` (369), `world/memory.rs` (280),</li>
 <li><span class="id">D136</span> <code>docs/reviews/2026-11-06-lib-rs-split-stage-1.md:1</code> # `lib.rs` split, stage 1: the file becomes a directory (D136)</li>
@@ -5765,11 +7863,11 @@ article.decision.v-wrong{border-left-color:#ff8fb1}
 </ul>
 </section>
 <section id="health"><h2>How this page knows</h2>
-<p>Parsed 259 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
+<p>Parsed 360 decisions and 12 amended ids from <code>docs/decisions.md</code>; 2 <code>D&lt;n&gt; applied</code> essays were recognised as notes rather than decisions, and 2 headings are document structure, not decisions.</p>
 <p>A basis is recorded only from a phrase in the decision itself, and the phrase is shown beside the label. <b>No stated basis</b> is the reliable category: it needs no pattern to be right. <b>Unresolved language</b> is a reading list, not a verdict - the quoted sentence is there to be judged.</p>
 <p>The scan for broken references reads <code>docs/</code>, <code>crates/</code>, <code>config/</code>, <code>SPEC.md</code> and <code>README.md</code>. <code>tools/</code> is excluded: its fixtures name ids that are meant not to exist.</p>
 <p class="empty">Every decision heading was placed.</p>
-<p class="stamp">Corpus as of 2026-11-17. Rebuild with <code>make decisions</code>.</p>
+<p class="stamp">Corpus as of 2026-11-22. Rebuild with <code>make decisions</code>.</p>
 </section></main>
 <script>(function(){
   var KEY='ruage-decisions-review';

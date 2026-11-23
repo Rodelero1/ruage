@@ -87,6 +87,16 @@ conformance-build:
 decisions:
 	python3 tools/decisions.py
 
+# **The one page a session reads instead of the bank** (D355): 340 rows as one line each - claim, verdict, source, fixture -
+# grouped by area, plus the three lists that matter (no source, no fixture, superseded). `docs/decisions.md` is ~832k
+# characters and cannot be loaded; this is 34k and can.
+decision-index:
+	python3 tools/decision_index.py
+
+# The other direction over the same work: every note, one line, newest first (D355).
+review-index:
+	python3 tools/review_index.py
+
 next-step-check:
 	python3 tools/next_step.py --check
 

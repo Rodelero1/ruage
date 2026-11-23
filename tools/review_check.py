@@ -38,11 +38,15 @@ def needs_review(paths) -> bool:
 
 
 def review_paths(paths):
-    """The staged review notes."""
+    """The staged review notes. **Generated indexes are not notes**: `INDEX.md` is written by
+    `tools/review_index.py` from the notes themselves, so demanding a measured number from it would be
+    demanding one from a table of contents (and the fix would be to paste a fake one)."""
     return [
         path
         for path in paths
-        if path.startswith(REVIEW_PREFIX) and path.endswith(".md")
+        if path.startswith(REVIEW_PREFIX)
+        and path.endswith(".md")
+        and path.rsplit("/", 1)[-1] != "INDEX.md"
     ]
 
 

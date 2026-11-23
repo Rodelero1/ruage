@@ -1,12 +1,24 @@
-# OPEN - the pile is an arrival problem: which rule keeps two men out of one point, read next as the plan's tile rectangle
 
-**Where this stands:** suite **227 result lines, 944 passed, 0 failed, 25 ignored** at D349; conformance **21 / 0 / 0**;
-acceptance `7782dd38d7557514`, **134 entities**, 37,204 re-paths, **12.17 s** median of three. The order to 100% conformance
-is **`docs/conformance-sequence.md`**; this file is the immediate step and the outstanding forks.
 
-**The one list of what we do differently is `docs/divergence-register.md`** (D352): two verdicts only - DEFECT (read, ours,
-with the source and the step that closes it) and OURS (deliberate, with what the game does instead). Eleven defects and five
-ours as of 2026-11-22.
+# OPEN - the depletion anchor, and the picker that hands the work out
+
+**Where this stands:** suite **945 passed, 0 failed, 25 ignored**; conformance **21 / 0 / 0**; acceptance `b5f981d1e20eb282`
+(**124** entities, **12,847** re-paths, **10.10 s** median of three) at D353. A session starts at `docs/decision-index.md` -
+341 rulings, ~8k tokens, claim + verdict + source + fixture - because `docs/decisions.md` is 832k characters and cannot be read,
+and D150's pile rule was re-decided on 2026-11-22 by a session that did not know it existed.
+
+**Two steps, in order (D354):**
+
+1. **Why wood freezes under the node anchor.** The anchor (`next_source_anchor`: the node he left, else his own position) makes
+   `spent_pile` green and **breaks wood on the acceptance scene**: wood **68** from 1,200 s, wall **10.10 -> 19.20 s**, re-paths
+   **12,847 -> 3,607**. Fewer paths and more time is a pick answering with a node `start_gather` then refuses, asked every tick.
+   Instrument one woodcutter's answer and the refusal before touching the anchor again.
+2. **`crates/script/src/lib.rs:1431`** - the assignment picker measures the search **from the worker**, who stands at the drop
+   site, with a nine-tile reach; this map's gold is **9.6** tiles from the town centre, so he is never assigned it (**220**
+   refusals, gold frozen at 10 with 1,011 on the ground). Fall back to the **base** anchor when the worker's own reach finds
+   nothing - D149's share-table anchor, D150.4's precedent.
+
+Then **D350's three ports** and the pile census, below.
 
 ## The owner's report, sized and attributed (2026-11-22)
 
@@ -146,3 +158,15 @@ already cost one slice, see `apply_switches`).
 node anchor - but the node anchor **freezes wood at 68** from 1,200 s and costs **+90% wall time** (10.10 -> 19.20 s). Instrument
 one woodcutter's pick answer and `start_gather`'s refusal before touching the anchor again. Then the assignment picker
 (`crates/script/src/lib.rs:1431`) gets the base fallback.
+
+## Session start, in order (D355)
+
+1. **`docs/decision-index.md`** - 341 rulings on one page (~34k characters, ~8k tokens): claim, `Conformance` verdict, source,
+   fixture, area, plus the lists that matter (**no source**, **no fixture**, **superseded**). It costs about 8k tokens and it is
+   the difference between applying D150 and re-deciding it, which happened on 2026-11-22.
+2. **`docs/reviews/INDEX.md`** - 309 notes, one line each, newest first, with the claim each settled.
+3. **`docs/divergence-register.md`** - the live DEFECT/OURS list.
+4. This file, then the code.
+
+Regenerate the two indexes with `make decision-index` / `make review-index` after touching the bank or writing a note; neither is
+a gate, both are generated, so they cannot drift.

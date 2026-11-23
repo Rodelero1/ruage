@@ -39,6 +39,23 @@ class NeedsReview(unittest.TestCase):
         self.assertFalse(review_check.needs_review(["docs/reviews/2026-10-31-x.md"]))
 
 
+class IndexIsNotANote(unittest.TestCase):
+    """`docs/reviews/INDEX.md` is generated from the notes; asking it for a measured number is asking a
+    table of contents for one, and the only way to satisfy that would be to invent the number."""
+
+    def test_the_review_index_is_not_treated_as_a_note(self):
+        self.assertEqual(
+            review_check.review_paths(["docs/reviews/INDEX.md"]),
+            [],
+        )
+
+    def test_a_note_beside_it_still_counts(self):
+        self.assertEqual(
+            review_check.review_paths(["docs/reviews/INDEX.md", "docs/reviews/2026-11-22-x.md"]),
+            ["docs/reviews/2026-11-22-x.md"],
+        )
+
+
 class Check(unittest.TestCase):
     def test_a_code_change_without_a_review_file_is_refused(self):
         problems = review_check.check(["crates/sim/src/path.rs"], {})
