@@ -31,6 +31,25 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-23 — openage rebuilds its C++ traceback by hand: nothing to act on
+
+**`SFTtech/openage`, 2 commits (`f6f87f9a` -> `738bfc6c`), PR #1836 merged 22 Nov, 2 files, +53/-34** — all of it in
+`openage/cppinterface/exctranslate.pyx`. Python 3.13 made `_PyTraceback_Add` private, so the Cython bridge that raises C++
+exceptions as Python ones had been dropping the C++ frames. The fix collects each frame as a
+`(functionname, filename, lineno)` triple (`exctranslate.pyx:88`), then builds the traceback by hand — a code object from
+`PyCode_NewEmpty` (`:55`), a frame from `PyFrame_New`, entries chained with `types.TracebackType` (`:155`) — and raises
+`exc.with_traceback(tb)` (`:157`). The new test pins the throw site: `traceback.extract_tb` must contain
+`exctranslate_tests.cpp` / `throw_foo` (`exctranslate_tests.pyx:83-92`).
+
+- **No engine axis.** Not the content format (D18), not the content/engine boundary (D17), not the tick model, not the asset
+  pipeline. Nothing in this tree moves; no U-number is touched.
+- **The one transferable idea, for whenever a script VM lands.** An error crossing a language boundary must carry the far
+  side's frames, or the traceback starts at the wrapper and the fault is unattributable. Their route also shows its cost:
+  three CPython internals (`PyCode_NewEmpty`, `PyFrame_New`, `PyThreadState_Get`), so it must be re-made at every Python
+  release. The lesson for us is to keep any FFI boundary thin, not to port this.
+
+**Nothing actionable.** D13, D14, D17 and D18 are unaffected.
+
 ## 2026-11-22 — HD's own recordings step every ~79 ms and declare a checkpoint every 500 steps
 
 **Two projects were due: `SFTtech/openage` moved (`4c04b6be` -> `f6f87f9a`), and `aesaganda/aoe2-on-browser` had never been

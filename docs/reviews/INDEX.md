@@ -2,9 +2,13 @@
 
 # Review notes
 
-**310 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
+**311 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
 
 The files are **not** moved: `docs/decisions.md` cites them by path, and an archive directory would dangle those citations.
+
+## 2026-11-23 (1)
+
+- **2026-11-23 - prior-art watch: openage's C++ tracebacks, nothing to act on** — `2026-11-23-prior-art-openage-pytracebacks.md` · Documentation only: 19 lines added to docs/prior-art.md. No crates/, config/, tools/, build/ or Age2HD/ file
 
 ## 2026-11-22 (13)
 
