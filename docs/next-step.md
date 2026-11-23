@@ -19,11 +19,16 @@ Suite and gates recorded in `docs/reviews/2026-11-22-d357-the-arrival-is-a-place
    next free spot near the same tree/mine", which is the gather case) or whether this is the walk's business - and measure before
    extending it.
 
-**Then the picker, with D358's reason (not D354's):** `crates/script/src/lib.rs:1431` gives a **quota** rule the worker's own
-reach (`Some(reach)`), while an explicit node gets `None` (`:455`) - so the AI-side assignment is bounded by the engine-side eye,
-which D149.5 itself says is wrong (*"an order is not a guess about what a villager can notice"*). The gold is **9.6** tiles out and
-the reach is **9**, so the quota refuses **220** times with 1,011 gold in four tiles. Fix the *line*, not the number: the engine's
-own search stays the dat's **4** (and the pack should carry `search_radius` for unit 83 - a data job). After that, D350's three ports.
+**Then the depletion anchor, in the owner's own words** (2026-11-22: *"Villager after finishing one resource (gold, stone,
+bush...) returns back to it and then looks around"*). The pending fixture `spent_pile` (outside the tree, in
+`/opt/data/cache/scratch/age2hd-pending-fixtures/`) is red on the shipped code - he banks **1 gold** and stands idle while a patch of
+**400** sits three tiles from the pile he emptied - and green under `next_source_anchor` (the node he left, else his own position).
+**What blocks it is not the anchor but the refusal loop it exposes**: under it, wood freezes at **68** and wall time doubles, because
+the pick answers with a node `start_gather` then refuses, asked again every tick. Find that node and its refusal first.
+
+The quota rule (`crates/script/src/lib.rs:1431`, `Some(reach)`) is a **crutch** for the same gap, not a separate defect: with the
+anchor fixed it should rarely fire at all, and the reach's value (dat 4 / sight + 5 / 8) does not decide the gold case either way -
+the neighbouring tile is one tile from the pile. After the anchor, D350's three ports.
 
 ## The owner's report, sized and attributed (2026-11-22)
 

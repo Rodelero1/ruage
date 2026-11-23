@@ -10162,6 +10162,14 @@ the **top performance item** in `docs/next-step.md`, and it is a plan-stamp ques
 
 ## D358 - The reach has three numbers in this bank, and the assignment is not the engine's guess
 
+> **Corrected by the owner, 2026-11-22, in one line:** *"Villager after finishing one resource (gold, stone, bush...) returns
+> back to it and then looks around."* That is D150.3/D354's rule, and it makes this row's framing wrong in one place: the
+> assignment is **not** a manager looking from the base - it is the **villager's own search, anchored on the pile he finished**.
+> With the pile as the anchor the reach's value stops mattering for the case that stalled (the next gold tile is **one tile** from
+> the spent one, so 4, 5 and 9 all find it), and the real defect is the **anchor** (`next_source_anchor`, pending:
+> `spent_pile` is green with it and wood freezes under it). The reach numbers below still disagree with each other and still need
+> the precedence; they are simply not what stopped the gold.
+
 **Conformance**: GAME - `task_info.search_radius` is the dat's own per-unit number (villager **4.0**, scout 4.0, cog 6.0, fishing ship
 12.0, trebuchet 17-18, widest 21.0; 750 slots, median 6.0), which is what D175 adopted. OWNER - D149's *"line of sight + 5"* and
 D150's *"the shipped constant is the owner's own 5"*.
