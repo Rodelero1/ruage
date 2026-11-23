@@ -45,7 +45,9 @@ FIXTURE = re.compile(
     r"|\btests/([a-z0-9_]{4,})\b"             # `tests/foo`, a file named without its extension
     r"|\bfixture:\s*([a-z0-9_,\s]{4,})"      # the convention this tool documents: `Fixture: a, b`
 )
-SUPERSEDED = re.compile(r"supersed\w*\s+by\s+(D\d+)", re.IGNORECASE)
+# `Superseded by D200`, `Superseded in part by D239 and D241`: the row says a *part* of it is gone, which is the case that
+# matters most - a ruling that reads as live while only half of it is.
+SUPERSEDED = re.compile(r"supersed\w*(?:\s+in\s+part)?\s+by\s+(D\w+)", re.IGNORECASE)
 SUPERSEDES = re.compile(r"\bsupersed\w*\s+(?!by\b)(D\d+)", re.IGNORECASE)
 
 # Title/body keywords -> the page's groups. **Scored, not first-match**, and a tie is broken by this order - which is why

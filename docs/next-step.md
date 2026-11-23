@@ -1,24 +1,28 @@
 
 
-# OPEN - the depletion anchor, and the picker that hands the work out
+# OPEN - the arrival is a placement, and the slide goes (D356's two rulings)
 
 **Where this stands:** suite **945 passed, 0 failed, 25 ignored**; conformance **21 / 0 / 0**; acceptance `b5f981d1e20eb282`
-(**124** entities, **12,847** re-paths, **10.10 s** median of three) at D353. A session starts at `docs/decision-index.md` -
-341 rulings, ~8k tokens, claim + verdict + source + fixture - because `docs/decisions.md` is 832k characters and cannot be read,
-and D150's pile rule was re-decided on 2026-11-22 by a session that did not know it existed.
+(**124** entities, **12,847** re-paths, **10.10 s**). A session starts at `docs/decision-index.md` - 343 rulings, ~8k tokens.
 
-**Two steps, in order (D354):**
+**Two rulings, both his, both unbuilt (D356):**
 
-1. **Why wood freezes under the node anchor.** The anchor (`next_source_anchor`: the node he left, else his own position) makes
-   `spent_pile` green and **breaks wood on the acceptance scene**: wood **68** from 1,200 s, wall **10.10 -> 19.20 s**, re-paths
-   **12,847 -> 3,607**. Fewer paths and more time is a pick answering with a node `start_gather` then refuses, asked every tick.
-   Instrument one woodcutter's answer and the refusal before touching the anchor again.
-2. **`crates/script/src/lib.rs:1431`** - the assignment picker measures the search **from the worker**, who stands at the drop
-   site, with a nine-tile reach; this map's gold is **9.6** tiles from the town centre, so he is never assigned it (**220**
-   refusals, gold frozen at 10 with 1,011 on the ground). Fall back to the **base** anchor when the worker's own reach finds
-   nothing - D149's share-table anchor, D150.4's precedent.
+1. **An arriving man takes the next free place, not the spot another body holds.** *"The second man steps to the next free spot
+   near the same tree/mine (the game's own placement rule), and only goes idle if there is none."* That is `func_002699A0`:
+   step out `ext_a + ext_b + 0.01` on one of four sides, 50 tries, refusing any obstructed candidate. The first attempt (D351,
+   branch `d351-reseat`) failed because it aimed at a **ring tile**, which is half a tile off the node; the fix is a step
+   **along the node's face** (tangent on the contact circle), which keeps the man working while it separates him.
+   Measured today on the acceptance scene: **144,534 overlapping pair-ticks**, deepest **8,000 raw (a full footprint)**,
+   gatherers closing to **5,600** raw against the **8,000** they need - while `invariants::villagers_never_close_into_one_body`
+   is green because its scene has four men on four nodes.
+2. **No slide: a blocked step stops and re-plans.** *"Never slide: if the step is blocked he stops and re-plans."* The terrain
+   slide is still in the engine. D255 tried this and got **14 red across 8 binaries**, all traced to "a tile is not an object";
+   D277 and D339 have since made the world the ground-as-a-point and the things-as-boxes, so **re-run that attempt first** - the
+   blocker may be gone, and if it is not, the measurement says exactly which rule still needs a body.
 
-Then **D350's three ports** and the pile census, below.
+**Then the picker (D354):** `crates/script/src/lib.rs:1431` measures the assignment search from the worker with a nine-tile reach
+and this map's gold is **9.6** tiles out (**220** refusals, gold frozen at 10 with 1,011 on the ground); fall back to the base
+anchor. After that, D350's three ports and the pile census.
 
 ## The owner's report, sized and attributed (2026-11-22)
 

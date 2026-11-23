@@ -4398,6 +4398,8 @@ stacking and distance pass (D171, D169); the **jump** was still open - the test 
 
 ## D181 - A standoff is taken when it is too close, not only when somebody stands on it
 
+**Superseded by D293 (2026-11-19):** the standoff this row introduced is gone - the gather arm hands out no seats and a man takes from the node when his box is against it. Its *observation* ("visible overlap of villagers") is the one D243.1, D289 and D351 are about.
+
 *2026-11-08. Owner, after D180: "Jumping and flicker is gone. However there is visible overlap of villagers. And occasionally they appear to be foraging
 while the circle is not touching the square with bush."*
 
@@ -4543,6 +4545,8 @@ came back to life on the next tick and its ground stayed claimed. Fixed with a g
   That is the rule, not a side effect: D183 §2 says the ghost is invisible as a fact, not as a rendering.
 
 ## D186 - the gather ring: 1.156 tiles, eighteen men, measured from the owner's save
+
+**Superseded by D199 (2026-11-09):** the 1.156-tile ring is withdrawn; the standoff is the touch, measured on the owner's own saves.
 
 **The owner's rule, from his own game.** With a close-up of eighteen woodcutters round one tree he said: *"I'd focus instead on how
 close men can stand to the bush, tree or mine. The ones behind them don't work. Only first row ever works."* Asked whether the men
@@ -4750,6 +4754,8 @@ table, so no float enters a tick.
 the time. See `docs/reviews/2026-11-12-design-and-architecture.md`.
 
 ### D189 - your own units pass through each other on the way
+
+**Superseded by D200 (2026-11-13):** "your own units are not walls" was withdrawn - it was chosen to make a crowd deliverable, not because the game does it. The observation it recorded (a crowd cannot be delivered with friends solid) is D236's, and D236's cause was the group exemption, not solidity.
 
 **The owner chose it**, between the two ways out of the crowd problem: *"1"* - bodies may overlap while walking, collision at rest
 only. His words for the need were *"I think that capping is pointless"* and the rule behind it, *"either villager fits in or
@@ -5133,6 +5139,8 @@ future "the match no longer resolves" report quotes the **town centre's hp and t
 number alone.
 
 ### D204 - no pushing: a man who cannot get his square looks for another tile of the same resource
+
+**Superseded in part by D239 and D241 (2026-11-16):** the idle-body nudge is gone, the same-kind re-target stands (D293 keeps it with a refusal-count trigger). This row's title reads as a live rule and is not one: only the re-target is in force.
 
 > **Withdrawn in part by D239 (2026-11-16), corrected by D241 the same day: the idle-body nudge is gone, the re-target is not.**
 > A newcomer with no square goes to the **nearest free node of the same kind within reach** or waits (both as built, `step.rs`
@@ -7611,6 +7619,8 @@ controlled-map probes for the north side and the diagonal preference; (c) then t
 
 ### D271 - the first man takes the spot, the others stand round him (2026-11-18)
 
+**Superseded in part by D289 (2026-11-19):** the ring place per follower is withdrawn on the moving side - every man's goal is the tile that was ordered. The gather-side remnants were D287/D293's business.
+
 *The owner chose **(b)**, and refined it: **"Any single unit chosen has to go to the exact spot by moving the center of the circle to
 that exact spot. If spot unreachable, try come as close as possible. If multiple villagers are chosen, then the first comes to the spot
 and others stand around him."***
@@ -10038,3 +10048,64 @@ only on `d351-reseat` was a dangling reference `tools/decisions.py` reported); 5
 
 **Fixture**: `tools/test_decision_index.py`, 6 cases over a sample bank (title-as-claim, verdict from the `Conformance` line
 only, a declared fixture beating a filename, supersession read both ways, area scored not first-match).
+
+## D356 - The collision analysis: one observation three times, and the two rulings his answers settle
+
+**Conformance**: GAME - placement separates (`func_002699A0` per child, `ext_a + ext_b + 0.01` on one of four sides, 50 tries,
+refusing off-map, wrong terrain class or any obstructed candidate, driven by `func_002697C0`); movement has no press floor
+(`FUN_008aa990` computes the depenetration and its only caller, `FUN_008a4360`, **discards** it); right of way is the lower id and
+the loser takes `setPause(rand*1.25/32767+0.25)` (`008a80ff cmp eax,esi / jle ; pause only when other > self`). Plus OWNER,
+2026-11-22, the two answers quoted below.
+
+**The ask.** *"Review all my decisions focused on pathfinding and obstacle avoidance. Are any of them colliding with each other?"*
+170 movement/economy rows, about forty of them his; four collisions found, two live.
+
+### 1. The overlap rule, stated by him three times, answered by machinery that was later deleted
+
+| when | his words | what answered it | what happened to that |
+|---|---|---|---|
+| 2026-11-08 (D181) | *"visible overlap of villagers"* | a standoff taken when too close | deleted by D293 (no seats) |
+| 2026-11-16 (D243.1) | *"If villagers approach each other closer than 1 diameter -> FAIL"* | places dealt a diameter apart (D248) | the seat book deleted by D287/D293 |
+| 2026-11-22 (D351) | *"HD definitely doesn't stack up that much ... never in this scale"* | the arrival's place (unbuilt) | - |
+
+So the three are **the same observation**, and between them the engine deleted every mechanism that had answered it. Measured on
+the acceptance scene today (`collision_probe`, 36,000 ticks, seed 7): **144,534 overlapping pair-ticks** of 15,926,363 inspected
+(0.91%), deepest **8,000 raw - a full footprint**, **129,512** pair-ticks deeper than half a footprint; a pair of gatherers closes
+**7,830 -> 7,030 -> 6,230 -> 5,600** raw against the **8,000** their bodies need. The fixture that pins D243.1 is **green**
+(`invariants::villagers_never_close_into_one_body`) because its scene is four men on four separate nodes.
+
+**Are D243.1 and D289/D290 ("let the crowds jam", "no press floor") a contradiction?** Not in the game: the game has both, at
+different moments. It **places** a body `ext+ext+0.01` away from the ones already there, and it has **no press floor** while a body
+moves. Ours honours neither at scale, because an arriving gatherer is not placed at all. D290's reading is right and stays; D289's
+jam is about the **walk** (every man's goal is the tile that was ordered), and the arrival is where the game differs.
+
+### 2. "No sliding" against "only sliding and the pause rule act"
+
+D255 (2026-11-17) records his instruction *"follow the game. No sliding."* D292 (2026-11-19) records *"No engine help: the order
+stays live and the man stands; only sliding and the pause rule act"*. **The second quote is my wording in the fork, not his
+ruling**: the binary has no slide (the depenetration is computed and discarded), so a fork that offered "sliding" offered
+something the game does not do. My error, recorded here rather than filed as a rule.
+
+### 3. Five rows that read as live rulings and are not
+
+`D189` (own units pass through each other) withdrawn by D200; `D181` (standoff when too close) superseded by D293; `D186`
+(1.156-tile ring) superseded by D199; `D271` (a ring place per follower) superseded in part by D289; `D204` (no pushing) superseded
+in part by D239/D241. All five now carry the marker, so `docs/decision-index.md` prints them as superseded instead of as live
+rules - which is how a session came to apply a dead one.
+
+**Checked and not colliding, because they look invented and are not:** D205 (lower id wins, loser pauses 0.25-1.50 s) is proved in
+the binary; D290 (no press floor) is proved by the discarded depenetration; D243.2/.3 (gather and drop within half a diameter)
+agree with D285/D313 through the one box ruler (D286); D207's group exemption is formation-scoped, and the Forgotten Empires
+documentation puts villagers in **no** formation.
+
+**His two rulings, 2026-11-22, and what they settle:**
+
+1. *"The second man steps to the next free spot near the same tree/mine (the game's own placement rule), and only goes idle if
+   there is none"* - so the arrival **is** a placement: a man who arrives where another body stands steps out by the pair's radii
+   and a hundredth (`func_002699A0`), and only when no free place exists does he stand down. D289's jam stays for the walk.
+2. *"Never slide: if the step is blocked he stops and re-plans"* - the terrain slide goes; D292's mandate is the **pause and the
+   re-path**, nothing else.
+
+**What closes this.** Two slices, both already on the register: the arrival's place (section 1, row 4 - D351's re-seat, which
+failed on a ring-tile target and needs the tangent step) and the slide's removal (D255, whose 14 reds were caused by "a tile is not
+an object" - a model that D277 and D339 have since replaced, so the blocker may be gone).

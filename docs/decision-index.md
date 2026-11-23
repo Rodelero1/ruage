@@ -2,12 +2,12 @@
 
 # Decision index
 
-**342 rows.** `docs/decisions.md` is ~838k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**343 rows.** `docs/decisions.md` is ~844k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
 - **337** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
-- **247** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
-- **3** rows say they are superseded.
+- **248** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
+- **8** rows say they are superseded.
 
 Areas are a keyword heuristic over each row; the point is a page you can scan, not a taxonomy.
 
@@ -48,7 +48,7 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D178** — A body stands on its point; its base is the position · —
 - **D179** — The selection ring sits round the feet, not under them · — · `ring`
 - **D187** — a click selects the body that is drawn, not the tile under it · —
-- **D189** — your own units pass through each other on the way · —
+- **D189** — your own units pass through each other on the way · — · **superseded by D200**
 - **D201** — content: our own campaigns only, names by three lists, all prose rewritten · —
 - **D214** — attribute 1 is line of sight and 12 is attack range, and the pack's names are the interface · — · `battle`, `memory`
 - **D216** — a packed attack value no reading explains is refused by name, not carried as silence · — · `techs`
@@ -57,7 +57,7 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D24a** — The zero flag is "disabled", and the negative ones are not that · —
 - **D251** — the game's speed is the unit's own, and this engine's walk stutters at every corner (2026-11-17) · — · `step_speed_probe`
 - **D258** — proved from the binary: box against box, and our trees are the wrong size (2026-11-17) · —
-- **D271** — the first man takes the spot, the others stand round him (2026-11-18) · —
+- **D271** — the first man takes the spot, the others stand round him (2026-11-18) · — · **superseded by D289**
 - **D273** — the click was half a tile out, and the half was the view's (2026-11-18) · — · `window`
 - **D274** — the cross and the circle land on the click too (2026-11-18) · —
 - **D282** — A plan keeps a body's clearance, not a tile (owner, 2026-11-19) · — · `motion`
@@ -95,10 +95,10 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D173** — OPEN: the gatherer's last third of a tile is a **placement**, and that is the jump the owner sees · —
 - **D182** — One gatherer a square, standing a body's radius off its edge · —
 - **D184** — The reproducer does not reproduce here, and the tree model is why · UNVERIFIED · `eviction`
-- **D186** — the gather ring: 1.156 tiles, eighteen men, measured from the owner's save · —
+- **D186** — the gather ring: 1.156 tiles, eighteen men, measured from the owner's save · — · **superseded by D199**
 - **D188** — there is no cap: a place is a spot on the ring, and the geometry gives eighteen · —
 - **D191** — tile geometry: the border is what a villager stands against · — · `tiles`
-- **D204** — no pushing: a man who cannot get his square looks for another tile of the same resource · — · `carrier_no_pushing`, `movement`
+- **D204** — no pushing: a man who cannot get his square looks for another tile of the same resource · — · `carrier_no_pushing`, `movement` · **superseded by D239**
 - **D208** — the order of work is a checked tree, and the mechanics we defer are deferred by seam · — · `civs`, `research` · **superseded by D192**
 - **D215** — a farm holds the civ row's 175, and the civ's team bonus is part of that line · —
 - **D218** — the construction rate is a civ effect's resource-195 row, and a tree debt whose evidence was a word · — · `research`
@@ -210,7 +210,7 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D234** — one bonus table per player, so every consumer asks the same list (2026-11-16) · — · `bonuses`, `research`
 - **D94a** — the shares moved, and the type stayed (2026-11-03, applied) · —
 
-## Movement & pathfinding (55)
+## Movement & pathfinding (56)
 
 - **D98** — Two owners' rulings on movement (owner, 2026-11-02) · — · `path`
 - **D109** — Continuous steering is a pass, not a step function · —
@@ -222,7 +222,7 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D135** — A re-plan that fails spends one of the route's two attempts · — · `repath_budget`
 - **D143** — The path search keeps two flat arrays, not two trees · — · `path_cost`
 - **D176** — The selection ellipse is the collision circle, and the body's clearance is a query · —
-- **D181** — A standoff is taken when it is too close, not only when somebody stands on it · —
+- **D181** — A standoff is taken when it is too close, not only when somebody stands on it · — · **superseded by D293**
 - **D192** — the standoff is the tile's border, not a ring round its centre · —
 - **D199** — the standoff is the touch, measured on the owner's own saves; D186's ring is withdrawn · —
 - **D200** — friends are solid: the owner's rule, and the crowd it has to carry (supersedes D200a) · — · `acceptance_economy` · supersedes D200
@@ -264,6 +264,7 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D346** — the owner's ruling: follow the game - the chain is smoothed, and the tier answers for real · —
 - **D349** — a body with a spent route still has a goal, and the plan's ignore clause means what it says · —
 - **D350** — the tier's refinement clips a body, and the fix is three ports, not one (read, not landed) · — · `body_blocks_its_tiles`
+- **D356** — The collision analysis: one observation three times, and the two rulings his answers settle · GAME
 - **D98a** — superseded by the original's own mechanism (owner, 2026-11-03) · —
 - **D200a** — the first landing of owner-blind collisions: built, measured and parked on a branch · — · **superseded by D200**
 - **D210b** — a standing body is an obstacle to the search that meets it, and only to *that* search · —
