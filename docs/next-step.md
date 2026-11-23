@@ -127,8 +127,12 @@ The drop-site fix (`D353`) made banking cheaper - re-paths **37,204 -> 12,847**,
 scene - and the scene's outcome went from **a win to a draw**. Measured cause: `player 1 has no gold node to gather` (220
 firings), gold **410 -> 10** at 2,400 s, so the army stalls. Two candidate readings, both testable:
 
-1. **The scene's AI never expands to farther gold** - `nearest_like` answers only within the tiles it scans, and once the near
-   gold is gone it answers `None`. Test: give player 1 a gold node 12 tiles out and see whether the economy finds it.
+1. **The scene's AI never expands to farther gold** - **CONFIRMED by measurement, 2026-11-22**: the nearest remaining gold is
+   **9.6 tiles** from the town centre (`24.5,11.5`, 1,011 gold in four tiles) against a gather reach of **9** (sight 4 + the
+   5-tile look-around, `gather_reach`'s fallback - this pack has no `search_radius` for unit 83). The engine stands the man
+   down *correctly* (D149); the gap is the scene's script, which never re-tasks him. **So this is an AI/scenario item, not an
+   engine defect** - and the open question is whether a `search_radius` should be generated into the pack for unit 83 (the dat
+   carries one; D175 says the pack uses it when present).
 2. **The mining-camp rule stopped firing** - if miners now drop at the town centre, the camp-spacing rule (`[build]
    drop_site_spacing`) may never trigger, and mining is the resource whose walk is longest. Test: count camps built per run
    before/after.

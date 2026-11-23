@@ -64,7 +64,11 @@ was replaced with the inline `wall_gap` before landing; the shape is in the diff
   stock: wood 1,826 -> 1,990, food 512 -> 1,305, **gold 410 -> 10**.
 - **Cause, measured**: the after-run ends with `rule at 2399.2s refused: player 1 has no gold node to gather` and
   `not enough gold: 20 needed, 10 in the bank` - **220 firings**. Faster banking mined the reachable gold out sooner, and the
-  scene's AI has no move to farther gold, so the army stalls at 10 gold and nobody wins. That is a scene/AI consequence of a
+  next pile is **one tile too far**: the nearest remaining gold is **9.6 tiles** from the town centre (`24.5,11.5`, 1,011 gold
+  in four tiles) against a gather reach of **9** (sight 4 plus the 5-tile look-around; unit 83 carries no `search_radius` in
+  this pack, so `gather_reach`'s fallback applies). The engine is **right** to stand the man down (D149) - and re-tasking him
+  is the AI's job (D291), which the scene's script does not do. `--dump` at tick 48,000 shows gold still on the map: **1,011
+  near, 1,600 across it**; nothing was exhausted. That is a scene/AI consequence of a
   faster economy, not a hang and not a crash: every refusal is counted and the match plays on to 48,000 ticks.
 - **Reported, not hidden**: this is the same shape as the warning in `apply_switches` ("176 entities and a won match became
   127 and a draw"), so it is written into `docs/next-step.md` as the next item rather than treated as noise.

@@ -9935,5 +9935,9 @@ own measure, so the delivery test and the choice of site agree). The owner's sec
 `at_the_wall` banks from any side and any corner, and the impassable middle is never reached.
 
 **Consequence, reported rather than hidden**: on the acceptance scene (48,000 ticks, seed 7) re-paths fall **37,204 -> 12,847**
-and wall time **12.19 -> 10.10 s**, and the outcome changes from a **win to a draw** - the faster economy mines the reachable
-gold out and the scene's AI cannot reach farther gold (`player 1 has no gold node to gather`, 220 firings, gold 410 -> 10).
+and wall time **12.19 -> 10.10 s**, and the outcome changes from a **win to a draw** - the faster economy mines the **reachable** gold out,
+and the next pile is **1 tile too far** to be reachable: the nearest remaining gold sits **9.6 tiles** from the town centre
+(`24.5,11.5`) against a gather reach of **9** (sight 4 + the 5-tile look-around, `gather_reach`; the pack carries no
+`search_radius` for unit 83, so the fallback applies). The engine is right to stand the man down (D149) - **1,011 gold is left
+about nine and a half tiles out, and 1,600 more across the map** - and re-tasking a man across resource types or out of his
+reach is the AI's job, not the engine's (D291).
