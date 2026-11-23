@@ -363,3 +363,7 @@ D350 = "Pathfinding & movement"
 [[decision]]
 id = "D353"
 area = "Economy"
+
+[[decision]]
+id = "D354"
+area = "Economy"

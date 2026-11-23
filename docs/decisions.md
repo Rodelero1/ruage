@@ -9941,3 +9941,30 @@ and the next pile is **1 tile too far** to be reachable: the nearest remaining g
 `search_radius` for unit 83, so the fallback applies). The engine is right to stand the man down (D149) - **1,011 gold is left
 about nine and a half tiles out, and 1,600 more across the map** - and re-tasking a man across resource types or out of his
 reach is the AI's job, not the engine's (D291).
+
+## D354 - the rule he remembers is in the engine; the picker that breaks it is the one handing out work
+
+**Conformance**: OWNER, 2026-11-07 (D150.3), restated 2026-11-22: *"Villager should return to former pile and look for another
+pile. If found, work on it. If none found, idle. Iirc I already made such decision."* He did, and **the engine implements it**:
+the depletion picks and the `pending_gather` carry-over choose the next source of the same kind. What does not implement it is
+the **assignment** picker, and that is where the acceptance scene's gold died.
+
+**The scene, measured (48,000 ticks, seed 7, `--dump` at the end):** gold sits at **10** from ~1,200 s to 2,400 s with **1,011
+gold** in four tiles at `(24.5,11.5)`, **9.6 tiles** from the town centre against a gather reach of **9** (sight 4 + the 5-tile
+look-around; this pack carries no `search_radius` for unit 83). `rule refused: player 1 has no gold node to gather`, **220
+firings**. Wood and food keep flowing, so it is gold alone: `crates/script/src/lib.rs:1431`
+(`nearest_resource(world, worker, slot, 0, Some(reach))`) measures the search **from the worker**, who is standing at the drop
+site. The script's other call site (`:455`) passes `None` - there the script names a resource, which is an order (D149.5).
+
+**A fixture for the engine's own path, and why it is not in the tree.** `spent_pile.rs` (preserved at
+`/opt/data/cache/scratch/age2hd-pending-fixtures/spent_pile.rs`) builds a 20x6 map: one gold tile of **1** at `(12,2)`, a patch
+of **400** at `(15,2)` - three tiles from the spent pile, ten from the drop site. On the shipped code he banks **1 gold** and
+stands `Idle`; with `next_source_anchor` (the node he left, falling back to his own position) at the four depletion sites it
+passes. **Rejected anyway**, because the same change breaks wood on the acceptance scene: **wood freezes at 68** from 1,200 s,
+wall time **10.10 -> 19.20 s**, re-paths **12,847 -> 3,607** - the signature of a pick that answers with a node `start_gather`
+then refuses, asked again every tick. Not diagnosed, so not shipped (D223/D217's rule: code a mutation cannot distinguish from
+nothing does not land, and code that halves a match's throughput certainly does not).
+
+**Next.** Two items, in order: (1) why the woodcutters idle under the node anchor - instrument the pick's answer and
+`start_gather`'s refusal for one woodcutter; (2) the assignment picker at `crates/script/src/lib.rs:1431`, which should fall
+back to the **base** anchor when the worker's own reach finds nothing (D149's share-table anchor, D150.4's precedent).

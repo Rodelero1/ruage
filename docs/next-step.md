@@ -139,3 +139,10 @@ firings), gold **410 -> 10** at 2,400 s, so the army stalls. Two candidate readi
 
 Answer with a measurement, not a choice; the scene's outcome is a metric this tree tracks ("a won match became a draw" has
 already cost one slice, see `apply_switches`).
+
+## Next: the depletion anchor, and why wood froze under it (D354)
+
+`spent_pile.rs` (pending, in `/opt/data/cache/scratch/age2hd-pending-fixtures/`) is red on the shipped code and green under a
+node anchor - but the node anchor **freezes wood at 68** from 1,200 s and costs **+90% wall time** (10.10 -> 19.20 s). Instrument
+one woodcutter's pick answer and `start_gather`'s refusal before touching the anchor again. Then the assignment picker
+(`crates/script/src/lib.rs:1431`) gets the base fallback.
