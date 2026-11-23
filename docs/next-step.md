@@ -1,28 +1,27 @@
 
 
-# OPEN - the arrival is a placement, and the slide goes (D356's two rulings)
+# OPEN - the plan stamp is the price of D357: 8x the re-paths for a halved pile
 
-**Where this stands:** suite **945 passed, 0 failed, 25 ignored**; conformance **21 / 0 / 0**; acceptance `b5f981d1e20eb282`
-(**124** entities, **12,847** re-paths, **10.10 s**). A session starts at `docs/decision-index.md` - 343 rulings, ~8k tokens.
+**Where this stands:** the arrival is a placement (D357, landed): the acceptance scene now runs **153 entities, 138,588 re-paths,
+24.83 s** and **wins**, against **124 / 12,847 / 10.10 s** and a draw before it. The pile halved - overlapping pair-ticks
+**144,534 -> 74,717**, deeper than half a footprint **129,512 -> 70,499** - the deepest pair unchanged at **8,000 raw**.
+Suite and gates recorded in `docs/reviews/2026-11-22-d357-the-arrival-is-a-placement.md`. A session starts at
+`docs/decision-index.md`.
 
-**Two rulings, both his, both unbuilt (D356):**
+**Two items, in this order:**
 
-1. **An arriving man takes the next free place, not the spot another body holds.** *"The second man steps to the next free spot
-   near the same tree/mine (the game's own placement rule), and only goes idle if there is none."* That is `func_002699A0`:
-   step out `ext_a + ext_b + 0.01` on one of four sides, 50 tries, refusing any obstructed candidate. The first attempt (D351,
-   branch `d351-reseat`) failed because it aimed at a **ring tile**, which is half a tile off the node; the fix is a step
-   **along the node's face** (tangent on the contact circle), which keeps the man working while it separates him.
-   Measured today on the acceptance scene: **144,534 overlapping pair-ticks**, deepest **8,000 raw (a full footprint)**,
-   gatherers closing to **5,600** raw against the **8,000** they need - while `invariants::villagers_never_close_into_one_body`
-   is green because its scene has four men on four nodes.
-2. **No slide: a blocked step stops and re-plans.** *"Never slide: if the step is blocked he stops and re-plans."* The terrain
-   slide is still in the engine. D255 tried this and got **14 red across 8 binaries**, all traced to "a tile is not an object";
-   D277 and D339 have since made the world the ground-as-a-point and the things-as-boxes, so **re-run that attempt first** - the
-   blocker may be gone, and if it is not, the measurement says exactly which rule still needs a body.
+1. **The plan-time cost.** With the seat switched off, the same build is **9.93 s and 12,847 re-paths**: the whole difference is
+   men standing a body's width apart and **stamping twice as many tiles as blockers**. The question is D296-D310's own - how the
+   stamp is applied and how a walker's route learns that a stander is there. Measure per-reason re-path counts before touching it
+   (D197's counter exists for exactly this), and treat "the pile is halved" as the invariant that must survive.
+2. **The deepest pair still a full footprint apart** (8,000 raw). It is a `Return`ing carrier walking home into another, not an
+   arrival at a node, so the seat never sees it. Decide whether the arrival rule covers a carrier (the owner's ruling names "the
+   next free spot near the same tree/mine", which is the gather case) or whether this is the walk's business - and measure before
+   extending it.
 
 **Then the picker (D354):** `crates/script/src/lib.rs:1431` measures the assignment search from the worker with a nine-tile reach
 and this map's gold is **9.6** tiles out (**220** refusals, gold frozen at 10 with 1,011 on the ground); fall back to the base
-anchor. After that, D350's three ports and the pile census.
+anchor. After that, D350's three ports.
 
 ## The owner's report, sized and attributed (2026-11-22)
 

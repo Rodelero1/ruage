@@ -2,7 +2,7 @@
 
 # Decision index
 
-**343 rows.** `docs/decisions.md` is ~844k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**344 rows.** `docs/decisions.md` is ~848k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
 - **337** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
@@ -69,7 +69,7 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D348** — the window is a per-unit margin we have not read, and our tier is a stand-in for a driver nobody has read · —
 - **D44a** — The dead zone is not siege-only, `set` modifiers were being dropped, and it is measured body to body · —
 
-## Economy & gathering (53)
+## Economy & gathering (54)
 
 - **D20** — Eight sides, so four-versus-four · —
 - **D27** — A farm is a building content calls a farm, and workers stand beside what they work · —
@@ -124,6 +124,7 @@ Areas are a keyword heuristic over each row; the point is a page you can scan, n
 - **D342** — sequence step 7 landed: the 300 row is a mine, and the tier cannot see it yet · —
 - **D352** — Conformance is a line on every ruling, and the divergence register is the one list of what we do differently · —
 - **D354** — the rule he remembers is in the engine; the picker that breaks it is the one handing out work · — · `spent_pile`
+- **D357** — The arrival is a placement: the pile halves, the re-plans multiply by eight, and both are reported · GAME · `one_place_per_man`, `one_place_per_man`
 
 ## Buildings & construction (62)
 

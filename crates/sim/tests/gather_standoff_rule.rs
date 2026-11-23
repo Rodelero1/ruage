@@ -424,11 +424,14 @@ fn six_men_asked_for_one_bush_all_stay_on_it() {
             closest = closest.min(gap(&world, after[a], after[b]));
         }
     }
-    // **Pressed, not spaced** (D290, D293): six men asked for one bush stand against it and overlap - **measured 0.000** between
-    // the closest pair after ten seconds - which is what an engine with no press floor does. The claim that survives is that they
-    // are all still on it and still taking, which the count above asserts.
+    // **A place each, not pressed** (D356's ruling 1, the owner 2026-11-22: *"the second man steps to the next free spot near
+    // the same tree/mine (the game's own placement rule)"*). This assertion was the opposite until then - it demanded the six be
+    // **inside one body's width**, because D289/D293 handed out no seats and let the crowd jam. An arriving man is now placed
+    // `ext_a + ext_b + 0.01` along one side of the node (`func_002699A0`), so the closest pair keeps a body's width; the count
+    // above is what still says all six work it.
     assert!(
-        closest < 0.40,
-        "MEASURED the closest pair {closest:.3} tiles apart after ten seconds - six men on one bush must be inside one body's width"
+        closest >= 0.40,
+        "MEASURED the closest pair {closest:.3} tiles apart after ten seconds - an arriving man is placed a body's width along \
+         the node's face (D356)"
     );
 }

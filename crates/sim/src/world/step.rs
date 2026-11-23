@@ -40,6 +40,20 @@ impl World {
         // closes is solid for them.
         self.step_gates();
         self.move_bodies(std::mem::take(&mut work.deltas))?;
+        // **The arrival's separation is a placement, not a step** (D356.1): the game writes the position
+        // (`func_002697C0` -> `Method15(out_x, out_y)`), and a step here would be refused by the body it separates from.
+        let now = self.tick;
+        for (id, point) in std::mem::take(&mut work.seats) {
+            // **A placement is not a walk.** The man is put down a body's width along the node's side, so the route he was
+            // walking is behind him: keep it and every tick is a "past waypoint" re-plan, which measured **138,588** re-paths on
+            // the acceptance scene against **12,847** before this rule. The route is cleared here; the gather arm gives him a
+            // fresh one when he next needs to walk.
+            self.paths.remove(&id);
+            if let Some(entity) = self.find_mut(id) {
+                entity.position = point;
+                entity.last_moved = now;
+            }
+        }
 
         self.fly_shots(
             work.shots,
@@ -1749,9 +1763,20 @@ impl World {
                         work.hunts.push((entity.id, node));
                     }
 
-                    // Standing still at the thing being worked is what entitles a worker to take
-                    // from it.
-                    if at_node {
+                    // **An arriving man's place is a placement, not a shared point** (D356's ruling 1, the game's own rule -
+                    // `func_002699A0`: step out by the pair's radii plus a hundredth, refusing any candidate another body
+                    // holds). The owner, 2026-11-22: *"the second man steps to the next free spot near the same tree/mine, and
+                    // only goes idle if there is none"*. Measured on the acceptance scene the day this landed: **144,534**
+                    // overlapping pair-ticks, deepest a **full footprint** (8,000 raw), a gatherer pair closing to **5,600**
+                    // against the **8,000** their bodies need. The step is tangential so he stays at the node (a ring tile is
+                    // half a tile off the face and a man sent to one stops taking), and only the later man yields.
+                    if at_node
+                        && let Some(seat) = self.arrival_seat(entity.id, node, entity.position)
+                    {
+                        work.seats.push((entity.id, seat));
+                        (Fixed::ZERO, Fixed::ZERO)
+                    } else if at_node {
+                        // Standing still at the thing being worked is what entitles a worker to take from it.
                         // **A standing tree is chopped down first.** Until its hit points are gone it yields nothing;
                         // when they are, it falls where it stands and is then cut for wood (the owner's rule). A bush or
                         // a mine has no hit points, so this branch never runs for them.
@@ -1998,6 +2023,11 @@ struct TickWork {
     homing: Vec<EntityId>,
     /// Men who chose a place on a node's ring this tick and must now keep it (D186 addendum 5).
     places: Vec<(EntityId, EntityId, (Fixed, Fixed))>,
+    /// **Men whose place at a node must be written, not stepped** (D356's ruling 1). The game's separation is a
+    /// *placement*: `func_002697C0` calls the child's own set-position after `func_002699A0` accepts a point. A step would
+    /// be refused by the very body it is separating from - measured, a man held the seat 7,000 raw away and never moved, the
+    /// delta refused every tick. So this is applied after the movement pass, as a write.
+    seats: Vec<(EntityId, (Fixed, Fixed))>,
     /// **How long each man has stood refused a square** (D204): `Some((node, ticks))` is a man still refused at that
     /// node, `None` is a man who has a square - or has just been sent to another one - so his count goes. Carried here
     /// because `decide` reads the world and never writes it; `count_refused_squares` folds these in after the loop.

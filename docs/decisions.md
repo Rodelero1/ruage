@@ -10106,6 +10106,47 @@ documentation puts villagers in **no** formation.
 2. *"Never slide: if the step is blocked he stops and re-plans"* - the terrain slide goes; D292's mandate is the **pause and the
    re-path**, nothing else.
 
+   **Status of ruling 2: awaiting his explicit word.** The clarifying form reported both answers, then he reported that he could
+   not answer it and restated **only ruling 1** (*"my answer to options is 1 - the second man steps to the next free spot"*). The
+   evidence in the paragraph above is unaffected - the binary has no slide, and D292's word "sliding" was mine - but a ruling
+   whose provenance is a form he says he never saw is not a ruling. It is re-asked in plain text, and until he answers, **the
+   terrain slide stays** and no slice is built on it.
+
 **What closes this.** Two slices, both already on the register: the arrival's place (section 1, row 4 - D351's re-seat, which
 failed on a ring-tile target and needs the tangent step) and the slide's removal (D255, whose 14 reds were caused by "a tile is not
 an object" - a model that D277 and D339 have since replaced, so the blocker may be gone).
+
+## D357 - The arrival is a placement: the pile halves, the re-plans multiply by eight, and both are reported
+
+**Conformance**: GAME - `func_002699A0` (a **side** is picked, the candidate is placed `ext_a + ext_b + 0.01` out from it with an
+offset **along** that side, fifty tries, refusing any candidate whose obstruction query is non-zero) and `func_002697C0` (the
+separation is written as a **set-position**, not stepped). OWNER, 2026-11-22: *"the second man steps to the next free spot near the
+same tree/mine (the game's own placement rule), and only goes idle if there is none."*
+
+**Fixture**: `one_place_per_man` (`crates/sim/tests/one_place_per_man.rs`), written before the change and watched failing at
+**0 raw** apart against the **8,000** the pair need.
+
+**What landed.** `World::arrival_seat` answers with a point on the **grown box's face** - the node's box grown by the man's own
+radius is his contact surface, and the seat is offset along a face by the pair's radii plus a hundredth - and `TickWork::seats`
+writes it **after the movement pass**, because a step is refused by the very body it separates from (measured: a man held a seat
+**7,000 raw** away, his delta refused on every tick). Who yields: the man who is not working (D246's rule 4 is absolute - the first
+version moved a working man **7,835 raw**), and when both work, the lower id (`008a80ff cmp eax,esi / jle`).
+
+**Three fixtures were restated, not deleted** - `gather_press_in`, `gather_spread`, `gather_standard_rule`'s six-men scene, and the
+press clause of `gather_continuous`'s ten-men scene - each now demanding **at least 0.40 of a tile** between two men on one node,
+each quoting the ruling that reversed it.
+
+**What it buys, measured** (`collision_probe`, 36,000 ticks, seed 7): overlapping pair-ticks **144,534 -> 74,717** (0.91% ->
+0.48%), pairs deeper than half a footprint **129,512 -> 70,499**, new overlaps per tick **888 -> 437**. On the acceptance scene
+(48,000 ticks): entities **124 -> 153** and the outcome a **draw -> a win**.
+
+**What it costs, measured:** re-paths **12,847 -> 138,588** and wall time **10.10 -> 24.83 s** median of three. The control that
+names the cause: with the rule switched off by an env flag and nothing else changed, the same build runs **9.93 s / 12,847
+re-paths / 124 entities** - so the whole difference is the rule. Men that shared one point now stand a body's width apart and
+**stamp twice as many tiles as blockers**, and every walker whose route crosses a node's ring re-plans where it used to pass.
+
+**Not closed**: the deepest pair is still **8,000 raw** (a full footprint) - a `Return`ing carrier walking home into another, not an
+arrival at a node. That pair is the first question of the next slice; the number that says it is still open is in this row.
+
+**Accepted cost, per the owner's own priority** (D275: *"fidelity first, and cost is a later question"*). The plan-time price is now
+the **top performance item** in `docs/next-step.md`, and it is a plan-stamp question (D296-D310's port), not an arrival one.

@@ -3254,6 +3254,118 @@ impl World {
             .map_or(0, |value| value.raw())
     }
 
+    /// **Is this point inside another body's box?** The arrival's question, kept apart from `inside_a_body` (which is asked
+    /// about a *tile centre* when the plan stamps what stands where): here the point is a body's own centre and the boxes are
+    /// grown by both radii, so "inside" means the two footprints overlap, not merely touch.
+    pub(crate) fn body_holds(&self, mover: EntityId, point: (Fixed, Fixed)) -> bool {
+        let own = self
+            .find(mover)
+            .map_or(0, |entity| self.body_radius(entity.unit));
+        self.entities.iter().any(|other| {
+            if other.kind != EntityKind::Unit || other.hp <= 0 || other.id == mover {
+                return false;
+            }
+            let his = self.body_radius(other.unit);
+            (point.0.raw() - other.position.0.raw()).abs() < own + his
+                && (point.1.raw() - other.position.1.raw()).abs() < own + his
+        })
+    }
+
+    /// **Where an arriving man stands when the place he wants is already held** (D356's ruling 1; the owner, 2026-11-22:
+    /// *"the second man steps to the next free spot near the same tree/mine (the game's own placement rule), and only goes idle
+    /// if there is none"*).
+    ///
+    /// That is `func_002699A0` (`unit_action_resolve.cpp`): pick a **side**, place the candidate `ext_a + ext_b + 0.01` out from
+    /// it with an offset **along** that side, refuse any candidate whose obstruction query is non-zero, fifty tries. This is the
+    /// same shape: the node's box grown by the man's own radius is his contact surface, its four faces are the four sides, and
+    /// the seat is offset **along a face** by the pair's radii - so he keeps touching the node while he stops touching his friend.
+    ///
+    /// Two shapes were tried before this one and both failed for a measured reason: a radial step pulled back onto the *distance*
+    /// re-crossed the box (**0.024 tiles** off the face, so he stopped taking), and the same step snapped per axis lost the
+    /// tangential offset it had just made. A face has one axis free, which is the property the rule needs.
+    ///
+    /// **Who yields**: the man who is not working. A man at work is never moved (D246, the owner's rule 4), and when both are
+    /// working the binary's right of way decides - the lower id keeps the spot (`008a80ff cmp eax,esi / jle`).
+    pub(crate) fn arrival_seat(
+        &self,
+        mover: EntityId,
+        node: EntityId,
+        at: (Fixed, Fixed),
+    ) -> Option<(Fixed, Fixed)> {
+        let own = self
+            .find(mover)
+            .map_or(0, |entity| self.body_radius(entity.unit));
+        let (friend, his, friend_working) = self.entities.iter().find_map(|other| {
+            if other.kind != EntityKind::Unit || other.hp <= 0 || other.id == mover {
+                return None;
+            }
+            let his = self.body_radius(other.unit);
+            let (dx, dy) = (
+                (at.0.raw() - other.position.0.raw()).abs(),
+                (at.1.raw() - other.position.1.raw()).abs(),
+            );
+            let working =
+                matches!(other.task, crate::Task::Gather { progress, .. } if progress.raw() > 0);
+            (dx < own + his && dy < own + his).then_some((other, his, working))
+        })?;
+        let mine_working = self.find(mover).is_some_and(
+            |entity| matches!(entity.task, crate::Task::Gather { progress, .. } if progress.raw() > 0),
+        );
+        if mine_working && !friend_working {
+            return None;
+        }
+        if mine_working && friend_working && mover.0 < friend.id.0 {
+            return None;
+        }
+
+        let node_at = self.find(node)?.position;
+        let grow = self.node_radius(node) + own;
+        let (left, top) = (node_at.0.raw() - grow, node_at.1.raw() - grow);
+        let (right, bottom) = (node_at.0.raw() + grow, node_at.1.raw() + grow);
+        let out = own + his + self.scale / 100;
+        let (friend_x, friend_y) = (friend.position.0.raw(), friend.position.1.raw());
+
+        // The four faces: `axis` 0 is a vertical face at `fixed`, `axis` 1 a horizontal one; `lo..=hi` is the free extent.
+        let faces = [
+            (0u8, right, top, bottom),
+            (0u8, left, top, bottom),
+            (1u8, bottom, left, right),
+            (1u8, top, left, right),
+        ];
+        // **The side he stands nearest first**, which is where the game's own separation would try first: the man he crowds is
+        // on one side of the node, and the free place is along that side.
+        let mut order = [0usize, 1, 2, 3];
+        order.sort_by_key(|&index| {
+            let (axis, fixed, _, _) = faces[index];
+            if axis == 0 {
+                (friend_x - fixed).abs()
+            } else {
+                (friend_y - fixed).abs()
+            }
+        });
+        for index in order {
+            let (axis, fixed, lo, hi) = faces[index];
+            let along = if axis == 0 { friend_y } else { friend_x };
+            for sign in [1i64, -1] {
+                let seat = along + sign * out;
+                if seat < lo || seat > hi {
+                    continue;
+                }
+                let point = if axis == 0 {
+                    (Fixed::from_raw(fixed), Fixed::from_raw(seat))
+                } else {
+                    (Fixed::from_raw(seat), Fixed::from_raw(fixed))
+                };
+                if !self.body_holds(mover, point) {
+                    return Some(point);
+                }
+            }
+        }
+        // Every side held: he keeps the place he has. That is the jam, and it is allowed - D289 is about the walk, this is the
+        // arrival, where the game does separate.
+        None
+    }
+
     /// **Plan a route, stamped with when it was planned** (D212). Every route goes through here so that the *past* test has
     /// something to compare against: the original writes the world clock into `path+0x10` when a search returns, and a
     /// collider whose `lastMoveTime` is newer than that is the one case the collision block re-acts to.

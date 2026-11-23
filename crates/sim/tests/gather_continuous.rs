@@ -193,9 +193,14 @@ fn ten_men_ask_for_one_bush_and_seven_press_into_it() {
             closest = closest.min(gap(&world, spots[a], spots[b]));
         }
     }
+    // **Not one body's width apart, but one place each** (D356's ruling 1, the owner 2026-11-22: *"the second man steps to the
+    // next free spot near the same tree/mine"*). This assertion was the opposite until then - it demanded the pair be pressed
+    // inside **0.40** of a tile, because D289/D293 handed out no seats and let the crowd jam. The rule is now the game's own: an
+    // arriving man is *placed*, `func_002699A0`'s `ext_a + ext_b + 0.01` along one side, so two men on one node stand at least
+    // their own two radii apart and both keep working.
     assert!(
-        closest < 0.40,
-        "MEASURED the closest pair {closest:.3} tiles apart - they should be pressing inside one body's width, not spaced at it"
+        closest >= 0.40,
+        "MEASURED the closest pair {closest:.3} tiles apart: an arriving man is placed a body's width from the one already there (D356)"
     );
     // **Each circle touches the bush's tile** (D192): 0.20 of a tile from its border, which is 0.70-0.99 from the centre
     // depending on which part of the border he is against.

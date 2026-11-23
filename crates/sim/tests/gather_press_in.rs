@@ -1,13 +1,17 @@
-//! **Gatherers press in; the engine hands out no seats.** The owner, 2026-11-19: *"Drop it and let the crowds jam. I want the start as
-//! close to the game as sensible"*, and the crosscheck that followed: the taken list our gather arm keeps (`gather_place`,
-//! `standoff_point`) is **ours**, not the original's - the game sends a man to the resource he was given, the bodies are solid, and
-//! friends press into each other with no floor at all (D290: the binary computes the depenetration and discards it).
+//! **Gatherers take a place each - and press only when no place is free.**
 //!
-//! So the claim: **two men ordered to one tree both work it, standing pressed** - closer than the one diameter the seat book keeps
-//! between them. With seats they are placed on distinct points 0.4 of a tile apart; without them they converge, which is what the
-//! players see.
+//! This file was written for the opposite rule. Until 2026-11-22 the owner's ruling was *"Drop it and let the crowds jam"* (D289)
+//! with the seat book cut (D293), on the reading that the binary computes a depenetration and discards it (D290) - so a second
+//! man on a node was *required* to press into the first, and this fixture failed any pair that stood a body's width apart.
 //!
-//! Written before the implementation (D7, SPEC §11).
+//! He saw the result and ruled again (D356's ruling 1, 2026-11-22): *"the second man steps to the next free spot near the same
+//! tree/mine (the game's own placement rule), and only goes idle if there is none"*. That is `func_002699A0` - a **side** is
+//! picked and the candidate is placed `ext_a + ext_b + 0.01` out from it, refusing any obstructed candidate - and it is the
+//! **arrival** rule, not a press floor during a walk: D290 stands, because the depenetration a moving body computes is still
+//! discarded. The assertion below is inverted with the ruling, and it says so.
+//!
+//! Written before the change (D7, SPEC §11); the rule it now pins was watched failing at **0 raw** apart
+//! (`docs/reviews/2026-11-22-d357-the-arrival-is-a-placement.md`).
 
 use std::path::PathBuf;
 
@@ -169,12 +173,13 @@ fn two_gatherers_on_one_tree_press_in() {
         both_taking,
         "the two never took from the tree on the same tick, so the fixture measures nothing"
     );
-    // A villager's radius is 0.2, so two of them touch at 0.4 of a tile (`2 * radius`). Pressing means closer than that.
+    // A villager's radius is 0.2, so two of them touch at 0.4 of a tile (`2 * radius`). **A place each** means at least that:
+    // the rule was the opposite until D356's ruling 1, and the assertion is inverted with it rather than softened.
     let diameter = scale * 2 / 5;
     assert!(
-        closest < diameter,
-        "the two stood {:.3} tiles apart at their closest while both working - the seat book kept them a body apart, and the \\
-         original does not: its bodies may press into each other with no floor (D290)",
+        closest >= diameter,
+        "the two stood {:.3} tiles apart at their closest while both working - an arriving man is placed a body's width \
+         along the node's side (D356, `func_002699A0`)",
         closest as f64 / scale as f64
     );
 }
