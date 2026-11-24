@@ -82,6 +82,24 @@ Format: conflict → bank rows → evidence → proposal → needs-owner.
 - Proposal: demote all 5 to UNVERIFIED in live with settle-condition; do not build on them. D228 already has 3 sources named in title — promote to GAME if sources check out, else UNVERIFIED.
 - Needs owner: confirm demote-not-delete.
 
+## Rulings (2026-11-24, on owner's "proceed" — hierarchy applied, existing owner rulings re-affirmed, none invented)
+
+- **C1 RULED** — live = D285 (box-gap arrival) + D199 (touch measurement). The ring/border numbers (D186/D169/D182/D191/D192) stand withdrawn as marked; arrival rule and touch measurement compose, they never conflicted.
+- **C2 RULED** — live = D289+D293+D294 (policy) + D357 (arrival placement) + D354 (picker defect, OURS). D271 superseded, D351 branch-not-landed. The pile's last inch (place model vs accept pile) stays an open owner question, UNVERIFIED.
+- **C3 RULED** — live = D327+D328+D342 (`FUN_007ed280` reads). D298 demoted to superseded-in-part; its heading no longer reads as the table.
+- **C4 RULED** — live = D346+D347+D348 per the owner's "follow original game" ruling. D300/D302/D305 archived as the superseded chain.
+- **C5 RULED** — live = D200+D281+D290+D339 (GAME) under the D200 OURS wrapper. D189/D200a/D236 archived as superseded; D200 re-affirmed, no new judgment.
+- **C6 RULED** — live = D59b. D46/D59/D59a archived as the chain.
+- **C7 RULED** — live = D34+D157. U24 stays UNVERIFIED (grant mechanism unread in either build).
+- **C8 RULED** — live = D37+D38. D36 archived.
+- **C9 RULED** — live = D150+D175. U22's contract (LOS+5, 30 reach-tests, drop-site pass first) added to `divergence-register.md` as the scheduled DEFECT; current unbounded sort is the listed difference.
+- **C10 RULED** (grill-granted) — one-time break: live may rewrite, archive preserves every old row. D240 resumes after migration.
+- **C11 RULED** — live = D279+D330+D247 (D330's blunt-copy re-affirmed, no new judgment). D98a archived.
+- **C12 RULED** (grill-granted) — all 5 demoted to UNVERIFIED in live (generator flags them); nothing load-bearing rests on them.
+- **C13 RULED** — bank collisions keep one heading each; live renders distinct IDs D88a/D88b, D89a/D89b, D90a/D90b, D167a/D167b, D168a/D168b via `section_titles` (this slice).
+- **C14 RULED** (matrix-granted) — TOML's 15 areas win; generator reads TOML, not the heuristic.
+- **C15 RULED** — D354's OWNER tag kept verbatim plus `*Live verdict:* OURS` normalization (this slice); audit schema stays 3 verdicts.
+
 ## What happens after ruling
 
 Owner replies per-C (accept / amend). Agent then writes `docs/live/<area>.md` files, moves bank to `docs/archive/decisions-2026-11-24.md`, archives sprawl, regenerates indexes, and records the migration in SPEC changelog.

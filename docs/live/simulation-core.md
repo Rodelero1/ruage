@@ -165,12 +165,10 @@ stands, and the same rules file now says why the other choice is expensive - flo
 field, with MSVC's unstable sort and the game's swap-remove list order.
 
 
-### D88 - Fights are ordered: the tick applies object by object, as the original does (2026-11-01)
-
-*Date:* 2026-11-01
+### D88a - Fights are ordered: the tick applies object by object, as the original does (2026-11-01) (bank id D88)
 
 *Area:* Simulation core
-*Status:* amended
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 The owner's instruction, verbatim: **"units cannot trade killing blows, follow original."** That settles U18 in favour of
 the original's model and against ours.
@@ -198,7 +196,10 @@ step of it being reached through a hash map. D90 is therefore part of this decis
 pass, then write its inverse - `the later unit does not swing` - and watch that one fail against the current loop before
 touching `Sim::step`. Two tests, one behaviour, and the failing run is the permission to change the engine.
 
-#### Amendment 1 (bank held two sections under one id)
+### D88b - Blows land in order: two units cannot trade killing blows (2026-11-01) (bank id D88)
+
+*Area:* Simulation core
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 The owner's answer to U18, verbatim: **"units cannot trade killing blows, follow original."** That settles a question that
 had stood open for three weeks with three consistent positions available (ours simultaneous; genie's ordered-by-object;

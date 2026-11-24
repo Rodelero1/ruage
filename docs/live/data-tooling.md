@@ -152,12 +152,10 @@ The size went from 402 KB to 461 KB of generated TOML, which is a price worth pa
 the animals the researched openings are built on.
 
 
-### D89 - The effect schema carries tech cost and tech time (2026-11-01)
-
-*Date:* 2026-11-01
+### D89a - The effect schema carries tech cost and tech time (2026-11-01) (bank id D89)
 
 *Area:* Data & tooling
-*Status:* amended
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 U16 and U2 closed on 2026-10-27: **kind 101 is tech cost** (`a` = tech id, `b` = resource 0-3, `c` = 0 set / 1 add,
 `d` = signed amount) and **kind 103 is tech time**. Our data holds **97 kind-101 and 25 kind-103 commands**, and today
@@ -175,7 +173,10 @@ then an *add* of -220/-157/-250 - and it survives into our `commands` while havi
 **First tests:** a kind-101 command survives import as a `tech_cost` modifier; applying effect 10 sets Feudal cost to 425
 and then subtracts 220 from it; a kind-103 command shortens the research length it names.
 
-#### Amendment 1 (bank held two sections under one id)
+### D89b - The adoptables from the prior-art round: taken, deferred, or refused (2026-11-01) (bank id D89)
+
+*Area:* Data & tooling
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 The owner: **"adopt adoptable"**, and **"3 adopt"** for tech cost/time. Recorded so a later session does not re-litigate:
 
@@ -337,12 +338,10 @@ both were fixed rather than asked about.*
    triaged.
 
 
-### D167 - A decision's area is written down, and the build refuses an unfiled one
-
-*Date:* 2026-11-09
+### D167a - A decision's area is written down, and the build refuses an unfiled one (bank id D167)
 
 *Area:* Data & tooling
-*Status:* amended
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 *2026-11-09. The owner: "I would like the grouping to be done in more natural way like 'UI, Pathfinding, Economy,
 Combat...'". The page had been grouped by position - bands of twenty-five ids - because a derived topic had failed. This
@@ -380,7 +379,10 @@ about, and D113 (a route bending at the body's clearance) is filed under movemen
 The page cannot edit the table - a correction is an edit to `docs/decision-areas.toml` - and the review queue's export
 does not carry areas, so a reviewer's disagreement with a filing has to be said in a note.
 
-#### Amendment 1 (bank held two sections under one id)
+### D167b - Units above buildings again, because both orders were reported (bank id D167)
+
+*Area:* Data & tooling
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 *2026-11-08, sixth round. Measured once more: a villager ordered to the tile **touching** a house's north wall and another to the tile touching its
 south wall both arrive **exactly on their goal tile's centre** - `(40.50, 39.50)` and `(40.50, 42.50)`. There is no reachability asymmetry; the
@@ -397,12 +399,10 @@ engine stops a unit at the tile boundary on every side.*
    marker to its tile's centre** so it can never straddle a neighbour. Both change how the game looks, so both are his call.
 
 
-### D168 - The decision index is derived from the corpus, and it quotes its evidence
-
-*Date:* 2026-11-09
+### D168a - The decision index is derived from the corpus, and it quotes its evidence (bank id D168)
 
 *Area:* Data & tooling
-*Status:* amended
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 *2026-11-09. The owner: "I want to have a page I can browse with a web browser where I could see all the decisions that
 have been made or are yet to be made and how they were made (research, decided by me, reverse engineered, assumed...)
@@ -462,7 +462,10 @@ mention, which is why the sentence is on the page. The U-register is read from o
 anywhere else is not in the open register. Nothing links a decision to the *test* that pins it - the code cites ids
 (155 of 178 `.rs` files do) but there is no check that the cited test still exists.
 
-#### Amendment 1 (bank held two sections under one id)
+### D168b - Two frames, one conversion: `drawn_at` subtracts half a tile (bank id D168)
+
+*Area:* Data & tooling
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 *2026-11-08. The defect under six rounds of "the unit is inside the building". `Camera::project` puts a tile's diamond **centre on the tile's
 point**, so tile `(x, y)` covers `x - 0.5 .. x + 0.5` on screen; the simulation's tile `(x, y)` covers `x .. x + 1` and a settled unit stands at

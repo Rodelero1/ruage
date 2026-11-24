@@ -224,12 +224,10 @@ Consequences, and they are what future sessions should act on:
    workaround and no passive human slot - which is what makes it a data source rather than a chore.
 
 
-### D90 - The workspace denies hash iteration and a bare `#[allow]` (2026-11-01)
-
-*Date:* 2026-11-01
+### D90a - The workspace denies hash iteration and a bare `#[allow]` (2026-11-01) (bank id D90)
 
 *Area:* Project process
-*Status:* amended
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 Borrowed in shape from `librematch/genie`'s lint set, adopted on the owner's "adopt adoptable". Determinism rule 3 says
 no collection the sim walks is a hash map, and **nothing enforces it**: this workspace has no `[workspace.lints]` section
@@ -245,7 +243,10 @@ violation on purpose once (a `HashMap` walk in a scratch test), watch the build 
 output in the commit or the day's review. `crates/sim/tests/no_float.rs` is the precedent for pinning a rule that would
 otherwise be a comment.
 
-#### Amendment 1 (bank held two sections under one id)
+### D90b - A missile whose launcher died does no damage (2026-11-01) (bank id D90)
+
+*Area:* Project process
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 The owner's second combat rule, verbatim: **"For projectiles also cause zero damage once launcher died in original game. If
 trebuchet goes missile and dies, missile causes 0 damage."**

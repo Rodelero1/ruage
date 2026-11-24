@@ -463,12 +463,10 @@ skipped, the rest stands, and the preview shows it red), **A** (the engine picks
    the second click.
 
 
-### D183 - A foundation is walkable, invisible and free of cost until a villager touches it
-
-*Date:* 2026-11-08
+### D183a - A foundation is walkable, invisible and free of cost until a villager touches it (bank id D183)
 
 *Area:* Buildings & construction
-*Status:* amended
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 *2026-11-08. The owner's model, given in two messages after his scout was pushed into the forest by a lumber-camp placement: **"When you place a
 building on the ground, it is still walkable over ... and you and your allies see it. If any of your or allied units stand over it, they will leave
@@ -491,7 +489,10 @@ building, it will turn dark grey (except farm) and start blocking the tiles"**. 
 7. **Farm is the exception**: constructed by walking **over** it, always walkable (D163), never blocks, multiple villagers may seed it and only one
    stays to farm it (the existing one-farmer-a-farm rule). Its site-clear gate therefore does not apply.
 
-#### Amendment 1 (bank held two sections under one id)
+### D183b - addendum - where a foundation may go, and what happens when the ground has changed (bank id D183)
+
+*Area:* Buildings & construction
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 *Same conversation, one message later: **"building can be placed only on the scouted area (can be in fog but never in black). It may happen that in
 meanwhile buildings are built there. Once villager sees that by his los, building construction is cancelled and refunded. You also cannot place any

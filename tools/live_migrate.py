@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -61,10 +62,19 @@ def build_plan(
 
 
 def render_decision(
-    decision: decisions.Decision, corpus: decisions.Corpus, area: str
+    decision: decisions.Decision,
+    corpus: decisions.Corpus,
+    area: str,
+    bank_titles: dict[str, list[str]] | None = None,
 ) -> str:
-    """One decision, verbatim, plus scaffolding. Amendments (second sections sharing
-    the id) follow the body; a game claim with no source pointer is flagged."""
+    """One decision, verbatim, plus scaffolding. Amendments (later substance under the
+    same id) follow the body; a bank numbering collision (two sections, two titles,
+    one id) renders as distinct live IDs `D<na>`/`D<nb>` instead. A game claim with
+    no source pointer is flagged."""
+    titles = (bank_titles or {}).get(decision.id, [decision.title])
+    if len(titles) > 1:
+        return _render_collision(decision, corpus, area, titles)
+    lines = [f"### {decision.id} - {decision.title}", ""]
     lines = [f"### {decision.id} - {decision.title}", ""]
     if decision.date:
         lines += [f"*Date:* {decision.date}", ""]
@@ -77,7 +87,18 @@ def render_decision(
             amendment,
             "",
         ]
-    if not audit.TAG.search(decision.text):
+    owner_tag = re.search(
+        r"^\*\*Conformance\*\*:\s*OWNER\b",
+        decision.text,
+        re.MULTILINE | re.IGNORECASE,
+    )
+    if owner_tag:
+        lines += [
+            "*Live verdict:* OURS — owner ruling, normalized from the bank's "
+            "nonstandard OWNER tag (C15). Schema allows GAME/OURS/UNVERIFIED only.",
+            "",
+        ]
+    elif not audit.TAG.search(decision.text):
         haystack = f"{decision.title}\n{decision.text}"
         if audit.CLAIM.search(haystack) and not audit.SOURCE.search(haystack):
             lines += [
@@ -88,11 +109,46 @@ def render_decision(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def section_titles(text: str) -> dict[str, list[str]]:
+    """Every `## D<n> - <title>` section title in bank order. Two distinct titles
+    under one id is a numbering collision (C13), not an amendment."""
+    found: dict[str, list[str]] = {}
+    for match in re.finditer(r"(?m)^#{2,3} +(D\d{1,4}[a-z]?)\b\s*-?\s*(.*)$", text):
+        found.setdefault(match.group(1), []).append(match.group(2).strip())
+    return found
+
+
+def _render_collision(
+    decision: decisions.Decision,
+    corpus: decisions.Corpus,
+    area: str,
+    titles: list[str],
+) -> str:
+    """Two bank sections, two titles, one id: distinct live IDs, both bodies kept."""
+    bodies = [decision.text] + corpus.amendments.get(decision.id, [])
+    parts = []
+    for pos, title in enumerate(titles):
+        live_id = f"{decision.id}{chr(ord('a') + pos)}"
+        body = bodies[pos] if pos < len(bodies) else "*body missing from parse*"
+        parts += [
+            f"### {live_id} - {title} (bank id {decision.id})",
+            "",
+            f"*Area:* {area}",
+            f"*Status:* live (bank numbering collision — see C13; "
+            f"bank status was {decisions.status(decision, corpus)})",
+            "",
+            body,
+            "",
+        ]
+    return "\n".join(parts).rstrip() + "\n"
+
+
 def render_area(
     area: str,
     items: list[decisions.Decision],
     corpus: decisions.Corpus,
     open_questions: dict[str, str],
+    bank_titles: dict[str, list[str]] | None = None,
 ) -> str:
     lines = [
         f"# Live — {area}",
@@ -105,7 +161,7 @@ def render_area(
         "",
     ]
     for decision in items:
-        lines.append(render_decision(decision, corpus, area))
+        lines.append(render_decision(decision, corpus, area, bank_titles))
         lines.append("")
     if open_questions:
         lines += ["## Open questions (U-register, this area)", ""]
@@ -115,7 +171,9 @@ def render_area(
 
 
 def main(check: bool = False) -> int:
-    corpus = decisions.parse_decisions(DECISIONS.read_text())
+    text = DECISIONS.read_text()
+    corpus = decisions.parse_decisions(text)
+    titles = section_titles(text)
     order, mapping, questions = decisions.load_areas(AREAS_FILE.read_text())
     unknowns = decisions.parse_unknowns(UNKNOWNS.read_text())
     open_by_area: dict[str, dict[str, str]] = {}
@@ -133,7 +191,7 @@ def main(check: bool = False) -> int:
     OUT_DIR.mkdir(exist_ok=True)
     for area, items in plan.items():
         (OUT_DIR / f"{decisions.slug(area)}.md").write_text(
-            render_area(area, items, corpus, open_by_area.get(area, {}))
+            render_area(area, items, corpus, open_by_area.get(area, {}), titles)
         )
     for problem in problems:
         print(f"REFUSED: {problem}", file=sys.stderr)

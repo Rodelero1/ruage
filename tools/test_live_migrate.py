@@ -85,5 +85,36 @@ class ConformancePreserved(unittest.TestCase):
         self.assertIn("Conformance needed", out)
 
 
+class CollisionLiveIds(unittest.TestCase):
+    def test_two_sections_sharing_one_id_get_distinct_live_ids(self):
+        text = (
+            "## D88 - First meaning\n\nBody one. Measured.\n\n"
+            "## D88 - Second meaning\n\nBody two. The dat says so.\n\n"
+        )
+        corpus = corpus_of(text)
+        titles = live_migrate.section_titles(text)
+        out = live_migrate.render_decision(
+            corpus.decisions["D88"], corpus, "Alpha", titles
+        )
+        self.assertIn("D88a", out)
+        self.assertIn("D88b", out)
+        self.assertIn("First meaning", out)
+        self.assertIn("Second meaning", out)
+
+
+class OwnerVerdictNormalized(unittest.TestCase):
+    def test_an_owner_tag_is_kept_and_counted_as_ours(self):
+        text = (
+            "## D354 - The rule he remembers\n\n"
+            "**Conformance**: OWNER, 2026-11-07: the owner said so.\n\nBody.\n\n"
+        )
+        corpus = corpus_of(text)
+        out = live_migrate.render_decision(
+            corpus.decisions["D354"], corpus, "Alpha"
+        )
+        self.assertIn("**Conformance**: OWNER", out)
+        self.assertIn("OURS", out)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -379,12 +379,10 @@ own `0..=65_535` guard, which already refuses a negative word; Forging's `[4, -1
 Review: `docs/reviews/2026-11-15-d216-packed-attack.md`.
 
 
-### D233 - a civilisation is config, and the attribute vocabulary is closed so a config that cannot work says so (2026-11-16)
-
-*Date:* 2026-11-16
+### D233a - a civilisation is config, and the attribute vocabulary is closed so a config that cannot work says so (2026-11-16) (bank id D233)
 
 *Area:* Techs & civs
-*Status:* amended
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 **The requirement, the owner's words (2026-11-16):** *"I would like team bonuses and civ bonuses moddable in the future to be
 able to easily add a civ by adding/changing config."* That is a constraint on the **shape** of the work, not a request to
@@ -421,7 +419,10 @@ Two new data tests are red on the old code (`attackk`, `other:7`) and green here
 modifier loader); `crates/data/tests/techs.rs` (three fixtures); the 29-name census of `config/gamedata/effects.toml`;
 `docs/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d233-moddable-civs.md`.
 
-#### Amendment 1 (bank held two sections under one id)
+### D233b - amendment (2026-11-17) - the `other:` half of the vocabulary was closed, and closing it broke the owner's build (bank id D233)
+
+*Area:* Techs & civs
+*Status:* live (bank numbering collision — see C13; bank status was amended)
 
 **What was wrong.** D233 closed the *whole* attribute vocabulary, the sixteen `other:<id>` / `unpacked:<id>` names included, so
 any pack carrying one that list did not happen to contain was refused at load. The owner's own machine is exactly that case:
