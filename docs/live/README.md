@@ -1,6 +1,11 @@
 # Live decisions — hub
 
-**Status: scaffold, not yet migrated.** `docs/decisions.md` (10,206 lines) is still the bank. This directory will become the live truth; nothing here is authoritative until the conflict table is ruled on.
+**Status: migrated 2026-11-24, mechanically.** 15 area files hold 364 decisions verbatim
+plus scaffolding (area, status, conformance flag); zero refusals
+(`python3 tools/live_migrate.py --check`: 364 placed, 15 areas, exit 0).
+Nothing is resolved: contradictions stand flagged in `conflict-table.md` (C1–C15)
+until the owner rules per-C. Bank (`docs/decisions.md`) stays the provenance source;
+live files are generated — re-run, never hand-edit.
 
 **Bank audit 2026-11-24:** 253 `##` headings (248 unique — D88/D89/D90/D167/D168 each appear twice, a 2026-11-01 numbering collision) + 16 table rows (D1–D16) + suffixed IDs (D24a, D44a, D46a, D50a, D58a, D59a/b, D94a, D98a, D200a, D210b) + split headings ≈ 264 headline rows, 345 indexed rows. Index areas are a keyword heuristic and do **not** read `decision-areas.toml` (see C14).
 
