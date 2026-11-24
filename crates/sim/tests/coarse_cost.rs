@@ -1,6 +1,6 @@
 //! **What a step into a coarse cell costs** (P11, step 11c), read from `FUN_007ed280`.
 //!
-//! The opener's table, as the code branches (`docs/pathfinding-levels-evidence.md`):
+//! The opener's table, as the code branches (`docs/archive/research/pathfinding-levels-evidence.md`):
 //!
 //! | situation | cost |
 //! | --- | --- |

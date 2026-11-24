@@ -196,7 +196,7 @@ class SeriesClockTests(unittest.TestCase):
     """The clock, and the check that says it is the clock.
 
     These numbers are not a guess about the format: they are what the thirteen saves of one match hold at one offset,
-    and `docs/save-format.md` records the three independent confirmations (monotone across the series, the recording's
+    and `docs/archive/research/save-format.md` records the three independent confirmations (monotone across the series, the recording's
     total length of 2,681,138 ms against brit13's 2,681,000, and the AI chat lines that cannot exist before they are
     spoken).
     """

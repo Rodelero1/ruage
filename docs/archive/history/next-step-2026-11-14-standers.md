@@ -4,8 +4,8 @@
 D210 (a collision is settled by time and by the clock, never by geometry), D210b (a standing body is an obstacle to the
 search that meets it), D211 (the search bends round a body inside a tile - bodies as discs with an octagon of shoulders),
 D212 (a search that starts inside a body is re-seeded at `2 x clearance`, and only *away*). All four are in
-`docs/decisions.md`; the mechanism and its measurements are in `docs/reviews/2026-11-14-d211-shoulders.md`, and the
-narrative of how the guard got there is `docs/history/next-step-2026-11-14-the-guard.md`.
+`docs/archive/decisions-2026-11-24.md`; the mechanism and its measurements are in `docs/reviews/2026-11-14-d211-shoulders.md`, and the
+narrative of how the guard got there is `docs/archive/history/next-step-2026-11-14-the-guard.md`.
 
 ## The one open step
 
@@ -43,7 +43,7 @@ with eight more nodes per body", and that is a different engine. Do not land the
   branch**: the pause is D210, the re-plan's knowledge of bodies and the "past" exemption are D210/D210b, and the fast path
   that answered "walk through him" is D211. What they needed first was a search that can route round a body, which is what
   D211 built.
-- `docs/dependency-tree.md` is the map: read it (and re-run its probes) before choosing a slice that is not on this file.
+- `docs/archive/research/dependency-tree.md` is the map: read it (and re-run its probes) before choosing a slice that is not on this file.
 
 ## Regressions this branch carries, parked by name
 

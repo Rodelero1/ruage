@@ -1,6 +1,6 @@
 # What each open pathfinding difference depends on (2026-11-20)
 
-*Follow-up to `docs/pathfinding-crosscheck-2026-11-20.md`, which listed ten differences and four unknowns. This is the dependency answer:
+*Follow-up to `docs/archive/research/pathfinding-crosscheck-2026-11-20.md`, which listed ten differences and four unknowns. This is the dependency answer:
 for each one, what has to be read, modelled or decided before it can be implemented - and which of those are ours to do versus waiting on
 evidence.*
 

@@ -47,8 +47,9 @@ SOURCE = re.compile(
     r"|func_[0-9A-F]{6,}"                   # a function in samuelcaldas' decomp
     r"|https?://"                           # a published source
     r"|\.(?:cpp|h)\b"                      # a decomp or install source file
-    r"|docs/(?:movement-in-the-binary|prior-art|gather-seating-evidence|pathfinding-[a-z-]+|sources|oracle|"
-    r"parse-notes|movement-pathing|recordings-and-timing)\.md"  # our own evidence files
+    r"|docs/(?:prior-art|sources)\.md"  # entry files that stayed at root
+    r"|docs/archive/research/(?:movement-in-the-binary|gather-seating-evidence|pathfinding-[a-z-]+|oracle|"
+    r"parse-notes)\.md"  # evidence files moved to the archive (Phase A)
     r"|\bmeasured\b"                       # a number this tree took
     r"|`[A-Za-z_]+`\s*\(\d"                # a call quoted with its arguments
     r"|build-order guide|wiki|forum|talk|slide"  # a published source named in prose

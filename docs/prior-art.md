@@ -35,8 +35,8 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 
 Owner note: `samuelcaldas/age-of-empires-2-decomp` + `Zaydme/openaok` can help decision-making. Recorded here so the live migration cites them correctly.
 
-- **`samuelcaldas/age-of-empires-2-decomp`** (matching decomp, AoC 1.0c / AoK 2.0a / PS2 ELF, no licence — all rights reserved). Already used 2026-11-16 for the P11 zone layer (`docs/sources.md`, `docs/pathfinding-conformance.md`: `src/zone/zone_spatial_pyramid_*.cpp`); silent on gather/work/speed (stubs, see 2026-11-17 section below). Addresses are **not HD 5.7**. Rule: read for shape, take numbers only from `AoK HD.exe` (`FUN_*`).
-- **`Zaydme/openaok`** (MIT, from-scratch 1999 AoK, 32.32 fixed at **60 Hz**). Already on the watchlist and cited across U7/U18/mechanics. Design precedent (determinism, integer A*, AI interpreter, UI in `docs/ui-from-openaok.md`), never GAME proof. Every cite must name the tick + version mismatch vs D16 20 Hz.
+- **`samuelcaldas/age-of-empires-2-decomp`** (matching decomp, AoC 1.0c / AoK 2.0a / PS2 ELF, no licence — all rights reserved). Already used 2026-11-16 for the P11 zone layer (`docs/sources.md`, `docs/archive/research/pathfinding-conformance.md`: `src/zone/zone_spatial_pyramid_*.cpp`); silent on gather/work/speed (stubs, see 2026-11-17 section below). Addresses are **not HD 5.7**. Rule: read for shape, take numbers only from `AoK HD.exe` (`FUN_*`).
+- **`Zaydme/openaok`** (MIT, from-scratch 1999 AoK, 32.32 fixed at **60 Hz**). Already on the watchlist and cited across U7/U18/mechanics. Design precedent (determinism, integer A*, AI interpreter, UI in `docs/archive/research/ui-from-openaok.md`), never GAME proof. Every cite must name the tick + version mismatch vs D16 20 Hz.
 
 Both sit at rung 2 of the live hierarchy (below binary/dat/save, above folklore): UNVERIFIED until a `FUN_*`/dat/save cross-check promotes the row. Facts only, never code, never prose.
 
@@ -242,7 +242,7 @@ reading for a shape.
 
 **The question.** The owner's ruling of 2026-11-16 - *"villagers push each other. What may never happen. Villager has to
 reroute, never push the other villager away"* - plus D207's claim that the original's search drops **moving selection-mates**
-so a group may walk over itself. The binary half of the answer is in `docs/movement-in-the-binary.md` (the path ignore list,
+so a group may walk over itself. The binary half of the answer is in `docs/archive/research/movement-in-the-binary.md` (the path ignore list,
 read the same day). This section is the second and third rungs: the neighbouring implementations, then published sources.
 
 **`Zaydme/openaok` (MIT; `95cb8a0`, read locally, nothing copied).** Every tick builds a per-tile `Traffic` index of
@@ -2150,7 +2150,7 @@ D14's narrow-borrow rule already anticipated the licence by citing facts rather 
 
 Not the scheduled watch: a **question-driven** survey, asked by the owner — *"evaluate the original game and other relevant
 open-source projects if they contain other items that are missing in the dependency tree."* Three sources, in the
-`AGENTS.md` order, and the findings became `docs/dependency-tree.md` §5 (M11-M25), §4 (T15-T17) and §5b.
+`AGENTS.md` order, and the findings became `docs/archive/research/dependency-tree.md` §5 (M11-M25), §4 (T15-T17) and §5b.
 
 **The original first.** Two facts about the install did the work. (1) **84 source-file names survive in
 `AoK HD.exe`** (assert and log strings) — `act_misl.cpp`, `tact_cnv.cpp`, `tact_obt.cpp`, `group.cpp`, `motion.cpp`,
@@ -2179,7 +2179,7 @@ detection. It is AoK, not DE, so it is the closest published thing to what HD 5.
 
 **The filter that matters.** genie targets a **later build than ours**, so every candidate was checked against the install
 before it became an item: `pasture`, `mule cart`, `empire wars` and `solidify` are **0 hits** in `AoK HD.exe` and are
-recorded in `docs/dependency-tree.md` §5b as *not* items. `treaty`, by contrast, is real in HD
+recorded in `docs/archive/research/dependency-tree.md` §5b as *not* items. `treaty`, by contrast, is real in HD
 (`mTreatyLength`, `TREATY_COUNTDOWN_MSG`, `TREATY_OVER_MSG`), and the dat carries `MONK`, `DOCK`, `TCART`, `COGXX`,
 `FTRAP`, `KINGX` and `RELIC` — so those are HD mechanics and not later-build ones. **Absence is a finding too**, and a list
 of what the game never had is what stops the next session porting a class name from the wrong build.
@@ -2201,10 +2201,10 @@ change mid-walk? It cannot answer it, and the search is recorded so the next ses
   both of per-frame calls into `func_XXXXXX` with no bodies; `src/unit/unit_action_build_formation.cpp` is 16 lines and
   `src/ai/tactical_ai_combat_subsystem_controller_formation.cpp` 27. Neither contains a speed.
 - **What it does cover** is the zone/spatial layer, part of the AI controller and the action system's plumbing - which is why it
-  is the source for the pathing rules in `docs/pathfinding-conformance.md`, and not for this.
+  is the source for the pathing rules in `docs/archive/research/pathfinding-conformance.md`, and not for this.
 - Its addresses are **AoC 1.0c / AoK 2.0a / the PS2 ELF**, not HD 5.7 (no licence, all rights reserved: read for behaviour,
   never transcribed). The movement answers in this tree come from `AoK HD.exe` itself -
-  `docs/movement-in-the-binary.md`, "The maximum forward velocity, read".
+  `docs/archive/research/movement-in-the-binary.md`, "The maximum forward velocity, read".
 
 ## openage on the three pathfinders and on formations (read 2026-11-21)
 
@@ -2232,4 +2232,4 @@ settles the direction of P14: a coarse tier that refuses to run when bodies are 
 tier runs *and* ignores them (the corpus agrees independently - `FUN_007ee980`'s body has no call to the stander inserter). It
 also makes the mate exemption a **formation's**, which villagers never have - our same-tick rule is broader than the game on
 both counts. It does **not** give a constant: no radius, no speed, no cost, no mip-map padding, and no statement about HD 5.7's
-own build (openage describes the classic engine). Those still come from the install - `docs/movement-in-the-binary.md`.
+own build (openage describes the classic engine). Those still come from the install - `docs/archive/research/movement-in-the-binary.md`.

@@ -6,7 +6,7 @@ a click landed on (`Command::Move`/`WalkTo`/`Task::Move` carry `target: Option<E
 (`solid_boxes`, `crosses_an_object`, `leg_is_clear`); and the step asks the same box question, **cutting a step at the target's
 face** (`target_contact`). Acceptance fixture **39.58 s -> 33.74 s**; suite **199 binaries, 884 passed, 21 failed, 21 ignored** - four of the 23
 baseline reds green, two joined (the owner's parked skirmish pair - see item 4). Full account, including the nine corrections the suite forced
-onto the slice: `docs/reviews/2026-11-19-d286-one-box-ruler.md`, and D286 in `docs/decisions.md`.
+onto the slice: `docs/reviews/2026-11-19-d286-one-box-ruler.md`, and D286 in `docs/archive/decisions-2026-11-24.md`.
 
 **The red set now, by name (21).** `a_mate_who_is_stopped_becomes_solid`, `six_settled_men_hold_their_places`,
 `three_gatherers_all_work_the_same_square_on_its_ring`, `a_settled_man_is_not_displaced_by_a_later_arrival`,
@@ -47,7 +47,7 @@ and the parked skirmish pair.
 P1/P2 landed (`c11e49d`): the search reports its expansions, answers the octile-nearest settled cell, and is **not** budget-
 enforced - at `h = 25 x tiles` a flat search truncates a legitimate detour (measured: a one-tile walk answered fifteen tiles
 east), so the budget lands **with** the levelled search (P11). P3, P4 and P5 were each attempted and each is blocked on the seat
-book: **P8 is the keystone** and the next slice. The full order and every measured reason is in `docs/parity-plan.md` and
+book: **P8 is the keystone** and the next slice. The full order and every measured reason is in `docs/archive/research/parity-plan.md` and
 `docs/reviews/2026-11-19-p3-p4-p5-attempted-the-blockers.md`.
 
 ## Prior implementation of the landed slice (D203) - kept because the next slice reads it

@@ -228,7 +228,7 @@ fn a_newcomer_steps_aside_and_the_body_already_there_does_not_move() {
 fn a_walker_never_ends_a_tick_inside_a_friend() {
     // **The owner's rule (D189, revised 2026-11-13): "units shouldn't just pass over each other - in the game they
     // obstruct each other and try to find a different path", and the original's collision block cannot tell a friend
-    // from an enemy (docs/movement-in-the-binary.md).** So this is checked *every tick*, not only at the end: the two
+    // from an enemy (docs/archive/research/movement-in-the-binary.md).** So this is checked *every tick*, not only at the end: the two
     // existing tests above judge where a unit finishes, and a walker that overlaps its friend for 300 ticks on the way
     // passes both of them.
     let Some(fx) = fixture() else { return };

@@ -9,7 +9,7 @@
 //! every sampled position stays on the line the order gave - because that is the thing the owner can see, and because a
 //! test of the endpoint alone passes for a staircase.
 //!
-//! Written before the implementation (D7). `docs/decisions.md` D110.
+//! Written before the implementation (D7). `docs/archive/decisions-2026-11-24.md` D110.
 
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, World};

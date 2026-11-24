@@ -37,7 +37,7 @@ fn at(x: i64, y: i64) -> (Fixed, Fixed) {
 
 #[test]
 fn the_originals_step_costs_are_sixteen_and_twenty_three() {
-    // The original's cost table (`docs/movement-in-the-binary.md`, `FUN_008007f0`): a cardinal step costs 16 and a
+    // The original's cost table (`docs/archive/research/movement-in-the-binary.md`, `FUN_008007f0`): a cardinal step costs 16 and a
     // diagonal 23 - 16 x sqrt2, rounded.
     assert_eq!(Ground::step_cost((4, 4), (5, 4)), 16);
     assert_eq!(Ground::step_cost((4, 4), (5, 5)), 23);

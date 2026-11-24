@@ -14,7 +14,7 @@ is really a simulation rule must **not** be moved. Every entry below was read in
   who a soldier fights, when a villager is redistributed. These belong in `config/ai/*.toml`, not in Rust.
 
 The game's own AI agrees with that split: its scripts set `sn-*-gatherer-percentage` and **the engine assigns the villagers**
-(`docs/ai-of-the-game.md`). So the engine keeps *mechanisms* and the AI keeps *decisions* — including the ones we have
+(`docs/archive/research/ai-of-the-game.md`). So the engine keeps *mechanisms* and the AI keeps *decisions* — including the ones we have
 hard-coded today.
 
 ## Inventory: choices currently made in Rust

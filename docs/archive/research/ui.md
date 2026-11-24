@@ -103,7 +103,7 @@ Read off the image rather than remembered:
 - **An instruction line sits at the panel's bottom-left** (*"Click a villager to gather wood from this tree."*) - the
   place for hints and, later, for the engine's own refusals.
 
-`docs/ui.md`'s data list is unchanged (the panel still needs the queue, the pause reason, the trainable list,
+`docs/archive/research/ui.md`'s data list is unchanged (the panel still needs the queue, the pause reason, the trainable list,
 affordability and a name); what changed is **where the message goes** (above the panel, red, world-space) and that the
 panel needs its own palette and a text line for hints.
 

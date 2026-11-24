@@ -39,7 +39,7 @@ help:
 	@echo "make review     - the review gate: does the staged change carry its review?"
 	@echo "make ai-review  - the same change through the AI reviewer (OCR_ARGS=--commit HASH by default HEAD)"
 	@echo "make decisions  - rebuild the browsable decision index (docs/site/index.html)"
-	@echo "make plan-check - is docs/dependency-tree.md consistent, and is every open item scheduled?"
+	@echo "make plan-check - is docs/archive/research/dependency-tree.md consistent, and is every open item scheduled?"
 	@echo "make clean      - remove target/"
 
 build:
@@ -69,7 +69,7 @@ require-data:
 test: require-data
 	$(CARGO) test --workspace
 
-# The conformance set (docs/pathfinding-conformance.md) - the original's pathing rules asserted against our planners. It is
+# The conformance set (docs/archive/research/pathfinding-conformance.md) - the original's pathing rules asserted against our planners. It is
 # its own workspace (D247) so it can never fail the gate: **no test in it is `#[ignore]`d**, and a red one is a rule of the
 # game this engine does not keep yet. `--target-dir` keeps it on the one build directory this tree allows.
 conformance:
@@ -100,7 +100,7 @@ review-index:
 next-step-check:
 	python3 tools/next_step.py --check
 
-# The dependency tree (docs/dependency-tree.md): every id defined once, every open item named by a phase, every citation
+# The dependency tree (docs/archive/research/dependency-tree.md): every id defined once, every open item named by a phase, every citation
 # pointing at a file that exists and a line inside it. Its own tests are in tools/test_plan_check.py.
 plan-check:
 	python3 tools/plan_check.py

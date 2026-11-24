@@ -3,11 +3,11 @@
 Written 2026-11-03. Answers the owner's question ("can you read path finding and evasion from the game binaries?")
 with the map first and the reading second. **The map is done and it was cheap** - the original asserts through calls
 that carry its own source path, line number and a log string, so the exported pseudocode can be indexed by source file
-without reading a single expression. `docs/re-toolchain.md` records the toolchain (REA on this box, D86); this file
+without reading a single expression. `docs/archive/research/re-toolchain.md` records the toolchain (REA on this box, D86); this file
 records what the movement module *is*.
 
 **Rebuildable without the corpus**: `tools/exe_map.py` reads the same source paths out of `Age2HD/AoK HD.exe` itself
-(84 of them, plus 541 RTTI classes) and writes `docs/binary-class-map.md` - so the map above rests on a file this project
+(84 of them, plus 541 RTTI classes) and writes `docs/archive/research/binary-class-map.md` - so the map above rests on a file this project
 owns rather than on a decompilation whose strings happen to carry it (D140).
 
 ## The method, so it can be repeated
@@ -339,7 +339,7 @@ original's flat search is an **octile A\***, weight **1**, and `h = 25 x euclid`
 greedy where the game's is not. Measured on the acceptance match (one variable, seed 7, 48,000 ticks, D334): the greedy key costs
 **28.9 expansions per search and exhausts its budget on 54% of them**, against **11.8 and 5.8%** with `g + octile` - the greedy
 key is *more* expensive here, because the budget is generous enough that it spends all of it. Route shapes differ everywhere, so
-adopting the octile key needs a witness and a suite run before it lands (`docs/parity-plan.md` P13). **Landed 2026-11-21 (D337)**: the key is
+adopting the octile key needs a witness and a suite run before it lands (`docs/archive/research/parity-plan.md` P13). **Landed 2026-11-21 (D337)**: the key is
 `g + octile`, the witness is a single tree at (8,8) where the greedy key paid 312 and the octile key pays 294, and the acceptance
 match is a longer match at a smaller wall (both players alive to 48,000 ticks, 9.87 s against 10.04 s).
 

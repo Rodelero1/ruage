@@ -2,7 +2,7 @@
 
 Scope, stated plainly: this reads what the format has been *verified* to hold - the compression, the twelve-byte header
 and the string records, whose framing is enforced by the game's own reader. It does not yet read the world: no clock, no
-stockpile, no entity list. `docs/save-format.md` carries the register of what is verified, what is inferred and what is
+stockpile, no entity list. `docs/archive/research/save-format.md` carries the register of what is verified, what is inferred and what is
 still unknown, with the address of the code that settled each one.
 
 Nothing here is derived data at rest: it runs against the user's own install at runtime and writes nothing (D8/D22).
@@ -78,7 +78,7 @@ class Header:
 
     Twelve bytes are understood: `VER 9.4\\0` and a float save-game version. The fourth word is a second float - 1000.0,
     1005.0 or 1006.0 across this install's files - and **its meaning is not known**; it is exposed under a name that
-    says so rather than given a plausible one (`docs/save-format.md`, "what is still unknown").
+    says so rather than given a plausible one (`docs/archive/research/save-format.md`, "what is still unknown").
     """
 
     magic: str

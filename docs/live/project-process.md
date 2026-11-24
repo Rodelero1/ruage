@@ -11,7 +11,7 @@
 *Area:* Project process
 *Status:* decided
 
-**Answered: G1 — "generally similar behaviour, sensibly attainable."** Own deterministic engine; numbers exact where the dat is exact, tolerance-banded where behaviour is only observable through play. **G2 rejected** (after asking the owner directly what it would cost): no oracle here can show a per-tick trajectory, the original runs on x87 with 80-bit intermediates, and bit-exactness would mean transliterating machine code rather than writing an engine. **G1+ was considered and not adopted** — no per-subsystem exactness budget is committed. Owner's words: "I want generally similar behaviour, but sensibly attainable". The 13 saves validate constants and outcomes, not trajectories (`docs/oracle.md`); the binary is 32-bit x86 with heavy x87 use (crude census: ~69k x87 escape bytes vs ~26k SSE `mov*` in `.text`), so exact-match work would not be *engine* work. Reaching for G2 also has a legal cost: a bit-exact clone is a derivative work, not interoperability. Exactness where it is cheap and free (dat values, fixed-point per-tick displacement, our own replay hashes); tolerances for behaviour, written down in §6.1. A subsystem may still be matched more tightly later as an optional experiment, but that is not part of the goal.
+**Answered: G1 — "generally similar behaviour, sensibly attainable."** Own deterministic engine; numbers exact where the dat is exact, tolerance-banded where behaviour is only observable through play. **G2 rejected** (after asking the owner directly what it would cost): no oracle here can show a per-tick trajectory, the original runs on x87 with 80-bit intermediates, and bit-exactness would mean transliterating machine code rather than writing an engine. **G1+ was considered and not adopted** — no per-subsystem exactness budget is committed. Owner's words: "I want generally similar behaviour, but sensibly attainable". The 13 saves validate constants and outcomes, not trajectories (`docs/archive/research/oracle.md`); the binary is 32-bit x86 with heavy x87 use (crude census: ~69k x87 escape bytes vs ~26k SSE `mov*` in `.text`), so exact-match work would not be *engine* work. Reaching for G2 also has a legal cost: a bit-exact clone is a derivative work, not interoperability. Exactness where it is cheap and free (dat values, fixed-point per-tick displacement, our own replay hashes); tolerances for behaviour, written down in §6.1. A subsystem may still be matched more tightly later as an optional experiment, but that is not part of the goal.
 
 
 ### D2 - Answered: file-based oracle
@@ -115,7 +115,7 @@ work; the engine receives "add 1 to attack class 4".
 Consequences already visible in the code:
 
 - ~~`ResourceKind` is a fixed enum and stockpiles are `[[u32; ResourceKind::COUNT]; 2]` — four
-  resources and two players in the *type*.~~ **Paid down 2026-10-26** (`docs/plan-resource-deletion.md`):
+  resources and two players in the *type*.~~ **Paid down 2026-10-26** (`docs/archive/research/plan-resource-deletion.md`):
   resources are content (`config/resources.toml`), a node carries a column, costs name their
   resource by reference id *or* by name, and the stockpile's width is the engine's `MAX_RESOURCES`
   with the pack's count checked at load. Proven by `a_content_pack_with_our_own_resources_loads_and_spends`.
@@ -175,7 +175,7 @@ the asset-pack work, not an assumption to build on.
 *Status:* decided
 
 The owner asked whether a Windows Hermes running REA could act as a slave delivering findings here. Measured
-first, then decided; the numbers, versions and install traps are in `docs/re-toolchain.md`.
+first, then decided; the numbers, versions and install traps are in `docs/archive/research/re-toolchain.md`.
 
 1. **REA is an MCP tool server, not an agent**, and its Windows support is an experimental read-only boundary:
    27 Ghidra inventory/memory/function operations on native PE, x64-first, 32-bit PE admission only on its
@@ -200,7 +200,7 @@ Nothing in `crates/` changes for this: it is a toolchain decision, not an engine
 
 The owner's question was whether the disassembly can give the **complete** behavioural difference between ruage and
 `AoK HD.exe`, "to rule one", with functional gaps deferred. The answer, written down rather than carried in a conversation
-(`docs/behaviour-diff.md`), is that completeness is not computable - 15,766 unnamed procedures with no PDB names, no
+(`docs/archive/research/behaviour-diff.md`), is that completeness is not computable - 15,766 unnamed procedures with no PDB names, no
 completion criterion for "have we found every rule", and code that is not behaviour. What replaces it is a **register**:
 one row per rule ruage implements, each ruled *same / different / unknown-static / needs-oracle* with the original's address
 and our file:line. The count is honest and small: **1 of 12 ruled today**.
@@ -536,7 +536,7 @@ worth the evidence hunt before it, and a hunt that found nothing is part of the 
 *Area:* Project process
 *Status:* decided
 
-**Owner, 2026-11-14**, six answers to the questions `docs/dependency-tree.md` §12 carried: *(1)* the target is **a correct
+**Owner, 2026-11-14**, six answers to the questions `docs/archive/research/dependency-tree.md` §12 carried: *(1)* the target is **a correct
 engine**, not a playable product first; *(2)* **one civ** until the data debts close; *(3)* monks, trade, naval and relics
 are **not in v1, but the architecture must be ready for them**; *(4)* publishing is **B** - the engine and its tooling
 public, the spec and the mechanics internal; *(5)* the binary register's **row 2 now, then the oracle**, because rows 3-12
@@ -544,7 +544,7 @@ are `needs-oracle`; *(6)* "the enemy is eliminated inside 40 minutes" is **not a
 
 **What it settles, and what it replaces.** Every slice in this project has carried its own plan, and the plans were written
 in whatever order the last session happened to work in - so a slice would be started and then found to depend on something
-unbuilt. The owner's request was a tree of the items, their status and the order, and this is it: `docs/dependency-tree.md`,
+unbuilt. The owner's request was a tree of the items, their status and the order, and this is it: `docs/archive/research/dependency-tree.md`,
 **64 items** in five groups - foundations, the simulation, **the debts**, the missing mechanics, the product - with the
 edges, seven phases and a gate per phase. The debts are the finding: **fourteen places where a row marked done is hollow**,
 each proved by a probe that can fail (attribute 1 is `Range` where the game means line of sight; nothing reads construction
@@ -581,7 +581,7 @@ protocol is **eleven streams reseeded from a frame seed every tick** (not "a rol
 weaker form) and there is a **turn** (only one player's unit AIs run fully), so R3 was rewritten and T15/T16 sit in
 Phase 3. Six candidates were **refused as later-build features** — pastures, the mule cart, Empire Wars, `Wait_Solidify`,
 genie's passive-ability task kinds and `fmath` — because their names are zero hits in `AoK HD.exe` or they are DE
-content, and they are recorded in `docs/dependency-tree.md` §5b so the next session does not port them.
+content, and they are recorded in `docs/archive/research/dependency-tree.md` §5b so the next session does not port them.
 
 **Basis.** The owner's six answers, quoted above; the tree's own probes (`grep -rn '\b195\b' crates`, `DisableTech` in
 `crates/sim`, `reseed`, `crates/data/src/techs.rs:96`); the importer's name table,
@@ -606,7 +606,7 @@ another eight - "apply team bonuses" is not one switch, it is a table two thirds
 also carry a **kind-102 row** (a bonus that *bars* a tech), which the current mental model does not cover, and kinds **3** and
 **6** appear in this data with no reader anywhere.
 
-**What was written instead of code.** `docs/civ-bonuses.md`, and a sixth seam in `docs/dependency-tree.md` §7b (**R6**): one
+**What was written instead of code.** `docs/archive/research/civ-bonuses.md`, and a sixth seam in `docs/archive/research/dependency-tree.md` §7b (**R6**): one
 resolved `BonusTable` per player - resources, attributes keyed by the enum rather than by string, barred techs, barred units,
 granted units - rebuilt on the two events that can change it (a tech landing, the civ being set), with the five consumers that
 walk those three tables today becoming five readers of one table. The proof is stated as a test: a fixture **pack** with a
@@ -618,7 +618,7 @@ exactly as they are, and the two team-bonus resource rows that matter today (36 
 `farm_food_bonus` as D215 left them. R6 is placed in Phase 3b beside R1-R5 - after the determinism work, before civ breadth,
 because breadth is what multiplies the call sites it replaces.
 
-**Basis.** A probe over `config/gamedata/civs.toml` and `effects.toml` (counts in `docs/civ-bonuses.md`); the five consumer
+**Basis.** A probe over `config/gamedata/civs.toml` and `effects.toml` (counts in `docs/archive/research/civ-bonuses.md`); the five consumer
 sites (`barred_by`, `civ_barred_unit`, `modifiers_for`, `farm_food_bonus`, `construction_rate`); D214's finding that the
 attribute *string* is the interface, which is what makes a resolved table worth writing before breadth.
 
@@ -675,7 +675,7 @@ Review: `docs/reviews/2026-11-15-d224-parked-audit.md`.
 **B shape** the owner ruled on 2026-11-14: the converter lives in `tools/`, so no reader of the game's save file ever enters
 `crates/`. The converter has nothing to convert *to* until the engine can write and read its own state, and **that** half is
 what landed here. The RE half - walking the save's sections 2-4 for civs, stockpiles and the object list, none of which is
-read yet (`docs/save-format.md`) - is not started and is not pretended to be.
+read yet (`docs/archive/research/save-format.md`) - is not started and is not pretended to be.
 
 **The shape: `serde` on `World` itself, not a `WorldState` mirror.** A mirror is a second list of the world's 95-odd fields,
 and the second list is the one that goes stale - this project has paid for exactly that shape twice (the farm line and the
@@ -749,7 +749,7 @@ and gains a pointer at its head; nothing else is touched, because the body is th
 probe per decision (does the symbol it names still exist), which is a tool of its own and is not built.
 
 **Basis.** `tools/decisions.py` (`check_shrink`, `SUPERSEDES`), `tools/test_decisions.py`, `docs/decision-areas.toml`,
-`docs/decisions.md` (D200a, D204, D238, D127, D135). Review: `docs/reviews/2026-11-16-d240-retirement.md`.
+`docs/archive/decisions-2026-11-24.md` (D200a, D204, D238, D127, D135). Review: `docs/reviews/2026-11-16-d240-retirement.md`.
 
 
 ### D246 - the reply is short, the code is simple, and both say why where the reader needs it (2026-11-16)
@@ -980,7 +980,7 @@ are not conformant with original game, decomp or online sources once and for all
 over and over that the original game and decomp are to be followed only to find out they were not..."*
 
 **What the bank actually looked like, measured rather than assumed.** 238 decision rows; **3** talked about the game while
-pointing at no source (all three honest: D151 quotes the owner and `docs/ai-extraction.md`, D166 is a rendering choice and says
+pointing at no source (all three honest: D151 quotes the owner and `docs/archive/research/ai-extraction.md`, D166 is a rendering choice and says
 so, D184 says its accident needs a model we do not have). So the *provenance* of the bank is not the disease. The disease is the
 other thing the tool cannot see: **a row that cites the right address and reads it wrong** - D348's "the margin is zero", D341's
 `has_route && moved` standing in for `isMoving`, my own D349 misreading of `FUN_007f9d80`'s `&&` this evening, D267 reading
@@ -1014,7 +1014,7 @@ one slice each, and the first is D351 (branch `d351-reseat`) with the three plan
 **Conformance**: OURS (process). The owner, 2026-11-22: *"Is too many decisions causing problems with context being filled and
 starting to forget?"* - and the answer is yes, but not the way the question guessed.
 
-`docs/decisions.md` is **832,998 characters** (~210k tokens), larger than a context window: it cannot be loaded, so a session can
+`docs/archive/decisions-2026-11-24.md` is **832,998 characters** (~210k tokens), larger than a context window: it cannot be loaded, so a session can
 only grep it, and a ruling it does not already suspect exists is a ruling it will not apply. That is not hypothetical - a session
 on this date wrote **D349-D354** while **D150 already held the owner's pile rule**, and then built a fixture that could not tell
 the rule from its absence. `docs/decision-areas.toml` - the index built for exactly this (D166) - named **2** decisions and left

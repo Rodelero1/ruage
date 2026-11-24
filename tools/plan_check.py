@@ -1,6 +1,6 @@
 """The dependency tree, checked rather than believed (2026-11-14).
 
-`docs/dependency-tree.md` says what is built, what is hollow and what order the rest goes in, and **nothing keeps it
+`docs/archive/research/dependency-tree.md` says what is built, what is hollow and what order the rest goes in, and **nothing keeps it
 honest**: a row can name an id that is not defined, an open item can be missing from the sequence, a `DONE-ish` row can
 lose the debt that explains it, and a `file:line` can point at a file that does not exist. Every one of those has already
 happened in a document in this tree, so every one of them is a check.
@@ -23,7 +23,7 @@ its **tail** against the tree, and a citation into a *generated* or *installed* 
 `Age2HD/`, `target/`) is not checked, because a fresh clone does not have it (D8). A glob (`tests/gather_*.rs`) is not
 checked either — it is a count, not a path.
 
-    python3 tools/plan_check.py                  # check docs/dependency-tree.md
+    python3 tools/plan_check.py                  # check docs/archive/research/dependency-tree.md
     python3 tools/plan_check.py --doc path.md    # check another
 """
 

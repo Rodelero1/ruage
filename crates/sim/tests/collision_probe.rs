@@ -343,7 +343,7 @@ fn how_deeply_bodies_still_overlap() {
 
 /// **How much of the body rule is a box, and how much is only a disc?** The step refuses a landing whose *centre* is
 /// inside the pair's reach - a **disc** - while the original's query is four `<=` on the two axis-aligned **boxes**
-/// (`FUN_00840830`, `docs/movement-in-the-binary.md`). A disc is inside a box of the same half-extent, so ours can never
+/// (`FUN_00840830`, `docs/archive/research/movement-in-the-binary.md`). A disc is inside a box of the same half-extent, so ours can never
 /// refuse something the box would take; the interest is the other way: a landing whose boxes overlap on **both axes**
 /// while the centres are a full reach apart is one the original counts as a collision and this engine takes.
 ///

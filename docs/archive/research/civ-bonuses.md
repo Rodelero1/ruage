@@ -1,7 +1,7 @@
 # Civ and team bonuses: the design, ready, not implemented
 
 **Ruling (the owner, 2026-11-15):** *"Team bonuses and other civilisation bonuses can wait. Let's just have the design ready for
-it to be implemented in the future."* So this file is a **seam**, in the sense §7b of `docs/dependency-tree.md` uses the word: a
+it to be implemented in the future."* So this file is a **seam**, in the sense §7b of `docs/archive/research/dependency-tree.md` uses the word: a
 shape, with the numbers read from the data and nothing implemented on top of them. What the engine already does with the three
 effect tables stays as it is; what it should look like when the bonuses are built is written down here, along with the test that
 would prove the seam.

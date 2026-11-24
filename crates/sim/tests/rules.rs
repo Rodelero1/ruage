@@ -1,5 +1,5 @@
 //! Rules: a condition and one action, re-evaluated - the shape the game's own AI uses for a build order
-//! (`docs/ai-of-the-game.md`), and the shape that does not rot when the economy's speed changes.
+//! (`docs/archive/research/ai-of-the-game.md`), and the shape that does not rot when the economy's speed changes.
 //!
 //! Written *after* the implementation, which is recorded in the review rather than hidden: the compile failures these
 //! tests first produced only proved the type names. Each test was then shown to bite by mutating the code it covers.

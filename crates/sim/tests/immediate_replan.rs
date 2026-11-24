@@ -1,4 +1,4 @@
-//! **Ground that goes stale is re-planned on the tick it is discovered** (P4, `docs/parity-plan.md`).
+//! **Ground that goes stale is re-planned on the tick it is discovered** (P4, `docs/archive/research/parity-plan.md`).
 //!
 //! The original's epilogue re-plans on **every** terrain collision (`0x122f`, `0x128b`: *"We have %d non-past collisions and %d terrain
 //! collisions, repathing"*). Ours throttles it to once every `REPLAN_TICKS` (20) after the route was written, so a wall that appears in a

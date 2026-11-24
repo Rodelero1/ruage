@@ -425,7 +425,7 @@ impl World {
                 // A building looses a volley rather than a shot: its own arrow plus whatever its
                 // garrison adds. Each arrow carries the *building's* damage for now - the published
                 // rule has extra arrows transmit the unit's attack, and that difference is recorded
-                // in docs/decisions.md rather than guessed at here (D37).
+                // in docs/archive/decisions-2026-11-24.md rather than guessed at here (D37).
                 let arrows = if source.2 == EntityKind::Building {
                     self.volley(attacker)
                 } else {
@@ -1902,8 +1902,8 @@ impl World {
                     // **Arrival is the reach, and nothing else** (P5, 2026-11-19). Two of our own rules used to end this walk:
                     // `beside` (finished within 1.25 tiles of a goal that holds a body, D200) and the forty-tick
                     // `finish_blocked_orders` (D200). The original has neither - wedged villagers never resolve
-                    // (`docs/gather-seating-evidence.md`) and its press depth is unbounded because the separation it computes is
-                    // discarded (`docs/press-depth-evidence.md`, D290) - so a walk that cannot arrive stands, its route intact,
+                    // (`docs/archive/research/gather-seating-evidence.md`) and its press depth is unbounded because the separation it computes is
+                    // discarded (`docs/archive/research/press-depth-evidence.md`, D290) - so a walk that cannot arrive stands, its route intact,
                     // until the player re-tasks.
                     if reaches(entity.position, to, delta.raw()) {
                         work.finished.push(entity.id);

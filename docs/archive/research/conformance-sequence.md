@@ -1,8 +1,8 @@
 # The road to 100%: the ordered steps, and what "100%" can and cannot mean
 
 *Requested 2026-11-21: the order of steps needed for 100% conformance on pathfinding and obstacle avoidance with the
-original, crosschecked against online sources. Sources read for this document: `docs/parity-plan.md` (the live register),
-`docs/pathfinding-*.md`, `docs/movement-in-the-binary.md`, the HD corpus (`/opt/data/tools/rea/pseudo-aokhd`), the AoC
+original, crosschecked against online sources. Sources read for this document: `docs/archive/research/parity-plan.md` (the live register),
+`docs/pathfinding-*.md`, `docs/archive/research/movement-in-the-binary.md`, the HD corpus (`/opt/data/tools/rea/pseudo-aokhd`), the AoC
 decompilation (`src/zone/`), and four online sources named in §2.*
 
 ## 1. What "100%" can mean, in three classes
@@ -133,6 +133,6 @@ Two things, and the second is the one that would have caught the last month of d
    its target. Run on the acceptance match it is a number to report beside the stockpile; run on the crowd fixture it is the
    thing the last four slices kept regressing.
 
-Bit-exactness stays out (class U), and `docs/parity-plan.md` says so at the top. What "blunt copy" buys here is that every
+Bit-exactness stays out (class U), and `docs/archive/research/parity-plan.md` says so at the top. What "blunt copy" buys here is that every
 **rule** is the game's, every **constant** is read or marked B, and no mechanism of ours survives for a reason other than a
 recorded decision.

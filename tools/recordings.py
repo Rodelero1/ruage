@@ -9,7 +9,7 @@ two floats and a player id; chat = 4 pad, `u32 length`, text.
 The validation is the EOF check: a walk that does not consume the stream exactly is refused rather than truncated
 silently. All four recordings in the install walk to exact EOF, and the elapsed time the walk accumulates on
 `142146` is **2 681 138 ms**, which is the same number the save series' clock gives for its last save - two artifacts,
-one timeline (`docs/save-format.md`).
+one timeline (`docs/archive/research/save-format.md`).
 
     python3 tools/recordings.py Age2HD/SaveGame/*.aoe2record
 """

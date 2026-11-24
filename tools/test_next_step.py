@@ -10,8 +10,18 @@ Run: `python3 -m unittest tools.test_next_step -v`
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 import next_step
+
+ROOT = Path(next_step.__file__).resolve().parent.parent
+
+
+class HistoryLivesInArchive(unittest.TestCase):
+    def test_split_target_is_the_archive(self):
+        self.assertEqual(
+            next_step.HISTORY, ROOT / "docs" / "archive" / "history"
+        )
 
 SMALL = """# OPEN - the one thing to do
 

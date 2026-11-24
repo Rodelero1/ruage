@@ -208,11 +208,11 @@ those projects' *assets* are licensed to them by the game's owner, not by their 
 
 ## The save reader: what the decision actually is (2026-11-13)
 
-D4 = B keeps `docs/mechanics/`, SPEC §3/§4, `docs/oracle.md` and `config/gamedata/` out of the published set, but it does not
+D4 = B keeps `docs/mechanics/`, SPEC §3/§4, `docs/archive/research/oracle.md` and `config/gamedata/` out of the published set, but it does not
 say where a **format reader** belongs. `crates/save` + `--load` needs an answer before any code ships, so here is the question
 split into the parts that actually differ.
 
-**What the reader is.** `tools/savegame.py` and `docs/save-format.md` describe a container (raw DEFLATE), a versioned header
+**What the reader is.** `tools/savegame.py` and `docs/archive/research/save-format.md` describe a container (raw DEFLATE), a versioned header
 (`VER 9.4`, a float32 save version), a `0x0A60`-framed string record, and a world section with a turn counter and 229-byte
 object records. Every one of those facts was obtained by **reading the game's loader and writer as behaviour** - what they
 compare, what version they refuse, which fields they branch on - and then by measuring the owner's own files. No decompiled
@@ -270,7 +270,7 @@ save-specific fields, A becomes a rewrite of the engine's seeding path instead o
 2. **Write the tool-side converter against the format notes**, not against the eventual engine reader, and keep every
    format fact in one module with its evidence cited as *behaviour* (loader gate, version field, record framing) - never a
    pasted decompilation.
-3. **Write the engine-side reader from `docs/save-format.md` alone**, ideally in a different session from the converter -
+3. **Write the engine-side reader from `docs/archive/research/save-format.md` alone**, ideally in a different session from the converter -
    the discipline that makes "functional, not expressive" a record rather than a claim. If a step cannot be written without
    opening the GPL converter, the notes are incomplete, and *that* is the finding.
 4. **Diff the two producers on every save in the install** (31 files today): field-for-field equality, with any difference
@@ -284,7 +284,7 @@ save-specific fields, A becomes a rewrite of the engine's seeding path instead o
 **Prerequisites before step 3 may start** - not steps, gates:
 
 - the state model is stable (no schema churn for a release);
-- `docs/save-format.md` is complete enough that a fresh reader can be written from it without the converter's source;
+- `docs/archive/research/save-format.md` is complete enough that a fresh reader can be written from it without the converter's source;
 - the provenance note exists for the module (what was learned, from where, as behaviour);
 - **the engine is actually going to be published**, and D4's publish set has been re-confirmed - if it is not, B is the
   destination and A never has to happen, which is the cheapest outcome of all;
@@ -331,7 +331,7 @@ paraphrase of Ghidra's output, and it survives a re-decompile.
    no engine crate depends on a GPL one - the failure mode is an edge appearing months later, which prose cannot catch.
 4. **README/quickstart**, and the path-based content gate moved into CI (the pre-commit hook is not installed by
    contributors).
-5. **Decide what the docs are**: D4 = B keeps `docs/mechanics/`, SPEC §3/§4, `docs/oracle.md` and the decision log internal.
+5. **Decide what the docs are**: D4 = B keeps `docs/mechanics/`, SPEC §3/§4, `docs/archive/research/oracle.md` and the decision log internal.
    The public set is engine + tooling + a README, and code comments currently cite `docs/mechanics/…`, which will not ship.
 
 ### 4. History

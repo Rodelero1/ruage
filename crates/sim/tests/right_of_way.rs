@@ -1,6 +1,6 @@
 //! **Right of way is the lower entity id, and the loser pauses 0.25-1.50 s on its own path** (D205).
 //!
-//! The original's collision block, read out of `AoK HD.exe` byte for byte (`docs/movement-in-the-binary.md`, last two
+//! The original's collision block, read out of `AoK HD.exe` byte for byte (`docs/archive/research/movement-in-the-binary.md`, last two
 //! sections): when a step's collision list holds a unit that is not the order's target, the mover compares the two
 //! units' handles and the **higher** one is told to pause - `rand()*1.25/32767+0.25`, i.e. a uniform 0.25 to 1.50
 //! seconds - in `path+0x28`, which is the current path's timer and nothing else. The loser keeps its path, advances no

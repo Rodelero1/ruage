@@ -1,6 +1,6 @@
 # The divergence register: every place this engine knowingly differs from the original
 
-> **This is the live register.** `docs/pathfinding-gap-register.md` is its predecessor and is marked superseded by D279 -
+> **This is the live register.** `docs/archive/research/pathfinding-gap-register.md` is its predecessor and is marked superseded by D279 -
 > read that one for the research, this one for what the engine does today.
 
 *Written 2026-11-22, on the owner's instruction: **"purge our rulings which are not conformant with original game, decomp or

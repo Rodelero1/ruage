@@ -48,7 +48,7 @@ is the same one that produces the game's: the two bodies step into the same gap 
 
 **Consequence for P5:** no floor should be added. The fixture that calls this "a stopped body walked over" is describing the game's
 own behaviour, and the honest re-point is *"friends may press; the crowd is separated only by the pause and the re-path"*. The
-quarter-footprint idea in `docs/parity-plan.md` is withdrawn - it would have been a floor the original does not have.
+quarter-footprint idea in `docs/archive/research/parity-plan.md` is withdrawn - it would have been a floor the original does not have.
 
 **Not established, and said so:** whether the discarded resolver is dead code in a *retail* build or was live in an earlier one (the
 corpus is a single HD build), and how the pause's 0.25-1.50 s roll is drawn - both are separate questions, and neither changes the

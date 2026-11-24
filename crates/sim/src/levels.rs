@@ -1,6 +1,6 @@
 //! **The level maps the levelled pathfinder searches over** (P11, step 11a; D296).
 //!
-//! Source, read 2026-11-19 and written up in `docs/pathfinding-levels-evidence.md`:
+//! Source, read 2026-11-19 and written up in `docs/archive/research/pathfinding-levels-evidence.md`:
 //!
 //! ```c
 //! // FUN_007ee980: the search descends from level 3, a cell is 2^level tiles per side
@@ -183,7 +183,7 @@ impl Levels {
     /// **The coarse route**: a 4-directional A\* over the level's cells, from the cell holding `from` to the cell holding `to`, at the
     /// level `descent` picks for the start.
     ///
-    /// Everything here is `FUN_007ed280` + `FUN_007ee980`, measured in `docs/pathfinding-levels-evidence.md`:
+    /// Everything here is `FUN_007ed280` + `FUN_007ee980`, measured in `docs/archive/research/pathfinding-levels-evidence.md`:
     ///
     /// - **four directions**, never diagonal (`param_4` = 1, 2, 4, 8);
     /// - `g = step + parent's g`, with `step` from [`Levels::step_cost`];
@@ -458,7 +458,7 @@ impl Levels {
     /// The binary tests bit `0x20` of the cell's **second** byte there, and its per-search stamper writes the **first**; that second
     /// byte is the persistent passability of the cell - the same byte `FUN_007ed8f0` reads for a usable child (`& 0xf == 0xf`, all
     /// four directions clear). So the test is "is this cell usable", and the descent stops at the first level where it is. Recorded as
-    /// an interpretation in `docs/pathfinding-levels-evidence.md`, because the byte's producer has not been read.
+    /// an interpretation in `docs/archive/research/pathfinding-levels-evidence.md`, because the byte's producer has not been read.
     #[must_use]
     pub fn descent(&self, tile: (u16, u16)) -> u8 {
         let mut level = u8::try_from(DEPTH - 1).unwrap_or(3);

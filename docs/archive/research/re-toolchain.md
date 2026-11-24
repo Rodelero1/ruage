@@ -46,7 +46,7 @@ read-only, loopback-bound, x64-first analyser to read a 32-bit binary that Linux
 1. **REA is installed here**, on the same machine as the engine, the dat, the importer and the commits. Static
    findings land in the agent that writes the Rust, with no coordination layer, no second memory, no second
    SPEC.
-2. **The Windows box is the oracle farm**, which is what `docs/oracle.md` (D2) already says it is for: it
+2. **The Windows box is the oracle farm**, which is what `docs/archive/research/oracle.md` (D2) already says it is for: it
    runs the game, presses Save, and drops `.aoe2spgame` files where this box can read them. Its unique value
    is *execution and observation*, not analysis.
 3. **If a Windows agent is ever added** — Hermes installs natively on Windows, and A2A is the supported
@@ -148,7 +148,7 @@ disassembly is for. Each one must come back as an address plus a number that a f
 
 ## Where the movement module turned out to be (2026-11-03)
 
-`docs/movement-in-the-binary.md` is the map: 18 functions carry **240 distinct `(file, line)` assertion sites** to
+`docs/archive/research/movement-in-the-binary.md` is the map: 18 functions carry **240 distinct `(file, line)` assertion sites** to
 `motion.cpp` (81, three functions) and `move_obj.cpp` (159, fifteen) - 265 raw string matches, and the site count is the
 one to quote - out of 1,029 `.cpp` string matches in the corpus. It was built by grepping the corpus for the
 source path - no pseudocode had to be interpreted - and it names each function's role from its own log strings. The

@@ -87,7 +87,7 @@ pub struct Units {
     ///
     /// Its own table rather than a field on `Unit`: only 190 of 1,166 units have a parent, and
     /// widening every record for them cost 2-4% of a tick at 1,126 entities in table footprint alone
-    /// (`docs/performance.md`, seventh pass). A lookup keeps `Unit` exactly as it was.
+    /// (`docs/archive/research/performance.md`, seventh pass). A lookup keeps `Unit` exactly as it was.
     pub variants: BTreeMap<u32, u32>,
 }
 

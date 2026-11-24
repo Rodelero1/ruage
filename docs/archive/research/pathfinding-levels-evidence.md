@@ -57,7 +57,7 @@ local_24 = FUN_007ee760(iVar7, iVar4, iVar6, (int)param_2, (int)param_3);   // c
 
 ## The independent source, and it agrees
 
-`docs/pathfinding-conformance.md` already carries the AoC decompilation's statement of the same machine, read before today from a
+`docs/archive/research/pathfinding-conformance.md` already carries the AoC decompilation's statement of the same machine, read before today from a
 different binary:
 
 - *"the search is **levelled**: a coarse node spans `<< level` tiles and an edge is refined to a tile on its boundary"*
@@ -80,7 +80,7 @@ Two sources, two binaries, same structure. That is the crosscheck this step need
 
 So **P11 is real and is the default**, and P1 (the budget) is not a separate problem: the budget belongs to the **flat** search, which in
 the original is the *fallback*, so a land unit rarely meets it. That is why "the binary can only afford `h = 25 x tiles` because a coarse
-node covers `<< level` tiles" was the right diagnosis in `docs/parity-plan.md` - but the mechanism is a **second search**, not a
+node covers `<< level` tiles" was the right diagnosis in `docs/archive/research/parity-plan.md` - but the mechanism is a **second search**, not a
 different h.
 
 ## What is still unknown, and is not being guessed

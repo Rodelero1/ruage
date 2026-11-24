@@ -716,7 +716,7 @@ impl World {
         // **Every man is sent to the tile that was ordered** (D289, the owner, 2026-11-19: *"Drop it and let the crowds jam. I
         // want the start as close to the game as sensible."*). D271 gave each follower a ring place of its own so a crowd spread
         // itself around the click; the original does not - its players' own reports are men piling onto one tree and standing
-        // pressed against each other (`docs/gather-seating-evidence.md`) - so the goal is the ordered tile for every man, and the
+        // pressed against each other (`docs/archive/research/gather-seating-evidence.md`) - so the goal is the ordered tile for every man, and the
         // bodies are solid. A crowd that cannot all fit therefore jams, which is the behaviour being asked for.
         let goal = to;
         let goal = self.check_order_at(unit, goal, target.is_some())?;

@@ -214,7 +214,7 @@ dies while it is in the air, because a shot is an entity with its own lifetime. 
 the owner has not given, and inventing it here would be the guess this project refuses.
 
 **What is still unknown.** *Which* order the original uses - by object id, by side, or something else. Entity-id order is a
-deterministic order that satisfies the rule; register row 3 in `docs/behaviour-diff.md` stays `needs-oracle` until a
+deterministic order that satisfies the rule; register row 3 in `docs/archive/research/behaviour-diff.md` stays `needs-oracle` until a
 recording or the binary says which.
 
 
@@ -288,7 +288,7 @@ inline **in the victim's own turn**, a unit killed by an earlier-ordered object 
 players are bracketed by `+0x130` before the walk and `+0x68` after it, with `+0x134` for the players already visited, then
 three more per-player loops gated on `FUN_00727810()`.
 
-**The turn, read for free.** The index at `+0x100` - `pturn`, the field `docs/save-format.md` reads out of the save header -
+**The turn, read for free.** The index at `+0x100` - `pturn`, the field `docs/archive/research/save-format.md` reads out of the save header -
 is advanced by one at the end of every update and wrapped at the player count. That is **T16**'s axis, corroborating the
 `Turn` step the DE port lists after the players, and it is not this slice.
 
@@ -316,7 +316,7 @@ rule's evidence is the fixtures.
 
 **Basis.** `FUN_00738720` (`0x738720`) in `AoK HD.exe`, read from the exported corpus `/opt/data/tools/rea/pseudo-aokhd`;
 `crates/sim/src/world/step.rs` (`turn_key`, the sort at the end of `decide`, the two gates in `step_production`);
-`crates/sim/tests/tick_order.rs`; `docs/behaviour-diff.md` row 3 (now **read** for the order *between* objects);
+`crates/sim/tests/tick_order.rs`; `docs/archive/research/behaviour-diff.md` row 3 (now **read** for the order *between* objects);
 `docs/mechanics/determinism.md`; `docs/next-step.md` T12. Review: `docs/reviews/2026-11-15-d229-tick-order.md`.
 
 
@@ -447,6 +447,6 @@ but the mirror is not even, and evening it is a content decision with a balance 
 
 ## Open questions (U-register, this area)
 
-- **U12** — Simulation tick rate for 5.7. No public source states it. librematch/genie reproduces DE build 158041 bit-for-bit and must therefore know its step interval — that code is the first place to look (see prior-art note in docs/decisions.md). Checked 2026-10-23: openage does not model a fixed tick at all — its time subsystem is a millisecond-resolution clock on its own thread driving an event queue, wi
+- **U12** — Simulation tick rate for 5.7. No public source states it. librematch/genie reproduces DE build 158041 bit-for-bit and must therefore know its step interval — that code is the first place to look (see prior-art note in docs/archive/decisions-2026-11-24.md). Checked 2026-10-23: openage does not model a fixed tick at all — its time subsystem is a millisecond-resolution clock on its own thread driving
 
 - **U18** — What is the intra-tick order of object updates, and can two units kill each other in one tick? librematch/genie's world/step.rs says a call on another object "takes effect at once", and the game reads the world's and players' fields live, so the original's tick is a sequence (Gaia, then players 1–8, each player's objects in slot order) in which a unit killed earlier in the tick does not swing late

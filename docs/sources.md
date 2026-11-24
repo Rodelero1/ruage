@@ -12,12 +12,12 @@ logged as a question (e.g. U11 farming).
   short-range pathfinder (pages 21-38) and their replacement for it (pages 82-96): shrink the unit to a point, expand the
   obstructions (axis-aligned rectangles), ray at the goal, edge-walk the union turning right at ends and left at
   intersections, re-ray at every vertex, brute-force smooth — all in `> < == + -`, because precision is what broke the
-  original. Our mapping and plan: `docs/pathfinding-from-the-talk.md`.
+  original. Our mapping and plan: `docs/archive/research/pathfinding-from-the-talk.md`.
 - No AoE2 source has ever been released. What exists: pre-release **binaries** (Hidden Palace: seven 1998-99 AoK builds), and
   a matching **decompilation** of AoC 1.0c / AoK 2.0a / the PS2 ELF (`samuelcaldas/age-of-empires-2-decomp`, no licence —
   all rights reserved). Read the decompilation for behaviour and cite the module; never copy its expression (see
   `docs/licensing.md`), and note its addresses are AoC/PS2, not HD 5.7. **Used 2026-11-16** for the pathing conformance set
-  (D247, `docs/pathfinding-conformance.md`): `src/zone/zone_spatial_pyramid_check_tile.cpp` (per-edge four-bit neighbour mask),
+  (D247, `docs/archive/research/pathfinding-conformance.md`): `src/zone/zone_spatial_pyramid_check_tile.cpp` (per-edge four-bit neighbour mask),
   `zone_spatial_pyramid_eval_cost.cpp` (node = x, y, level, g, h, parent, dir; Euclidean `h`; a linked frontier, not a heap),
   `zone_spatial_pyramid_find_path.cpp` (scratch obstacle grid, cleared per search) and `zone_spatial_pyramid_check_edge.cpp`
   (levelled edges). Its C bodies are reconstructions of PS2 assembly - at least one loops `w` for both axes - so they are read
@@ -84,7 +84,7 @@ non-physical. Worth re-reading only if planning *cost* becomes our bottleneck, w
 | [SiegeEngineers/genie-rs](https://github.com/SiegeEngineers/genie-rs) | Cross-check oracle for block counts (GPL-3.0) |
 | [Tapsa/genieutils](https://github.com/Tapsa/genieutils) | Read as the format *specification* (LGPL-3.0) |
 | [AoE forums — sharing saves](https://forums.ageofempires.com/t/how-to-find-and-share-save-game-and-recorded-game-files/84162) | Confirms `.aoe2spgame` = full state, `.aoe2record` = replay |
-| [morluto/rea](https://github.com/morluto/rea) | The MCP reverse-engineering server (6.8.0) that returns Ghidra/IDA pseudocode with evidence. Its [`docs/windows-ghidra-p0.md`](https://github.com/morluto/rea/blob/main/docs/windows-ghidra-p0.md) is the authority on the Windows boundary — see `docs/re-toolchain.md` (D86) |
+| [morluto/rea](https://github.com/morluto/rea) | The MCP reverse-engineering server (6.8.0) that returns Ghidra/IDA pseudocode with evidence. Its [`docs/windows-ghidra-p0.md`](https://github.com/morluto/rea/blob/main/docs/windows-ghidra-p0.md) is the authority on the Windows boundary — see `docs/archive/research/re-toolchain.md` (D86) |
 | [Ghidra 12.1.4](https://github.com/NationalSecurityAgency/ghidra/releases/tag/Ghidra_12.1.4_build) | The decompiler REA drives on this box, pinned: REA 6.8.0 rejects 12.2 as `config_drift` |
 | `Age2HD/AoK HD.exe` (the install) | The authority for behaviour the saves cannot show. Measured: i386 PE, 7,521,280 bytes, PE timestamp 2018-08-22T18:26:19Z |
 

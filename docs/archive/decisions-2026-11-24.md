@@ -5,10 +5,10 @@ not revisited silently — if one is reversed, add a new row rather than editing
 
 | # | Date | Decision | Rationale | Commits us to |
 |---|---|---|---|---|
-| **D1** | 2026-10-23 | **Answered: G1 — "generally similar behaviour, sensibly attainable."** Own deterministic engine; numbers exact where the dat is exact, tolerance-banded where behaviour is only observable through play. **G2 rejected** (after asking the owner directly what it would cost): no oracle here can show a per-tick trajectory, the original runs on x87 with 80-bit intermediates, and bit-exactness would mean transliterating machine code rather than writing an engine. **G1+ was considered and not adopted** — no per-subsystem exactness budget is committed. | Owner's words: "I want generally similar behaviour, but sensibly attainable". The 13 saves validate constants and outcomes, not trajectories (`docs/oracle.md`); the binary is 32-bit x86 with heavy x87 use (crude census: ~69k x87 escape bytes vs ~26k SSE `mov*` in `.text`), so exact-match work would not be *engine* work. Reaching for G2 also has a legal cost: a bit-exact clone is a derivative work, not interoperability. | Exactness where it is cheap and free (dat values, fixed-point per-tick displacement, our own replay hashes); tolerances for behaviour, written down in §6.1. A subsystem may still be matched more tightly later as an optional experiment, but that is not part of the goal. |
+| **D1** | 2026-10-23 | **Answered: G1 — "generally similar behaviour, sensibly attainable."** Own deterministic engine; numbers exact where the dat is exact, tolerance-banded where behaviour is only observable through play. **G2 rejected** (after asking the owner directly what it would cost): no oracle here can show a per-tick trajectory, the original runs on x87 with 80-bit intermediates, and bit-exactness would mean transliterating machine code rather than writing an engine. **G1+ was considered and not adopted** — no per-subsystem exactness budget is committed. | Owner's words: "I want generally similar behaviour, but sensibly attainable". The 13 saves validate constants and outcomes, not trajectories (`docs/archive/research/oracle.md`); the binary is 32-bit x86 with heavy x87 use (crude census: ~69k x87 escape bytes vs ~26k SSE `mov*` in `.text`), so exact-match work would not be *engine* work. Reaching for G2 also has a legal cost: a bit-exact clone is a derivative work, not interoperability. | Exactness where it is cheap and free (dat values, fixed-point per-tick displacement, our own replay hashes); tolerances for behaviour, written down in §6.1. A subsystem may still be matched more tightly later as an optional experiment, but that is not part of the goal. |
 | **D2** | 2026-10-23 | **Answered: file-based oracle.** No driven game, no Windows migration. | 13 `.aoe2spgame` files already present, all inflate (raw DEFLATE, `VER 9.4`). Saves are full state dumps. | Snapshot-based verification where cheap; save parser left partial (step 2b). |
 | **D3** | 2026-10-23 | **Answered: start with one civ — British — and add civs later.** British is whatever the dat lists at civ index 1 (index 0 is Gaia); the name is not a preference. Scope of step 5 is British vs British. | Owner's decision. Measured the same day (U13): the unit tables of all 31 non-Gaia civs differ in 5 rows out of ~36,000, so the cost of a second civ is a tech-disable-list join, not a data model change. Doing one civ first buys a running game sooner without assuming a one-civ design. | The data model stays per-civ (deltas are real, if tiny); the loader must not hardcode "British"; `gamedata/` keeps emitting civ 1 as canonical, and `tech_tree_effect_id` (type-102 disable lists) becomes the path to more civs. |
-| **D4** | 2026-10-23 | **Answered: B — publish the engine and tooling; keep the spec and the mechanics internal.** Condition set by the owner: "as long as the game can be compiled and ran" — a stranger with their own install must be able to clone, build and run it. Not published: `docs/mechanics/`, SPEC §3/§4 (hashes, string VAs, install paths), `docs/oracle.md`, `config/gamedata/` (already excluded by D8). | Owner's decision after the four options were costed. Three regimes separate the material: our own work (no exposure), published community facts (facts are not copyrightable; only wiki prose is CC-BY-SA), substantial extraction from the dat (Database Directive 96/9/EC Art. 7), and binary-derived material (Art. 6). Nothing in `crates/` came from the last category, so the safe set is large. Publishing now, before any decompiler output exists, is also the clean-room record — after step 7 the history can no longer prove it. | A licence split (`crates/` MIT/Apache, `tools/` GPL-3.0 to match the parser it imports); engine code must not cite internal docs; one provenance line per module. **Blocking gap:** a public clone cannot currently produce `config/gamedata/` — see the publishability checklist in SPEC §6.2. |
+| **D4** | 2026-10-23 | **Answered: B — publish the engine and tooling; keep the spec and the mechanics internal.** Condition set by the owner: "as long as the game can be compiled and ran" — a stranger with their own install must be able to clone, build and run it. Not published: `docs/mechanics/`, SPEC §3/§4 (hashes, string VAs, install paths), `docs/archive/research/oracle.md`, `config/gamedata/` (already excluded by D8). | Owner's decision after the four options were costed. Three regimes separate the material: our own work (no exposure), published community facts (facts are not copyrightable; only wiki prose is CC-BY-SA), substantial extraction from the dat (Database Directive 96/9/EC Art. 7), and binary-derived material (Art. 6). Nothing in `crates/` came from the last category, so the safe set is large. Publishing now, before any decompiler output exists, is also the clean-room record — after step 7 the history can no longer prove it. | A licence split (`crates/` MIT/Apache, `tools/` GPL-3.0 to match the parser it imports); engine code must not cite internal docs; one provenance line per module. **Blocking gap:** a public clone cannot currently produce `config/gamedata/` — see the publishability checklist in SPEC §6.2. |
 | **D5** | 2026-10-23 | **The dat is authoritative for all numeric values.** Where the dat and community documentation disagree, the dat wins. | Stated by the project owner. The dat is the artefact the game actually shipped; wiki numbers describe DE and are derived, not primary. | Every number in `docs/mechanics/` that conflicts with a wiki gets a dat-side value and a note (U11 is the first). |
 | **D6** | 2026-10-23 | **Game data lives in `config/` as generated TOML, and the engine reads TOML — not the `.dat` — at runtime.** Nothing numeric is hardcoded. Hand edits go in `config/overrides.toml`; loading is strict (unknown or missing key = startup failure). | Project owner's requirement, stated explicitly. The generated layer makes the data reproducible and diffable; the override layer keeps experiments alive across regeneration; strict loading stops typos from silently doing nothing. | `gen_config.py` must stay runnable and `MANIFEST.toml` must be checked at startup for staleness. If **D4** lands on "publishable", `config/gamedata/` is gitignored and generated at first run — it is derived game content. |
 | **D7** | 2026-10-23 | **TDD is mandatory.** No production code without a failing test first. The failing run must be recorded in the session before the implementation exists. Scope: engine crates + shipped tooling; throwaway analysis probes in `build/tools/` are exempt. Coverage is behaviour-based with **no percentage gate**. | Project owner's requirement. A recorded failure is the only thing that distinguishes TDD from tests-after, which pass immediately and therefore prove nothing. A coverage % can be raised without testing a behaviour. | Code found without a prior failing test is **deleted**, not retro-fitted. Every cycle report names the test and shows the command that saw it fail. Full rules: SPEC §11. |
@@ -142,7 +142,7 @@ work; the engine receives "add 1 to attack class 4".
 Consequences already visible in the code:
 
 - ~~`ResourceKind` is a fixed enum and stockpiles are `[[u32; ResourceKind::COUNT]; 2]` — four
-  resources and two players in the *type*.~~ **Paid down 2026-10-26** (`docs/plan-resource-deletion.md`):
+  resources and two players in the *type*.~~ **Paid down 2026-10-26** (`docs/archive/research/plan-resource-deletion.md`):
   resources are content (`config/resources.toml`), a node carries a column, costs name their
   resource by reference id *or* by name, and the stockpile's width is the engine's `MAX_RESOURCES`
   with the pack's count checked at load. Proven by `a_content_pack_with_our_own_resources_loads_and_spends`.
@@ -704,7 +704,7 @@ every pack written before this meant.
    bound to the wrong one and arrows were never removed. It is `landed_arrows` now.
 
 The projectile id is "one past the highest", which is an O(n) scan per shot. Training spawns do the same, so
-this is consistent rather than new, and it is recorded in `docs/performance.md` as the thing to fix first if
+this is consistent rather than new, and it is recorded in `docs/archive/research/performance.md` as the thing to fix first if
 arrow-heavy fights ever show up in a profile.
 
 ## D36 - Garrison is data, buildings fight, and line of sight still has no consumer
@@ -2042,7 +2042,7 @@ because a window onto rectangles is not the milestone the owner asked for.
 
 ## D75 - Rules and shares: the two things the game's own AI does, now done here
 
-*Read from the install, not guessed: `docs/ai-of-the-game.md`. The acceptance script had been a list of timestamps for
+*Read from the install, not guessed: `docs/archive/research/ai-of-the-game.md`. The acceptance script had been a list of timestamps for
 months of game time; HD's own AI never writes one.*
 
 **(1) `[[rule]]`: a condition and one action, re-evaluated.** `Economy/Dark Age.per` trains a villager while food is
@@ -2218,7 +2218,7 @@ cannot place anything stops with a reason a HUD can draw - never a recruit that 
 ## D86 - REA runs on this container; the Windows box is a target, not an analyst (2026-10-31)
 
 The owner asked whether a Windows Hermes running REA could act as a slave delivering findings here. Measured
-first, then decided; the numbers, versions and install traps are in `docs/re-toolchain.md`.
+first, then decided; the numbers, versions and install traps are in `docs/archive/research/re-toolchain.md`.
 
 1. **REA is an MCP tool server, not an agent**, and its Windows support is an experimental read-only boundary:
    27 Ghidra inventory/memory/function operations on native PE, x64-first, 32-bit PE admission only on its
@@ -2237,7 +2237,7 @@ Nothing in `crates/` changes for this: it is a toolchain decision, not an engine
 
 The owner's question was whether the disassembly can give the **complete** behavioural difference between ruage and
 `AoK HD.exe`, "to rule one", with functional gaps deferred. The answer, written down rather than carried in a conversation
-(`docs/behaviour-diff.md`), is that completeness is not computable - 15,766 unnamed procedures with no PDB names, no
+(`docs/archive/research/behaviour-diff.md`), is that completeness is not computable - 15,766 unnamed procedures with no PDB names, no
 completion criterion for "have we found every rule", and code that is not behaviour. What replaces it is a **register**:
 one row per rule ruage implements, each ruled *same / different / unknown-static / needs-oracle* with the original's address
 and our file:line. The count is honest and small: **1 of 12 ruled today**.
@@ -2337,7 +2337,7 @@ dies while it is in the air, because a shot is an entity with its own lifetime. 
 the owner has not given, and inventing it here would be the guess this project refuses.
 
 **What is still unknown.** *Which* order the original uses - by object id, by side, or something else. Entity-id order is a
-deterministic order that satisfies the rule; register row 3 in `docs/behaviour-diff.md` stays `needs-oracle` until a
+deterministic order that satisfies the rule; register row 3 in `docs/archive/research/behaviour-diff.md` stays `needs-oracle` until a
 recording or the binary says which.
 
 ## D89 - The adoptables from the prior-art round: taken, deferred, or refused (2026-11-01)
@@ -2373,7 +2373,7 @@ case does not arise there rather than that the rule does nothing.
 
 ## D91 - The counter relation is derived from the pack, never authored (2026-11-01)
 
-Owner's ruling on `docs/ai-scripts.md` fork 1: **agreed as proposed.** "Which of my units beats which of theirs" is
+Owner's ruling on `docs/archive/research/ai-scripts.md` fork 1: **agreed as proposed.** "Which of my units beats which of theirs" is
 arithmetic over the pack - `damage_between(attacks, armours, rules)` against each candidate's `attacks`/`armours` pairs -
 so it is computed, never written down.
 
@@ -2443,7 +2443,7 @@ loads `[policy]` or a `[[rule]]` points at the new files.
 - **Layout: a base AI plus a per-civilisation delta** ("per civ delta sounds more sensible"). The base holds the rules
   every civ shares; `config/ai/civ/<name>.toml` carries only what that civ does differently. This matches what the
   original's own scripts do in spirit - civ differences are the exception, not a script set per civ
-  (`docs/ai-scripts.md` measured 15 `(civ-selected ...)` uses across 39 files) - while keeping "what does Britons do"
+  (`docs/archive/research/ai-scripts.md` measured 15 `(civ-selected ...)` uses across 39 files) - while keeping "what does Britons do"
   answerable in one file, which is the maintenance property the owner asked for.
 - **Still open: derived defaults.** Whether a civ's *tuning* is derived from the bonuses already in `civs.toml` (with a
   hand-written entry overriding) or authored per civ. The distinction is about the *values*, not the files: a delta file
@@ -2782,7 +2782,7 @@ zero, body inside the wall, which the owner saw as "villagers went through the h
 away: **1 raw unit** from the wall with the body's 4,000.
 
 `crates/sim/src/short.rs` is the answer, and it is the algorithm the original's maintainers documented
-(`docs/pathfinding-from-the-talk.md`): the body is shrunk to a point and every obstruction expands by its radius; a ray at
+(`docs/archive/research/pathfinding-from-the-talk.md`): the body is shrunk to a point and every obstruction expands by its radius; a ray at
 the goal, and where it hits, a walk over the corners of the merged rectangles. The walk is a **visibility graph** rather than
 the talk's edge-following - the same geodesic, and an invariant that is much easier to test (an edge exists only where a
 straight line enters no expanded rectangle's interior).
@@ -2889,7 +2889,7 @@ one.** That is a correctness fix - the dat's speed is tiles per second - and it 
 the old speed, including `config/scenario.toml` (one step moved 380 s -> 390 s; see the review).
 
 Still to come, and next: the route's **corners** are tile centres, not the corners of the obstacles expanded by the body's
-radius (`docs/pathfinding-from-the-talk.md`), so a walker still turns at the middle of a tile and can graze a wall by half
+radius (`docs/archive/research/pathfinding-from-the-talk.md`), so a walker still turns at the middle of a tile and can graze a wall by half
 a tile. Everything else about collision - the goal exemption, the both-corners rule, the one nudge per route - is
 unchanged. A change of this size is measured against `HEAD` interleaved, and the acceptance hash moves: what a unit walks
 to is what it does next.
@@ -3002,7 +3002,7 @@ is not a behaviour worth preserving.
 availability and which unit it upgrades", and on modding: "What if I chose that scout cavalry will be upgrade of hussar, not
 the other way around?"*
 
-1. **The plan is written before the schema, and measured first.** `docs/unit-vocabulary.md` is the plan;
+1. **The plan is written before the schema, and measured first.** `docs/archive/research/unit-vocabulary.md` is the plan;
    `tools/vocabulary.py` is the inventory every number in it is measured against and it exits non-zero while the pack would
    block a name-keyed schema (today: **56** unnamed units, **28** duplicated names).
 2. **The edge is the unit of content, not a per-unit field.** An upgrade is `(from, to, tech)`; the tech is the actor. A
@@ -3260,7 +3260,7 @@ into `None`, so their tests reported **passed** while asserting nothing.*
      for the ticks of a pass.
 
 9. **What the first-party deck says about the policy, added 2026-11-06 while checking the research thread** (Klingers,
-   Meeting C++ 2025, page 9 - `docs/pathfinding-from-the-talk.md`): *"In Age of Empires 2: Units bump into others, stop and
+   Meeting C++ 2025, page 9 - `docs/archive/research/pathfinding-from-the-talk.md`): *"In Age of Empires 2: Units bump into others, stop and
    repath around. **No pushing allowed**. Formations allow for some friendly overlap."* Consequences, which narrow the
    choice:
    - **B is not the game.** Two bodies do not slip past each other; overlap in AoE2 belongs to **formations**, not to a
@@ -3459,7 +3459,7 @@ is the check, and a failure is remembered.*
    phoenix\age2hd_archive_5.7_with_hotfix` - HD 5.7 was cut from the DE tree, which `SPEC.md` asserted from one string and
    now has 84 paths behind it.
 3. **The module map confirms U7's shape from a second source**: `path.cpp` **and** `pathsys.cpp` separately, `motion.cpp`,
-   `move_obj.cpp`, `act_gath.cpp`, four `tact_*.cpp` - the same six-pather picture that `docs/movement-in-the-binary.md`
+   `move_obj.cpp`, `act_gath.cpp`, four `tact_*.cpp` - the same six-pather picture that `docs/archive/research/movement-in-the-binary.md`
    built from the decompiled corpus, now rebuildable without the corpus.
 4. **The new part is the class taxonomy.** 31 `Comm*` classes name a turn-synchronised command stream:
    `CommPacketSyncTurn`, `CommPacketSyncCmdCount`, `CommPacketPlayerCommand`, `CommPacketChecksum`, plus speed change,
@@ -3467,7 +3467,7 @@ is the check, and a failure is remembered.*
    count, a checksum**.
 5. **The rate is still open, and the arithmetic says why.** 31,104 `SYNC` ops over 3,066.04 s is **10.15/s**, one every
    ~98.6 ms - every *second* turn at 20 Hz, and equally consistent with a 10 Hz sim, which the dat's 50 ms authoring
-   granularity rules out. Recorded as a hypothesis in `docs/oracle.md`; not a settled rate.
+   granularity rules out. Recorded as a hypothesis in `docs/archive/research/oracle.md`; not a settled rate.
 6. **Nothing is copied.** A class name and a build path are facts about a file this project owns. genie is AGPL-3.0 and
    the UGC guide GPL-3.0; neither was read for this step, and the thread's own "NEVER COPY" rule is the reason.
 7. **The tool has one rule per lesson already paid for**: a missing binary is an `exit 2`, never an empty map (D130); and a
@@ -3748,7 +3748,7 @@ return to where it gathered last time and only then look for another tree. If 2,
 
 ## D151 - The AI leaves the binary: nine choices enumerated, placement first
 
-**Conformance**: OURS - the owner's instruction of 2026-11-07 (quoted below), with the inventory in `docs/ai-extraction.md`.
+**Conformance**: OURS - the owner's instruction of 2026-11-07 (quoted below), with the inventory in `docs/archive/research/ai-extraction.md`.
 
 *2026-11-07. The owner: "By extract AI I mean removing all the AI controls from the binary and moving it exclusively into ai
 files. Do this first." And: "every unit control should be removed from game code and moved to AI." Answers given to the ten
@@ -3758,7 +3758,7 @@ original; disabled rules are extracted too; **pass condition is a working econom
 1. **The line is choice vs mechanism.** Simulation stays in Rust (movement, collision, pathfinding, damage, harvest rates,
    production timers, vision, death, rot, validation, geometry). A **choice made for a player** — which node, which tile,
    which unit, whom to fight, when to redistribute villagers — moves to `config/ai/*.toml`.
-2. **The inventory is `docs/ai-extraction.md`**: nine choices currently in Rust, each with its file and line, plus the rows
+2. **The inventory is `docs/archive/research/ai-extraction.md`**: nine choices currently in Rust, each with its file and line, plus the rows
    that must **not** move (`site_fits`/`site_refusal` validation, `approach_tile` geometry, `settle_blind_sites` bookkeeping,
    `step_leashes`, `step_conversion`, order fulfilment).
 3. **`nearest_like` stays in the engine**: the original's engine also continues a villager on a nearby resource; D148 (only
@@ -3807,7 +3807,7 @@ general functionality matter for now. I think best order of priority is: 1 gener
 ## D153 - Gates are a global state, not per-player passability (research only)
 
 *2026-11-08. The owner corrected D54's premise: "Gates are more difficult than 'passable for owner and allies, solid for
-others'. Enemy unit can pass together with your own. Please do mere research." Research is `docs/gates-research.md`.*
+others'. Enemy unit can pass together with your own. Please do mere research." Research is `docs/archive/research/gates-research.md`.*
 
 1. **D54's sentence is corrected**: *"Not modelled: gates (owner-passable pathing needs a per-player grid)"* is **wrong**. A
    gate is a **time-varying global state** - open means walkable for everyone, closed means walkable for nobody - so it is
@@ -3981,7 +3981,7 @@ a **shape**, not a second simulation.*
 
 *2026-11-08. The owner, with a screenshot of a villager standing on a town centre: *"villager still goes through the town centre … maybe
 the white diamond laying around the building is too small … I do remember that being so in the game. How is building collision handled by
-the game?"* Research: `docs/building-collision.md`.*
+the game?"* Research: `docs/archive/research/building-collision.md`.*
 
 1. **The game separates three things**: collision = the dat's `radius[0]`/`radius[1]` as **half-extents in tiles** (town centre 4x4,
    house 2x2, wall 1x1); the footprint is **not all solid** - the town centre keeps a walkable **yard** (D115, and aoe2mc's *"let units
@@ -4008,7 +4008,7 @@ have been made or are yet to be made and how they were made (research, decided b
 and that would help me to spot gaps and bad decisions." Answers to the three shapes offered: **generated rather than
 authored**, **the open register, the evidence ladder and broken references**, committed at **`docs/site/`**.*
 
-1. **Derived, never authored.** `tools/decisions.py` reads `docs/decisions.md` and the U-register in
+1. **Derived, never authored.** `tools/decisions.py` reads `docs/archive/decisions-2026-11-24.md` and the U-register in
    `docs/mechanics/README.md` and writes one self-contained HTML file. Nothing on the page is typed by hand, so the page
    cannot drift from the corpus - and when a label is wrong, the classifier is wrong in a way a reader can see.
 2. **Every label carries the phrase it was read from.** A basis is recorded only when the decision's own text says where
@@ -4028,7 +4028,7 @@ authored**, **the open register, the evidence ladder and broken references**, co
 6. **`unresolved` is a reading list, not a verdict.** Language that admits doubt ("stays a hypothesis", "not
    established") is quoted, unless the same sentence says the doubt was settled ("tested and is falsified") - because
    22 decisions flagging themselves is useful and 120 would be noise.
-7. **Where it lives.** `docs/site/index.html`, committed, because `docs/decisions.md` is committed. Rebuild with
+7. **Where it lives.** `docs/site/index.html`, committed, because `docs/archive/decisions-2026-11-24.md` is committed. Rebuild with
    `make decisions`; `make decisions-check` parses and reports without writing and fails on a heading it cannot place.
    It is deliberately **not** in `make check`: a docs tool cannot regress the engine, and adding it would make every
    commit pay for the corpus.
@@ -4758,7 +4758,7 @@ table, so no float enters a tick.
 **Measured on landing:** repaths **435 -> 240** (-45%), `made_room` **151 -> 96** (-36%), entities 142 -> **139**, `World::step`
 7.2 -> **6.7 us**, hash `ef7cdba9` -> `8999f1ba`. Ten men work one bush and eighteen work one tree at a body each.
 
-**Recovered record.** This entry was lost with the rest of the log when `docs/decisions.md` was truncated from 385,025 bytes to
+**Recovered record.** This entry was lost with the rest of the log when the bank was truncated from 385,025 bytes to
 1,937 in commit `12b1e35`; the text above is written from `docs/reviews/2026-11-12-no-cap-and-pass-through.md`, which measured it at
 the time. See `docs/reviews/2026-11-12-design-and-architecture.md`.
 
@@ -4857,7 +4857,7 @@ cannot do that" from "the engine is wrong" without matching all of them, so ever
 ### D195 - the next step is one step
 
 **What it says.** `docs/next-step.md` is capped at **16,384 bytes**, must start with `# OPEN`, and `tools/next_step.py --split` moves
-everything after the first block to `docs/history/next-step-<date>.md`. Enforced by `make check` and the pre-commit hook.
+everything after the first block to `docs/archive/history/next-step-<date>.md`. Enforced by `make check` and the pre-commit hook.
 
 **Why, measured.** The owner's rule is "compact first: persist state to files so a fresh session resumes without the conversation". By
 2026-11-12 that file was **350,038 bytes** - twenty times the largest source file - and this session read it at 101 KB and growing
@@ -4958,7 +4958,7 @@ implemented items is enough"* - match resolution is not the acceptance test at t
 
 **What the binary says, and it agrees.** `FUN_008a4360`'s collision block classifies each collision by **unit id against the
 order's target** and nothing else; there is no player, team or alliance test anywhere in it, and the collision query is issued
-with an owner sentinel rather than the mover's player (`docs/movement-in-the-binary.md`, read 2026-11-13). So a friend is a
+with an owner sentinel rather than the mover's player (`docs/archive/research/movement-in-the-binary.md`, read 2026-11-13). So a friend is a
 non-past collision exactly like an enemy, and the original's answer is to **repath** around it, not to pass through it.
 
 **This withdraws D189's point 1** ("your own units are not walls"). That rule was chosen to make a crowd deliverable, not
@@ -5006,7 +5006,7 @@ Five pieces, and the order they become true:
 | piece | state |
 |---|---|
 | engine builds and runs from a clean clone | **true today** (`cargo build` needs no game data) |
-| `--load` in the engine | starts as **B** (tool-side converter behind `World::from_state`), becomes **A** once the reader is written from `docs/save-format.md` alone - gates in `docs/licensing.md` |
+| `--load` in the engine | starts as **B** (tool-side converter behind `World::from_state`), becomes **A** once the reader is written from `docs/archive/research/save-format.md` alone - gates in `docs/licensing.md` |
 | the importer lives here, not in another repository | not yet (D12 moved it out); returns as a GPL-3.0 directory under `tools/`, or as our own Rust reader later |
 | content: names by three lists, all prose rewritten, campaigns only ours | the rule is D201; the content work comes with the authored pack |
 | assets read in place; ours later | true today (D21) |
@@ -5117,7 +5117,7 @@ worth the evidence hunt before it, and a hunt that found nothing is part of the 
 ### D200 - friends are solid: the owner's rule, and the crowd it has to carry (supersedes D200a)
 
 **What it says.** A body blocks whoever it belongs to. The collision block in the original has no player, team or alliance
-test anywhere in it and its query passes an owner sentinel (`docs/movement-in-the-binary.md`), and the owner ruled on
+test anywhere in it and its query passes an owner sentinel (`docs/archive/research/movement-in-the-binary.md`), and the owner ruled on
 2026-11-13: *"Adopt original game behaviour. Don't make difference of friend or foe as in original game."* So `hostile` is
 gone from `collide`; a friend blocks, slides, gives way or re-paths exactly as an enemy does. **D189's "your own units are
 not walls" is withdrawn** - it was chosen to make a crowd deliverable, not because the game does it.
@@ -5235,7 +5235,7 @@ is the body a future test has to find, watched by position, not by `made_room`.
 ### D205 - right of way is the lower entity id, and the loser pauses 0.25-1.50 s on its own path
 
 **What it says (owner, 2026-11-14: *"1"*).** Copy the original's collision tie-break rather than invent one. Read out of
-`AoK HD.exe` byte for byte (`docs/movement-in-the-binary.md`, last two sections): when a step's collision list holds a unit
+`AoK HD.exe` byte for byte (`docs/archive/research/movement-in-the-binary.md`, last two sections): when a step's collision list holds a unit
 that is not the order's target, the mover compares **`[vtable+0x2b4]`** on both units - a virtual call whose move-object
 implementation returns `*(int*)(this+8)`, the object handle - and the unit with the **higher** value is told to pause:
 
@@ -5356,12 +5356,12 @@ filled from the command rather than from the tick.
 
 **Basis.** `FUN_008007f0`, `FUN_00801a20`, `FUN_007fe010`, `FUN_007ffd70`/`FUN_007fffe0` (read 2026-11-14); the Forgotten
 Empires forum answer *Investigations into Pathfinding* (2026); the DE talk's *"units bump into others, stop and repath around.
-No pushing allowed"* with "some friendly overlap" (`docs/pathfinding-from-the-talk.md`, page 9); the owner's ruling above.
+No pushing allowed"* with "some friendly overlap" (`docs/archive/research/pathfinding-from-the-talk.md`, page 9); the owner's ruling above.
 Review: `docs/reviews/2026-11-14-d207-group-overlap.md`.
 
 ### D208 - the order of work is a checked tree, and the mechanics we defer are deferred by seam
 
-**Owner, 2026-11-14**, six answers to the questions `docs/dependency-tree.md` §12 carried: *(1)* the target is **a correct
+**Owner, 2026-11-14**, six answers to the questions `docs/archive/research/dependency-tree.md` §12 carried: *(1)* the target is **a correct
 engine**, not a playable product first; *(2)* **one civ** until the data debts close; *(3)* monks, trade, naval and relics
 are **not in v1, but the architecture must be ready for them**; *(4)* publishing is **B** - the engine and its tooling
 public, the spec and the mechanics internal; *(5)* the binary register's **row 2 now, then the oracle**, because rows 3-12
@@ -5369,7 +5369,7 @@ are `needs-oracle`; *(6)* "the enemy is eliminated inside 40 minutes" is **not a
 
 **What it settles, and what it replaces.** Every slice in this project has carried its own plan, and the plans were written
 in whatever order the last session happened to work in - so a slice would be started and then found to depend on something
-unbuilt. The owner's request was a tree of the items, their status and the order, and this is it: `docs/dependency-tree.md`,
+unbuilt. The owner's request was a tree of the items, their status and the order, and this is it: `docs/archive/research/dependency-tree.md`,
 **64 items** in five groups - foundations, the simulation, **the debts**, the missing mechanics, the product - with the
 edges, seven phases and a gate per phase. The debts are the finding: **fourteen places where a row marked done is hollow**,
 each proved by a probe that can fail (attribute 1 is `Range` where the game means line of sight; nothing reads construction
@@ -5406,7 +5406,7 @@ protocol is **eleven streams reseeded from a frame seed every tick** (not "a rol
 weaker form) and there is a **turn** (only one player's unit AIs run fully), so R3 was rewritten and T15/T16 sit in
 Phase 3. Six candidates were **refused as later-build features** — pastures, the mule cart, Empire Wars, `Wait_Solidify`,
 genie's passive-ability task kinds and `fmath` — because their names are zero hits in `AoK HD.exe` or they are DE
-content, and they are recorded in `docs/dependency-tree.md` §5b so the next session does not port them.
+content, and they are recorded in `docs/archive/research/dependency-tree.md` §5b so the next session does not port them.
 
 **Basis.** The owner's six answers, quoted above; the tree's own probes (`grep -rn '\b195\b' crates`, `DisableTech` in
 `crates/sim`, `reseed`, `crates/data/src/techs.rs:96`); the importer's name table,
@@ -5441,7 +5441,7 @@ tick). So today the *past* test can never be true (`moved` is always the current
 empty. The two rules that read it are therefore inert, and the work that makes them live - one guard plus the timing the
 first attempt measured at 2.3x - is `docs/next-step.md`'s first item, not something this decision claims.
 
-**Basis.** `0x8a7fe7`, `0x8aa6d0`, `+0x134`, `path+0x10` (`docs/movement-in-the-binary.md`, read 2026-11-14); the DE
+**Basis.** `0x8a7fe7`, `0x8aa6d0`, `+0x134`, `path+0x10` (`docs/archive/research/movement-in-the-binary.md`, read 2026-11-14); the DE
 talk's *"units bump into others, stop and repath around. No pushing allowed"*; the owner's D205 ruling.
 Reviews: `docs/reviews/2026-11-14-d205-pause.md`, `docs/reviews/2026-11-14-d210-time-not-geometry.md`.
 
@@ -5509,7 +5509,7 @@ edge, `O(n^2)` in nodes - is real and still unmeasured per plan: `crates/sim/tes
 measurement owed for it.
 
 **Basis.** The DE talk's method (*shrink the units to points, expand the obstacles, be careful with the start and the end*,
-`docs/pathfinding-from-the-talk.md`); `FUN_007f9d80` for the per-search body list; measurement in
+`docs/archive/research/pathfinding-from-the-talk.md`); `FUN_007f9d80` for the per-search body list; measurement in
 `docs/reviews/2026-11-14-d211-clearance.md` and its follow-up.
 
 ### D212 - a search that starts inside a body is re-seeded at twice the clearance, and only *away* from him
@@ -5565,7 +5565,7 @@ a standing man instead of walking into him and re-planning afterwards. The match
 1,919.2 s against 1,857.2 s, with 144 entities against 133). D210b's 2.3x was measured with this field broken: the stander set
 was fed nothing, so the search failed more often and every failure ran the whole-route fallback.
 
-**Basis.** `+0x134` and `path+0x10` (`docs/movement-in-the-binary.md`, read 2026-11-14); `FUN_007f9d80` for the per-search
+**Basis.** `+0x134` and `path+0x10` (`docs/archive/research/movement-in-the-binary.md`, read 2026-11-14); `FUN_007f9d80` for the per-search
 body list; the field's own doc comment, which the code contradicted. Review: `docs/reviews/2026-11-15-d213-last-moved.md`.
 
 ### D214 - attribute 1 is line of sight and 12 is attack range, and the pack's names are the interface
@@ -5772,7 +5772,7 @@ another eight - "apply team bonuses" is not one switch, it is a table two thirds
 also carry a **kind-102 row** (a bonus that *bars* a tech), which the current mental model does not cover, and kinds **3** and
 **6** appear in this data with no reader anywhere.
 
-**What was written instead of code.** `docs/civ-bonuses.md`, and a sixth seam in `docs/dependency-tree.md` §7b (**R6**): one
+**What was written instead of code.** `docs/archive/research/civ-bonuses.md`, and a sixth seam in `docs/archive/research/dependency-tree.md` §7b (**R6**): one
 resolved `BonusTable` per player - resources, attributes keyed by the enum rather than by string, barred techs, barred units,
 granted units - rebuilt on the two events that can change it (a tech landing, the civ being set), with the five consumers that
 walk those three tables today becoming five readers of one table. The proof is stated as a test: a fixture **pack** with a
@@ -5784,7 +5784,7 @@ exactly as they are, and the two team-bonus resource rows that matter today (36 
 `farm_food_bonus` as D215 left them. R6 is placed in Phase 3b beside R1-R5 - after the determinism work, before civ breadth,
 because breadth is what multiplies the call sites it replaces.
 
-**Basis.** A probe over `config/gamedata/civs.toml` and `effects.toml` (counts in `docs/civ-bonuses.md`); the five consumer
+**Basis.** A probe over `config/gamedata/civs.toml` and `effects.toml` (counts in `docs/archive/research/civ-bonuses.md`); the five consumer
 sites (`barred_by`, `civ_barred_unit`, `modifiers_for`, `farm_food_bonus`, `construction_rate`); D214's finding that the
 attribute *string* is the interface, which is what makes a resolved table worth writing before breadth.
 
@@ -6044,7 +6044,7 @@ not another function hunt.
 number, the floor, stayed unexamined.
 
 **Basis.** `sub_744d60` and `sub_745060` in `AoK HD.exe` (sha256 `cbd10d81...`), read with the clean-room decompiler through the active-target session;
-`docs/behaviour-diff.md` row 2; `crates/sim/src/lib.rs:219` `damage_between`. Review: `docs/reviews/2026-11-15-d227-damage-row.md`.
+`docs/archive/research/behaviour-diff.md` row 2; `crates/sim/src/lib.rs:219` `damage_between`. Review: `docs/reviews/2026-11-15-d227-damage-row.md`.
 
 ### D228 - the minimum-1 rule is once per attack, and three sources say so
 
@@ -6075,7 +6075,7 @@ land for **3**, is excluded.
 the register says so, in its own words, with the binary evidence beside it. That is a legitimate close for a project that follows the original generally: the rule
 is stated, the sources are named, and the one thing static reading could not reach is described rather than hidden.
 
-**Basis.** `docs/behaviour-diff.md` row 2 (now **`same`**; the register reads **2 of 12**); `sub_744d60` and `sub_745060` (D227); `crates/sim/src/lib.rs:219`
+**Basis.** `docs/archive/research/behaviour-diff.md` row 2 (now **`same`**; the register reads **2 of 12**); `sub_744d60` and `sub_745060` (D227); `crates/sim/src/lib.rs:219`
 `damage_between`; `crates/sim/tests/combat.rs:184` `no_attack_never_floors_below_the_minimum`. Review: `docs/reviews/2026-11-15-d228-minimum-rule.md`.
 
 ### D229 - the tick's order is the original's: players in index order, objects in slot order (2026-11-15)
@@ -6103,7 +6103,7 @@ inline **in the victim's own turn**, a unit killed by an earlier-ordered object 
 players are bracketed by `+0x130` before the walk and `+0x68` after it, with `+0x134` for the players already visited, then
 three more per-player loops gated on `FUN_00727810()`.
 
-**The turn, read for free.** The index at `+0x100` - `pturn`, the field `docs/save-format.md` reads out of the save header -
+**The turn, read for free.** The index at `+0x100` - `pturn`, the field `docs/archive/research/save-format.md` reads out of the save header -
 is advanced by one at the end of every update and wrapped at the player count. That is **T16**'s axis, corroborating the
 `Turn` step the DE port lists after the players, and it is not this slice.
 
@@ -6131,7 +6131,7 @@ rule's evidence is the fixtures.
 
 **Basis.** `FUN_00738720` (`0x738720`) in `AoK HD.exe`, read from the exported corpus `/opt/data/tools/rea/pseudo-aokhd`;
 `crates/sim/src/world/step.rs` (`turn_key`, the sort at the end of `decide`, the two gates in `step_production`);
-`crates/sim/tests/tick_order.rs`; `docs/behaviour-diff.md` row 3 (now **read** for the order *between* objects);
+`crates/sim/tests/tick_order.rs`; `docs/archive/research/behaviour-diff.md` row 3 (now **read** for the order *between* objects);
 `docs/mechanics/determinism.md`; `docs/next-step.md` T12. Review: `docs/reviews/2026-11-15-d229-tick-order.md`.
 
 ### D230 - the players take turns: each player's work is a turn, and a dead man's turn does nothing (2026-11-15)
@@ -6252,7 +6252,7 @@ build the bonuses now - D219's deferral stands - and it settles three things tha
 1. **A civ is a row plus effects, never a name in `crates/`.** No engine code may know "British", nor that there are 31; a
    mod adds a civ by adding a `[[civ]]` row and the effect rows it points at. The engine's vocabulary for a bonus is a
    *capability* (`attack`, `line_of_sight`, `population`), and content chooses which civs get which.
-2. **Every bonus has to land in every consumer, or the mod is a lie.** This is what the R6 seam (`docs/civ-bonuses.md`) is
+2. **Every bonus has to land in every consumer, or the mod is a lie.** This is what the R6 seam (`docs/archive/research/civ-bonuses.md`) is
    for: five consumers already walk three effect tables today, and a sixth would be another place a new bonus can be
    half-applied. The seam's rule stands - one resolved table per player, consumers read it - and the requirement raises its
    priority, because "add a civ by config" is false while a bonus can silently reach four consumers out of five.
@@ -6278,7 +6278,7 @@ Two new data tests are red on the old code (`attackk`, `other:7`) and green here
 
 **Basis.** `crates/data/src/techs.rs` (`NAMED_ATTRIBUTES`, `UNREAD_ATTRIBUTES`, `knows_attribute`, the refusal in the
 modifier loader); `crates/data/tests/techs.rs` (three fixtures); the 29-name census of `config/gamedata/effects.toml`;
-`docs/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d233-moddable-civs.md`.
+`docs/archive/research/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d233-moddable-civs.md`.
 
 ### D234 - one bonus table per player, so every consumer asks the same list (2026-11-16)
 
@@ -6309,7 +6309,7 @@ it did not: `cb1f6a83a119a2a3`, bit-identical at 24,000 ticks.
    ticks_where_a_british_one_needs_500` went red. The rebuild now runs **after** the civ table is stored, with the reason
    next to it.
 2. **The bars were folded from every source.** A kind-102 row sitting in a *team bonus* started barring a tech, which no
-   consumer has ever done and whose meaning in the original is **unverified** (`docs/civ-bonuses.md` records the two rows).
+   consumer has ever done and whose meaning in the original is **unverified** (`docs/archive/research/civ-bonuses.md` records the two rows).
    The test suite did not see it: entity count and repath counts were unchanged at 24,000 ticks. The **acceptance hash** did -
    `051e29ec69087825` against `cb1f6a83a119a2a3`. The bars now come from the tech tree only, which is the source
    `barred_by` has always read, and the question of what a team-bonus bar *should* do stays open rather than being answered
@@ -6331,7 +6331,7 @@ That should put the lookup below the old walk; it is not claimed until measured.
 
 **Basis.** `crates/sim/src/world/bonuses.rs` (`BonusTable`, `Source`, `ResourceRow`, `World::rebuild_bonuses`,
 `World::bonuses`); the five consumers in `lib.rs` and `world/research.rs`; `crates/sim/tests/bonuses.rs` (three fixtures, red
-on a once-only fill); `docs/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d234-bonus-table.md`.
+on a once-only fill); `docs/archive/research/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d234-bonus-table.md`.
 
 ### D233 amendment (2026-11-17) - the `other:` half of the vocabulary was closed, and closing it broke the owner's build
 
@@ -6368,7 +6368,7 @@ and runs after it (`tick=100 entities=128 players=2 hash=266bcdf711e7824d`). Rev
 **B shape** the owner ruled on 2026-11-14: the converter lives in `tools/`, so no reader of the game's save file ever enters
 `crates/`. The converter has nothing to convert *to* until the engine can write and read its own state, and **that** half is
 what landed here. The RE half - walking the save's sections 2-4 for civs, stockpiles and the object list, none of which is
-read yet (`docs/save-format.md`) - is not started and is not pretended to be.
+read yet (`docs/archive/research/save-format.md`) - is not started and is not pretended to be.
 
 **The shape: `serde` on `World` itself, not a `WorldState` mirror.** A mirror is a second list of the world's 95-odd fields,
 and the second list is the one that goes stale - this project has paid for exactly that shape twice (the farm line and the
@@ -6416,7 +6416,7 @@ them is the one he saw:
    and the collider was dropped outright. The window submits one walk per selected unit in one tick, so a box-select and a
    right-click turn the selection into a crowd that passes through itself. The original has this exemption, but the list it
    filters is the *formation's* members, and Forgotten Empires' own documentation puts villagers, trade carts and fishing ships
-   in no formation - *"each of them takes their own path"* (`docs/prior-art.md`, `docs/movement-in-the-binary.md`).
+   in no formation - *"each of them takes their own path"* (`docs/prior-art.md`, `docs/archive/research/movement-in-the-binary.md`).
 2. **A node's ring is re-laid** when it refuses a man (D200), and the re-lay re-assigns every man on the node.
 
 **Both fixes were built and both were measured, and both were worse than the defect.**
@@ -6446,7 +6446,7 @@ solid needs a **body-aware replan** - a route that goes *round* a body, which is
 crowd deadlocks into the same failure D205 measured. The fix is a slice of its own, not a flag.
 
 **Basis.** `crates/sim/src/world/step.rs` (`stamp_group`, `maybe_respawn`→`maybe_respread`, `move_bodies`), `crates/sim/src/
-world/movement.rs` (`blocker_at`, the mate and "past" clauses), `docs/movement-in-the-binary.md` (the path-ignore list),
+world/movement.rs` (`blocker_at`, the mate and "past" clauses), `docs/archive/research/movement-in-the-binary.md` (the path-ignore list),
 `docs/prior-art.md` (openaok, genie, openage, the formations page), and the two acceptance runs above. Review:
 `docs/reviews/2026-11-16-d236-overlap-and-reroute.md`.
 
@@ -6490,7 +6490,7 @@ rule with **villagers** in two fixtures; with villagers never being mates they w
 group at all. Both now spawn **spearmen** - the units the rule is actually about - through a shared `spawn_unit` helper.
 
 **Basis.** `crates/sim/src/world/step.rs` (`stamp_group`), `crates/sim/src/world/movement.rs` (the near-goal clause), the pencil
-in `world/pathing` (`short_range_clear`, discs), `crates/sim/tests/overlap.rs`, `docs/movement-in-the-binary.md` (the path-ignore
+in `world/pathing` (`short_range_clear`, discs), `crates/sim/tests/overlap.rs`, `docs/archive/research/movement-in-the-binary.md` (the path-ignore
 list), `docs/prior-art.md` (the formations page). Review: `docs/reviews/2026-11-16-d237-villagers-solid.md`.
 
 ### D238 - "villagers still push": it is the seat shuffle, and the shuffle is load-bearing (2026-11-16, nothing landed but the reading)
@@ -6537,11 +6537,11 @@ fixture comes off ignore. The gate is the acceptance match at 48,000 ticks - ent
 
 **Basis.** `crates/sim/tests/overlap.rs` (the fixture and its measurement); `crates/sim/src/world/step.rs` (`owned_place`'s
 staleness filter, `standoff_point`'s `taken`); `crates/sim/src/world/movement.rs` (the "past" clause and the inside rule);
-`docs/movement-in-the-binary.md`. Review: `docs/reviews/2026-11-16-d238-seat-shuffle.md`.
+`docs/archive/research/movement-in-the-binary.md`. Review: `docs/reviews/2026-11-16-d238-seat-shuffle.md`.
 
 ### D239 - The game is the source of truth on pathing: every divergence adopted, and two rules of ours deleted (owner, 2026-11-16)
 
-The owner, over the movement rows of the register (`docs/behaviour-diff.md`): *"Resolve the questions by adopting from the game.
+The owner, over the movement rows of the register (`docs/archive/research/behaviour-diff.md`): *"Resolve the questions by adopting from the game.
 That is the source of truth."* Every divergent row therefore becomes a slice, and **where the game's side is unread the read comes
 first** - the tree does not get a guess in the game's name.
 
@@ -6629,7 +6629,7 @@ and gains a pointer at its head; nothing else is touched, because the body is th
 probe per decision (does the symbol it names still exist), which is a tool of its own and is not built.
 
 **Basis.** `tools/decisions.py` (`check_shrink`, `SUPERSEDES`), `tools/test_decisions.py`, `docs/decision-areas.toml`,
-`docs/decisions.md` (D200a, D204, D238, D127, D135). Review: `docs/reviews/2026-11-16-d240-retirement.md`.
+`docs/archive/decisions-2026-11-24.md` (D200a, D204, D238, D127, D135). Review: `docs/reviews/2026-11-16-d240-retirement.md`.
 
 ### D241 - Four pathing rulings the game cannot settle, and one of them was already built (owner, 2026-11-16)
 
@@ -6663,7 +6663,7 @@ is no longer a defect - it is what the game does when a route is planned through
 must therefore assert what the owner actually objects to (**nobody is shoved off his square**), not that no two bodies ever
 overlap; the old assertion would now be the old rule speaking.
 
-**Basis.** `docs/behaviour-diff.md` rows 24, 25, 32; `crates/sim/src/world/step.rs` (the refusal count, the retarget, the nudge),
+**Basis.** `docs/archive/research/behaviour-diff.md` rows 24, 25, 32; `crates/sim/src/world/step.rs` (the refusal count, the retarget, the nudge),
 `crates/sim/src/world/gather.rs` (`nearest_like_free`, `gather_reach`), `crates/sim/src/world/orders.rs:52`. Review:
 `docs/reviews/2026-11-16-d241-rulings.md`.
 
@@ -6697,7 +6697,7 @@ R2-R9 are unchanged and unblocked; R1 is split in the queue into **R1a** (the pa
 
 **Basis.** `crates/sim/src/world/movement.rs` (rule 6, the arm), `crates/sim/src/world/step.rs` (the re-plan's `obstacles`),
 `crates/sim/tests/replan.rs` (the ignored fixture), `crates/sim/tests/group_overlap.rs` (the deadlock, measured),
-`docs/behaviour-diff.md` rows 29-30. Review: `docs/reviews/2026-11-16-d242-r1-measured.md`.
+`docs/archive/research/behaviour-diff.md` rows 29-30. Review: `docs/reviews/2026-11-16-d242-r1-measured.md`.
 
 ### D243 - the owner's four body invariants, measured: two hold, two do not (2026-11-16)
 
@@ -6839,7 +6839,7 @@ engine's planners, as its own set with its own command (`make conformance`), and
 
 **Why.** Asked on 2026-11-16 whether the original's pathing rules could be pinned as tests "for the project as extra set ran
 separately". The value is the register: D239 adopted the game's pathing wholesale and rows 13-33 of
-`docs/behaviour-diff.md` each owe a slice, so a set that states the game's rule and our answer in one place makes the queue
+`docs/archive/research/behaviour-diff.md` each owe a slice, so a set that states the game's rule and our answer in one place makes the queue
 checkable rather than remembered. It is out of the gate because a conformance test's job is to *disagree* when we diverge;
 putting disagreement into the gate either turns every commit red or teaches everyone to weaken the test.
 
@@ -6855,7 +6855,7 @@ first pop is a neighbour of the start. Its own doc comment and D134's "nearest l
 own slice and its own measurement.
 
 **Commits us to.** Keeping the set's findings and divergences visible rather than green; and adding a rule to
-`docs/pathfinding-conformance.md`'s table when one is read, with the module that settles it.
+`docs/archive/research/pathfinding-conformance.md`'s table when one is read, with the module that settles it.
 
 ### D249 - the conformance set ignores nothing: a red test is a rule we do not keep (2026-11-16)
 
@@ -7001,7 +7001,7 @@ game and [the decomp] first. Then let me decide."*
 by **one** thing - a motion object's factor (`[move+0x14]+0x6c`) when that is `> 0.0` - and **exactly 0.0 on a pause**. No terrain
 factor, no ramp, no partial-speed arm. The factor's only writer is the virtual setter `0x7f4130`, which has no direct caller and
 is **unread**; the only mechanism that needs one is the formation (`FormationParams(..., breakAutoFormationsBySpeed=%d)`), where
-villagers are never members. Read in `docs/movement-in-the-binary.md`.
+villagers are never members. Read in `docs/archive/research/movement-in-the-binary.md`.
 
 **The decompilation cannot help**: `samuelcaldas/age-of-empires-2-decomp` has no speed, velocity, acceleration or max-velocity
 code at all - its unit movement and formation files are 16-47-line stubs, and the only "acceleration" in it is camera drag
@@ -7078,7 +7078,7 @@ animals and herding, gathering, depletion, a partial load, fights, the line upgr
 cannot slide round a wall wedges, which is what D188 was written from.
 
 **Why it is a fork and not a defect to patch.** Read out of the original on 2026-11-17 (`doIntelligentMovementUpdate`, `008a4360`,
-in `docs/movement-in-the-binary.md`): a step is a **velocity applied whole**, the new position is then **tested**, and every
+in `docs/archive/research/movement-in-the-binary.md`): a step is a **velocity applied whole**, the new position is then **tested**, and every
 collision answer is a **repath** (`We have %d non-past collisions and %d terrain collisions, repathing`), a **pause** enforced by
 a priority comparison (`TOLD TO PAUSE BY UNIT %d`), or a stop. **No axis is ever dropped** - the slide does not exist there. And a
 reached waypoint is **snapped to and spent in the same update** (`Teleporting to exact waypoint` + `Incrementing waypoint`), which
@@ -7098,7 +7098,7 @@ so it would have been untested code. Review: `docs/reviews/2026-11-17-the-slide-
 found, because the finding is sharper than the change would have been.*
 
 **What was tried.** The terrain slide was deleted outright - the original applies its step whole and answers a collision with a
-repath or a pause (`docs/movement-in-the-binary.md`) - with the owner's fixture written first: the same walk with a body parked
+repath or a pause (`docs/archive/research/movement-in-the-binary.md`) - with the owner's fixture written first: the same walk with a body parked
 half a tile past the first corner, asserting every walking tick is one step or a stand. **Red before**: 82, 81, 80... raw units a
 tick, **567 of 1,398** walking ticks short. **Green after**: no slide, no creep, and the walk still costs the ticks its geometry
 owes. That part is the rule working exactly as asked.
@@ -7162,7 +7162,7 @@ against a trunk or a wall face brushes the tile) and `a_villager_walking_beside_
 because both are honest about different things: **our blocked tile is a whole tile; the game's obstacle is an object with bounds.**
 
 **So the next slice is the model, not the mover**, and the binary and the decompilation say exactly what it is
-(`docs/movement-in-the-binary.md`, section of 2026-11-17): **ground is a per-tile test at a point** (`FUN_008aa480` - no radius
+(`docs/archive/research/movement-in-the-binary.md`, section of 2026-11-17): **ground is a per-tile test at a point** (`FUN_008aa480` - no radius
 anywhere in it), and **things are boxes with a `(radius_x, radius_y)` pair**, with the game's own distance function measuring to
 the box so that everything inside a footprint is distance zero
 (`compute_distance_sq`, `src/unit/unit_action_build_77a0.cpp`). Overlap is then `distance-to-box < radius`: a man at **half a
@@ -7234,7 +7234,7 @@ once the place model can live with it.
 *The owner: **"Proved and follow the original game and decomp."** Three functions read end to end, and they settle the question
 this project has been circling: the game collides **boxes**, not tiles, and every object's box comes from its own radii.*
 
-**The proof** (written out with the code in `docs/movement-in-the-binary.md`):
+**The proof** (written out with the code in `docs/archive/research/movement-in-the-binary.md`):
 
 1. **Ground is a point test** - `FUN_008aa480` compares the tile's bits with the unit's passability mask; arguments cast to `int`,
    no radius in it.
@@ -7732,7 +7732,7 @@ them: a step **landing 7,500 inside a body** where 8,000 is needed (D269).
 **The ruling, in his words.** *"Port everything from the game. I want the game to be ported as accurately as sensible. We can
 think about optimizations later."* Given after D15's four options were put to him with their measured costs.
 
-**What it settles.** D239 adopted every divergent row of `docs/behaviour-diff.md` where the game's side was *read*, but each
+**What it settles.** D239 adopted every divergent row of `docs/archive/research/behaviour-diff.md` where the game's side was *read*, but each
 slice stayed free to be refused by measurement - and two were (D242's row 29/30, R1a). **That freedom is withdrawn:**
 a measurement is no longer a reason to keep a divergence. Row 22's caps, the terrain slide, the same-tick mate heuristic,
 `TakeAtRest`, `D52`'s "a body already inside is not an obstruction", `D134`'s one-step answer and the gather place model all
@@ -7745,7 +7745,7 @@ with a fixture. G2's bit-exactness stays rejected - where the original's own ari
 weighted heuristic), the port keeps the *arithmetic shape* in fixed point and the fixture pins the **cost ordering and the
 tie-break**, not the decimal.
 
-**Already read, so the first slice is not a puzzle.** The cost model settled on 2026-11-16 (`docs/movement-in-the-binary.md`,
+**Already read, so the first slice is not a puzzle.** The cost model settled on 2026-11-16 (`docs/archive/research/movement-in-the-binary.md`,
 "The cost model settled"): **16** per cardinal step, an octile table at `0xafd2a0`, and `h = 25 x Euclidean` - which makes the
 original a **weighted A\*** (weight ~1.56) that returns slightly longer routes **on purpose**. The frontier is a **heap**
 (`FUN_00801e90` sifts on every push) *beside* the per-tile best-cost array with its generation byte - both structures exist,
@@ -7767,7 +7767,7 @@ leaves its measurement on a branch with the missing mechanism named. The conform
 ### D276 - The ground re-plan cap and the slide both go, and the order is forced (owner, 2026-11-18)
 
 **Asked:** *"Can you review D127, D135, D253, D255 and D256? Please adopt original game or decomp."* Reviewed against
-`docs/movement-in-the-binary.md` and the decomp; all five are ours, all five are withdrawn, and the three slices that replace
+`docs/archive/research/movement-in-the-binary.md` and the decomp; all five are ours, all five are withdrawn, and the three slices that replace
 them have a dependency order rather than a preference.
 
 **D127, the ground cap** - a re-plan was capped at two per route. Withdrawn. The rule came from `glouw/openempire`'s "re-examine the
@@ -7814,11 +7814,11 @@ plan chose. "Copy the game" is two halves; the step half is done, the route half
 
 **Basis.** Read from the original's binary: `FUN_008a4360`'s collision epilogue and *"no axis is ever dropped"*,
 `FUN_008aa480`'s point test on the ground, `FUN_00840830`'s boxes, `func_002690E0`'s box distance and
-`mConsecutiveSubstituteCount` (all recorded in `docs/movement-in-the-binary.md`).
+`mConsecutiveSubstituteCount` (all recorded in `docs/archive/research/movement-in-the-binary.md`).
 
 Measured in this tree, in the five rows under review: the 10% steps, the 14-and-3 red counts, and the 11,260 attempts.
 
-Register: `docs/behaviour-diff.md` rows 13, 21, 22, 26 and 29. Review:
+Register: `docs/archive/research/behaviour-diff.md` rows 13, 21, 22, 26 and 29. Review:
 `docs/reviews/2026-11-18-d276-adopt-the-game-on-slide-and-cap.md`.
 
 **Amendment (2026-11-18, on the A/B the slice ran): the order is reversed, and the game says so twice.** Measured on branch
@@ -7888,7 +7888,7 @@ wall and resource are the candidates).
 tile; then the slide goes; then the planner learns the radius. D117 and D177 stop being two rules and become the two ends of
 one: **the ground is a point, the things are boxes, the plan keeps the radius.**
 
-**Basis.** The original's binary, read at 2026-11-17 and recorded in `docs/movement-in-the-binary.md`: `FUN_008aa480` (point
+**Basis.** The original's binary, read at 2026-11-17 and recorded in `docs/archive/research/movement-in-the-binary.md`: `FUN_008aa480` (point
 test), `FUN_00840830` (boxes grown by the mover's radius, `<=` collision) and `func_002690E0` in the decomp's
 `src/unit/unit_action_distance.cpp` (box-to-box, overlap clamped to zero).
 
@@ -7958,7 +7958,7 @@ set, and that the red set survived the naming of the shape. The owner's answer i
 structure whole, at the cost of fidelity where the original's structure is still unread.
 
 **Basis.** The decompilation at `/opt/data/tools/src/aoe2-decomp` (the repo he named, cloned): `zone_path_eval.cpp`,
-`zone_spatial_pyramid_*`, `zone_spatial_entity_*`; the tree's `docs/movement-in-the-binary.md` for the cost model and the
+`zone_spatial_pyramid_*`, `zone_spatial_entity_*`; the tree's `docs/archive/research/movement-in-the-binary.md` for the cost model and the
 pause block; the owner's directive above.
 
 **Commits us to.** Deleting the listed mechanisms rather than keeping them behind a flag, and paying for the fixtures built
@@ -8006,7 +8006,7 @@ future filter of the map may reintroduce a path question before the sort.
 do."* Then, on the fixture that had made the attempt a half-fix: *"Is it unit test or conformance test? If unit test, drop
 it."* It is a unit test (`crates/sim/src/lib.rs`, `mod tests`), and it is dropped.
 
-**What the original does, read (`docs/movement-in-the-binary.md`, the collision block's epilogue).** A collision against the
+**What the original does, read (`docs/archive/research/movement-in-the-binary.md`, the collision block's epilogue).** A collision against the
 order's target ends the order (*"That collision is with our target, so we're done"*). **Any other non-past collision is
 counted and the mover re-plans** - *"We have %d non-past collisions and %d terrain collisions, repathing"* - and the **higher
 id of each surviving pair** is told `setPause(rand*1.25/32767 + 0.25)` (`0x8a80ff`-`0x8a8141`). The epilogue **never writes a
@@ -8195,14 +8195,14 @@ suite confirms it: 888 passed / 18 failed / 21 ignored, the same 18 reds and no 
 
 **How it arose.** The owner asked for Q1 - whether our gather seat *taken list* is the game's own mechanism - to be
 crosschecked against the game or the internet. It is **not**: the game sends every man to the resource he was given, the bodies are
-solid, men bump and stand (`docs/gather-seating-evidence.md` quotes the player reports and the guide), and a man who cannot get
+solid, men bump and stand (`docs/archive/research/gather-seating-evidence.md` quotes the player reports and the guide), and a man who cannot get
 there is **re-targeted to the nearest usable resource of the same kind**.
 
 **Ruled, on that evidence.** `World::standoff_point`'s taken list is a **deliberate difference** and stays only as a choice;
 `finish_blocked_orders` and `beside` are cut (the game's best-reported bug is wedged villagers that never resolve); **the D204
 re-task is the game's own rule and stays**. This reverses the previous hour's assumption, which had D204 in the cut set.
 
-**Basis.** `docs/gather-seating-evidence.md`: the corpus (`FUN_004aaea0` for `act_gath.cpp`, `FUN_004b90f0` for `tact_gth.cpp`) has
+**Basis.** `docs/archive/research/gather-seating-evidence.md`: the corpus (`FUN_004aaea0` for `act_gath.cpp`, `FUN_004b90f0` for `tact_gth.cpp`) has
 no seat picker; Capoch's guide; Age of Empires forum 289465 and 78029; r/aoe2 "Am I imagining this villager pathing bug?";
 `aoe2mc` #4063 (`NEXT = 5`). The decomp has no gather code at all.
 
@@ -8223,7 +8223,7 @@ was fed by are deleted (D271 withdrawn on the moving side; its gather-side remna
 
 **Why the game wins here.** The original gives no man a private place: its own players describe men piling onto one tree and
 standing pressed (*"If you send them to different trees within the same tile, they will usually stand still"*,
-`docs/gather-seating-evidence.md`), and D271 was a smoothing of exactly that which the owner had asked for before the parity
+`docs/archive/research/gather-seating-evidence.md`), and D271 was a smoothing of exactly that which the owner had asked for before the parity
 order.
 
 **Measured.** The witness was written first and watched failing: `crowd_piles_up::a_crowd_ordered_to_one_tile_piles_up` - three men
@@ -8249,7 +8249,7 @@ finding from the other end. What stops a unit is the **pause** (`setPause` 0.25-
 overlap to any depth, which is what the players see and what our own simultaneous-step artefact already produces (4576 raw is
 *less* than the game permits).
 
-**Basis and the unknown.** `docs/press-depth-evidence.md`; the corpus functions named above. Whether the resolver is dead in a
+**Basis and the unknown.** `docs/archive/research/press-depth-evidence.md`; the corpus functions named above. Whether the resolver is dead in a
 retail build or live in an earlier one is not established, and neither is the pause roll's distribution - neither changes the ruling.
 
 **Commits us to.** Before adding a physical floor, find the binary's own; if its answer is computed and thrown away, ours is not to be
@@ -8375,7 +8375,7 @@ rectangle at level 3 and `FUN_007f1100` recursing *down* the pyramid actually do
 
 **Measured.** Test-first, three failures deep: unresolved import, then a fixture that was not a game (no town centres), then green -
 **4 passed / 0.00 s**. The suite is **904 passed / 6 failed / 21 ignored** with the red set byte-identical to before, so the maps change
-no existing rule. Review: `docs/reviews/2026-11-19-p11a-the-four-levels.md`, evidence: `docs/pathfinding-levels-evidence.md`.
+no existing rule. Review: `docs/reviews/2026-11-19-p11a-the-four-levels.md`, evidence: `docs/archive/research/pathfinding-levels-evidence.md`.
 
 **Not decided here.** The level **descent** (11b) stays unbuilt: the descent reads bit `0x20` of a cell's *second* byte while the
 stamper writes the *first*, and the second byte's producer is unread. Guessing it would be the kind of deliberate difference the owner
@@ -8388,7 +8388,7 @@ ground, never cached across a change to it.
 
 **Ruling.** `Levels::descent(tile)` walks from level 3 down and stops at the first level whose cell holding that tile is unblocked, with
 level 0 as the floor. That is `FUN_007ee980`'s loop, and it is built on one **interpretation** - flagged as such here, in the code and in
-`docs/pathfinding-levels-evidence.md`:
+`docs/archive/research/pathfinding-levels-evidence.md`:
 
 - the loop tests bit `0x20` of a level cell's **second** byte, and the per-search stamper writes the **first** byte - so the second byte
   is not the search's own mark;
@@ -8457,7 +8457,7 @@ because the pyramid is built per call where the binary holds it and only re-stam
 **11d is therefore three steps, in this order**: (1) a **cached pyramid** - which, read against `Ground`, turns out to need a **modelling
 change first**: `blocked()` folds units and obstacles together and `block`/`unblock` fire on every unit step, so a cache would be stale
 every tick. The original keeps static obstacles in the level maps and **bodies as a live cost row (2000)**, so the step is to split
-`Ground`'s occupancy into **static blockers** and **bodies** (see `docs/pathfinding-levels-evidence.md`); (2) the coarse search measured again against 11.4 µs, with the O(n) frontier insert and the four lookups per
+`Ground`'s occupancy into **static blockers** and **bodies** (see `docs/archive/research/pathfinding-levels-evidence.md`); (2) the coarse search measured again against 11.4 µs, with the O(n) frontier insert and the four lookups per
 `step_cost` as the named suspects (a heap would fix the insert and break D299's ordering, so the fix is bounded insertion or buckets);
 (3) only then the switch, gated on the full suite and the acceptance run.
 
@@ -9196,7 +9196,7 @@ sent to re-cut P5 or re-land P1, which is exactly what the previous register did
 
 ## D331 - P7: the planner sees a body the mover is standing inside
 
-**`docs/parity-plan.md` P7, landed.** `standing_bodies` skipped every body within a quarter tile of the planning origin in both axes, where the
+**`docs/archive/research/parity-plan.md` P7, landed.** `standing_bodies` skipped every body within a quarter tile of the planning origin in both axes, where the
 original's search starts on the mover's own tile and puts **every stander the mover does not ignore** into it (`FUN_007f9d80`). Two bodies in
 one place is a state this engine reaches on purpose - D289 sends every man to the tile he was ordered to, D290 leaves no press floor - so the
 plan certified legs the step then refused.
@@ -9219,7 +9219,7 @@ match-length artefact rather than an economy signal - the stockpile line above i
 
 ## D332 - P4: ground that refuses a step is re-planned at once, not a second later
 
-**`docs/parity-plan.md` P4, landed.** `replan_after_ground` refused a re-plan until the route was `REPLAN_TICKS` (20) old, so a wall that
+**`docs/archive/research/parity-plan.md` P4, landed.** `replan_after_ground` refused a re-plan until the route was `REPLAN_TICKS` (20) old, so a wall that
 appeared in a walker's lane left him standing for up to a second while the search he needed waited out a timer. The original re-plans on the
 collision itself: *"We have %d non-past collisions and %d terrain collisions, repathing"* (`0x128b`).
 
@@ -9274,7 +9274,7 @@ and the published sources. Every claim below was checked against a line in `/opt
 186-191, and `iVar20` is read once - line 198, against `local_46c`, the expansion counter. The **frontier's** key is line 316:
 `stored = (stored_current - octile(current, goal)) + octile(neighbour, goal) + step(current, neighbour)`, which is `g + octile`
 because `stored_current` already is `g + octile`. So the original is an **octile A\*** (weight 1), and the sentence in
-`docs/movement-in-the-binary.md` (and D275, the gap register, `cost_model.rs`) that calls it "weighted A\* with a weight of about
+`docs/archive/research/movement-in-the-binary.md` (and D275, the gap register, `cost_model.rs`) that calls it "weighted A\* with a weight of about
 1.56" is a misreading of the budget. `ground.rs` implements the misreading. **Measured A/B**, one variable, seed 7, 48,000 ticks:
 baseline 5,989 searches at **28.9 expansions each, 54% exhausting the budget**, 1,727 re-paths, hash `e248486298910e28`, 10.04 s;
 with `g + octile` 45,088 searches at **11.8 each, 5.8% exhausting**, 41,557 re-paths, hash `9d5fea513f3f8efb`, both players alive
@@ -9316,7 +9316,7 @@ running the suite on the same two cores. Every number was re-taken idle.
 ## D335 - The road to 100%: the sequence, and the three things the online crosscheck changed
 
 **Asked for:** the order of steps to reach 100% conformance on pathfinding and obstacle avoidance, crosschecked against online
-sources. The answer is `docs/conformance-sequence.md`: thirteen steps, ordered by dependency and then by blast radius (the step
+sources. The answer is `docs/archive/research/conformance-sequence.md`: thirteen steps, ordered by dependency and then by blast radius (the step
 that moves **every** route first, so each later measurement is against a settled base), each with its source, the witness it
 owes, its size and its blocker. **"100%" is defined in three classes**: R (read and implementable from the sources in hand -
 ten steps), B (needs the matching binary or the running game - P3's inset, the 100/600 terrain bits, the octile table) and U
@@ -9953,7 +9953,7 @@ are not conformant with original game, decomp or online sources once and for all
 over and over that the original game and decomp are to be followed only to find out they were not..."*
 
 **What the bank actually looked like, measured rather than assumed.** 238 decision rows; **3** talked about the game while
-pointing at no source (all three honest: D151 quotes the owner and `docs/ai-extraction.md`, D166 is a rendering choice and says
+pointing at no source (all three honest: D151 quotes the owner and `docs/archive/research/ai-extraction.md`, D166 is a rendering choice and says
 so, D184 says its accident needs a model we do not have). So the *provenance* of the bank is not the disease. The disease is the
 other thing the tool cannot see: **a row that cites the right address and reads it wrong** - D348's "the margin is zero", D341's
 `has_route && moved` standing in for `isMoving`, my own D349 misreading of `FUN_007f9d80`'s `&&` this evening, D267 reading
@@ -10035,7 +10035,7 @@ back to the **base** anchor when the worker's own reach finds nothing (D149's sh
 **Conformance**: OURS (process). The owner, 2026-11-22: *"Is too many decisions causing problems with context being filled and
 starting to forget?"* - and the answer is yes, but not the way the question guessed.
 
-`docs/decisions.md` is **832,998 characters** (~210k tokens), larger than a context window: it cannot be loaded, so a session can
+`docs/archive/decisions-2026-11-24.md` is **832,998 characters** (~210k tokens), larger than a context window: it cannot be loaded, so a session can
 only grep it, and a ruling it does not already suspect exists is a ruling it will not apply. That is not hypothetical - a session
 on this date wrote **D349-D354** while **D150 already held the owner's pile rule**, and then built a fixture that could not tell
 the rule from its absence. `docs/decision-areas.toml` - the index built for exactly this (D166) - named **2** decisions and left

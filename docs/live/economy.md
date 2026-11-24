@@ -865,7 +865,7 @@ table, so no float enters a tick.
 **Measured on landing:** repaths **435 -> 240** (-45%), `made_room` **151 -> 96** (-36%), entities 142 -> **139**, `World::step`
 7.2 -> **6.7 us**, hash `ef7cdba9` -> `8999f1ba`. Ten men work one bush and eighteen work one tree at a body each.
 
-**Recovered record.** This entry was lost with the rest of the log when `docs/decisions.md` was truncated from 385,025 bytes to
+**Recovered record.** This entry was lost with the rest of the log when the bank was truncated from 385,025 bytes to
 1,937 in commit `12b1e35`; the text above is written from `docs/reviews/2026-11-12-no-cap-and-pass-through.md`, which measured it at
 the time. See `docs/reviews/2026-11-12-design-and-architecture.md`.
 
@@ -1147,7 +1147,7 @@ fixture comes off ignore. The gate is the acceptance match at 48,000 ticks - ent
 
 **Basis.** `crates/sim/tests/overlap.rs` (the fixture and its measurement); `crates/sim/src/world/step.rs` (`owned_place`'s
 staleness filter, `standoff_point`'s `taken`); `crates/sim/src/world/movement.rs` (the "past" clause and the inside rule);
-`docs/movement-in-the-binary.md`. Review: `docs/reviews/2026-11-16-d238-seat-shuffle.md`.
+`docs/archive/research/movement-in-the-binary.md`. Review: `docs/reviews/2026-11-16-d238-seat-shuffle.md`.
 
 
 ### D243 - the owner's four body invariants, measured: two hold, two do not (2026-11-16)

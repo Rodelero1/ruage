@@ -4,11 +4,11 @@ The owner's rule for every step is "compact first: persist state to files so a f
 2026-11-12 that file was **350,038 bytes** - twenty times the largest source file - and a session that read it (this one did, at
 101 KB and growing) spent its context on history instead of on the step. A "next step" that is 350 KB is not a next step.
 
-So: one file, one step, sixteen kilobytes, and everything older moves to `docs/history/`. The history is not deleted - it is already
+So: one file, one step, sixteen kilobytes, and everything older moves to `docs/archive/history/`. The history is not deleted - it is already
 in git, which is a better archive than a live file that the next session has to read.
 
     python3 tools/next_step.py --check      # nonzero if over the cap or not headed by the one open step
-    python3 tools/next_step.py --split      # move everything after the first block into docs/history/next-step-<date>.md
+    python3 tools/next_step.py --split      # move everything after the first block into docs/archive/history/next-step-<date>.md
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 NEXT_STEP = ROOT / "docs" / "next-step.md"
-HISTORY = ROOT / "docs" / "history"
+HISTORY = ROOT / "docs" / "archive" / "history"
 
 # Sixteen kilobytes is about four thousand words: a page a session reads in one go and still has context left to work with.
 CAP = 16_384
@@ -43,7 +43,7 @@ def check(text: str, cap: int = CAP) -> list[str]:
     if size > cap:
         problems.append(
             f"docs/next-step.md is {size:,} bytes, over the {cap:,} cap by {size - cap:,}: move everything after the first "
-            f"block to docs/history/ with `python3 tools/next_step.py --split`"
+            f"block to docs/archive/history/ with `python3 tools/next_step.py --split`"
         )
     return problems
 
@@ -63,9 +63,9 @@ def split(text: str) -> tuple[str, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="keep docs/next-step.md to one step, and its history in docs/history/")
+    parser = argparse.ArgumentParser(description="keep docs/next-step.md to one step, and its history in docs/archive/history/")
     parser.add_argument("--check", action="store_true", help="report problems; nonzero if there are any")
-    parser.add_argument("--split", action="store_true", help="move everything after the first block into docs/history/")
+    parser.add_argument("--split", action="store_true", help="move everything after the first block into docs/archive/history/")
     parser.add_argument("--file", default=str(NEXT_STEP), help="the file (defaults to docs/next-step.md)")
     args = parser.parse_args(argv)
 

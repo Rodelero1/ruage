@@ -321,7 +321,7 @@ which is also why the acceptance scenario from D62 needs them before it can boom
 availability and which unit it upgrades", and on modding: "What if I chose that scout cavalry will be upgrade of hussar, not
 the other way around?"*
 
-1. **The plan is written before the schema, and measured first.** `docs/unit-vocabulary.md` is the plan;
+1. **The plan is written before the schema, and measured first.** `docs/archive/research/unit-vocabulary.md` is the plan;
    `tools/vocabulary.py` is the inventory every number in it is measured against and it exits non-zero while the pack would
    block a name-keyed schema (today: **56** unnamed units, **28** duplicated names).
 2. **The edge is the unit of content, not a per-unit field.** An upgrade is `(from, to, tech)`; the tech is the actor. A
@@ -393,7 +393,7 @@ build the bonuses now - D219's deferral stands - and it settles three things tha
 1. **A civ is a row plus effects, never a name in `crates/`.** No engine code may know "British", nor that there are 31; a
    mod adds a civ by adding a `[[civ]]` row and the effect rows it points at. The engine's vocabulary for a bonus is a
    *capability* (`attack`, `line_of_sight`, `population`), and content chooses which civs get which.
-2. **Every bonus has to land in every consumer, or the mod is a lie.** This is what the R6 seam (`docs/civ-bonuses.md`) is
+2. **Every bonus has to land in every consumer, or the mod is a lie.** This is what the R6 seam (`docs/archive/research/civ-bonuses.md`) is
    for: five consumers already walk three effect tables today, and a sixth would be another place a new bonus can be
    half-applied. The seam's rule stands - one resolved table per player, consumers read it - and the requirement raises its
    priority, because "add a civ by config" is false while a bonus can silently reach four consumers out of five.
@@ -419,7 +419,7 @@ Two new data tests are red on the old code (`attackk`, `other:7`) and green here
 
 **Basis.** `crates/data/src/techs.rs` (`NAMED_ATTRIBUTES`, `UNREAD_ATTRIBUTES`, `knows_attribute`, the refusal in the
 modifier loader); `crates/data/tests/techs.rs` (three fixtures); the 29-name census of `config/gamedata/effects.toml`;
-`docs/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d233-moddable-civs.md`.
+`docs/archive/research/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d233-moddable-civs.md`.
 
 #### Amendment 1 (bank held two sections under one id)
 
@@ -485,7 +485,7 @@ it did not: `cb1f6a83a119a2a3`, bit-identical at 24,000 ticks.
    ticks_where_a_british_one_needs_500` went red. The rebuild now runs **after** the civ table is stored, with the reason
    next to it.
 2. **The bars were folded from every source.** A kind-102 row sitting in a *team bonus* started barring a tech, which no
-   consumer has ever done and whose meaning in the original is **unverified** (`docs/civ-bonuses.md` records the two rows).
+   consumer has ever done and whose meaning in the original is **unverified** (`docs/archive/research/civ-bonuses.md` records the two rows).
    The test suite did not see it: entity count and repath counts were unchanged at 24,000 ticks. The **acceptance hash** did -
    `051e29ec69087825` against `cb1f6a83a119a2a3`. The bars now come from the tech tree only, which is the source
    `barred_by` has always read, and the question of what a team-bonus bar *should* do stays open rather than being answered
@@ -507,7 +507,7 @@ That should put the lookup below the old walk; it is not claimed until measured.
 
 **Basis.** `crates/sim/src/world/bonuses.rs` (`BonusTable`, `Source`, `ResourceRow`, `World::rebuild_bonuses`,
 `World::bonuses`); the five consumers in `lib.rs` and `world/research.rs`; `crates/sim/tests/bonuses.rs` (three fixtures, red
-on a once-only fill); `docs/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d234-bonus-table.md`.
+on a once-only fill); `docs/archive/research/civ-bonuses.md` (R6). Review: `docs/reviews/2026-11-16-d234-bonus-table.md`.
 
 
 ## Open questions (U-register, this area)

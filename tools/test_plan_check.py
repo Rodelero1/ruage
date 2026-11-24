@@ -1,6 +1,6 @@
 """What `tools/plan_check.py` must be able to refuse, and the real document it must accept.
 
-The dependency tree is a status table whose whole value is that a row can be checked (`docs/dependency-tree.md`, §1 and
+The dependency tree is a status table whose whole value is that a row can be checked (`docs/archive/research/dependency-tree.md`, §1 and
 §11). A table nobody checks rots in the two ways that have cost this project sessions: an id that is referred to and never
 defined, and an open item that is defined and never scheduled. Both are silent, so both are tests.
 

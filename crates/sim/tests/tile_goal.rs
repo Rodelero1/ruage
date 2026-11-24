@@ -8,7 +8,7 @@
 //! The owner sees the second half as bodies *in* walls: "villagers went through the house". The first half is subtler and
 //! just as visible - click a tile, and everybody piles onto the same corner of it.
 //!
-//! Written before the implementation (D7). `docs/decisions.md` D114.
+//! Written before the implementation (D7). `docs/archive/decisions-2026-11-24.md` D114.
 
 use std::path::PathBuf;
 

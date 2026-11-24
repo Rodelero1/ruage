@@ -34,14 +34,14 @@ historical saves. Reading all 31 took **0.74 s**, 0 refused.
 | 12.5 | 23 (the four 2026 recordings, `brit1`-`brit13`, `britXhuns`, `Alaric`, `Bari`, `Random_map`, `khmer`, `sforza`) | 1006.0, except `Bari` and `khmer` at 1005.0 | 4-15 per file |
 | 12.36 | 8 (`1`, `Berber`, `ETHIOP`, `Magyars`, `Magyars1`, `Persia`, `malinese`, `portuguese`) | 1000.0 | **0** |
 
-**That second row closes an open question in `docs/oracle.md`.** It recorded that 8 of 13 saves "yield no name records"
+**That second row closes an open question in `docs/archive/research/oracle.md`.** It recorded that 8 of 13 saves "yield no name records"
 and guessed at campaign-vs-random-map or patch revisions. The split is now exact and mechanical: **the eight files that
 yield no `0x0A60` records are the eight at version 12.36.** Whether they store names in another encoding, or store none,
 is not known - only that this framing finds nothing in them, which is a statement about the framing.
 
 ## Errata
 
-- **`VER 9.4\0\0\0HA\0` was a misreading, and it was mine.** `docs/oracle.md` and the 2026-11-01 note both quote a `HA`
+- **`VER 9.4\0\0\0HA\0` was a misreading, and it was mine.** `docs/archive/research/oracle.md` and the 2026-11-01 note both quote a `HA`
   word in the header, and the first version of this reader *required* it - which is how it came to refuse eight of the
   user's own saves (`no HA tag at offset 10: b'\x8f\xc2EA'`). There is no `HA` tag: `12.5f` is `0x41480000`, whose upper
   two bytes are `0x48 0x41` - the ASCII `HA`. The initialiser that made it look deliberate (`FUN_005e60b0` writing
@@ -170,7 +170,7 @@ the "known interval" when the copies have lost their timestamps.
 
 The world follows the scenario and the map in the same byte stream, in this order. All addresses are image-base
 coordinates in `AoK HD.exe` (32-bit PE, 2018-08-22) and all quotes are from the exported pseudocode corpus
-(`/opt/data/tools/rea/pseudo-aokhd`, 15,465 functions, see `docs/re-toolchain.md`).
+(`/opt/data/tools/rea/pseudo-aokhd`, 15,465 functions, see `docs/archive/research/re-toolchain.md`).
 
 | # | Section | Reader | What it holds |
 |---|---|---|---|

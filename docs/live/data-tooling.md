@@ -294,7 +294,7 @@ into `None`, so their tests reported **passed** while asserting nothing.*
    phoenix\age2hd_archive_5.7_with_hotfix` - HD 5.7 was cut from the DE tree, which `SPEC.md` asserted from one string and
    now has 84 paths behind it.
 3. **The module map confirms U7's shape from a second source**: `path.cpp` **and** `pathsys.cpp` separately, `motion.cpp`,
-   `move_obj.cpp`, `act_gath.cpp`, four `tact_*.cpp` - the same six-pather picture that `docs/movement-in-the-binary.md`
+   `move_obj.cpp`, `act_gath.cpp`, four `tact_*.cpp` - the same six-pather picture that `docs/archive/research/movement-in-the-binary.md`
    built from the decompiled corpus, now rebuildable without the corpus.
 4. **The new part is the class taxonomy.** 31 `Comm*` classes name a turn-synchronised command stream:
    `CommPacketSyncTurn`, `CommPacketSyncCmdCount`, `CommPacketPlayerCommand`, `CommPacketChecksum`, plus speed change,
@@ -302,7 +302,7 @@ into `None`, so their tests reported **passed** while asserting nothing.*
    count, a checksum**.
 5. **The rate is still open, and the arithmetic says why.** 31,104 `SYNC` ops over 3,066.04 s is **10.15/s**, one every
    ~98.6 ms - every *second* turn at 20 Hz, and equally consistent with a 10 Hz sim, which the dat's 50 ms authoring
-   granularity rules out. Recorded as a hypothesis in `docs/oracle.md`; not a settled rate.
+   granularity rules out. Recorded as a hypothesis in `docs/archive/research/oracle.md`; not a settled rate.
 6. **Nothing is copied.** A class name and a build path are facts about a file this project owns. genie is AGPL-3.0 and
    the UGC guide GPL-3.0; neither was read for this step, and the thread's own "NEVER COPY" rule is the reason.
 7. **The tool has one rule per lesson already paid for**: a missing binary is an `exit 2`, never an empty map (D130); and a
@@ -409,7 +409,7 @@ have been made or are yet to be made and how they were made (research, decided b
 and that would help me to spot gaps and bad decisions." Answers to the three shapes offered: **generated rather than
 authored**, **the open register, the evidence ladder and broken references**, committed at **`docs/site/`**.*
 
-1. **Derived, never authored.** `tools/decisions.py` reads `docs/decisions.md` and the U-register in
+1. **Derived, never authored.** `tools/decisions.py` reads `docs/archive/decisions-2026-11-24.md` and the U-register in
    `docs/mechanics/README.md` and writes one self-contained HTML file. Nothing on the page is typed by hand, so the page
    cannot drift from the corpus - and when a label is wrong, the classifier is wrong in a way a reader can see.
 2. **Every label carries the phrase it was read from.** A basis is recorded only when the decision's own text says where
@@ -429,7 +429,7 @@ authored**, **the open register, the evidence ladder and broken references**, co
 6. **`unresolved` is a reading list, not a verdict.** Language that admits doubt ("stays a hypothesis", "not
    established") is quoted, unless the same sentence says the doubt was settled ("tested and is falsified") - because
    22 decisions flagging themselves is useful and 120 would be noise.
-7. **Where it lives.** `docs/site/index.html`, committed, because `docs/decisions.md` is committed. Rebuild with
+7. **Where it lives.** `docs/site/index.html`, committed, because `docs/archive/decisions-2026-11-24.md` is committed. Rebuild with
    `make decisions`; `make decisions-check` parses and reports without writing and fails on a heading it cannot place.
    It is deliberately **not** in `make check`: a docs tool cannot regress the engine, and adding it would make every
    commit pay for the corpus.

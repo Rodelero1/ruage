@@ -7,7 +7,7 @@
 //! (`0xf98`: "Looking for a LOW LEVEL path (mid-level path failed)") - a fall-through, not a gate.
 //!
 //! **What this fixture pins.** `descent` is the coarsest **passable** cell (D297, re-read 2026-11-22 - see
-//! `docs/pathfinding-levels-evidence.md`). The scene puts one blocker in the start's 4-tile cell but outside its 2-tile
+//! `docs/archive/research/pathfinding-levels-evidence.md`). The scene puts one blocker in the start's 4-tile cell but outside its 2-tile
 //! cell, so `descent(start) == 1`: under the old floor the flat search answers, under the new one the search runs at level
 //! 1 and the chain's waypoints are crossings of **2-tile** boundaries (`n * 2 * scale`), which no tile-centre route can
 //! produce.

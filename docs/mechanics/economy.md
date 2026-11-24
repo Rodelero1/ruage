@@ -60,7 +60,7 @@ the dat (civ 1), cross-checked against the published table:
 
 Eight of nine land resources agree with the published table to within rounding. **Farming is
 the outlier**, and it is now resolved by decision rather than by measurement (D5,
-`docs/decisions.md`): the dat gives the farmer variant 0.530 and the farm *building* (`FARM`,
+`docs/archive/decisions-2026-11-24.md`): the dat gives the farmer variant 0.530 and the farm *building* (`FARM`,
 id 50) **0.400**. Checked and ruled out: `work_value1` is 1.0 on every gather task, so nothing
 scales 0.530 down to a plausible number.
 
@@ -161,7 +161,7 @@ next tree of the same kind), and movement ignores obstacles until A* lands.
   `work_rate` per task variant, multipliers are `c=13` type-5 commands.
 - ~~**U11** farming rate~~ — **resolved by decision (D5)**: effective rate 0.400, the farm
   building's own `work_rate`, capping the villager's 0.530. Rationale and the cheap
-  re-measurement test are in `docs/decisions.md`.
+  re-measurement test are in `docs/archive/decisions-2026-11-24.md`.
 - ~~**U8** the 190-entry per-civ `resources` array~~ — **answered 2026-11-02**: it is the player-resource table, named
   entry by entry in the UGC guide's `resources.md`, and the playable civs agree on every value but index 34 (U8 in
   `README.md`).

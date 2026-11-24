@@ -218,7 +218,7 @@ target = "enemy_town_center"
 
 # --- Where the villagers go ---------------------------------------------------------------------------------------
 #
-# Villager shares, in the shape the game's own AI uses (`docs/ai-of-the-game.md`): a percentage per resource, per
+# Villager shares, in the shape the game's own AI uses (`docs/archive/research/ai-of-the-game.md`): a percentage per resource, per
 # villager count, which the engine applies to idle villagers. The numbers are HD's own
 # `Economy/Low-pop Villager Distribution.per`, whose 19 rules cover 1 to 26+ villagers and every row sums to 100; the
 # row with the highest `at_villagers` the player has reached is the one that applies, and a resource a row does not

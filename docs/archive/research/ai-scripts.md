@@ -8,7 +8,7 @@ inventing a second one, and so the three forks below get an owner's ruling befor
 
 ## What exists today
 
-**D91/D92/D93 are decided** (`docs/decisions.md`, 2026-11-01) and the first piece is in the tree: `tools/counters.py`
+**D91/D92/D93 are decided** (`docs/archive/decisions-2026-11-24.md`, 2026-11-01) and the first piece is in the tree: `tools/counters.py`
 derives damage, damage per second and damage per resource-second between any roles the pack names, from the pack's own
 attack/armour classes, with the engine's formula - including the part that is easy to get backwards, that a class the
 target does not list contributes **nothing** (`armour_missing_sentinel`). Against a knight the order it prints is

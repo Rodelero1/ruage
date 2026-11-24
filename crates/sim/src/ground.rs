@@ -177,7 +177,7 @@ impl Clear {
     }
 }
 
-/// The original's cost of one cardinal step (`docs/movement-in-the-binary.md`, `FUN_008007f0`).
+/// The original's cost of one cardinal step (`docs/archive/research/movement-in-the-binary.md`, `FUN_008007f0`).
 pub const CARDINAL: u32 = 16;
 /// The same table's diagonal: `16 x sqrt2`, rounded.
 pub const DIAGONAL: u32 = 23;

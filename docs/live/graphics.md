@@ -117,7 +117,7 @@ a **shape**, not a second simulation.*
 
 *2026-11-08. The owner, with a screenshot of a villager standing on a town centre: *"villager still goes through the town centre … maybe
 the white diamond laying around the building is too small … I do remember that being so in the game. How is building collision handled by
-the game?"* Research: `docs/building-collision.md`.*
+the game?"* Research: `docs/archive/research/building-collision.md`.*
 
 1. **The game separates three things**: collision = the dat's `radius[0]`/`radius[1]` as **half-extents in tiles** (town centre 4x4,
    house 2x2, wall 1x1); the footprint is **not all solid** - the town centre keeps a walkable **yard** (D115, and aoe2mc's *"let units

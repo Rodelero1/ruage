@@ -12,11 +12,18 @@ live files are generated — re-run, never hand-edit.
 ## Who loads what (agent sessions first)
 
 1. This file — overview, ~2k tokens.
-2. `docs/decision-index.md` — one line per bank row (345 rows, ~8k tokens). Grep the bank by ID from here.
+2. `docs/decision-index.md` — one line per bank row (345 rows, ~8k tokens). Grep the bank (`docs/archive/decisions-2026-11-24.md`) by ID from here.
 3. One `docs/live/<area>.md` only when touching that area. Do not load all areas.
-4. `docs/divergence-register.md` — the single live defect/OURS list (D352).
+4. `docs/divergence-register.md` — the zero-divergence burn-down list: every place the engine still differs, each with its closing step. Goal: this file becomes empty.
 5. `docs/mechanics/` — dat facts + U-unknowns. Never duplicated here.
-6. `docs/reviews/INDEX.md` — 314 notes, evidence only, never truth.
+6. `docs/reviews/INDEX.md` — 318 notes, evidence only, never truth.
+
+## Where things live (Phase A, 2026-11-24)
+
+- Root keeps entry files only: `decision-index.md`, `divergence-register.md`, `next-step.md`, `prior-art.md`, `sources.md`, `licensing.md`, `config.md` (+ tomls, `hermes.container`).
+- `docs/live/` — the authoritative rulings, 15 area files, generated. This hub + `conflict-table.md` (all 15 conflicts ruled).
+- `docs/archive/` — `decisions-2026-11-24.md` (frozen bank, provenance only), `research/` (34 moved research files), `history/` (7 next-step snapshots), 2 pending witness drafts.
+- `docs/mechanics/` — findings source. `docs/reviews/` — frozen evidence log. `docs/site/` — generated index page.
 
 ## Truth hierarchy (agreed 2026-11-24)
 
@@ -28,7 +35,7 @@ When sources conflict, in this order:
 4. **Owner ruling** — recorded as OURS, never as GAME.
 5. **Community / prior art** — UNVERIFIED until cross-checked (openage, openaok, genie, `samuelcaldas/age-of-empires-2-decomp`, wiki, talk slides).
 
-End state: zero live contradictions. See `conflict-table.md` for the ones still open.
+End state: zero live contradictions and zero divergence — the register above is the burn-down list. See `conflict-table.md` for the ruled conflicts.
 
 ## Strict row format (every live row)
 
@@ -47,20 +54,20 @@ Rules: no GAME without source pointer. No load-bearing UNVERIFIED. Measurements 
 
 Combat, Pathfinding & movement, Economy, Buildings & construction, Production & queues, Techs & civs, Vision & fog, Victory & defeat, UI, Graphics, AI, Simulation core, Data & tooling, Licensing & publication, Project process.
 
-Live files will be `docs/live/<area>.md` with `Decisions / GAME / OURS / UNVERIFIED` sections inside (matrix: overview + detail without loading everything).
+Live files are `docs/live/<area>.md` with bank-verbatim bodies plus generated scaffolding (matrix: overview + detail without loading everything).
 
 ## Second-rung sources (2026-11-24 note)
 
-- `samuelcaldas/age-of-empires-2-decomp` (AoC 1.0c / AoK 2.0a / PS2, no licence): behavior shape only, addresses are not HD. Any number needs an HD `FUN_*`. Already used for P11 zone layer (`docs/sources.md`, `docs/pathfinding-conformance.md`); silent on gather/work (see `docs/prior-art.md` 2026-11-17).
-- `Zaydme/openaok` (MIT, 1999 AoK, 32.32 fixed at 60 Hz): design precedent (determinism, integer A*, AI interpreter, UI in `docs/ui-from-openaok.md`). Tick and version mismatch vs D16 20 Hz must be named on every cite.
+- `samuelcaldas/age-of-empires-2-decomp` (AoC 1.0c / AoK 2.0a / PS2, no licence): behavior shape only, addresses are not HD. Any number needs an HD `FUN_*`. Already used for P11 zone layer (`docs/sources.md`, `docs/archive/research/pathfinding-conformance.md`); silent on gather/work (see `docs/prior-art.md` 2026-11-17).
+- `Zaydme/openaok` (MIT, 1999 AoK, 32.32 fixed at 60 Hz): design precedent (determinism, integer A*, AI interpreter, UI in `docs/archive/research/ui-from-openaok.md`). Tick and version mismatch vs D16 20 Hz must be named on every cite.
 
 Both are rung 2: below binary/dat/save, above folklore. Read for facts, write our own sentences.
 
 ## What is frozen
 
-- `docs/reviews/` — immutable log. Correct by new live row, never by editing a note.
-- `docs/archive/decisions-2026-11-24.md` — the frozen bank (provenance only). Live files are generated from it; never hand-edit them, never revive the bank.
-- Sprawl (`parity-plan.md`, `pathfinding-gap-register.md`, `pathfinding-crosscheck-*.md`, `gates-research.md`, `behaviour-diff.md`, `conformance-sequence.md`, `crosscheck-2026-11-19-rulings.md`, `movement-in-the-binary.md` except as evidence, `building-collision.md`, `press-depth-evidence.md`, `gather-seating-evidence.md`) → archive. Live defect list stays `divergence-register.md`.
+- `docs/reviews/` — immutable log (old paths inside notes resolve via git history). Correct by new live row, never by editing a note.
+- `docs/archive/decisions-2026-11-24.md` — the frozen bank (provenance only; one pointer-maintenance pass kept its citations live — git history holds the original bytes). Live files are generated from it; never hand-edit them, never revive the bank.
+- `docs/archive/research/` + `docs/archive/history/` — moved once, citations rewritten mechanically, verified green. The live defect list stays `divergence-register.md` until empty.
 
 ## Done criteria (agreed)
 

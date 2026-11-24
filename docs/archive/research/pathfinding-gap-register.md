@@ -3,13 +3,13 @@
 > **SUPERSEDED BY D279 (2026-11-18).** The owner ordered the movement layer deleted and re-ported from the decompilation;
 > this register's "ours" column describes files that no longer exist (`movement.rs`, `short.rs`, `path.rs`) and divergences
 > that went with them (the slide, `TakeAtRest`, rule 3, the place model, the radius in the planner). Read it as the *research*
-> that led to the port - the original's side of every row still stands - and read `docs/decisions.md` D279 plus
+> that led to the port - the original's side of every row still stands - and read `docs/archive/decisions-2026-11-24.md` D279 plus
 > `docs/next-step.md` for what the engine does now.
 
 *Written 2026-11-18, on the owner's ask: evaluate the original's pathfinding and obstacle avoidance, compare this engine
 against it, and plan the difference to zero. Sources: `AoK HD.exe` read at the addresses named below
-(`docs/movement-in-the-binary.md`), the matching decompilation (`samuelcaldas/age-of-empires-2-decomp`, `src/zone/`,
-`src/unit/`), and the first-party talk (`docs/pathfinding-from-the-talk.md`).*
+(`docs/archive/research/movement-in-the-binary.md`), the matching decompilation (`samuelcaldas/age-of-empires-2-decomp`, `src/zone/`,
+`src/unit/`), and the first-party talk (`docs/archive/research/pathfinding-from-the-talk.md`).*
 
 ## 1. What the original does, as one model
 

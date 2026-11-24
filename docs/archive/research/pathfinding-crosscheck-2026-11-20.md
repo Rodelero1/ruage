@@ -1,9 +1,9 @@
 # Pathfinding and obstacle avoidance: where we match, where we differ (crosscheck, 2026-11-20)
 
 *Requested by the owner: crosscheck our implementation against the original game, the decompilation and our own sources, and **flag the
-differences**. Sources: the REA pseudocode corpus (`/opt/data/tools/rea/pseudo-aokhd`, HD 5.7), `docs/pathfinding-levels-evidence.md`,
-`docs/movement-in-the-binary.md`, `docs/pathfinding-conformance.md` (which carries the AoC decompilation's statements),
-`docs/press-depth-evidence.md`, and the code as it stands at `b262c1a`.*
+differences**. Sources: the REA pseudocode corpus (`/opt/data/tools/rea/pseudo-aokhd`, HD 5.7), `docs/archive/research/pathfinding-levels-evidence.md`,
+`docs/archive/research/movement-in-the-binary.md`, `docs/archive/research/pathfinding-conformance.md` (which carries the AoC decompilation's statements),
+`docs/archive/research/press-depth-evidence.md`, and the code as it stands at `b262c1a`.*
 
 ## What matches, with the anchor
 

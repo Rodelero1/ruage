@@ -1,7 +1,7 @@
 //! **A crowd ordered to one tile all go to that tile.** The owner, 2026-11-19: *"Drop it and let the crowds jam. I want the start
 //! as close to the game as sensible. Upgrades may only come later."* D271 gave every follower a ring place of its own, so a crowd
 //! ordered to one spot spread itself around it; the original does not - the players' own reports are men piling onto one tree and
-//! standing pressed against each other (`docs/gather-seating-evidence.md`).
+//! standing pressed against each other (`docs/archive/research/gather-seating-evidence.md`).
 //!
 //! So the claim is the game's: with three men ordered to one tile, **at least two of them end pressed against a friend** - closer
 //! than their own tile centres allow - which can only happen when they share the goal. D271's fan-out makes every man a tile of his

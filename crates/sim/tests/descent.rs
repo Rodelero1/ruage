@@ -22,7 +22,7 @@
 //! whose cell is** - the fast coarse search in the open, fine cells in clutter, and level 0 (the tiles) as the floor.
 //!
 //! That reading is the only one that matches the rest of the machine, and it is recorded as an *interpretation* in
-//! `docs/pathfinding-levels-evidence.md`, not as a certainty: the byte's producer has not been read.
+//! `docs/archive/research/pathfinding-levels-evidence.md`, not as a certainty: the byte's producer has not been read.
 //!
 //! Written before the code (D7, SPEC §11).
 

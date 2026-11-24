@@ -1,6 +1,6 @@
 """The install's own module map: source paths and RTTI classes inside `AoK HD.exe` (D140).
 
-**Why this exists.** `docs/movement-in-the-binary.md` built the movement map from the decompiled corpus's embedded assert
+**Why this exists.** `docs/archive/research/movement-in-the-binary.md` built the movement map from the decompiled corpus's embedded assert
 strings. That corpus was produced by a toolchain on this box; the strings it carries come from *the binary we own*. This
 tool reads them out of the install directly, so the evidence is ours end to end and the map can be rebuilt without the
 corpus at all.
@@ -18,7 +18,7 @@ name. Nothing here is copied from another project (see `docs/licensing.md`).
 Run:
     uv run python tools/exe_map.py                  # counts, families, and the Comm* list
     uv run python tools/exe_map.py --json           # the same report, machine-readable
-    uv run python tools/exe_map.py --write          # docs/binary-class-map.md
+    uv run python tools/exe_map.py --write          # docs/archive/research/binary-class-map.md
 """
 
 from __future__ import annotations

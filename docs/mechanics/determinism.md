@@ -174,7 +174,7 @@ order:
 4. **Per-player bracket**: `+0x130` before the object walk, `+0x68` after it, `+0x134` for each player already visited;
    then three more per-player loops gated on `FUN_00727810()`.
 5. **The turn is real, and it is `pturn`.** The index at `+0x100` is advanced by one at the end of the update and wrapped
-   at the player count - and `+0x100` is `pturn`, the field `docs/save-format.md` reads out of the save header. This is the
+   at the player count - and `+0x100` is `pturn`, the field `docs/archive/research/save-format.md` reads out of the save header. This is the
    **`Turn`** step the DE schedule above lists *after* the players, found independently in 5.7. It is T16's axis.
 
 What is still not read: the order **inside** one object's update. The DE port's `world/after_step.rs` names one (the step,

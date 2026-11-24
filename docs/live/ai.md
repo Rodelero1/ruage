@@ -9,7 +9,7 @@
 *Area:* AI
 *Status:* decided
 
-*Read from the install, not guessed: `docs/ai-of-the-game.md`. The acceptance script had been a list of timestamps for
+*Read from the install, not guessed: `docs/archive/research/ai-of-the-game.md`. The acceptance script had been a list of timestamps for
 months of game time; HD's own AI never writes one.*
 
 **(1) `[[rule]]`: a condition and one action, re-evaluated.** `Economy/Dark Age.per` trains a villager while food is
@@ -113,7 +113,7 @@ loads `[policy]` or a `[[rule]]` points at the new files.
 - **Layout: a base AI plus a per-civilisation delta** ("per civ delta sounds more sensible"). The base holds the rules
   every civ shares; `config/ai/civ/<name>.toml` carries only what that civ does differently. This matches what the
   original's own scripts do in spirit - civ differences are the exception, not a script set per civ
-  (`docs/ai-scripts.md` measured 15 `(civ-selected ...)` uses across 39 files) - while keeping "what does Britons do"
+  (`docs/archive/research/ai-scripts.md` measured 15 `(civ-selected ...)` uses across 39 files) - while keeping "what does Britons do"
   answerable in one file, which is the maintenance property the owner asked for.
 - **Still open: derived defaults.** Whether a civ's *tuning* is derived from the bonuses already in `civs.toml` (with a
   hand-written entry overriding) or authored per civ. The distinction is about the *values*, not the files: a delta file
@@ -271,7 +271,7 @@ Four rulings, each forced by a measurement rather than chosen:
 *Area:* AI
 *Status:* decided
 
-**Conformance**: OURS - the owner's instruction of 2026-11-07 (quoted below), with the inventory in `docs/ai-extraction.md`.
+**Conformance**: OURS - the owner's instruction of 2026-11-07 (quoted below), with the inventory in `docs/archive/research/ai-extraction.md`.
 
 *2026-11-07. The owner: "By extract AI I mean removing all the AI controls from the binary and moving it exclusively into ai
 files. Do this first." And: "every unit control should be removed from game code and moved to AI." Answers given to the ten
@@ -281,7 +281,7 @@ original; disabled rules are extracted too; **pass condition is a working econom
 1. **The line is choice vs mechanism.** Simulation stays in Rust (movement, collision, pathfinding, damage, harvest rates,
    production timers, vision, death, rot, validation, geometry). A **choice made for a player** — which node, which tile,
    which unit, whom to fight, when to redistribute villagers — moves to `config/ai/*.toml`.
-2. **The inventory is `docs/ai-extraction.md`**: nine choices currently in Rust, each with its file and line, plus the rows
+2. **The inventory is `docs/archive/research/ai-extraction.md`**: nine choices currently in Rust, each with its file and line, plus the rows
    that must **not** move (`site_fits`/`site_refusal` validation, `approach_tile` geometry, `settle_blind_sites` bookkeeping,
    `step_leashes`, `step_conversion`, order fulfilment).
 3. **`nearest_like` stays in the engine**: the original's engine also continues a villager on a nearby resource; D148 (only

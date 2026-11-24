@@ -1,4 +1,4 @@
-//! Villager shares: the engine's side of "keep four on wood" (the game's own AI shape, `docs/ai-of-the-game.md`).
+//! Villager shares: the engine's side of "keep four on wood" (the game's own AI shape, `docs/archive/research/ai-of-the-game.md`).
 //!
 //! The AI never assigns a villager to a tree. It states a **percentage per resource** and the game moves idle villagers
 //! to meet it. Written before the implementation (D7).

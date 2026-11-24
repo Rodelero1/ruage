@@ -213,7 +213,7 @@ one.** That is a correctness fix - the dat's speed is tiles per second - and it 
 the old speed, including `config/scenario.toml` (one step moved 380 s -> 390 s; see the review).
 
 Still to come, and next: the route's **corners** are tile centres, not the corners of the obstacles expanded by the body's
-radius (`docs/pathfinding-from-the-talk.md`), so a walker still turns at the middle of a tile and can graze a wall by half
+radius (`docs/archive/research/pathfinding-from-the-talk.md`), so a walker still turns at the middle of a tile and can graze a wall by half
 a tile. Everything else about collision - the goal exemption, the both-corners rule, the one nudge per route - is
 unchanged. A change of this size is measured against `HEAD` interleaved, and the acceptance hash moves: what a unit walks
 to is what it does next.
@@ -230,7 +230,7 @@ zero, body inside the wall, which the owner saw as "villagers went through the h
 away: **1 raw unit** from the wall with the body's 4,000.
 
 `crates/sim/src/short.rs` is the answer, and it is the algorithm the original's maintainers documented
-(`docs/pathfinding-from-the-talk.md`): the body is shrunk to a point and every obstruction expands by its radius; a ray at
+(`docs/archive/research/pathfinding-from-the-talk.md`): the body is shrunk to a point and every obstruction expands by its radius; a ray at
 the goal, and where it hits, a walk over the corners of the merged rectangles. The walk is a **visibility graph** rather than
 the talk's edge-following - the same geodesic, and an invariant that is much easier to test (an edge exists only where a
 straight line enters no expanded rectangle's interior).
@@ -433,7 +433,7 @@ https://github.com/glouw/openempire?"*
      for the ticks of a pass.
 
 9. **What the first-party deck says about the policy, added 2026-11-06 while checking the research thread** (Klingers,
-   Meeting C++ 2025, page 9 - `docs/pathfinding-from-the-talk.md`): *"In Age of Empires 2: Units bump into others, stop and
+   Meeting C++ 2025, page 9 - `docs/archive/research/pathfinding-from-the-talk.md`): *"In Age of Empires 2: Units bump into others, stop and
    repath around. **No pushing allowed**. Formations allow for some friendly overlap."* Consequences, which narrow the
    choice:
    - **B is not the game.** Two bodies do not slip past each other; overlap in AoE2 belongs to **formations**, not to a
@@ -688,7 +688,7 @@ node's blocked ground and re-plan, one every 217 ticks of 36,000.
 *Status:* decided
 
 **What it says.** A body blocks whoever it belongs to. The collision block in the original has no player, team or alliance
-test anywhere in it and its query passes an owner sentinel (`docs/movement-in-the-binary.md`), and the owner ruled on
+test anywhere in it and its query passes an owner sentinel (`docs/archive/research/movement-in-the-binary.md`), and the owner ruled on
 2026-11-13: *"Adopt original game behaviour. Don't make difference of friend or foe as in original game."* So `hostile` is
 gone from `collide`; a friend blocks, slides, gives way or re-paths exactly as an enemy does. **D189's "your own units are
 not walls" is withdrawn** - it was chosen to make a crowd deliverable, not because the game does it.
@@ -736,7 +736,7 @@ implemented items is enough"* - match resolution is not the acceptance test at t
 
 **What the binary says, and it agrees.** `FUN_008a4360`'s collision block classifies each collision by **unit id against the
 order's target** and nothing else; there is no player, team or alliance test anywhere in it, and the collision query is issued
-with an owner sentinel rather than the mover's player (`docs/movement-in-the-binary.md`, read 2026-11-13). So a friend is a
+with an owner sentinel rather than the mover's player (`docs/archive/research/movement-in-the-binary.md`, read 2026-11-13). So a friend is a
 non-past collision exactly like an enemy, and the original's answer is to **repath** around it, not to pass through it.
 
 **This withdraws D189's point 1** ("your own units are not walls"). That rule was chosen to make a crowd deliverable, not
@@ -852,7 +852,7 @@ is the body a future test has to find, watched by position, not by `made_room`.
 *Status:* decided
 
 **What it says (owner, 2026-11-14: *"1"*).** Copy the original's collision tie-break rather than invent one. Read out of
-`AoK HD.exe` byte for byte (`docs/movement-in-the-binary.md`, last two sections): when a step's collision list holds a unit
+`AoK HD.exe` byte for byte (`docs/archive/research/movement-in-the-binary.md`, last two sections): when a step's collision list holds a unit
 that is not the order's target, the mover compares **`[vtable+0x2b4]`** on both units - a virtual call whose move-object
 implementation returns `*(int*)(this+8)`, the object handle - and the unit with the **higher** value is told to pause:
 
@@ -985,7 +985,7 @@ filled from the command rather than from the tick.
 
 **Basis.** `FUN_008007f0`, `FUN_00801a20`, `FUN_007fe010`, `FUN_007ffd70`/`FUN_007fffe0` (read 2026-11-14); the Forgotten
 Empires forum answer *Investigations into Pathfinding* (2026); the DE talk's *"units bump into others, stop and repath around.
-No pushing allowed"* with "some friendly overlap" (`docs/pathfinding-from-the-talk.md`, page 9); the owner's ruling above.
+No pushing allowed"* with "some friendly overlap" (`docs/archive/research/pathfinding-from-the-talk.md`, page 9); the owner's ruling above.
 Review: `docs/reviews/2026-11-14-d207-group-overlap.md`.
 
 
@@ -1023,7 +1023,7 @@ tick). So today the *past* test can never be true (`moved` is always the current
 empty. The two rules that read it are therefore inert, and the work that makes them live - one guard plus the timing the
 first attempt measured at 2.3x - is `docs/next-step.md`'s first item, not something this decision claims.
 
-**Basis.** `0x8a7fe7`, `0x8aa6d0`, `+0x134`, `path+0x10` (`docs/movement-in-the-binary.md`, read 2026-11-14); the DE
+**Basis.** `0x8a7fe7`, `0x8aa6d0`, `+0x134`, `path+0x10` (`docs/archive/research/movement-in-the-binary.md`, read 2026-11-14); the DE
 talk's *"units bump into others, stop and repath around. No pushing allowed"*; the owner's D205 ruling.
 Reviews: `docs/reviews/2026-11-14-d205-pause.md`, `docs/reviews/2026-11-14-d210-time-not-geometry.md`.
 
@@ -1101,7 +1101,7 @@ edge, `O(n^2)` in nodes - is real and still unmeasured per plan: `crates/sim/tes
 measurement owed for it.
 
 **Basis.** The DE talk's method (*shrink the units to points, expand the obstacles, be careful with the start and the end*,
-`docs/pathfinding-from-the-talk.md`); `FUN_007f9d80` for the per-search body list; measurement in
+`docs/archive/research/pathfinding-from-the-talk.md`); `FUN_007f9d80` for the per-search body list; measurement in
 `docs/reviews/2026-11-14-d211-clearance.md` and its follow-up.
 
 
@@ -1169,7 +1169,7 @@ a standing man instead of walking into him and re-planning afterwards. The match
 1,919.2 s against 1,857.2 s, with 144 entities against 133). D210b's 2.3x was measured with this field broken: the stander set
 was fed nothing, so the search failed more often and every failure ran the whole-route fallback.
 
-**Basis.** `+0x134` and `path+0x10` (`docs/movement-in-the-binary.md`, read 2026-11-14); `FUN_007f9d80` for the per-search
+**Basis.** `+0x134` and `path+0x10` (`docs/archive/research/movement-in-the-binary.md`, read 2026-11-14); `FUN_007f9d80` for the per-search
 body list; the field's own doc comment, which the code contradicted. Review: `docs/reviews/2026-11-15-d213-last-moved.md`.
 
 
@@ -1189,7 +1189,7 @@ them is the one he saw:
    and the collider was dropped outright. The window submits one walk per selected unit in one tick, so a box-select and a
    right-click turn the selection into a crowd that passes through itself. The original has this exemption, but the list it
    filters is the *formation's* members, and Forgotten Empires' own documentation puts villagers, trade carts and fishing ships
-   in no formation - *"each of them takes their own path"* (`docs/prior-art.md`, `docs/movement-in-the-binary.md`).
+   in no formation - *"each of them takes their own path"* (`docs/prior-art.md`, `docs/archive/research/movement-in-the-binary.md`).
 2. **A node's ring is re-laid** when it refuses a man (D200), and the re-lay re-assigns every man on the node.
 
 **Both fixes were built and both were measured, and both were worse than the defect.**
@@ -1219,7 +1219,7 @@ solid needs a **body-aware replan** - a route that goes *round* a body, which is
 crowd deadlocks into the same failure D205 measured. The fix is a slice of its own, not a flag.
 
 **Basis.** `crates/sim/src/world/step.rs` (`stamp_group`, `maybe_respawn`→`maybe_respread`, `move_bodies`), `crates/sim/src/
-world/movement.rs` (`blocker_at`, the mate and "past" clauses), `docs/movement-in-the-binary.md` (the path-ignore list),
+world/movement.rs` (`blocker_at`, the mate and "past" clauses), `docs/archive/research/movement-in-the-binary.md` (the path-ignore list),
 `docs/prior-art.md` (openaok, genie, openage, the formations page), and the two acceptance runs above. Review:
 `docs/reviews/2026-11-16-d236-overlap-and-reroute.md`.
 
@@ -1269,7 +1269,7 @@ rule with **villagers** in two fixtures; with villagers never being mates they w
 group at all. Both now spawn **spearmen** - the units the rule is actually about - through a shared `spawn_unit` helper.
 
 **Basis.** `crates/sim/src/world/step.rs` (`stamp_group`), `crates/sim/src/world/movement.rs` (the near-goal clause), the pencil
-in `world/pathing` (`short_range_clear`, discs), `crates/sim/tests/overlap.rs`, `docs/movement-in-the-binary.md` (the path-ignore
+in `world/pathing` (`short_range_clear`, discs), `crates/sim/tests/overlap.rs`, `docs/archive/research/movement-in-the-binary.md` (the path-ignore
 list), `docs/prior-art.md` (the formations page). Review: `docs/reviews/2026-11-16-d237-villagers-solid.md`.
 
 
@@ -1280,7 +1280,7 @@ list), `docs/prior-art.md` (the formations page). Review: `docs/reviews/2026-11-
 *Area:* Pathfinding & movement
 *Status:* decided
 
-The owner, over the movement rows of the register (`docs/behaviour-diff.md`): *"Resolve the questions by adopting from the game.
+The owner, over the movement rows of the register (`docs/archive/research/behaviour-diff.md`): *"Resolve the questions by adopting from the game.
 That is the source of truth."* Every divergent row therefore becomes a slice, and **where the game's side is unread the read comes
 first** - the tree does not get a guess in the game's name.
 
@@ -1375,7 +1375,7 @@ is no longer a defect - it is what the game does when a route is planned through
 must therefore assert what the owner actually objects to (**nobody is shoved off his square**), not that no two bodies ever
 overlap; the old assertion would now be the old rule speaking.
 
-**Basis.** `docs/behaviour-diff.md` rows 24, 25, 32; `crates/sim/src/world/step.rs` (the refusal count, the retarget, the nudge),
+**Basis.** `docs/archive/research/behaviour-diff.md` rows 24, 25, 32; `crates/sim/src/world/step.rs` (the refusal count, the retarget, the nudge),
 `crates/sim/src/world/gather.rs` (`nearest_like_free`, `gather_reach`), `crates/sim/src/world/orders.rs:52`. Review:
 `docs/reviews/2026-11-16-d241-rulings.md`.
 
@@ -1415,7 +1415,7 @@ R2-R9 are unchanged and unblocked; R1 is split in the queue into **R1a** (the pa
 
 **Basis.** `crates/sim/src/world/movement.rs` (rule 6, the arm), `crates/sim/src/world/step.rs` (the re-plan's `obstacles`),
 `crates/sim/tests/replan.rs` (the ignored fixture), `crates/sim/tests/group_overlap.rs` (the deadlock, measured),
-`docs/behaviour-diff.md` rows 29-30. Review: `docs/reviews/2026-11-16-d242-r1-measured.md`.
+`docs/archive/research/behaviour-diff.md` rows 29-30. Review: `docs/reviews/2026-11-16-d242-r1-measured.md`.
 
 
 ### D247 - the original's pathing rules are a separate conformance set, not part of the gate (2026-11-16)
@@ -1437,7 +1437,7 @@ engine's planners, as its own set with its own command (`make conformance`), and
 
 **Why.** Asked on 2026-11-16 whether the original's pathing rules could be pinned as tests "for the project as extra set ran
 separately". The value is the register: D239 adopted the game's pathing wholesale and rows 13-33 of
-`docs/behaviour-diff.md` each owe a slice, so a set that states the game's rule and our answer in one place makes the queue
+`docs/archive/research/behaviour-diff.md` each owe a slice, so a set that states the game's rule and our answer in one place makes the queue
 checkable rather than remembered. It is out of the gate because a conformance test's job is to *disagree* when we diverge;
 putting disagreement into the gate either turns every commit red or teaches everyone to weaken the test.
 
@@ -1453,7 +1453,7 @@ first pop is a neighbour of the start. Its own doc comment and D134's "nearest l
 own slice and its own measurement.
 
 **Commits us to.** Keeping the set's findings and divergences visible rather than green; and adding a rule to
-`docs/pathfinding-conformance.md`'s table when one is read, with the module that settles it.
+`docs/archive/research/pathfinding-conformance.md`'s table when one is read, with the module that settles it.
 
 
 ### D248 - the four body rules hold, and the seat is the reason they did not (2026-11-17)
@@ -1575,7 +1575,7 @@ game and [the decomp] first. Then let me decide."*
 by **one** thing - a motion object's factor (`[move+0x14]+0x6c`) when that is `> 0.0` - and **exactly 0.0 on a pause**. No terrain
 factor, no ramp, no partial-speed arm. The factor's only writer is the virtual setter `0x7f4130`, which has no direct caller and
 is **unread**; the only mechanism that needs one is the formation (`FormationParams(..., breakAutoFormationsBySpeed=%d)`), where
-villagers are never members. Read in `docs/movement-in-the-binary.md`.
+villagers are never members. Read in `docs/archive/research/movement-in-the-binary.md`.
 
 **The decompilation cannot help**: `samuelcaldas/age-of-empires-2-decomp` has no speed, velocity, acceleration or max-velocity
 code at all - its unit movement and formation files are 16-47-line stubs, and the only "acceleration" in it is camera drag
@@ -1664,7 +1664,7 @@ animals and herding, gathering, depletion, a partial load, fights, the line upgr
 cannot slide round a wall wedges, which is what D188 was written from.
 
 **Why it is a fork and not a defect to patch.** Read out of the original on 2026-11-17 (`doIntelligentMovementUpdate`, `008a4360`,
-in `docs/movement-in-the-binary.md`): a step is a **velocity applied whole**, the new position is then **tested**, and every
+in `docs/archive/research/movement-in-the-binary.md`): a step is a **velocity applied whole**, the new position is then **tested**, and every
 collision answer is a **repath** (`We have %d non-past collisions and %d terrain collisions, repathing`), a **pause** enforced by
 a priority comparison (`TOLD TO PAUSE BY UNIT %d`), or a stop. **No axis is ever dropped** - the slide does not exist there. And a
 reached waypoint is **snapped to and spent in the same update** (`Teleporting to exact waypoint` + `Incrementing waypoint`), which
@@ -1690,7 +1690,7 @@ so it would have been untested code. Review: `docs/reviews/2026-11-17-the-slide-
 found, because the finding is sharper than the change would have been.*
 
 **What was tried.** The terrain slide was deleted outright - the original applies its step whole and answers a collision with a
-repath or a pause (`docs/movement-in-the-binary.md`) - with the owner's fixture written first: the same walk with a body parked
+repath or a pause (`docs/archive/research/movement-in-the-binary.md`) - with the owner's fixture written first: the same walk with a body parked
 half a tile past the first corner, asserting every walking tick is one step or a stand. **Red before**: 82, 81, 80... raw units a
 tick, **567 of 1,398** walking ticks short. **Green after**: no slide, no creep, and the walk still costs the ticks its geometry
 owes. That part is the rule working exactly as asked.
@@ -1760,7 +1760,7 @@ against a trunk or a wall face brushes the tile) and `a_villager_walking_beside_
 because both are honest about different things: **our blocked tile is a whole tile; the game's obstacle is an object with bounds.**
 
 **So the next slice is the model, not the mover**, and the binary and the decompilation say exactly what it is
-(`docs/movement-in-the-binary.md`, section of 2026-11-17): **ground is a per-tile test at a point** (`FUN_008aa480` - no radius
+(`docs/archive/research/movement-in-the-binary.md`, section of 2026-11-17): **ground is a per-tile test at a point** (`FUN_008aa480` - no radius
 anywhere in it), and **things are boxes with a `(radius_x, radius_y)` pair**, with the game's own distance function measuring to
 the box so that everything inside a footprint is distance zero
 (`compute_distance_sq`, `src/unit/unit_action_build_77a0.cpp`). Overlap is then `distance-to-box < radius`: a man at **half a
@@ -1850,7 +1850,7 @@ once the place model can live with it.
 *The owner: **"Proved and follow the original game and decomp."** Three functions read end to end, and they settle the question
 this project has been circling: the game collides **boxes**, not tiles, and every object's box comes from its own radii.*
 
-**The proof** (written out with the code in `docs/movement-in-the-binary.md`):
+**The proof** (written out with the code in `docs/archive/research/movement-in-the-binary.md`):
 
 1. **Ground is a point test** - `FUN_008aa480` compares the tile's bits with the unit's passability mask; arguments cast to `int`,
    no radius in it.
@@ -2390,7 +2390,7 @@ them: a step **landing 7,500 inside a body** where 8,000 is needed (D269).
 **The ruling, in his words.** *"Port everything from the game. I want the game to be ported as accurately as sensible. We can
 think about optimizations later."* Given after D15's four options were put to him with their measured costs.
 
-**What it settles.** D239 adopted every divergent row of `docs/behaviour-diff.md` where the game's side was *read*, but each
+**What it settles.** D239 adopted every divergent row of `docs/archive/research/behaviour-diff.md` where the game's side was *read*, but each
 slice stayed free to be refused by measurement - and two were (D242's row 29/30, R1a). **That freedom is withdrawn:**
 a measurement is no longer a reason to keep a divergence. Row 22's caps, the terrain slide, the same-tick mate heuristic,
 `TakeAtRest`, `D52`'s "a body already inside is not an obstruction", `D134`'s one-step answer and the gather place model all
@@ -2403,7 +2403,7 @@ with a fixture. G2's bit-exactness stays rejected - where the original's own ari
 weighted heuristic), the port keeps the *arithmetic shape* in fixed point and the fixture pins the **cost ordering and the
 tie-break**, not the decimal.
 
-**Already read, so the first slice is not a puzzle.** The cost model settled on 2026-11-16 (`docs/movement-in-the-binary.md`,
+**Already read, so the first slice is not a puzzle.** The cost model settled on 2026-11-16 (`docs/archive/research/movement-in-the-binary.md`,
 "The cost model settled"): **16** per cardinal step, an octile table at `0xafd2a0`, and `h = 25 x Euclidean` - which makes the
 original a **weighted A\*** (weight ~1.56) that returns slightly longer routes **on purpose**. The frontier is a **heap**
 (`FUN_00801e90` sifts on every push) *beside* the per-tile best-cost array with its generation byte - both structures exist,
@@ -2431,7 +2431,7 @@ leaves its measurement on a branch with the missing mechanism named. The conform
 *Status:* decided
 
 **Asked:** *"Can you review D127, D135, D253, D255 and D256? Please adopt original game or decomp."* Reviewed against
-`docs/movement-in-the-binary.md` and the decomp; all five are ours, all five are withdrawn, and the three slices that replace
+`docs/archive/research/movement-in-the-binary.md` and the decomp; all five are ours, all five are withdrawn, and the three slices that replace
 them have a dependency order rather than a preference.
 
 **D127, the ground cap** - a re-plan was capped at two per route. Withdrawn. The rule came from `glouw/openempire`'s "re-examine the
@@ -2478,11 +2478,11 @@ plan chose. "Copy the game" is two halves; the step half is done, the route half
 
 **Basis.** Read from the original's binary: `FUN_008a4360`'s collision epilogue and *"no axis is ever dropped"*,
 `FUN_008aa480`'s point test on the ground, `FUN_00840830`'s boxes, `func_002690E0`'s box distance and
-`mConsecutiveSubstituteCount` (all recorded in `docs/movement-in-the-binary.md`).
+`mConsecutiveSubstituteCount` (all recorded in `docs/archive/research/movement-in-the-binary.md`).
 
 Measured in this tree, in the five rows under review: the 10% steps, the 14-and-3 red counts, and the 11,260 attempts.
 
-Register: `docs/behaviour-diff.md` rows 13, 21, 22, 26 and 29. Review:
+Register: `docs/archive/research/behaviour-diff.md` rows 13, 21, 22, 26 and 29. Review:
 `docs/reviews/2026-11-18-d276-adopt-the-game-on-slide-and-cap.md`.
 
 **Amendment (2026-11-18, on the A/B the slice ran): the order is reversed, and the game says so twice.** Measured on branch
@@ -2558,7 +2558,7 @@ wall and resource are the candidates).
 tile; then the slide goes; then the planner learns the radius. D117 and D177 stop being two rules and become the two ends of
 one: **the ground is a point, the things are boxes, the plan keeps the radius.**
 
-**Basis.** The original's binary, read at 2026-11-17 and recorded in `docs/movement-in-the-binary.md`: `FUN_008aa480` (point
+**Basis.** The original's binary, read at 2026-11-17 and recorded in `docs/archive/research/movement-in-the-binary.md`: `FUN_008aa480` (point
 test), `FUN_00840830` (boxes grown by the mover's radius, `<=` collision) and `func_002690E0` in the decomp's
 `src/unit/unit_action_distance.cpp` (box-to-box, overlap clamped to zero).
 
@@ -2598,7 +2598,7 @@ set, and that the red set survived the naming of the shape. The owner's answer i
 structure whole, at the cost of fidelity where the original's structure is still unread.
 
 **Basis.** The decompilation at `/opt/data/tools/src/aoe2-decomp` (the repo he named, cloned): `zone_path_eval.cpp`,
-`zone_spatial_pyramid_*`, `zone_spatial_entity_*`; the tree's `docs/movement-in-the-binary.md` for the cost model and the
+`zone_spatial_pyramid_*`, `zone_spatial_entity_*`; the tree's `docs/archive/research/movement-in-the-binary.md` for the cost model and the
 pause block; the owner's directive above.
 
 **Commits us to.** Deleting the listed mechanisms rather than keeping them behind a flag, and paying for the fixtures built
@@ -2616,7 +2616,7 @@ on them; no acceptance run in this slice (his call), the unit and conformance su
 do."* Then, on the fixture that had made the attempt a half-fix: *"Is it unit test or conformance test? If unit test, drop
 it."* It is a unit test (`crates/sim/src/lib.rs`, `mod tests`), and it is dropped.
 
-**What the original does, read (`docs/movement-in-the-binary.md`, the collision block's epilogue).** A collision against the
+**What the original does, read (`docs/archive/research/movement-in-the-binary.md`, the collision block's epilogue).** A collision against the
 order's target ends the order (*"That collision is with our target, so we're done"*). **Any other non-past collision is
 counted and the mover re-plans** - *"We have %d non-past collisions and %d terrain collisions, repathing"* - and the **higher
 id of each surviving pair** is told `setPause(rand*1.25/32767 + 0.25)` (`0x8a80ff`-`0x8a8141`). The epilogue **never writes a
@@ -2847,14 +2847,14 @@ suite confirms it: 888 passed / 18 failed / 21 ignored, the same 18 reds and no 
 
 **How it arose.** The owner asked for Q1 - whether our gather seat *taken list* is the game's own mechanism - to be
 crosschecked against the game or the internet. It is **not**: the game sends every man to the resource he was given, the bodies are
-solid, men bump and stand (`docs/gather-seating-evidence.md` quotes the player reports and the guide), and a man who cannot get
+solid, men bump and stand (`docs/archive/research/gather-seating-evidence.md` quotes the player reports and the guide), and a man who cannot get
 there is **re-targeted to the nearest usable resource of the same kind**.
 
 **Ruled, on that evidence.** `World::standoff_point`'s taken list is a **deliberate difference** and stays only as a choice;
 `finish_blocked_orders` and `beside` are cut (the game's best-reported bug is wedged villagers that never resolve); **the D204
 re-task is the game's own rule and stays**. This reverses the previous hour's assumption, which had D204 in the cut set.
 
-**Basis.** `docs/gather-seating-evidence.md`: the corpus (`FUN_004aaea0` for `act_gath.cpp`, `FUN_004b90f0` for `tact_gth.cpp`) has
+**Basis.** `docs/archive/research/gather-seating-evidence.md`: the corpus (`FUN_004aaea0` for `act_gath.cpp`, `FUN_004b90f0` for `tact_gth.cpp`) has
 no seat picker; Capoch's guide; Age of Empires forum 289465 and 78029; r/aoe2 "Am I imagining this villager pathing bug?";
 `aoe2mc` #4063 (`NEXT = 5`). The decomp has no gather code at all.
 
@@ -2881,7 +2881,7 @@ was fed by are deleted (D271 withdrawn on the moving side; its gather-side remna
 
 **Why the game wins here.** The original gives no man a private place: its own players describe men piling onto one tree and
 standing pressed (*"If you send them to different trees within the same tile, they will usually stand still"*,
-`docs/gather-seating-evidence.md`), and D271 was a smoothing of exactly that which the owner had asked for before the parity
+`docs/archive/research/gather-seating-evidence.md`), and D271 was a smoothing of exactly that which the owner had asked for before the parity
 order.
 
 **Measured.** The witness was written first and watched failing: `crowd_piles_up::a_crowd_ordered_to_one_tile_piles_up` - three men
@@ -2913,7 +2913,7 @@ finding from the other end. What stops a unit is the **pause** (`setPause` 0.25-
 overlap to any depth, which is what the players see and what our own simultaneous-step artefact already produces (4576 raw is
 *less* than the game permits).
 
-**Basis and the unknown.** `docs/press-depth-evidence.md`; the corpus functions named above. Whether the resolver is dead in a
+**Basis and the unknown.** `docs/archive/research/press-depth-evidence.md`; the corpus functions named above. Whether the resolver is dead in a
 retail build or live in an earlier one is not established, and neither is the pause roll's distribution - neither changes the ruling.
 
 **Commits us to.** Before adding a physical floor, find the binary's own; if its answer is computed and thrown away, ours is not to be
@@ -2963,7 +2963,7 @@ rectangle at level 3 and `FUN_007f1100` recursing *down* the pyramid actually do
 
 **Measured.** Test-first, three failures deep: unresolved import, then a fixture that was not a game (no town centres), then green -
 **4 passed / 0.00 s**. The suite is **904 passed / 6 failed / 21 ignored** with the red set byte-identical to before, so the maps change
-no existing rule. Review: `docs/reviews/2026-11-19-p11a-the-four-levels.md`, evidence: `docs/pathfinding-levels-evidence.md`.
+no existing rule. Review: `docs/reviews/2026-11-19-p11a-the-four-levels.md`, evidence: `docs/archive/research/pathfinding-levels-evidence.md`.
 
 **Not decided here.** The level **descent** (11b) stays unbuilt: the descent reads bit `0x20` of a cell's *second* byte while the
 stamper writes the *first*, and the second byte's producer is unread. Guessing it would be the kind of deliberate difference the owner
@@ -2982,7 +2982,7 @@ ground, never cached across a change to it.
 
 **Ruling.** `Levels::descent(tile)` walks from level 3 down and stops at the first level whose cell holding that tile is unblocked, with
 level 0 as the floor. That is `FUN_007ee980`'s loop, and it is built on one **interpretation** - flagged as such here, in the code and in
-`docs/pathfinding-levels-evidence.md`:
+`docs/archive/research/pathfinding-levels-evidence.md`:
 
 - the loop tests bit `0x20` of a level cell's **second** byte, and the per-search stamper writes the **first** byte - so the second byte
   is not the search's own mark;
@@ -3069,7 +3069,7 @@ because the pyramid is built per call where the binary holds it and only re-stam
 **11d is therefore three steps, in this order**: (1) a **cached pyramid** - which, read against `Ground`, turns out to need a **modelling
 change first**: `blocked()` folds units and obstacles together and `block`/`unblock` fire on every unit step, so a cache would be stale
 every tick. The original keeps static obstacles in the level maps and **bodies as a live cost row (2000)**, so the step is to split
-`Ground`'s occupancy into **static blockers** and **bodies** (see `docs/pathfinding-levels-evidence.md`); (2) the coarse search measured again against 11.4 µs, with the O(n) frontier insert and the four lookups per
+`Ground`'s occupancy into **static blockers** and **bodies** (see `docs/archive/research/pathfinding-levels-evidence.md`); (2) the coarse search measured again against 11.4 µs, with the O(n) frontier insert and the four lookups per
 `step_cost` as the named suspects (a heap would fix the insert and break D299's ordering, so the fix is bounded insertion or buckets);
 (3) only then the switch, gated on the full suite and the acceptance run.
 
@@ -3600,7 +3600,7 @@ which matters exactly as much as the cap does - not at all below 255.
 *Area:* Pathfinding & movement
 *Status:* decided
 
-**`docs/parity-plan.md` P7, landed.** `standing_bodies` skipped every body within a quarter tile of the planning origin in both axes, where the
+**`docs/archive/research/parity-plan.md` P7, landed.** `standing_bodies` skipped every body within a quarter tile of the planning origin in both axes, where the
 original's search starts on the mover's own tile and puts **every stander the mover does not ignore** into it (`FUN_007f9d80`). Two bodies in
 one place is a state this engine reaches on purpose - D289 sends every man to the tile he was ordered to, D290 leaves no press floor - so the
 plan certified legs the step then refused.
@@ -3627,7 +3627,7 @@ match-length artefact rather than an economy signal - the stockpile line above i
 *Area:* Pathfinding & movement
 *Status:* decided
 
-**`docs/parity-plan.md` P4, landed.** `replan_after_ground` refused a re-plan until the route was `REPLAN_TICKS` (20) old, so a wall that
+**`docs/archive/research/parity-plan.md` P4, landed.** `replan_after_ground` refused a re-plan until the route was `REPLAN_TICKS` (20) old, so a wall that
 appeared in a walker's lane left him standing for up to a second while the search he needed waited out a timer. The original re-plans on the
 collision itself: *"We have %d non-past collisions and %d terrain collisions, repathing"* (`0x128b`).
 
@@ -3665,7 +3665,7 @@ and the published sources. Every claim below was checked against a line in `/opt
 186-191, and `iVar20` is read once - line 198, against `local_46c`, the expansion counter. The **frontier's** key is line 316:
 `stored = (stored_current - octile(current, goal)) + octile(neighbour, goal) + step(current, neighbour)`, which is `g + octile`
 because `stored_current` already is `g + octile`. So the original is an **octile A\*** (weight 1), and the sentence in
-`docs/movement-in-the-binary.md` (and D275, the gap register, `cost_model.rs`) that calls it "weighted A\* with a weight of about
+`docs/archive/research/movement-in-the-binary.md` (and D275, the gap register, `cost_model.rs`) that calls it "weighted A\* with a weight of about
 1.56" is a misreading of the budget. `ground.rs` implements the misreading. **Measured A/B**, one variable, seed 7, 48,000 ticks:
 baseline 5,989 searches at **28.9 expansions each, 54% exhausting the budget**, 1,727 re-paths, hash `e248486298910e28`, 10.04 s;
 with `g + octile` 45,088 searches at **11.8 each, 5.8% exhausting**, 41,557 re-paths, hash `9d5fea513f3f8efb`, both players alive
@@ -3711,7 +3711,7 @@ running the suite on the same two cores. Every number was re-taken idle.
 *Status:* decided
 
 **Asked for:** the order of steps to reach 100% conformance on pathfinding and obstacle avoidance, crosschecked against online
-sources. The answer is `docs/conformance-sequence.md`: thirteen steps, ordered by dependency and then by blast radius (the step
+sources. The answer is `docs/archive/research/conformance-sequence.md`: thirteen steps, ordered by dependency and then by blast radius (the step
 that moves **every** route first, so each later measurement is against a settled base), each with its source, the witness it
 owes, its size and its blocker. **"100%" is defined in three classes**: R (read and implementable from the sources in hand -
 ten steps), B (needs the matching binary or the running game - P3's inset, the 100/600 terrain bits, the octile table) and U

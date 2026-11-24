@@ -1,5 +1,5 @@
 //! **An order is never given up by the engine.** The owner, 2026-11-19: *"I want no deliberate differences to original game. If
-//! there is any, I want that adjusted to meet the original or cut off."* The evidence (`docs/gather-seating-evidence.md`) says the
+//! there is any, I want that adjusted to meet the original or cut off."* The evidence (`docs/archive/research/gather-seating-evidence.md`) says the
 //! original never resolves a wedged walk - the game's most-reported bug is villagers *"frozen in place"*, *"stuck blocking each
 //! other"* - so the forty-tick `finish_blocked_orders` (D200) and the `beside` completion are ours and go.
 //!
@@ -151,7 +151,7 @@ fn a_crowded_walk_is_never_finished() {
 
     // **Two hundred ticks: five times the old forty-tick window.** The one man who *does* get there may stand down - he
     // arrived, and an order that is complete is complete. Everybody else must still be walking: the original never stands a
-    // wedged man down (`docs/gather-seating-evidence.md`).
+    // wedged man down (`docs/archive/research/gather-seating-evidence.md`).
     let scale = world.scale();
     let at_goal = |world: &World, man: EntityId| -> bool {
         let Some(entity) = world.entity(man) else {

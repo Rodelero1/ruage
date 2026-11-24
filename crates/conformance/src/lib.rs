@@ -3,7 +3,7 @@
 //! Every test in `tests/` states one rule, gives the place the rule was read from, and checks our side against it. The
 //! source is `samuelcaldas/age-of-empires-2-decomp` (matching decompilation of AoC 1.0c / AoK 2.0a / the PS2 ELF, **no
 //! licence**): read for behaviour and cited by module, never transcribed - and its addresses are AoC/PS2, so a number that
-//! HD 5.7 carries differently is pinned to the HD binary's own site, which `docs/movement-in-the-binary.md` holds.
+//! HD 5.7 carries differently is pinned to the HD binary's own site, which `docs/archive/research/movement-in-the-binary.md` holds.
 //!
 //! **This set is not the gate.** `cargo test` at the workspace root does not run it; `make conformance` does, and a test
 //! that fails here is a *finding* about our engine, not a broken build. Rules the engine deliberately does not implement are

@@ -6,10 +6,10 @@ this tree is either source data or supporting documentation.
 
 | | |
 |---|---|
-| Spec version | 1.221 |
+| Spec version | 1.222 |
 | Last updated | 2026-11-24 |
 | Decision status | **D1 = G1, D2 = file-based oracle, D17 = four layers with the resource enum deleted — see §6 and `docs/live/` (bank archived at `docs/archive/decisions-2026-11-24.md`)** |
-| Historical handoff | [`docs/age2hd.md`](docs/age2hd.md) — read it *through* the errata in §4 |
+| Historical handoff | [`docs/archive/research/age2hd.md`](docs/archive/research/age2hd.md) — read it *through* the errata in §4 |
 | Ground truth | `Age2HD/` (the game install) — read-only, treat as immutable |
 
 ---
@@ -100,7 +100,7 @@ Everything in this section was checked against the files in this container on 20
 ### 3.2 The `.dat` files are raw-DEFLATE compressed
 
 This is the single most important operational fact in this document, and it is absent
-from `docs/age2hd.md`.
+from `docs/archive/research/age2hd.md`.
 
 Raw bytes have entropy 7.99 bits/byte and begin `ec bd 05 78` — no `VER` header. They are
 **raw DEFLATE with no zlib/gzip framing**. Inflate at offset 0 with `wbits=-15`:
@@ -196,17 +196,17 @@ would break.
 overrides. Civ 0 is Gaia; names are internal (`British`, not Britons) and display names
 live in the language tables, not the dat.
 
-Method, caveats, spot checks and licences: `docs/parse-notes.md`. Raw parse output:
+Method, caveats, spot checks and licences: `docs/archive/research/parse-notes.md`. Raw parse output:
 `build/parse-2026-10-23.txt`.
 
 ---
 
-## 4. Errata for `docs/age2hd.md`
+## 4. Errata for `docs/archive/research/age2hd.md`
 
 The historical handoff is useful for narrative and has correct hashes, but eight claims
 are wrong or stale. Read it, then apply these:
 
-| # | Claim in `docs/age2hd.md` | Reality |
+| # | Claim in `docs/archive/research/age2hd.md` | Reality |
 |---|---|---|
 | 1 | Phase 1 = "parse `empires2_x1_p1.dat` → JSON" | Files are raw-DEFLATE; inflate first (§3.2) |
 | 2 | "DRS archives → loose files" is a task | 0 `.drs` files exist; already loose (§3.5) |
@@ -227,7 +227,7 @@ to `docs/`.
 
 ### 5.1 No oracle, so "bit-exact" is unfalsifiable
 
-`docs/age2hd.md` targets "deterministic lockstep sim (bit-exact multiplayer/replays)" but
+`docs/archive/research/age2hd.md` targets "deterministic lockstep sim (bit-exact multiplayer/replays)" but
 never names an oracle. The exe can be read here but never run: no Wine, no Windows, no
 Steam. HD's own replays are not an oracle either — they desync across patch versions and
 there is no stepping debugger.
@@ -276,11 +276,11 @@ openage's shape, and the doc cites openage as its own cautionary tale.
 | # | Question | Why it blocks |
 |---|---|---|
 | **D1** | ~~G1 or G2?~~ **Answered 2026-10-23 — G1.** "Generally similar behaviour, sensibly attainable." G2 was priced and rejected: no per-tick oracle exists here, the original's sim is x87 float, and a bit-exact copy would be a derivative work rather than an engine. G1+ (a per-subsystem exactness budget) was considered and **not** adopted | Sets every acceptance criterion, and whether the RE phase is bounded |
-| **D2** | ~~Is there a machine that can run HD, usable as an oracle?~~ **Answered 2026-10-23 — a driven game is not needed.** The install already holds 13 `.aoe2spgame` saves; they are raw DEFLATE (`VER 9.4`) and inflate to 4.5–11 MB of world state. Snapshots answer U1/U2/U4/U5/U6 and partly U8/U10; they cannot answer U7 (pathing). Details: `docs/oracle.md` |
+| **D2** | ~~Is there a machine that can run HD, usable as an oracle?~~ **Answered 2026-10-23 — a driven game is not needed.** The install already holds 13 `.aoe2spgame` saves; they are raw DEFLATE (`VER 9.4`) and inflate to 4.5–11 MB of world state. Snapshots answer U1/U2/U4/U5/U6 and partly U8/U10; they cannot answer U7 (pathing). Details: `docs/archive/research/oracle.md` |
 | **D3** | ~~Content scope~~ **Answered 2026-10-23 — one civ (British) first, others later.** British is dat civ index 1 (0 is Gaia), not a preference. A second civ costs a type-102 disable-list join, not a per-civ unit delta layer (U13: 5 differing unit rows across all 31 civs) | Sets the data model's generality requirement |
 | **D4** | ~~Private / publishable engine / publishable both~~ **Answered 2026-10-23 — B: publish engine + tooling, keep spec and mechanics internal.** Condition: a stranger with their own install must be able to clone, build and run it. Checklist and blocking gap in §6.2 | Whether the RE-derived spec is a deliverable, and how strict clean-room hygiene must be |
 
-**D1 recommendation, on the evidence in `docs/oracle.md`: G1.** A snapshot oracle can hold a
+**D1 recommendation, on the evidence in `docs/archive/research/oracle.md`: G1.** A snapshot oracle can hold a
 reimplementation to "the numbers agree"; it cannot hold one to "the trajectory is identical"
 without per-tick instrumentation we do not have. G1 with snapshot validation is measurable;
 G2 is not.
@@ -318,7 +318,7 @@ step 5; they are deliberately loose, because G1 does not claim the original's tr
 | Unit arrival time over ground | within 2 ticks = **100 ms at 20 Hz** | path smoothing and waypoint snapping are unpublished |
 | Population / resource accounting | exact at every tick | bookkeeping, not behaviour |
 
-**Why the ms column exists.** U12 is now *supported but unproven*: 20 Hz is corroborated by the dat's 50 ms reload grain and by a 10-syncs/second cadence in three real HD recordings against 59 in a DE one (see `docs/oracle.md`). If the original turns out to
+**Why the ms column exists.** U12 is now *supported but unproven*: 20 Hz is corroborated by the dat's 50 ms reload grain and by a 10-syncs/second cadence in three real HD recordings against 59 in a DE one (see `docs/archive/research/oracle.md`). If the original turns out to
 run at 60 Hz, every "1 tick" band above silently becomes 16.7 ms and the tolerances tighten by 3×
 without anyone deciding to tighten them. Bands are therefore stated in both units, and a session
 that changes `tick_rate_hz` must restate the ms column rather than inherit it.
@@ -357,7 +357,7 @@ before a test that was watched failing.
 | 0 | Evidence base | This file | Hashes, counts, recipes recorded |
 | 1 | Data layer: inflate + parse | **done** — `build/converted/*.json` for both dats, units included (§3.6) | 19 (x1) / 32 (x2) civs; units 672 of 866 slots (x1) and 1,166 of 1,402 (x2); techs/effects/sprites/tasks all parse; two implementations agree |
 | 2 | Knowledge harvest | **done** — `docs/mechanics/` (6 files + index), every fact tagged `known` / `inferred` / `unknown` | 12 unknowns registered (U1–U12): 5 resolved, U11 open, U12 now *supported by two independent measurements* (50 ms dat grain; 10 vs 59 syncs/s in HD vs DE recordings) but not proven |
-| 2b | Oracle harness: `VER 9.4` save reader | **partial, stopped** — `build/tools/save.py` inflates all 13 saves and reads player names where framing is clean (5/13) | Not met and deprioritised: no public spec, no second implementation to validate against, resources/units/tick not located. Rationale in `docs/oracle.md` |
+| 2b | Oracle harness: `VER 9.4` save reader | **partial, stopped** — `build/tools/save.py` inflates all 13 saves and reads player names where framing is clean (5/13) | Not met and deprioritised: no public spec, no second implementation to validate against, resources/units/tick not located. Rationale in `docs/archive/research/oracle.md` |
 | 3 | Decision gate | **done** — D1 = G1 (2026-10-23), D2 = file-based oracle, thresholds written into §6.1 | "Done" is a number someone can check |
 | 4 | Rust workspace skeleton | **done** — `crates/fixed` (11), `crates/data` (15 + corpus + 13 economy + 6 map + 6 units), `crates/sim` (10 library + 7 seeding + 7 subprocess). All four loaders strict; headless runner seeds a real match | `cargo test` = **82 green**, clippy `-D warnings` clean, fmt clean. A seeded 2000-tick run prints `tick=2000 entities=8 players=2 hash=d91a1a7e79ea6b08` |
 | 5 | Vertical slice | **in progress** — a villager earns wood end to end and **walks around terrain**: A* over the tile grid routes it to the node, home to the nearest drop site its variant accepts, and back again; a walled-off node is refused at order time. **Next:** build (house → barracks) spending the stockpile, then combat and the scripted opponent |
@@ -619,9 +619,9 @@ should say so rather than claim otherwise.
 | Path | Status | Purpose |
 |---|---|---|
 | `SPEC.md` | current, v1.11 | Entry point — this file |
-| `docs/age2hd.md` | historical, **superseded by §4** | 2026-10-23 handoff from the previous session |
+| `docs/archive/research/age2hd.md` | historical, **superseded by §4** | 2026-10-23 handoff from the previous session |
 | `docs/hermes.container` | reference | Host container definition |
-| `docs/parse-notes.md` | current | Step 1 record: toolchain, reproduce commands, parse counts, cross-validation, per-civ unit model, caveats, licences |
+| `docs/archive/research/parse-notes.md` | current | Step 1 record: toolchain, reproduce commands, parse counts, cross-validation, per-civ unit model, caveats, licences |
 | `ruage-tools` (separate repo) | current | **D7/D12** — test-first importer: `genconfig/` (dat → content pack) + 22 pytest tests, GPL-3.0-or-later |
 | `README.md`, `LICENSE-MIT`, `LICENSE-APACHE` | current | Public entry point and the dual licence (D21) |
 | `config/` | current | **D6** — gamedata TOML (generated) + behaviour configs + `overrides.toml`; see `docs/config.md` |
@@ -632,15 +632,15 @@ should say so rather than claim otherwise.
 | `docs/licensing.md` | current | **D8** — repo hygiene: what is never committed, legal basis, enforcement |
 | `.githooks/pre-commit` | current | Refuses commits containing game data or extracted values **at known paths**. It matches paths and extensions, not content: a CSV of unit stats under `config/` commits cleanly (verified 2026-10-23) |
 | `docs/sources.md` | current | Every outside source used, what for, trust level, and the version caveat (wiki = DE, dat = 5.7) |
-| `docs/oracle.md` | current | The oracle: 13 saves found, raw DEFLATE, `VER 9.4`; what snapshots can/can't answer; D1 recommendation |
-| `docs/ai-scripts.md` | current | The scripted AI's next shape: counters derived from the pack's attack/armour classes, a per-player **memory** of what was seen (never the world's truth), the conditions that fall out of it, and three forks awaiting a ruling |
-| `docs/i18n.md` | current | Translation: three kinds of text (identifiers, display, diagnostics), why the only drawn text is digits today (D82's 3x5 font), the message-key refactor gettext would need, and the rule that a translated string must never reach the state hash. Nothing implemented. |
-| `docs/save-format.md` | current | The save container as verified: raw DEFLATE, `VER 9.x` + float save version (12.5 / 12.36), the `0x0A60` string framing, what the world sections are and the address of the code that reads each; errata for the `HA` misreading. Tool: `tools/savegame.py` |
+| `docs/archive/research/oracle.md` | current | The oracle: 13 saves found, raw DEFLATE, `VER 9.4`; what snapshots can/can't answer; D1 recommendation |
+| `docs/archive/research/ai-scripts.md` | current | The scripted AI's next shape: counters derived from the pack's attack/armour classes, a per-player **memory** of what was seen (never the world's truth), the conditions that fall out of it, and three forks awaiting a ruling |
+| `docs/archive/research/i18n.md` | current | Translation: three kinds of text (identifiers, display, diagnostics), why the only drawn text is digits today (D82's 3x5 font), the message-key refactor gettext would need, and the rule that a translated string must never reach the state hash. Nothing implemented. |
+| `docs/archive/research/save-format.md` | current | The save container as verified: raw DEFLATE, `VER 9.x` + float save version (12.5 / 12.36), the `0x0A60` string framing, what the world sections are and the address of the code that reads each; errata for the `HA` misreading. Tool: `tools/savegame.py` |
 | `docs/mechanics/*.md` | current | 6 subsystem files + `README.md` (tag legend, index, unknown registry U1–U12) |
 | `docs/formats/*.md` | planned | dat / slp / dld / rms / per — what our parser assumes |
 | `docs/archive/decisions-2026-11-24.md` | frozen 2026-11-24 (provenance only) | Bank D1–D21…: D5 dat authoritative, D6 config layer, D7 mandatory TDD, D8 no game data in git, D17 four layers, D20 eight sides, D21 licence. Live truth is `docs/live/`. |
 | `docs/next-step.md` | current | The effect interpreter, priced from the data (kind 3 landed v0.55; kinds 4/5 remain), measured from `effects.toml`: 1,667 of 3,306 commands are kinds 4/5, 270 effects are nothing else, and the engine already resolves stats at order time |
-| `docs/plan-resource-deletion.md` | **done (2026-10-26)** | The plan D17 was paid down with: what was load-bearing, the order of work, and the test that proves the boundary — `a_content_pack_with_our_own_resources_loads_and_spends` |
+| `docs/archive/research/plan-resource-deletion.md` | **done (2026-10-26)** | The plan D17 was paid down with: what was load-bearing, the order of work, and the test that proves the boundary — `a_content_pack_with_our_own_resources_loads_and_spends` |
 | `build/` | throwaway | Inflated dats, converted JSON, Ghidra projects |
 
 ---
@@ -649,6 +649,7 @@ should say so rather than claim otherwise.
 
 | Date | Change |
 |---|---|
+| 2026-11-24 | v1.222 - **Phase A docs shaping: thin root, citations follow**. 45 root md → 7; 34 → `archive/research/`, 7 history → `archive/history/`, `.swp` deleted. One-shot rewrite of every moved path (reviews/ frozen by design, SPEC history untouched); audit patterns + `next_step` HISTORY repointed (RED-recorded tests). Caught: archived filename corrupting D188's derived date (fixed, 1 of 364). Counts identical, gates green. Review: `docs/reviews/2026-11-24-phase-a-docs-shaping.md`. |
 | 2026-11-24 | v1.221 - **index files by authored areas; C14 complete**. Deleted the keyword heuristic from `decision_index.py` (`assign_areas` + `group_entries`, table-ordered, `Unfiled` tail); contract test replaced, RED-recorded. Regen: 345 rows, counts identical, 10 buckets → 15 TOML areas, no Unfiled gap. Review: `docs/reviews/2026-11-24-index-files-by-table.md`. |
 | 2026-11-24 | v1.220 - **bank archived; scope + heuristic fixes**. `git mv docs/decisions.md → docs/archive/decisions-2026-11-24.md`; 5 tools + tests + Makefile + AGENTS + SPEC repointed. Index regen one-line diff (lossless). Fixes: collision heuristic now filters by parser kind (D186a–e false split caught and reverted), generated `docs/live/` excluded from citation scope like `site/`. Site build left stale (exits 1 on 9 pre-existing dangling ids, verified on clean tree — separate slice). Review: `docs/reviews/2026-11-24-bank-archived-scope-fixes.md`. |
 | 2026-11-24 | v1.219 - **all 15 conflicts ruled; collisions get live IDs, OWNER normalizes to OURS**. C3/C5/C6/C8/C11 mechanical chains, C1/C2/C4/C7/C9 compositions under existing owner rulings, C10/C12/C14 grill-granted, C13/C15 in the generator (RED-recorded, 7/7). Live shows D88a/D88b etc., D354 keeps its line plus `*Live verdict:* OURS`. Divergence register +1 DEFECT (gather search bounds, C9). Known side effect: live IDs read as dangling refs in the informational report — no new test failure (same 2 pre-existing). Review: `docs/reviews/2026-11-24-c-rulings-collision-ids.md`. |

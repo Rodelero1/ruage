@@ -103,7 +103,7 @@ impl BonusTable {
                     }
                     // **The bars come from the tech tree and nowhere else** (D23, D234): `barred_by` has always read that
                     // one effect, and two team bonuses in this pack carry a kind-102 row whose meaning is unverified
-                    // (`docs/civ-bonuses.md`), so folding every source here would have answered an open question by
+                    // (`docs/archive/research/civ-bonuses.md`), so folding every source here would have answered an open question by
                     // accident. The acceptance hash caught exactly that when this was first written.
                     102 if matches!(source, Source::Tree) => {
                         // The barred id is carried in `value` (D23): the four selectors are -1. A row that does not resolve

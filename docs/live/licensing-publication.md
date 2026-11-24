@@ -11,7 +11,7 @@
 *Area:* Licensing & publication
 *Status:* amended
 
-**Answered: B — publish the engine and tooling; keep the spec and the mechanics internal.** Condition set by the owner: "as long as the game can be compiled and ran" — a stranger with their own install must be able to clone, build and run it. Not published: `docs/mechanics/`, SPEC §3/§4 (hashes, string VAs, install paths), `docs/oracle.md`, `config/gamedata/` (already excluded by D8). Owner's decision after the four options were costed. Three regimes separate the material: our own work (no exposure), published community facts (facts are not copyrightable; only wiki prose is CC-BY-SA), substantial extraction from the dat (Database Directive 96/9/EC Art. 7), and binary-derived material (Art. 6). Nothing in `crates/` came from the last category, so the safe set is large. Publishing now, before any decompiler output exists, is also the clean-room record — after step 7 the history can no longer prove it. A licence split (`crates/` MIT/Apache, `tools/` GPL-3.0 to match the parser it imports); engine code must not cite internal docs; one provenance line per module. **Blocking gap:** a public clone cannot currently produce `config/gamedata/` — see the publishability checklist in SPEC §6.2.
+**Answered: B — publish the engine and tooling; keep the spec and the mechanics internal.** Condition set by the owner: "as long as the game can be compiled and ran" — a stranger with their own install must be able to clone, build and run it. Not published: `docs/mechanics/`, SPEC §3/§4 (hashes, string VAs, install paths), `docs/archive/research/oracle.md`, `config/gamedata/` (already excluded by D8). Owner's decision after the four options were costed. Three regimes separate the material: our own work (no exposure), published community facts (facts are not copyrightable; only wiki prose is CC-BY-SA), substantial extraction from the dat (Database Directive 96/9/EC Art. 7), and binary-derived material (Art. 6). Nothing in `crates/` came from the last category, so the safe set is large. Publishing now, before any decompiler output exists, is also the clean-room record — after step 7 the history can no longer prove it. A licence split (`crates/` MIT/Apache, `tools/` GPL-3.0 to match the parser it imports); engine code must not cite internal docs; one provenance line per module. **Blocking gap:** a public clone cannot currently produce `config/gamedata/` — see the publishability checklist in SPEC §6.2.
 
 #### Amendment 1 (bank held two sections under one id)
 
@@ -179,7 +179,7 @@ Five pieces, and the order they become true:
 | piece | state |
 |---|---|
 | engine builds and runs from a clean clone | **true today** (`cargo build` needs no game data) |
-| `--load` in the engine | starts as **B** (tool-side converter behind `World::from_state`), becomes **A** once the reader is written from `docs/save-format.md` alone - gates in `docs/licensing.md` |
+| `--load` in the engine | starts as **B** (tool-side converter behind `World::from_state`), becomes **A** once the reader is written from `docs/archive/research/save-format.md` alone - gates in `docs/licensing.md` |
 | the importer lives here, not in another repository | not yet (D12 moved it out); returns as a GPL-3.0 directory under `tools/`, or as our own Rust reader later |
 | content: names by three lists, all prose rewritten, campaigns only ours | the rule is D201; the content work comes with the authored pack |
 | assets read in place; ours later | true today (D21) |

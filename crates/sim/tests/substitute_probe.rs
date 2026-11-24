@@ -10,7 +10,7 @@
 //!   faster one arrives, and the faster one walks through him.
 //!
 //! It prints rather than asserts: the numbers belong in a review note, and the rule they argue against belongs in
-//! `docs/decisions.md` D340. Run with
+//! `docs/archive/decisions-2026-11-24.md` D340. Run with
 //! `cargo test -p ruage-sim --test substitute_probe -- --ignored --nocapture`.
 
 use ruage_fixed::Fixed;

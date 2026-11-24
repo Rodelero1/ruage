@@ -3,7 +3,7 @@
 //!
 //! The seat book re-lays a ring whenever a man at a node is refused (`maybe_respread`, D200/D202), and a newcomer's arrival
 //! displaces working men through it. The original places a man **once**, when the order is given: after that his body is solid
-//! and nobody shuffles him. So this measures the thing P8 (`docs/parity-plan.md`) must hold: with men working one tree, a man
+//! and nobody shuffles him. So this measures the thing P8 (`docs/archive/research/parity-plan.md`) must hold: with men working one tree, a man
 //! who has arrived does not move by a single raw unit.
 //!
 //! Written before the implementation (D7, SPEC §11).

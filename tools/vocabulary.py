@@ -17,7 +17,7 @@ Reads `config/names.toml`, `config/gamedata/{units,effects}.toml` and `config/ec
 - effect fields that name a **unit id with no name**, which an importer could not translate.
 
 Exit code 1 when something would block a name-keyed pack, so the tool can gate a future step. Nothing here touches the
-simulation; it is the inventory the plan in `docs/unit-vocabulary.md` is written against.
+simulation; it is the inventory the plan in `docs/archive/research/unit-vocabulary.md` is written against.
 """
 
 from __future__ import annotations

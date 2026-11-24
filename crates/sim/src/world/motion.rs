@@ -557,7 +557,7 @@ impl World {
         //
         // 1. a landing that touches an object tile the body does **not** already touch is refused;
         // 2. a landing that takes the body **deeper** into one it does touch is refused too, so it may slide out but not in.
-        // **The ruling is in, and the step does not follow it yet** (`docs/parity-plan.md` P3, D330): the binary's test collides on
+        // **The ruling is in, and the step does not follow it yet** (`docs/archive/research/parity-plan.md` P3, D330): the binary's test collides on
         // **touching** (`FUN_00840830`, four `<=`), while this clause refuses only a landing that *penetrates* a new object. D306 settled
         // the apparent contradiction - the owner measured a packed trebuchet threading a one-tile hole, so touching-as-collision and a
         // passable one-tile gap are both true - which means the box this test grows is **not** the body's nominal radius: a body whose

@@ -1,6 +1,6 @@
 // **A DRAFT, not compiled by the workspace** - `docs/` is not a crate. It is the shape the P5 witness has to take, kept here
 // because the session that wrote it ran out of time to make it jam: the scene's two orders both arrive, so the fixture measures
-// nothing and the engine's own cuts cannot be attributed. What is established, in `docs/parity-plan.md` under P5:
+// nothing and the engine's own cuts cannot be attributed. What is established, in `docs/archive/research/parity-plan.md` under P5:
 //
 //   * a walk onto a tile a body holds cannot be *ordered* - `Command::Move`'s acceptance resolves it to a free neighbour;
 //   * a `Command::Spawn` aimed at a held tile is displaced by the placement rules;

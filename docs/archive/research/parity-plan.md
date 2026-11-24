@@ -7,7 +7,7 @@
 > **original's behaviour**, including the rows that were marked FORK because they encoded the owner's own earlier rulings - he has now
 > ruled the other way (D330). Where a row cannot be reached from this box, that is said in the row rather than in a note.
 >
-> **The order the rows are taken in, with each step's witness and size, is `docs/conformance-sequence.md`** (written 2026-11-21 at
+> **The order the rows are taken in, with each step's witness and size, is `docs/archive/research/conformance-sequence.md`** (written 2026-11-21 at
 > the owner's ask, crosschecked against the first-party talk and openage). This file is *what* differs; that one is *in which order*,
 > and it also carries what "100%" cannot mean (bit-exact routes).
 
@@ -33,15 +33,15 @@ ordered behaviour the game does not have, so "meet the original" and "the rule I
 | P8 | **DONE** | no seat book: gatherers spread by collision and pause only | the original has no seat book | cut (D293/D294), fixtures re-pointed |
 | P9 | **DONE** | nothing: `beside` (D200) was cut in D292 and the crowd ring point (D271) was withdrawn in D289 - `grep` finds neither rule in the tree | a group is sent to the **clicked point**; no "beside a body holding the goal" rule | already cut, at the owner's instruction, before this directive; the row was stale |
 | P10 | **KEEP** | the pause is drawn from our seeded stream, 0.25-1.50 s | the game's `rand()`, whose own comment calls it *"not considered sync safe"* | same interval, same distribution; only the random *source* differs, and a reproducible one is what makes the acceptance hash possible |
-| P11 | **HALF** | one flat A* for short/medium walks, and the levelled search for long routes | **three**: levelled, tile short-range, and a **polygonal** one for combat (dynamic convex hulls) | the levelled one landed (D296-D302, D322). The polygonal one is **not built** - there is no hull code in the tree - and it is a project, not a step. **The target is the legacy algorithm** (slides 21-38: AABBs, gift-wrapped hulls, cardinal rays, edge walk, 64-iteration cap, smoothing), not the DE-era fixed-point edge walk the talk presents as its replacement - HD predates that rewrite (crosscheck, `docs/conformance-sequence.md` §2) |
-| P12 | **UNREAD** | a tile is walkable or not; no per-edge passage | a **four-bit N/S/W/E neighbour mask**: a step is legal per **edge** (`zone_spatial_pyramid_check_tile.cpp`, `func_001D29F0`) | no HD address pins the mask, so the first move is a **read**, not a patch. **`docs/pathfinding-conformance.md` reads the mask as a derived cache of `!blocked(neighbour)` and says nothing needs porting** - the two files disagree and one of them is stale (D334) |
+| P11 | **HALF** | one flat A* for short/medium walks, and the levelled search for long routes | **three**: levelled, tile short-range, and a **polygonal** one for combat (dynamic convex hulls) | the levelled one landed (D296-D302, D322). The polygonal one is **not built** - there is no hull code in the tree - and it is a project, not a step. **The target is the legacy algorithm** (slides 21-38: AABBs, gift-wrapped hulls, cardinal rays, edge walk, 64-iteration cap, smoothing), not the DE-era fixed-point edge walk the talk presents as its replacement - HD predates that rewrite (crosscheck, `docs/archive/research/conformance-sequence.md` §2) |
+| P12 | **UNREAD** | a tile is walkable or not; no per-edge passage | a **four-bit N/S/W/E neighbour mask**: a step is legal per **edge** (`zone_spatial_pyramid_check_tile.cpp`, `func_001D29F0`) | no HD address pins the mask, so the first move is a **read**, not a patch. **`docs/archive/research/pathfinding-conformance.md` reads the mask as a derived cache of `!blocked(neighbour)` and says nothing needs porting** - the two files disagree and one of them is stale (D334) |
 | P13 | **DONE** | the heap key is `g + octile` (D337), the budget still `25 x euclid` | the key is `g + octile`; the 25 is the **expansion budget** only (`FUN_008007f0`, lines 177, 198, 312-316) | landed `D337`, witness `search_key::a_walk_round_one_tree_costs_what_the_octile_key_pays` (312 -> 294 on one tree). The same slice fixed a mover rounding hole the new routes exposed (801.295 raw in one tick) |
-| P14 | **LIVE** | tier 2 runs only on `avoid.is_empty() && manhattan >= 16 && level >= 2` | the land default **is** the levelled search (`FUN_008000d0` -> `FUN_007ee980`), and it **ignores moving objects**: `FUN_007ee980`'s body contains no stander insertion (the inserter `FUN_007f9d80` is reached from `FUN_007f96b0`/`FUN_007fbab0`, not from the levelled search), and openage's reading of the classic engine says the same ("it ignores moving objects, e.g. units or wildlife") | measured (D334): 121 long walks, **121 carrying a stander, 0 coarse searches**; lift the gate -> 6 answers, unchanged hash. **The gate is backwards**: the game runs the coarse search *and* ignores bodies; ours falls back to the flat search instead. The 16-tile floor is D306's and is ours too. Order and witnesses: `docs/conformance-sequence.md` steps 2-3 |
+| P14 | **LIVE** | tier 2 runs only on `avoid.is_empty() && manhattan >= 16 && level >= 2` | the land default **is** the levelled search (`FUN_008000d0` -> `FUN_007ee980`), and it **ignores moving objects**: `FUN_007ee980`'s body contains no stander insertion (the inserter `FUN_007f9d80` is reached from `FUN_007f96b0`/`FUN_007fbab0`, not from the levelled search), and openage's reading of the classic engine says the same ("it ignores moving objects, e.g. units or wildlife") | measured (D334): 121 long walks, **121 carrying a stander, 0 coarse searches**; lift the gate -> 6 answers, unchanged hash. **The gate is backwards**: the game runs the coarse search *and* ignores bodies; ours falls back to the flat search instead. The 16-tile floor is D306's and is ours too. Order and witnesses: `docs/archive/research/conformance-sequence.md` steps 2-3 |
 | P15 | **DONE** | `EXPANSION_CAP = 20_000` with a witness that binds | `20000 < local_46c` at `0x800d57` | landed (D336): a 1,200 x 1,200 map with a sealed goal, `estimate = 42,300`, `expansions == 20_000` asserted; mutation-proved against `EXPANSION_CAP = u32::MAX` (fails at 42,300 of 20,000) |
 | P16 | **LIVE** | a body refuses a landing whose **centre** is inside the pair's reach - a **disc** (`motion.rs:505`) | four `<=` on two axis-aligned **boxes**, the query grown by the mover's radius (`FUN_00840830`) | measured (D334): 4,741 of 218,920 body-steps (2.17%) end with both boxes overlapping and the discs clear; the original counts those as collisions and answers with the repath and the pause |
-| P17 | **MISSING** | a waypoint the mover cannot reach is returned by every re-plan and stands there | **substituted**: the log names `mConsecutiveSubstituteCount` - *"We won't reach our waypoint either this or the next update, but we have a count of %d, faking it"* - so the waypoint is skipped and the next is reached | `grep substitut crates/` finds only a comment; the gap register listed it and no live row carried it (D334). Witness and order: `docs/conformance-sequence.md` step 5 |
-| P18 | **MISSING** | the order has one goal point; nothing else is carried | the order's **path vocabulary**: a forced waypoint, a teleport-to-waypoint, a per-path hit (`ADDmove`'s fields) | unread; the gap register listed it and no live row carried it (D334). A read first, then a fixture (`docs/conformance-sequence.md` step 9) |
-| P19 | **MISSING** | the levelled search has no distance-from-the-edge term | open cells cost `10 + (coord - window_lo) + 10` in the direction of travel, and a border cell gets `cost_mod` 0/-100 (`FUN_007ed280`, `zone_spatial_pyramid_search_radius`) | parked on the window's padding, which is unread (D299) - but the term itself is read and is a row, not a note (`docs/conformance-sequence.md` §3) |
+| P17 | **MISSING** | a waypoint the mover cannot reach is returned by every re-plan and stands there | **substituted**: the log names `mConsecutiveSubstituteCount` - *"We won't reach our waypoint either this or the next update, but we have a count of %d, faking it"* - so the waypoint is skipped and the next is reached | `grep substitut crates/` finds only a comment; the gap register listed it and no live row carried it (D334). Witness and order: `docs/archive/research/conformance-sequence.md` step 5 |
+| P18 | **MISSING** | the order has one goal point; nothing else is carried | the order's **path vocabulary**: a forced waypoint, a teleport-to-waypoint, a per-path hit (`ADDmove`'s fields) | unread; the gap register listed it and no live row carried it (D334). A read first, then a fixture (`docs/archive/research/conformance-sequence.md` step 9) |
+| P19 | **MISSING** | the levelled search has no distance-from-the-edge term | open cells cost `10 + (coord - window_lo) + 10` in the direction of travel, and a border cell gets `cost_mod` 0/-100 (`FUN_007ed280`, `zone_spatial_pyramid_search_radius`) | parked on the window's padding, which is unread (D299) - but the term itself is read and is a row, not a note (`docs/archive/research/conformance-sequence.md` §3) |
 
 **Rows this box cannot finish, said here rather than at the bottom**: the **100/600 cost rows** (D327) need the terrain descriptor table, and
 this install's `AoK HD.exe` is **a different build** from the decompiled corpus (the table's address is outside its image, and the corpus's
@@ -147,7 +147,7 @@ becomes "men stand touching the node, a body apart from each other"), plus the f
 overlapping; a man who is working does not move; the acceptance match's time is within the +1.1 s measured for P4+P5.
 
 
-## P8b - CORRECTED 2026-11-19: the taken list is *ours*, and the game re-targets (see `docs/gather-seating-evidence.md`)
+## P8b - CORRECTED 2026-11-19: the taken list is *ours*, and the game re-targets (see `docs/archive/research/gather-seating-evidence.md`)
 
 **This section was wrong when it was written**, and the crosscheck the owner asked for overturned it. It said the taken list is the
 game's mechanism, quoting a *neighbouring open-source project's* approach planner. The game's own players say otherwise:
@@ -206,7 +206,7 @@ So the jam case only arises when a body **moves into the goal after the order** 
 is displaced by the placement rules, which is why two attempts at the fixture arrived instead of jamming. The witness must
 therefore make a **body walk in** (`collision::a_walker_never_ends_a_tick_inside_a_friend` does exactly this, placing the stander
 once the walker is under way), and the three cuts go in one commit: `beside`, `finish_blocked_orders`, the D204 re-task.
-**A draft of the fixture is `docs/p5-witness-draft.rs`** (not compiled): two orders to one tile, the nearer man ordered a tick
+**A draft of the fixture is `docs/archive/p5-witness-draft.rs`** (not compiled): two orders to one tile, the nearer man ordered a tick
 later. It does **not** jam - the engine's own acceptance resolves both - and the `Idle` at tick ~144 is still unattributed, so
 the next session's first move is to instrument `work.finished` (`step.rs`, the `Task::Move` arm) and `end_walk` (`motion.rs`)
 with the tick and read which arm fired.
@@ -221,7 +221,7 @@ becomes "no deeper than the step that was already being taken").
 
 ### P5 measured again: three rules end a walk, and arrival is generous
 
-The crowded-goal witness (eight men ordered to one tile, `docs/p5-witness-draft-crowd.rs`) **bites on the unmodified engine** -
+The crowded-goal witness (eight men ordered to one tile, `docs/archive/p5-witness-draft-crowd.rs`) **bites on the unmodified engine** -
 `ZZREACHED EntityId(9103) tick 94` and `ZZFINISHED tick 94` - and it shows there are **three** ways a walk ends, not two:
 
 1. **`beside`** (D200) - ours, cut.
@@ -231,7 +231,7 @@ The crowded-goal witness (eight men ordered to one tile, `docs/p5-witness-draft-
    the man it named had **reached** at tick 94 - while an earlier run had shown him `Idle` at 86, i.e. **something re-issues his
    order** after the engine stood him down.
 
-**The witness as it must be written** is in `docs/p5-witness-draft-crowd.rs`, and its claim is not "every man stays `Move`" - the
+**The witness as it must be written** is in `docs/archive/p5-witness-draft-crowd.rs`, and its claim is not "every man stays `Move`" - the
 one man who arrives may legitimately stand down. It is: **a man may stand down only standing on the goal**; every other man keeps
 his order. Written that way it **bites on the unmodified engine** (`at tick 104 EntityId(9102) was given up away from the goal:
 Idle`), which is what a witness has to do.
@@ -279,7 +279,7 @@ on every tick the walker presses him, so the 4576 is the pair **mid-exchange**, 
 **What that changes:** the old forty-tick finish did not so much protect the collision rules as *end the exchange before it pressed
 this deep*. So the P5 slice is smaller than the re-plumbing note above made out - the press-through guard does not need inventing -
 and its first task was to decide, with the game in hand, how deep two friends may press - **the binary answered (D290,
-`docs/press-depth-evidence.md`): there is no floor.** `FUN_008aa990` computes a full depenetration and its only caller never reads
+`docs/archive/research/press-depth-evidence.md`): there is no floor.** `FUN_008aa990` computes a full depenetration and its only caller never reads
 the result back into the unit's position; what stops a unit is the pause and the re-path. So the fixture's `>= reach` is replaced by
 "friends may press", and the quarter-footprint floor proposed before the reading is withdrawn.
 
@@ -341,7 +341,7 @@ drafts under `docs/`, and no engine change from this attempt.
 The crosscheck's first draft claimed the gather arm still pushes a body 0.15 tiles after forty refusals (quoting a *comment* at
 `world/step.rs:1807`). **It does not**: no assignment to an entity's position exists outside the movement pass, the only `scale / 20`
 left is a tolerance for "on his own place", and `no_pushing::a_crowd_at_a_tree_is_never_pushed` - which asserts that nobody in the
-crowd is moved - is green. D204 removed the nudge; the comment outlived it. `docs/crosscheck-2026-11-19-rulings.md` carries the
+crowd is moved - is green. D204 removed the nudge; the comment outlived it. `docs/archive/research/crosscheck-2026-11-19-rulings.md` carries the
 correction.
 
 ## What is done, what is next (rewritten 2026-11-19, after D289/D290/D291)
@@ -396,4 +396,4 @@ P4, P5 and P6/P7 do not depend on the answer.
 - A **conformance row** for a rule the game states, or a **fixture** for behaviour, **watched failing before the change**.
 - The acceptance fixture's time (`the_acceptance_match_trains_more_villagers`), and the suite's red set **diffed by name**
   against the previous commit's, not by count.
-- The step written into `docs/decisions.md` and this file, committed and pushed per step.
+- The step written into `docs/archive/decisions-2026-11-24.md` and this file, committed and pushed per step.

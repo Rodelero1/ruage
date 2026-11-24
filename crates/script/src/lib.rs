@@ -39,7 +39,7 @@ pub struct Scenario {
     pub step: Vec<Step>,
     /// Rules are **additive**: a v2 file without any means exactly what it did, which is why they do not bump the
     /// schema. A timestamp says *when*; a rule says *while* - which is how the game's own AI writes a build order
-    /// (`docs/ai-of-the-game.md`), and the reason a rule cannot go stale when the economy's speed changes.
+    /// (`docs/archive/research/ai-of-the-game.md`), and the reason a rule cannot go stale when the economy's speed changes.
     #[serde(default)]
     pub rule: Vec<Rule>,
     /// The **personality** this match plays (D94): a name resolved beside the scenario, as `ai/<name>.toml`. Behaviour

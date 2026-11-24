@@ -1,4 +1,4 @@
-//! **A body the mover already stands inside is still planned round** (P7, `docs/parity-plan.md`).
+//! **A body the mover already stands inside is still planned round** (P7, `docs/archive/research/parity-plan.md`).
 //!
 //! The original's search starts on the tile the mover stands on and puts **every stander the mover does not ignore** into it
 //! (`FUN_007f9d80`): that bodies touch is the step pass's problem, not the plan's. Ours drops every body within a quarter tile of the mover in

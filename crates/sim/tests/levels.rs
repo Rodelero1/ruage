@@ -1,7 +1,7 @@
 //! **The four level maps the levelled pathfinder searches over** (P11, step 11a).
 //!
 //! Source: `FUN_007ee980_007ee980.c`, `FUN_007ede40_007ede40.c` and `FUN_007f1100_007f1100.c` (the REA corpus, HD 5.7, read
-//! 2026-11-19), written up in `docs/pathfinding-levels-evidence.md`:
+//! 2026-11-19), written up in `docs/archive/research/pathfinding-levels-evidence.md`:
 //!
 //! ```c
 //! // FUN_007ede40: stamp an obstacle rectangle into the top level only

@@ -37,7 +37,7 @@ oracle you obtain by pressing "Save", not by writing a game bot.
 | U6 rate of fire (shots fired over an interval) | **yes** |
 | U8 civ `resources` array meaning (compare civs across saves) | **partly** |
 | U2 effect-type semantics (research a tech, diff the save) | **yes** — the cleanest method available |
-| U7 pathing algorithm / tie-breaks | **no** — needs per-tick trajectories; the *module map* behind it is named by the binary (`docs/binary-class-map.md`: `path.cpp` and `pathsys.cpp` separately, `motion.cpp`, `move_obj.cpp`) |
+| U7 pathing algorithm / tie-breaks | **no** — needs per-tick trajectories; the *module map* behind it is named by the binary (`docs/archive/research/binary-class-map.md`: `path.cpp` and `pathsys.cpp` separately, `motion.cpp`, `move_obj.cpp`) |
 | U10 age-up upgrade timing | **partly** — snapshots catch the aftermath, not the transition |
 
 So D2 resolves to: **file-based oracle, sufficient for the constants and the economy, not
@@ -82,7 +82,7 @@ the closest thing to a per-tick oracle that exists in a file.
 Two caveats before anyone gets excited:
 
 - It is **DE-only**. When that paragraph was written this install held **zero** `.aoe2record` files;
-  since 2026-11-01 it holds **four HD 5.8 recordings** (`docs/save-format.md`), so this branch is live.
+  since 2026-11-01 it holds **four HD 5.8 recordings** (`docs/archive/research/save-format.md`), so this branch is live.
 - **HD's recordings do carry the sync section** (measured 2026-11-22, `tools/recordings.py`):
   28 bytes every **500 steps** — the meta block's second word is 500 — holding a world checksum that
   changes each block, two zero words, a number that only grows, and the world time in ms to the
@@ -124,7 +124,7 @@ a recorded game's periodic sync records (decisive, needs one `.aoe2record` made 
 box), a save's task progress at a known game time (the save reader currently gets only player
 names), or a decompiled constant.
 
-**The lockstep *shape* is now named, by the binary itself** (`docs/binary-class-map.md`, D140): HD 5.7 carries 31
+**The lockstep *shape* is now named, by the binary itself** (`docs/archive/research/binary-class-map.md`, D140): HD 5.7 carries 31
 `Comm*` classes, and they are a turn-synchronised command stream — `CommPacketSyncTurn`, `CommPacketSyncCmdCount`,
 `CommPacketPlayerCommand`, `CommPacketChecksum`, plus `CommPacketSpeedChange`, `CommPacketResign` and the pre-game state
 packets. So the contract is: per turn, a batch of player commands, a count, and a checksum — which is the ensemble
@@ -257,7 +257,7 @@ just not an oracle.
 ## The AI-vs-AI farm: what to capture, and in what mode (2026-11-01)
 
 The owner's plan - two AIs playing each other, recorded, with periodic captures - is the right way to close the rows that
-static reading cannot (`docs/behaviour-diff.md` rows 3-5, 8, 10). The mode matters, and the answer is not "either".
+static reading cannot (`docs/archive/research/behaviour-diff.md` rows 3-5, 8, 10). The mode matters, and the answer is not "either".
 
 **Random Map, not Death Match.**
 
@@ -327,7 +327,7 @@ Decoded by hand (raw DEFLATE, `zlib.decompressobj(-15)`, exactly the recipe step
 | recordings | `u32 section_len`, `u32 0`, then the deflated header; the op stream after it, uncompressed | `VER 9.4\0\0\0HA\0` | 187,964-2,697,673 bytes; the header section is ~252-256 KB in all four, so the 2.7 MB one carries a far longer op stream |
 | saves | raw DEFLATE from offset 0 | `VER 9.4\0\0\0HA\0` | 263,141 → 453,902 bytes, monotone growth across `brit1`…`brit13` |
 
-**The `VER 5.8` question is settled.** `docs/re-toolchain.md` recorded that the binary holds no `VER 5.8` literal "so that
+**The `VER 5.8` question is settled.** `docs/archive/research/re-toolchain.md` recorded that the binary holds no `VER 5.8` literal "so that
 needs a real `.aoe2record` from your install", and `oracle.md` itself said mgz-fast supports HD 5.8 but "whether 5.7 differs
 is unknown". These four files are named **v5.8 by the game itself**, so this build writes 5.8 recordings — and every one of
 them still carries a `VER 9.4` payload, the same magic as the 5.7-family recording and the saves. The version string in the
@@ -365,7 +365,7 @@ from the same `VER 9.4` header the recording shares.
 
 ## Errata (2026-11-01): there is no `HA` magic, and the 8-of-13 puzzle is the save version
 
-Two claims in this file are corrected by `docs/save-format.md` and `tools/savegame.py`:
+Two claims in this file are corrected by `docs/archive/research/save-format.md` and `tools/savegame.py`:
 
 1. **`VER 9.4\0\0\0HA\0` is a float seen as text.** Bytes 8-11 of a save are a **float32 save-game version**, and
    `12.5f` is `0x41480000` - whose upper two bytes are the ASCII `HA`. The tag is not part of the format; the eight

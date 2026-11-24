@@ -55,7 +55,7 @@ weakened into passing.
 Two limits, both load-bearing:
 
 - **Its addresses are AoC/PS2, not HD 5.7.** A number that HD carries differently is pinned to HD's own site instead
-  (`docs/movement-in-the-binary.md`): 16 per tile step with the octile table `table[min] + 16 * (max - min)`
+  (`docs/archive/research/movement-in-the-binary.md`): 16 per tile step with the octile table `table[min] + 16 * (max - min)`
   (`FUN_007ffd10`), Euclidean × 2500/100 for the estimate, standers inserted per search (`FUN_007f9d80`), a trapped start
   re-seeded by `2 x radius` (`FUN_007fb220`).
 - **The repo carries no licence** (all rights reserved). So it is read for **behaviour** and cited by module - never
@@ -66,7 +66,7 @@ Two limits, both load-bearing:
 
 *The verdict column is the **2026-11-16** read (D247). Rows 26-29 are all closed since: 26 by D279's closest-cell answer,
 27 by `16853ac` (16/23 + weight 25 as the budget), 28 by D296-D306 (the hierarchy), 29 by D304's budget. Read the verdicts as
-history; `docs/parity-plan.md` is the live register.*
+history; `docs/archive/research/parity-plan.md` is the live register.*
 
 | # | rule | verdict |
 |---|---|---|

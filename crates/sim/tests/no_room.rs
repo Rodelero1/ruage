@@ -3,7 +3,7 @@
 //! Written before the implementation (D7). The owner's rule, after the footprint masks exposed it: a finished unit with
 //! **no free tile beside its building** is garrisoned **inside that building**; when there is **no garrison room either**,
 //! training **pauses** at that building with the reason in state - never dropped, never silently retried. The engine owns
-//! the reason (`NoRoom`); the words on screen are the view's (`docs/ui.md`).
+//! the reason (`NoRoom`); the words on screen are the view's (`docs/archive/research/ui.md`).
 
 use std::path::PathBuf;
 

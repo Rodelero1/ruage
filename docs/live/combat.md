@@ -53,7 +53,7 @@ every pack written before this meant.
    bound to the wrong one and arrows were never removed. It is `landed_arrows` now.
 
 The projectile id is "one past the highest", which is an O(n) scan per shot. Training spawns do the same, so
-this is consistent rather than new, and it is recorded in `docs/performance.md` as the thing to fix first if
+this is consistent rather than new, and it is recorded in `docs/archive/research/performance.md` as the thing to fix first if
 arrow-heavy fights ever show up in a profile.
 
 
@@ -528,7 +528,7 @@ centre instead - a target a walk can always reach, and a scratch on the wall tea
 *Area:* Combat
 *Status:* decided
 
-Owner's ruling on `docs/ai-scripts.md` fork 1: **agreed as proposed.** "Which of my units beats which of theirs" is
+Owner's ruling on `docs/archive/research/ai-scripts.md` fork 1: **agreed as proposed.** "Which of my units beats which of theirs" is
 arithmetic over the pack - `damage_between(attacks, armours, rules)` against each candidate's `attacks`/`armours` pairs -
 so it is computed, never written down.
 
@@ -649,7 +649,7 @@ not another function hunt.
 number, the floor, stayed unexamined.
 
 **Basis.** `sub_744d60` and `sub_745060` in `AoK HD.exe` (sha256 `cbd10d81...`), read with the clean-room decompiler through the active-target session;
-`docs/behaviour-diff.md` row 2; `crates/sim/src/lib.rs:219` `damage_between`. Review: `docs/reviews/2026-11-15-d227-damage-row.md`.
+`docs/archive/research/behaviour-diff.md` row 2; `crates/sim/src/lib.rs:219` `damage_between`. Review: `docs/reviews/2026-11-15-d227-damage-row.md`.
 
 
 ### D228 - the minimum-1 rule is once per attack, and three sources say so
@@ -686,7 +686,7 @@ land for **3**, is excluded.
 the register says so, in its own words, with the binary evidence beside it. That is a legitimate close for a project that follows the original generally: the rule
 is stated, the sources are named, and the one thing static reading could not reach is described rather than hidden.
 
-**Basis.** `docs/behaviour-diff.md` row 2 (now **`same`**; the register reads **2 of 12**); `sub_744d60` and `sub_745060` (D227); `crates/sim/src/lib.rs:219`
+**Basis.** `docs/archive/research/behaviour-diff.md` row 2 (now **`same`**; the register reads **2 of 12**); `sub_744d60` and `sub_745060` (D227); `crates/sim/src/lib.rs:219`
 `damage_between`; `crates/sim/tests/combat.rs:184` `no_attack_never_floors_below_the_minimum`. Review: `docs/reviews/2026-11-15-d228-minimum-rule.md`.
 
 **Conformance needed**: claims the game with no source pointer — UNVERIFIED until one is named.

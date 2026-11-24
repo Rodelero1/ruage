@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """**Read unit positions out of an AoE2 HD save, and measure a gathering ring.**
 
-The save's order queue carries destinations, not standing places (`docs/save-format.md`), so a ring measurement needs the
+The save's order queue carries destinations, not standing places (`docs/archive/research/save-format.md`), so a ring measurement needs the
 objects themselves. This finds them: the world section holds records whose first eight bytes are the object's **x and y as
 float32 in tiles** (the bush save chains them at a **229-byte stride**; other saves lay them out differently), and it prints every
 position in a window plus, for a named square, how many bodies stand on a ring around it and at what distance.

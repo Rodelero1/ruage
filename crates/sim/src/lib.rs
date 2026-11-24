@@ -307,11 +307,11 @@ pub enum RallyPoint {
 
 /// Why a building's production queue is stopped (D85).
 ///
-/// Engine state, never words: the view owns the wording (`docs/ui.md`), so a mod changes what the player reads without
+/// Engine state, never words: the view owns the wording (`docs/archive/research/ui.md`), so a mod changes what the player reads without
 /// touching the simulation. It is a fact about *now* rather than an event - set while the reason holds, cleared the
 /// tick it stops holding, which is what lets the panel draw it for exactly as long as it is true.
 ///
-/// `Unaffordable` is in `docs/ui.md`'s plan and is **not** here: the queue pays when the order is placed, so no code
+/// `Unaffordable` is in `docs/archive/research/ui.md`'s plan and is **not** here: the queue pays when the order is placed, so no code
 /// path can produce it today, and a variant no test can drive is a guess.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrainingPause {
@@ -1227,7 +1227,7 @@ pub struct World {
     aggro_scan_ticks: u64,
     /// Units waiting behind the one a building is making, by building. A side table rather than a
     /// second field on `Entity`: the entity array is walked every tick, and a `Vec` in it costs every
-    /// entity for the sake of a few buildings (docs/performance.md, pass seven).
+    /// entity for the sake of a few buildings (docs/archive/research/performance.md, pass seven).
     /// **One queue per building, jobs in order** (D157): units and techs together, so a tech ordered after two units runs
     /// third. The running job is not in here - it lives on the entity as `training` or `researching`, because those are the
     /// timers the tick loop reads.
@@ -2019,7 +2019,7 @@ impl World {
         if self.ground.is_none() {
             return Vec::new();
         }
-        // **The mover is the only body skipped, and by id** (D331, `docs/parity-plan.md` P7). This used to skip every body within a quarter
+        // **The mover is the only body skipped, and by id** (D331, `docs/archive/research/parity-plan.md` P7). This used to skip every body within a quarter
         // tile of the mover in both axes, which hid a friend the mover was standing inside - and two bodies standing in one place is a state
         // this engine reaches on purpose (D289 sends every man to the tile he was ordered to; D290 leaves no press floor), so the plan
         // certified legs the step then refused. The original's search includes every stander the mover does not ignore (`FUN_007f9d80`).
@@ -2038,7 +2038,7 @@ impl World {
             // **has waypoints left AND moved on the previous tick** - not movement alone. The route half is a third clause the
             // binary does not have, and it is deliberately conservative: a body with a spent route that is still walking (a
             // `Task::Move` driven by the task layer's own direction, D349) stays an obstacle. Dropping the route half was tried
-            // and measured (`docs/decisions.md`, D349): every crowd's own boxes then made the tiles round a man unplannable.
+            // and measured (`docs/archive/decisions-2026-11-24.md`, D349): every crowd's own boxes then made the tiles round a man unplannable.
             // **Both halves are needed.** `velocity` is not the field - it is a fixture-only drift for idle bodies
             // (`lib.rs:2313`) - so the movement is read from `last_moved`, which the movement pass writes for every
             // body that took a step. The route half is what keeps a body that has *just been placed* an obstacle:
@@ -4549,7 +4549,7 @@ impl World {
     /// whose rule it is.
     ///
     /// Derived on the spot rather than cached: the set would have been one more field on `World`, and a
-    /// field on `World` costs more than the lookup does (`docs/performance.md`, pass seven and thirteen).
+    /// field on `World` costs more than the lookup does (`docs/archive/research/performance.md`, pass seven and thirteen).
     /// The scan is one effect's command list, and only when an order is placed.
     fn civ_barred_unit(&self, player: u8, unit: u32) -> Option<String> {
         let civs = self.civs.as_ref()?;

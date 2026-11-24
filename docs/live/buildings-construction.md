@@ -386,7 +386,7 @@ simulation still blocks one tile per building (D76's masks are recorded and not 
 *Status:* decided
 
 *2026-11-08. The owner corrected D54's premise: "Gates are more difficult than 'passable for owner and allies, solid for
-others'. Enemy unit can pass together with your own. Please do mere research." Research is `docs/gates-research.md`.*
+others'. Enemy unit can pass together with your own. Please do mere research." Research is `docs/archive/research/gates-research.md`.*
 
 1. **D54's sentence is corrected**: *"Not modelled: gates (owner-passable pathing needs a per-player grid)"* is **wrong**. A
    gate is a **time-varying global state** - open means walkable for everyone, closed means walkable for nobody - so it is
