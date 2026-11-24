@@ -167,5 +167,32 @@ class GeneratedFilesOutOfCitationScope(unittest.TestCase):
         )
 
 
+class RefinementTables(unittest.TestCase):
+    def test_a_status_override_names_the_chain_link(self):
+        text = "## D59 - Old rule\n\nBody. Measured.\n\n"
+        corpus = corpus_of(text)
+        out = live_migrate.render_decision(
+            corpus.decisions["D59"],
+            corpus,
+            "Alpha",
+            None,
+            status_overrides={"D59": ("superseded", "D59b")},
+        )
+        self.assertIn("superseded by D59b", out)
+
+    def test_a_conformance_addition_promotes_a_flagged_row(self):
+        text = "## D78 - Victory is conquest\n\nThe game ends so in the game.\n\n"
+        corpus = corpus_of(text)
+        out = live_migrate.render_decision(
+            corpus.decisions["D78"],
+            corpus,
+            "Alpha",
+            None,
+            conformance_additions={"D78": "GAME - the manual's rule, quoted in D59"},
+        )
+        self.assertIn("**Conformance**: GAME - the manual's rule, quoted in D59", out)
+        self.assertNotIn("Conformance needed", out)
+
+
 if __name__ == "__main__":
     unittest.main()

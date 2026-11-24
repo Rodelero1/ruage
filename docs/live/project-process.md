@@ -479,7 +479,7 @@ blame lands on whichever side is cheaper to change - which is never the rule. Re
 *Status:* decided
 
 **What it says.** `docs/next-step.md` is capped at **16,384 bytes**, must start with `# OPEN`, and `tools/next_step.py --split` moves
-everything after the first block to `docs/history/next-step-<date>.md`. Enforced by `make check` and the pre-commit hook.
+everything after the first block to `docs/archive/history/next-step-<date>.md`. Enforced by `make check` and the pre-commit hook.
 
 **Why, measured.** The owner's rule is "compact first: persist state to files so a fresh session resumes without the conversation". By
 2026-11-12 that file was **350,038 bytes** - twenty times the largest source file - and this session read it at 101 KB and growing

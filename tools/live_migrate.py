@@ -26,6 +26,17 @@ AREAS_FILE = ROOT / "docs" / "decision-areas.toml"
 UNKNOWNS = ROOT / "docs" / "mechanics" / "README.md"
 OUT_DIR = ROOT / "docs" / "live"
 
+# Phase B refinement tables (ruled, with evidence; bank stays verbatim).
+# Status: the bank never wrote D59's supersession in machine form (C6 ruled the
+# chain ends at D59b). Conformance: D78's victory claim rests on the manual's
+# conquest rule quoted in D59 (no other source pointer exists in the tree).
+STATUS_OVERRIDES: dict[str, tuple[str, str]] = {
+    "D59": ("superseded", "D59b"),
+}
+CONFORMANCE_ADDITIONS: dict[str, str] = {
+    "D78": "GAME - the manual's conquest rule, quoted in D59",
+}
+
 sys.path.insert(0, str(HERE))
 import conformance_audit as audit  # noqa: E402 (sibling script, deliberately shared)
 import decisions  # noqa: E402
@@ -66,19 +77,25 @@ def render_decision(
     corpus: decisions.Corpus,
     area: str,
     bank_titles: dict[str, list[str]] | None = None,
+    status_overrides: dict[str, tuple[str, str]] | None = None,
+    conformance_additions: dict[str, str] | None = None,
 ) -> str:
     """One decision, verbatim, plus scaffolding. Amendments (later substance under the
     same id) follow the body; a bank numbering collision (two sections, two titles,
     one id) renders as distinct live IDs `D<na>`/`D<nb>` instead. A game claim with
-    no source pointer is flagged."""
+    no source pointer is flagged — unless the refinement tables supply one."""
     titles = (bank_titles or {}).get(decision.id, [decision.title])
     if len(titles) > 1:
         return _render_collision(decision, corpus, area, titles)
     lines = [f"### {decision.id} - {decision.title}", ""]
-    lines = [f"### {decision.id} - {decision.title}", ""]
     if decision.date:
         lines += [f"*Date:* {decision.date}", ""]
-    lines += [f"*Area:* {area}", f"*Status:* {decisions.status(decision, corpus)}", ""]
+    override = (status_overrides or STATUS_OVERRIDES).get(decision.id)
+    if override:
+        state, other = override
+        lines += [f"*Area:* {area}", f"*Status:* {state} by {other} (ruled)", ""]
+    else:
+        lines += [f"*Area:* {area}", f"*Status:* {decisions.status(decision, corpus)}", ""]
     lines += [decision.text, ""]
     for pos, amendment in enumerate(corpus.amendments.get(decision.id, []), 1):
         lines += [
@@ -99,13 +116,17 @@ def render_decision(
             "",
         ]
     elif not audit.TAG.search(decision.text):
-        haystack = f"{decision.title}\n{decision.text}"
-        if audit.CLAIM.search(haystack) and not audit.SOURCE.search(haystack):
-            lines += [
-                "**Conformance needed**: claims the game with no source pointer "
-                "— UNVERIFIED until one is named.",
-                "",
-            ]
+        addition = (conformance_additions or CONFORMANCE_ADDITIONS).get(decision.id)
+        if addition:
+            lines += [f"**Conformance**: {addition} (live refinement)", ""]
+        else:
+            haystack = f"{decision.title}\n{decision.text}"
+            if audit.CLAIM.search(haystack) and not audit.SOURCE.search(haystack):
+                lines += [
+                    "**Conformance needed**: claims the game with no source pointer "
+                    "— UNVERIFIED until one is named.",
+                    "",
+                ]
     return "\n".join(lines).rstrip() + "\n"
 
 

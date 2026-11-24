@@ -6,7 +6,7 @@ this tree is either source data or supporting documentation.
 
 | | |
 |---|---|
-| Spec version | 1.222 |
+| Spec version | 1.223 |
 | Last updated | 2026-11-24 |
 | Decision status | **D1 = G1, D2 = file-based oracle, D17 = four layers with the resource enum deleted — see §6 and `docs/live/` (bank archived at `docs/archive/decisions-2026-11-24.md`)** |
 | Historical handoff | [`docs/archive/research/age2hd.md`](docs/archive/research/age2hd.md) — read it *through* the errata in §4 |
@@ -649,6 +649,7 @@ should say so rather than claim otherwise.
 
 | Date | Change |
 |---|---|
+| 2026-11-24 | v1.223 - **Phase B calibration: Vision & fog + Victory & defeat**. 8 rows read in full; 2 scaffolding refinements (D59 superseded-by-D59b per C6, D78 GAME via manual quote in D59), 0 drops/merges. Refinements land as tested generator tables; open question for Phase B: tables until a body change is needed, then hand-maintained live files. Review: `docs/reviews/2026-11-24-phase-b-calibration.md`. |
 | 2026-11-24 | v1.222 - **Phase A docs shaping: thin root, citations follow**. 45 root md → 7; 34 → `archive/research/`, 7 history → `archive/history/`, `.swp` deleted. One-shot rewrite of every moved path (reviews/ frozen by design, SPEC history untouched); audit patterns + `next_step` HISTORY repointed (RED-recorded tests). Caught: archived filename corrupting D188's derived date (fixed, 1 of 364). Counts identical, gates green. Review: `docs/reviews/2026-11-24-phase-a-docs-shaping.md`. |
 | 2026-11-24 | v1.221 - **index files by authored areas; C14 complete**. Deleted the keyword heuristic from `decision_index.py` (`assign_areas` + `group_entries`, table-ordered, `Unfiled` tail); contract test replaced, RED-recorded. Regen: 345 rows, counts identical, 10 buckets → 15 TOML areas, no Unfiled gap. Review: `docs/reviews/2026-11-24-index-files-by-table.md`. |
 | 2026-11-24 | v1.220 - **bank archived; scope + heuristic fixes**. `git mv docs/decisions.md → docs/archive/decisions-2026-11-24.md`; 5 tools + tests + Makefile + AGENTS + SPEC repointed. Index regen one-line diff (lossless). Fixes: collision heuristic now filters by parser kind (D186a–e false split caught and reverted), generated `docs/live/` excluded from citation scope like `site/`. Site build left stale (exits 1 on 9 pre-existing dangling ids, verified on clean tree — separate slice). Review: `docs/reviews/2026-11-24-bank-archived-scope-fixes.md`. |

@@ -33,7 +33,7 @@ vocabulary for yet, and the rule is deliberately one rule rather than a switch.
 ### D59 - Defeat is the absence of anything that counts (supersedes D46)
 
 *Area:* Victory & defeat
-*Status:* decided
+*Status:* superseded by D59b (ruled)
 
 The original rule, from the manual, twice:
 
@@ -148,5 +148,5 @@ The match ends when a side has nothing left that keeps it alive (D59's rule, unc
 acceptance script's prose said "a mangonel at the enemy town centre" and that is not the same thing: a razed town centre
 with three villagers in a corner is not a victory, in this engine or in the game.
 
-**Conformance needed**: claims the game with no source pointer — UNVERIFIED until one is named.
+**Conformance**: GAME - the manual's conquest rule, quoted in D59 (live refinement)
 
