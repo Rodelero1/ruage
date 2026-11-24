@@ -32,8 +32,10 @@ DECISIONS = ROOT / "docs" / "archive" / "decisions-2026-11-24.md"
 OUT = ROOT / "docs" / "decision-index.md"
 
 # One parser, not two: the conformance verdict, the claim and the source pointer are `conformance_audit`'s definitions.
+# Areas are the authored `docs/decision-areas.toml`, not keywords: C14 ruled the TOML wins, so this page files by table.
 sys.path.insert(0, str(HERE))
 import conformance_audit as audit  # noqa: E402  (a sibling script, deliberately shared)
+import decisions as bank  # noqa: E402  (area table + order, single-sourced)
 
 ROW = re.compile(r"^(#{2,3}) (D\w+) - (.+)$", re.MULTILINE)
 HEADING = re.compile(r"^#{1,3} ", re.MULTILINE)
@@ -50,42 +52,35 @@ FIXTURE = re.compile(
 SUPERSEDED = re.compile(r"supersed\w*(?:\s+in\s+part)?\s+by\s+(D\w+)", re.IGNORECASE)
 SUPERSEDES = re.compile(r"\bsupersed\w*\s+(?!by\b)(D\d+)", re.IGNORECASE)
 
-# Title/body keywords -> the page's groups. **Scored, not first-match**, and a tie is broken by this order - which is why
-# `Economy` is listed after `Buildings`: "a drop site" is an economy phrase that contains the word "site".: a title hit weighs 5 and a body hit 1, because
-# "body", "place" and "step" appear in every other row's prose and first-match filing put 261 of 340 rows under one area.
-AREAS: list[tuple[str, str]] = [
-    ("Combat & units", r"\battack|damage|armou?r|pierce|melee|projectile|arrow|siege|militar\w*|\bunit|hit point|"
-                       r"line of sight|conversion|monk|heal|garrison|stance|patrol|ballistic|accuracy"),
-    ("Economy & gathering", r"gather|resource|wood|gold|\bfood|stone|\bfarm|drop site|drop-off|carry|bank|"
-                            r"villager|hunt|forage|fishing|economy|stockpile|trade|market|pile|berry|tree\b"),
-    ("Buildings & construction", r"\bbuild|construction|foundation|\bsite|house|town cent|footprint|repair|\bwall|"
-                                 r"\bgate|pack|unpack|placement"),
-    ("Tech, ages & content", r"\btech|research|\bage\b|upgrade|civilisation|civilization|bonus|\beffect|\bpolicy|"
-                             r"content pack|unit line|\bdat\b|generator"),
-    ("Movement & pathfinding", r"pathfind|path finding|\bpath\b|collision|waypoint|\broute|movement|\bmotion|"
-                               r"standoff|\bbump|crowd|overlap|\bnudge|formation|collider|avoidance|"
-                               r"smooth|refine"),
-    ("Simulation core", r"\btick|fixed point|determin\w*|\bhash|\bseed|snapshot|save game|replay|\bclock|"
-                        r"\border|command|queue|schedul|random|budget|outcome|victory|defeat"),
-    ("AI & scenario", r"\bAI\b|scenario|\brule|objective|\bteam|quota|acceptance|skirmish|difficulty"),
-    ("Rendering & UI", r"render|sprite|graphic|\bUI\b|button|panel|theme|colour|color|sound|audio|camera|\bfog"),
-    ("Process & tooling", r"review|\btest|fixture|\btool|audit|document|decision|process|hook|commit|branch|"
-                          r"skill|probe|bench|clippy|\bfmt\b|verify|ledger"),
-]
+AREAS_FILE = ROOT / "docs" / "decision-areas.toml"
+
+UNFILED = "Unfiled"
 
 CLAIM_CHARS = 150
 
 
-def area_of(title: str, body: str) -> str:
-    """The area with the most keyword evidence: a title hit is worth five body hits."""
-    heading = title.lower()
-    prose = body[:800].lower()
-    best, best_score = "Other", 0
-    for name, pattern in AREAS:
-        score = 5 * len(re.findall(pattern, heading, re.IGNORECASE)) + len(re.findall(pattern, prose, re.IGNORECASE))
-        if score > best_score:
-            best, best_score = name, score
-    return best
+def assign_areas(
+    entries: list[dict], mapping: dict[str, str]
+) -> list[dict]:
+    """File every row by the authored table. A row the table does not name is
+    `Unfiled` — an open gap on the page, never a silent heuristic bucket."""
+    for entry in entries:
+        entry["area"] = mapping.get(entry["id"], UNFILED)
+    return entries
+
+
+def group_entries(
+    entries: list[dict], order: list[str]
+) -> list[tuple[str, list[dict]]]:
+    """Groups in the table's order, each sorted by id; `Unfiled` rows last, visibly."""
+    groups: dict[str, list[dict]] = {}
+    for entry in entries:
+        groups.setdefault(entry.get("area", UNFILED), []).append(entry)
+    for group in groups.values():
+        group.sort(key=lambda e: (len(e["id"]), e["id"]))
+    names = [name for name in order if groups.get(name)]
+    names += [name for name in groups if name not in order and groups[name]]
+    return [(name, groups[name]) for name in names]
 
 
 def first_sentence(body: str) -> str:
@@ -168,7 +163,6 @@ def parse(text: str) -> tuple[list[dict], dict[str, str], dict[str, list[str]]]:
                 "where": where,
                 "sourced": sourced,
                 "fixtures": fixtures,
-                "area": area_of(title, body),
                 "date": date.group(1) if date else "",
                 "claims_game": claims_game,
             }
@@ -185,12 +179,9 @@ def main() -> int:
 
     text = DECISIONS.read_text(encoding="utf-8")
     entries, superseded_by, supersedes = parse(text)
-
-    groups: dict[str, list[dict]] = {}
-    for entry in entries:
-        groups.setdefault(entry["area"], []).append(entry)
-    for group in groups.values():
-        group.sort(key=lambda e: (len(e["id"]), e["id"]))
+    order, mapping, _ = bank.load_areas(AREAS_FILE.read_text(encoding="utf-8"))
+    assign_areas(entries, mapping)
+    grouped = group_entries(entries, order)
 
     silent = [e for e in entries if e["kind"] is None]
     game_without_source = [e for e in entries if e["claims_game"] and not e["sourced"]]
@@ -214,13 +205,10 @@ def main() -> int:
     out.append(f"- **{len(no_fixture)}** rows name no fixture - the \"believed implemented\" list, where D150's pile rule lived.")
     out.append(f"- **{len(marked_superseded)}** rows say they are superseded.")
     out.append("")
-    out.append("Areas are a keyword heuristic over each row; the point is a page you can scan, not a taxonomy.")
+    out.append("Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section names rows the table does not file.")
     out.append("")
 
-    for area in [name for name, _ in AREAS] + ["Other"]:
-        group = groups.get(area)
-        if not group:
-            continue
+    for area, group in grouped:
         out.append(f"## {area} ({len(group)})")
         out.append("")
         for entry in group:
@@ -253,7 +241,7 @@ def main() -> int:
     else:
         OUT.write_text(page, encoding="utf-8")
         print(f"wrote {OUT.relative_to(ROOT)}: {len(entries)} rows, {len(page) // 1000}k characters, "
-              f"{len(groups)} areas, no_fixture={len(no_fixture)}, game_no_source={len(game_without_source)}")
+              f"{len(grouped)} areas, no_fixture={len(no_fixture)}, game_no_source={len(game_without_source)}")
     return 0
 
 

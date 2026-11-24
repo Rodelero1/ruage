@@ -60,12 +60,24 @@ class ParseTests(unittest.TestCase):
     def test_a_supersession_is_read_both_ways(self) -> None:
         self.assertEqual(self.superseded_by, {"D3": "D4"})
 
-    def test_area_is_scored_not_first_match(self) -> None:
-        # "body" and "step" are common prose words: a row about gathering must not be filed under movement because of them,
-        # which is what first-match filing did to 261 of 340 rows.
-        title = "Gathering wood at a drop site"
-        body = "the body of the man takes a step"
-        self.assertEqual(index.area_of(title, body), "Economy & gathering")
+    def test_areas_come_from_the_authored_table_not_keywords(self) -> None:
+        # C14: the TOML wins. A row about gathering is filed where the table says,
+        # even when its prose scores higher elsewhere under the old heuristic.
+        entries = [
+            {"id": "D1", "title": "Gathering wood at a drop site"},
+            {"id": "D9", "title": "Something unfiled"},
+        ]
+        assigned = index.assign_areas(entries, {"D1": "Economy"})
+        by_id = {entry["id"]: entry["area"] for entry in assigned}
+        self.assertEqual(by_id, {"D1": "Economy", "D9": "Unfiled"})
+
+    def test_unfiled_rows_order_last_visibly(self) -> None:
+        entries = [
+            {"id": "D9", "title": "B", "area": "Unfiled"},
+            {"id": "D1", "title": "A", "area": "Economy"},
+        ]
+        groups = index.group_entries(entries, ["Economy", "Simulation core"])
+        self.assertEqual([name for name, _ in groups], ["Economy", "Unfiled"])
 
 
 if __name__ == "__main__":

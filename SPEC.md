@@ -6,7 +6,7 @@ this tree is either source data or supporting documentation.
 
 | | |
 |---|---|
-| Spec version | 1.220 |
+| Spec version | 1.221 |
 | Last updated | 2026-11-24 |
 | Decision status | **D1 = G1, D2 = file-based oracle, D17 = four layers with the resource enum deleted — see §6 and `docs/live/` (bank archived at `docs/archive/decisions-2026-11-24.md`)** |
 | Historical handoff | [`docs/age2hd.md`](docs/age2hd.md) — read it *through* the errata in §4 |
@@ -649,6 +649,7 @@ should say so rather than claim otherwise.
 
 | Date | Change |
 |---|---|
+| 2026-11-24 | v1.221 - **index files by authored areas; C14 complete**. Deleted the keyword heuristic from `decision_index.py` (`assign_areas` + `group_entries`, table-ordered, `Unfiled` tail); contract test replaced, RED-recorded. Regen: 345 rows, counts identical, 10 buckets → 15 TOML areas, no Unfiled gap. Review: `docs/reviews/2026-11-24-index-files-by-table.md`. |
 | 2026-11-24 | v1.220 - **bank archived; scope + heuristic fixes**. `git mv docs/decisions.md → docs/archive/decisions-2026-11-24.md`; 5 tools + tests + Makefile + AGENTS + SPEC repointed. Index regen one-line diff (lossless). Fixes: collision heuristic now filters by parser kind (D186a–e false split caught and reverted), generated `docs/live/` excluded from citation scope like `site/`. Site build left stale (exits 1 on 9 pre-existing dangling ids, verified on clean tree — separate slice). Review: `docs/reviews/2026-11-24-bank-archived-scope-fixes.md`. |
 | 2026-11-24 | v1.219 - **all 15 conflicts ruled; collisions get live IDs, OWNER normalizes to OURS**. C3/C5/C6/C8/C11 mechanical chains, C1/C2/C4/C7/C9 compositions under existing owner rulings, C10/C12/C14 grill-granted, C13/C15 in the generator (RED-recorded, 7/7). Live shows D88a/D88b etc., D354 keeps its line plus `*Live verdict:* OURS`. Divergence register +1 DEFECT (gather search bounds, C9). Known side effect: live IDs read as dangling refs in the informational report — no new test failure (same 2 pre-existing). Review: `docs/reviews/2026-11-24-c-rulings-collision-ids.md`. |
 | 2026-11-24 | v1.218 - **live migration landed, mechanically: 15 area files, 364 decisions, 0 refusals**. `tools/live_migrate.py` (test-first, 5/5, RED recorded) reuses `tools/decisions.py` + `decision-areas.toml`; duplicate-id sections kept as amendments (15), conformance pointers verbatim, 5 no-source game claims flagged UNVERIFIED-needed. Contradictions unresolved by design — `conflict-table.md` C1–C15 awaits owner ruling. Pre-existing tools-test failures verified on clean tree (areas wiring, plan dependency tree); this slice breaks nothing. Review: `docs/reviews/2026-11-24-live-migration-tool-and-areas.md`. |
