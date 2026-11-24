@@ -6,9 +6,9 @@ this tree is either source data or supporting documentation.
 
 | | |
 |---|---|
-| Spec version | 1.219 |
+| Spec version | 1.220 |
 | Last updated | 2026-11-24 |
-| Decision status | **D1 = G1, D2 = file-based oracle, D17 = four layers with the resource enum deleted — see §6 and `docs/decisions.md`** |
+| Decision status | **D1 = G1, D2 = file-based oracle, D17 = four layers with the resource enum deleted — see §6 and `docs/live/` (bank archived at `docs/archive/decisions-2026-11-24.md`)** |
 | Historical handoff | [`docs/age2hd.md`](docs/age2hd.md) — read it *through* the errata in §4 |
 | Ground truth | `Age2HD/` (the game install) — read-only, treat as immutable |
 
@@ -43,7 +43,8 @@ workspace/Age2HD/
 │   ├── hermes.container     podman quadlet describing the host container
 │   ├── mechanics/           one file per subsystem, §7
 │   ├── config.md            config layer (D6)
-│   ├── decisions.md         D1–D7
+│   ├── live/                authoritative rulings, per area (generated — re-run, never hand-edit)
+│   ├── archive/decisions-2026-11-24.md   frozen bank, D1–D7 onward (provenance only)
 │   └── sources.md           every outside source, with trust level
 ├── config/                  ← the engine's only input (D6)
 │   ├── gamedata/*.toml      GENERATED from the dat — never hand-edited
@@ -286,7 +287,7 @@ G2 is not.
 
 **D5 (2026-10-23): the dat outranks community documentation for every numeric value.**
 Applied first to the farming rate (U11): effective 0.400, the farm building's own rate capping
-the villager's 0.530. Full reasoning and the cheap re-measurement: `docs/decisions.md`.
+the villager's 0.530. Full reasoning and the cheap re-measurement: `docs/archive/decisions-2026-11-24.md` (D5).
 
 Unanswered decisions are recorded here, not silently assumed. If a session needs to move
 before D1/D3/D4 are answered, it may do only work that is identical under every branch:
@@ -637,7 +638,7 @@ should say so rather than claim otherwise.
 | `docs/save-format.md` | current | The save container as verified: raw DEFLATE, `VER 9.x` + float save version (12.5 / 12.36), the `0x0A60` string framing, what the world sections are and the address of the code that reads each; errata for the `HA` misreading. Tool: `tools/savegame.py` |
 | `docs/mechanics/*.md` | current | 6 subsystem files + `README.md` (tag legend, index, unknown registry U1–U12) |
 | `docs/formats/*.md` | planned | dat / slp / dld / rms / per — what our parser assumes |
-| `docs/decisions.md` | current | D1–D21 with rationale: D5 dat authoritative, D6 config layer, D7 mandatory TDD, D8 no game data in git, D17 four layers, D20 eight sides, D21 licence |
+| `docs/archive/decisions-2026-11-24.md` | frozen 2026-11-24 (provenance only) | Bank D1–D21…: D5 dat authoritative, D6 config layer, D7 mandatory TDD, D8 no game data in git, D17 four layers, D20 eight sides, D21 licence. Live truth is `docs/live/`. |
 | `docs/next-step.md` | current | The effect interpreter, priced from the data (kind 3 landed v0.55; kinds 4/5 remain), measured from `effects.toml`: 1,667 of 3,306 commands are kinds 4/5, 270 effects are nothing else, and the engine already resolves stats at order time |
 | `docs/plan-resource-deletion.md` | **done (2026-10-26)** | The plan D17 was paid down with: what was load-bearing, the order of work, and the test that proves the boundary — `a_content_pack_with_our_own_resources_loads_and_spends` |
 | `build/` | throwaway | Inflated dats, converted JSON, Ghidra projects |
@@ -648,6 +649,7 @@ should say so rather than claim otherwise.
 
 | Date | Change |
 |---|---|
+| 2026-11-24 | v1.220 - **bank archived; scope + heuristic fixes**. `git mv docs/decisions.md → docs/archive/decisions-2026-11-24.md`; 5 tools + tests + Makefile + AGENTS + SPEC repointed. Index regen one-line diff (lossless). Fixes: collision heuristic now filters by parser kind (D186a–e false split caught and reverted), generated `docs/live/` excluded from citation scope like `site/`. Site build left stale (exits 1 on 9 pre-existing dangling ids, verified on clean tree — separate slice). Review: `docs/reviews/2026-11-24-bank-archived-scope-fixes.md`. |
 | 2026-11-24 | v1.219 - **all 15 conflicts ruled; collisions get live IDs, OWNER normalizes to OURS**. C3/C5/C6/C8/C11 mechanical chains, C1/C2/C4/C7/C9 compositions under existing owner rulings, C10/C12/C14 grill-granted, C13/C15 in the generator (RED-recorded, 7/7). Live shows D88a/D88b etc., D354 keeps its line plus `*Live verdict:* OURS`. Divergence register +1 DEFECT (gather search bounds, C9). Known side effect: live IDs read as dangling refs in the informational report — no new test failure (same 2 pre-existing). Review: `docs/reviews/2026-11-24-c-rulings-collision-ids.md`. |
 | 2026-11-24 | v1.218 - **live migration landed, mechanically: 15 area files, 364 decisions, 0 refusals**. `tools/live_migrate.py` (test-first, 5/5, RED recorded) reuses `tools/decisions.py` + `decision-areas.toml`; duplicate-id sections kept as amendments (15), conformance pointers verbatim, 5 no-source game claims flagged UNVERIFIED-needed. Contradictions unresolved by design — `conflict-table.md` C1–C15 awaits owner ruling. Pre-existing tools-test failures verified on clean tree (areas wiring, plan dependency tree); this slice breaks nothing. Review: `docs/reviews/2026-11-24-live-migration-tool-and-areas.md`. |
 | 2026-11-24 | v1.217 - **docs live scaffold: hub + conflict table, no engine change**. `docs/live/README.md` (truth hierarchy binary > dat > save > owner OURS > community, strict row format, 15 TOML areas, frozen reviews/bank) + `docs/live/conflict-table.md` (C1–C15: standoff, seat/pile, cost table, tier floor, solidity, defeat, housing, garrison, gather search, D240 break, blunt-copy, unsourced-5 demotion, numbering collisions D88–D90/D167–D168, area drift, OWNER→OURS). Bank audit: 253 `##` headings (248 unique) + 16 table rows ≈ 264 headline / 345 indexed. `docs/prior-art.md` 2026-11-24 records samuelcaldas (shape-only, AoC/PS2 addresses) + openaok (MIT, 60 Hz design precedent) as rung 2. Next: owner rules per-C, then per-area live files + archive. Review: `docs/reviews/2026-11-24-docs-live-hub-and-conflict-table.md`. |

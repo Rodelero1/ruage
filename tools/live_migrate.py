@@ -1,6 +1,6 @@
 """Shard the decision bank into per-area live files — mechanically, never by rewording.
 
-`docs/decisions.md` holds every ruling in one ~10k-line file; no session can load it.
+`docs/archive/decisions-2026-11-24.md` holds every ruling in one ~10k-line file; no session can load it.
 This reads the corpus with `tools/decisions.py` (the same parser the site index uses),
 groups by the authored `docs/decision-areas.toml`, and writes `docs/live/<area>.md` —
 one file per area, each decision verbatim plus scaffolding (area, status, conformance
@@ -21,7 +21,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-DECISIONS = ROOT / "docs" / "decisions.md"
+DECISIONS = ROOT / "docs" / "archive" / "decisions-2026-11-24.md"
 AREAS_FILE = ROOT / "docs" / "decision-areas.toml"
 UNKNOWNS = ROOT / "docs" / "mechanics" / "README.md"
 OUT_DIR = ROOT / "docs" / "live"
@@ -110,11 +110,14 @@ def render_decision(
 
 
 def section_titles(text: str) -> dict[str, list[str]]:
-    """Every `## D<n> - <title>` section title in bank order. Two distinct titles
-    under one id is a numbering collision (C13), not an amendment."""
+    """Every decision-kind `## D<n> - <title>` section title in bank order. Two
+    distinct titles under one id is a numbering collision (C13), not an amendment:
+    amendment/addendum/note subsections are the parser's, not second decisions."""
     found: dict[str, list[str]] = {}
-    for match in re.finditer(r"(?m)^#{2,3} +(D\d{1,4}[a-z]?)\b\s*-?\s*(.*)$", text):
-        found.setdefault(match.group(1), []).append(match.group(2).strip())
+    for match in re.finditer(r"(?m)^#{2,3} +(D\d{1,4}[a-z]?)\b\s*(.*)$", text):
+        if decisions._heading_kind(match.group(2)) != "decision":
+            continue
+        found.setdefault(match.group(1), []).append(match.group(2).strip(" -–—"))
     return found
 
 

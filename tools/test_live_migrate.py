@@ -1,6 +1,6 @@
 """The live migration: what `tools/live_migrate.py` must guarantee (docs cleanup).
 
-The bank (`docs/decisions.md`) is sharded into `docs/live/<area>.md` by the authored
+The bank (`docs/archive/decisions-2026-11-24.md`) is sharded into `docs/live/<area>.md` by the authored
 `docs/decision-areas.toml` — mechanically, never by rewording. Every test here is about
 a guarantee the migration makes, not a formatting detail: if a decision is lost,
 doubled, or silently bucketed, the live files are worse than the bank.
@@ -11,6 +11,7 @@ Run: `python3 -m unittest discover -s tools -p 'test_live_migrate.py' -v`
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 import decisions
 import live_migrate
@@ -114,6 +115,56 @@ class OwnerVerdictNormalized(unittest.TestCase):
         )
         self.assertIn("**Conformance**: OWNER", out)
         self.assertIn("OURS", out)
+
+
+class BankLivesInArchive(unittest.TestCase):
+    def test_every_bank_reader_points_at_the_archive_file(self):
+        import conformance_audit
+        import decision_index
+
+        for module in (decisions, decision_index, conformance_audit, live_migrate):
+            self.assertEqual(
+                module.DECISIONS,
+                Path(module.__file__).resolve().parent.parent / "docs" / "archive"
+                / "decisions-2026-11-24.md",
+                module.__name__,
+            )
+
+    def test_the_archived_bank_still_parses_whole(self):
+        archive = (
+            Path(decisions.__file__).resolve().parent.parent
+            / "docs" / "archive" / "decisions-2026-11-24.md"
+        )
+        self.assertTrue(archive.exists())
+        corpus = decisions.parse_decisions(archive.read_text())
+        placed, _ = live_migrate.build_plan(corpus, ["A"], {d: "A" for d in corpus.decisions})
+        self.assertEqual(sum(len(v) for v in placed.values()), len(corpus.decisions))
+
+
+class AmendmentSubsectionIsNotACollision(unittest.TestCase):
+    def test_an_addendum_subsection_keeps_one_id(self):
+        text = (
+            "## D5 - Title\n\nBody one.\n\n"
+            "### D5 addendum: fix\n\nMore body.\n\n"
+        )
+        titles = live_migrate.section_titles(text)
+        self.assertEqual(titles.get("D5"), ["Title"])
+        corpus = corpus_of(text)
+        out = live_migrate.render_decision(
+            corpus.decisions["D5"], corpus, "Alpha", titles
+        )
+        self.assertNotIn("D5a", out)
+        self.assertIn("More body", out)
+
+
+class GeneratedFilesOutOfCitationScope(unittest.TestCase):
+    def test_live_mirror_is_not_citation_checked(self):
+        self.assertFalse(decisions._in_scope("docs/live/combat.md"))
+
+    def test_archived_bank_stays_in_scope(self):
+        self.assertTrue(
+            decisions._in_scope("docs/archive/decisions-2026-11-24.md")
+        )
 
 
 if __name__ == "__main__":

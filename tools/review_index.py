@@ -1,11 +1,11 @@
 """**309 review notes, and no way to find one.** This writes `docs/reviews/INDEX.md`: one line per note.
 
-The notes are the tree's second bank. `docs/decisions.md` says *what* was decided; a note says *what was measured* on the way,
+The notes are the tree's second bank. `docs/archive/decisions-2026-11-24.md` says *what* was decided; a note says *what was measured* on the way,
 and the two are useful together - D353 is half a paragraph, its note has the timings and the fixture that proved it. Nothing
 readable lists them, so the only way to find "that note about the pile" is `ls | grep`, which is what a person does by hand and
 an agent does badly.
 
-**The notes are not moved.** `docs/decisions.md` cites them by path in a hundred places ("Review: `docs/reviews/...`"), so
+**The notes are not moved.** `docs/archive/decisions-2026-11-24.md` cites them by path in a hundred places ("Review: `docs/reviews/...`"), so
 archiving them into subdirectories would dangle those citations for the sake of tidiness. An index is the cheap half of the same
 win.
 
@@ -69,7 +69,7 @@ def main() -> int:
         f"**{total} notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what "
         "each note found, so a session can search the notes instead of listing the directory.",
         "",
-        "The files are **not** moved: `docs/decisions.md` cites them by path, and an archive directory would dangle those "
+        "The files are **not** moved: `docs/archive/decisions-2026-11-24.md` cites them by path, and an archive directory would dangle those "
         "citations.",
         "",
     ]

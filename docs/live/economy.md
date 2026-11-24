@@ -673,10 +673,12 @@ from? If there is no space at half diameter from another villager and the the re
    `three_gatherers_on_one_bush_do_not_pile_up`.
 
 
-### D186a - the gather ring: 1.156 tiles, eighteen men, measured from the owner's save (bank id D186)
+### D186 - the gather ring: 1.156 tiles, eighteen men, measured from the owner's save
+
+*Date:* 2026-11-09
 
 *Area:* Economy
-*Status:* live (bank numbering collision — see C13; bank status was amended)
+*Status:* amended
 
 **Superseded by D199 (2026-11-09):** the 1.156-tile ring is withdrawn; the standoff is the touch, measured on the owner's own saves.
 
@@ -742,10 +744,7 @@ but their front rows were not separated out, and a bush smaller than a tree migh
 men not yet settled rather than three different radii. And the *builder's* ring is not measured at all: no save with a site under
 construction has been read, so D185's approach ring stands unchanged.
 
-### D186b - addendum - a place belongs to the nearest man, and the walk ends on the ring (bank id D186)
-
-*Area:* Economy
-*Status:* live (bank numbering collision — see C13; bank status was amended)
+#### Amendment 1 (bank held two sections under one id)
 
 **The defect.** Two men could end up on the same place. Measured twice: **0.001** tiles apart in the three-bush fixture and
 **0.20** in the bush-and-tree one - the exact failure the owner had photographed in the original (two villagers at 0.00) and
@@ -776,10 +775,7 @@ the reason D181 exists at all.
 Both previously `#[ignore]`d tests pass without a tolerance: `three_gatherers_on_one_bush_do_not_pile_up` and
 `three_gatherers_all_work_the_same_square_on_its_ring`.
 
-### D186c - addendum 2 - the picker thought one man filled a square (bank id D186)
-
-*Area:* Economy
-*Status:* live (bank numbering collision — see C13; bank status was amended)
+#### Amendment 2 (bank held two sections under one id)
 
 `claimed_by_other` answers the picker's question *"is this source taken?"* - and it answered **yes if anybody at all was gathering
 the node**, which is D182's one-worker-a-square living on in a second place after the ring replaced it in the first. Under a
@@ -799,10 +795,7 @@ measurements above (`Task::Idle`).
 allows, and was parked while the settle *placed* a worker on its standoff. The settle walks now, the test passes, and an
 `#[ignore]` that no longer describes anything is a lie in the suite.
 
-### D186d - addendum 4 - the capacity is the ground, but our packing cannot yet hold the ground's number (bank id D186)
-
-*Area:* Economy
-*Status:* live (bank numbering collision — see C13; bank status was amended)
+#### Amendment 3 (bank held two sections under one id)
 
 **The nine is wrong, and the evidence is the owner's own game.** It came from his *"max 9 per each. 4 on corners and 4 on sides"*
 and from the **9 + 7** split over two adjacent trees. `owner-bush2.aoe2spgame` carries **eleven** orders to one bush and he watched
@@ -828,10 +821,7 @@ the geometry gives.
 **What is not claimed**: that the game's number is eighteen. Eleven is observed; eighteen is what the ring fits; the game may cap
 somewhere between, and only a bigger crowd in his own save would say.
 
-### D186e - addendum 6 - a place on the ring belongs to the man (landed) (bank id D186)
-
-*Area:* Economy
-*Status:* live (bank numbering collision — see C13; bank status was amended)
+#### Amendment 4 (bank held two sections under one id)
 
 **The rule.** A gatherer takes a **place** on his node's ring when the order lands and keeps it until the task changes. The place
 is `gather_place: BTreeMap<worker, (node, slot)>`; `standoff_point` will not give a reserved slot to anyone else, so a man who

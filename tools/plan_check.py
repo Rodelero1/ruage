@@ -254,7 +254,7 @@ def _corpora(root: Path) -> tuple[set[str], set[str]]:
         else set()
     )
     corpus = ""
-    for path in (root / "docs" / "decisions.md", root / "docs" / "dangling.toml"):
+    for path in (root / "docs" / "archive" / "decisions-2026-11-24.md", root / "docs" / "dangling.toml"):
         if path.exists():
             corpus += path.read_text(encoding="utf-8")
     known = {f"D{number}{suffix}" for number, suffix in re.findall(r"\bD(\d+)([a-z]?)\b", corpus)}

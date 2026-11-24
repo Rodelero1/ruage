@@ -26,7 +26,7 @@ def parse(text: str) -> decisions.Corpus:
 class TheCorpusNeverShrinks(unittest.TestCase):
     """A lost prefix is the one failure the area table cannot see: when the corpus and the areas table are truncated
     **together**, every other check passes and the page simply shows fewer decisions. That is what happened on
-    2026-11-12 - `docs/decisions.md` went from 385,025 bytes and 187 decisions to 1,937 bytes and one, and
+    2026-11-12 - `docs/archive/decisions-2026-11-24.md` went from 385,025 bytes and 187 decisions to 1,937 bytes and one, and
     `--check` was green because `docs/decision-areas.toml` had been cut back to match.
     """
 
@@ -497,7 +497,7 @@ class Areas(unittest.TestCase):
                                                    {"D1": "Combat", "D2": "Economy"}, unknowns, {}))
 
     def test_every_question_in_the_repository_has_an_authored_area(self):
-        corpus = decisions.parse_decisions((ROOT / "docs/decisions.md").read_text())
+        corpus = decisions.parse_decisions((ROOT / "docs/archive/decisions-2026-11-24.md").read_text())
         unknowns = decisions.parse_unknowns((ROOT / "docs/mechanics/README.md").read_text())
         order, mapping, questions = decisions.load_areas((ROOT / "docs/decision-areas.toml").read_text())
         self.assertEqual([], decisions.check_areas(corpus, order, mapping, unknowns, questions))
@@ -534,7 +534,7 @@ class Kinds(unittest.TestCase):
         self.assertIn("1 unfinished", html)
 
     def test_every_decision_in_the_repository_has_an_authored_area(self):
-        corpus = decisions.parse_decisions((ROOT / "docs/decisions.md").read_text())
+        corpus = decisions.parse_decisions((ROOT / "docs/archive/decisions-2026-11-24.md").read_text())
         order, mapping, questions = decisions.load_areas((ROOT / "docs/decision-areas.toml").read_text())
         unknown_rows = decisions.parse_unknowns((ROOT / "docs/mechanics/README.md").read_text())
         self.assertEqual([], decisions.check_areas(corpus, order, mapping, unknown_rows, questions))
@@ -545,8 +545,8 @@ class TheScan(unittest.TestCase):
     """A committed page must quote the repository, not whatever is lying in the working tree."""
 
     def test_the_scan_reads_the_paths_it_is_given_and_nothing_else(self):
-        texts = decisions.scan_sources(["docs/decisions.md"])
-        self.assertEqual(["docs/decisions.md"], list(texts))
+        texts = decisions.scan_sources(["docs/archive/decisions-2026-11-24.md"])
+        self.assertEqual(["docs/archive/decisions-2026-11-24.md"], list(texts))
 
     def test_a_path_outside_the_scanned_folders_is_not_read(self):
         self.assertEqual({}, decisions.scan_sources(["tools/decisions.py"]))
@@ -564,12 +564,12 @@ class TheRealCorpus(unittest.TestCase):
     """The strict one: the corpus as it actually stands must parse with nothing unplaced."""
 
     def test_every_decision_in_the_repository_is_parsed_and_placed(self):
-        corpus = decisions.parse_decisions((ROOT / "docs/decisions.md").read_text())
+        corpus = decisions.parse_decisions((ROOT / "docs/archive/decisions-2026-11-24.md").read_text())
         self.assertGreater(len(corpus.decisions), 150)
         self.assertEqual([], corpus.unclassified)
 
     def test_every_decision_without_a_basis_is_listed_so_it_can_be_triaged(self):
-        corpus = decisions.parse_decisions((ROOT / "docs/decisions.md").read_text())
+        corpus = decisions.parse_decisions((ROOT / "docs/archive/decisions-2026-11-24.md").read_text())
         uncited = [d for d in corpus.decisions.values() if d.uncited]
         # Not zero: the corpus has rules whose reasoning is prose and nothing else. The page has to name them,
         # which is the whole point - but if *every* decision were uncited the classifier would be broken.

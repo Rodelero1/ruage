@@ -27,7 +27,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-DECISIONS = ROOT / "docs" / "decisions.md"
+DECISIONS = ROOT / "docs" / "archive" / "decisions-2026-11-24.md"
 
 ROW = re.compile(r"^## (D\w+) - (.+)$", re.MULTILINE)
 TAG = re.compile(r"^\*\*Conformance\*\*:\s*(GAME|OURS|UNVERIFIED)\b(.*)$", re.MULTILINE | re.IGNORECASE)

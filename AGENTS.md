@@ -7,7 +7,8 @@ system prompt for any session working in this tree (context files, `AGENTS.md`),
 an agent reading this: **these four steps bracket every increment, and the third one is the one that gets skipped.**
 
 1. **Compact first.** Persist the state to files *before* touching code: the step's compact in `docs/next-step.md`, the
-   SPEC version and changelog row, any decision the step rests on in `docs/decisions.md`. A new session, in a new thread,
+   SPEC version and changelog row, any decision the step rests on in `docs/live/` (per-area files; the frozen bank is
+   `docs/archive/decisions-2026-11-24.md`). A new session, in a new thread,
    with no conversation history, must be able to resume from those files alone. **The compact's first half is the
    feature's prior implementation** — where it lives now (`file:line`), which tests pin it, what it measures today —
    because a plan written over an unnamed implementation cannot say what it is changing (D203).
@@ -28,8 +29,7 @@ an agent reading this: **these four steps bracket every increment, and the third
 4. **Push.** `main` level with `origin` at the end of every step, not at the end of a topic. A local commit is not the
    deliverable, and this box reboots nightly.
 
-**Read the two indexes before grepping the banks.** `docs/decisions.md` is ~832k characters and cannot be loaded, and
-`docs/reviews/` is ~309 notes; a session that reads neither re-decides what was decided in November. So:
+**Read the two indexes before grepping the banks.** `docs/live/` (15 area files, generated from the frozen bank) is what a session loads — hub first, then one area — and `docs/reviews/` holds the measurements; a session that reads neither re-decides what was decided in November. So:
 
 - **`docs/decision-index.md`** (~34k characters, ~8k tokens) - one line per ruling: id, the claim, its `Conformance` verdict,
   its source and its fixture, grouped by area, plus the three lists that matter: **claims the game with no source**, **names no

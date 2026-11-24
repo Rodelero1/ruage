@@ -1,10 +1,10 @@
 # Live decisions — hub
 
-**Status: migrated 2026-11-24, mechanically.** 15 area files hold 364 decisions verbatim
+**Status: migrated and ruled 2026-11-24.** 15 area files hold 364 decisions verbatim
 plus scaffolding (area, status, conformance flag); zero refusals
 (`python3 tools/live_migrate.py --check`: 364 placed, 15 areas, exit 0).
-Nothing is resolved: contradictions stand flagged in `conflict-table.md` (C1–C15)
-until the owner rules per-C. Bank (`docs/decisions.md`) stays the provenance source;
+All 15 conflicts stand RULED below (C1–C15) with evidence. Bank (`docs/archive/decisions-2026-11-24.md`, frozen)
+stays the provenance source;
 live files are generated — re-run, never hand-edit.
 
 **Bank audit 2026-11-24:** 253 `##` headings (248 unique — D88/D89/D90/D167/D168 each appear twice, a 2026-11-01 numbering collision) + 16 table rows (D1–D16) + suffixed IDs (D24a, D44a, D46a, D50a, D58a, D59a/b, D94a, D98a, D200a, D210b) + split headings ≈ 264 headline rows, 345 indexed rows. Index areas are a keyword heuristic and do **not** read `decision-areas.toml` (see C14).
@@ -59,7 +59,7 @@ Both are rung 2: below binary/dat/save, above folklore. Read for facts, write ou
 ## What is frozen
 
 - `docs/reviews/` — immutable log. Correct by new live row, never by editing a note.
-- `docs/decisions.md` — frozen as `docs/archive/` once migration lands. Until then, bank stays read-only except conflict-table rulings.
+- `docs/archive/decisions-2026-11-24.md` — the frozen bank (provenance only). Live files are generated from it; never hand-edit them, never revive the bank.
 - Sprawl (`parity-plan.md`, `pathfinding-gap-register.md`, `pathfinding-crosscheck-*.md`, `gates-research.md`, `behaviour-diff.md`, `conformance-sequence.md`, `crosscheck-2026-11-19-rulings.md`, `movement-in-the-binary.md` except as evidence, `building-collision.md`, `press-depth-evidence.md`, `gather-seating-evidence.md`) → archive. Live defect list stays `divergence-register.md`.
 
 ## Done criteria (agreed)

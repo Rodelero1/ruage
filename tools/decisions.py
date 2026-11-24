@@ -1,6 +1,6 @@
 """The decision index: what was decided, how, and what is still open (D168).
 
-`docs/decisions.md` is 4,000 lines of prose with two different shapes (a table for D1-D16, `## D<n>` sections after
+`docs/archive/decisions-2026-11-24.md` is 4,000 lines of prose with two different shapes (a table for D1-D16, `## D<n>` sections after
 that), and nothing in it says which rules rest on the dat, which on the owner's word, which on a guess, or which
 were rewritten a week later. This tool reads the corpus and *says* those things — and it says them with the phrase it
 read them from, so a wrong label is visible rather than authoritative.
@@ -30,7 +30,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-DECISIONS = ROOT / "docs" / "decisions.md"
+DECISIONS = ROOT / "docs" / "archive" / "decisions-2026-11-24.md"
 UNKNOWNS = ROOT / "docs" / "mechanics" / "README.md"
 AREAS_FILE = ROOT / "docs" / "decision-areas.toml"
 DANGLING_FILE = ROOT / "docs" / "dangling.toml"
@@ -572,7 +572,7 @@ def check_shrink(corpus: Corpus, baseline: str) -> list[str]:
     lost.sort(key=lambda item: before.decisions[item].number)
     shown = ", ".join(lost[:12]) + (", ..." if len(lost) > 12 else "")
     return [
-        f"docs/decisions.md lost {len(lost)} decisions since the last commit: {shown}. "
+        f"docs/archive/decisions-2026-11-24.md lost {len(lost)} decisions since the last commit: {shown}. "
         "A corpus never shrinks - restore it from history."
     ]
 
@@ -581,7 +581,7 @@ def committed_corpus() -> str:
     """The corpus as the last commit has it, or '' when there is no history to ask for it."""
     try:
         finished = subprocess.run(
-            ["git", "show", "HEAD:docs/decisions.md"],
+            ["git", "show", "HEAD:docs/archive/decisions-2026-11-24.md"],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -767,7 +767,7 @@ def render(
     add("<header><h1>Decisions</h1>")
     add(
         "<p class=\"lede\">Every rule the corpus states, what it rests on, and what it has not decided yet. "
-        "Generated from <code>docs/decisions.md</code> and the U-register; nothing on this page is typed by hand, "
+        "Generated from <code>docs/archive/decisions-2026-11-24.md</code> and the U-register; nothing on this page is typed by hand, "
         "so a wrong label means the classifier is wrong and can be seen to be wrong.</p>"
     )
     add("<ul class=\"coverage\" id=\"coverage\">")
@@ -916,7 +916,7 @@ def render(
     add("<section id=\"health\"><h2>How this page knows</h2>")
     add(
         f"<p>Parsed {counts['decisions']} decisions and {len(corpus.amendments)} amended ids from "
-        f"<code>docs/decisions.md</code>; {counts['notes']} <code>D&lt;n&gt; applied</code> essays were recognised as "
+        f"<code>docs/archive/decisions-2026-11-24.md</code>; {counts['notes']} <code>D&lt;n&gt; applied</code> essays were recognised as "
         f"notes rather than decisions, and {counts['structural']} headings are document structure, not decisions.</p>"
     )
     add(
@@ -1227,7 +1227,11 @@ def _in_scope(relative: str) -> bool:
         bool(parts)
         and parts[0] in [folder for folder, _ in SCAN]
         and relative.endswith(tuple(pattern.replace("*", "") for _, pattern in SCAN))
+        # Generated mirrors, not independent sources: the site build and the live
+        # shard mirror the bank verbatim, so scanning them only duplicates signals
+        # (and the live collision IDs read as dangling).
         and "site" not in parts
+        and "live" not in parts
     )
 
 
@@ -1289,7 +1293,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Index the decision corpus into one browsable page.")
     parser.add_argument("--check", action="store_true", help="parse and report coverage; write nothing")
     parser.add_argument("--out", default=str(OUTPUT), help="where to write the page")
-    parser.add_argument("--decisions", default=str(DECISIONS), help="the corpus (defaults to docs/decisions.md)")
+    parser.add_argument("--decisions", default=str(DECISIONS), help="the corpus (defaults to docs/archive/decisions-2026-11-24.md)")
     args = parser.parse_args(argv)
 
     try:

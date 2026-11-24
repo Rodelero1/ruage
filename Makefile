@@ -82,13 +82,13 @@ conformance:
 conformance-build:
 	$(CARGO) test --manifest-path crates/conformance/Cargo.toml --target-dir target --no-run
 
-# The decision index (D168): one browsable page over docs/decisions.md and the U-register. Committed, because the
+# The decision index (D168): one browsable page over docs/archive/decisions-2026-11-24.md and the U-register. Committed, because the
 # corpus it renders is committed. `make decisions-check` parses and reports without writing.
 decisions:
 	python3 tools/decisions.py
 
 # **The one page a session reads instead of the bank** (D355): 340 rows as one line each - claim, verdict, source, fixture -
-# grouped by area, plus the three lists that matter (no source, no fixture, superseded). `docs/decisions.md` is ~832k
+# grouped by area, plus the three lists that matter (no source, no fixture, superseded). `docs/archive/decisions-2026-11-24.md` is ~832k
 # characters and cannot be loaded; this is 34k and can.
 decision-index:
 	python3 tools/decision_index.py

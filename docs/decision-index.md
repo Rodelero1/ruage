@@ -2,7 +2,7 @@
 
 # Decision index
 
-**345 rows.** `docs/decisions.md` is ~852k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**345 rows.** `docs/archive/decisions-2026-11-24.md` is ~852k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
 - **337** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.

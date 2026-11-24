@@ -1,7 +1,7 @@
 """**The bank is 200k tokens; nobody can load it. This makes it a page.**
 
 The owner, 2026-11-22: *"Is too many decisions causing problems with context being filled and starting to forget?"* - yes, and
-the failure is not memory but *discovery*: `docs/decisions.md` is ~833 KB (~210k tokens, larger than a context window), so a
+the failure is not memory but *discovery*: `docs/archive/decisions-2026-11-24.md` is ~833 KB (~210k tokens, larger than a context window), so a
 session can only grep it, and a ruling it does not already suspect exists is a ruling it will not apply. The same session then
 re-decides what was decided in November, or implements a rule at one of four call sites.
 
@@ -28,7 +28,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-DECISIONS = ROOT / "docs" / "decisions.md"
+DECISIONS = ROOT / "docs" / "archive" / "decisions-2026-11-24.md"
 OUT = ROOT / "docs" / "decision-index.md"
 
 # One parser, not two: the conformance verdict, the claim and the source pointer are `conformance_audit`'s definitions.
@@ -203,7 +203,7 @@ def main() -> int:
     out.append("# Decision index")
     out.append("")
     out.append(
-        f"**{len(entries)} rows.** `docs/decisions.md` is ~{len(text) // 1000}k characters and cannot be loaded whole; this page "
+        f"**{len(entries)} rows.** `docs/archive/decisions-2026-11-24.md` is ~{len(text) // 1000}k characters and cannot be loaded whole; this page "
         "is what a session reads instead, then greps the bank for the ids it needs."
     )
     out.append("")

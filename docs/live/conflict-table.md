@@ -100,13 +100,16 @@ Format: conflict → bank rows → evidence → proposal → needs-owner.
 - **C14 RULED** (matrix-granted) — TOML's 15 areas win; generator reads TOML, not the heuristic.
 - **C15 RULED** — D354's OWNER tag kept verbatim plus `*Live verdict:* OURS` normalization (this slice); audit schema stays 3 verdicts.
 
-## What happens after ruling
+## What happened after ruling (2026-11-24)
 
-Owner replies per-C (accept / amend). Agent then writes `docs/live/<area>.md` files, moves bank to `docs/archive/decisions-2026-11-24.md`, archives sprawl, regenerates indexes, and records the migration in SPEC changelog.
+Ruled above. Bank moved to `docs/archive/decisions-2026-11-24.md`, tools
+(`decisions.py`, `decision_index.py`, `conformance_audit.py`, `live_migrate.py`,
+`plan_check.py`) repointed, `AGENTS.md` compact routine and `SPEC.md` index row updated.
+Live files regenerated with collision IDs and OURS normalization.
 
 ## C13. Numbering collisions (blocks every index)
 
-- Rows: D88/D89/D90/D167/D168 each head two different decisions (`docs/decisions.md:2288/2325/2343/2357` vs `:2325/2343/2357/4129/4186` area). 2026-11-01 batch restarted numbering while D88–D90 already existed. Suffixed IDs (D24a…D210b) and split headings (D77–D82) explain the 264-headline vs 345-indexed gap.
+- Rows: D88/D89/D90/D167/D168 each head two different decisions (`docs/archive/decisions-2026-11-24.md:2288/2325/2343/2357` vs `:2325/2343/2357/4129/4186` area). 2026-11-01 batch restarted numbering while D88–D90 already existed. Suffixed IDs (D24a…D210b) and split headings (D77–D82) explain the 264-headline vs 345-indexed gap.
 - Proposal: live files use new unique IDs with `supersedes D88a/D88b` mapping table; bank frozen as-is for provenance.
 - Needs owner: accept renumber on migration.
 

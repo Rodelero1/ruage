@@ -5,7 +5,7 @@ The dependency tree is a status table whose whole value is that a row can be che
 defined, and an open item that is defined and never scheduled. Both are silent, so both are tests.
 
 Each case writes a small tree, because the checks read the corpora they cite: a fixture that borrowed the real
-`docs/decisions.md` would pass on an id the real corpus happens to mention, which is the opposite of a test.
+`docs/archive/decisions-2026-11-24.md` would pass on an id the real corpus happens to mention, which is the opposite of a test.
 
 Run: `python3 -m unittest discover -s tools -p 'test_plan_check.py' -v`
 """
