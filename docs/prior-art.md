@@ -31,6 +31,15 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-24 — docs cleanup: the two decomp/engines become rung-2 sources
+
+Owner note: `samuelcaldas/age-of-empires-2-decomp` + `Zaydme/openaok` can help decision-making. Recorded here so the live migration cites them correctly.
+
+- **`samuelcaldas/age-of-empires-2-decomp`** (matching decomp, AoC 1.0c / AoK 2.0a / PS2 ELF, no licence — all rights reserved). Already used 2026-11-16 for the P11 zone layer (`docs/sources.md`, `docs/pathfinding-conformance.md`: `src/zone/zone_spatial_pyramid_*.cpp`); silent on gather/work/speed (stubs, see 2026-11-17 section below). Addresses are **not HD 5.7**. Rule: read for shape, take numbers only from `AoK HD.exe` (`FUN_*`).
+- **`Zaydme/openaok`** (MIT, from-scratch 1999 AoK, 32.32 fixed at **60 Hz**). Already on the watchlist and cited across U7/U18/mechanics. Design precedent (determinism, integer A*, AI interpreter, UI in `docs/ui-from-openaok.md`), never GAME proof. Every cite must name the tick + version mismatch vs D16 20 Hz.
+
+Both sit at rung 2 of the live hierarchy (below binary/dat/save, above folklore): UNVERIFIED until a `FUN_*`/dat/save cross-check promotes the row. Facts only, never code, never prose.
+
 ## 2026-11-23 — openage rebuilds its C++ traceback by hand: nothing to act on
 
 **`SFTtech/openage`, 2 commits (`f6f87f9a` -> `738bfc6c`), PR #1836 merged 22 Nov, 2 files, +53/-34** — all of it in
