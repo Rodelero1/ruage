@@ -125,6 +125,7 @@ fn scene(pack: &ruage_data::ContentPack) -> Option<(World, Vec<EntityId>)> {
     world.step().expect("lands");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (wx, wy),
         })

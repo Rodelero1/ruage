@@ -83,6 +83,7 @@ fn a_golden_view_survives_a_replay() {
             .id;
         world
             .submit_checked(Command::Move {
+                target: None,
                 unit: villager,
                 to: (22, 18),
             })

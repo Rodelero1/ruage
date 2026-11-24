@@ -1,57 +1,51 @@
-//! **The defect this set found, and the rule that replaced it. No test here is `#[ignore]`d.**
+//! **RULE: where a click lands, when the ground will not take it.**
 //!
-//! The two tests below were written against `nearest_reachable`, a helper beside the search that answered **one step from
-//! the start** instead of the tile nearest the click. The owner's ruling was to follow the game (D249), and the game's
-//! planner answers the closest reachable point itself - so the helper is deleted, the rule lives in `find_path`, and these
-//! tests now check the search.
-//!
-//! ```sh
-//! cargo test --manifest-path crates/conformance/Cargo.toml --test findings
-//! ```
+//! Source: `zone_spatial_pyramid_search_hierarchical.cpp` (the search returns the best cell it settled on) and
+//! `zone_path_eval.cpp` (the click point is what the order asked for, not the tile centre). Together they say: a route's last
+//! waypoint is the **clicked point** when the goal tile is reachable, and the settled tile's centre when it is not.
 
-use ruage_conformance::walk;
-use ruage_sim::find_path;
+use ruage_conformance::{SCALE, centre, ground};
 
-/// RULE: an unreachable click is answered by **the reachable tile nearest the click**, not by the first free tile the
-/// search happens to reach.
-///
-/// Source: the Klingers deck, p. 96 (*"otherwise give the closest point path"*); D134's *"nearest legal standing point"*.
-/// The defect it replaces: a helper that returned one step from the start, so from (1,1) toward (10,10) it answered (2,2).
+/// RULE: the last waypoint is the clicked point, not the centre of the goal tile.
 #[test]
-fn the_closest_point_is_the_tile_nearest_the_click() {
-    let walk = walk(20, 20, &[]);
-    // Open ground and a free click: the nearest reachable tile to the click is the click.
-    let route = find_path(&walk, (1, 1), (10, 10)).expect("open ground is always a path");
+fn the_route_ends_on_the_point_that_was_clicked() {
+    let field = ground(16, 16, &[]);
+    let click = (
+        ruage_fixed::Fixed::from_raw(7 * SCALE + SCALE / 3),
+        ruage_fixed::Fixed::from_raw(9 * SCALE + SCALE / 4),
+    );
+    let route = field
+        .route(SCALE, centre(3, 9), click)
+        .expect("open ground is routable");
     assert_eq!(
-        route.last(),
-        Some(&(10, 10)),
-        "the route stopped short: {route:?}"
+        route.last().copied(),
+        Some(click),
+        "the order lands where it pointed, not at a tile centre"
     );
 }
 
-/// RULE: the same rule through the case a player causes - a click into a wood, from a distance.
-///
-/// A 3x3 wood at x, y in 6..9 on a 16x16 map, a walker at (1,1): the nearest reachable tile to the middle (7,7) is a tile of
-/// the wood's ring at 5..=9. The helper this replaces answered **(2,2)** - five tiles short, beside the walker's feet.
+/// RULE: a click **inside a wood** lands on the edge of the wood, and the route is real - not empty, not a refusal.
 #[test]
-fn a_distant_click_into_a_wood_lands_on_the_woods_edge() {
-    let mut blocked = Vec::new();
-    for x in 6..9u16 {
-        for y in 6..9u16 {
-            blocked.push((x, y));
-        }
-    }
-    let walk = walk(16, 16, &blocked);
-    let route = find_path(&walk, (1, 1), (7, 7)).expect("the wood has an edge");
-    let tile = *route.last().expect("a route has an end");
-    let on_the_edge = (5..=9).contains(&tile.0) && (5..=9).contains(&tile.1);
-    assert!(
-        on_the_edge,
-        "the answer {tile:?} is not on the wood's edge: the walker was ordered to a tile {} from it",
-        tile.0.abs_diff(7).max(tile.1.abs_diff(7))
+fn a_click_into_a_wood_lands_on_the_edge_of_the_wood() {
+    // A three-by-three block of blocked tiles with a clear field around it.
+    let wood: Vec<(u16, u16)> = (8..=10)
+        .flat_map(|y| (8..=10).map(move |x| (x, y)))
+        .collect();
+    let field = ground(20, 20, &wood);
+    let route = field
+        .route(SCALE, centre(4, 10), centre(9, 9))
+        .expect("the search settles on the wood's edge");
+    let last = route.last().copied().expect("a route has an end");
+    let tile = (
+        u16::try_from(last.0.raw().div_euclid(SCALE)).unwrap_or(0),
+        u16::try_from(last.1.raw().div_euclid(SCALE)).unwrap_or(0),
     );
     assert!(
-        route.len() > 1,
-        "a distant click into a wood must walk somewhere: {route:?}"
+        field.walkable(tile.0, tile.1),
+        "the route ends on ground a body can stand on, not in the wood: {tile:?}"
+    );
+    assert!(
+        tile.0.abs_diff(9) <= 2 && tile.1.abs_diff(9) <= 2,
+        "and it ends beside the click, not across the map: {tile:?}"
     );
 }

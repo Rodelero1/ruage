@@ -175,6 +175,7 @@ fn a_plain_move_walks_past_the_same_enemy() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: mine,
             to: (26, 20),
         })

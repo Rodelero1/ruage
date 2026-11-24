@@ -531,6 +531,7 @@ fn a_boar_that_loses_interest_returns_to_where_it_was_struck() {
     let away = tile_of(&world, start);
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: villager,
             to: away,
         })
@@ -596,6 +597,7 @@ fn a_second_blow_turns_a_boar_that_had_given_up() {
     let away = tile_of(&world, start);
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: villager,
             to: away,
         })

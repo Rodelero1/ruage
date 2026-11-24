@@ -93,6 +93,7 @@ fn a_villager_can_stand_on_the_yard() {
         .expect("a villager");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: villager,
             to: ((ax + 2) as u16, (ay + 3) as u16),
         })

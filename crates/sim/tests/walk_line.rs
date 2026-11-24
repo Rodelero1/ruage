@@ -5,7 +5,7 @@
 //!
 //! Written before the changes (D7, SPEC §11).
 
-use ruage_sim::{Walk, line_clear};
+use ruage_sim::Ground;
 
 const MAP: &str = r#"
 schema = 1
@@ -47,7 +47,7 @@ fn map() -> ruage_data::Map {
 /// a full A* search for a line it could see. The two have to agree about the tile you are already on.
 #[test]
 fn a_line_from_an_occupied_start_is_clear_when_the_rest_of_it_is() {
-    let mut walk = Walk::from_map(&map());
+    let mut walk = Ground::from_map(&map());
     let (from, to) = ((2u16, 2u16), (6u16, 2u16));
     walk.block(from.0, from.1);
     assert!(
@@ -55,20 +55,20 @@ fn a_line_from_an_occupied_start_is_clear_when_the_rest_of_it_is() {
         "the start has to be occupied for this test to mean anything"
     );
     assert!(
-        line_clear(&walk, from, to),
+        walk.line_clear(from, to),
         "the start tile is where the body already is: it cannot be an obstruction to its own line"
     );
     // The rest of the line still counts: an obstruction one tile along refuses it.
     walk.block(4, 2);
     assert!(
-        !line_clear(&walk, from, to),
+        !walk.line_clear(from, to),
         "a body in the middle of the line is still a body in the way"
     );
 }
 
 /// **A map whose terrain array does not match its size is a bug, not a grid** (second review, `path.rs:33`).
 ///
-/// The loader refuses one, but `Map` is public and tests and fixtures build it directly; `Walk::from_map` indexed it by
+/// The loader refuses one, but `Map` is public and tests and fixtures build it directly; `Ground::from_map` indexed it by
 /// `width`/`height` and would read one tile's ground for another. It asserts instead, in debug builds, where a fixture bug
 /// belongs.
 #[test]
@@ -77,5 +77,5 @@ fn a_line_from_an_occupied_start_is_clear_when_the_rest_of_it_is() {
 fn a_map_whose_terrain_does_not_match_its_size_is_refused() {
     let mut map = map();
     map.terrain.pop();
-    let _ = Walk::from_map(&map);
+    let _ = Ground::from_map(&map);
 }

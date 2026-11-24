@@ -170,6 +170,7 @@ fn no_unit_centre_crosses_the_core() {
     world.step().expect("step");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: id,
             to: (at.0 + 4, at.1 - 1),
         })

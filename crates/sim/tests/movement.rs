@@ -81,6 +81,7 @@ fn a_unit_that_arrives_stops_dead() {
     let id = walker(&mut world, 1, (20, 20), "0.8");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: id,
             to: (23, 20),
         })
@@ -171,6 +172,7 @@ fn a_very_slow_unit_walks_to_where_it_was_sent() {
     let id = walker(&mut world, 1, (20, 20), "0.1");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: id,
             to: (22, 20),
         })
@@ -210,6 +212,7 @@ fn a_walker_whose_goal_tile_holds_a_friend_still_arrives() {
         let scale = world.scale();
         world
             .submit_checked(Command::Move {
+                target: None,
                 unit: friend,
                 to: (20, 20),
             })
@@ -226,6 +229,7 @@ fn a_walker_whose_goal_tile_holds_a_friend_still_arrives() {
     let walker_id = walker(&mut world, 1, (23, 20), "0.8");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker_id,
             to: (20, 20),
         })

@@ -28,6 +28,18 @@ an agent reading this: **these four steps bracket every increment, and the third
 4. **Push.** `main` level with `origin` at the end of every step, not at the end of a topic. A local commit is not the
    deliverable, and this box reboots nightly.
 
+**Read the two indexes before grepping the banks.** `docs/decisions.md` is ~832k characters and cannot be loaded, and
+`docs/reviews/` is ~309 notes; a session that reads neither re-decides what was decided in November. So:
+
+- **`docs/decision-index.md`** (~34k characters, ~8k tokens) - one line per ruling: id, the claim, its `Conformance` verdict,
+  its source and its fixture, grouped by area, plus the three lists that matter: **claims the game with no source**, **names no
+  fixture** (the "believed implemented" list), and **superseded**. Regenerate with `make decision-index`.
+- **`docs/reviews/INDEX.md`** - one line per note, newest first, with the claim it settled. Regenerate with `make review-index`.
+
+Both are generated from the files they index, so they cannot drift; neither is a gate. **Every ruling that rests on a fixture
+should name it** (`Fixture: <name>` or a `tests/<name>.rs` path in the row) - a row that names none is the list where D150's
+pile rule sat for two weeks while the tree believed it implemented.
+
 **Never assume - research first.** For any question about how the game behaves, the order of evidence is (D203): the
 original game - run it, watch it, read its own data (`config/gamedata/`, the install) and its binary - then a neighbouring
 open-source project (`librematch/genie`, `Zaydme/openaok`, `Secttech/openage`) and published sources (the manual, the

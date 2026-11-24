@@ -1,5 +1,12 @@
 # The pathing conformance set
 
+> **COUNTS CORRECTED BY D334 (2026-11-21).** This header said *"13 tests green and 3 `#[ignore]`d"* and the table below still
+> lists rows 26-29 as red. Measured today: **21 passed, 0 failed, 0 ignored** over seven binaries (`budget`, `contact`,
+> `cost_model`, `divergences`, `findings`, `obstacles`, `walkability`), `--no-fail-fast`. The three rows D279 ignored (hierarchy,
+> radius-aware search, expansion budget) all landed in D296-D306 and are ordinary rows now. And **one row cannot see what it
+> claims**: `contact.rs` pins `Ground::touches_object`, which has no production caller (P3, D334) - the set tests the query, not
+> the step.
+
 **What it is.** `crates/conformance` asserts the pathfinding and obstacle-avoidance rules of **the original** against this
 engine's planners - one rule per test, the source of every rule named in the test's doc comment. It is a second set, run on
 its own:
@@ -56,6 +63,10 @@ Two limits, both load-bearing:
   measures our own API.
 
 ## The rules, and where we stand
+
+*The verdict column is the **2026-11-16** read (D247). Rows 26-29 are all closed since: 26 by D279's closest-cell answer,
+27 by `16853ac` (16/23 + weight 25 as the budget), 28 by D296-D306 (the hierarchy), 29 by D304's budget. Read the verdicts as
+history; `docs/parity-plan.md` is the live register.*
 
 | # | rule | verdict |
 |---|---|---|

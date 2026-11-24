@@ -318,6 +318,7 @@ fn a_defensive_unit_gives_up_a_chase_beyond_its_ground() {
     // The target runs away, east, for as long as it takes.
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: runner,
             to: (40, 20),
         })

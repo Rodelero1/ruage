@@ -125,6 +125,7 @@ fn a_diagonal_gap_between_two_trees_is_not_walkable() {
     world.step().expect("the spawn lands");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: id,
             to: (8, 5),
         })

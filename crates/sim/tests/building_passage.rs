@@ -201,6 +201,7 @@ fn a_villager_walks_round_a_house_rather_than_through_it() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (
                 u16::try_from(goal.0).expect("in range"),
@@ -294,6 +295,7 @@ fn a_villager_walks_round_a_half_built_house() {
     let walker = villager(&mut world, start);
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (
                 u16::try_from(goal.0).expect("in range"),
@@ -453,6 +455,7 @@ fn a_farm_is_a_floor_while_it_is_built_and_after() {
     let walker = villager(&mut world, (at.0 - 3, at.1));
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (
                 u16::try_from(at.0).expect("in range"),
@@ -641,6 +644,7 @@ fn a_walk_past_a_house_keeps_its_bodys_clearance() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (
                 u16::try_from(goal.0).expect("in range"),
@@ -732,6 +736,7 @@ fn a_big_unit_walks_through_a_one_tile_gap() {
     let goal = (gap, at.1 + 5);
     world
         .submit_checked(Command::Move {
+            target: None,
             unit,
             to: (
                 u16::try_from(goal.0).expect("in range"),

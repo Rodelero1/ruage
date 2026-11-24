@@ -147,6 +147,7 @@ fn a_villager_walking_beside_a_building_keeps_its_body_clear() {
     world.step().expect("the villager lands");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: EntityId(9_800),
             to: (at.0, at.1),
         })

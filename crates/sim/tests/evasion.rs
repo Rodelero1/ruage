@@ -179,10 +179,12 @@ fn two_villagers_crossing_pass_through_and_both_arrive() {
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
+        target: None,
         unit: a,
         to: (x + 6, y),
     });
     world.submit(Command::Move {
+        target: None,
         unit: b,
         to: (x, y),
     });
@@ -222,6 +224,7 @@ fn a_blocked_unit_goes_round_a_standing_body_and_arrives() {
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
+        target: None,
         unit: walker,
         to: (x + 6, y),
     });
@@ -276,6 +279,7 @@ fn a_body_on_the_goal_is_never_entered_and_costs_no_repath() {
     let before = world.repaths();
 
     world.submit(Command::Move {
+        target: None,
         unit: walker,
         to: goal,
     });
@@ -458,6 +462,7 @@ fn a_repath_route_is_pulled_like_a_planned_one() {
     world.step().expect("the walker's spawn lands");
 
     world.submit(Command::Move {
+        target: None,
         unit: walker,
         to: (x + 6, y),
     });

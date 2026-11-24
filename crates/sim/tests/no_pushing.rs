@@ -177,7 +177,7 @@ fn a_crowd_round_one_tree() -> Option<Crowd> {
 /// his first square was refused, because the stop at his drop site was not a stander to his own plan - `last_moved` was
 /// stamped on every tick, so the plan walked him into a body and then asked for a route it could not build.
 #[test]
-fn a_man_who_cannot_get_his_square_takes_the_next_tree() {
+fn a_man_who_can_press_in_keeps_the_node_he_was_given() {
     let Some(mut crowd) = a_crowd_round_one_tree() else {
         return;
     };
@@ -206,12 +206,14 @@ fn a_man_who_cannot_get_his_square_takes_the_next_tree() {
             at.1.raw() as f64 / scale as f64
         ),
     };
+    // **A man who can press in keeps the node he was given** (D290/D291): with no press floor in the original, "no square for him"
+    // is not a reason to send him elsewhere - he presses in and takes from the tree he was ordered to. The D204 re-target is for a
+    // man who cannot reach the node at all, and it never crosses a resource kind.
     assert_eq!(
         node,
-        crowd.free,
-        "MEASURED he is still working the tree with no square for him ({:?}) at ({:.3},{:.3}) - the free tree of the \
-         same column is {:?}",
         crowd.crowded,
+        "MEASURED the man was moved off the node he was given while he can press in and work it: {node:?} at ({:.3},{:.3}), \
+         the free tree of the same column is {:?}",
         at.0.raw() as f64 / scale as f64,
         at.1.raw() as f64 / scale as f64,
         crowd.free
@@ -219,10 +221,9 @@ fn a_man_who_cannot_get_his_square_takes_the_next_tree() {
     let Task::Gather { progress, .. } = task else {
         unreachable!("just matched")
     };
-    assert!(
-        progress.raw() > 0,
-        "MEASURED he was sent to the free tree but has taken nothing from it in 2,000 ticks"
-    );
+    // **Taking is not promised** (D289/D290): a man behind a crowd may stand refused and take nothing, which is the original's own
+    // best-reported behaviour. What the engine promises is that it never moves him off the node, and that is what this asserts.
+    let _ = progress;
 }
 
 /// **Nobody in the crowd is moved off his square.** `push_the_standing` displaces a body a twentieth of a tile after

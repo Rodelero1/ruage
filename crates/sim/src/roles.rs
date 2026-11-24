@@ -22,7 +22,7 @@ impl World {
 
     /// Is this tile inside the map, walkable, and empty?
     pub fn is_free_ground(&self, x: u16, y: u16) -> bool {
-        let Some(walk) = self.walk.as_ref() else {
+        let Some(walk) = self.ground.as_ref() else {
             return false;
         };
         if !walk.contains(x, y) || walk.blocked(x, y) {

@@ -87,14 +87,14 @@ impl World {
 
         for GateChange { id, tiles, open } in changes {
             if open {
-                if let Some(walk) = self.walk.as_mut() {
+                if let Some(walk) = self.ground.as_mut() {
                     for (x, y) in &tiles {
                         walk.unblock(*x, *y);
                     }
                 }
                 self.open_gates.insert(id);
             } else {
-                if let Some(walk) = self.walk.as_mut() {
+                if let Some(walk) = self.ground.as_mut() {
                     for (x, y) in &tiles {
                         walk.block(*x, *y);
                     }

@@ -470,6 +470,19 @@ impl App {
             .as_ref()
             .and_then(|world| target.and_then(|id| world.entity(id)))
             .map(|entity| entity.kind);
+        // **A walk names what it was aimed at** (D286): a click on a building or on one of our own units is an order *about
+        // that object*, which is what ends the walk on contact in the original (*"That collision is with our target, so we're
+        // done"*). A click on a resource or an enemy has its own command above, and a click on the ground names nothing.
+        let walk_target = match target_kind {
+            Some(ruage_sim::EntityKind::Building) => target,
+            Some(ruage_sim::EntityKind::Unit) => target.filter(|id| {
+                self.world
+                    .as_ref()
+                    .and_then(|world| world.entity(*id))
+                    .is_some_and(|entity| entity.player == 1)
+            }),
+            _ => None,
+        };
         let Some(world) = self.world.as_mut() else {
             return;
         };
@@ -505,6 +518,7 @@ impl App {
                     #[allow(clippy::cast_possible_truncation)]
                     let raw = |value: f32| (f64::from(value) * scale as f64).round() as i64;
                     ruage_sim::Command::WalkTo {
+                        target: walk_target,
                         unit: id,
                         to: (
                             ruage_fixed::Fixed::from_raw(raw(point.0)),

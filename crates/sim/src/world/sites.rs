@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ruage_fixed::Fixed;
 
-use crate::{Entity, EntityId, EntityKind, Route, SimError, Task, Walk, World};
+use crate::{Entity, EntityId, EntityKind, Ground, Route, SimError, Task, World};
 
 /// How long a *failed* step-aside is remembered before the search is asked again (D223). Long enough that a stuck man costs
 /// no path search a tick, short enough that a builder's arrival gets an answer within a second.
@@ -21,7 +21,7 @@ impl World {
     /// resolves it later. **Units do not block a site** - the game drops a building on your own villagers and pushes them
     /// out - and a spent farm is the one thing a new building may cover.
     pub(crate) fn site_refusal(&self, player: u8, unit: u32, at: (u16, u16)) -> Option<SimError> {
-        let walk = self.walk.as_ref()?;
+        let walk = self.ground.as_ref()?;
         let mut held: BTreeMap<(u16, u16), EntityId> = BTreeMap::new();
         // Ground held by a building this player **cannot see**. The walk layer has it blocked - `insert` blocks a
         // building's tiles the moment it stands - so asking `walk.blocked` alone refused a blind placement with
@@ -202,10 +202,9 @@ impl World {
             task @ (Task::Gather { .. } | Task::Hunt { .. }) => task,
             _ => Task::Idle,
         };
-        // **His place goes with him** (D186 addendum 5): a man moved off a foundation must not walk back onto it because the
-        // ring's place he owned is still there. Without this the site's clear gate and the man's place fight each other, and the
-        // site never starts - the ten-minute scenario's barracks stood at 0 of 1000 ticks with its builder at a gather task.
-        self.release_gather_place(id);
+        // **Nothing to release any more** (D293): a man's gathering place used to be let go here, because a man moved off a
+        // foundation would otherwise walk back onto the place he owned. There are no places: he stands where his order and the
+        // bodies leave him.
         let Some(to) = self.exit_tile(tiles, here, from) else {
             // **Nowhere to go**: the site stalls, which D183 §4 accepts. The attempt is remembered anyway, so the search
             // is not repeated every tick - a unit that cannot leave would otherwise cost a ring of path searches a tick
@@ -217,7 +216,7 @@ impl World {
             return;
         };
         let goal = self.tile_centre(to);
-        let Ok(route) = self.plan_path(from, goal, 0) else {
+        let Ok(route) = self.plan_path(Some(id), from, goal) else {
             self.resuming.insert(id, resumable);
             self.aside_retry
                 .insert(id, self.tick.saturating_add(ASIDE_RETRY_TICKS));
@@ -234,7 +233,10 @@ impl World {
             },
         );
         if let Some(entity) = self.find_mut(id) {
-            entity.task = Task::Move { to: goal };
+            entity.task = Task::Move {
+                to: goal,
+                target: None,
+            };
         }
     }
 
@@ -247,7 +249,7 @@ impl World {
         from: (u16, u16),
         position: (Fixed, Fixed),
     ) -> Option<(u16, u16)> {
-        let (wide, tall) = self.walk.as_ref().map_or((0, 0), Walk::size);
+        let (wide, tall) = self.ground.as_ref().map_or((0, 0), Ground::size);
         // **Empty first, then merely walkable** (D192). A crowd standing against a resource next to the site used to leave every
         // ring tile occupied, `exit_tile` answered `None`, and the man on the ghost was never moved - so `site_is_clear` refused
         // for ever and the content pack's house sat at hp 1 after 2,000 ticks. Bodies are not walls for their own side (D189), so a
@@ -264,7 +266,7 @@ impl World {
                     if !empty && !self.tile_walkable(x, y) {
                         continue;
                     }
-                    if self.plan_path(position, self.tile_centre(at), 0).is_ok() {
+                    if self.plan_path(None, position, self.tile_centre(at)).is_ok() {
                         return Some(at);
                     }
                 }
@@ -334,6 +336,43 @@ impl World {
         ))
     }
 
+    /// **How far a point is from a node's ground**, squared and in raw units: zero when the point is on the footprint.
+    ///
+    /// A node's *position* is an anchor, not its extent - `Command::Spawn` puts a building wherever it is handed, a scenario
+    /// may carry the middle of a tile, and a route's points are tile corners - so a distance to the position reads the wrong
+    /// thing for anything wider than a point. A node with no footprint (a resource) answers as its own point, which is what a
+    /// one-tile node is.
+    pub(crate) fn gap_to_footprint(&self, point: (Fixed, Fixed), node: EntityId) -> i64 {
+        let Some((ax, ay, wide, tall)) = self.footprint_rect(node) else {
+            let Some(at) = self.find(node).map(|entity| entity.position) else {
+                return 0;
+            };
+            let dx = point.0.raw() - at.0.raw();
+            let dy = point.1.raw() - at.1.raw();
+            return dx * dx + dy * dy;
+        };
+        let scale = self.scale;
+        let left = i64::from(ax) * scale;
+        let top = i64::from(ay) * scale;
+        let right = i64::from(ax.saturating_add(wide)) * scale;
+        let bottom = i64::from(ay.saturating_add(tall)) * scale;
+        let across = if point.0.raw() < left {
+            left - point.0.raw()
+        } else if point.0.raw() > right {
+            point.0.raw() - right
+        } else {
+            0
+        };
+        let down = if point.1.raw() < top {
+            top - point.1.raw()
+        } else if point.1.raw() > bottom {
+            point.1.raw() - bottom
+        } else {
+            0
+        };
+        across * across + down * down
+    }
+
     /// **Where a builder stands to work a site**: a free, reachable tile on the **outer ring of the footprint**, nearest
     /// to where the builder is now - never a tile of the footprint itself (D183 §3).
     ///
@@ -388,7 +427,7 @@ impl World {
             // and the builder stalls one step short (measured: a farm that never started, 600 ticks of jitter at 4.78).
             let position = self.tile_centre(tile);
             // Free is not the same as reachable: a free tile inside a wall is no place to stand.
-            self.plan_path(from, position, 0).ok().map(|_| position)
+            self.plan_path(None, from, position).ok().map(|_| position)
         })
     }
 
@@ -485,10 +524,17 @@ impl World {
                     drop_sites.contains(&unit) || drop_sites.contains(&root)
                 })
             })
+            // **The nearest *wall*, not the nearest anchor** (the owner's report, 2026-11-22): *"villagers prioritise
+            // dropping wood to lumber camp even town center is closer. The whole area of town center could be dropped
+            // at"*. A building's `position` is its anchor tile, and a town centre is 4x4 - so its anchor sits two tiles in
+            // from its own wall on every side, and a carrier measured to the anchor walks past a nearer town centre to a
+            // lumber camp whose corner happens to be closer. `footprint_gap` is the wall (D246's own measure), so the
+            // ranking is: wall, then anchor distance to break a tie, then id so the choice is a function of the world.
             .min_by_key(|entity| {
                 let dx = entity.position.0.raw() - from.0.raw();
                 let dy = entity.position.1.raw() - from.1.raw();
-                (dx * dx + dy * dy, entity.id.0)
+                let wall = self.wall_gap(entity, from).unwrap_or(i64::MAX);
+                (wall, dx * dx + dy * dy, entity.id.0)
             })
             .map(|entity| entity.id)
     }
@@ -573,7 +619,7 @@ impl World {
         candidates.sort_by_key(|(distance, tile)| (*distance, *tile));
         candidates.into_iter().find_map(|(_, tile)| {
             let position = self.tile(tile);
-            self.plan_path(from, position, 0).ok().map(|_| position)
+            self.plan_path(None, from, position).ok().map(|_| position)
         })
     }
 
@@ -585,7 +631,7 @@ impl World {
             return;
         };
         let mut target = None;
-        if let Ok(route) = self.plan_path(from, to, 0) {
+        if let Ok(route) = self.plan_path(Some(unit), from, to) {
             self.put_route(
                 unit,
                 Route {
@@ -614,7 +660,7 @@ impl World {
                             continue;
                         }
                         let candidate = self.tile_centre((cx, cy));
-                        if let Ok(route) = self.plan_path(from, candidate, 0) {
+                        if let Ok(route) = self.plan_path(Some(unit), from, candidate) {
                             self.put_route(
                                 unit,
                                 Route {
@@ -632,7 +678,10 @@ impl World {
         if let Some(target) = target
             && let Some(entity) = self.find_mut(unit)
         {
-            entity.task = Task::Move { to: target };
+            entity.task = Task::Move {
+                to: target,
+                target: None,
+            };
         }
     }
 
@@ -647,34 +696,30 @@ impl World {
         to: (Fixed, Fixed),
         fighting: bool,
         patrol: bool,
+        target: Option<EntityId>,
     ) -> Result<(), SimError> {
         // **Every click is accepted** (D134): a target on blocked ground becomes the nearest legal standing point before
         // anything is planned, slotted or stored, so the order's goal is always a tile a body can occupy.
         let from = self.find(unit).map_or(to, |entity| entity.position);
-        let to = self.walk_goal(unit, from, to)?;
-        // Crowd slots are **tiles** (a place to stand), so the point becomes a tile for the slot search and survives as
-        // the goal when this unit takes the clicked tile itself (A).
-        let wanted = self.tile_of(to);
-        // A crowd ordered to one tile is a crowd ordered to a *place*: each unit takes a tile of its own
-        // near the one that was clicked, in the order the orders arrive. Without this they all aim at one
-        // tile, and with the last-step rule (D52) all but one stop a step short of it (D53).
-        let already_heading = self
-            .entities
-            .iter()
-            .filter(|entity| entity.id != unit)
-            .filter(|entity| matches!(self.goal_of(entity), Some((tile, true)) if tile == wanted))
-            .count();
-        // **The first man takes the spot; the others stand round him** (D271, the owner, 2026-11-18: *"If multiple villagers
-        // are chosen, then the first comes to the spot and others stand around him"*). This used to give a follower
-        // `tile_centre(slot)` - the middle of a square the ring search picked, and `slot_for` scans from `(-1, -1)` outwards,
-        // so every follower landed up and to the left: measured **25,455 raw (1.27 tiles)** from the click.
-        let goal = if already_heading == 0 {
-            to
-        } else {
-            let radius = self.body_radius(self.find(unit).and_then(|entity| entity.unit));
-            self.crowd_ring_point(to, radius, from, already_heading, unit)
+        // **A click on a thing is an order about the thing** (D286): the goal becomes the nearest point outside its box, so
+        // the route aims at the thing and no legal step has to enter it. A click on the ground keeps D134's answer - the
+        // nearest place the body can stand.
+        let to = match target {
+            Some(thing) => {
+                let reach = self
+                    .find(unit)
+                    .map_or(0, |entity| self.body_radius(entity.unit));
+                self.push_out_of_target(to, reach, thing)
+            }
+            None => self.walk_goal(unit, from, to)?,
         };
-        let goal = self.check_order_at(unit, goal)?;
+        // **Every man is sent to the tile that was ordered** (D289, the owner, 2026-11-19: *"Drop it and let the crowds jam. I
+        // want the start as close to the game as sensible."*). D271 gave each follower a ring place of its own so a crowd spread
+        // itself around the click; the original does not - its players' own reports are men piling onto one tree and standing
+        // pressed against each other (`docs/gather-seating-evidence.md`) - so the goal is the ordered tile for every man, and the
+        // bodies are solid. A crowd that cannot all fit therefore jams, which is the behaviour being asked for.
+        let goal = to;
+        let goal = self.check_order_at(unit, goal, target.is_some())?;
         let entity = self.find(unit).ok_or(SimError::MissingEntity(unit))?;
         let route = self.plan_path_for(unit, entity.position, goal)?;
         let here = self.tile_of(entity.position);
@@ -696,7 +741,7 @@ impl World {
             entity.task = if fighting {
                 Task::Hunt { to: goal }
             } else {
-                Task::Move { to: goal }
+                Task::Move { to: goal, target }
             };
         }
         Ok(())

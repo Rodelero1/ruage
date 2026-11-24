@@ -102,6 +102,7 @@ fn a_move_across_empty_ground_lands_on_the_tile_it_was_given() {
     world.step().expect("the villager lands");
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: EntityId(9_900),
             to: (12, 11),
         })

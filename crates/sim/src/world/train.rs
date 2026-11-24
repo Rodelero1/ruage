@@ -382,7 +382,7 @@ impl World {
             );
             taken[((dy + 2) * i64::from(SIDE) + (dx + 2)) as usize] = true;
         }
-        let walk = self.walk.as_ref()?;
+        let walk = self.ground.as_ref()?;
         for dy in 0..=2i32 {
             for dx in 0..=2i32 {
                 for (sx, sy) in [(dx, dy), (-dx, dy), (dx, -dy), (-dx, -dy)] {

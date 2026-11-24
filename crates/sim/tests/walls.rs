@@ -138,7 +138,11 @@ fn a_wall_of_walls_closes_the_way() {
     // ground is "come as close as you can", not an error). What this test is about is the wall, not the refusal: the unit
     // walks up to it and stays outside. Before D134 the same test asserted a `NoPath` refusal, which was the old rule.
     world
-        .submit_checked(Command::Move { unit, to: (30, 30) })
+        .submit_checked(Command::Move {
+            target: None,
+            unit,
+            to: (30, 30),
+        })
         .expect("a click is a click: it walks as close as the walls allow");
     for _ in 0..600 {
         world.step().expect("step");
@@ -174,7 +178,11 @@ fn knocking_one_segment_down_opens_the_way() {
     world.step().expect("step");
 
     world
-        .submit_checked(Command::Move { unit, to: (30, 30) })
+        .submit_checked(Command::Move {
+            target: None,
+            unit,
+            to: (30, 30),
+        })
         .expect("a gap is a way through");
 }
 
@@ -204,6 +212,10 @@ fn a_house_blocks_its_own_tile_and_the_way_goes_round() {
     );
     let unit = walker(&mut world, 9_954, (26, 30));
     world
-        .submit_checked(Command::Move { unit, to: (34, 30) })
+        .submit_checked(Command::Move {
+            target: None,
+            unit,
+            to: (34, 30),
+        })
         .expect("the way goes round a house");
 }

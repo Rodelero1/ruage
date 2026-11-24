@@ -354,18 +354,14 @@ fn run(args: &[String]) -> Result<(), String> {
         .max()
         .unwrap_or(0);
 
-    // `repaths` and `made_room` are counters of reactions the engine gives itself: a slice that changes how bodies
-    // answer each other is judged by them as much as by the bank (C).
+    // `repaths` counts the routes the engine had to plan again, which is the one reaction D279 kept.
     println!(
-        "tick={} entities={} players={} hash={:016x} repaths={} made_room={} repaths_body={} repaths_ground={}",
+        "tick={} entities={} players={} hash={:016x} repaths={}",
         world.tick(),
         world.entities().len(),
         players,
         world.state_hash(),
-        world.repaths(),
-        world.made_room(),
-        world.repaths_by_body(),
-        world.repaths_by_ground()
+        world.repaths()
     );
     Ok(())
 }

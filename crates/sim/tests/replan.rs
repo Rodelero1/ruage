@@ -78,10 +78,11 @@ fn a_villager(world: &mut World, id: u32, column: i64, row: i64) -> EntityId {
     EntityId(id)
 }
 
-/// **A man who has stopped is not walked through** (row 29). `collide`'s rule 6 takes the step anyway (`TakeAtRest`): an idle
-/// friend who is *not* past is treated as ground that cannot move, so the walker goes through him and only *then* re-plans -
-/// the route round him is installed one tick after the body has already been crossed. The original's collision epilogue has
-/// four arms and none of them is that one: a non-past collision is a re-path and a pause.
+/// **A man who has stopped is walked through only *after* the mover's re-plan** (row 29, D320). The original's chain on a
+/// non-past collision is a **re-path** and a pause: the new path carries a new `createdAt`, and the man who has stood still
+/// since then is past (`path->createdAt >= lastMoveTime`), so the walker goes on. Keeping the old stamp - which this engine
+/// did - leaves a stopped man non-past for ever, and the walker sinks through him tick after tick until their centres
+/// coincide: measured, **0 raw apart at tick 176**, and 600 re-plans in 600 ticks.
 ///
 /// The meeting is forced the way `step_decision.rs` forces its own: the friend is put on the walker's row **after** the route
 /// exists, so he is met rather than planned around (D210b).
@@ -92,14 +93,14 @@ fn a_villager(world: &mut World, id: u32, column: i64, row: i64) -> EntityId {
 /// stamped later, and the stopped man is walked through. That chain does not complete here yet, so the arm stays and this
 /// fixture is the specification for the slice that completes it.
 #[test]
-#[ignore = "R1b: blocked by the head-on pair's 2,000-tick stand; see docs/next-step.md and D242"]
-fn a_stopped_friend_is_not_walked_through() {
+fn a_stopped_friend_is_only_walked_through_after_the_replan() {
     let Some(pack) = pack() else { return };
     let mut world = a_world(&pack);
     let row = 4i64;
     let walker = a_villager(&mut world, 9_500, 4, row);
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (30, row as u16),
         })
@@ -115,6 +116,7 @@ fn a_stopped_friend_is_not_walked_through() {
     let friend = a_villager(&mut world, 9_600, ahead, row);
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: friend,
             to: (u16::try_from(ahead - 1).expect("a column"), row as u16),
         })
@@ -130,12 +132,17 @@ fn a_stopped_friend_is_not_walked_through() {
         .step()
         .expect("and one more, so he has not moved this tick");
 
-    // **Contact is allowed; getting deeper is not** (D210's rule, and the shape `collision.rs` already pins for a pair). The
-    // arm being deleted did not stop at contact: it took every step, so the walker sank through the friend tick after tick.
+    // **The game's chain, not a stricter one** (D320). A rester who moved after the route was drawn is *not past*, so he is a
+    // collision: the mover re-paths - and a re-plan is a **new path**, so it is stamped later, which is the link that was missing -
+    // and the loser is paused. Once the stamp is later than the friend's last move the friend **is** past and the walker goes
+    // through him, which is the original's own rule (`path->createdAt >= other->lastMoveTime`) and what D239's reading of row 29
+    // describes. What must never happen is the deleted arm's shape: sinking deeper for **600 ticks** because a stopped man can
+    // never become past. So the bar is the pause window - at most 1.5 s, 60 ticks - of being inside a man who is not past.
     let reach = world.reach_between(walker, friend).raw();
+    let repaths_before = world.repaths();
     let mut contact: Option<i64> = None;
-    let mut deepest = i64::MAX;
-    let mut deepest_tick = 0u64;
+    let mut inside_not_past: u64 = 0;
+    let mut got_past = false;
     for _ in 0..600 {
         world.step().expect("a tick");
         let (a, b) = (
@@ -147,29 +154,31 @@ fn a_stopped_friend_is_not_walked_through() {
         if contact.is_none() && apart < reach {
             contact = Some(apart);
         }
-        if apart < deepest {
-            deepest = apart;
-            deepest_tick = world.tick();
+        let past = world.is_past(walker, friend);
+        if apart < reach && !past {
+            inside_not_past += 1;
+        }
+        if past {
+            got_past = true;
         }
     }
     let contact =
         contact.expect("MEASURED the walker never came within the reach: the fixture did not meet");
     assert!(
-        deepest >= contact,
-        "the walker went {deepest} raw from a friend standing still at tick {deepest_tick}, deeper than the {contact} he \
-         first touched at: a body at rest was walked through instead of being answered with a re-path"
+        got_past,
+        "the friend never became past after the walker's re-plan: a re-plan that keeps the old stamp leaves a stopped man \
+         non-past for ever, so the walker can only ever sink through him"
     );
-    let ended = {
-        let (a, b) = (
-            world.position(walker).expect("alive"),
-            world.position(friend).expect("alive"),
-        );
-        let (dx, dy) = (a.0.raw() - b.0.raw(), a.1.raw() - b.1.raw());
-        (dx * dx + dy * dy).isqrt()
-    };
     assert!(
-        ended >= reach,
-        "the walker finished {ended} raw from the friend, inside the {reach} their footprints need: he stood in him"
+        inside_not_past <= 60,
+        "the walker spent {inside_not_past} ticks inside a friend who was **not** past (contact was {contact} raw at the \
+         first touch): the game's chain answers that in one re-plan and a pause of at most 1.5 s, i.e. 60 ticks"
+    );
+    let replans = world.repaths() - repaths_before;
+    assert!(
+        replans <= 4,
+        "the walker re-planned {replans} times in 600 ticks against a man who never moved: the re-plan is not taking a fresh \
+         stamp, so every tick answers the same collision again"
     );
     assert!(
         world.position(walker).is_some(),

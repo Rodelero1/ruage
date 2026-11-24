@@ -1459,6 +1459,7 @@ fn resolve_rule(world: &World, rule: &Rule) -> Result<Vec<Command>, String> {
                 let here = world.tile_of_position(entity.position);
                 if let Some(to) = world.nearest_unseen(player, here, 26) {
                     commands.push(Command::Move {
+                        target: None,
                         unit: entity.id,
                         to,
                     });

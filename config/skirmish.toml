@@ -222,8 +222,15 @@ kind = "train"
 building = "barracks"
 role = "militia"
 
+# **600 s, not 230** (D315): the mirrored opening is *not* evenly timed, and this step was the one that made the
+# skirmish one-sided. Player 2's barracks stands at 70 s and its two militia exist by 230 s; player 1's barracks needs
+# its 320 s build order plus ~80 s of work to finish and its militia appears at ~505 s - measured on this tree, with
+# player 2's attack held back: foundation 320 s, progress 422 of 1000 at 350 s, finished before 400 s, militia present at
+# 525 s. Sent at 230 s the two militia killed player 1's builder (villager 2, hp 40 -> 25 by 310 s) and left the barracks
+# frozen at **119 of 1000**, so player 1 fielded nothing and the attack step refused with "no unit militia". 600 s leaves
+# player 1's militia standing and both armies on the map.
 [[step]]
-at_seconds = 230.0
+at_seconds = 600.0
 player = 2
 kind = "attack"
 attacker = "militia"

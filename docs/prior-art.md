@@ -31,6 +31,90 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-23 — openage rebuilds its C++ traceback by hand: nothing to act on
+
+**`SFTtech/openage`, 2 commits (`f6f87f9a` -> `738bfc6c`), PR #1836 merged 22 Nov, 2 files, +53/-34** — all of it in
+`openage/cppinterface/exctranslate.pyx`. Python 3.13 made `_PyTraceback_Add` private, so the Cython bridge that raises C++
+exceptions as Python ones had been dropping the C++ frames. The fix collects each frame as a
+`(functionname, filename, lineno)` triple (`exctranslate.pyx:88`), then builds the traceback by hand — a code object from
+`PyCode_NewEmpty` (`:55`), a frame from `PyFrame_New`, entries chained with `types.TracebackType` (`:155`) — and raises
+`exc.with_traceback(tb)` (`:157`). The new test pins the throw site: `traceback.extract_tb` must contain
+`exctranslate_tests.cpp` / `throw_foo` (`exctranslate_tests.pyx:83-92`).
+
+- **No engine axis.** Not the content format (D18), not the content/engine boundary (D17), not the tick model, not the asset
+  pipeline. Nothing in this tree moves; no U-number is touched.
+- **The one transferable idea, for whenever a script VM lands.** An error crossing a language boundary must carry the far
+  side's frames, or the traceback starts at the wrapper and the fault is unattributable. Their route also shows its cost:
+  three CPython internals (`PyCode_NewEmpty`, `PyFrame_New`, `PyThreadState_Get`), so it must be re-made at every Python
+  release. The lesson for us is to keep any FFI boundary thin, not to port this.
+
+**Nothing actionable.** D13, D14, D17 and D18 are unaffected.
+
+## 2026-11-22 — HD's own recordings step every ~79 ms and declare a checkpoint every 500 steps
+
+**Two projects were due: `SFTtech/openage` moved (`4c04b6be` -> `f6f87f9a`), and `aesaganda/aoe2-on-browser` had never been
+looked at.**
+
+### aoe2-on-browser: the original's code, lifted — and the game's own sync checker as a harness
+
+`aesaganda/aoe2-on-browser` (created 2026-11-18, ~30 commits in three days to `3d5eb6d3`) statically recompiles
+*The Conquerors* 1.0 (`age2_x1.exe`, MSVC 6, 32-bit PE) to C with `pcrecomp` (MIT, submodule) plus a Win32/DirectDraw/
+DirectSound shim, then to WebAssembly; menus, a game and multiplayer over a WebSocket relay run in a browser, and the same
+lifted build plays natively on Linux. It **runs the original's code**, so it is not a second implementation and documents no
+mechanics - but its *harness* is the useful part: a replay driven with `DONTIGNORESYNC` makes the game compare its own world
+checksums and stop on a mismatch ("Out of sync replaying game...", string 9013, raised at `0x5FF53A` in `0x5FF180`), so "did
+400 s of an AI game replay to the same world" is a pass/fail with nobody watching. They report **10 of 10** checksums
+matching across a 403 s game recorded by the original under Wine and replayed by the lifted build, **4 of 4** the other way
+round, and two deliberately corrupted controls that stopped where they should.
+
+**What that implies about the original, checked against our own files.** Their note puts a sync op at "about 80 ms of game
+time" and the 28-byte checksum block at "about every 40 s". Measured in our four HD 5.8 recordings with `tools/recordings.py`
+(it already accumulated these numbers; nobody had looked at the distribution): the longest, `142146`, has **38,880 steps over
+2,681.1 s**, per-step increment **median 79 ms, mean 79.14**, **98.6% inside 73-90**, **295 of 33,879 at exactly 150** (a
+merged double step), **12.64 steps/s**. The meta block's second word is **500**, and the checksum blocks land **every 500
+steps exactly** - first at 38,588 ms, then 76,081, 114,115 - i.e. **39.5 s**, which is their "about 40 s". The block's last
+word is the accumulated step time to the millisecond (38,588); the word three before it is a checksum that changes every
+block (98,225,359 -> 98,516,813 -> 98,451,015), and the word after that is a number that only grows (28,007 -> 28,447 ->
+28,735) whose meaning is unread. The two short recordings (302 and 122 steps) carry no checksum block at all, which is what a
+500-step interval predicts.
+
+**What it means for U12.** The increment is **not a fixed quantum**: 73-90 continuously, with no integral multiple of 50 or
+16 ms anywhere in it. The recording therefore does not carry "the tick rate" - it carries each step's ms, which is what a
+replay needs precisely because the length varies. Two readings survive and the number cannot separate them: one turn per sync
+op (the parsimonious one - 150 is exactly 2x75, a missed turn merged into the next), or several fixed turns per sync op
+(which would put the quantum at an integer fraction, and the continuous spread argues against it). Unread either way, and
+named: **the game speed these four were recorded at** - nothing in our tree parses that field, and U12's own 2026-11-07
+caution says a wall-clock number taken at the wrong rung costs that factor. The register row now carries the measurement.
+
+### openage: a multiplier needs somewhere to live
+
+**`SFTtech/openage`, three commits and a merge (`4c04b6be` -> `f6f87f9a`, PR #1835 "converter-strict-numbers", merged
+21 Nov, two of them authored 14 Nov), 10 files, +139/-25.** nyan - their content format - now separates `int` and `float`
+**strictly**: an INT member rejects a non-integral value and no longer accepts `DIVIDE`, a FLOAT member holds floats and
+refuses division by zero (`openage/nyan/nyan_structs.py:687-713`, `1031-1055`). Six members are retyped to float:
+`Projectile.arc`, the `min_range`/`max_range` of the three ranged ability types, `AttributeSetting.{min,max,starting}_value`,
+`ResourceAmount.amount` and `EntityContainer.slots` (`nyan_api_loader.py`, with the reference docs beside it).
+
+**The defect is at the boundary, not in the operator table.** `libopenage/gamestate/entity_factory.cpp:196-197` now reads
+`starting_value` with `get_float` and rounds once with `std::llround`, under the comment *"attribute settings are floats so
+tech multipliers stay exact"*. Before it, a member declared `int` held a hit-point multiplier of 1.1 written by the converter
+and read by a C++ consumer that asked for an int: content and engine disagreed about what the member was, exactly where a
+tech's fraction crosses between them.
+
+**No divergence - we were already where they now are.** Our pack types by meaning: `MultiplyAttribute { value: MaybeFixed }`
+(`crates/data/src/techs.rs:151-156`) keeps 1.1 as an `f64` (`crates/data/src/lib.rs:172-183`), and health is
+*adds first, then multiply, one round at the end* (`scaled_health`, `crates/sim/src/lib.rs:260-280`), which is the shape
+openage just moved to. The one per-operation rounding in our tree is `multiply_class` on an attack/armour list
+(`crates/sim/src/lib.rs:281-287`), an `i16` list the game itself stores as integers - unavoidable there. Nothing to port; the
+study value is the shape of their two new test files (`openage/nyan/tests.py`, 34 lines, and
+`openage/convert/processor/conversion/aoc/tests.py`, 59 lines), the first converter tests of their kind.
+
+**Licence, and it is worse than GPL here.** openage is GPL-3.0, so nothing of theirs crosses. `aoe2-on-browser` ships **no
+licence at all** (GitHub reports none), which is stricter than GPL: no right to copy, adapt or redistribute anything in it,
+and its shim sources are derived from observation of a 2000 binary - a second reason not to. The one thing taken from it here
+is a *technique* (drive a replay with the game's own checker on), and the numbers behind it were measured in our own files, so
+nothing in this section depends on their code.
+
 ## 2026-11-18 — openage's `last_before` gave two answers to one question, and the hint chose which
 
 **`SFTtech/openage`, two commits (`e3080121` -> `4c04b6be`, PR #1837, merged 17 Nov, authored 14 Nov), 2 files, +41/-4.**
@@ -535,6 +619,16 @@ Published-value cross-checks for open questions:
 
 Later steps:
 - `SiegeEngineers/rms-check`, `SiegeEngineers/rms-doc` — the random map script language.
+- `aesaganda/aoe2-on-browser` — **watched for its method, not its code.** The Conquerors (2000, `age2_x1.exe`)
+  statically recompiled x86→C by `pcrecomp` (MIT), with a Win32/DirectX shim, a native Linux build and a WebAssembly
+  build; four phases done, multiplayer over a WebSocket relay. **The part that matters to us:** its oracle is the
+  recording, not a person — an AoC recording carries a world checksum about every 40 s of game time, a replay compares
+  each against its own world, and their harness (`tools/oracle/replay_check.sh`) drives the menus under gdb and exits
+  0/1/2 on in-sync/out-of-sync/inconclusive. Their claim is 10/10 checksums matching on a 403 s game, both directions.
+  That is the *shape* of the certificate D87 left open, and the `pcrecomp` route is the one mechanical alternative to
+  reading HD by hand if a `needs-oracle` row ever has to be settled. Licence: **none stated** — all rights reserved, so
+  read for facts and never lift code (same rule as genie, strictly applied). Targets AoC, not HD 5.7.2: rules transfer,
+  balance values do not.
 - `Divy1211/AoE2DE_UGC_Guide` — RM scripting and data modding, and it states it covers older versions.
   The only candidate from the first discovery sweep (2026-10-31) worth adding: the rest were replay
   viewers, a LAN server, an iPad port and a rating chart.
@@ -2102,3 +2196,31 @@ change mid-walk? It cannot answer it, and the search is recorded so the next ses
 - Its addresses are **AoC 1.0c / AoK 2.0a / the PS2 ELF**, not HD 5.7 (no licence, all rights reserved: read for behaviour,
   never transcribed). The movement answers in this tree come from `AoK HD.exe` itself -
   `docs/movement-in-the-binary.md`, "The maximum forward velocity, read".
+
+## openage on the three pathfinders and on formations (read 2026-11-21)
+
+Found while crosschecking the conformance sequence against online sources. `SFTtech/openage` (GPL-3.0: facts, never code) keeps a
+reverse-engineering note that cites the Ensemble postmortem, Pottinger's GDC 2000 talk and the official AoK strategy guide -
+three independent descriptions behind one page, which is why it is worth a citation even though it is a sibling project.
+
+**`doc/reverse_engineering/game_mechanics/pathfinding.md`**, verbatim where it matters:
+
+- *"Age of Empires 2 uses three different algorithms for pathfinding plus two obstruction systems."* The high-level one *"uses
+  mip-mapping to create a general route across the map. Criteria for the mip-map subdivision is passability. **It ignores moving
+  objects, e.g. units or wildlife**, though it takes 'static' object like buildings into account. Whenever a building is
+  constructed the pathfinder gets notified and updates the corresponding mip-map chains."*
+- *"The other two pathfinders are for short and medium distances. One uses tile-based pathfinding while the other one is a
+  polygonal pathfinder that dynamically generates convex hulls. These are used in combat situations or when units cross paths."*
+
+**`.../formations.md`:**
+
+- *"Units within the same formation don't collide with each other when the formation is established."*
+- *"Villagers, trade carts and fishing ships will not be part of any formation ... each of them takes their own path."*
+- A marching formation is used when the order lands more than **10 tiles** away.
+
+**What this settles for us, and what it does not.** It corroborates the three-solver shape the register carries as P11 and it
+settles the direction of P14: a coarse tier that refuses to run when bodies are near is backwards, because the game's coarse
+tier runs *and* ignores them (the corpus agrees independently - `FUN_007ee980`'s body has no call to the stander inserter). It
+also makes the mate exemption a **formation's**, which villagers never have - our same-tick rule is broader than the game on
+both counts. It does **not** give a constant: no radius, no speed, no cost, no mip-map padding, and no statement about HD 5.7's
+own build (openage describes the classic engine). Those still come from the install - `docs/movement-in-the-binary.md`.

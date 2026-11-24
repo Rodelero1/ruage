@@ -167,6 +167,7 @@ fn a_head_on_pair_in_a_one_tile_corridor_never_overlaps() {
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
+        target: None,
         unit: a,
         to: (right, row),
     });
@@ -174,6 +175,7 @@ fn a_head_on_pair_in_a_one_tile_corridor_never_overlaps() {
     // other half of the rule and is tested in `group_overlap.rs`.
     world.step().expect("a tick between the orders");
     world.submit(Command::Move {
+        target: None,
         unit: b,
         to: (left, row),
     });
@@ -231,10 +233,12 @@ fn a_pair_standing_inside_each_other_can_separate() {
     world.step().expect("the spawns land");
 
     world.submit(Command::Move {
+        target: None,
         unit: a,
         to: (30, 24),
     });
     world.submit(Command::Move {
+        target: None,
         unit: b,
         to: (22, 24),
     });

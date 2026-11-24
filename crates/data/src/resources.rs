@@ -37,6 +37,10 @@ pub struct ResourceDef {
     /// A forest tree, a forage bush and a stone mine are all `0.5` there, so a node fills its tile. It is content because
     /// the number comes from the pack's own data, and the engine only asks "how close may a worker stand" (D169).
     pub radius: f64,
+    /// **Whether the search charges 300 to walk beside this node** (D342). The binary's row is keyed on the object's
+    /// **class** - 8 (stone mine) and 32 (gold mine) - and a class is a dat fact the engine may not know (D17), so the
+    /// pack says which of its own resources are the expensive neighbours. Omitted means the plain 10.
+    pub snug: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +52,13 @@ pub struct Resources {
 impl Resources {
     pub fn count(&self) -> usize {
         self.entries.len()
+    }
+
+    /// **Whether a node of this slot is an expensive neighbour** (D342): the pack's own answer to the binary's class
+    /// test, kept here so `crates/sim` learns neither the class nor the dat id.
+    #[must_use]
+    pub fn slot_is_snug(&self, slot: usize) -> bool {
+        self.entries.get(slot).is_some_and(|resource| resource.snug)
     }
 
     pub fn slot_of(&self, name: &str) -> Option<usize> {
@@ -101,6 +112,9 @@ struct RawResource {
     /// The node's half-extent in tiles, from the dat's `radius_x`. Omitted means a whole tile, the old behaviour.
     #[serde(default)]
     radius: Option<f64>,
+    /// Whether the levelled search charges 300 to walk beside this node (D342). Omitted means it does not.
+    #[serde(default)]
+    snug: Option<bool>,
     /// Omitted means open ground; `site = "forest"` says this resource lives in forests.
     #[serde(default)]
     site: ResourceSite,
@@ -174,6 +188,7 @@ pub fn load_resources_str(text: &str, path: &str) -> Result<Resources, ConfigErr
             dat_id: resource.dat_id,
             site: resource.site,
             radius: resource.radius.unwrap_or(0.5),
+            snug: resource.snug.unwrap_or(false),
         });
     }
 

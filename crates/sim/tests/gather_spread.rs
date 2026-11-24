@@ -93,7 +93,7 @@ fn apart(a: (Fixed, Fixed), b: (Fixed, Fixed), scale: i64) -> f64 {
 
 /// **Both villagers come from the west, so the one side they can both reach is the west side** - and only one of them may have it.
 #[test]
-fn two_woodcutters_on_one_tree_do_not_share_its_side() {
+fn two_woodcutters_on_one_tree_share_its_side_and_press() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
@@ -141,9 +141,14 @@ fn two_woodcutters_on_one_tree_do_not_share_its_side() {
         .position(EntityId(9_611))
         .expect("the second villager");
     let split = apart(first, second, scale);
+    // **They share the side and each take a place on it** (D356's ruling 1): the owner, 2026-11-22, after seeing the jam -
+    // *"HD definitely doesn't stack up that much ... never in this scale"*. Until then this assertion demanded the opposite -
+    // **0.00** tiles apart, both working - because D289/D293 handed out no seats. An arriving man is now placed by the game's
+    // own rule (`func_002699A0`: `ext_a + ext_b + 0.01` along one side), so two woodcutters on one tree stand at least their two
+    // radii apart while both keep chopping.
     assert!(
-        split >= 0.36,
-        "the two villagers stand {split:.2} tiles apart - their 0.4-wide bodies overlap on screen"
+        split >= 0.40,
+        "the two villagers stand {split:.2} tiles apart: an arriving woodcutter is placed a body's width along the tree's side (D356)"
     );
     // ... and **both** have the square (D186): the ring round one source square holds eighteen men, so a second woodcutter
     // is no longer answered with another tree. What D171 was really about - two men on one point, pushing each other for the

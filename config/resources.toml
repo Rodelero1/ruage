@@ -36,6 +36,11 @@ name = "gold"
 dat_id = 3
 # A gold mine is one tile wide in the art this pack's maps use, so its half-extent is 0.5.
 radius = 0.5
+# **Walking beside a mine costs 300, beside a tree the plain 10** (D342). The binary's test is the object's class -
+# `FUN_007f11f0` answers 1 only for class 8 (stone mine) or 32 (gold mine), and `FUN_007ed280` charges 10 when the cell
+# and its four orthogonal neighbours all answer 0. GOLDM is class 32 in the dat (`config/gamedata/units.toml`, class 32 =
+# GOLDM/ROCKGX; the published class list names 8 = Stone Mine, 32 = Gold Mine).
+snug = true
 
 [[resource]]
 slot = 3
@@ -43,3 +48,5 @@ name = "stone"
 dat_id = 2
 # STONM is 0.5 in the dat.
 radius = 0.5
+# Class 8 in the dat (STONM/ROCKSX), the other half of the 300 row - the provenance line above the gold entry names it.
+snug = true

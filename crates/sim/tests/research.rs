@@ -240,11 +240,9 @@ fn bank(world: &mut World, slot: usize, want: u32) {
         }
     }
     panic!(
-        "could not bank {want} in column {slot} in {ticks} ticks; the bank holds {}; repaths {} (body {}), made_room {}",
+        "could not bank {want} in column {slot} in {ticks} ticks; the bank holds {}; repaths {}",
         world.stock(1, slot),
-        world.repaths(),
-        world.repaths_by_body(),
-        world.made_room()
+        world.repaths()
     );
 }
 

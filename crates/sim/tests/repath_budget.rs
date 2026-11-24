@@ -1,12 +1,11 @@
-//! **A re-plan that fails must cost one search every so often, not one every tick** (D135).
+//! **A ground refusal buys one search every so often, not one every tick** (D135, restated by D279).
 //!
-//! The engine answers ground it cannot cross by re-planning the route, at most twice per route (D127). It counted the
-//! **successful** re-plans; a re-plan that *failed* left the count where it was, so the unit asked again on the next tick,
-//! and the next. Measured on the acceptance match of the D134 branch: **2,533 failed searches in 12,000 ticks, 8.1 s of a
-//! 20 s run**, one every tick a unit spent against ground it could not answer for.
+//! The engine answers ground it cannot cross by planning the route again; the budget is now a **throttle of time** rather
+//! than a count of attempts (`motion::REPLAN_TICKS`), because the original has no per-route budget to spend. The cost this
+//! fixture exists for is measured history: a search a tick in a stalled match bought **2,533 searches in 12,000 ticks, 8.1 s
+//! of a 20 s run** (D134).
 //!
-//! Written before the implementation (D7, SPEC §11). `World::repath_failures` is scaffolding added first, so that the
-//! failure below is an assertion rather than a compile error.
+//! Written before the implementation (D7, SPEC §11).
 
 use ruage_fixed::Fixed;
 use ruage_sim::{Command, EntityId, EntityKind, World};
@@ -118,10 +117,10 @@ fn tile_of(world: &World, id: EntityId) -> (i64, i64) {
     )
 }
 
-/// A walker on its way, then a wall across its route **and on its goal**: every re-plan from then on fails, and the unit
-/// must stop asking after its two attempts instead of spending a search a tick for the rest of the match.
+/// A walker on its way, then a wall across its route **and on its goal**: every re-plan from then on is answered by the
+/// nearest reachable tile, and the throttle is what keeps it from being a search a tick.
 #[test]
-fn ground_it_cannot_cross_is_re_planned_at_most_twice() {
+fn ground_it_cannot_cross_is_re_planned_once_a_second() {
     let Some(mut world) = loaded(PLATE) else {
         return;
     };
@@ -130,6 +129,7 @@ fn ground_it_cannot_cross_is_re_planned_at_most_twice() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (7, 4),
         })
@@ -145,16 +145,17 @@ fn ground_it_cannot_cross_is_re_planned_at_most_twice() {
     }
     spawn_wall(&mut world, 9_980, (7, 4));
 
-    let before = world.repath_failures();
+    let before = world.repaths();
+    let seconds = 30;
     for _ in 0..600 {
         world.step().expect("step");
     }
-    let failed = world.repath_failures() - before;
-
+    let planned = world.repaths() - before;
+    // One search per `REPLAN_TICKS` (20), plus the tick the first refusal lands on.
     assert!(
-        failed <= 2,
-        "{failed} failed re-plans in 600 ticks against ground that cannot be crossed: a search a tick is the cost that \
-         made the D134 branch's match run at 3.5 ms a tick instead of 0.3"
+        planned <= seconds + 2,
+        "{planned} re-plans in 600 ticks against ground that cannot be crossed: a search a tick is the cost that made the \
+         D134 branch's match run at 3.5 ms a tick instead of 0.3"
     );
     // And it is still where the walls allow - it did not walk through them.
     let (x, y) = tile_of(&world, walker);

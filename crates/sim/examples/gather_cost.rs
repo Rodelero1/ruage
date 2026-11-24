@@ -137,9 +137,8 @@ fn main() {
         .filter(|entity| matches!(entity.task, Task::Gather { .. }))
         .count();
     println!(
-        "repaths {} | made_room {} | working {} | entities {}",
+        "repaths {} | working {} | entities {}",
         world.repaths(),
-        world.made_room(),
         working,
         world.entities().len()
     );

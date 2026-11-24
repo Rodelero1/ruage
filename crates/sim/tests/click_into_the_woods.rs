@@ -119,6 +119,7 @@ fn a_click_in_the_middle_of_a_wood_is_accepted_and_walked_to_its_edge() {
     world.step().expect("the spawn lands");
 
     let ordered = world.submit_checked(Command::Move {
+        target: None,
         unit: walker,
         to: (4, 4),
     });
@@ -197,6 +198,7 @@ fn a_click_inside_a_walled_court_is_accepted_and_walked_to_its_wall() {
     world.step().expect("the spawn lands");
 
     let ordered = world.submit_checked(Command::Move {
+        target: None,
         unit: walker,
         to: (4, 4),
     });
@@ -232,6 +234,7 @@ fn a_click_on_its_own_tile_is_accepted_and_does_nothing() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (1, 4),
         })

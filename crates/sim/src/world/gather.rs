@@ -23,6 +23,19 @@ impl World {
         self.nearest_like_in(from, old, worker, false)
     }
 
+    /// **The engine's own answer to "which source is next"** (D280), for the scenario language and for a fixture that
+    /// prices the choice. One question, one answer: the nearest node of the same kind as `old` that this worker knows,
+    /// can reach, and can work. The scenario's `gather` action needs exactly this (D198) - and until now it could only
+    /// ask its own copy of the question, which is how the two pickers came to differ.
+    pub fn next_source_near(
+        &self,
+        from: (Fixed, Fixed),
+        old: EntityId,
+        worker: EntityId,
+    ) -> Option<EntityId> {
+        self.nearest_like(from, old, worker)
+    }
+
     /// **The nearest other node of the same kind that nobody else is working** (D182). The owner's rule: when the ring round a square is full,
     /// the extra worker takes the next source rather than crowding in - so a node another villager is already gathering from does not count.
     pub(crate) fn nearest_like_free(
@@ -78,24 +91,26 @@ impl World {
         let reach = self.gather_reach(worker);
         let unit = source.unit;
         let family = unit.and_then(|unit| self.units.as_ref().map(|units| units.root(unit)));
-        // A farm is a **building** that fills the same column a bush does, so "the next source of food" has to cross the
-        // two kinds. Without this a forager whose berries are gone has nowhere to go: eighteen of them stood on the empty
-        // berry patch at 2,400 s and the match never spent another stick of wood.
-        let farm_slot = self
-            .economy
-            .as_ref()
-            .and_then(|economy| economy.farm.resource.as_deref())
-            .and_then(|name| self.slot_of(name));
-        // **Cheap first, expensive last, and only for the nearest few.** Reachability costs a path search per candidate, and
-        // this function is asked every time a node runs dry - over a map with 118 nodes that was 236 path searches for one
-        // villager, and the acceptance run's slow ticks spent **1,336 path searches a tick** in exactly this loop. The sort is
-        // distance-only; the walk is asked of the nearest eight, which is more than a worker will ever pass up in practice.
+        // **No crossing of kinds** (D291, the owner, 2026-11-19: *"The game code itself should never hardcode such move. That
+        // should be handled by AI to repurpose idle villagers. Is it the case?"* - it is). The engine's own answer to "which
+        // source is next" is the nearest node of the **same kind** within the worker's reach, which is what a spent tree uses to
+        // find the next tree; repurposing a man across resource *types* is the AI's job, and the game ships AI parameters for
+        // exactly that (`sn-retask-gather-amount`, `sn-max-retask-gather-amount`) plus a technology that improves it
+        // (`up-retask-gatherers`). A forager with no bush in reach therefore **stands** - the idle villager the player (or the
+        // AI) then re-tasks.
+        // **Cheap first, expensive last, and only for the nearest few** (D280). Reachability costs a path search, and the
+        // picker is asked every time a node runs out - so the order of the questions *is* the cost. Before this rule the
+        // loop below asked `node_workable` of **every resource on the map** before it had sorted them: measured on the
+        // acceptance map, **114 path questions a pick** and **13 ms of a tick**, and **66 routes to name one tree on a map
+        // of 66** (`nine_times_the_wood_does_not_cost_nine_times_the_pick`). The expensive question is now asked of the
+        // eight survivors, which is what a pick may cost: one place and one route each.
+        //
+        // The eight are the nearest **same-kind nodes the player has scouted and nobody else has claimed** - not the
+        // nearest eight that happen to have a free tile. A wood inside a wall can sit in that list and be passed over,
+        // which is the answer the old filter gave, one question cheaper.
         let mut candidates: Vec<(i64, u32, EntityId)> = Vec::new();
         for entity in &self.entities {
             if entity.id == old || entity.id == worker {
-                continue;
-            }
-            if matches!(entity.kind, EntityKind::Resource(_)) && !self.node_workable(entity.id) {
                 continue;
             }
             if skip_claimed && self.claimed_by_other(entity.id, worker) {
@@ -112,13 +127,14 @@ impl World {
                 continue;
             }
             let same = match (kind, entity.kind) {
-                (EntityKind::Resource(slot), EntityKind::Resource(other)) => slot == other,
-                // ... and a finished farm, for the column a farm fills.
-                (EntityKind::Resource(slot), EntityKind::Building) => {
-                    farm_slot == Some(slot)
-                        && entity.construction.is_none()
-                        && entity.amount.raw() > 0
+                // **A drained node is not a source** (D280). Matching on the column alone put a worker on an empty tree,
+                // whose own re-task put him back here: measured, four villagers bounced between two spent bushes **every
+                // tick** of the acceptance match (7,369 re-tasks by tick 14,400) at a route each, 59.8 s of a 155 s run.
+                (EntityKind::Resource(slot), EntityKind::Resource(other)) => {
+                    slot == other && entity.amount.raw() > 0
                 }
+                // A finished farm is **not** a bush (D291): the engine does not cross resource types, and the AI re-tasks.
+                (EntityKind::Resource(_), EntityKind::Building) => false,
                 (EntityKind::Unit, EntityKind::Unit) => {
                     // Another animal of the same family, and still alive: a carcass is not something to hunt.
                     entity.hp > 0
@@ -152,19 +168,23 @@ impl World {
         }
         candidates.sort_unstable();
         candidates.truncate(8);
-        // Reachability is part of the choice, and a node's own tile is usually **blocked** (a tree, a mine, a farm), so the
-        // question is whether a worker can reach somewhere it can *work* it - the same tile `work_position` picks when the
-        // gather order is given. Asking `can_reach(node.position)` refused every tree, which is how the first version sent
-        // every lumberjack to Idle.
+        // **The expensive question, asked of the eight.** A node is worked by standing **on** it (a carcass, a sheep) or
+        // **beside** it (a tree, a mine, a farm). "On it" is a route to the node's own tile; "beside it" is a place that is
+        // free *and* reachable - and asking `can_reach` about the node's own blocked tile was the other half of the trap:
+        // the closest-tile planner answers almost any blocked goal with a whole-map search and a cheerful "yes", so a pick
+        // bought a map for an answer it could not use.
         for (_, _, id) in candidates {
             let Some(entity) = self.find(id) else {
                 continue;
             };
-            if self.can_reach(from, entity.position)
-                || self
-                    .work_position(from, entity.position)
-                    .is_some_and(|stand| self.can_reach(from, stand))
-            {
+            let (tx, ty) = self.tile_of(entity.position);
+            let workable = if self.tile_walkable(tx, ty) {
+                self.can_reach(from, entity.position)
+            } else {
+                self.work_position(from, entity.position)
+                    .is_some_and(|place| self.can_reach(from, place))
+            };
+            if workable {
                 return Some(id);
             }
         }
@@ -446,29 +466,11 @@ impl World {
             (variant_id, rate_per_tick, carry_cap)
         };
 
-        let from = self
-            .find(villager)
-            .map(|entity| entity.position)
-            .ok_or(SimError::MissingEntity(villager))?;
-        let to = self
-            .find(node)
-            .map(|entity| entity.position)
-            .ok_or(SimError::MissingEntity(node))?;
-        // A building's own tile is blocked, so a worker stands *beside* it. Planning to the centre
-        // would walk the villager into the building, and the walk home would then start from a
-        // blocked tile and never find a route.
-        let planned = if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
-            match self.work_position(from, to) {
-                Some(stand) => self.plan_path(from, stand, 0),
-                None => self.plan_path(from, to, 0),
-            }
-        } else {
-            // The walk still ends at the neighbouring tile's centre - a route that ends anywhere else is a route the movement
-            // rules may never call *arrived*, and a worker that never arrives never works. The last third of a tile is closed by
-            // `settle` in the gather arm instead (D169).
-            self.plan_path(from, to, 0)
-        };
-        let route = match planned {
+        // **One question, asked by both the click and the tick** (D314). The route and the reach test live in
+        // `gather_route`, and the dry run calls it rather than its own copy: it used to plan at the node's **point** and skip
+        // the reach test, so a click on a node behind a wall was answered `Ok` and then dropped at apply with the error
+        // discarded - measured on `gather_pick`'s walled block, where the villager stood idle with the order accepted.
+        let route = match self.gather_route(villager, node) {
             Ok(route) => route,
             Err(error) => {
                 // **A node nobody can work is remembered here** (D138). The picker asks nothing - a search per candidate
@@ -497,25 +499,72 @@ impl World {
             carry_cap,
             progress: Fixed::ZERO,
         };
-        // **His place on the ring, taken now, kept until he is re-tasked** (D186 addendum 5). The owner's words for what went
-        // wrong: *"it feels rather random"* - and it was, because the settle re-chose a place every tick, so a man's
-        // destination moved as his neighbour moved. A place is a property of the order: chosen when the order lands (here),
-        // released when the order changes (`place_is_live` asks the task, so nothing needs sweeping).
-        if matches!(
-            self.find(node).map(|entity| entity.kind),
-            Some(EntityKind::Resource(_))
-        ) {
-            // **A place, taken when the order lands** (D188): the geometry decides it, exactly as the settle would, so two men
-            // ordered in the same tick cannot both be given the same spot.
-            if let Some(crate::Standoff::Point(place)) =
-                self.standoff_point(from, to, node, villager, &[], false)
-            {
-                self.reserve_gather_place(villager, node, place);
-            }
-        }
+        // **No place is taken, and none is pushed onto the route** (D293, owner 2026-11-19: *"Drop it and let the crowds jam"*).
+        // The order used to end on a private seat round the node (`standoff_point`), which is what kept two men a body apart for
+        // ever. The original hands out no seats: the route ends at the resource, the bodies are solid, and a man presses in until his
+        // box is against the node's (D285) - which is what entitles him to take. `standoff_point` and the place book survive only
+        // until the next cut removes them; nothing calls this one any more.
         // The load is the villager's, not the node's: re-tasking onto the next tree (or the next sheep) must not spill
         // what is already in its hands. It used to be zeroed here, which was invisible until a worker could move on by
         // itself.
         Ok(())
+    }
+
+    /// **Where the walk to `node` ends, and whether that end is the node's ground** (D314).
+    ///
+    /// The whole of the planner's question about a gather order, in one place, because two callers need the same answer: the
+    /// order spends the route, and `Command::Gather`'s dry run only wants to know whether it would be refused. The dry run
+    /// used to keep its own version - it planned at the node's **point** and never asked the reach question - so a click on a
+    /// node behind a wall was answered `Ok` and then dropped at apply with the error thrown away. Measured on `gather_pick`'s
+    /// walled block: the order was taken, and the villager stood idle for ever.
+    ///
+    /// Returns the route's points (empty when the worker is already on the node's tile).
+    pub(crate) fn gather_route(
+        &self,
+        villager: EntityId,
+        node: EntityId,
+    ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
+        let from = self
+            .find(villager)
+            .map(|entity| entity.position)
+            .ok_or(SimError::MissingEntity(villager))?;
+        let to = self
+            .find(node)
+            .map(|entity| entity.position)
+            .ok_or(SimError::MissingEntity(node))?;
+        // A building's own tile is blocked, so a worker stands *beside* it. Planning to the centre would walk the villager
+        // into the building, and the walk home would then start from a blocked tile and never find a route.
+        // **Already standing on the node's tile**: there is nothing to walk, and the search would answer `NoPath` for a start
+        // that is its own goal. That used to be unreachable because the settle walked a man off a node's tile; it is reachable
+        // now, because a crowd presses onto whatever ground is between it and the node.
+        let route = if self.tile_of(from) == self.tile_of(to) {
+            Vec::new()
+        } else if self.find(node).map(|entity| entity.kind) == Some(EntityKind::Building) {
+            match self.work_position(from, to) {
+                Some(stand) => self.plan_path(Some(villager), from, stand)?,
+                None => self.plan_path(Some(villager), from, to)?,
+            }
+        } else {
+            // The walk still ends at the neighbouring tile's centre - a route that ends anywhere else is a route the movement
+            // rules may never call *arrived*, and a worker that never arrives never works. The last third of a tile is closed
+            // by `settle` in the gather arm instead (D169).
+            self.plan_path(Some(villager), from, to)?
+        };
+        // **A node behind a wall is refused, not walked at** (D241, kept by D279): the search answers an unreachable goal
+        // with the nearest tile it settled on, so a route always exists - the question is whether it ends at the node's
+        // **ground**. The measure is the gap to the footprint, not to the anchor point (D312): a route's points are tile
+        // corners and an entity's position is wherever `Command::Spawn`, a scenario or a save put it, so a point measure
+        // read the first free ring tile of a centre-anchored plot as 1.5 tiles away on *each* axis instead of 1.0 - and
+        // refused a villager sent to a plot standing in the open (measured: 4.5 tile-squared against a 2-tile reach).
+        if let Some(end) = route.last() {
+            let reach = 2 * self.scale;
+            if self.gap_to_footprint(*end, node) > reach * reach {
+                return Err(SimError::NoPath {
+                    from: self.tile_of(from),
+                    to: self.tile_of(to),
+                });
+            }
+        }
+        Ok(route)
     }
 }

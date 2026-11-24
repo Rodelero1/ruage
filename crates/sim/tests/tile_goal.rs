@@ -164,6 +164,7 @@ fn a_walk_to_a_tile_ends_in_the_middle_of_it() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (
                 u16::try_from(goal.0).expect("in range"),
@@ -203,6 +204,7 @@ fn a_walk_to_a_tile_beside_a_house_does_not_end_on_the_house() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: walker,
             to: (
                 u16::try_from(goal.0).expect("in range"),

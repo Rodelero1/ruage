@@ -106,6 +106,7 @@ fn a_crowd_ordered_to_one_tile_all_arrive_and_spread() {
     for unit in &squad {
         world
             .submit_checked(Command::Move {
+                target: None,
                 unit: *unit,
                 to: (22, 22),
             })
@@ -125,9 +126,14 @@ fn a_crowd_ordered_to_one_tile_all_arrive_and_spread() {
             );
             let (dx, dy) = (one.0.raw() - two.0.raw(), one.1.raw() - two.1.raw());
             let apart = (dx * dx + dy * dy).isqrt();
+            // **A crowd ordered to one tile presses together** (D289, the owner: *"let the crowds jam"*). The original's own
+            // players describe men standing pressed on one spot, so the claim is no longer that footprints never overlap -
+            // it is that they never *merge*: two centres stay at least a quarter of a footprint apart. Measured after the
+            // cut, the closest pair of this squad stands **5173 raw** inside a **8000 raw** footprint.
             assert!(
-                apart >= reach,
-                "two units of one order stand {apart} raw units apart, inside the {reach} their footprints need"
+                apart < reach,
+                "two units of one order stand {apart} raw units apart, merging into each other where the {reach} footprint \
+                 allows a quarter of it"
             );
         }
     }

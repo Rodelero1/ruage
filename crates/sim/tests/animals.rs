@@ -236,6 +236,7 @@ fn a_sheep_walks_where_its_owner_points() {
 
     world
         .submit_checked(Command::Move {
+            target: None,
             unit: sheep,
             to: goal,
         })

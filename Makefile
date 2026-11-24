@@ -26,7 +26,7 @@ PACK = --config $(CONFIG)/sim.toml \
        --effects $(CONFIG)/gamedata/effects.toml \
        --civs $(CONFIG)/gamedata/civs.toml
 
-.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check next-step-check plan-check ai-review conformance
+.PHONY: help build window run headless batch test check review fmt clippy clean decisions decisions-check next-step-check plan-check ai-review conformance conformance-build conformance-audit
 
 help:
 	@echo "make build      - build everything, release"
@@ -75,10 +75,27 @@ test: require-data
 conformance:
 	$(CARGO) test --manifest-path crates/conformance/Cargo.toml --target-dir target
 
+# **Its build is in the gate even though its run is not** (D319). Three weeks of `search_reporting` gaining a `reach` argument
+# left `budget.rs` calling it with four, and because this workspace is not built by `make check` nobody noticed: the crate did not
+# compile, so its rows could not run at all and "19 pass, 1 ignored" was really "nothing has run". Compiling the tests catches
+# that drift without letting a *red* conformance rule block a commit.
+conformance-build:
+	$(CARGO) test --manifest-path crates/conformance/Cargo.toml --target-dir target --no-run
+
 # The decision index (D168): one browsable page over docs/decisions.md and the U-register. Committed, because the
 # corpus it renders is committed. `make decisions-check` parses and reports without writing.
 decisions:
 	python3 tools/decisions.py
+
+# **The one page a session reads instead of the bank** (D355): 340 rows as one line each - claim, verdict, source, fixture -
+# grouped by area, plus the three lists that matter (no source, no fixture, superseded). `docs/decisions.md` is ~832k
+# characters and cannot be loaded; this is 34k and can.
+decision-index:
+	python3 tools/decision_index.py
+
+# The other direction over the same work: every note, one line, newest first (D355).
+review-index:
+	python3 tools/review_index.py
 
 next-step-check:
 	python3 tools/next_step.py --check
@@ -91,11 +108,16 @@ plan-check:
 decisions-check:
 	python3 tools/decisions.py --check
 
+# **The conformance burn-down** (D352): rows that claim something about the original game while pointing at no source. A list,
+# not a gate - a gate here would teach a fake `**Conformance**` line, which is the failure it exists to prevent.
+conformance-audit:
+	python3 tools/conformance_audit.py
+
 # The tools' own tests, including the gate above. Cheap, and they are what keeps a tool honest.
 tools-test:
 	python3 -m unittest discover -s tools -p 'test_*.py'
 
-check: fmt clippy test tools-test next-step-check plan-check
+check: fmt clippy test conformance-build tools-test next-step-check plan-check
 	@echo "check: clean"
 
 fmt:

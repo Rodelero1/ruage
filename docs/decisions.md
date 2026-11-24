@@ -709,6 +709,8 @@ arrow-heavy fights ever show up in a profile.
 
 ## D36 - Garrison is data, buildings fight, and line of sight still has no consumer
 
+**Superseded in part by D38 (2026-11-01):** "any building with a garrison capacity takes any unit standing beside it" is wrong for the five that exist to make units - they accept only a unit they have just trained.
+
 Every unit carries `garrison` in the dat (a town centre 15, a castle 20, a barracks 10) and 55 buildings
 have a real capacity; town centres, towers and castles also carry an `attack` array and a `range`. Both were
 parsed and unused. Now:
@@ -1774,6 +1776,8 @@ side; the rule as stated is what gets implemented, and this note exists so nobod
 follow.
 
 ## D70 - Herding, meat, and a herdable that changes hands
+
+**Superseded in part by D116 (2026-11-05):** the herding movement is gone - a gathered herdable is worked where it stands, and moving livestock is an ordinary order its owner gives. The meat, the roles and the rot stay.
 
 *The sheep-and-boar slice, as the owner specified it over four corrections.*
 
@@ -3689,6 +3693,11 @@ idle."*
 *2026-11-07. The owner chose **C - line of sight + 5** when asked how far a depleted worker should look. Measured, that
 number breaks the acceptance match; the shipped constant is sight + 8.*
 
+> **This row's "shipped" line is superseded by D150 (the same day):** the shipped constant is the owner's **5**, not 8 - 8 was
+> shipped only while the share table's *anchor* was wrong. **D175** then replaces both with the dat's own `search_radius`
+> (villager **4.0**) wherever the pack carries it. Three numbers are recorded across these rows - 4, 5 and 8 - and their
+> precedence is stated in **D358**, because until it was written the bank read as if all three were in force at once.
+
 1. **`World::gather_reach(worker)`** = the worker's own line of sight (whole tiles, the dat's `los`) plus a look-around,
    scaled once. `sight_of` answers in **whole tiles** - adding a raw offset to it gives a five-tile reach and looks like a
    rule that refuses everything, which is how the first version failed its own control test.
@@ -3738,6 +3747,8 @@ return to where it gathered last time and only then look for another tree. If 2,
 
 
 ## D151 - The AI leaves the binary: nine choices enumerated, placement first
+
+**Conformance**: OURS - the owner's instruction of 2026-11-07 (quoted below), with the inventory in `docs/ai-extraction.md`.
 
 *2026-11-07. The owner: "By extract AI I mean removing all the AI controls from the binary and moving it exclusively into ai
 files. Do this first." And: "every unit control should be removed from game code and moved to AI." Answers given to the ten
@@ -4156,6 +4167,8 @@ does not carry areas, so a reviewer's disagreement with a filing has to be said 
 
 ## D166 - A unit's marker is clipped to its own tile
 
+**Conformance**: OURS - a rendering choice, and the row says itself that the overlap it fixes was never reproduced in a test.
+
 *2026-11-08. Fifth round on the same report. The marker is now drawn pixel by pixel and clipped to the diamond of the tile its centre is in, for
 all three silhouettes - so no marker pixel can land on a neighbouring tile, and a unit standing beside a building can no longer paint inside it.*
 
@@ -4394,6 +4407,8 @@ stacking and distance pass (D171, D169); the **jump** was still open - the test 
 
 ## D181 - A standoff is taken when it is too close, not only when somebody stands on it
 
+**Superseded by D293 (2026-11-19):** the standoff this row introduced is gone - the gather arm hands out no seats and a man takes from the node when his box is against it. Its *observation* ("visible overlap of villagers") is the one D243.1, D289 and D351 are about.
+
 *2026-11-08. Owner, after D180: "Jumping and flicker is gone. However there is visible overlap of villagers. And occasionally they appear to be foraging
 while the circle is not touching the square with bush."*
 
@@ -4470,6 +4485,9 @@ building over tile with neutral/enemy in"**.*
 
 ## D184 - The reproducer does not reproduce here, and the tree model is why
 
+**Conformance**: UNVERIFIED - the accident needs the object-on-grass model (scattered trees) this tree does not have yet; the
+row is a guard on the eviction, not a claim about the original's eviction.
+
 *2026-11-08. The owner: **"I noticed that scout stopped near the forest, then villager placed there a lumber camp colliding with
 his position, that pushed scout to the forrest. So reproducer: put scout as near to forest as possible, place lumber camp where
 the scout is, he should immediately jump to the forrest."***
@@ -4536,6 +4554,8 @@ came back to life on the next tick and its ground stayed claimed. Fixed with a g
   That is the rule, not a side effect: D183 §2 says the ghost is invisible as a fact, not as a rendering.
 
 ## D186 - the gather ring: 1.156 tiles, eighteen men, measured from the owner's save
+
+**Superseded by D199 (2026-11-09):** the 1.156-tile ring is withdrawn; the standoff is the touch, measured on the owner's own saves.
 
 **The owner's rule, from his own game.** With a close-up of eighteen woodcutters round one tree he said: *"I'd focus instead on how
 close men can stand to the bush, tree or mine. The ones behind them don't work. Only first row ever works."* Asked whether the men
@@ -4743,6 +4763,8 @@ table, so no float enters a tick.
 the time. See `docs/reviews/2026-11-12-design-and-architecture.md`.
 
 ### D189 - your own units pass through each other on the way
+
+**Superseded by D200 (2026-11-13):** "your own units are not walls" was withdrawn - it was chosen to make a crowd deliverable, not because the game does it. The observation it recorded (a crowd cannot be delivered with friends solid) is D236's, and D236's cause was the group exemption, not solidity.
 
 **The owner chose it**, between the two ways out of the crowd problem: *"1"* - bodies may overlap while walking, collision at rest
 only. His words for the need were *"I think that capping is pointless"* and the rule behind it, *"either villager fits in or
@@ -5126,6 +5148,8 @@ future "the match no longer resolves" report quotes the **town centre's hp and t
 number alone.
 
 ### D204 - no pushing: a man who cannot get his square looks for another tile of the same resource
+
+**Superseded in part by D239 and D241 (2026-11-16):** the idle-body nudge is gone, the same-kind re-target stands (D293 keeps it with a refusal-count trigger). This row's title reads as a live rule and is not one: only the re-target is in force.
 
 > **Withdrawn in part by D239 (2026-11-16), corrected by D241 the same day: the idle-body nudge is gone, the re-target is not.**
 > A newcomer with no square goes to the **nearest free node of the same kind within reach** or waits (both as built, `step.rs`
@@ -7604,6 +7628,8 @@ controlled-map probes for the north side and the diagonal preference; (c) then t
 
 ### D271 - the first man takes the spot, the others stand round him (2026-11-18)
 
+**Superseded in part by D289 (2026-11-19):** the ring place per follower is withdrawn on the moving side - every man's goal is the tile that was ordered. The gather-side remnants were D287/D293's business.
+
 *The owner chose **(b)**, and refined it: **"Any single unit chosen has to go to the exact spot by moving the center of the circle to
 that exact spot. If spot unreachable, try come as close as possible. If multiple villagers are chosen, then the first comes to the spot
 and others stand around him."***
@@ -7836,22 +7862,6 @@ exactly `clearance >= 0`. D117's "the ground is tested as ground" is the game's 
 already supersedes it), and D177's *"every blocked tile"* is the right rule applied to the wrong unit - the game's unit of
 obstruction is **the object's box**, and a blocked tile is only a good stand-in when the object fills it.
 
-**Addendum (2026-11-19), measured: the "two predicates" reading of the storm is withdrawn.** The 149,254 ground re-paths
-were split by the **origin** of the refused route on `d279-substitute` (`704d9ba`): `geometry` **47.5%**, `tile-chain`
-**47.9%**, `none` **4.6%** (390,239 / 393,558 / 38,025 lines of 821,822). Three things follow, and the first cancels a
-planned slice:
-
-1. **There is one ground predicate, not two.** `clearance_at` (`nearest - radius`) is called by the planner and the mover
-   alike, and compared identically (`< 0` refuses, `>= 0` allows). "Unify the predicate" is not a slice.
-2. **The mover's step test is ground *and* bodies** (`clearance_at(..) >= 0 && clear(..)`), so a `geometry` refusal is
-   mostly *"a body moved into the leg"* - the label names the route's origin, not the cause. That is why the collision
-   block's epilogue (re-plan round the collider, pause the higher id) is the answer to half the storm.
-3. **The tallies are an upper bound**: 821,822 probe lines against 156,433 re-paths is **5.3 per re-path** and that
-   inflation is unexplained; the ratio is the measurement.
-
-Delete the fallback (the tile-chain half) **and** answer a body refusal with the epilogue (the geometry half) - neither
-alone moves more than half of it. Measurement: `docs/reviews/2026-11-19-the-storm-split-by-route-origin.md`.
-
 **The open question, and it closed on a read (2026-11-18, on the owner's *"follow the game"*): a building blocks by its
 stamped tiles, not by its radius box.** `zone_spatial_grid_stamp_obstacle_region.cpp` (`func_001EE5B0`) takes a **rectangle** of
 tiles - `min_x, min_y, max_x, max_y` - and writes into each one
@@ -7921,52 +7931,2276 @@ floors are superseded as gates, and their measurements stand.
 **Commits us to.** Every slice reports **the win, the food wall if any, and the entity count** - the count as information, never
 as the gate - and a slice that wins with fewer entities is a slice that won.
 
-### D284 - The group is on the order, so the plan walks through its own men (2026-11-19)
+### D279 - The movement layer is the original's, ported bluntly from the decompilation (owner, 2026-11-18)
 
-**The red this closes.** `army_walk::a_crowd_walking_through_a_gap_stays_on_free_ground` refused an accepted click:
-`NoPath { from: (6, 20), to: (19, 19) }` with twelve militia ordered through one gap. The last session's reading stands -
-the cause is **when we plan**, not the width of anything - but the shape that fixes it is not a re-ordering of the tick.
+**The ruling, in his words.** *"Drop all of pathfinding and obstacle avoidance code and decisions. All of them. I want clean
+slate. Then please check the original game and https://github.com/samuelcaldas/age-of-empires-2-decomp and implement as close
+as possible. So not over engineer, do not overcomplicate, just blunt conversion to rust. ... If decisions are needed, again ask
+original game. Don't run verification runs. ... I want to see myself in a game which runs anyhow."*
 
-**What the game does, and it is one list read twice.** `FUN_008007f0` builds a per-search ignore list at its entry point
-(`local_404`, cap 255) holding **self**, the **order's target**, and then either the route-own array's entries that answer
-`isMoving` (`+0x2a0`) - the no-group form - or **every id in the group object** `FUN_0072cf10` (`+0xd0` count, `+0xd8`
-array) with **no per-member test at all**. `FUN_00801a20` then reads that list as **passability**: a tile is free ground
-when every body on it is on the list, so a group's route is planned *through* its own members. The collision block reads
-the same ids (`FUN_007fe010`) and **drops** an exempt collider. One list, two readers, and it is **route-local**.
+**What that settles, and what it withdraws.** Every movement mechanism this tree invented is withdrawn **as a body**, not
+one at a time: the short-range visibility graph (D211/D264), the place model and the radius argument in the planner
+(D257), the avoid set and the re-plan budget (D98a/D135/D248), the substituted waypoint (D276/D279's half-port), the
+slide (D253/D255/D256), the step fold (D252), the settle ring (D188) and `TakeAtRest` (D193). Their fixtures go with them.
+What replaces them is the original's own model, read from the decompilation's `zone/` sources and the tree's register:
 
-**The defect, stated exactly.** Ours had the list in the **collision block only** (`Route::mates`, D207) and not in the
-search, and it was stamped **after** the batch had landed. So a man's step walked through his order while his plan treated
-those same men as tile walls - and the first of twelve men, planned while the other eleven had no route, could not leave his
-own tile. **D207's sentence "the search `FUN_008007f0` never reads the route's ignore list" is withdrawn** by the 2026-11-16
-read of that function (`docs/movement-in-the-binary.md` §"The path ignore list"): the list is built *there* and used as
-passability. D207's *rule* stands; its reading of where the list is read was one function short.
+1. **A tile grid** of counted occupants (the original's spatial grid): terrain impassable, objects stamped on their tiles.
+2. **One A\* over that grid**, costs 16/23 and `h = 25 x Euclidean` - the numbers already read out of `FUN_008007f0`. No
+   hierarchy, no window, no radius. An unreachable goal answers the **closest settled tile**.
+3. **One whole step a tick** toward the next waypoint; no slide, no partial step, no fold.
+4. **Four refusal rules**: the order's own target; ground; a body **at rest since the route was planned** (which the mover
+   walks past - the original's *past* test, `path+0x10` against `lastMoveTime`); anything else, which refuses the step and
+   pauses the **higher id** for 0.25-1.50 s (the original's `setPause`, `0x8a80ed`-`0x8a8141`).
+5. **One re-plan per ground refusal**, throttled per unit, to the same goal.
 
-**What lands, in three parts.**
+**Why a blunt port and not a tenth design.** The register's own record is that five designs in one evening left the same red
+set, and that the red set survived the naming of the shape. The owner's answer is to stop designing: take the original's
+structure whole, at the cost of fidelity where the original's structure is still unread.
 
-1. **The group exists before the first plan.** `drain_orders` pre-scans the batch for movement orders into `ordered_now`
-   (one match, `World::movement_order`, feeding both readers), then applies; a refused order is removed again, so it cannot
-   leave its unit in a group it never walked with. Same set as before at the end of the tick - the knowledge only moves
-   earlier.
-2. **The search reads the list.** `stander_tiles` and `stander_bodies` skip the mover's group (`World::path_ignore` at order
-   time, `Route::mates` on a re-plan - the route-local list the original keeps), so a tile held only by the group is free
-   ground to the plan. `World::group_mates` is now the **one** definition both readers use, so the plan and the collision
-   block cannot drift apart again.
-3. **A movement click is never refused** (D134). The submit-time dry run plans *before* the group exists, so a crowd could
-   refuse its own click; `walk_goal_permissive` answers the click point when that dry run finds no route and the plan made
-   when the order lands - group known - answers where the body will stand. A genuinely unreachable goal still fails there,
-   which is what keeps "a tree behind a wall is a refusal" (item 9).
+**Basis.** The decompilation at `/opt/data/tools/src/aoe2-decomp` (the repo he named, cloned): `zone_path_eval.cpp`,
+`zone_spatial_pyramid_*`, `zone_spatial_entity_*`; the tree's `docs/movement-in-the-binary.md` for the cost model and the
+pause block; the owner's directive above.
 
-**Soldiers only**, unchanged from D237: a villager takes his own path and never walks through another, so a box-selected
-crowd of villagers forms no group in the original either and `group_mates` answers empty for them.
+**Commits us to.** Deleting the listed mechanisms rather than keeping them behind a flag, and paying for the fixtures built
+on them; no acceptance run in this slice (his call), the unit and conformance suites being the gate.
 
-**The known compromise, still D207's.** "Same tick" is not "same selection": two separate clicks landing in one tick form
-one group here and two in the game. The register row for an explicit group id on the command stays open, and when it lands
-`group_mates` reads the command instead of the tick.
+### D280 - The picker asks the cheap questions first, and the expensive one of the nearest eight (2026-11-19)
 
-**Basis.** The original's **binary**: `FUN_008007f0` (builds the list), `FUN_00801a20` (reads it as passability),
-`FUN_0072cf10` (the group object), `FUN_007fe010` (the collision skip), read 2026-11-14 and again 2026-11-16 through the
-disassembly in `docs/movement-in-the-binary.md`; and **measured** in this tree - the red on `7eabb70`
-(`NoPath { from: (6, 20), to: (19, 19) }`, watched failing before the code and again in the `before-group` worktree), the
-twelve men's arrival (furthest 1.51 tiles from the goal), and the suite. D134 (every click is accepted), D207 (the group),
-D237 (soldiers only).
-Review: `docs/reviews/2026-11-19-the-group-is-on-the-order.md`.
+**What it was.** D279's port left `nearest_like` asking `node_workable` - which plans a route - of **every resource on
+the map**, inside the loop that was supposed to be the cheap filter, before the sort and the `truncate(8)`. The comment
+above it had claimed the opposite since D138 ("cheap first, expensive last, and only for the nearest few"); the code had
+the expensive question first and the cheap one never.
+
+**Measured, on the acceptance fixture, after the port.** `760,946` route plans by tick 14,400, **157 a tick**, and
+`198.6 s` of `225.9 s` spent inside them: `114` path questions per pick and **13 ms** of a tick, while the match's own
+new work was under 30 s. The fixture was **322 s** against `main`'s **26.6 s**. The pick happens about ten times a
+second because a scenario rule re-orders four villagers at an exhausted tile, which is what turned a per-map cost into a
+per-tick one.
+
+**The rule.**
+
+1. **Cheap first, and provably cheap**: kind, scouted, reach and "nobody else has it" - four comparisons and one distance.
+2. **Then the sort and `truncate(8)`**, so nothing expensive is asked of a node that cannot be among the eight.
+3. **Then the expensive question, of those eight only**: a node is worked **on** its own tile (a carcass, a sheep) or
+   **beside** it (a tree, a mine, a farm). "Beside" is a free tile that a route reaches: `work_position` for the place,
+   `can_reach` for the route. "On" is a route to the tile.
+4. **`can_reach` is never asked about a blocked tile.** The closest-tile planner answers almost any blocked goal with a
+   whole-map search and a cheerful yes, which is why the old arm could never refuse a candidate and why it cost a map.
+
+**What it costs, in behaviour.** The eight are now the nearest same-kind nodes the player has **scouted** and nobody else
+has claimed - not the nearest eight that happen to have a free tile. A wood inside a wall can therefore occupy one of the
+eight and be passed over, where before it was filtered out before the truncation; the answer is the same until a worker
+has eight unhidden nodes nearer than his next real one, which the acceptance fixture does not reach and no scene in the
+suite does either.
+
+**Basis.** The measurement above (`nine_times_the_wood_does_not_cost_nine_times_the_pick`: **66 routes to name one tree on
+a map of 66**, **6 on a map of 6**; after the rule, **2 and 2**), the phase probe over `World::step`, and `nearest_like`'s
+own D138 comment.
+
+**Commits us to.** A pick that costs one place and one route per candidate among eight, whatever the map holds - and no
+future filter of the map may reintroduce a path question before the sort.
+
+### D281 - The body collision is the original's: the mover re-plans round it, and a route's clock is its order's (owner, 2026-11-19)
+
+**The ruling.** Asked which of three ways to make a crowd behave, the owner: *"Follow what does the original game and decomp
+do."* Then, on the fixture that had made the attempt a half-fix: *"Is it unit test or conformance test? If unit test, drop
+it."* It is a unit test (`crates/sim/src/lib.rs`, `mod tests`), and it is dropped.
+
+**What the original does, read (`docs/movement-in-the-binary.md`, the collision block's epilogue).** A collision against the
+order's target ends the order (*"That collision is with our target, so we're done"*). **Any other non-past collision is
+counted and the mover re-plans** - *"We have %d non-past collisions and %d terrain collisions, repathing"* - and the **higher
+id of each surviving pair** is told `setPause(rand*1.25/32767 + 0.25)` (`0x8a80ff`-`0x8a8141`). The epilogue **never writes a
+position** (the retraction is discarded, `0x8a7fe7`), so bodies overlap for the ticks they pass. A collider is *past* when
+`path->createdAt >= other->lastMoveTime` (`move_obj.cpp:2063`). The path-ignore list holds the mover's **moving** mates
+(`isMoving`) and nothing else, so a stopped unit **blocks**.
+
+**Landed, in those words.**
+
+1. **A non-past collision re-plans the same goal round the colliders' tiles** - `Ground::route_avoiding`,
+   `World::plan_path_avoiding` - and it runs whether or not the mover's own step was allowed, because the winner of a
+   head-on keeps his step *and* re-plans. No budget: the original has none.
+2. **A route's `created` is its order's clock, not its last re-plan's.** It is the only input to the *past* test;
+   re-stamping it made the man just avoided into a *past* collider on the next tick (**4,207 raw** inside an 8,000 raw reach).
+3. **D279's exemption "a body that is not going anywhere is past" is withdrawn.** A paused or stopped body is a body to plan
+   round, not a ghost.
+4. **The smoothing line test takes the same avoid list.** A route bent in the search and pulled straight again through the
+   man is not a plan.
+5. **`a_spawn_in_the_same_tick_does_not_move_the_wrong_entities` is deleted**, on the owner's rule: it is a unit test, and
+   the scene it built - two bodies on one spot walking the same direction at the same speed - is unpassable under the game's
+   rule (the follower is one step inside the reach every time his pause expires, so he is paused again, for ever). Its
+   guard, a mid-tick spawn shifting the entity list, is **not carried elsewhere**: that index-shift defect is unguarded now
+   and is recorded as a gap rather than pretended away.
+
+**Measured.** Acceptance fixture **42.62 s -> 39.59 s** (debug, 48,000 ticks); **three** of D279's reds green
+(`a_repath_route_is_pulled_like_a_planned_one`, `both_sides_field_an_army`, `the_skirmish_only_refuses_what_the_fight_has_taken`);
+suite **198 binaries, 881 passed, 20 failed, 21 ignored** (from 880/22/21), and **one new red**:
+`the_ten_minute_scenario_builds_trains_and_fights` - a builder who never reaches his barracks, which is the game's model
+exposing a real stall rather than a rule being broken (diagnosis and the next slice in `docs/next-step.md`).
+
+**Basis.** The epilogue and the past test as read above; the owner's two rulings quoted above; the numbers and the two
+defects found inside the attempt in `docs/reviews/2026-11-19-d281-the-body-collision.md`.
+
+**Commits us to.** A body collision answered by a route, not by an exemption and not by a nudge; the *past* test asked of the
+order's clock; and the stall the new red names is the crowd slice's first item.
+
+### D282 - A plan keeps a body's clearance, not a tile (owner, 2026-11-19)
+
+**The order.** *"Proceed"* on the audit's first recommendation, which was itself the decomp's: `FUN_007f9d80` puts every
+object the mover does not ignore into the search as a rectangle **grown by the mover's radius**, so "keep a body's distance"
+is the game's rule **at plan time** - `0x8a7fe7` only removes the *step* clamp. D281's re-plan avoided the collider's
+**tile**, which cannot express 0.4 of a tile: the route still cut the corner, and the walker came **4,619 raw** from a body
+standing 8,000 raw away.
+
+**What landed.**
+
+1. **`ground::Clear`**: a body's centre and the mover's reach to it, carried beside the tile grid. A tile whose centre is
+   inside it is not planned through, and a straightening jump that passes within it is refused (point-to-segment distance,
+   integers, exact).
+2. **`plan_path` takes the standing bodies into every plan** (`World::standing_bodies`): every body with no route left or
+   standing its pause out, near the line, is a clearance. That is the original's ignore list read the other way round: the
+   mover's *moving* mates are ignored, so a stopped body is an obstacle at plan time.
+3. **The pause is written as drawn**: `motion.rs` wrote `ticks - 1`, so the game's 0.25 s floor became **0.20 s** at 20 Hz.
+
+**Measured.** `evasion::a_blocked_unit_goes_round_a_standing_body_and_arrives` **red -> green** (the whole point of the
+slice); `head_on::the_loser_stands_for_the_drawn_pause` **red -> green**; the acceptance fixture unchanged at **39.58 s**
+(the clearance scan is a unit scan per plan, no search added). Suite numbers in the review note.
+
+**What it does not settle.** Two bodies that **share a tile** still cannot be planned round - the search starts on the tile
+they share - so `a_mate_who_is_stopped_becomes_solid` stays red at **4,478 raw**; and `collision::a_walker_never_ends_a_tick_inside_a_friend`'s
+scene no longer meets at all, because a head-on pair now plans round each other, which is the game's behaviour but not what
+that fixture stages.
+
+**Basis.** `FUN_007f9d80` (the growth), `FUN_00840830` (`+0x268`, collide on `<=`), `0x8a7fe7` (the clamp that is discarded),
+`setPause`'s `0.25-1.50 s`; `docs/reviews/2026-11-19-fixtures-vs-the-decomp.md` rows 11 and 12; the owner's *"Proceed"*.
+
+**Commits us to.** Planning for the body's distance rather than the tile it stands on, and to a pause that is as long as the
+draw that set it.
+
+## D283 - "Never step deeper" bounds the overlap at the contact and freezes the crowd (reverted)
+
+*Row written from its review file (`docs/reviews/2026-11-19-d283-never-deeper-reverted.md`), which is the evidence; the row itself was lost
+when the log was reflowed.*
+
+**Tried, measured, reverted.** The rule the game's shape implies - take **one** step into a collider and answer it with a re-plan and a
+pause, never driving an overlap deeper - **does** bound the overlap: two men meeting head-on came **4,478 raw** inside an 8,000 raw reach
+before it and **7,728 raw** with it (8,000 minus the 272 raw contact step). It also makes `a_mate_who_is_stopped_becomes_solid`'s second
+assertion arithmetically unsatisfiable, so that assertion was restated to *"never deeper than the meeting"*.
+
+**Why it is not landable**: in a crowd a body stands inside **several** clearances at once, and a hard per-collider veto refuses every one
+of them at the same time, so the man has no legal step. The acceptance match said so in one line - `the crew did not grow between 400 s and
+800 s: 7 then 7` - and its 26.26 s runtime is that early failure, not a win. A rule that works here needs a **net** answer (deeper into
+one, further from another) or the game's single radius query.
+
+## D284 - The self-brake D279 invented is removed, and the ignore list is gated on `isMoving`
+
+*Row written from its review file (`docs/reviews/2026-11-19-d284-our-brake-removed.md`).* Owner: *"Please do not invent own stuff and remove
+extra whatever compared to original game and decomp in pathfinding and obstacle avoidance. I do not want new stuff to be invented. I asked
+for blunt copy/conversion to rust."*
+
+**Two subtractions.** (1) **`blocked = true`** - the mover refusing his own step against a lower-id collider - is gone: the binary's
+epilogue never writes a position (`0x8a7fe7` discards the radius retraction; no store to `+0x104` anywhere in `FUN_008a4360`), so the step
+is always taken and the only thing that stops a body is a pause someone else handed it. In a crowd that brake stood every man for every
+lower-id neighbour (`"villagers get stuck"`). (2) The **mate exemption is gated on `isMoving`** (`+0x2a0`), as the binary gates its
+path-ignore list: a stopped mate is not ignored and blocks. Acceptance **passes** in 55.25 s where the braked branch failed at 7-then-7;
+the cost is that every collision buys a re-plan, which is the original's behaviour.
+
+## D285 - "At the node" is the game's box gap, and four of our distance rules go
+
+*Row written from its review file (`docs/reviews/2026-11-19-d285-box-gap-arrival.md`).* Owner: *"remove/adjust all rules on pathfinding in
+this branch that are not aligned with original game and decomp."*
+
+**The rule, ported**: `func_002690E0` (`compute_distance_sq`) subtracts **both bodies' sizes from each axis** and clamps at zero, so the
+number is border to border and an overlap is exactly **0**; motion compares it with the order's `rangeDistance` and a job with range 0
+arrives when the boxes **touch**. `World::box_gap_sq` is that function and `World::node_radius` gives a node its box. **Deleted**, because
+the game has one distance and these were four approximations of it: `touching` and its `touch_tolerance`, and three more arrival
+predicates. Acceptance **passes** in 52.52 s (55.25 s before) and nothing was added to the tick.
+
+### D286 - An order names a target, and one box ruler decides every distance (owner, 2026-11-19)
+
+**The ruling.** Asked how to close the last gap between our approach rule and the original's, the owner: *"follow the
+game/decomp."* So the game's data shape wins over our convenience: an order **names the object it is about**, and every
+distance question is answered by the same box measure.
+
+**What the original has, read.**
+
+1. **An order carries a target object.** The collision block's own words are *"That collision is with our target, so we're
+   done"* (`0x127d`), and the path-ignore list is built from `param_5[2]` (self) and the order's target (`local_45c + 8`).
+   A click that lands on a building therefore produces an order *about that building*.
+2. **One distance**: `func_002690E0` subtracts both bodies' sizes per axis and clamps at zero - border to border - and the
+   motion layer compares it with the order's `rangeDistance` (*"We're in range of our target, so we'll increment our
+   waypoint"*). Range 0 means the boxes touch.
+3. **Obstacles are boxes grown by the mover's radius** in the search (`FUN_007f9d80`) and in the collision query
+   (`FUN_00840830`, `+0x268`, colliding on `<=`).
+4. **The path ends on the exact waypoint** - *"Setting position to exact waypoint"* - not on a tile centre.
+
+**What this settles for the engine** (the next commit, in this order):
+
+1. **`Command::Move` and `Task::Move` gain an optional target entity**, filled when the click lands on a unit or a building,
+   and the target-collision rule then ends the order on contact - one rule for both of the owner's clicks.
+2. **`ground::Clear` becomes a box** (half-extents per axis) instead of a disc, so a blocked tile's grown box is exactly the
+   game's rectangle: a one-tile gap stays passable for a 0.2-radius body, which a 0.7-radius disc would forbid.
+3. **The plan's clearances include blocked tiles' boxes** (buildings and resources), not only bodies, so a route never
+   clips a footprint corner - that is what the three "walk round a house" fixtures caught when the step was changed alone.
+4. **The step asks the same box question** (`FUN_00840830`) instead of `tile_walkable`, and **the route's last point is the
+   exact waypoint** rather than the settled tile's centre.
+
+**Landed (2026-11-19, `blunt-port`).** All four edits, together, as the row required. The step's box test **alone** had
+measured **21.81 s** on the acceptance fixture (39.58 s before, `main` 26.6 s) while turning three green fixtures red -
+`a_villager_walks_round_a_house_rather_than_through_it`, `a_villager_walks_round_a_half_built_house`,
+`a_big_unit_walks_through_a_one_tile_gap` - because the plan still worked in tiles and handed the step routes it refused.
+With the plan half in place the acceptance fixture **passes in 33.74 s**, and those three are green.
+
+**What the port needed beyond the row, all of it measured** (`docs/reviews/2026-11-19-d286-one-box-ruler.md`):
+
+1. **Only the target's *solid* part is a box.** A farm plot and an untouched foundation are walkable (D183), so a footprint
+   box stopped builders from stepping onto their own site: farms never seeded and houses never finished. `solid_boxes` reads
+   the blocked tiles of the footprint, which also keeps a town centre's yard walkable.
+2. **A step is cut at the target's face, not refused at it.** The original refuses the landing and writes no position, and its
+   movement is continuous, so the tick before contact is at contact; ours steps in `speed / tick_rate` chunks and stopped up
+   to a step short, leaving a gatherer's box gap nonzero and a walk never arriving. `target_contact` is *"Setting position to
+   exact waypoint"*, and it is what puts the body at **0.70** from a tile's centre - `0.5 + 0.2`.
+3. **A body the dat gives no radius has no box** and is walked over, which is how a worker stands on a carcass.
+4. **The leg certified is the leg the body walks**, from its own position and not from its tile's centre: a trebuchet (radius
+   half a tile) spawned on a corner was certified a straight walk down a one-tile gap and then refused every step into it.
+5. **A body already inside an object may not step *deeper*, but may step out** - the original's placement phase prevents that
+   case; ours can produce it, and a plain yes/no nailed such a body to the spot.
+6. **In reach is box to box in every arm** (melee contact, the shepherd's blow), and `at_node` is "within one step": on a
+   diagonal a body stopped by a box is farther away by its centres than the radii sum, and an equality on a step grid is
+   unreachable - measured, a miner with `progress 0` and the bank stuck at 100 for 400,000 ticks.
+
+**Basis.** `func_002690E0`, `FUN_007f9d80`, `FUN_00840830` (`+0x268`), the epilogue's target arm (`0x127d`), the ignore list's
+`local_45c + 8`, the motion layer's *"Setting position to exact waypoint"*; the owner's two rulings quoted above; the
+measurements in `docs/reviews/2026-11-19-d285-box-gap-arrival.md` and this row.
+
+**Commits us to.** An order that names what it is about, and one box measure in the plan, the step and the arrival test.
+
+## D287 - A node's ring is never re-laid (owner, 2026-11-19)
+
+**Ruling.** The owner, on the parity order: *"cut the book entirely and let collisions and pauses do the spreading."* A node's
+ring is therefore **placed once, when the order is given**, and never re-laid: `maybe_respread` (D200) and its `respread_at`
+guard are gone, along with the `respreads` bucket on the tick's work.
+
+**Why it was ours.** The original picks a man's place once and after that his body is solid; nothing re-seats him. The re-lay
+existed to make a crowded node seat more men than the comfortable ring holds, by shuffling the men who had not started yet.
+
+**Measured, not argued.** `crates/sim/tests/working_men_never_move.rs` - a man working (`Gather`, `progress > 0`, D246's own
+definition) and still for twenty ticks must not move a raw unit - passes both with the cut and without it, because D246 already
+froze working seats and because `standoff_point` falls back to the packed spacing, so `Standoff::NoRoom` is not reached in any
+scene this suite can build (fourteen men on one tree included). The cut is a **deletion of unreachable machinery**, and the full
+suite confirms it: 888 passed / 18 failed / 21 ignored, the same 18 reds and no name changed (`docs/reviews/2026-11-19-p8a-the-relay-goes.md`).
+
+**Commits us to.** The witness stays as the line P8's remaining cuts (the place registry, the angular ring) must not cross.
+
+## D288 - The taken list is ours, not the game's; the walk stands, the gather re-targets (owner, 2026-11-19)
+
+**How it arose.** The owner asked for Q1 - whether our gather seat *taken list* is the game's own mechanism - to be
+crosschecked against the game or the internet. It is **not**: the game sends every man to the resource he was given, the bodies are
+solid, men bump and stand (`docs/gather-seating-evidence.md` quotes the player reports and the guide), and a man who cannot get
+there is **re-targeted to the nearest usable resource of the same kind**.
+
+**Ruled, on that evidence.** `World::standoff_point`'s taken list is a **deliberate difference** and stays only as a choice;
+`finish_blocked_orders` and `beside` are cut (the game's best-reported bug is wedged villagers that never resolve); **the D204
+re-task is the game's own rule and stays**. This reverses the previous hour's assumption, which had D204 in the cut set.
+
+**Basis.** `docs/gather-seating-evidence.md`: the corpus (`FUN_004aaea0` for `act_gath.cpp`, `FUN_004b90f0` for `tact_gth.cpp`) has
+no seat picker; Capoch's guide; Age of Empires forum 289465 and 78029; r/aoe2 "Am I imagining this villager pathing bug?";
+`aoe2mc` #4063 (`NEXT = 5`). The decomp has no gather code at all.
+
+**Unknown, and said so.** The original's re-target radius and its tie-break among equally near candidates are not established; the
+five-tile figure is a third-party model's, not the binary's.
+
+**Commits us to.** Before cutting any of the book, ask what the game's players see; and never cite a sibling project's approach
+planner as evidence about the game.
+
+## D289 - A crowd is sent to the tile it was ordered to, and it jams there (owner, 2026-11-19)
+
+**Ruling.** The owner, asked whether D271's fan-out stays (every follower given a ring place of its own) or goes: *"Drop it and let
+the crowds jam. I want the start as close to the game as sensible. Upgrades may only come later."*
+
+**What that means.** `start_walk` no longer searches for a place per follower: **every man's goal is the tile that was ordered**,
+the bodies are solid, and a crowd that does not fit stands pressed together. `crowd_ring_point` and the `already_heading` count it
+was fed by are deleted (D271 withdrawn on the moving side; its gather-side remnants are P8's business).
+
+**Why the game wins here.** The original gives no man a private place: its own players describe men piling onto one tree and
+standing pressed (*"If you send them to different trees within the same tile, they will usually stand still"*,
+`docs/gather-seating-evidence.md`), and D271 was a smoothing of exactly that which the owner had asked for before the parity
+order.
+
+**Measured.** The witness was written first and watched failing: `crowd_piles_up::a_crowd_ordered_to_one_tile_piles_up` - three men
+ordered to one tile - reported **0.800 tiles** between the closest pair before the cut (one tile each, D271's ring) and passes after
+it, the men pressed inside half a tile. Its claim is the game's own description, not a number of ours.
+
+**Commits us to.** Parity first, comfort second: a mechanism that spreads units out for looks goes before one that the original has.
+
+## D290 - There is no press floor: friends may overlap, and only the pause and the re-path act (owner, 2026-11-19)
+
+**Question.** How deep may two friends press? Our `group_overlap` fixture measured a walker **4576 raw** inside an **8000 raw**
+footprint (0.23 of a tile) once D200's forty-tick order-finish stopped ending his walk.
+
+**Answered from the binary**, not chosen: `FUN_008aa990` is a full depenetration - per collider it computes the overlap on both axes,
+takes the **smaller** (separating axis), moves the candidate out by it, snaps to full separation when the fraction is `>= 1.0`, and
+writes the result into the candidate position (`*param_2 = local_14`). Its only caller is `FUN_008a4360` (`move_obj.cpp`
+0x127d-0x12b2), which passes `local_64` - and `local_64` is **never read back into the unit's position**: it is declared, filled,
+logged at 0x11df and handed to the resolver, and that is all. So the game computes the separation and **discards it**, which is D210's
+finding from the other end. What stops a unit is the **pause** (`setPause` 0.25-1.50 s, `0x8a8141`) and the **re-path**
+(`0x12b2`, colliders added to the ignore list at `0x1265`).
+
+**Ruled.** No press floor is added - not the quarter-footprint this project proposed an hour earlier, and not touching. Friends may
+overlap to any depth, which is what the players see and what our own simultaneous-step artefact already produces (4576 raw is
+*less* than the game permits).
+
+**Basis and the unknown.** `docs/press-depth-evidence.md`; the corpus functions named above. Whether the resolver is dead in a
+retail build or live in an earlier one is not established, and neither is the pause roll's distribution - neither changes the ruling.
+
+**Commits us to.** Before adding a physical floor, find the binary's own; if its answer is computed and thrown away, ours is not to be
+invented.
+
+## D291 - The engine retargets within a kind; repurposing across kinds is the AI's job (owner, 2026-11-19)
+
+**The owner's question.** *"How is the retarget::a_forager_whose_bush_is_finished_goes_to_a_farm handled by the game? The game code
+itself should never hardcode such move. That should be handled by AI to repurpose idle villagers. Is it the case?"*
+
+**It is the case, and our code did the opposite.** `World::nearest_like_in` matched a bush (`Resource(food)`) to a **farm**
+(`Building`) on purpose, with a comment explaining why: *"A farm is a building that fills the same column a bush does, so 'the next
+source of food' has to cross the two kinds. Without this a forager whose berries are gone has nowhere to go."* The evidence says the
+original does not do that:
+
+- the engine's next-source search is a **same-kind** search inside a radius. **The radius is the owner's own ruling, not a
+  measurement** - D149, 2026-11-07: *"the owner chose C - line of sight + 5"* - and the same-kind shape is what a replay-derived model
+  of DE implements (`aoe2mc`: 8 tiles for trees, 5 for the rest). No function in the corpus was found that filters a next-source
+  search by object type, so *this* half of the basis is inference and is labelled as such;
+- reassigning a man across resource **types** is the **AI's** work, and the game ships parameters for exactly that -
+  `sn-retask-gather-amount`, `sn-max-retask-gather-amount`, `sn-food-gatherer-percentage`, `sn-percent-civilian-gatherers` - plus a
+  technology whose only job is to improve it, `up-retask-gatherers`;
+- the decomp contributes nothing either way (no gather code at all).
+
+**Ruled and done.** The cross-kind arm is cut: a forager whose bush is spent and who has no bush in reach **stands** - he is the idle
+villager the player or the AI then re-tasks. The fixture was re-pointed first and watched failing (`the engine sent the forager to a
+farm by itself: Gather { node: 130 }`), then passes: `a_forager_whose_bush_is_finished_stands_rather_than_walking_to_a_farm`.
+
+**Commits us to.** An engine rule may only order a worker to a node of the **same kind**; anything that moves a man between resource
+types belongs to the AI layer (D17: the engine knows kinds, not particulars), and it must be built there, with its own evidence.
+
+## D292 - No rule of ours ever stands a man down on its own: `beside` and the forty-tick finish go (owner, 2026-11-19)
+
+**Ruling, in the owner's words.** *"No engine help: the order stays live and the man stands; only sliding and the pause rule act"* -
+chosen from the binary when the fork was put to him, and applied here.
+
+**Cut.** `beside` (a `Move` whose goal held a body was finished within 1.25 tiles of it) and `finish_blocked_orders` (forty refusals
+and the order became `Idle`). Both were D200's and both were ours: the binary pauses a body (`getMaxVelFwd` returns exactly `0.0`) and
+re-paths it, and nothing replaces an order because a body was in the way - which is why a wedged villager is the game's most-reported
+bug.
+
+**Added, because the cut exposed it.** A mover re-armed his friend's pause on every refused tick (the pause is written after the
+movement pass, so `pause_remaining` is still zero while it runs): measured **1,876 ticks (93.8 s)** of standing against the original's
+0.25-1.50 s. The guard now checks both the running pause and the one queued this tick.
+
+**Tried and withdrawn.** A "no two bodies on one point" guard: D289's shared goals let a crowd press to **0 raw** apart, the guard
+refused it, and `right_of_way::the_higher_id_pauses_...` then **never finished its crossing in 2,499 ticks**. The binary has no press
+floor at all (D290), so the fixtures ask for **convergence**, not separation.
+
+**Measured.** Full suite **893 passed / 14 failed / 21 ignored** against D291's 890/17/21 - three reds turned green, none the other way.
+`acceptance_economy` runs in **30.34 s** (was 34.25 s). Review: `docs/reviews/2026-11-19-d292-orders-are-never-given-up.md`.
+
+**Commits us to.** The engine may refuse a step and pause a body; it may never rewrite a player's order. A man who cannot arrive
+stands, with his route intact, until the player re-tasks him.
+
+## D293 - A gatherer presses in; the seat book stops being read (owner, 2026-11-19)
+
+**Ruling.** The gather arm hands out no seats. `start_gather` stops calling `standoff_point` and stops pushing a private place onto the
+route; the settle walk is off; a man goes to the node he was given and takes from it when his box is against it (D285). The reasoning is
+D290's - the original computes a depenetration and discards it, so its bodies press to any depth - and D288's, that the taken list is
+ours.
+
+**What replaces the seat as a spreader.** D204's same-kind re-target, kept by D291, with a **new trigger**: the refusal count itself. It
+used to fire only on `Standoff::NoRoom`, which no longer exists, so with the seats gone nobody was ever re-targeted and a jammed crowd
+stayed jammed **for ever** - measured, `research::a_trebuchet_cannot_be_trained_before_the_imperial_age` could not bank 400 wood in
+400,000 ticks (bank at 210). The trigger now counts a man whose **route is spent** and who is still not taking - not a man walking in,
+which re-tasked every gatherer forty ticks after he set off (three `gather_touching` fixtures red).
+
+**Measured.** Witness first: `gather_press_in::two_gatherers_on_one_tree_press_in` read **0.960 tiles** between two men on one tree before
+the cut, and presses inside a body's width after it. Suite **897 passed / 11 failed / 21 ignored** against D292's 893 / 14 / 21 - four
+greens, none the other way, one of them a red older than this slice
+(`gather::a_depleted_node_sends_the_villager_to_the_next_one_of_its_kind`). Review:
+`docs/reviews/2026-11-19-d293-gatherers-press-in.md`.
+
+**Left standing, deliberately.** `standoff_point`, `Standoff` and the `gather_place` book are inert and marked `#[allow(dead_code)]`:
+deleting them is the next slice's first task, because five fixtures still read `gather_places()` and must stop first.
+
+**Commits us to.** An engine rule may order a man to a node; it may not decide where round that node he stands.
+
+## D294 - The seat book is gone (completes D293's cleanup)
+
+**Ruling.** The book that kept one man per place round a node is **deleted**, not left inert: `standoff_point`, `Standoff`,
+`place_is_live`, `gather_places`, `gather_place_public`, `gather_place_of`, `reserve_gather_place`, `release_gather_place`,
+`reserve_places`, the `gather_place` field, the `GATHER_WALK_SLACK_MILLI` constant it was scored against, and the release call in
+`world/sites.rs`. Nothing read it after D293; the last readers were fixtures, which came off it in the commit before this one.
+
+**What a gatherer aims at now.** The node's own tile, and beside it the last waypoint of the order's route. Two aims that used to
+prefer "his place" (`match ... place.unwrap_or(point)`) are now the plain waypoint and the plain target - a change of **no** behaviour,
+because `place` was already `None` everywhere after D293.
+
+**Measured.** The suite is **895 passed / 11 failed / 21 ignored** before and after the deletion, with the red set **byte-identical**
+(`diff` of the sorted names reports no lines), which is what "inert" has to mean: a deletion that moves a test is a deletion that was
+still doing something. Clippy is clean at `-D warnings` across the workspace and all targets. Review:
+`docs/reviews/2026-11-19-d294-the-book-is-gone.md`.
+
+**Commits us to.** No code path may keep a per-man record of *where round a node he stands*; if a future rule needs one it has to
+argue against D290 (the original has no press floor) first.
+
+## D295 - A gather on the tile a man already stands on is accepted (owner rule: nothing may refuse an order the game takes)
+
+**Ruling.** `Command::Gather` for a node whose tile is the tile the villager stands on is **accepted with an empty route**, not refused.
+The validator skips its "is the node reachable" search in exactly that case, and `start_gather_with` plans no route. The general planner
+is untouched: a **walk** to a point inside one's own tile still plans, because the walker must land on the clicked point rather than
+on the tile's centre.
+
+**Why it came up.** D293's press model lets a crowd stand on ground the seat book used to keep clear, and three fixtures spawn a
+villager on the bush's own tile. All three failed with `NoPath { from: (12, 7), to: (12, 7) }`, and the order was then remembered as a
+**walled-off node** (`share_failed`) - a villager refused his own bush for the rest of the match.
+
+**The wrong fix, measured and reverted.** The first version put the same-tile rule in `plan_path_with`, the planner every walk uses.
+Suite **897 passed / 9 failed** with **three new reds**: `a_point_inside_its_own_tile_is_still_reached` (a walk to a point in one's own
+tile must still plan), `an_enemy_foundation_in_plain_sight_does_not_block_me`, and `a_newcomer_does_not_move_the_working_gatherers`.
+Narrowed to gather validation: **900 passed / 6 failed / 21 ignored**.
+
+**Commits us to.** Every acceptance rule that refuses an order needs a scene where the game accepts it - a `NoPath` on a
+zero-length route is never right, and neither is a general rule that changes walking to fix gathering.
+
+## D296 - The level maps are the binary's stamping rule, not a choice (P11a)
+
+**Ruling.** `Levels::of(&Ground)` builds the four maps the levelled pathfinder searches over: level `L`'s cell is `2^L` tiles per side,
+indexed `tile >> L`, and **a cell is blocked when any tile under it is blocked** - which is what `FUN_007ede40` stamping an obstacle
+rectangle at level 3 and `FUN_007f1100` recursing *down* the pyramid actually does. Anything off the map answers blocked.
+
+**Measured.** Test-first, three failures deep: unresolved import, then a fixture that was not a game (no town centres), then green -
+**4 passed / 0.00 s**. The suite is **904 passed / 6 failed / 21 ignored** with the red set byte-identical to before, so the maps change
+no existing rule. Review: `docs/reviews/2026-11-19-p11a-the-four-levels.md`, evidence: `docs/pathfinding-levels-evidence.md`.
+
+**Not decided here.** The level **descent** (11b) stays unbuilt: the descent reads bit `0x20` of a cell's *second* byte while the
+stamper writes the *first*, and the second byte's producer is unread. Guessing it would be the kind of deliberate difference the owner
+forbids.
+
+**Commits us to.** A coarse node is never a place a route may run through when a wall touches it; the level maps are rebuilt from the
+ground, never cached across a change to it.
+
+## D297 - A search starts at the coarsest level whose cell is usable (P11b)
+
+**Ruling.** `Levels::descent(tile)` walks from level 3 down and stops at the first level whose cell holding that tile is unblocked, with
+level 0 as the floor. That is `FUN_007ee980`'s loop, and it is built on one **interpretation** - flagged as such here, in the code and in
+`docs/pathfinding-levels-evidence.md`:
+
+- the loop tests bit `0x20` of a level cell's **second** byte, and the per-search stamper writes the **first** byte - so the second byte
+  is not the search's own mark;
+- the same second byte is what `FUN_007ed8f0` reads for a usable child (`& 0xf == 0xf`, clear in all four directions);
+- so byte 1 is the cell's **persistent passability**, and `0x20` is its "usable" flag. The rejected reading (bit set = blocked) would
+  search coarsely in clutter and finely in the open, which is backwards from any hierarchy, and it is recorded rather than deleted.
+
+**Measured.** Test-first, and the first version of the fixture was **my** error: the wall sat at `(9, 2)`, inside the very 4×4 cell the
+start occupies, so level 2 was correctly blocked and the assertion was wrong. Moved to `(14, 6)` - same 8×8 cell, different 4×4 cell.
+Suite **907 passed / 6 failed / 21 ignored** from 904 / 6 / 21, red set byte-identical; the three fixtures are **3 passed / 0.00 s**.
+Review: `docs/reviews/2026-11-19-p11b-the-descent.md`.
+
+**Commits us to.** The descent is a decision about *granularity*, never about passability: a level's map never says a route is legal where
+the tiles are not.
+
+## D298 - A coarse step costs 10, 300 or 2000 (P11c's table)
+
+**Ruling.** `Levels::step_cost` answers the original's `FUN_007ed280` table where our content can express it: a **blocked** cell is not
+enterable (`None`), a cell with a **body** on it costs **2000**, an open cell touching a blocked orthogonal neighbour costs **300**, and
+an open cell clear on all four sides costs **10**. The distance-from-the-edge term the original adds (`(coord - window_lo) + 10` in the
+direction of travel) belongs to the search that knows the window, not to the table.
+
+**Named gap, not a silent one.** The original's **100** and **600** rows need "crossable but slow" terrain; our tiles are walkable or not.
+Treating every blocked tile as unenterable makes our coarse routes *more conservative* than the game's on rough ground - the safe direction
+to be wrong in. *(Corrected by D327: the two rows are keyed on the **tile's terrain object** - flag byte `+0x28` bit 3 turns 100 into 300,
+bit 6 gives 600 - so this is a terrain flag to name, not a passability class to invent; and the 2000 row is **not** "a body on the cell".)*
+
+**Measured.** Test-first (`E0599` then three green: **3 passed / 0.00 s**), and the fixture's first version was my error twice over in the
+same way as D297's: I asked the level-3 cell of `(16, 16)` about a wall at `(16, 15)`, which is a different cell, and read a correct 300
+as a bug. Suite **910 passed / 6 failed / 21 ignored** from 907 / 6 / 21, red set byte-identical; clippy clean at `-D warnings` after two
+impossible `try_from`s became `from`. Review: `docs/reviews/2026-11-19-p11c-the-cost-table.md`.
+
+**Commits us to.** A cost is a property of the cell being entered, never of the pair; and no row of the table is invented to fill a gap in
+our content model.
+
+## D299 - The coarse A\* runs on four directions, a tuned cost table and a sorted list (P11c)
+
+**Ruling.** `Levels::coarse_route` searches **one level** (the coarsest usable one for the start, never finer than the goal needs), over the
+**four orthogonal directions**, with `g = step + parent's g` from D298's table, `h` = Manhattan between cells, a frontier that is
+**insertion-sorted on `f` with a new node placed before equal `f`** (`FUN_007ed500`'s order, not a heap), closed cells never reopened, and
+a parent chain walked back and refined to **one waypoint per cell at its centre** - `n * 2^level + 2^(level-1)` tiles, which is
+`+ 0.5` only at level 0.
+
+**Two deviations, recorded and both safe.** (1) **No search window**: the binary clips expansions to `in_ECX[0x42..0x45]`, whose padding is
+set where it has not been read; without the clip the search finds routes the clipped one refuses - a superset, never an illegal route.
+(2) `h` is Manhattan because `window_hi - coord` needs the window. Both are in the function's doc comment, here, and in the evidence file.
+
+**Measured.** The conformance row `the_original_solves_a_long_walk_in_its_hierarchy` - `#[ignore]`d since D279 - is **live and green**:
+a 58-tile open walk is **8 cells** at level 3 instead of 58 tiles, on the lattice `n*8+4`, none of them blocked. Suite **914 passed /
+6 failed / 21 ignored** from 910 / 6 / 21, red set byte-identical; clippy clean. **Three errors of mine on the way**, all caught by
+fixtures: a 96-row height declared over 49 written rows, a town centre at `(90, 90)` on a 49-row map, and a lattice check written with the
+tile convention (`n*8+0.5`) for an 8-tile cell centre (`n*8+4`) - the last one had also been copied into the evidence file and is
+corrected there. Review: `docs/reviews/2026-11-19-p11c-the-coarse-astar.md`.
+
+**Commits us to.** The levelled search is the default only once the switch (11d) is built and measured; until then it is a machine with
+its own witnesses, and the flat search still answers `Ground::route`.
+
+## D300 - The hierarchy is correct and 60x too slow; the switch waits for a cached pyramid
+
+**Ruling.** `Levels::coarse_route` is **not** wired into `Ground::route`. Measured on the project-sized map (64×65, 200 runs each), in
+**release**: **build 16.9 µs**, descent **9 ns**, coarse A\* **4.6 µs** for a 56-tile diagonal, against a **flat tile search of 408 ns** on
+the same walk - **~52×**. (The first figures published here, 543 µs / 139 µs / 11.4 µs, were a **debug** build published without that
+label; both are in the review, because the mistake was the label, not the measurement.) The search is correct (D296-D299, and the conformance row parked since D279 is green) and it is **60× too slow**, almost entirely
+because the pyramid is built per call where the binary holds it and only re-stamps it.
+
+**11d is therefore three steps, in this order**: (1) a **cached pyramid** - which, read against `Ground`, turns out to need a **modelling
+change first**: `blocked()` folds units and obstacles together and `block`/`unblock` fire on every unit step, so a cache would be stale
+every tick. The original keeps static obstacles in the level maps and **bodies as a live cost row (2000)**, so the step is to split
+`Ground`'s occupancy into **static blockers** and **bodies** (see `docs/pathfinding-levels-evidence.md`); (2) the coarse search measured again against 11.4 µs, with the O(n) frontier insert and the four lookups per
+`step_cost` as the named suspects (a heap would fix the insert and break D299's ordering, so the fix is bounded insertion or buckets);
+(3) only then the switch, gated on the full suite and the acceptance run.
+
+**Measured, not asserted.** Review: `docs/reviews/2026-11-19-p11d-the-pyramid-costs.md`. This is the third hand-counted map-height error
+of the session, caught by the loader again; the fixture now derives its height from its rows.
+
+**Commits us to.** A rule that is correct but unaffordable does not ship; the number decides, and the number is written down with what was
+measured and how.
+
+## D301 - The pyramid is cached, and D300's conclusion is withdrawn
+
+**Ruling.** `Ground` holds the pyramid (`pyramid()`, built on demand, `Rc`-shared, `#[serde(skip)]`), invalidated inside `block` and
+`unblock` - the only two mutators - so a caller cannot forget to invalidate it.
+
+**D300's premise was wrong, and so was its conclusion.** It said the cache "would never hit" because `block`/`unblock` fire on every unit
+step. They do not: `occupants` is touched only by **objects** (a tree, a building, a gate), there are exactly **eight** call sites, and a
+unit's body lives in the step pass, not in `occupants`. Measured: **201 routes, 1 build**.
+
+**D300's number measured the wrong case too.** "~52× slower" compared the hierarchy against a **straight-line test** on open ground
+(477 ns, no search at all). Where both actually search - a wall across the path - the hierarchy is **6.3× faster**: **4.6 µs** against
+**28.9 µs**. So the shape for 11d is the binary's own, plus this engine's shortcut: **straight line first, then the levelled search, then
+the flat search as fallback**.
+
+**Measured.** Test-first (`E0599` twice, then 2 green), `pyramid_cache.rs` **2 passed / 0.00 s**, probe 1 passed; build **21.1 µs** once,
+cached route **4.8 µs**, descent **11 ns**. Review: `docs/reviews/2026-11-19-d301-the-pyramid-cache.md`.
+
+**Commits us to.** A cache is invalidated in the mutator, never at the call site; and a performance claim names the case it measured,
+because this one was measured on the case where the fast path does not run.
+
+## D302 - A route is a line, then the hierarchy, then the tile search (P11 done)
+
+**Ruling.** `Ground::route_with` answers in three tiers: the **straight line** (477 ns, one waypoint), then the **levelled search** (the
+binary's land-unit default, D299 + D301's cache), then the **flat tile search**. The hierarchy runs only when `avoid` is empty and
+`reach == 0` - a coarse cell knows where objects stand and nothing about bodies, so a body-aware route stays the flat search's job - and
+the tier certifies its **first and last legs** with the same `leg_is_clear` the tier above uses, falling back entirely if either fails.
+
+**Measured.** The acceptance suite drops from **33.74 s to 22.96 s - 32%** - with the same 31 tests green. The witness was written with the
+tier **disabled** and failed on the claim it exists for (`waypoint (630000, 570000) is not a level-3 cell centre`), then passed: a blocked
+walk is a chain of `n*8+4` centres and the open control is still one waypoint. Full suite **918 passed / 6 failed / 21 ignored**, red set
+byte-identical. Review: `docs/reviews/2026-11-20-d302-the-three-tier-route.md`.
+
+**Named limits.** No measurement yet of a hundred units planning in one tick, nor of a 480×480 map (≈1.2 ms per ground change, unmeasured).
+And the red-set diff cannot see that blocked routes are now **coarser** - no fixture asserted a per-tile polyline, which is the suite's
+coverage being thin on this subject, said out loud rather than implied.
+
+**Commits us to.** A faster search may change the *shape* of a route only where the game's own search would; and any tier that cannot see
+bodies never answers a route that was asked to avoid them.
+
+## D303 - The radius reaches the line test and the step, not the searches
+
+**Ruling (crosscheck, step 1 of #7).** Before building a radius into the planner, the record was checked and **corrected**: `plan_path_for`
+passes `reach = body_radius(entity.unit)` into `route_with`, the **line tier** hands it to `leg_is_clear`, and the **step** applies it in
+`clearance_at`. So a straight-line route *is* radius-aware. What is blind is the two **searches** - the flat tile search asks
+`blocked(x, y)` and the levelled search asks the pyramid, neither of which takes the reach.
+
+**Measured, differential.** `radius_route::the_gap_is_planned_for_a_villager_and_not_for_a_trebuchet` (a wall with a one-tile gap and a
+stub that forces a search): the villager reaches the goal through the gap, the packed trebuchet is also planned through it -
+`[(210000, 190000), (310000, 190000), (310000, 210000), (530000, 210000)]`, ending on the goal. Parked `#[ignore]`d with that
+measurement, so the suite stays at **918 / 6 / 21 + 1 parked** and the gap stays visible.
+
+**The fix, and its price, known from D301/D302's own measurements**: one **radius-grown grid** per radius class (0.20 / 0.25 / 0.40 / 0.50
+from the dat), each ~21 µs at 64×65 **once per ground change**, feeding both the flat search's passability test and the pyramid's cells; the
+pyramid cache is keyed by radius as well as by generation.
+
+**Commits us to.** A register entry is a claim like any other and gets checked before it is built on - this one was half wrong, and the
+correction narrowed the work rather than widening it.
+
+## D304 - The search budget is live, and a third row proves it bites
+
+**Ruling.** The two conformance rows parked since D279 are **live**: `a_hopeless_search_is_bounded_by_its_own_estimate` and
+`the_budget_never_exceeds_twenty_thousand`. Nothing in the engine changed - `search_reporting` already computed
+`budget = estimate.min(EXPANSION_CAP)`, stopped before an unaffordable expansion, and answered from the closest cell it had stood on; what
+D279 lacked was a search that could afford the rule, and P11 supplied it.
+
+**Measured.** `crates/conformance/tests/budget.rs`: **4 passed / 0.00 s**. The fourth is new and closes the vacuous-pass hole:
+`a_search_that_runs_out_of_budget_stops_short_of_the_goal` seals a 40×40 room and asserts the search **spends exactly its budget** (1000) and
+answers inside the room. **Mutation-proved**: with the budget replaced by `u32::MAX`, that row fails on `1498 of 1000` and the estimate row
+fails with it; restored, all four pass.
+
+**Still weak, said plainly.** Two rows compute the budget with the same `estimate` the search uses, so a shared arithmetic error satisfies
+both; the cap row is the independent one. Review: `docs/reviews/2026-11-20-d304-the-budget-goes-live.md`.
+
+**Commits us to.** A test that is un-parked after its cause is fixed needs a row proving it still bites, or it is decoration.
+
+## D305 - The hierarchy is not running for units, and D302's 32% cannot be attributed to it
+
+**Finding.** `route_with`'s tier 2 is gated on `reach == 0`, and every unit route carries a non-zero reach (`plan_path_for` uses
+`body_radius`, `plan_path` uses `reach_at`). **So the levelled search never answers a unit's route** - only the callers that plan with no
+body at the point. **D302's "acceptance 33.74 s -> 22.96 s, a 32% cut" is therefore not attributable to the hierarchy for units.** The
+number was measured twice and is real; the cause is unestablished, and the attribution is withdrawn until it is re-measured.
+
+**Why the gate is wrong.** `avoid.is_empty()` is the right test - a coarse cell knows where objects stand and nothing about bodies, so a
+route that must keep clear of a friend cannot come from the hierarchy. But `reach` is the **walker's own width**, not a body list; refusing
+to plan a wide unit's long walk coarsely is a hole, not a parity choice.
+
+**The fix, one line**: drop `reach == 0`, keep `avoid.is_empty()`, and certify the chain's legs with `leg_is_clear(..., reach, ...)`. It is
+exactly what the radius attempt did and it was reverted for a **different** reason - the `fits` tangency change that reddened
+`straight_line` - so the two must be separated: the gate is free, the tangency is contested (owner's HD test pending).
+
+**Also landed here.** `route_shape::cluttered_ground_is_answered_at_tile_level` closes D302's coverage gap: every waypoint but the last on a
+tile centre, in ground cluttered enough that the hierarchy must abstain. **1 passed / 0.00 s**, and it stays valid after the gate fix, which
+is the point of asserting a shape. Review: `docs/reviews/2026-11-20-d305-route-shape-and-a-finding.md`.
+
+**Commits us to.** A published number names the mechanism it is attributed to, and a gate that disables the feature it gates is a defect even
+when every test passes.
+
+## D306 - Tangency is a passage, and the radius reaches the searches
+
+**The game settled it.** The owner measured in HD (2026-11-20): a **packed trebuchet walks a one-tile hole** in a wall and a **one-tile
+corridor in bamboo**, and the scenario editor places one inside such a corridor. My earlier inference - 0.5 radius in a 1.0 gap leaves zero
+clearance and the box ruler collides on `<=`, so no passage - is **withdrawn**; the game is the authority, and it is consistent with the step,
+where the depenetration is computed and never applied (D290).
+
+**Ruling.** `Ground::fits` answers `nearest blocked square - reach >= 0` (tangency is a passage), the **flat search** asks it per node and for
+both diagonal side tiles, the **pyramid** is built per radius (`Levels::for_radius`, `Ground::pyramid_for`, cached by reach), and tier 2 of
+`route_with` runs for **any** reach - closing D305's finding that the hierarchy never ran for a unit.
+
+**Gates on the tier, each with its reason**: bodies (`avoid.is_empty()`), granularity (`coarse.level >= 2`), and distance (**≥ 16 tiles** - a
+labelled deviation, because until the refinement matches `FUN_007eeda0`'s tile-boundary rule a coarse chain is a staircase for a short walk;
+measured, 31 points past one tree).
+
+**Measured.** `coarse_route` 5, `radius_route` 1 (both radii take the gap), `route_shape` 1, `straight_line` 4, `walk_line` 2 - green
+together, which the earlier attempt did not manage. Full suite **920 passed / 6 failed / 21 ignored**, red set identical; clippy clean.
+Review: `docs/reviews/2026-11-20-d306-tangency-is-a-passage.md`.
+
+**Commits us to.** When the game and the code disagree, the game wins and the record says which claim was withdrawn.
+
+## D307 - The stamp resolves at the finest level the obstacle occupies (closes D306's caveat)
+
+**Ruling (read, no code).** `FUN_007f0da0` recurses **only into cells whose second byte has bit `0x20`** - "this cell contains an obstacle" -
+down to level 0, and applies the mover's grown box there via `FUN_007ed950`, marking bit `0x10` (the per-search block, cleared at the end).
+So the radius growth is resolved **per tile wherever a one-tile obstacle is**, and a one-tile gap is never washed into an 8×8 block.
+
+**Consequences.** (1) The caveat in D306 - "the game may refuse the gap's whole neighbourhood" - is **withdrawn**; the owner's HD result and the
+binary agree, and our per-tile `FUN_007f0da0`-equivalent (`Ground::fits`) has the right granularity. (2) It also corrects the *descent's*
+wording: it stops at the coarsest level whose cell **holds an obstacle**, which is the level at which the search has something to resolve -
+"coarsest usable" was the same idea from the other side, and the read now supports it directly.
+
+**Still open from this read.** Whether `0x20` is seeded from terrain alone or from terrain *and* buildings (the tree/building case) - the setter
+of `0x20` has not been read; `FUN_007ed950`'s exact box test either, though its arguments are the mover's box (`x, y, h, radius`) and the cell.
+
+## D308 - A coarse edge refines to the tile where the passage is, not to a cell centre
+
+**Ruling (read; port not yet written).** `FUN_007eeda0` expands a coarse cell to the **tile span it covers** (`x << level .. ((x+1) << level)
+- 1`), scans the shared edge **tile by tile** along the step's direction (bit `bVar1` of the tile's four-bit passability mask), and returns the
+**first tile where that direction is interrupted**, with a linear interpolation for the other coordinate. So the game's route is refined to
+waypoints **on tile boundaries at the crossing point**, which is why its short walks are fine where ours are 8-tile staircases.
+
+**What that implies for us.** `Levels::refine` must walk each edge rather than emit cell centres; then the **16-tile gate** D306 added as a
+labelled deviation comes out, and coarse routes become the game's shape at any distance. Witnesses already exist: the two `straight_line`
+fixtures that reddened the first radius attempt, and `route_shape`, which asserts tile-level waypoints in cluttered ground.
+
+**Why this is a read and not a patch tonight.** The edge walk needs its own fixture before it changes any route, and the gate is the thing
+keeping the suite green in the meantime - replacing both in one step without a witness would be the trade this project has already paid for
+once (D249's reverted sweep).
+
+**Commits us to.** A refinement rule is a route-shape rule: it changes every coarse waypoint, so it lands with fixtures that assert the shape on
+both sides of the boundary, not with a suite that merely stays green.
+
+## D309 - No pre-search line test has been found; our first tier stays unverified
+
+**Read (crosscheck #10).** Three probes into the move code's path request:
+
+- `FUN_008000d0` - the wrapper that chooses the planner - does bounds checks and then goes **straight to the registry** (`FUN_007ef140`):
+  levelled (`FUN_007ee980`) if the object has a handler, flat (`FUN_008007f0`) if not. **No line test before the search.**
+- `FUN_008a4360` - the move function - calls `FUN_007fdf80` and `FUN_007ffae0`; the first, read in full (20 lines), **walks to the tail of a
+  list** and returns it, which is a queue/waypoint accessor, not a line test.
+- `FUN_008a3a20` calls `FUN_007fffe0` inside a `FUN_007fd4b0(0xffffffff)` bracket - the same "begin/end a search" shape - and nothing that
+  looks like a straight-line clearance check.
+
+**Therefore: no evidence of a straight-line short-circuit, and some evidence against one.** Our tier 1 - a clear leg answers with one waypoint in
+477 ns - is therefore **unverified as parity**, and if the binary truly always searches, it is a **deliberate speed difference** that should be
+declared rather than left in the register as "possibly ours alone".
+
+**Why it was not changed tonight.** A line test changes the shape of every open-ground route (one waypoint instead of a searched polyline), and
+every fixture that pins a route's end point would need re-reading. That is a step with its own witness, not a footnote to a read.
+
+**What would settle it**: trace the caller of `FUN_008000d0` (the object that owns the path request) and see whether anything tests the leg
+before calling it - `FUN_007ffae0`'s result is the place to look, since the move code reads it repeatedly around the request.
+
+## D310 - The avoid list has no 255 cap, and that is left open on purpose
+
+**Read (crosscheck #8).** `standing_bodies` builds the list a route must keep clear of: every live unit within a span of the line, minus the
+mover's own body and minus friends who are **moving and not paused** (they will not be in the way). The result is passed to
+`plan_path_with` and fed to the search as `Clear { at, half, reach }` entries. **There is no cap on its length**, where the binary's ignore list
+is `local_404[255]` (`0x1265`) and stops filling at `0xfe`.
+
+**Why the cap is not being added tonight.** Two reasons, both about evidence rather than effort:
+
+1. **The selection would be ours, not the game's.** The binary fills its list in its own order (the object's colliders first, then the groups at
+   `param_5[0x1a]` and `param_5[0x21]`) and stops at 255; ours iterates entities in **id order** and would truncate at 255 by id. Both are
+   arbitrary in a crowd, but they are *different* arbitrariness, and calling ours "the cap" would be a parity claim it does not earn.
+2. **No witness can see it.** A route with 300 nearby bodies produces a route either way, and the difference only shows in *which* bodies are
+   avoided - which no fixture can assert without a test-only probe of the list, and a test-only probe would assert the implementation rather
+   than a behaviour.
+
+**What would make it a step:** a scene where the 256th body is the one that matters (a wall of 255 villagers and a route that must go round the
+256th), which is constructible and is how the cap should be proven when it lands.
+
+**So the state is**: the avoid list exists and is used (D281), its *length* is unbounded, and that is a recorded difference rather than a defect
+that hides - a crowd of more than 255 bodies within a line's span is where the two engines can differ, and the game will be the one that gives
+up first.
+
+## D311 - The two reseed reds fail at the same place: the plot is paid for and never raised
+
+**Crosscheck (item 3, first pair).** Both `reseed` fixtures fail on the **same assertion**, and it is not the one their names suggest:
+
+```
+a_queued_reseed_pays_the_farms_price_and_replaces_the_spent_plot   line 169
+auto_reseed_is_a_player_setting_and_pays_when_the_plot_runs_out    line 235
+```
+
+Both are `assert!(replaced.is_some(), ...)` after **1,200 ticks** - i.e. **no farm is raised on the spent plot's ground**. Everything before that
+passes, and it is a lot:
+
+- the queue entry is taken and **one farm's 60 wood is committed** (`stock(1, wood) == before - 60`, `reseed_of(1).queued == 1`);
+- the toggle **costs nothing** and is remembered (`reseed_of(1).auto` is true, stock unchanged);
+- the two neighbouring rows pass: `only_a_finished_mill_may_queue_or_toggle` and
+  `without_a_queue_or_the_toggle_nothing_is_reseeded`.
+
+**So the trigger, the payment and the setting all work; the farm is never placed.** That narrows the fault to one of two places, and they are
+distinguishable with one probe:
+
+1. **the reseed arm is never reached** - the spent plot is not being detected (the farm's "ran out" state), so nothing tries to place; or
+2. **the placement is refused** - the arm runs and `place` says no, on ground that was a farm a moment ago.
+
+**Next probe, written down rather than guessed**: instrument the reseed arm to print on entry and on refusal, and run the fixture - the answer is
+which of the two it is, in one run. That is the shape every other diagnosis in this project has taken, and it is cheaper than reading the
+economy code end to end.
+
+**What this note is not**: a fix. The two fixtures are still red, and the suite stands at **920 / 6 / 21**.
+
+## D312 - The two reseed reds were a statue, and the reach was measured to the anchor point
+
+**Crosscheck, continuing D311's own probe.** Three prints - `start_gather` entry, the plan it produced, and the result at apply time - said
+in one run what D311 could only bracket:
+
+```
+DBG plan stage: from=(19, 18) to=(20, 18) kind=Some(Building)
+DBG planned: Ok((1, Some((Fixed(380000), Fixed(340000)))))
+DBG apply gather EntityId(130)->EntityId(131): Err(NoPath { from: (19, 18), to: (20, 18) })
+```
+
+**D311's two candidates were both wrong.** The reseed arm was fine and the placement was never tried: the *gather order* was refused, so the
+plot never ran out and nothing asked for a replacement. D311's evidence stands (the queue is paid, the toggle is remembered, the neighbours
+pass); its conclusion - "the fault is in the reseed arm or in the placement" - is withdrawn, and it had pointed a whole step at the wrong file.
+
+**Fault 1, the engine: the reach was measured to a point.** D279's test compared the route's last point with the node's position. A route's
+points are tile **corners**, a node's position is wherever `Command::Spawn`, a scenario or a save put it, and a farm is 3x3 - so for a plot
+anchored at the middle of a tile (20.5, 18.5) the first free ring tile (19, 17) read **1.5 tiles away on each axis**, 4.5 tile-squared against a
+2-tile reach, and a villager could not be sent to a plot standing in the open three tiles away.
+Fixed by `World::gap_to_footprint` (`sites.rs`): the gap from a point to the node's **footprint box**, zero on it. A resource has no unit and
+so no footprint and answers as its own point - which is the one-tile node it is. **The number does not change**: 2 tiles stays, the thing it is
+measured to does not (the FORM of a rule, `references/game-rule-to-engine.md`). It is still a fixed number rather than the game's box gap
+against a range of zero, and that deviation stays labelled.
+
+**Fault 2, the fixture, and it is ours: the villager could not walk.** With the order accepted, the gather arm's own log showed `step=0` and
+`at_node=false` for 1,200 ticks: the `reseed` helper spawned **villagers** with `speed: Fixed::ZERO`, so the man stood 0.3 tiles short of the
+plot's box, never took, never emptied it, and never gave the reseed arm anything to do. The queue, the toggle, the husk and the replacement on
+the same ground were complete the whole time. The helper now resolves the man's speed from content, as `farm.rs` already did; **every assertion
+is untouched** and both rows pass.
+
+**Witness, watched failing first** (`crates/sim/tests/farm.rs::a_man_sent_to_a_plot_anchored_at_a_tiles_middle_works_it`): a plot spawned at a
+tile's middle, a man three tiles away on open ground, `Gather` ordered, 400 ticks. Before: `the man walks over and takes food out of it:
+1000000 -> 1000000`. After: green.
+
+**Measured.** Suite **923 / 4 / 21** from **920 / 6 / 21**; the red-set `diff` is exactly the two `reseed` rows leaving and **no red joined**.
+Acceptance match (release, seed 7, 48,000 ticks) **8.54 s** against **8.53 s / 8.81 s** on the parent `373902f`, with a **bit-identical** final
+hash `3f6c802027ff40fb` (141 entities, 6031 repaths) - so the looser reach **fires zero times** there, which is the proof it is inert in that
+scenario and the limit of the measurement. Clippy clean, `fmt` clean. Review: `docs/reviews/2026-11-20-d312-the-reach-is-the-ground.md`.
+
+**Found and not fixed, each with its shape.**
+
+1. **`submit_checked` accepts what the apply refuses.** Its dry run plans to the node's *point* (`orders.rs:57`) and never runs the reach test, so
+   both orders above were answered `Ok` and dropped at `step` with the `Err` discarded. A click that is accepted and does nothing is a defect of
+   its own; the fix is for the dry run to ask what the apply will ask, with its own witness (a click on a plot behind a wall refused **at the
+   click**).
+2. **`work_position` picks a stand by compass order, not by proximity** - its ring starts north-west and it skips the tile the man stands on,
+   because `plan_path(from, from)` is `NoPath`. Measured: a man beside a plot at `(19, 18)` was sent to `(19, 17)`. `approach_footprint`, the
+   builder's version, already picks the nearest; the two should agree.
+
+## D313 - A load leaves at the wall, and nothing looser
+
+**Crosscheck: the owner's rule 3 was being broken by a clause written to work around an older defect.** The invariant
+(`invariants.rs`, his words: *"If villager drops resource when further from the drop site than 1/2 diameter -> FAIL"*) was red at
+**0.420 tiles**, inside the engine's `as_close_as_the_ground` clause - `gap <= radius + a quarter tile` = **0.45** - and outside the
+rule. That clause dates from before **D306**: touching a wall used to be a *collision*, so a carrier whose neighbouring tile was taken
+could not get to the wall and never banked (measured once at 400,000 ticks, `research::two_players_can_be_different_civilisations`,
+890 of 900). Tangency is a passage now, so he walks the last stretch to `wall_point` and the rescue is dead weight.
+**The number never changed - `radius + one step` stands - the number of clauses did.**
+
+**Landed:** the clause is deleted from `Task::Return`; `at_the_wall` (`gap <= radius + one step`) is the only test.
+**Witness:** the owner's own invariant, watched failing at 0.420 tiles and green after; the fixture was not touched.
+
+**A fixture had to give, and the reviewer should know what it gave.** The suite swapped one red for another:
+`overlap::a_newcomer_does_not_move_the_working_gatherers` went red, and not because a rule was broken - the man who "moved" had
+**filled his load and gone home**. Its before-set was chosen by `progress > 0` and its after-check excluded only "task is not a
+gather", and a man who has banked and is walking back is still `Gather` with `progress 0`. Repaired by making the exclusion the one
+the selection uses, adding a **`judged > 0` guard** (the sharper exclusion could otherwise skip everybody and pass on nothing - it was
+one frame from doing so), and placing the eight gatherers on the node's ring so four of eight are working by tick 1,200 instead of
+one. **Proven:** the position comparison fires (that is the red above) and the fixture is no longer vacuous. **Not proven:** that it
+catches a deliberate shove - a mutation that displaces a working man while leaving others at work was not constructed.
+
+**Measured.** Acceptance match (release, seed 7, 48,000 ticks) **9.28 s / 9.54 s** against **8.53 s / 8.81 s** on `373902f`
+(**+9% to +12%**), and the outcome **changed**, as it must: hash `89ff37d844cfd11f` against `3f6c802027ff40fb`,
+**129 entities against 141**, **10,026 repaths against 6,031**. *(Corrected by D318: the economy is **larger**, not smaller - the stockpile at 2,400 s more than doubles, wood 813 -> 1,831 and food 395 -> 1,503, and the fewer entities are fewer *finished* foundations. The sentence that stood here was written from the entity count alone.)* **Not
+measured:** the delivered totals per column on both trees, which would turn the wall-time figure into a throughput figure. No carrier
+is stuck in `Return` without a route in the 48,000-tick dump. Suite **924 / 3 / 21** from **923 / 4 / 21**, no new red; clippy and
+`fmt` clean. Review: `docs/reviews/2026-11-20-d313-a-load-leaves-at-the-wall.md`.
+
+## D314 - The click asks what the tick will ask
+
+**Crosscheck, and the defect D312 named is the one that closed this red.** `Command::Gather`'s dry run planned at the node's
+**point** and never asked the reach question (D279), while `start_gather` planned at the **work stand** and asked it. When the two
+disagreed the click won and the player lost: `submit_checked` answered `Ok`, the apply returned `Err`, and `step` threw the error
+away. Measured on `gather_pick`'s walled block:
+
+```
+candidate EntityId(11) at (13,6) workable=true
+submit_checked on the nearest candidate: Ok(())
+after 40 ticks: Some("Idle") (idle means the apply refused it)
+```
+
+That is also why `a_walled_off_wood_is_tried_once_and_then_left_alone` was red: its first claim is *"the picker must take the
+nearest node and let the engine refuse it"* and it reads the refusals the runner collected - of which there were none, because the
+refusal happened where no caller could see it. **The picker never pre-filtered**: a probe showed it offering the walled node and
+its tiles workable; the refusal was simply swallowed one layer down.
+
+**Landed:** `World::gather_route` - work stand, plan and footprint-box reach test in one function - called by both
+`start_gather_with` (which then spends the route and keeps its `share_failed` book) and the dry run. One authority, and it is the
+apply's.
+**Witness:** the walled-wood fixture, watched failing with *"it refused nothing, so it pre-filtered"* and green after, **untouched**.
+
+**Measured.** Acceptance `9.42 / 9.27 s` against `9.28 / 9.54 s` on `ec9d99c`, with a **bit-identical** state
+(`89ff37d844cfd11f`, 129 entities, 10,026 repaths) - so no gather order in that match is walled at the click, and the fixture is
+the only evidence the new branch fires. Suite **925 / 2 / 21** from **924 / 3 / 21**; the red set lost the walled-wood row and
+**nothing joined**. clippy and `fmt` clean. Review: `docs/reviews/2026-11-20-d314-the-click-asks-what-the-tick-asks.md`.
+
+**Owed:** a unit fixture isolating the rule (a gather on a walled node refused **at the order**), which today is pinned only through
+the rule runner; and `work_position`'s compass-order stand choice (D312 finding 2), still open.
+
+## D315 - The skirmish was one-sided because its clock was stale
+
+**Crosscheck, and the two reds were one fault with a misleading name.** Both said *"player 1 has no unit militia"*; the step list showed the
+cause one pod above it:
+
+```
+500.0s  Refused("player 1 has no finished barracks")
+525.0s  Refused("player 1 has no unit militia")
+```
+
+A probe printing each side's possessions, the foundation's progress and villager 2's health every ten seconds: player 1's barracks
+foundation appears at 320 s at **119 of 1000** build ticks, **never advances**, and villager 2 - its builder - is **dead**: hp 40 -> 37 -> 31
+-> 25 between 260 s and 310 s, gone by 340 s. Player 2's two militia were attacking from **230 s** because its barracks stands at 70 s,
+while player 1's own timeline (measured with player 2's attack held back) is: site 320 s, 422 of 1000 at 350 s, finished before 400 s,
+militia in hand at 525 s.
+
+**So the content was wrong, not the engine**: a five-minute head start in a section the file calls a *mirrored* opening, and its own
+comments already warn that the numbers were measured under older rules. **Landed:** player 2's attack moves **230 s -> 600 s**, with the
+measurement in a comment beside it. No engine code, no assertion touched.
+
+**Measured.** Suite **927 / 0 / 21** - the first fully green run of this work, from **925 / 2 / 21** - and the acceptance match is
+**bit-identical** (`89ff37d844cfd11f`, 129 entities, 10,026 repaths, 9.54 / 9.21 s), which is the check that a change to one scenario is
+inert everywhere else. clippy and `fmt` clean. Review: `docs/reviews/2026-11-20-d315-the-skirmish-clock.md`.
+
+**Named and not done:** player 2's opening is still much faster than player 1's (barracks 70 s against 320 s). It no longer decides the test,
+but the mirror is not even, and evening it is a content decision with a balance question behind it.
+
+## D316 - A farmer beside a plot still walks at it: the stand was half the story
+
+**Crosscheck of D312 finding 2, and the reading is the step.** Two changes were built to make a man work from where he stands:
+`work_position` choosing the **nearest** free ring tile instead of walking a compass order from the north-west, and his own tile
+counting as a stand (`gather_route` giving an empty route for it, because `plan_path(from, from)` is `NoPath`). The witness, written
+first:
+
+```
+a_man_beside_a_plot_stays_where_he_stands_and_works_it
+  the farmer walked off the tile he was standing on instead of working from it:
+  was (780000, 820000), now (785660, 814340)
+```
+
+**He still walks, and the stand is not why.** With the stand answered as his own position, the gather arm's own arrival test decides he
+is **not at the plot**: `at_node` is the box gap against `node_radius(node)` - a **one-tile box at the node's anchor point** - and a 3x3
+plot's anchor corner is a tile away from a man standing beside the plot. So the arm falls to its else-branch and steps him at the
+node's *position*, which is the same point-versus-footprint mistake D312 fixed in the reach test, one function over.
+
+**So the farmer's wart is two changes, not one, and they need one witness each:**
+1. the stand is the **nearest** ring tile, his own tile included (`work_position`);
+2. a **building** node is "at" by its **footprint**, not by a one-tile box at its anchor (`at_node` in the gather arm - `gap_to_footprint`
+   already computes the right answer).
+
+**Reverted, per the half-fix rule**: the witness still failed with change 1 in, so neither change lands alone. What was measured while it
+was in: `farm` 7 of 8 green and **only** the new witness red; `gather` unchanged. Suite stands at **927 / 0 / 21**; the tree is clean.
+
+**Why this is a step and not a footnote**: it is the last piece of the "a man works from where he stands" rule the owner stated as
+invariant 4 (*"If villager gathers from the resource, resource is not empty, villager is not at 100% carry capacity and changes position
+-> FAIL"*) - the invariant holds today only because the settle finds a man a place *before* he starts taking, which is why the
+`(19, 18) -> (19, 17)` walk in D312 was invisible to it.
+
+## D317 - D316's inference is withdrawn: the man in that scene was a tile away, and walking was right
+
+**The check that found it.** D316 concluded that "the stand was half the story" - that with the nearest-stand fix in, a farmer beside a
+plot still walked because the gather arm's `at_node` box is a one-tile box at the node's anchor. Building that second change (a building
+is "at" by its **footprint**: `footprint_gap <= radius + one step`, the delivery rule's own shape) and then **re-running the witness
+against the un-fixed tree** showed the witness **passing on both trees**: it no longer discriminated anything.
+
+**Why.** The scene in D312/D316 puts the man at a tile **corner** one tile west of the plot - `Spawn` anchors a point, and a corner is
+the far edge of its own tile, so he stood **a whole tile** from the plot's footprint. Walking there was correct: he was not beside the
+plot, he was a tile away. Placed where a man actually comes to rest - his disc **against the plot's wall** at the footprint's vertical
+middle - he works it **without moving on either tree**, which means the engine already keeps the owner's invariant 4 (*"a working man
+does not move"*) for a farm, and the at-node term needed no change.
+
+**So the compass-order wart is narrower than D316 said**: `work_position`'s fixed north-west ring does choose *which* tile a man walks to,
+but a man who is already in reach is not moved first, so the cost is at most a longer **initial** walk - not a lost place and not a broken
+invariant. Both changes were reverted; the tree is clean and the suite stands at **927 / 0 / 21**.
+
+**What is still true from D312**: the walk to a stand goes round the plot's corner rather than to the nearest side, and `approach_footprint`
+- the builder's version - already answers "nearest to where he is". Making the two agree is a **tidiness** change with a route-length
+measurement behind it, not a rule fix. Recorded as such in `docs/next-step.md`.
+
+## D318 - D313's economy figure is corrected: the stockpile **doubles**, and the error was mine
+
+**How the error happened.** D313's row (and its review) said "the economy is **smaller** because a carrier now walks the last ~0.21 tiles on
+every trip", with the entity count (141 -> 129) as the only number behind it and an arithmetic estimate standing in for a measurement. The
+owed measurement - the delivered/scheduled totals per column - has now been taken, and it says the opposite.
+
+**Measured**: the same acceptance match, release, seed 7, 48,000 ticks, `--report 600`, three trees (D312 in a worktree at `338b9f8`, D313 at
+`ec9d99c`, and today's `fee9cd8`; the worktrees ran the main tree's generated `config/gamedata/`, which none of these commits changed):
+
+```
+                    600 s            1200 s           1800 s            2400 s        units / buildings
+D312 (338b9f8)   w  22  f  23     w  17  f  133    w  354  f  340    w  813  f  395       36 / 16
+D313 (ec9d99c)   w  17  f   8     w  90  f  227    w 1006  f 1363    w 1831  f 1503       35 / 18
+today (fee9cd8)  w  17  f   8     w  90  f  227    w 1006  f 1363    w 1831  f 1503       35 / 18
+```
+
+**So the stricter bank rule more than doubles the stockpile** (wood 813 -> 1,831, food 395 -> 1,503 at 2,400 s) and the entity count fell
+because **fewer foundations** are standing around (buildings 16 -> 18, units 36 -> 35 - the difference is in what a run has *finished*, not
+in what it has gathered). The guess about the mechanism was wrong in direction: a carrier that banks at the wall is the one that stops
+lingering 0.45 tiles out with its route spent, which is the state the old clause tolerated.
+
+**What this corrects**: D313's row and `docs/reviews/2026-11-20-d313-a-load-leaves-at-the-wall.md` both carry the wrong claim; the review
+has a correction section and this row supersedes the row's sentence. **D314 and D315 move nothing in the acceptance match** - today's tree and
+`ec9d99c` print the same numbers line for line, which is the bit-identical hash seen at D314 confirmed on the economy as well.
+
+**The lesson, for the next reviewer of my own work**: an entity count is not a throughput figure, and "smaller economy" is a claim about
+*delivered* resources. `--report` prints the stockpile at each interval and costs one run; the estimate that replaced it was wrong by a factor
+of two in the opposite direction.
+
+## D319 - The conformance gate was dead, and one divergence row was stale
+
+**The owner asked whether conformance tests are still skipped. The answer was worse than yes: the crate did not compile, so none of its
+rows had run since D306.**
+
+```
+error[E0061]: this method takes 5 arguments but 4 arguments were supplied
+   --> tests/budget.rs:63:38, 76:38, 95:37
+```
+
+`Ground::search_reporting` gained a `reach` argument in D306 and `budget.rs` still passed four. The crate is its own workspace (D247) so
+that a **red** rule can never block a commit - the right call - but nothing in `make check` so much as **built** it, so a signature change
+in `crates/sim` silently took the whole set out of service. Its own comment, "no test in it is `#[ignore]`d", was false too.
+
+**Landed.** `budget.rs` passes `reach = 0` (the tile search's own value, which is what those three rows are about). The one `#[ignore]`d
+divergence - *"the radius lives in the step, not in the planner"* - was made false by D303-D306 and is now a live conformance row,
+`the_search_grows_obstacles_by_the_bodys_radius`: a body a tile wide is planned **through** a one-tile gap (tangency is a passage, the
+owner's trebuchet measurement) and a body 1.2 tiles wide is **not**. Both halves were watched: with `reach = 0` substituted for the wide
+body the row fails with *"a body 1.2 tiles wide was planned through a one-tile gap"*. The hierarchy row's doc no longer says "not ported
+yet" - it landed in D296-D302. **And `make check` now compiles the conformance tests** (`conformance-build`, `--no-run`) without running
+them, so D247's hazard stays shut while the staleness cannot recur.
+
+**Measured.** Conformance set **21 tests, 21 pass, 0 ignored** (was: does not compile; before that 19/1 with two rows parked). The build
+step costs ~9 s cold, under a second warm. The main workspace is untouched: **928 / 0 / 21** stands.
+
+**Still ignored, named rather than hidden**: the main workspace keeps **21** `#[ignore]`s - **19 instruments** (perf and measurement
+probes that print, plus the two four-hour determinism runs) and **2 real gaps**, `a_passer_by_does_not_move_the_seated_gatherers` (D238)
+and `a_stopped_friend_is_not_walked_through` (R1b). Neither is a fixture the owner asked for; both are ours, with their causes written
+down.
+
+## D320 - The re-plan takes a fresh stamp, and the past rule finishes its chain (owner: *"C, proceed"*)
+
+**The owner chose C over leaving it, over solid seated men alone (a measured lane deadlock) and over the seat-rule hybrid (a measured
+0.204-tile pile). C was described to him as "the bounded pause with a resume plus the past stamp".**
+
+**Crosscheck first, and it changed the plan**: the pause and the past rule **already exist** (D279's step pass, refined by D281 and
+D290). What was missing was one line - and the reason the chain never completed is a timestamp.
+
+**The original's chain, completed.** A non-past collider means **re-path and pause the loser**. The new path carries a **new
+`createdAt`**; a body that has stood still since *that* moment is **past** (`path->createdAt >= other->lastMoveTime`) and is walked
+through. We re-planned but kept the old route's stamp, so a man who had stopped stayed non-past **for ever**: the walker re-planned on
+every tick it touched him, got the same route straight through him, and sank until their centres coincided - `the walker went 0 raw from a
+friend standing still at tick 176`, with **600 re-plans in 600 ticks**.
+
+**Landed:** `replan_around_bodies` stamps `created: self.tick`. Nothing else about the step, the pause or the route changes.
+
+**Witness** - the fixture that had been ignored *as the specification for this slice* since D242, re-specified rather than deleted and
+renamed with its pair stated (`a_stopped_friend_is_only_walked_through_after_the_replan`). It asserts the chain: the friend **becomes
+past** after the re-plan; the walker is inside a non-past friend for **at most 60 ticks** (the 1.5 s pause) where it was 600; and it
+re-plans **at most 4 times** in 600 ticks. **Mutation-proved**: restoring `created = route.created` fails it on the first assertion.
+
+**Measured** (acceptance, release, seed 7, idle; parent `25cb1a8` against this change):
+
+| ticks | before: entities / repaths / wall | after |
+|---|---|---|
+| 12,000 | 153 / 2,229 / 1.60 s | 154 / **732** / **1.53 s** |
+| 24,000 | 158 / 5,481 / 5.18 s | 159 / **2,645** / **4.84 s** |
+| 48,000 | 129 / 10,026 / 9.30 s | 141 / **7,125** / **13.01 s** |
+
+Re-paths fall 67% / 52% and the first half of the match is **7% faster**; the full match is **40% slower** and its state changes
+(`c7191f531bd81b1b`, 141 entities, **`players=1`** - the fight now resolves). The gap is entirely in the second half, so it is the
+**combat** the script could not previously reach, not the villagers. Suite **929 / 0 / 20** from **928 / 0 / 21**, nothing joined.
+
+**Own error, stated**: the first timing A/B was run while the full suite held both cores and read 19.5 s against 13.5 s - both were
+contention. The table is idle and sequential.
+
+**Still open, and next**: the seat shuffle (`overlap::a_passer_by_does_not_move_the_seated_gatherers`) is untouched and now fails its own
+precondition (*"no gatherer was at work beside the node"*), so it measures nothing. D238's verdict that the shuffle is *load-bearing* was
+measured **before** this chain existed; re-measuring it is the step that this one makes meaningful.
+
+## D321 - The seat shuffle was measuring its own grave
+
+**After D320 completed the past chain, D238's fixture was re-checked - and it passes.** D238 diagnosed the owner's *"villager still pushes
+another villager"* as the **seat shuffle** and called it *load-bearing*: removing it let villagers stand **0.204** tiles apart, because a
+walker still walked through a seated man's square. Both halves of that reasoning have since gone: the **place book itself was deleted**
+(D293, the owner: *"Drop it and let the crowds jam"*), so there is no square to give up; and the walker's **past** rule now completes its
+chain (D320), so a passer-by is resolved by the pause and the re-plan, not by displacement.
+
+**Landed:** `overlap::a_passer_by_does_not_move_the_seated_gatherers` off `#[ignore]`, with its **scene repaired** - three men **on the
+node's ring**, one of them actually taking (`progress > 0`), a fourth crossing the ring for 300 ticks, positions compared on every tick the
+walker moves. It failed its own precondition before (*"no gatherer was at work beside the node; the fixture measures nothing"*), which is the
+second time in two days that an `#[ignore]`d fixture turned out to be measuring nothing (the first was D315's skirmish clock).
+
+**Nothing in `crates/sim/src` changed**: this is test-only, so the acceptance match is byte-for-byte D320's (`c7191f531bd81b1b`, 141
+entities, 7,125 repaths). Suite **930 / 0 / 19** from **929 / 0 / 20**, nothing joined. The two fixtures that would show the 0.204 pile if
+the shuffle's absence still hurt - `invariants::villagers_never_close_into_one_body` and `gather_motion::three_gatherers_on_one_bush_do_not_
+pile_up` - are green.
+
+**What the guard is now**: a man taking from a node keeps the point he stands on while someone walks past. It can fail (anything that writes
+a working man's position fails it) but not for D238's reason, because that mechanism no longer exists. Its scene is stated in its doc so the
+next reader knows what it does and does not cover.
+
+## D322 - The chain refines to the crossing of each edge - and tier 2 is dormant in a match
+
+**The refinement now matches the binary's** (`FUN_007eeda0`, D308's item): `Levels::refine` emits, per step, the point **on the boundary
+between the two cells at the first tile of the span the step can pass**, instead of the cells' centres. `coarse_route::the_chain_refines_
+to_the_crossing_of_each_shared_edge` replaces the centre fixture (watched red: centres give one point per cell) and
+`a_blocked_walk_is_answered_by_the_hierarchy` was re-specified from "cell centres" to "a boundary crossing at a tile's middle". No trailing
+centre: the goal is the caller's point.
+
+**The 16-tile gate was tried and is kept**, on a measurement rather than on the old note. Removing it, on a 40x40 open map: a walk 8 / 10 /
+12 tiles past a single tree goes from **2** points to **7 / 7 / 8**, because one tree closes a whole 4-tile cell and the level-2 chain dives
+six tiles down and back up (`(2,1) (2,2) (2,3) (3,3) (4,3) (4,2) (4,1)`). 16 and 24 tiles are unchanged; a wall walk is 3 points either way.
+
+**The acceptance match is bit-identical** (`c7191f531bd81b1b`, 141 entities, 7,125 repaths, 12.6 s) - and that is a finding, not a
+non-result. Instrumented over 48,000 ticks: **11,042** route calls, **1,677** of them >= 16 tiles, **0** answered by the hierarchy, for two
+independent and counted reasons: **every** long call carries a non-empty `avoid` (1,276 with one body, up to 16), and **every** coarse route
+on this map comes back at **level 0**, which `level >= 2` rejects. The tier is green in every fixture and dead in the game loop.
+
+**Next**: tier 2 cannot matter until those two call-site facts change - the binary's avoidance pass is the thing to trace (D309's caller of
+`FUN_008000d0`), and the descent's collapse to level 0 on a cluttered map is D303's gate biting at the root rather than a refinement
+problem.
+
+## D323 - Tier 2 is dormant in a match because the descent is anchored on the start, in the binary too
+
+**No production change.** Measured while trying to make D322's hierarchy pay for itself: over 48,000 acceptance ticks, 11,042 route calls,
+**1,677** long ones, **0** answered by the hierarchy. Two explanations tested, one survives:
+
+- **`avoid` is not the cause**: dropping `avoid.is_empty()` from the tier-2 condition leaves the match byte-identical (`c7191f531bd81b1b`,
+  141 / 7,125, 12.7 s). Restored, because the conservative reading costs nothing measurable.
+- **The descent is**: 1,603 of 1,677 long calls have `descent(start) = 0` with the goal at 1-3 - gatherers stand beside their resource, an
+  8x8 cell holding a villager *and* his forest is blocked, and every coarser cell above it is blocked too.
+
+**The binary's own rule, read from `FUN_007ee980`'s head**: it starts at level 3, indexes **the start point's own cell**, and stops at the
+first level whose cell carries bit **`0x20`** (level 0 always stops it). **The goal is never consulted.** So the dormancy is **parity**: the
+game's hierarchy is for walks that begin on open ground, and a chopper is pitched to tile level in the original as well. Already pinned by
+`descent::a_wall_in_the_coarse_cell_drops_the_start_one_level` and `descent::a_one_tile_corridor_starts_at_level_zero`.
+
+**One shape difference left standing, and why**: ours takes `descent(from).min(descent(to))`; the binary takes the start's alone. They differ
+only if the goal's descent is smaller - which happened in **0 of 1,677** calls - so the `.min()` is harmless and is not churned. Recorded
+here so the next reader knows it was seen and priced.
+
+**Left open, and it is a fork rather than a step**: our `standing_bodies` **adds** standing bodies to the search as `Clear` obstacles. The
+binary has no such input - its list is an **ignore** list that makes bodies *passable* (`FUN_00801a20`), and its answer to a standing body is
+the collision epilogue's pause + repath. Removing our avoidance would make villagers plan through each other, which is what the game does and
+what the owner will see; it is his call, made with the numbers.
+
+## D324 - The body avoidance is not an invention: the removal is faster, reddens two fixtures, and is reverted
+
+**Tried and reverted.** D323 left open whether `standing_bodies` (bodies added to the search as obstacles) was ours, since the binary's
+list is an *ignore* list. The variant - every planning call given an empty clear list - measured: acceptance **140 entities, 8,861 re-paths,
+8.4 s** against **141 / 7,125 / 12.6 s**, hash `d818560cf7bfe824`, suite **928 / 2 / 19**. The reds:
+`evasion::a_blocked_unit_goes_round_a_standing_body_and_arrives` (*"the walker came 4619 raw units from the body, standoff 8000"*) and
+`build::a_content_pack_with_our_own_resources_loads_and_spends` (*"an own-content house must be built to full hp: left None, right
+Some(550)"*).
+
+**Why the premise was wrong**: `FUN_00801a20` returns **passable only when every body on the tile is in the path-ignore list**, and that list
+holds self, the target, and the route's objects **whose `isMoving` answers 1**. So the binary's passability is **fail-closed**: a **moving**
+group member's tile is free ground, a **stopped** body's tile is blocked - the route goes through one and round the other. That is our
+`standing_bodies` in the opposite inventory (it subtracts the mover and moving friends and hands the rest to the search). The binary has no
+"avoid" array because its test is fail-closed.
+
+**Kept, and now sourced.** The 33% speed-up the variant buys is real and is what a levelled search with no body awareness would give - it is
+recorded so it is not rediscovered as an optimisation, and it is not taken, because it removes a clearance from a walking body and costs a
+builder his house.
+
+**Housekeeping in the same commit**: D283, D284 and D285 were referenced by the corpus and defined nowhere - their review files existed and
+their rows were lost when the log was reflowed. The three rows are written from those review files, marked as such, and `decisions.py`
+reports **7 dangling ids** where it reported 10.
+
+## D325 - The stand is chosen for buildings only, so the compass order is not observable for a tree
+
+**No production change.** Ran the acceptance to a measured close rather than the promised route-length change, and the measurement says
+there is nothing to change: `work_position` has three call sites and **only one moves anybody** - `gather.rs:543`, and only for
+`EntityKind::Building`. For a resource the gather route is planned **to the node's own position** and the man stops when the box gap says he
+is in reach (`settle` D169, `gap_to_footprint` D312); the other two call sites (`gather.rs:184`, `lib.rs:3794/3973`) answer *questions*
+("is this node workable", "can he reach it"), where any free ring tile says yes. A mid-tile-anchored footprint has every ring tile of its
+anchor inside itself, so `work_position` answers `None` and the route falls back to the anchor where `gap_to_footprint` closes the last third.
+
+**Witness**: `stand::a_man_who_comes_from_the_east_works_the_tree_from_the_east` - one tree, a man four tiles due east, 600 ticks, standing
+tile asserted to be `(tree.x + 1, tree.y)`. **Mutation-proved**: routing a resource through `work_position` reddens it (the man walks round
+to the north-west); reverted, production unchanged. Suite **931 / 0 / 19**, acceptance unchanged (`c7191f531bd81b1b`).
+
+**Closes next-step item 1** ("the compass-order stand is a tidiness fix"): for a resource it is not observable at all, and for a building
+it is either harmless or unreachable. It stays as it is. Confirms D317 from the other side: the man there did not walk off his plot because
+the stand he was sent to was the anchor and he was already in reach of it.
+
+## D326 - The conformance row for the hierarchy was pinning the shape D322 replaced
+
+**A miss of mine, found by running the gate instead of counting its lines.** D322 changed `Levels::refine` from cell centres to **edge
+crossings** and I checked `make conformance` by counting `test result` lines (9, as usual) without reading pass/fail. It was **10 passed /
+1 failed**: `the_original_solves_a_long_walk_in_its_hierarchy` asserted that every waypoint sits on the `n * 8 + 4` cell lattice, which is
+exactly what the change removed. The row's own RULE paragraph already cited `FUN_007eeda0` ("to step toward the next") as the thing that
+decides the point, so the **assertion** was the stale half and the **text** was already right.
+
+**Fixed**: every point after the first must be a **crossing of a level-3 boundary** - the step's own coordinate on the `n * 8` line and the
+other one at a tile's middle - and the cell-not-blocked check stays. Conformance **21 passed / 0 failed / 0 ignored**.
+
+**What I take from it**: the conformance set is a separate workspace and is **not in the pre-commit gate** by design (`make conformance` is
+run by hand), so a shape change can land with the main suite green. From now on, a change to `Levels`, `refine` or `coarse_route` runs
+`make conformance` and reads its **totals**, not its line count.
+
+## D327 - The cost table read straight: the 100/600 rows are terrain flags and the 2000 row is not bodies
+
+**Read, not guessed, and it corrects my own D298 in two directions.** `FUN_007ed280` (116 lines) is the coarse search's expansion cost, and
+in its own order it charges: **10** for an open cell clear on four sides (plus the distance-from-the-edge term, which is the search's and
+D298 was right about that); **300** when **this cell or one of its four neighbours holds an object whose type is 8 or 0x20**
+(`FUN_007f11f0` walks the tile's object array); **100 or 300** when the cell's own byte is set and bit **3** of the terrain object's flag
+byte `+0x28` decides which (`FUN_00773c80`); **600** when bit **6** of that same byte is set (`FUN_00773bf0`); and it overrides any of them to
+**2000** when the per-tile grid at `[0x4d]` is non-zero.
+
+**Correction 1**: the 100 and 600 rows are not "crossable but slow" terrain classes - they are **two bits on the terrain object**, so naming
+them is a terrain-table lookup (the dat's entries, or the editor's labels), not a cost class to invent. The open question is smaller than
+D298 made it and is answerable from the sources we have.
+
+**Correction 2**: the 2000 row is **not** "a body standing on the cell". It reads `[0x4d]`, which `FUN_007ef3f0` builds as per-direction
+marks (`0x01 << n`, compared with neighbours and with the tile's blocked byte) - and `FUN_00801a20`, the only function known to look at
+standing bodies, is in the **flat** search. D298's sentence is corrected inline and the row stays unclaimed until `[0x4d]`'s writer is read.
+
+**Also**: our `step_cost` is called with `body = false` from the only call site, so the 2000 branch has **never run** - it is dead code, and
+its doc says so now instead of implying it is live.
+
+**Answers "can these be crosschecked?" - yes, and the reading changed the questions**: the terrain item is a naming task against the terrain
+table; the 2000 item needs one more function read (`[0x4d]`'s writer) and is moot until a caller passes a body.
+
+## D328 - The 2000 row priced a rule the original does not have; the two terrain bits need a binary this box does not have
+
+**Two reads, both answering "no, not what I said", and one removal.**
+
+**Read 1 - `[0x4d]` is a run grid, not bodies.** `FUN_007ed280` overrides any cost to **2000** when the per-tile grid at `[0x4d]` is
+non-zero. `FUN_007ef3f0` (157 lines) fills `[0x4c]` with ones and zeroes it as runs are consumed, and `[0x4d]` with **eight one-bit direction
+masks**, walking **maximal straight runs** in each direction and allocating one node per run. The only body-aware test in the path system is
+`FUN_00801a20`, and it is called from the **flat** search. So the 2000 row is **not** a body penalty, and D298's sentence saying so is wrong.
+
+**Read 2 - the terrain bits, and the wall.** `FUN_0076f430` indexes a **per-terrain-id descriptor table** at `DAT_00af541c`, which makes bits
+3 and 6 of `+0x28` **terrain** flags (and `FUN_00842bf0` classifies tiles with exactly those bits: `& 7` → 1, `& 0x18` → 2, bit 5 → 4, a
+four-way terrain class). Naming them needs that table, and **this box's `AoK HD.exe` is a different build from the decompiled binary**: the
+table's VA `0xaf541c` lies outside its image (`.data` ends `0x9e3044`), and the same string constants sit **0x8346** lower in its address
+space, a shift that is not constant. So the rows stay unstated, now with the reason "wrong binary" rather than "unknown rule".
+
+**Landed**: `Levels::step_cost` loses its `body: bool` parameter and its 2000 branch - **no caller ever passed it true**, so it was a rule the
+original does not have, dead since it was written. The fixture `clear_ground_is_ten_and_a_body_is_two_thousand` becomes `clear_ground_is_ten`,
+its retired assertion replaced by the read that retired it; removing the parameter then broke **five** call sites (`E0061`) before the
+production edit, which is what a removal should look like.
+
+**Measured**: acceptance **bit-identical** (`c7191f531bd81b1b`, 141 entities, 7,125 repaths, 12.9 s) - the proof the branch was dead. Suite
+**931 / 0 / 19**, conformance **21 / 0 / 0**. One branch per expansion removed, nothing added.
+
+**Commits us to**: no row of the cost table is stated without either a caller that uses it or a read that names it. The three unstated rows
+and what each needs are in `step_cost`'s doc.
+
+## D329 - The binary's 255-entry body-list cap is unobservable in any scene the game makes
+
+**D310's second reason for not adding the cap - "no witness can see it" - was an argument, so it was measured.** A 64x64 open map, a wall
+of villagers in column 32 (layered when the count exceeds the rows), a walker at (20, 30) ordered through it to (40, 30), and the route
+compared by a hash of its points **with and without a 255-entry truncation inside `standing_bodies`**:
+
+| bodies | points | hash | with the cap |
+|---|---|---|---|
+| 0 / 100 / 200 / 255 / 256 | 1 / 2 / 2 / 2 / 2 | `1253b82b…` / `a4eec65f…` x4 | identical |
+| 300 / 400 | 3 / 3 | `7947ee1a…` | identical |
+
+**Not one route changed.** The point count moves at 300 because the wall is five layers of bodies there, not because of the list.
+
+**Therefore**: the cap can only bind when the body that decides the route is the one past entry 255 - 255 bodies inside the span of the line
+with the decisive one behind them and a higher id, which no player can produce. The acceptance match's largest list is **17** entries (D323).
+The cap stays unimplemented; what remains unfaithful is only the **selection order** (ours is id order, the binary's is colliders first),
+which matters exactly as much as the cap does - not at all below 255.
+
+**Cost of finding out**: one probe, seven body counts, two builds, four minutes - less than the paragraph that had deferred it since D310.
+
+## D330 - "Blunt copy": the parity register re-verified, and its two forks forfeited to the original
+
+**Owner, 2026-11-21**: *"Please remove all deviations. I want this to be blunt copy."* That settles the two rows the register had marked
+**FORK** - places where his own earlier rulings ordered behaviour the game does not have - in favour of the game: **P9** (arrival "beside a
+held goal", D200, and the crowd ring point, D271) becomes a **live row to cut**, not a fork to discuss.
+
+**The register was verified row by row, by symbol**, and five rows had drifted in **both** directions:
+
+- **done but still written open**: **P1**, **P2** (budget, octile tie-break), **P5** (`finish_blocked_orders` and `beside` are gone),
+  **P8** (no seat book), the levelled half of **P11**;
+- **P4** written *"BLOCKED on P8"* - and P8 is cut, so it is **unblocked and untouched**;
+- **P3** written as *pending a ruling* in `motion.rs` **after D306 had ruled**, and its own ruling note claiming *"a half-tile body stops at
+  a one-tile gap"*, which is the opposite of the passage the owner measured.
+
+**Landed**: a status column per row (**DONE / LIVE / LIVE, unblocked / LIVE - forks forfeited / HALF / UNREAD / KEEP**), the two classes of
+unreachable row stated in the row itself (the 100/600 cost rows need a binary this box does not have, D327; P12 and P11's polygon pathfinder
+need reads the corpus may not hold), and the `motion.rs` comment now carrying both the ruling and the constraint it puts on P3 - if touching
+collides **and** a one-tile gap is passable, the box that test grows is **not** the body's nominal radius.
+
+**Work order recorded**: P7, P4, P3, P6, P9, P12 (read first), then P11's polygon pathfinder as a project. The small alignments (search
+window D299, refinement interpolation D322, descent's start-only test D323, body-list order and cap D329) ride with whichever step touches
+them.
+
+**Measured**: no behaviour - acceptance `c7191f531bd81b1b`, suite **931 / 0 / 19**. What the step bought is that the next session cannot be
+sent to re-cut P5 or re-land P1, which is exactly what the previous register did.
+
+## D331 - P7: the planner sees a body the mover is standing inside
+
+**`docs/parity-plan.md` P7, landed.** `standing_bodies` skipped every body within a quarter tile of the planning origin in both axes, where the
+original's search starts on the mover's own tile and puts **every stander the mover does not ignore** into it (`FUN_007f9d80`). Two bodies in
+one place is a state this engine reaches on purpose - D289 sends every man to the tile he was ordered to, D290 leaves no press floor - so the
+plan certified legs the step then refused.
+
+**Landed**: the skip is now **by id** (`plan_path`, `plan_path_avoiding` and `plan_path_for` carry the mover as `Option<EntityId>`, fourteen
+call sites updated). `None` is for the three predicates that genuinely have no body to name (`can_reach`, `work_position`, `exit_tile` /
+`approach_footprint`), and each says so. The moving-friend exemption is untouched (the binary's `isMoving` gate, D284).
+
+**Witness**: `planning_round_bodies::a_body_the_mover_overlaps_is_still_planned_round`, red first with *"the route past a body the mover is
+standing inside is one straight leg (1 point(s), the friend 0 raw away)"*. The scene reaches the state the way the game does, because
+`Command::Spawn`'s placement **separates** bodies (measured: a spawn asked for `410400` landed at `419600`): both are ordered to one point,
+pressed to **0 raw**, then one walks past the other.
+
+**Measured** (two trees, `--report 600`, same generated `config/gamedata/`): stockpile at 2,400 s **1,362/724/510 -> 1,949/960/130**
+(wood +43%, food +33%), re-paths **7,125 -> 1,918** (-73%), acceptance **12.93 s -> 10.18/10.35 s**, hash `c7191f53` -> `bef8b77b`. Entities
+at 48,000 ticks fall 141 -> 127 **because the match ends 2,348.6 s** (*"the match is over: no further orders are accepted"*), which is a
+match-length artefact rather than an economy signal - the stockpile line above is the one that answers that question.
+
+**Suite 932 / 0 / 19** (one more test, nothing joined), conformance **21 / 0 / 0**, all eleven movement suites green.
+
+## D332 - P4: ground that refuses a step is re-planned at once, not a second later
+
+**`docs/parity-plan.md` P4, landed.** `replan_after_ground` refused a re-plan until the route was `REPLAN_TICKS` (20) old, so a wall that
+appeared in a walker's lane left him standing for up to a second while the search he needed waited out a timer. The original re-plans on the
+collision itself: *"We have %d non-past collisions and %d terrain collisions, repathing"* (`0x128b`).
+
+**Landed**: the early return goes. The **stall** threshold that shares the constant - D279's fall-back to the tile centre after 20 consecutive
+refusals of an off-grid goal - stays, and the doc comment now distinguishes the two questions, because one constant was doing both jobs.
+
+**Witness**: `immediate_replan::a_wall_in_the_lane_is_replanned_the_tick_it_is_seen` - a one-leg open route, a palisade placed in the tile
+ahead, then the fixture walks him **one tick at a time** until his position stops and asks what the plan did on that tick. Red first: *"on tick
+4 ground refused him and the route was not re-planned (0 -> 0 re-paths)"*; green with the gate gone; **mutation-proved** by putting the gate
+back, which reddens it at the same tick.
+
+**Two errors of mine in the fixture, both caught by it refusing to pass**: the wall was first placed four tiles ahead (a hundred ticks out of
+reach, so nothing was ever refused), and the refusal was then checked in a three-tick window from placement, where the queued palisade lands
+only on the next tick and the walker needs ten to reach it.
+
+**Measured** (two trees, same generated `config/gamedata/`, release, seed 7, idle): re-paths **1,918 -> 1,727** (-10%), acceptance wall
+10.18/10.35 s -> **10.26/10.30 s** (inside the run-to-run spread), stockpile at 2,400 s 1,949/960/130 -> **1,961/960/130**, entities 127 -> 127,
+hash `bef8b77b` -> `e2484862`. **The cost the throttle was protecting against did not appear**: re-planning at once produces a route that is no
+longer refused, so the throttle was paying for repeat searches of a route that had already gone stale. Suite **933 / 0 / 19**, conformance
+**21 / 0 / 0**.
+
+## D333 - Two parity rows closed by measurement, and P3 narrowed to one number
+
+**P9 was already done**: its two halves - arrival "beside a held goal" (D200) and the crowd ring point (D271) - went with D292 and D289 at the
+owner's own instruction, and `grep` finds neither in the tree. The row said "forks forfeited" for work that had already been cut; third time
+this register has pointed the next step at ground already covered.
+
+**P6 is nominal, measured**: the ground's per-tile `occupants` count only differs from the game's per-object boxes when an object is **narrower
+than its tile**, and every object this content carries is exactly a tile wide - all four resource kinds have `radius = 0.5` (a tile's
+half-extent) and blocking buildings take dat radii of 1.0, 1.5 or 2.0. The row now says what would reopen it.
+
+**P3 is blocked on one float.** `FUN_00840830` read in full: the overlap test is an **inclusive AABB** (`min <= other_max && other_min <=
+max`, so touching counts, the `<=` the register quoted), applied to a box that is **shrunk on all four sides** by `+0x268` when the flag at
+`+0x266` is set. That inset is what makes D306 possible - a half-tile body still fits a one-tile gap because the query box is inset - so the
+inclusive test cannot land without it, and the inset's formula is not in the corpus. **Our `object_depth > 0` is the same rule from the other
+side**: refusing penetration into a box is refusing touching of a box inset by a hair.
+
+**What is left of "remove all deviations" is not code**: P3 needs one number, P12 needs the per-edge mask read, and P11's polygon pathfinder is
+a project with no hull code in the tree. Everything else is done, nominal, or - P10 - deliberately kept, because a reproducible random source
+is what makes the acceptance hash possible.
+
+**Measured**: no code change - acceptance `e248486298910e28` (127 entities, 1,727 re-paths, 10.2 s), suite **933 / 0 / 19**, conformance
+**21 / 0 / 0**.
+
+## D334 - The pathing review, adversarially: the 25 was the budget, the hierarchy never ran, and the body rule is a disc
+
+**Asked for:** an adversarial review of pathfinding and obstacle avoidance conformance against the original, the decompilation
+and the published sources. Every claim below was checked against a line in `/opt/data/tools/rea/pseudo-aokhd` or against
+`crates/`, not against a decision row. The note is `docs/reviews/2026-11-21-pathfinding-conformance-adversarial.md`.
+
+**The 25 is the expansion budget, not the heuristic's weight.** `FUN_008007f0` computes `iVar20 = (int)euclid * 25` at lines
+186-191, and `iVar20` is read once - line 198, against `local_46c`, the expansion counter. The **frontier's** key is line 316:
+`stored = (stored_current - octile(current, goal)) + octile(neighbour, goal) + step(current, neighbour)`, which is `g + octile`
+because `stored_current` already is `g + octile`. So the original is an **octile A\*** (weight 1), and the sentence in
+`docs/movement-in-the-binary.md` (and D275, the gap register, `cost_model.rs`) that calls it "weighted A\* with a weight of about
+1.56" is a misreading of the budget. `ground.rs` implements the misreading. **Measured A/B**, one variable, seed 7, 48,000 ticks:
+baseline 5,989 searches at **28.9 expansions each, 54% exhausting the budget**, 1,727 re-paths, hash `e248486298910e28`, 10.04 s;
+with `g + octile` 45,088 searches at **11.8 each, 5.8% exhausting**, 41,557 re-paths, hash `9d5fea513f3f8efb`, both players alive
+at the end, 9.92 s. The greedy key is *more* expensive per search and burns its budget on more than half of all searches. **Not
+landed**: it moves every route and owes a witness. Recorded as **P13**.
+
+**The levelled search never runs in a match, and the gate is ours.** `route_with` takes tier 2 only on `avoid.is_empty() &&
+long_walk && level >= 2`. Instrumented over one acceptance match: **121 long walks, 121 with a non-empty `avoid` list** (1 to 36 standers), **0 coarse
+searches**. Lift the gate: 6 coarse searches, 6 answers at level 2, 0 rejected legs, and the **acceptance hash does not move** -
+those six changed nothing. The other 115 are refused by `descent(start) < 2` (78 at 0, 12 at 1) or by `coarse_route` returning
+`None`. D323's account (the descent is the cause) describes the 1,677 long *calls*, most of which tier 1 answers before the gate.
+Both remaining clauses - the 16-tile floor and "no standers in the plan" - are ours and in no register; the binary's land default
+has neither. Recorded as **P14**.
+
+**The 20,000 cap has no witness.** Its row builds a 480 x 480 map whose own estimate is 16,850 and spends **642** expansions;
+`EXPANSION_CAP = u32::MAX` leaves all four budget rows green. The cap binds only past ~800 tiles of diagonal walk, i.e. a map about
+1,140 tiles a side, and nothing builds one. Recorded as **P15**.
+
+**The body rule is a disc where the game's is a box.** `refusal` refuses on centre distance; `FUN_00840830` is four `<=` on boxes.
+New probe: **4,741 of 218,920 body-steps (2.17%)** end in a pose whose boxes overlap on both axes while the discs are clear - a
+collision the original counts and we take. The probe's exemption split (3,568 "neither") is an **upper bound**: it audits the end
+of a tick, so an exemption that lapsed inside the tick reads as unjustified, and the probe says so in its own doc. Recorded as
+**P16**.
+
+**And the register was stale again.** P4 and P7 read LIVE after D332 and D331 landed them with witnesses in the tree; the D330
+"verified" block still lists P4, P6, P7, P9. D330 called this the third occurrence; this is the fourth and fifth.
+
+**Corrected in the same commit, documentation only plus one probe:** the cost-model paragraph in `movement-in-the-binary.md`; the
+counts in `pathfinding-conformance.md` (21 passed / 0 failed / 0 ignored, not "13 green + 3 ignored"); the 2026-11-20 crosscheck's
+rows #5, #6 and #7, each already closed by D322, D328 and D306; and comments in `ground.rs`, `motion.rs` and `lib.rs` that
+describe a port the code has moved past ("no hierarchy, no radius, no avoid set, no expansion budget"; "the re-plan is throttled";
+"`finish_blocked_orders`"; "no radius argument, no second solver, no avoid set" on `plan_path`).
+
+**Measured, final state:** suite **933 / 0 / 19** before the probe row (933 / 0 / 20 after, the probe being `#[ignore]`d),
+conformance **21 / 0 / 0**, acceptance `e248486298910e28`, 127 entities, 1,727 re-paths, 10.04 s median of five on an idle box.
+**My own error, in the note:** a first timing batch read 16.11 s and I nearly charged the difference to the engine; the machine was
+running the suite on the same two cores. Every number was re-taken idle.
+
+## D335 - The road to 100%: the sequence, and the three things the online crosscheck changed
+
+**Asked for:** the order of steps to reach 100% conformance on pathfinding and obstacle avoidance, crosschecked against online
+sources. The answer is `docs/conformance-sequence.md`: thirteen steps, ordered by dependency and then by blast radius (the step
+that moves **every** route first, so each later measurement is against a settled base), each with its source, the witness it
+owes, its size and its blocker. **"100%" is defined in three classes**: R (read and implementable from the sources in hand -
+ten steps), B (needs the matching binary or the running game - P3's inset, the 100/600 terrain bits, the octile table) and U
+(undefined or deliberately different - bit-exact routes, the pause's random source). Conformance is every R step landed and
+witnessed, every B step unblocked or recorded out of reach, and the **"unit stuck" class test** green; it is not route
+equality with the binary.
+
+**Three corrections the crosscheck forced**, each with a source:
+
+- **P14's gate is backwards.** openage's pathfinding note (citing the Ensemble postmortem and Pottinger's talk) says the
+  high-level mip-map *"ignores moving objects, e.g. units or wildlife"*; the corpus agrees independently - `FUN_007ee980`'s
+  body has no call to the stander inserter (`FUN_007f9d80` is reached from `FUN_007f96b0`/`FUN_007fbab0`, not the levelled
+  search). The game runs the coarse tier and ignores bodies; ours drops to the flat search instead. Step 3.
+- **P11 targets the legacy algorithm.** The talk's fixed-point edge walk is the **modern** replacement; HD 5.7 is the AoK/AoC
+  engine, so its polygonal pather is slides 21-38 - AABBs, gift-wrapped hulls, cardinal rays, edge walk, 64-iteration cap,
+  smoothing. The skill's movement reference had the DE design listed as "the design to implement" and is corrected. Step 12.
+- **The mate exemption is a formation's, and villagers never join one** (openage `formations.md`, and the talk's "formations
+  allow for some friendly overlap" against "no pushing allowed"). Our same-tick rule is broader than the game on both counts;
+  closing it is step 11 and the one fork left that the sources cannot settle.
+
+**Also rowed, because the superseded gap register listed them and no live row carried them**: **P17** waypoint substitution
+(`mConsecutiveSubstituteCount`), **P18** the order's path vocabulary (forced waypoint, teleport-to-waypoint), **P19** the
+levelled search's border/distance cost term.
+
+**Measured:** no code change - acceptance `e248486298910e28`, suite 933 / 0 / 20, conformance 21 / 0 / 0, unchanged. The order
+and the crosscheck are the deliverable; the first two steps are a conformance-only witness (P15) and the route-wide key change
+(P13).
+
+## D336 - P15: the 20,000 cap's row is a witness now
+
+**Crosscheck:** `FUN_008007f0:198` has two clauses - the estimate (`iVar20`, 25 x euclid) and the hard cap (`20000 <
+local_46c`). The cap binds only when the estimate is larger, i.e. `euclid > 800`, a map past ~1,130 tiles a side. The old row
+used a 480 x 480 map (estimate 16,850, spent 642 expansions) and could not fail: `EXPANSION_CAP = u32::MAX` left it green
+(D334).
+
+**Landed (conformance only):** the row now builds a 1,200 x 1,200 map (`25 x 1,692 = 42,300`), seals the goal in a 3x3 ring,
+asserts the estimate exceeds the cap as a *precondition*, and asserts `expansions == 20_000` exactly. **Mutation-proved**: with
+`EXPANSION_CAP = u32::MAX` it fails *"the cap is the budget on this map: 42300 of 20,000 (estimate 42300)"*. Four budget rows in
+0.10 s debug, 17 MB of search arrays per call. No engine line changed; acceptance unchanged.
+
+## D337 - P13 landed: the key is `g + octile`, and it exposed a rounding hole in the mover
+
+**Crosscheck:** `FUN_008007f0` line 177 stores the octile as the start's frontier value, lines 312-316 keep it up to date node by
+node (`g + octile`), and the `25 x euclid` at 186-191 is read only at line 198 - the expansion guard. The key is the octile,
+weight 1; the 25 is the budget.
+
+**Landed:** the flat search's heap key is the octile. Witness, red first: `search_key::a_walk_round_one_tree_costs_what_the
+octile_key_pays` - 16 x 16 open ground, (2,2) -> (14,14), one tree at (8,8); the greedy key paid **312**, the octile key pays
+**294** (bound 276). A probe over 400 sampled maps showed the keys disagree on the chain in **3,973 of 4,001** scenes.
+
+**The second defect, found by the first:** the key change reddened the owner's `whole_steps` fixture at **801.295 raw** where a
+step is 800 - a pre-existing hole, not a consequence. `integer_sqrt` floors, so a (566,566) step (800.44 raw) read as exactly
+the step and was never rescaled; the "never longer" trim used the same floored root (a (1,1) leg, 1.41 raw, passed as 1); and
+the budget was charged `take` rather than what was walked. Fixed with squared over-step tests, `ceil_sqrt` for the trim,
+`round_sqrt` for the charge, and the final leg landing exactly on its waypoint. Two of my three attempts were wrong in opposite
+directions (801.295, then 798.77) and are recorded in the review.
+
+**Re-pointed, with its reason:** `gather_ring::two_woodcutters_on_one_tree_both_touch_it_and_press_together` asserted
+`apart < 0.39` - the seat book's last trace. Each man's route is now his own, so they take opposite faces (**1.018** apart, both
+touching the tree); the fixture is `..._and_never_overlap` and asserts `apart >= 0.39` (two radii = 0.400).
+
+**Measured:** key only `9d5fea513f3f8efb`, 133/2, 41,557 re-paths, **9.72-9.88 s**; with the exact steps `527bf4ebb9520fa0`,
+132/1, 41,473, **15.70 s** and stockpile 1,446/852/655 at 2,400 s. **The 60% wall rise is unattributed**: same entity and
+re-path counts, a different match, and the sqrt helpers account for 0.16 s of it - so it is the next perf item (profile per
+pass, and price the per-search allocations) rather than a claim.
+
+## D338 - P14 landed: the tier's `avoid` gate is dropped, and the clause that binds is the descent
+
+**Crosscheck:** `FUN_007ee980`'s body calls no stander inserter (`FUN_007f9d80`'s only callers are `FUN_007f96b0` and
+`FUN_007fbab0`), openage's pathfinding note says the mip-map "ignores moving objects, e.g. units or wildlife", and the talk says
+units "bump into others, stop and repath around". Three sources, one rule: the coarse tier runs in a crowd and does not see
+bodies. Ours refused to run it whenever a body was in the plan's avoid list.
+
+**Landed:** `Ground::route_with` no longer carries `avoid.is_empty()` - the tier is asked on every long walk, bodies or not.
+The tier's *leg certification* keeps the avoid list, so a chain that would walk through a friend is refused and the flat search
+answers instead: the game's search is blind to bodies, but our `route_avoiding` promise is not, and handing a route back
+through the man it was told to avoid would let D320's "past" stamp walk the mover through him. Measured: 0 answers either way
+in the acceptance match, so honouring the promise costs nothing. The substitution this replaces - "the coarse tier must not run
+at all when a body is near" - is gone.
+
+**Witness, red first:** `tier_ignores_bodies::a_long_walk_past_a_stander_comes_from_the_hierarchy` - a `World::plan_path` walk
+through the order path, 56 tiles, one stander two tiles off the corridor; the route's interior waypoints must be cell-edge
+crossings (a coordinate that is an exact multiple of the scale), which no tile-centre route can produce. Red on the un-cut tree
+with two tile-centre waypoints.
+
+**The finding:** with the gate gone the tier still answers **0 of 61,276** routes in the acceptance match, and the binding
+clause is D303's descent floor (`coarse.level >= 2`): 127 of 185 long walks start on a tile whose 4-tile cell is not usable, so
+the flat search answers - which is also the game's answer at level 0. Loosening the level floor to 1 answers 13 routes, to 0
+answers 108, and each rewrites the match (hashes `69a548722252b27e` / `d700295118db1114`); lowering the distance floor to 8 or 0
+answers 7 and rewrites it too (`2e4e7c4e306a2d67`). So the avoid gate was never the constraint in a wooded map, and the next
+lever is the level floor - its own slice, since it moves every route. The 16-tile floor is **kept**: it exists because the
+refinement for short spans is unread (sequence step 8), and it is re-tested then.
+
+**Instrumentation:** `Ground::tier_answers` / `World::tier_answers` (never hashed), and the ignored probe
+`crates/sim/tests/tier_probe.rs`, so the next slice can say how often the tier fires instead of arguing it must have.
+
+## D339 - P16 landed: a body collides as a box, and the probe's 4,741 stay
+
+**Crosscheck:** `FUN_00840830` compares four grown axis-aligned extents (`<=`), the talk says "shrink the unit to a point and grow
+everything else", and nothing in the corpus or openage gives two bodies a disc. Ours tested squared distance against the summed
+radii. Everything downstream was already a box (`solid_boxes`, `target_contact`, `entry_parameter`, `body_touches`, the plan's
+`Clear`), so the arrival arithmetic did not move.
+
+**Landed:** the step's body test is `dx.abs() >= reach || dy.abs() >= reach` -> continue. Strict overlap: the binary's inclusive
+`<=` and the `+0x268` inset are P3 (blocked on the matching binary), kept out to hold one variable on this branch.
+
+**Witness:** `body_boxes::a_step_that_lands_in_the_box_pocket_is_refused` - a stander dropped in the pocket (0.350 on both axes,
+inside the box, outside the disc) after the mover's plan (a collider standing at plan time is *past* and exempt). Measured on the
+same tree, one variable: disc `repaths 0` (the landing is taken, 0.378/0.378); box `repaths 1` (collision counted, route re-made,
+step sideways). Two earlier fixture designs were thrown away - one passed for the exempt-collider reason, one asserted a freeze
+that would be the congelation D290 recorded; both are in the review.
+
+**Measured:** acceptance `36ceb342bd94acc9` (was `527bf4ebb9520fa0`), 134 entities and **both players alive at 48,000** (was 132
+and one), re-paths 40,127, wall 15.93 s median of three - the match changes, the wall does not. The probe does **not** fall to
+zero: disc 4,681 of 251,681 (1.86%), box 3,156 of 153,061 (2.06%), because the pockets it counts are pairs the engine exempts
+(past 17,517), not landings the disc allowed. What the box does move is the body-step census: **251,681 -> 153,061** in 36,000
+ticks (-39%), stricter blocks meaning fewer bodies get to walk.
+
+## D340 - sequence step 5 read, not landed: the substitution has no stand to answer
+
+**Crosscheck.** `FUN_008a4360` (`move_obj.cpp`, HD 5.7) asks the mover's reach test (`[vtbl+0x2c8]`) how the current
+waypoint stands and branches three ways:
+
+- **2** - *"We've reached our current sub waypoint, setting cIncrementWaypointNextUpdate"* (`0x11e7`);
+- **1** - *"We will reach our current waypoint next time, setting cIncrementWaypointNextUpdate"* (`0x11f7`) - advance
+  deferred one update;
+- **neither, and `2 < in_ECX[0x52]`** - *"We won't reach our waypoint either this or the next update, but we have a
+  mConsecutiveSubstituteCount count of %d, faking it"* (`0x1203`) - which jumps to the **same** advance label as the
+  `== 1` arm.
+
+So the counter is the mover's `+0x148` (`0x52 * 4`), the threshold is **the third consecutive failure** (`> 2`), and
+"substituting" is the deferred advance the `== 1` arm already performs. `FUN_007ff650(bit, set)` - read this branch -
+sets or clears a bit in a **path** object's flags word at `+0x30`, walking up the parent chain when the bit asked for
+is 2; it is the path's own "advance the waypoint next update" flag, not a position write. The older twin of the same
+loop (`FUN_007f4330`, `motion.cpp:0x4d6`/`0x4e2`) carries the two reach arms and **no** substitute arm, which is
+HD 5.7's `move_obj` adding it.
+
+**Independent corroboration** (a first-party engineer, different kind of source): Rich Geldreich (Forgotten Empires),
+*On Age DE's pathing/movement*, 2018-02-28 - *"Waypoints along a path can be skipped if a unit can safely move from its
+current position to the next waypoint"*, and *"Age1's waypoint detection code was very janky ... Age1's code would
+sometimes cause units to oscillate around their current waypoint until it figured out it was ok to go to the next
+one."*
+
+**Why it does not land here.** The rule is about a mover that **stands because it cannot reach a waypoint**. Our mover
+almost never does:
+
+- `refusal()` (`world/motion.rs:479-611`) returns `WaitTarget` (the order's own target) or `WaitGround` (terrain).
+  A **body** never refuses the step: the collider joins `blockers`, the higher id is paused, and the mover walks on
+  (D279 rule 4, D281). `StepDecision::WaitBlocked` is therefore constructed **nowhere** in `crates/` - the enum
+  offers an answer no code path gives (`grep -rn WaitBlocked crates/sim/src`: only the `is_a_wait` list).
+- So `stalled` (`motion.rs:150-160`), which is exactly "consecutive updates without reaching the waypoint", counts
+  **ground** refusals only. Measured (`crates/sim/tests/substitute_probe.rs`, both scenes named in its header): beside
+  the seeded base a walker touching another body re-plans **196 times in 200 ticks** and **never stands**; in a clear
+  lane the same catch-up gives **0 re-plans in 260 ticks**. The pathology step 5 was written for is a **re-plan storm
+  while walking**, which the game's predicate ("won't reach it this update or the next") does not describe, so
+  substituting a waypoint cannot reach it.
+- The tree's only substitution is `replan_after_ground`'s off-grid fallback to the aim's tile centre, at
+  `REPLAN_TICKS` (20). Its comment says *"Refused twice in a row, the aim falls back"* while the code needs 20 -
+  the stated rule and the implemented one disagree, and 20 is ours, not the game's.
+
+**Not landed, deliberately.** Moving the off-grid fallback from 20 to the game's 3 was drafted and dropped: no fixture
+in hand produces a walk that stands on an **off-grid** aim for three ticks (a move order to a body ends on contact in
+~50 ticks; a builder beside its site is *adjacent* and working, which is a legitimate zero delta; the sampled stalls in
+those scenes are 1-19 ticks), so the change would have been a constant without a witness. **The wall this leaves is the
+one step 6 removes**: `standing_bodies` (`lib.rs:1991-2030`) skips every body that *has a route*, while the binary's
+test is velocity zero (`FUN_007f9d80:45`, `[vtbl+0x2a0] == 0`) - so a walker standing still with a route on its books is
+invisible to the planner, and that, not the waypoint index, is what makes the re-plan fire.
+
+**Instrumentation kept:** `crates/sim/tests/substitute_probe.rs` (ignored, prints the two scenes' re-plan counts), and
+the reach-arm reading above, so the next session does not re-derive them.
+
+## D341 - sequence step 6 landed: a body is an obstacle unless it moved
+
+**Crosscheck.** `FUN_007f9d80` (`pathfinding.cpp`, HD 5.7) walks the route's object list and inserts each one as a box
+grown by the mover's radius **unless** its id is in the mover's ignore list **and** `[vtbl+0x2a0]` - the same `isMoving`
+`FUN_008a4360` logs - answers non-zero:
+
+```c
+if (((local_10 <= iVar4) && (iVar4 = (**(code **)(*piVar3 + 0x2a0))(), iVar4 == 0)) || iVar6 < param_6) { ... FUN_007f6ff0(&box, 1); }
+```
+
+So the exemption is **velocity**, not a route: a unit standing at work with a path on its books is still an obstruction.
+openage's note agrees from the other side - the high-level search *"ignores moving objects, e.g. units or wildlife"*.
+
+**Prior implementation.** `standing_bodies` (`lib.rs:1991`) skipped every body with `route.points` non-empty and no
+pause. That certified legs straight through a man standing at work: a builder whose site is beside it answers "adjacent"
+from the first tick and never spends its route, so it stands with a live route for as long as the site takes.
+
+**Landed.** `has_route && moved` - both halves, where `moved` is `self.tick - 1 <= other.last_moved` (the movement pass
+writes `last_moved` for every body that took a step). `velocity` is not the field: it is a fixture-only drift for idle
+bodies (`lib.rs:2313`). The route half is load-bearing - `last_moved` starts at the tick a body appeared, so without it
+a freshly placed body reads as moving for one tick; the first cut dropped it and `evasion` and `gather_ring` went red.
+
+**Witness, red first:** `moving_bodies::a_standing_body_with_a_route_is_planned_round` - a builder at work beside a site
+one tile east (live `Build`, live route, zero motion) and a second man ordered past him through his tile centre. Un-cut:
+**19 ticks inside the builder's box, closest axis gap 0 raw**. Cut: **0 ticks, closest gap 30,018 raw** (1.5 tiles).
+
+**Measured, same tree, one variable:** acceptance `1e1fcc3cf2b05a4c` (was `36ceb342bd94acc9`), **133 entities and one
+player alive at 48,000** (was 134 and two), re-paths **36,567** (was 40,127, -9%), wall **11.42 s** median of three (was
+15.60 s). The wall falls, but not cleanly: the scenario diverges - player 2 no longer survives - and a dead player is
+work the tick never does again, so the 27% is not a cost claim for the same match. Suite 219 result lines, 937 passed, 0
+failed, 22 ignored; conformance 21 / 0 / 0.
+
+## D342 - sequence step 7 landed: the 300 row is a mine, and the tier cannot see it yet
+
+**Crosscheck, three kinds.** `FUN_007ed280` prices an empty cell at **10**, and jumps to **300** only when
+`FUN_007f11f0` answers 1 for the cell or one of its four orthogonal neighbours. `FUN_007f11f0` walks the tile's object
+list and answers 1 only for an object whose **class** is **8** or **0x20**. Three independent readings name those two:
+
+- the function itself: `sVar3 = *(short *)(*(int *)(*(int *)(iVar1 + 0x18) + i * 4) + 0xc) + 0x16; if (sVar3 == 8 || sVar3 == 0x20) return 1;`
+  - the same `+0x16` short that `FUN_008a4360` compares with `0x27` for a gate, which is the gate's **class** (39);
+- the dat this tree's install ships: class 8 is `STONM`/`ROCKSX`, class 32 is `GOLDM`/`ROCKGX`
+  (`config/gamedata/units.toml`, and `type` values in this dat are only 10/20/25/30/60/70/80 - neither 8 nor 32 - so the
+  field is the class, not the type);
+- the published class list (Genie Editor): *8 - Stone Mine*, *32 - Gold Mine*.
+
+So the row is **gold or stone mines**, not "a blocked neighbour": a cell beside a tree, a wall or a cliff is the plain 10.
+Ours charged 300 to every cell with a blocked orthogonal neighbour.
+
+**Landed.** The pack names which of its own resources are the expensive neighbours - `snug = true` on gold and stone in
+`config/resources.toml`, with the class provenance in the comment - so `crates/` learns neither the dat's class nor the
+id (D17). `Ground` carries the mark and drops it when the mine is spent; `Levels` builds the same OR-reduced pyramid over
+it, and `step_cost` charges 300 when the cell or one of its four orthogonal neighbours is a mine.
+
+**Witness, red first:** `snug_cost::a_mine_is_expensive_to_walk_beside_and_a_tree_is_not` - on the seeded map, the open
+tile beside a gold mine must be 300 and the open tile beside a tree 10. Red on the un-cut tree with `Some(300)` for the
+tree cell; green after.
+
+**The row the old fixture pinned is withdrawn.** `coarse_cost::a_cell_beside_an_obstacle_costs_three_hundred` asserted
+the 300 **beside a wall**, which is the reading the decomp denies; it is now
+`a_cell_beside_a_wall_is_ten_and_beside_a_mine_is_three_hundred` on the same plate, one `mark_snug` apart.
+
+**The census, and the reason no match moves:** on the acceptance map, level 0 has **3,970** open tiles, of which **247**
+were 300 under the old rule and **32** are under the game's - 215 cells the search stops pricing. And the acceptance
+match itself is **bit-identical**: hash `1e1fcc3cf2b05a4c`, 133 entities, 36,567 re-paths, both sides. That is D338's
+finding showing up as a number: the levelled tier answers **0 of 61,276** routes on this map, so the row it prices is
+never read. The next lever is the level floor (D303), not this constant.
+
+**Wall, median of three:** 11.79 s (11.84 / 11.79 / 11.90) against the un-cut **11.56 s** (11.56 / 11.47 / 11.56) - the
+same match to the hash, so the 2% is the band, not the change.
+
+## D343 - sequence step 8 landed: the refined waypoint is the crossing the line makes
+
+**Crosscheck.** `FUN_007eeda0` is the chain's refinement, and its first act is an **interpolation**: handed the mover's
+position and a far point, for a boundary crossed along x it computes `iVar7 = (iVar4 * param_5) / param_4 + param_7` -
+the straight line's own crossing of the edge - and only then looks at tiles. The scan runs **outward from that tile**:
+forward to the span's end (first crossing kept, with its distance `iVar10`), then backward from the same point, breaking
+when `iVar10 < 1` or at a crossing, which wins because it is strictly nearer. The vertical case is the same code on the
+other axis. The first-party talk (`25+ Years of Pathfinding Problems with C++`) covers the three-solver architecture and
+the legacy hull algorithm in its text layer; its levelled-search slides are images, so **the refinement's interpolation is
+not corroborated outside the binary** - the deck's absence is said plainly rather than counted as agreement.
+
+**Prior implementation.** `Levels::refine` walked each span from `first + 0` and took the first crossing it met, with no
+line and no interpolation - so on an edge with two crossings it left through the bottom one however the walk was shaped.
+
+**Landed.** `refine` takes the plan's two endpoints, interpolates where the walk's line crosses each shared edge
+(`across.0 + (edge - along) * (across.1 - across.0) / travel`, integer arithmetic like the binary's), and scans outward:
+the first crossing forward at distance `d`, then back over `0..d`, where a nearer crossing wins.
+
+**Witness, red first:** `refine_crossing::the_refined_point_is_the_crossing_the_line_makes` - a level-2 plate whose shared
+edge has crossings at rows 0 and 2 and a walk along row 2. Un-cut the waypoint came out at `(4.000, 0.500)`; with the cut,
+`(4.000, 2.500)`.
+
+**Measured, same tree, one variable:** acceptance `1e1fcc3cf2b05a4c`, 133 entities, one player, 36,567 re-paths - **both
+sides, bit-identical**, because the tier that uses the refinement answers **0 of 61,276** routes on this map (D338). Wall:
+cut 12.07 s median of three against un-cut **12.01 s**, back to back, so the difference is the band. Suite **221 result
+lines, 939 passed, 0 failed, 23 ignored**.
+
+## D344 - the level floor moved to 1 and was put back: the tier's routes are worse than the flat search's
+
+**Crosscheck, and it corrected the record rather than the code.** The descent's polarity was re-read because the 2026-11-20
+entry had "corrected" bit `0x20` of a cell's second byte to *"this cell contains an obstacle"*, which would have inverted
+`Levels::descent` (coarse in clutter, fine in the open). **That correction was backwards.** `FUN_007f0da0` tests the grown box
+against the cells that *have* the bit and then **blocks** them (`0x10`): blocking a cell that already holds an obstacle is a
+no-op, while blocking the passable cell the mover's radius now covers is the growth's whole point. `FUN_007f1100` reads the
+same bit the same way - it descends *through* cells without it and stamps the per-search block on the first cell that has it -
+and `FUN_007ee760` refuses to open a start node whose cell has no passable direction. So the bit means **passable**, the
+descent stops at the coarsest **passable** level, and `Levels::descent` was already the game's rule. The evidence file now
+says that and withdraws the 2026-11-20 wording. No code changed for it.
+
+**Prior implementation.** `route_with`'s tier arm gated on `descent(start).min(descent(goal)) >= 2` (`ground.rs:646`) - the
+start's 4-tile cell had to be passable. On the acceptance map that refused 127 of 185 long walks (D338), so the tier answered
+nothing and D341-D343 were unread.
+
+**Moved to 1, measured, and withdrawn (D345).** The floor became **1**: the binary refuses nothing - `FUN_007ee980` walks the
+levels down and floors at 0 - and a mid-level attempt that fails *falls through* to the low-level path (`0xf98`). It is back
+at **2** because the owner's acceptance for this slice was *"is the tier's route better than the flat search's on the same
+walk"*, and the answer is no: at floor 1 the tier answered 14 of 50,022 routes and on those walks cost **172 points /
+5,180,218 raw against 67 / 4,719,155**, at 13.71 s against 12.16 s of wall. The numbers and the fork they open are D345's.
+
+**Witness, red first:** `tier_level_floor::a_walk_from_a_cluttered_cell_is_answered_two_tiles_at_a_time` (now parked in
+`docs/parked/tier-level-floor.rs`) - a walk whose 4-tile cell holds a tree outside its 2-tile cell, so `descent(start) == 1`.
+Un-cut the flat search answered (interior waypoints `(730000, 970000), (1290000, 810000)`, tile centres); with the cut the
+chain's waypoints were 2-tile crossings.
+
+**Measured, then, and it was inert.** Acceptance `1e1fcc3cf2b05a4c`, 133 entities, one player, 36,567 re-paths, **identical
+at floor 1, floor 2 and floor 0** - all three measured by edit on the same tree. Wall (median of three, back to back): floor 2
+**12.00 s** (11.90 / 11.90 / 12.09), floor 1 **12.16 s** (11.93 / 12.16 / 12.19), floor 0 **11.96 s** (11.85 / 11.96 / 12.14) -
+the bands overlap. Inert because the floor was not the gate (the funnel below); once the two gates behind it were reached, the
+tier answered and the routes were worse (D345). Suite at the landing **222 result lines, 940 passed, 0 failed, 23 ignored**.
+
+**The finding: D338's priced neighbours do not reproduce, and the floor was never the binding gate.** D338 measured floor 1 at
+13 answers and floor 0 at 108, each rewriting the match (`69a548722252b27e`, `d700295118db1114`). On this tree no floor value
+answers anything: the acceptance hash is unchanged even at floor 0. Instrumentation says why - of **91** long walks in the
+match, the floor refused 60 (0 at floor 1), **13** got no coarse route, **17** had a leg refused by a **body** in the plan's
+avoid list and **1** by geometry, and **none** reached an answer. So the gates between the tier and an answer were our own two
+downstream of the floor - the refusal of a goal whose cell is occupied, and the segment-level body certification - which is
+D345's subject. The correction is D338's numbers, which were measured before D341 changed which routes exist; the mechanism
+they were attributed to did change.
+
+**Instrumentation, off by default.** `Ground::compare_tier_routes` (a probe's switch) records `TierShadow` - every tier
+answer beside the flat search's answer for the same walk: points and polyline length in raw units - and `TierFunnel` - long
+walks, floor refusals, no-coarse, one-cell chains, and refused legs split into body / object / tiles. `flat_route` was
+extracted from `route_with`'s tail, behaviour unchanged, so both answers come from the same code. Never hashed; the
+production path pays one `Cell` read per tier answer.
+
+**Commits us to.** A published answer count is measured again whenever the routes under it change, and a gate is priced
+before it is loosened: the floor was the *named* lever for a session and moved nothing.
+
+## D345 - the tier answers, and its routes lose: the floor goes back to 2 and both gates stay
+
+**What this measured.** D344's funnel left two of our own gates between the tier and an answer: `coarse_route` refusing a goal
+whose cell holds an obstacle (**13** long walks), and the chain's certification refusing a leg that crosses a **body**'s box
+(**17**). Both were opened, in order, and the tier finally answered - then lost on the acceptance the slice was for.
+
+**The body certification (opened, measured, withdrawn).** The plan's avoid list is built by `World::standing_bodies`, which
+*skips* every body whose route has moved - so it holds the bodies that are **standing**, and D320 walks through a standing body
+once the route is newer than his last move (*past*). The veto therefore refused exactly the bodies the step resolves, and the
+binary's coarse search inserts no body at all (`FUN_007ee980` calls no stander inserter; D338's crosscheck). Dropping it from
+the **chain** certification (the direct-walk test at the top of `route_with` kept its half) moved the funnel to: **130** long
+walks, 110 floor-refused, 6 no coarse route, 0 legs refused, **14 answered**. Witness, red first:
+`tier_certification::a_stander_in_the_corridor_does_not_refuse_the_chain` (parked in `docs/parked/tier-certification.rs`) -
+a stander on the tile centre the chain crosses; un-cut the flat search answered, cut it was a 2-tile chain.
+
+**The acceptance, and it is why both are back.** Same tree, floor 1 and the certification open:
+
+| | tier's route | flat search's route, same 14 walks |
+|---|---|---|
+| waypoints | **172** (12.3 a walk) | **67** (4.8 a walk) |
+| length | **5,180,218 raw** | **4,719,155 raw** (+9.8% for the tier) |
+
+and the match at floor 1 with the veto still in (12.16 s, `1e1fcc3cf2b05a4c`, 133 entities) against floor 1 without it
+(**13.71 s** median of three, 13.48 / 13.71 / 13.76, `2999657a804e913b`, **134 entities**, 36,569 re-paths). So the tier's
+answer is 2.6x the waypoints, 9.8% more ground and **13% slower** than the flat search's on the same walks. The owner's
+acceptance for the floor - *"is the tier's route better than the flat search's on the same walk ... if it is not better, the
+finding is the numbers and the floor stays at 2"* - is answered: it is not.
+
+**What is back, and what is not.** The floor is **2**; the chain is certified against bodies again; both witnesses are parked in
+`docs/parked/` with the un-park condition named, and `docs/next-step.md` carries the fork. What landed is the **measurement**:
+`TierShadow` (points and polyline length for the tier's answer and the flat search's, on the same walk), `TierFunnel` (long
+walks, floor refusals, no-coarse, one-cell chains, refused legs by reason) and `flat_route` extracted from `route_with`'s tail
+so both answers come from the same code - probe-only, never hashed, one `Cell` read per tier answer when off.
+
+**The shape of the loss, said plainly.** The game's coarse route is a four-directional staircase over 2-tile cells refined to a
+crossing per edge, and the binary hands that polyline to the movement code; our flat search is octile, pulled to corners, and at
+1-tile resolution. At every level the floor allows, the coarse answer is a worse route *and* a slower match - our tier is not
+the game's tier, because what we compare it against is better than what the game compares its own against.
+
+**Commits us to.** A port of a rule is not a port of its cost: the game's coarse search is the right rule and a losing route
+here, and the two have to be measured separately before a gate is opened. And a fixture parked for a reason names the reason in
+its header, or the next session un-parks it into a red suite.
+
+## D346 - the owner's ruling: follow the game - the chain is smoothed, and the tier answers for real
+
+**The ruling.** U28 offered three doors (pull the chain, price the coarse costs, leave the tier unread). The owner answered
+**"Please follow original game"**, so the question stopped being "which route is better" and became "which route is the
+game's". That settles both halves: the level floor is the binary's (nothing refused above 0, D344's read), and the polyline
+the tier hands over is the one the original hands over.
+
+**Crosscheck, and it found the missing pass.** `move_obj.cpp` logs the mid-level path, calls `FUN_008acf20`, and logs it
+again: `0xf56` *"        Found a valid mid-level path with %d waypoints"*, then `0xf69` *"          After smoothing, path has
+%d waypoints"*. `FUN_008acf20(object, path)` is a **visibility pass over the polyline**: it keeps two indices - the last kept
+waypoint (`param_1`, starting at 0, the unit's own position) and a candidate (`iVar8`, starting at 2) - and calls the
+radius-grown segment test `FUN_00840c60` (`FUN_00841400` seeds the query with the object's movement class, `+0x6e`;
+`FUN_00843410(1, radius)` gives it the mover's radius, the same `+0x268` inset query our `fits` follows). Blocked: the
+in-between waypoint is kept and both indices advance. Clear: it is **deleted** (`FUN_007feb80(param_1 + 1)`) and the same
+candidate is tried again from the same anchor, so a straight run collapses to its ends. The pass never refuses a route.
+Prior art could not settle it - the deck's smoothing slide is about the *polygonal* solver - so the port rests on the
+binary's own log line and body, said plainly rather than implied.
+
+**Prior implementation.** The tier returned `Levels::refine`'s crossings verbatim - a waypoint on every cell edge - and the
+floor of 2 kept the whole tier out of the match (D344/D345). Measured before this change: 12.3 waypoints a walk against the
+flat search's 4.8, and 1.6 tiles of extra ground per walk.
+
+**Landed.** `Ground::smooth` is the binary's two-index pass, with `chain_leg` as its segment test (objects' grown boxes and
+the grid, at the mover's reach). The chain is smoothed before it is returned; the per-leg certification loop is gone because
+the pass tests every kept segment by construction; bodies are not in the tier's geometry (the coarse search and the pass are
+both blind to them in the binary, D338), and the step's bump/re-plan answers a body as D320 always did. The floor is **1**
+(the binary's).
+
+**Witnesses, each red first.**
+- `tier_smoothing::the_levelled_route_is_smoothed_before_it_is_handed_over` - a 56-tile walk round a wood: the raw chain came
+  out at **10 waypoints** `[(320000, 810000), (480000, 810000), (570000, 960000), ..., (1370000, 960000), (1290000, 810000)]`,
+  including a 4-tile overshoot past the goal; smoothed it is the corners.
+- `tier_level_floor::a_walk_from_a_cluttered_cell_is_answered_two_tiles_at_a_time` and
+  `tier_certification::a_stander_in_the_corridor_does_not_refuse_the_chain` were un-parked from `docs/parked/` and pass
+  unchanged - the floor and the body rule were right, only the polyline was missing its pass.
+
+**Measured, same tree, one variable** (`tier_probe`, 48,000 ticks, release): tier answers **16 of 31,256** routes; the waypoint
+census is **194 raw -> 57 smoothed**; and on the same 16 walks the tier now costs **57 waypoints / 5,460,841 raw** against the
+flat search's **76 / 5,251,895** - **fewer waypoints than the flat search** and **+4.0% ground**, where before the pass it was
+172 against 67 and +9.8%. Acceptance: hash `28aa6caa2747f9db`, **130 entities**, one player, re-paths **17,743** (was
+36,567), wall **11.70 s** median of three (11.62 / 11.70 / 11.77) against 12.18 s - **4% faster**, with the match now ending
+at ~1,977 s rather than ~2,350 s.
+
+**What is still ours, and named** (`docs/next-step.md`): `route_with` refuses `descent == 0` and hands those walks to our
+octile flat search, where the binary would run its own levelled search over 1-tile cells - 55 of the 86 long walks in the
+match. That is the last gate and its own slice; the coarse costs at tile resolution (10/300 rows, four-directional, then
+smoothed) against our octile search is the measurement it owes.
+
+**Commits us to.** "Follow the game" is a rule about the *mechanism*: a port that stops at the search and skips the pass that
+follows it is not the game's route, and the cost of the missing pass was mistaken for the cost of the mechanism.
+
+## D347 - the last gate is the game's: level 0 is answered by the levelled search, not by ours
+
+**The ruling carries.** D346 followed the game's *route* (the smoothing pass) and left one gate ours: `route_with` refused
+`descent == 0` and handed those walks to the octile flat search, where `FUN_007ee980` floors at **0 and then searches** -
+`FUN_007ee760(0, ...)` opens the tile's cell and `FUN_007ed280` expands it four-directionally, the same machine at 1-tile
+resolution. That is 55 of the 86 long walks in the acceptance match, so "follow the game" cannot stop at the pass.
+
+**Prior implementation.** `if floor == 0 { fall through }` - a gate that existed only because the raw chain was worse than
+the flat search (D345), and D346 showed the cost was the missing smoothing, not the level.
+
+**Landed.** The gate is gone: every long walk asks `coarse_route`, and the descent only *chooses the level* (as the binary's
+loop does). Nothing else moved - the refinement, the smoothing pass and the body rule are D346's.
+
+**Witness, red first:** `tier_level_zero::a_walk_from_a_cluttered_cell_is_answered_at_level_zero` - a tree at (8, 41) puts
+the start's 2-tile cell in the blocked set, so `descent(start) == 0` and the goal stays at 3. Un-cut the flat search answered
+(`(730000, 970000), (1290000, 810000)`, tile centres); cut, the chain's crossings sit on tile lines, which no tile-centre
+route can produce.
+
+**Measured, same tree, one variable** (`tier_probe`, 48,000 ticks, release): tier answers **92 of 50,652** routes (was 16 of
+31,256), the waypoint census **4,175 raw -> 637 smoothed** (85% removed), and on the same 92 walks the tier costs **637
+waypoints / 65,242,638 raw** against the flat search's **515 / 63,486,927** - **+2.8% ground** and 1.3 more waypoints a walk.
+Acceptance: hash `7782dd38d7557514`, **134 entities**, one player (the most of any variant measured this session: 133 at the
+pre-D346 baseline, 130 with the floor at 1), re-paths **37,204**, wall **12.12 s** median of three (11.94 / 12.18 / 12.38)
+against 12.18 s at baseline and 11.70 s with level 0 refused. The match still ends at ~1,985 s.
+
+**What that trade says, plainly.** Refusing level 0 was *cheaper in the match* (11.70 s, 17,743 re-paths against 12.12 s and
+37,204) and *worse in bodies* (130 entities against 134). So the number that argues for the deviation is wall time, and the
+number that argues for the game is a surviving entity; the rule the owner gave decides it, and the numbers are here for the
+next person who wants to reopen it.
+
+**Commits us to.** A gate justified by a cost is a claim about a mechanism, and a mechanism measured without the pass that
+follows it is half a mechanism - twice now, in the same subsystem.
+
+## D348 - the window is a per-unit margin we have not read, and our tier is a stand-in for a driver nobody has read
+
+**The question this started from.** The tier's routes are still +2.8% longer than the flat search's on the same walks (D347).
+The candidates were the coarse cost rows or the four-directional expansion at level 0. Both are `FUN_007ed280`'s, and reading
+them again turned up the thing that mattered more: **the window that search is clipped to**, which D299 has carried as "the
+padding is unread" since P11 landed.
+
+**What the window is.** `FUN_007f0be0(x, y, h, margin, on)` sets `in_ECX[0x42..0x45]` to a box of **half-extent `h + margin`
+around one point** - the point the search measures its h from - and `FUN_007ed280` refuses every cell outside it. In
+`FUN_007ee980` that point is the *goal of the call*, and `h` is the mover's radius plus the target's. So the margin decides
+whether the search is local or global - **and it is a caller's number, not a constant of the machine**:
+
+| caller | margin |
+|---|---|
+| the **mover's own repath** (`FUN_008a4360:808`) | `path + 0x20`, and `FUN_007fd4b0` initialises `+0x20 = 0` (`+0x28` count, `+0x2c` capacity, `+0x30` points) |
+| the order path at `FUN_00528650:63` | **0** |
+| the order path at `FUN_00533da0:102` | **`0x3f800000`**, i.e. `1.0` |
+| `FUN_00529590:193` and `FUN_0052ff40:333` | `(float)` of a **virtual call at vtable `+0x12c`**, so a per-unit value |
+| `FUN_005130d0:160`, `FUN_0052a250:115` | a variable from the same neighbourhood |
+
+So **the mover's mid-level search is local** (margin 0 - one cell), and **the order-level planner's window is whatever the
+unit says it is**, through a virtual method whose implementations are unread. D348 first claimed "both real callers pass zero"
+on the strength of two call sites; that was too strong and is withdrawn here - the honest statement is that the two call sites
+*read* pass 0 and 1.0, and two more take a per-unit float whose scale nobody has read.
+
+**What the mover does with it, in the binary's own order of log lines** (`move_obj.cpp`, read from `FUN_008a4360`):
+
+1. `0xf56` *"Found a valid mid-level path with %d waypoints"* - `FUN_007ee980`, the local search above;
+2. `0xfef` *"Looking for a STRAIGHT LINE path:"* - is the line to the waypoint clear of non-target collisions;
+3. `0x1026` *"Looking for a TILE-BASED path:"* - the flat octile search `FUN_008007f0`.
+
+That ladder is **per waypoint**, and the waypoints come from a "high level path" the mover already holds (`0xeba`
+*"Waiting for path: current waypoint=%d"*, `0xe52` *"We're patrolling, setting waypoint to %d"*, and the `0x2ea`-area
+tests `HighLevel`/`MidLevel`/`LowLevel`). **The driver that builds that high-level path is still unread** - it is the same gap
+D297 recorded ("the driver that assembles a coarse route out of those pieces ... none of them has been read far enough").
+
+**What that makes our tier, stated as far as the evidence goes.** Two of its parts are now firmly wrong or unknown:
+
+- **The mover's mid-level search is local** (margin 0), so it is *not* what answers a long walk in the binary; ours does.
+- **The order-level planner's window is a per-unit margin** (0, 1.0, and a virtual value in the call sites read), so it is
+  *either* a local approach or a coarse route depending on a number we have not read. If a villager's margin turns out to be
+  large, our whole-walk A\* is faithful to the order-level planner and the tier is right; if it is small, the order-level
+  planner is local too and the game's long route comes from somewhere else entirely.
+
+Either way the route we hand over - coarse waypoints walked straight, smoothed by D346's pass - is the *shape* both
+mechanisms produce, and the **+2.8% is the coarse guide's shape rather than a defect in the cost rows**.
+
+**So the next read is the vtable method at `+0x12c`** (what margin a unit returns, and how it is computed), and behind it the
+routines the path's waypoint array comes from (`FUN_007ed600`, `FUN_007ee600`, the `FUN_007f4330` path-state machine). Until
+the margin is known, no change to the cost rows can be judged, because the window it is walked in is unknown.
+
+**What changed in code: nothing.** The tier's activation (D346/D347), its smoothing pass and its level split stand as landed;
+this row records what they model and what they stand in for. The three candidate repairs on the table - restoring the floor,
+pricing the cost rows, or waiting for the driver - are now ordered: waiting for the driver first, because the other two
+measure a route shape whose source is unread.
+
+**Commits us to.** When a port's window is unread, the port is a stand-in and has to be named as one - "the levelled search" in
+our docs had been standing for a search whose window nobody had read, and three decisions (D344, D346, D347) were measured
+against it. And a claim of the form "both callers pass X" needs *every* caller read, not the first two: this row's own first
+version asserted zero for the order-level planner on one call site, and two more call sites later in the alphabet pass 1.0 and
+a per-unit float.
+
+## D349 - a body with a spent route still has a goal, and the plan's ignore clause means what it says
+
+**Where this came from.** The owner, 2026-11-22: *"I noticed in latest build that villagers stack on each other a lot (like 5
+in the same spot). Is there scheduled any step that would address it?"* Nothing in the queue did, so the report was measured
+first (`collision_probe` grows a **pile census**), then traced (`pile_probe` attributes each new overlap to the exemption the
+mover held), then cut.
+
+**What the measurement says.** 11 bodies in one overlapping group, 317,041 pairs closer than a fifth of a tile, on 35,336 of
+36,000 ticks - and only **877** of 349,824 overlapping pair-ticks are *new* on a tick, so the pile is a state the engine
+settles into, entered rarely. Of the 664 landings a single mover can be named for: **mate 0, past 500, neither 164**, and
+every offender is a `Gather`/`Return` pair arriving at the **same raw point** (dx = 0, dy = 7,200 against an 8,000 reach).
+The pile is the **arrival**, not the step: a body collision never refuses a step here (D279's port - the step is taken, the
+higher id is paused, the mover re-plans), which is the binary's own epilogue, and nothing separates two men who stop inside
+each other.
+
+**What landed (code, one change).** `World::replan_goal`: a body-collision re-plan aims at the route's last waypoint **or the
+task's own `to` when the route is spent**. `move_bodies` walks a `Task::Move` with no waypoints along the task layer's
+direction, one whole step a tick - so a spent route still drives a man at his point - and `replan_around_bodies` bailed on the
+empty route, which left him walking straight through friends with nothing to steer round. Witness
+`contact_needs_one_collision::a_walk_ends_at_contact_only_when_the_target_is_all_it_touches`: two men sent at one target from
+the same side ended **0 raw** apart (against an 8,000-raw reach) with the friend recorded as a blocker on every tick and **0
+re-plans**; they now end more than a reach apart, each within a tile of the target.
+
+**What did not land, and why it is written here.** The obvious next move - make every body an obstacle in the plan, on the
+reading that the ignore list is the only way out of `FUN_007f9d80`'s clause - **was written, measured and reverted in the same
+session**. Three fixtures refused their orders (`NoPath { from: (15,14), to: (15,14) }` twice, `(21,14) -> (20,14)` once):
+a crowd's own boxes make the tiles round a man unplannable, which is what the exemption exists to prevent. The clause is
+`(local_10 <= iVar4) && (isMoving() == 0)` - **not on the mover's own list AND not moving** - so **movement alone** drops a
+box, whoever owns it. The engine already did it; the comment above it said the list mattered, and the slice was built on the
+comment. Corrected in the same commit; the pile census is **bit-identical** with the entry cut, which is the other half of
+why it was not kept.
+
+**Why the pile is still there, stated as far as the evidence goes.** A moving body is not an obstacle to the plan, and a
+standing one that has not moved since the route was created is *past* to the step - both are the binary's rules. So men who
+share one destination arrive on the same point and the game has no rule that separates them afterwards (no pushing; no place
+model - D293, the owner's *"drop it and let the crowds jam"*). What the game has and we do not is entirely on the **plan** side:
+`FUN_007f9d80` hands the search a **rectangle of tiles** (the stander's box grown by the mover's radius, clamped to tile indices
+and stamped blocked), while `inside_a_body` asks whether a tile's **centre** is inside that box - the same answer only while a
+body stands near a tile centre. That is the next slice, with the pile census as its witness. **Not measured, stated as a
+hypothesis**: whether the rectangle moves the pile is unknown until it is built.
+
+**Commits us to.** A report of the form *"X happens a lot"* gets a **size** and an **attribution** before a slice (a census and
+a per-exemption split), because "not a regression" and "the rule should have refused it" are different defects. And a comment
+above a rule is not the rule: the binary's expression is read again before a slice is built on what the comment says, or the
+slice ports the comment.
+
+## D350 - the tier's refinement clips a body, and the fix is three ports, not one (read, not landed)
+
+**What was tried.** D349 left the pile as an arrival problem and named `FUN_007f9d80`'s **rectangle** as the next slice: a
+stander blocks every tile its box covers, not only the tile whose centre is inside it. The fixture was written to bite at the
+one place a centre test fails completely - a body on a lattice **corner**, which no tile centre is within 0.4 of, and a
+**diagonal** walk, whose tile-centre line passes exactly through such a corner. It bit: the walker's own centre came within
+**7,677 / 7,612 raw** of the stander's against the **8,000** the pair needs, on a walk from (10,10) to (20,20).
+
+**Three readings, and they compose into one gap.**
+
+1. **`inside_a_body` is a centre test; the binary stamps a rectangle.** `FUN_007f9d80` grows the stander's box by the mover's
+   radius, clamps it to tile indices (`FUN_007f9b70`) and calls `FUN_007f6ff0(rect, 1)` - the *whole* rectangle is blocked. Ported
+   (the tile's square against the grown box, touching excluded) and the fixture's route **still** clipped the body: the plan
+   bent round the corner, so nothing was wrong with the tile test.
+2. **The tier's smoothing was body-blind, and that is a divergence.** `FUN_008acf20`'s segment test is `FUN_00840c60`, which
+   walks the same **object-system** buckets as the collision query (`+0x8c`, the same `+0x266`/`+0x268` inset state) and asks a
+   per-object segment test of each (`FUN_00841020`/`FUN_00841220`) - so **units** are in it. Ours used `chain_leg` (objects and
+   grid, no bodies), on the reading that the coarse search is blind to bodies - true of the **search** (D338,
+   `FUN_007ee980`), false of the pass that follows it. Ported (the pass now certifies with `leg_is_clear`, bodies included), and
+   the route went from **one straight point to three** - and the fixture **still** clipped: **7,650 / 2,355 raw**.
+3. **The refinement is the third place, and it is where the clip is made.** `FUN_007eeda0` scans the cell's tile span **along
+   the direction of travel** and takes the first tile where the direction is passable - *passable* being the tile test, which
+   consults the non-ignore objects on the tile (`FUN_00801a20`). Our `Levels::refine` interpolates the crossing by geometry
+   alone, so a crossing lands inside a body's box while every tile the chain crosses is open; the smoothing can only *delete*
+   waypoints, never insert one, so the clipped leg survives it. **That is the number that decides this row**: after 1 and 2, the
+   polyline was `(15.5,16) -> (16,16.5) -> (20.5,20.5)` - a corner cut, exactly the leg `crossing-by-geometry` produces.
+
+**What did not land, and why.** Both ports (1 and 2) are faithful and were reverted **because their own fixture still failed**:
+a half-fix that leaves the rule broken reads as a fix in the log and is not one. The fixture is preserved **outside the tree**
+at `/opt/data/cache/scratch/age2hd-pending-fixtures/body_blocks_its_tiles.rs` (it asserts both that the walker never enters the
+pair's grown box and that he still arrives), and the three-port slice is `docs/next-step.md`'s next item: **the rectangle, the
+smoothing's bodies and `refine`'s tile span**, then the census.
+
+**Commits us to.** A fixture can be right and a change right and the pair still red - and that is information about the
+*shape*, not a reason to keep the change. The preserved fixture is the next session's starting point, and the reading above is
+what stops it re-deriving the same three steps.
+
+## D351 - a place another body holds is not a place to work from (branch `d351-reseat`, not landed)
+
+**The ruling this comes from.** The owner, 2026-11-22, on the pile: *"HD definitely doesn't stack up that much. Maybe things
+like that could happen, but never in this scale."* So the scale is the defect, and this row is the measured slice against it.
+
+**What the decomp gives.** `func_002699A0` (`unit_action_resolve.cpp`) is the only "the spot you were given is taken" rule in
+either source: step out by `ext_self + ext_other + 0.01`, on one of four sides with an offset across that side, up to fifty
+tries, **refusing any candidate whose obstruction query is non-zero**; the first accepted point is where the object is written,
+and `func_002697C0` never writes a child onto a point an earlier child already holds. **What it does not give**: a seat picker
+for a *gatherer* - the gather action is a state machine that calls virtuals, and no loop over positions round a resource exists
+in the corpus. So the rule is adopted at the place a worker's standoff resolves, which is where our ring already decides it.
+
+**What changed (code, two places).** `World::work_position` takes the mover and refuses a candidate whose centre lies inside
+another body's box grown by his footprint - the ring is `func_002699A0`'s four-sides-and-offsets in a deterministic order. And
+the gather arm **re-seats** a worker who is standing inside another body while a free ring place exists, because the place is
+otherwise decided once at order time, when the other man may still be walking.
+
+**Measured (36,000 ticks, seed 7, release).** Deepest overlapping group **11 -> 9**; pairs closer than a fifth of a tile
+**317,041 -> 274,054** (-13.6%); overlapping pair-ticks 349,824 -> 324,711; most overlapping pairs in one tick **63 -> 42**;
+re-paths 24,897 -> 10,703. The fixture that was written first - two gatherers of one tree, tracked on every tick both are
+*taking* - read **4,598 raw against the 8,000 their footprints need** and passes.
+
+**Why it is not on `blunt-port`.** It flips **five** fixtures, and four of them assert the press as the intended behaviour:
+`two_gatherers_on_one_tree_press_in`, `two_woodcutters_on_one_tree_share_its_side_and_press`,
+`ten_men_ask_for_one_bush_and_seven_press_into_it`, `two_villagers_on_one_node_cannot_take_more_than_it_holds` - D289/D293, the
+owner's *"drop it and let the crowds jam"* - and `a_working_man_is_never_moved`, which is D246's *"villager is never to be nudged
+to leave place he is working at"*. The stacking in this engine is therefore **pinned by tests that encode his own rulings**, and
+reversing one is his call. The branch is pushed regardless of failure, which is what a change he judges himself gets.
+
+**Commits us to.** A player-visible scale complaint is answered by a *census*, not by a rule: 11 -> 9 bodies is real progress and
+it is not "fixed", and the four press fixtures are the record of a decision that may now be reversed rather than a set of bugs.
+
+**Not landed on this branch.** The revive/re-seat work lives on `d351-reseat` (its last commit `100bae9`); what belongs here is
+the reading and the three measured re-seat targets, recorded in `docs/reviews/2026-11-22-d351-a-taken-place-is-not-a-place.md`.
+The register (`docs/divergence-register.md`) cites this row, and a citation of a row that exists only on a side branch is a
+dangling reference the corpus cannot resolve.
+
+
+## D352 - Conformance is a line on every ruling, and the divergence register is the one list of what we do differently
+
+**The owner's instruction, 2026-11-22, and the frustration behind it, verbatim**: *"Could you please FFS purge our rulings which
+are not conformant with original game, decomp or online sources once and for all? It is bloody touring [tiring] having to repeat
+over and over that the original game and decomp are to be followed only to find out they were not..."*
+
+**What the bank actually looked like, measured rather than assumed.** 238 decision rows; **3** talked about the game while
+pointing at no source (all three honest: D151 quotes the owner and `docs/ai-extraction.md`, D166 is a rendering choice and says
+so, D184 says its accident needs a model we do not have). So the *provenance* of the bank is not the disease. The disease is the
+other thing the tool cannot see: **a row that cites the right address and reads it wrong** - D348's "the margin is zero", D341's
+`has_route && moved` standing in for `isMoving`, my own D349 misreading of `FUN_007f9d80`'s `&&` this evening, D267 reading
+`func_002699A0` as group placement only. Each was corrected by **re-reading the expression**, and each cost a slice first.
+
+**What this row establishes, in three parts.**
+
+1. **A conformance line on a ruling.** Any row may carry
+   `**Conformance**: GAME - <pointer>` / `OURS - <why>` / `UNVERIFIED - <what would settle it>`, and a row that talks about the
+   game carries one or a source pointer. `tools/conformance_audit.py` lists the ones that do neither; it is a **burn-down list,
+   not a gate**, because a wrong gate teaches a fake line (`0%` taught exactly that, D209).
+2. **One register of divergences**: `docs/divergence-register.md`. Two verdicts only - **DEFECT** (read, ours, with the source
+   and the step that closes it) and **OURS** (deliberate, with what the game does instead). Eleven defects and five ours as of
+   today, every one with its pointer. **A claim about the game that is in neither section is a claim waiting for a source**, and
+   it goes in `next-step.md` as a read, not into code.
+3. **The supersession order, restated because it is the sentence he keeps having to repeat**: the original game (binary, dat,
+   install) > the decomp > the neighbour projects > published sources > **our own rulings, including his** > our convenience. A
+   ruling of ours that contradicts a reading is not "a decision we follow" - it is a **DEFECT** row, and the reading wins.
+
+**What changes in behaviour: nothing.** This row is a mechanism and a register. The purge it orders is the eleven DEFECT rows,
+one slice each, and the first is D351 (branch `d351-reseat`) with the three plan ports behind it.
+
+## D353 - a drop site is the nearest wall, not the nearest anchor
+
+**Conformance**: GAME `unit_action_distance.cpp` (box-to-box distance; `func_002690E0`/`func_00269190`/`func_00269220`), plus the
+owner's report 2026-11-22 *"villagers prioritise dropping wood to lumber camp even town center is closer. The whole area of town
+center could be dropped at (impassable center doesn't need to be reached)"*.
+
+A building's `position` is its **anchor tile** - the north-west corner of its footprint - so ranking drop sites by the distance
+to it measures a corner. A town centre is 4x4 and its anchor is two tiles in from its own wall on every side; a lumber camp is
+2x2 and one tile in. Measured in `a_nearer_wall_wins_over_a_nearer_anchor`: the town centre's wall **1 tile** from the tree
+against the camp's **2**, and the camp's anchor nearer than the town centre's - the carrier walked past the town centre.
+
+The ranking is `(wall_gap, anchor distance², id)`, where `wall_gap` is `footprint_gap`'s measurement without the lookup (D246's
+own measure, so the delivery test and the choice of site agree). The owner's second clause was already true and is unchanged:
+`at_the_wall` banks from any side and any corner, and the impassable middle is never reached.
+
+**Fixture**: `a_nearer_wall_wins_over_a_nearer_anchor` (`crates/sim/tests/gather.rs`), written first and watched failing.
+
+**Consequence, reported rather than hidden**: on the acceptance scene (48,000 ticks, seed 7) re-paths fall **37,204 -> 12,847**
+and wall time **12.19 -> 10.10 s**, and the outcome changes from a **win to a draw** - the faster economy mines the **reachable** gold out,
+and the next pile is **1 tile too far** to be reachable: the nearest remaining gold sits **9.6 tiles** from the town centre
+(`24.5,11.5`) against a gather reach of **9** (sight 4 + the 5-tile look-around, `gather_reach`; the pack carries no
+`search_radius` for unit 83, so the fallback applies). The engine is right to stand the man down (D149) - **1,011 gold is left
+about nine and a half tiles out, and 1,600 more across the map** - and re-tasking a man across resource types or out of his
+reach is the AI's job, not the engine's (D291).
+
+## D354 - the rule he remembers is in the engine; the picker that breaks it is the one handing out work
+
+**Conformance**: OWNER, 2026-11-07 (D150.3), restated 2026-11-22: *"Villager should return to former pile and look for another
+pile. If found, work on it. If none found, idle. Iirc I already made such decision."* He did, and **the engine implements it**:
+the depletion picks and the `pending_gather` carry-over choose the next source of the same kind. What does not implement it is
+the **assignment** picker, and that is where the acceptance scene's gold died.
+
+**The scene, measured (48,000 ticks, seed 7, `--dump` at the end):** gold sits at **10** from ~1,200 s to 2,400 s with **1,011
+gold** in four tiles at `(24.5,11.5)`, **9.6 tiles** from the town centre against a gather reach of **9** (sight 4 + the 5-tile
+look-around; this pack carries no `search_radius` for unit 83). `rule refused: player 1 has no gold node to gather`, **220
+firings**. Wood and food keep flowing, so it is gold alone: `crates/script/src/lib.rs:1431`
+(`nearest_resource(world, worker, slot, 0, Some(reach))`) measures the search **from the worker**, who is standing at the drop
+site. The script's other call site (`:455`) passes `None` - there the script names a resource, which is an order (D149.5).
+
+**Fixture**: `spent_pile` (pending, outside the tree - see below).
+
+**A fixture for the engine's own path, and why it is not in the tree.** `spent_pile.rs` (preserved at
+`/opt/data/cache/scratch/age2hd-pending-fixtures/spent_pile.rs`) builds a 20x6 map: one gold tile of **1** at `(12,2)`, a patch
+of **400** at `(15,2)` - three tiles from the spent pile, ten from the drop site. On the shipped code he banks **1 gold** and
+stands `Idle`; with `next_source_anchor` (the node he left, falling back to his own position) at the four depletion sites it
+passes. **Rejected anyway**, because the same change breaks wood on the acceptance scene: **wood freezes at 68** from 1,200 s,
+wall time **10.10 -> 19.20 s**, re-paths **12,847 -> 3,607** - the signature of a pick that answers with a node `start_gather`
+then refuses, asked again every tick. Not diagnosed, so not shipped (D223/D217's rule: code a mutation cannot distinguish from
+nothing does not land, and code that halves a match's throughput certainly does not).
+
+**Next.** Two items, in order: (1) why the woodcutters idle under the node anchor - instrument the pick's answer and
+`start_gather`'s refusal for one woodcutter; (2) the assignment picker at `crates/script/src/lib.rs:1431`, which should fall
+back to the **base** anchor when the worker's own reach finds nothing (D149's share-table anchor, D150.4's precedent).
+
+## D355 - the bank becomes a page: 341 rulings in 8k tokens, and the fixture column that names the lies
+
+**Conformance**: OURS (process). The owner, 2026-11-22: *"Is too many decisions causing problems with context being filled and
+starting to forget?"* - and the answer is yes, but not the way the question guessed.
+
+`docs/decisions.md` is **832,998 characters** (~210k tokens), larger than a context window: it cannot be loaded, so a session can
+only grep it, and a ruling it does not already suspect exists is a ruling it will not apply. That is not hypothetical - a session
+on this date wrote **D349-D354** while **D150 already held the owner's pile rule**, and then built a fixture that could not tell
+the rule from its absence. `docs/decision-areas.toml` - the index built for exactly this (D166) - named **2** decisions and left
+**49** (D283-D332, the whole pathfinding run) with no area at all, and `docs/reviews/` held **309** notes with nothing listing
+them.
+
+**So:** `tools/decision_index.py` writes `docs/decision-index.md` - **341 rows, one line each** (claim, verdict, source, fixture,
+area, supersession) in **34k characters / ~8k tokens**, plus the three lists that matter: **claims the game with no source** (5),
+**names no fixture** (**247**, the "believed implemented" list), **superseded** (3). `tools/review_index.py` writes
+`docs/reviews/INDEX.md`: 309 notes, one line each. Both are generated, committed, and neither is a gate.
+
+**The convention that makes the fixture column worth having**: a ruling that rests on a test names it (`Fixture: <name>` in the
+row, or a `tests/<name>.rs` path). A row that names none is the work list - 247 rows long tonight, and emptied one measurement at
+a time, never by inventing a name.
+
+**Also in this slice**: D351's row carried onto this branch read-only (the register cites it, and a citation of a row that exists
+only on `d351-reseat` was a dangling reference `tools/decisions.py` reported); 51 rows given areas; `decisions-check` back to
+**0**; `AGENTS.md` opening with the two indexes and the convention.
+
+**Fixture**: `tools/test_decision_index.py`, 6 cases over a sample bank (title-as-claim, verdict from the `Conformance` line
+only, a declared fixture beating a filename, supersession read both ways, area scored not first-match).
+
+## D356 - The collision analysis: one observation three times, and the two rulings his answers settle
+
+**Conformance**: GAME - placement separates (`func_002699A0` per child, `ext_a + ext_b + 0.01` on one of four sides, 50 tries,
+refusing off-map, wrong terrain class or any obstructed candidate, driven by `func_002697C0`); movement has no press floor
+(`FUN_008aa990` computes the depenetration and its only caller, `FUN_008a4360`, **discards** it); right of way is the lower id and
+the loser takes `setPause(rand*1.25/32767+0.25)` (`008a80ff cmp eax,esi / jle ; pause only when other > self`). Plus OWNER,
+2026-11-22, the two answers quoted below.
+
+**The ask.** *"Review all my decisions focused on pathfinding and obstacle avoidance. Are any of them colliding with each other?"*
+170 movement/economy rows, about forty of them his; four collisions found, two live.
+
+### 1. The overlap rule, stated by him three times, answered by machinery that was later deleted
+
+| when | his words | what answered it | what happened to that |
+|---|---|---|---|
+| 2026-11-08 (D181) | *"visible overlap of villagers"* | a standoff taken when too close | deleted by D293 (no seats) |
+| 2026-11-16 (D243.1) | *"If villagers approach each other closer than 1 diameter -> FAIL"* | places dealt a diameter apart (D248) | the seat book deleted by D287/D293 |
+| 2026-11-22 (D351) | *"HD definitely doesn't stack up that much ... never in this scale"* | the arrival's place (unbuilt) | - |
+
+So the three are **the same observation**, and between them the engine deleted every mechanism that had answered it. Measured on
+the acceptance scene today (`collision_probe`, 36,000 ticks, seed 7): **144,534 overlapping pair-ticks** of 15,926,363 inspected
+(0.91%), deepest **8,000 raw - a full footprint**, **129,512** pair-ticks deeper than half a footprint; a pair of gatherers closes
+**7,830 -> 7,030 -> 6,230 -> 5,600** raw against the **8,000** their bodies need. The fixture that pins D243.1 is **green**
+(`invariants::villagers_never_close_into_one_body`) because its scene is four men on four separate nodes.
+
+**Are D243.1 and D289/D290 ("let the crowds jam", "no press floor") a contradiction?** Not in the game: the game has both, at
+different moments. It **places** a body `ext+ext+0.01` away from the ones already there, and it has **no press floor** while a body
+moves. Ours honours neither at scale, because an arriving gatherer is not placed at all. D290's reading is right and stays; D289's
+jam is about the **walk** (every man's goal is the tile that was ordered), and the arrival is where the game differs.
+
+### 2. "No sliding" against "only sliding and the pause rule act"
+
+D255 (2026-11-17) records his instruction *"follow the game. No sliding."* D292 (2026-11-19) records *"No engine help: the order
+stays live and the man stands; only sliding and the pause rule act"*. **The second quote is my wording in the fork, not his
+ruling**: the binary has no slide (the depenetration is computed and discarded), so a fork that offered "sliding" offered
+something the game does not do. My error, recorded here rather than filed as a rule.
+
+### 3. Five rows that read as live rulings and are not
+
+`D189` (own units pass through each other) withdrawn by D200; `D181` (standoff when too close) superseded by D293; `D186`
+(1.156-tile ring) superseded by D199; `D271` (a ring place per follower) superseded in part by D289; `D204` (no pushing) superseded
+in part by D239/D241. All five now carry the marker, so `docs/decision-index.md` prints them as superseded instead of as live
+rules - which is how a session came to apply a dead one.
+
+**Checked and not colliding, because they look invented and are not:** D205 (lower id wins, loser pauses 0.25-1.50 s) is proved in
+the binary; D290 (no press floor) is proved by the discarded depenetration; D243.2/.3 (gather and drop within half a diameter)
+agree with D285/D313 through the one box ruler (D286); D207's group exemption is formation-scoped, and the Forgotten Empires
+documentation puts villagers in **no** formation.
+
+**His two rulings, 2026-11-22, and what they settle:**
+
+1. *"The second man steps to the next free spot near the same tree/mine (the game's own placement rule), and only goes idle if
+   there is none"* - so the arrival **is** a placement: a man who arrives where another body stands steps out by the pair's radii
+   and a hundredth (`func_002699A0`), and only when no free place exists does he stand down. D289's jam stays for the walk.
+2. *"Never slide: if the step is blocked he stops and re-plans"* - the terrain slide goes; D292's mandate is the **pause and the
+   re-path**, nothing else.
+
+   **Status of ruling 2: awaiting his explicit word.** The clarifying form reported both answers, then he reported that he could
+   not answer it and restated **only ruling 1** (*"my answer to options is 1 - the second man steps to the next free spot"*). The
+   evidence in the paragraph above is unaffected - the binary has no slide, and D292's word "sliding" was mine - but a ruling
+   whose provenance is a form he says he never saw is not a ruling. It is re-asked in plain text, and until he answers, **the
+   terrain slide stays** and no slice is built on it.
+
+**What closes this.** Two slices, both already on the register: the arrival's place (section 1, row 4 - D351's re-seat, which
+failed on a ring-tile target and needs the tangent step) and the slide's removal (D255, whose 14 reds were caused by "a tile is not
+an object" - a model that D277 and D339 have since replaced, so the blocker may be gone).
+
+## D357 - The arrival is a placement: the pile halves, the re-plans multiply by eight, and both are reported
+
+**Conformance**: GAME - `func_002699A0` (a **side** is picked, the candidate is placed `ext_a + ext_b + 0.01` out from it with an
+offset **along** that side, fifty tries, refusing any candidate whose obstruction query is non-zero) and `func_002697C0` (the
+separation is written as a **set-position**, not stepped). OWNER, 2026-11-22: *"the second man steps to the next free spot near the
+same tree/mine (the game's own placement rule), and only goes idle if there is none."*
+
+**Fixture**: `one_place_per_man` (`crates/sim/tests/one_place_per_man.rs`), written before the change and watched failing at
+**0 raw** apart against the **8,000** the pair need.
+
+**What landed.** `World::arrival_seat` answers with a point on the **grown box's face** - the node's box grown by the man's own
+radius is his contact surface, and the seat is offset along a face by the pair's radii plus a hundredth - and `TickWork::seats`
+writes it **after the movement pass**, because a step is refused by the very body it separates from (measured: a man held a seat
+**7,000 raw** away, his delta refused on every tick). Who yields: the man who is not working (D246's rule 4 is absolute - the first
+version moved a working man **7,835 raw**), and when both work, the lower id (`008a80ff cmp eax,esi / jle`).
+
+**Three fixtures were restated, not deleted** - `gather_press_in`, `gather_spread`, `gather_standard_rule`'s six-men scene, and the
+press clause of `gather_continuous`'s ten-men scene - each now demanding **at least 0.40 of a tile** between two men on one node,
+each quoting the ruling that reversed it.
+
+**What it buys, measured** (`collision_probe`, 36,000 ticks, seed 7): overlapping pair-ticks **144,534 -> 74,717** (0.91% ->
+0.48%), pairs deeper than half a footprint **129,512 -> 70,499**, new overlaps per tick **888 -> 437**. On the acceptance scene
+(48,000 ticks): entities **124 -> 153** and the outcome a **draw -> a win**.
+
+**What it costs, measured:** re-paths **12,847 -> 138,588** and wall time **10.10 -> 24.83 s** median of three. The control that
+names the cause: with the rule switched off by an env flag and nothing else changed, the same build runs **9.93 s / 12,847
+re-paths / 124 entities** - so the whole difference is the rule. Men that shared one point now stand a body's width apart and
+**stamp twice as many tiles as blockers**, and every walker whose route crosses a node's ring re-plans where it used to pass.
+
+**Not closed**: the deepest pair is still **8,000 raw** (a full footprint) - a `Return`ing carrier walking home into another, not an
+arrival at a node. That pair is the first question of the next slice; the number that says it is still open is in this row.
+
+**Accepted cost, per the owner's own priority** (D275: *"fidelity first, and cost is a later question"*). The plan-time price is now
+the **top performance item** in `docs/next-step.md`, and it is a plan-stamp question (D296-D310's port), not an arrival one.
+
+## D358 - The reach has three numbers in this bank, and the assignment is not the engine's guess
+
+> **Corrected by the owner, 2026-11-22, in one line:** *"Villager after finishing one resource (gold, stone, bush...) returns
+> back to it and then looks around."* That is D150.3/D354's rule, and it makes this row's framing wrong in one place: the
+> assignment is **not** a manager looking from the base - it is the **villager's own search, anchored on the pile he finished**.
+> With the pile as the anchor the reach's value stops mattering for the case that stalled (the next gold tile is **one tile** from
+> the spent one, so 4, 5 and 9 all find it), and the real defect is the **anchor** (`next_source_anchor`, pending:
+> `spent_pile` is green with it and wood freezes under it). The reach numbers below still disagree with each other and still need
+> the precedence; they are simply not what stopped the gold.
+
+**Conformance**: GAME - `task_info.search_radius` is the dat's own per-unit number (villager **4.0**, scout 4.0, cog 6.0, fishing ship
+12.0, trebuchet 17-18, widest 21.0; 750 slots, median 6.0), which is what D175 adopted. OWNER - D149's *"line of sight + 5"* and
+D150's *"the shipped constant is the owner's own 5"*.
+
+**The collision, found by auditing the bank rather than the code.** Three rows answer "how far does a worker look for the next
+source" and none supersedes another:
+
+| row | its number | its own words |
+|---|---|---|
+| D149 | 8 | *"Shipped: sight + 8 = 12 tiles."* |
+| D150 | 5 | *"The shipped constant is the owner's own **5**, not 8."* |
+| D175 | the dat's 4 | *"the dat's `search_radius` per unit"* |
+
+D149 and D150 are the same day and contradict each other on what shipped. The code settles it in silence: `gather_reach` answers
+with the dat's `search_radius` **when the pack carries it**, and falls back to sight + **5** otherwise - and this generated pack
+carries none for unit 83, so the live value is **9**.
+
+**Why it matters, measured** (D354): the acceptance map's gold sits **9.6 tiles** from the town centre, so a worker is never
+offered it - **220** refusals, gold frozen at 10 with **1,011** gold in four tiles. Two different mistakes meet in that number,
+and only one of them is the engine's.
+
+**The precedence, stated once:** the **dat's `search_radius`** is the engine's number for *its own* search (a spent node's
+replacement), and a pack that does not carry it should carry it rather than fall back to a number five tiles larger; sight + 5 is a
+fallback for packs generated before the field existed, not a rule.
+
+**And the assignment is not that search.** D149.5 already draws the line - *"an order is not a guess about what a villager can
+notice"* - and the script keeps it for an explicit node (`nearest_resource(..., None)`, `crates/script/src/lib.rs:455`) while a
+**quota** rule passes the worker's own reach (`Some(reach)`, `:1431`). That is the third number in the collision: a *quota* is the
+AI's business, and the game's AI assigns from the base, not through the villager's four-tile eyes. The stall D354 measured is that
+line, not the reach's value.
+
+**Consequence for the queue.** Fixing the reach alone does not fix the stall (9.6 > 4 either way); the quota rule must stop using
+the worker's eyes, which is the item already in `docs/next-step.md`. The pack should also carry `search_radius` for unit 83 so the
+engine's own search is the game's 4, not our 9 - a data job, and the *smaller* of the two changes.

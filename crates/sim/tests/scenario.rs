@@ -500,6 +500,7 @@ fn a_scenario_researches_a_tech_named_by_a_role() {
         .expect("player 1 has a unit");
     world
         .submit_checked(Command::WalkTo {
+            target: None,
             unit: scout,
             to: gold,
         })

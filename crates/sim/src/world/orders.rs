@@ -47,8 +47,17 @@ impl World {
                 self.gather_source(*node)?;
                 // A walled-off node is refused here rather than discovered ten seconds later by a
                 // villager walking into a wall and giving up.
-                if let Some(position) = self.find(*villager).map(|e| e.position) {
-                    self.plan_path_for(*villager, position, target.position)?;
+                // **A man already on the node's tile has no route to plan.** A search asked for a start that is its own goal
+                // answers `NoPath`, and the order was refused as a walled-off node - reachable now that a crowd presses onto a
+                // node's tile (D293). The general planner keeps its rule: a *walk* to a point in one's own tile still plans, so
+                // the walker lands on the point and not on the tile's centre.
+                // **The click asks what the tick will ask** (D314). It used to plan at the node's *point* and skip the reach
+                // test, so a node behind a wall was accepted here and refused at apply - with the error dropped at `step`,
+                // which reads to a player as a click that does nothing. `gather_route` is the one copy of the question.
+                if let Some(position) = self.find(*villager).map(|e| e.position)
+                    && self.tile_of(position) != self.tile_of(target.position)
+                {
+                    self.gather_route(*villager, *node)?;
                 }
             }
             Command::Build { villager, unit, at } => {
@@ -112,11 +121,13 @@ impl World {
                 }
             }
             Command::Stop { .. } => {}
-            Command::Move { unit, to } => {
+            Command::Move { unit, to, target } => {
                 self.check_order(*unit, *to)?;
+                self.check_walk_target(*unit, *target)?;
             }
-            Command::WalkTo { unit, to } => {
-                self.check_order_at(*unit, *to)?;
+            Command::WalkTo { unit, to, target } => {
+                self.check_order_at(*unit, *to, target.is_some())?;
+                self.check_walk_target(*unit, *target)?;
             }
             Command::Stance { unit, .. } => {
                 let entity = self.find(*unit).ok_or(SimError::MissingEntity(*unit))?;
@@ -178,8 +189,12 @@ impl World {
         // **A movement order joins this tick's group** (D207): orders that land together were given together, which is the
         // interim stand-in for a selection this engine does not have. Read *before* the arm runs, because an order that is
         // refused afterwards must not leave the unit in a group it never moved with.
-        if let Some(unit) = Self::movement_order(&command) {
-            self.ordered_now.insert(unit);
+        if let Command::Move { unit, .. }
+        | Command::WalkTo { unit, .. }
+        | Command::AttackMove { unit, .. }
+        | Command::Patrol { unit, .. } = &command
+        {
+            self.ordered_now.insert(*unit);
         }
         match command {
             Command::Spawn {
@@ -371,18 +386,18 @@ impl World {
                 }
                 Ok(())
             }
-            Command::Move { unit, to } => {
+            Command::Move { unit, to, target } => {
                 let goal = self.tile_centre(to);
-                self.start_walk(unit, goal, false, false)
+                self.start_walk(unit, goal, false, false, target)
             }
-            Command::WalkTo { unit, to } => self.start_walk(unit, to, false, false),
+            Command::WalkTo { unit, to, target } => self.start_walk(unit, to, false, false, target),
             Command::AttackMove { unit, to } => {
                 let goal = self.tile_centre(to);
-                self.start_walk(unit, goal, true, false)
+                self.start_walk(unit, goal, true, false, None)
             }
             Command::Patrol { unit, to } => {
                 let goal = self.tile_centre(to);
-                self.start_walk(unit, goal, true, true)
+                self.start_walk(unit, goal, true, true, None)
             }
             Command::Delete { entity, .. } => {
                 // A deletion is a death and takes the death path: health to zero, and the end of the

@@ -282,7 +282,7 @@ impl World {
             return;
         };
         let tiles = self.solid_tiles(entity);
-        if let Some(walk) = self.walk.as_mut() {
+        if let Some(walk) = self.ground.as_mut() {
             for tile in tiles {
                 walk.block(tile.0, tile.1);
             }
@@ -445,7 +445,16 @@ impl World {
         let position = self.tile(at);
         // Reachability is part of "can this order run": paying for a site nobody can walk to would
         // leave a construction that never progresses and wood the player cannot get back.
-        self.plan_path(worker.position, position, 0)?;
+        //
+        // **A route that exists is not reachability** (D279): the search answers a walled-in goal with the nearest tile it
+        // settled on, so a site sealed behind a wood still plans. The builder has to be able to *stand beside the site*, and
+        // that is what `can_reach` asks.
+        if !self.can_reach(worker.position, position) {
+            return Err(SimError::NoPath {
+                from: self.tile_of(worker.position),
+                to: at,
+            });
+        }
 
         Ok(BuildPlan {
             total_ticks: total,

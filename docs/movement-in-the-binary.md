@@ -300,29 +300,48 @@ is no branch anywhere in the block that moves the other body.
   exempt a **box-selected crowd of villagers** ordered by a player - which is exactly what our window sends - or only a
   military formation, which is all the FE quote ever claimed.
 
-## The cost model settled (2026-11-16): the heuristic is deliberately inadmissible
+## The cost model, corrected (2026-11-21): 25 is the **budget**, and the frontier's key is the octile
 
-The open item in "What is still unread" was a contradiction: *"x25 against a 16-per-step cost is not admissible, so either those
-four arguments are not tiles or 16 is not the per-step cost."* **Neither was wrong - the assumption was.** Three functions, read
-in the corpus:
+> **Corrected by the adversarial review, D334.** This section used to open "the heuristic is deliberately inadmissible" and
+> read the `25 x euclid` as the frontier's weight. That was a misreading of one variable, and it is kept here in its own words
+> so the error stays visible: *"So 16 is the step cost and 25 is the **heuristic weight** ... The original's search is therefore
+> weighted A\* / best-first with a weight of about 1.56."* What follows is the reading that replaces it.
+
+Three functions, read in the corpus:
 
 - **`FUN_007ffc80`** is the **octile cost**: `table[min] + (max - min) * 0x10` - 16 per cardinal step, with the diagonal share
   looked up in `DAT_00afd2a0` (runtime storage, computed at load).
 - **`FUN_007ffcd0`** is the plain **Euclidean distance**: `sqrt(dx*dx + dy*dy)` on the same arguments, returned as a float,
   truncated by the caller. Its arguments are tile coordinates - the same pair that indexes the best-cost array at
   `(x*0x1e0 + y)*4`, with `0x1e0` = 480, the maximum map dimension.
-- **`FUN_008007f0`** (the search) computes `h = (int)euclid * 2500 / 100`, and when `FUN_0074e020() == 1` it computes
-  `h = (int)euclid * 0x19` instead. **2500/100 *is* 0x19**: both are **25**, in hundredths and in whole units.
+- **`FUN_008007f0`** (the search) computes `iVar20 = (int)euclid * 2500 / 100`, and when `FUN_0074e020() == 1` it computes
+  `iVar20 = (int)euclid * 0x19` instead. **2500/100 *is* 0x19**: both are **25**, in hundredths and in whole units.
 
-So 16 is the step cost and 25 is the **heuristic weight**, and `25 > 16..22.6` - the octile cost of one tile of Euclidean
-distance - means **h overestimates the remaining cost**. The original's search is therefore **weighted A\* / best-first with a
-weight of about 1.56**, trading path optimality for speed. That is a decision in the original, not a contradiction in its
-constants, and it explains why the pair looked impossible to port: it is impossible to port *as an admissible A\** because it
-never was one.
+**`iVar20` has exactly one reader** - line 198, `if ((DAT_00aad420 != -1 && iVar20 < local_46c) || (20000 < local_46c)) break;`,
+against `local_46c`, the expansion counter incremented at line 542. It is the **budget**, not the frontier's key, and this file's
+own termination section below says the same thing ("the budget is the heuristic itself" - the estimate *is* the budget).
 
-**What this changes for us.** Row 13 of the register is not "10/14 against 16 plus a table" - it is "an admissible octile A\*
-against a weighted one that returns slightly longer routes on purpose". Adopting it changes route *shape* everywhere, which is a
-behaviour change worth its own measurement rather than a constant swap, and it is no longer blocked on an arithmetic puzzle.
+**The frontier's key is set at line 316**, for a neighbour of the node being expanded:
+
+```c
+iVar15 = FUN_007ffc80(uVar13, uVar18, local_418, local_414);   // step cost, current -> neighbour
+iVar19 = FUN_007ffd10(uVar13, uVar18, param_3, param_4);       // octile(current, goal)
+iVar16 = FUN_007ffd10(local_418, local_414, param_3, param_4); // octile(neighbour, goal)
+iVar17 = (iVar17 - iVar19) + iVar16 + iVar15;                  // iVar17 was stored[current]
+```
+
+`stored[start]` is `FUN_007ffd10(start, goal)` (line 177), so `stored` is `g + octile(., goal)` and the line above is the
+identity `f(neighbour) = g(current) + step + octile(neighbour, goal)`. A worked example on (0,0) -> (10,0): `stored[start] = 160`,
+the neighbour (1,0) gets `160 - 160 + 144 + 16 = 160 = g + h` - where a 25 x euclid key would put it at `16 + 225 = 241`. So the
+original's flat search is an **octile A\***, weight **1**, and `h = 25 x euclid` is not a heuristic at all.
+
+**What this means for us.** `ground.rs` orders its heap by `step + estimate(...)`, i.e. the misreading, so the engine's search is
+greedy where the game's is not. Measured on the acceptance match (one variable, seed 7, 48,000 ticks, D334): the greedy key costs
+**28.9 expansions per search and exhausts its budget on 54% of them**, against **11.8 and 5.8%** with `g + octile` - the greedy
+key is *more* expensive here, because the budget is generous enough that it spends all of it. Route shapes differ everywhere, so
+adopting the octile key needs a witness and a suite run before it lands (`docs/parity-plan.md` P13). **Landed 2026-11-21 (D337)**: the key is
+`g + octile`, the witness is a single tree at (8,8) where the greedy key paid 312 and the octile key pays 294, and the acceptance
+match is a longer match at a smaller wall (both players alive to 48,000 ticks, 9.87 s against 10.04 s).
 
 **The frontier is a heap too, and the note that said otherwise is corrected.** The loop keeps a **frontier array** of
 `(x, y, cost)` triples at `0x119414 + n*8` with its length at `0x2db41c`, and calls **`FUN_00801e90(index)`** on every push -
@@ -348,17 +367,27 @@ So the budget is **the heuristic itself**: a search answers at most *h* expansio
 tiles`, and never more than **20,000**. Further goals get more expansions, which is why the odd pairing is not an error - the
 "distance" is the budget and the count is the spend.
 
-**What the break does is NOT settled, and a first read of it was wrong.** The target of both breaks, `0x801855`, is the head of
-a block that **pushes a node onto the frontier** (`0x801861`-`0x80189d`: increment the length at `+0x2db41c`, write the tile as
-two words at `+0x119414`, write a cost of `0` at `+0x119418`, call the sift `FUN_00801e90`), and `0x80185b` is also reached
-from the `jle` on an **empty frontier**. A push is not a return, so either the guard re-seeds and continues, or the block is
-the outer loop's tail and this function is not the whole search. **Either way the earlier sentence here - "both breaks land on
-the epilogue, so a budget-exhausted search returns what it has" - is withdrawn**: it was inferred from a shared jump target
-without reading what the target does, which is the exact mistake this file exists to prevent.
+**What the break does, settled 2026-11-21.** The target of both breaks, `0x801855`, is reached from the loop's own tail
+(`0x80185b` is the `jle` on an empty frontier), and the function's last block **after** the loop is the answer:
 
-**Still unread, and named:** what the guard's push carries (a re-seed node with cost zero? a sentinel that ends the outer
-loop?), what the search *answers* when the budget runs out, and the equal-`f` tie-break inside the sift. The termination rule
-is known; the answer's shape is not, and a replay depends on both. **So the budget is not ported and must not be guessed.**
+```
+0x801855:  mov length, [0x2db41c]; inc length           ; one past the frontier
+           write local_490/local_458 (the saved best) to the frontier at length
+           write cost 0 at +0x119418
+           call FUN_00801e90 (the sift)
+           ... -> security check -> return
+```
+
+`local_490`/`local_458` are the coordinates saved at `0x8017xx` whenever a popped node's octile distance beat `local_468` - the
+best-settled node. So a budget-exhausted search **pushes the best node it settled with cost 0 and returns**, and its caller walks
+the parent chain from it. `ground.rs`'s `settled_best` is that rule, and the break's comparison is `budget < expansions` (one
+expansion later than ours, which breaks at `expanded >= budget`).
+
+**The retraction that stood here is now itself retracted**, and the reason is worth keeping: the earlier note withdrew "both
+breaks land on the epilogue, so a budget-exhausted search returns what it has" because a push is not a return - correct at the
+time, since the block's *destination* had not been read. Read to its end, the block is the epilogue: push the best, then return.
+The equal-`f` tie-break inside the sift is still unread (our heap orders `(f, g, y, x)`; the sift moves an equal-`f` child up,
+i.e. newest first).
 
 ## What blocks a tile: a stamped footprint, and the radius is not a wall (2026-11-18)
 

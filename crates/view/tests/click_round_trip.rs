@@ -67,6 +67,7 @@ fn the_circle_ends_on_the_pixel_that_was_clicked() {
     let at = camera.world_point(clicked);
     world
         .submit_checked(ruage_sim::Command::WalkTo {
+            target: None,
             unit: id,
             to: (
                 ruage_fixed::Fixed::from_raw((f64::from(at.0) * scale as f64).round() as i64),

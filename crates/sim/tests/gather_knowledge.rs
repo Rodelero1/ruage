@@ -269,6 +269,7 @@ fn scout_the_tile(world: &mut World, x: u16, y: u16) {
         .expect("player 1 starts with a scout");
     world
         .submit_checked(ruage_sim::Command::WalkTo {
+            target: None,
             unit: scout,
             to: (
                 Fixed::from_raw(i64::from(x) * scale),

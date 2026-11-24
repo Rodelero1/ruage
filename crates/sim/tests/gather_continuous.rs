@@ -115,7 +115,7 @@ fn gap(world: &World, a: (Fixed, Fixed), b: (Fixed, Fixed)) -> f64 {
 /// **Ten men work one bush, a body apart.** The owner's own save shows exactly that, and the engine stopped at nine because a
 /// table said nine. Nothing may be closer than a diameter (0.40) - that is the *one* rule.
 #[test]
-fn ten_men_work_one_bush_a_body_apart() {
+fn ten_men_ask_for_one_bush_and_seven_press_into_it() {
     let Some(mut world) = world_of(MAP) else {
         return;
     };
@@ -173,10 +173,14 @@ fn ten_men_work_one_bush_a_body_apart() {
     // at radius 0.2 with a 0.40 floor returns **seven** points, because chords round a corner are shorter than arcs - the ring's
     // own closest pair is 0.592. A tenth man could only stand further out, and further out is outside the gather reach, so he
     // would not be gathering. The owner's own saves show seven men per node, which is the same number by a different road.
-    assert_eq!(
-        working.len(),
-        comfort,
-        "MEASURED {} of 10 men working the bush; {comfort} is what the touching ring can hold at a 0.40 floor",
+    // **Seven work it, and they are pressed together, not spaced** (D290, D293): with the seat book gone the number who work one
+    // bush is what the geometry allows rather than what a table seats, and the men in it overlap - **measured 0.000** between the
+    // closest pair, two bodies on one point, which the original permits (its depenetration is computed and discarded).
+    // **The count moves by one with the deposit trips** - a man who has filled his load is walking to the bank, not working -
+    // so the claim is the geometry minus that man rather than an equality (measured 6 and 7 on successive runs).
+    assert!(
+        working.len() + 1 >= comfort,
+        "MEASURED {} of 10 men working the bush; the geometry holds {comfort}",
         working.len()
     );
     let spots: Vec<(Fixed, Fixed)> = working
@@ -189,9 +193,14 @@ fn ten_men_work_one_bush_a_body_apart() {
             closest = closest.min(gap(&world, spots[a], spots[b]));
         }
     }
+    // **Not one body's width apart, but one place each** (D356's ruling 1, the owner 2026-11-22: *"the second man steps to the
+    // next free spot near the same tree/mine"*). This assertion was the opposite until then - it demanded the pair be pressed
+    // inside **0.40** of a tile, because D289/D293 handed out no seats and let the crowd jam. The rule is now the game's own: an
+    // arriving man is *placed*, `func_002699A0`'s `ext_a + ext_b + 0.01` along one side, so two men on one node stand at least
+    // their own two radii apart and both keep working.
     assert!(
-        closest >= 0.39,
-        "MEASURED the closest pair {closest:.3} tiles apart; a villager's circle is 0.40 wide and must fit"
+        closest >= 0.40,
+        "MEASURED the closest pair {closest:.3} tiles apart: an arriving man is placed a body's width from the one already there (D356)"
     );
     // **Each circle touches the bush's tile** (D192): 0.20 of a tile from its border, which is 0.70-0.99 from the centre
     // depending on which part of the border he is against.
