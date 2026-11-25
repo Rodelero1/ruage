@@ -1,4 +1,4 @@
-# ADR 0360 — Publish engine and tooling, keep spec internal (supersedes D4)
+# ADR 0002 — Publish engine and tooling, keep spec internal (supersedes D4)
 
 - **D-id alias:** D4 (2026-10-23, amended 2026-10-25)
 - **Status:** Accepted. Old row untouched until owner sign-off.
@@ -19,7 +19,7 @@ Option B: publish engine + tooling, keep `docs/mechanics/`, SPEC ground-truth se
 
 ## Consequences
 
-Anything under `crates/` must be defensible as original work, never transcription. Blocking gap recorded, not solved here: a public clone cannot yet produce `config/gamedata/` — generator must be run from the separate repo (see ADR 0361).
+Anything under `crates/` must be defensible as original work, never transcription. Blocking gap recorded, not solved here: a public clone cannot yet produce `config/gamedata/` — generator must be run from the separate repo (see ADR 0003).
 
 ## Fixtures
 

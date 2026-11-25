@@ -1,4 +1,4 @@
-# ADR 0364 — Target shape: original content now, replaceable later (supersedes D18)
+# ADR 0006 — Target shape: original content now, replaceable later (supersedes D18)
 
 - **D-id alias:** D18 (2026-10-25)
 - **Status:** Accepted. Old row untouched until owner sign-off.
@@ -9,7 +9,7 @@ Owner's words: keep the vibe and dynamics; start with original graphics, tech tr
 
 ## Decision
 
-(a) Now: dat numbers + install art. (b) Scheduled, not blocked: own resources, tech tree, stats — the engine must accept them unchanged (ADR 0363 buys this). (c) Not planned: divergent rules stay expressible in the same schema, nothing designed against it. Engine addresses visuals by content id, never filename; simulation geometry (radius, footprint) lives in the unit table, so swapping art cannot change gameplay.
+(a) Now: dat numbers + install art. (b) Scheduled, not blocked: own resources, tech tree, stats — the engine must accept them unchanged (ADR 0005 buys this). (c) Not planned: divergent rules stay expressible in the same schema, nothing designed against it. Engine addresses visuals by content id, never filename; simulation geometry (radius, footprint) lives in the unit table, so swapping art cannot change gameplay.
 
 ## Evidence
 

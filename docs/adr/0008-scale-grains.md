@@ -1,4 +1,4 @@
-# ADR 0366 — Scale derived from two measured grains (supersedes D10, amends D9)
+# ADR 0008 — Scale derived from two measured grains (supersedes D10, amends D9)
 
 - **D-id alias:** D10 (2026-10-23)
 - **Status:** Accepted. Old row untouched until owner sign-off.

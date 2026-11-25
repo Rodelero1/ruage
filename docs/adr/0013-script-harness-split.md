@@ -1,4 +1,4 @@
-# ADR 0371 — Scenario language and runners are not the engine (supersedes D198)
+# ADR 0013 — Scenario language and runners are not the engine (supersedes D198)
 
 - **D-id alias:** D198
 - **Status:** Accepted. Old row untouched until owner sign-off.

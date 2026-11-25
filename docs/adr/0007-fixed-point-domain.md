@@ -1,6 +1,6 @@
-# ADR 0365 — Fixed-point domain is simulation state only (supersedes D9)
+# ADR 0007 — Fixed-point domain is simulation state only (supersedes D9)
 
-- **D-id alias:** D9 (2026-10-23; scale clause superseded by D10, see ADR 0366)
+- **D-id alias:** D9 (2026-10-23; scale clause superseded by D10, see ADR 0008)
 - **Status:** Accepted. Old row untouched until owner sign-off.
 
 ## Context
@@ -9,7 +9,7 @@ Determinism needs exact arithmetic in state. It does not forbid floats where sta
 
 ## Decision
 
-Values entering simulation state are `Fixed` (i64 at `sim.fixed_point_scale`). Load-time constants that never enter state (pathing weights, heuristic costs) stay f64. The boundary is explicit: `Fixed::parse` refuses sub-precision instead of rounding. (The "scale must divide a power of ten" clause was arithmetically inverted and is superseded — ADR 0366.)
+Values entering simulation state are `Fixed` (i64 at `sim.fixed_point_scale`). Load-time constants that never enter state (pathing weights, heuristic costs) stay f64. The boundary is explicit: `Fixed::parse` refuses sub-precision instead of rounding. (The "scale must divide a power of ten" clause was arithmetically inverted and is superseded — ADR 0008.)
 
 ## Evidence
 

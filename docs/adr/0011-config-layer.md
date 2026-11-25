@@ -1,4 +1,4 @@
-# ADR 0369 — Game data lives in config/ as generated TOML (supersedes D6)
+# ADR 0011 — Game data lives in config/ as generated TOML (supersedes D6)
 
 - **D-id alias:** D6 (2026-10-23)
 - **Status:** Accepted. Old row untouched until owner sign-off.
@@ -19,7 +19,7 @@ Engine reads TOML at runtime, never the `.dat`. Nothing numeric is hardcoded. Th
 
 ## Consequences
 
-If D4 lands publishable, `config/gamedata/` is gitignored and generated at first run (already the case — ADR 0359). Override precedence: `overrides.toml` beats `gamedata/`; regeneration never clobbers it. Later paydowns built on this: D45 `overrides.toml` surface, D50 content-hash handshake, D137 name checks.
+If D4 lands publishable, `config/gamedata/` is gitignored and generated at first run (already the case — ADR 0001). Override precedence: `overrides.toml` beats `gamedata/`; regeneration never clobbers it. Later paydowns built on this: D45 `overrides.toml` surface, D50 content-hash handshake, D137 name checks.
 
 ## Fixtures
 

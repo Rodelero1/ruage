@@ -1,4 +1,4 @@
-# ADR 0363 — Four layers; only the content pack knows AoE2 (supersedes D17)
+# ADR 0005 — Four layers; only the content pack knows AoE2 (supersedes D17)
 
 - **D-id alias:** D17 (2026-10-25)
 - **Status:** Accepted. Old row untouched until owner sign-off.

@@ -1,4 +1,4 @@
-# ADR 0359 — No game data in git (supersedes D8)
+# ADR 0001 — No game data in git (supersedes D8)
 
 - **D-id alias:** D8 (2026-10-23)
 - **Status:** Accepted. Old row untouched until owner sign-off.

@@ -1,4 +1,4 @@
-# ADR 0370 — Hand-authored map and scripted opponent; replay is a command list (supersedes D15 in part)
+# ADR 0012 — Hand-authored map and scripted opponent; replay is a command list (supersedes D15 in part)
 
 - **D-id alias:** D15 (2026-10-23)
 - **Status:** Accepted in part. Old row untouched until owner sign-off.

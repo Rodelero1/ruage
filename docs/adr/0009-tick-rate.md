@@ -1,4 +1,4 @@
-# ADR 0367 — Tick rate is a per-match setting, 20 Hz default (supersedes D16)
+# ADR 0009 — Tick rate is a per-match setting, 20 Hz default (supersedes D16)
 
 - **D-id alias:** D16 (2026-10-25)
 - **Status:** Accepted. Old row untouched until owner sign-off.

@@ -1,4 +1,4 @@
-# ADR 0361 — Generator lives in its own repository (supersedes D12, records D13 correction)
+# ADR 0003 — Generator lives in its own repository (supersedes D12, records D13 correction)
 
 - **D-id alias:** D12 (2026-10-23, amended same day); corrects D13 (2026-10-23)
 - **Status:** Accepted. Old rows untouched until owner sign-off.

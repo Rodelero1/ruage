@@ -1,4 +1,4 @@
-# ADR 0368 — Dat is authoritative over community documentation (supersedes D5)
+# ADR 0010 — Dat is authoritative over community documentation (supersedes D5)
 
 - **D-id alias:** D5 (2026-10-23)
 - **Status:** Accepted. Old row untouched until owner sign-off.

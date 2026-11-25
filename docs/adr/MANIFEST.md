@@ -4,23 +4,23 @@ One row per old D-id. Old rows stay authoritative until the ADR is signed off; d
 
 | D-id | ADR | State |
 |---|---|---|
-| D8 | `docs/adr/0359-no-game-data-in-git.md` | Draft — needs owner sign-off |
-| D4 | `docs/adr/0360-publish-engine-tooling.md` | Draft — needs owner sign-off |
-| D12 | `docs/adr/0361-generator-separate-repo.md` | Draft — needs owner sign-off |
-| D21 | `docs/adr/0362-permissive-licence.md` | Draft — needs owner sign-off |
-| D22 | — | Parked to next slice (bring-your-own-copy binds ADR 0359/0360) |
-| D17 | `docs/adr/0363-four-layers.md` | Draft — needs owner sign-off |
-| D18 | `docs/adr/0364-target-shape.md` | Draft — needs owner sign-off |
-| D9 | `docs/adr/0365-fixed-point-domain.md` | Draft — needs owner sign-off |
-| D10 | `docs/adr/0366-scale-grains.md` | Draft — needs owner sign-off |
-| D16 | `docs/adr/0367-tick-rate.md` | Draft — needs owner sign-off |
-| D5 | `docs/adr/0368-dat-authoritative.md` | Draft — needs owner sign-off |
-| D6 | `docs/adr/0369-config-layer.md` | Draft — needs owner sign-off |
-| D15 | `docs/adr/0370-scenario-scope.md` | Draft — needs owner sign-off (A* clause parked to movement) |
-| D198 | `docs/adr/0371-script-harness-split.md` | Draft — needs owner sign-off |
+| D8 | `docs/adr/0001-no-game-data-in-git.md` | Draft — needs owner sign-off |
+| D4 | `docs/adr/0002-publish-engine-tooling.md` | Draft — needs owner sign-off |
+| D12 | `docs/adr/0003-generator-separate-repo.md` | Draft — needs owner sign-off |
+| D21 | `docs/adr/0004-permissive-licence.md` | Draft — needs owner sign-off |
+| D22 | — | Parked to next slice (bring-your-own-copy binds ADR 0001/0002) |
+| D17 | `docs/adr/0005-four-layers.md` | Draft — needs owner sign-off |
+| D18 | `docs/adr/0006-target-shape.md` | Draft — needs owner sign-off |
+| D9 | `docs/adr/0007-fixed-point-domain.md` | Draft — needs owner sign-off |
+| D10 | `docs/adr/0008-scale-grains.md` | Draft — needs owner sign-off |
+| D16 | `docs/adr/0009-tick-rate.md` | Draft — needs owner sign-off |
+| D5 | `docs/adr/0010-dat-authoritative.md` | Draft — needs owner sign-off |
+| D6 | `docs/adr/0011-config-layer.md` | Draft — needs owner sign-off |
+| D15 | `docs/adr/0012-scenario-scope.md` | Draft — needs owner sign-off (A* clause parked to movement) |
+| D198 | `docs/adr/0013-script-harness-split.md` | Draft — needs owner sign-off |
 | D1, D2, D3, D5–D7, D9–D11, D13–D20, D23…D358 | — | Pending, in trunk order |
 
 Rulings made this slice:
-- ADRs numbered 0359+ (continue past max D358), not 1–4.
+- ADRs numbered from 0001 in migration order (Q11 amended 2026-11-25: owner was wrong; old bank deleted at the end, so no permanent collision).
 - Hygiene rows carry explicit "not a game-behavior claim" instead of a fake game citation.
 - D22 deferred to keep this slice to four.

@@ -1,4 +1,4 @@
-# ADR 0362 — Permissive engine licence, attribution for art (supersedes D21)
+# ADR 0004 — Permissive engine licence, attribution for art (supersedes D21)
 
 - **D-id alias:** D21 (2026-10-25)
 - **Status:** Accepted. Old row untouched until owner sign-off.
@@ -9,7 +9,7 @@ Every comparable engine is GPL-3.0 or AGPL-3.0. Permissive code flows into GPL p
 
 ## Decision
 
-Engine and content schema: MIT OR Apache-2.0. Future original art/audio: CC-BY-SA 4.0 with per-asset attribution. Game data: never shipped (ADR 0359). Nothing borrowed from GPL code; unlicensed code (`sld-extractor`) is read-only, never copied.
+Engine and content schema: MIT OR Apache-2.0. Future original art/audio: CC-BY-SA 4.0 with per-asset attribution. Game data: never shipped (ADR 0001). Nothing borrowed from GPL code; unlicensed code (`sld-extractor`) is read-only, never copied.
 
 ## Evidence
 
