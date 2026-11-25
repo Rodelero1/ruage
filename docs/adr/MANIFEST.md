@@ -9,6 +9,8 @@ One row per old D-id. Old rows stay authoritative until the ADR is signed off; d
 | D12 | `docs/adr/0361-generator-separate-repo.md` | Draft — needs owner sign-off |
 | D21 | `docs/adr/0362-permissive-licence.md` | Draft — needs owner sign-off |
 | D22 | — | Parked to next slice (bring-your-own-copy binds ADR 0359/0360) |
+| D17 | `docs/adr/0363-four-layers.md` | Draft — needs owner sign-off |
+| D18 | `docs/adr/0364-target-shape.md` | Draft — needs owner sign-off |
 | D1, D2, D3, D5–D7, D9–D11, D13–D20, D23…D358 | — | Pending, in trunk order |
 
 Rulings made this slice:
