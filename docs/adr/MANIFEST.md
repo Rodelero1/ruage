@@ -4,13 +4,13 @@ One row per old D-id. Old rows stay authoritative until the ADR is signed off; d
 
 | D-id | ADR | State |
 |---|---|---|
-| D8 | `docs/adr/0001-no-game-data-in-git.md` | Draft — needs owner sign-off |
-| D4 | `docs/adr/0002-publish-engine-tooling.md` | Draft — needs owner sign-off |
-| D12 | `docs/adr/0003-generator-separate-repo.md` | Draft — needs owner sign-off |
-| D21 | `docs/adr/0004-permissive-licence.md` | Draft — needs owner sign-off |
+| D8 | `docs/adr/0001-no-game-data-in-git.md` | Signed 2026-11-25 |
+| D4 | `docs/adr/0002-publish-engine-tooling.md` | Signed 2026-11-25 |
+| D12 | `docs/adr/0003-generator-separate-repo.md` | Signed 2026-11-25 |
+| D21 | `docs/adr/0004-permissive-licence.md` | Signed 2026-11-25 |
 | D22 | — | Parked to next slice (bring-your-own-copy binds ADR 0001/0002) |
-| D17 | `docs/adr/0005-four-layers.md` | Draft — needs owner sign-off |
-| D18 | `docs/adr/0006-target-shape.md` | Draft — needs owner sign-off |
+| D17 | `docs/adr/0005-four-layers.md` | Signed 2026-11-25 |
+| D18 | `docs/adr/0006-target-shape.md` | Signed 2026-11-25 |
 | D9 | `docs/adr/0007-fixed-point-domain.md` | Draft — needs owner sign-off |
 | D10 | `docs/adr/0008-scale-grains.md` | Draft — needs owner sign-off |
 | D16 | `docs/adr/0009-tick-rate.md` | Draft — needs owner sign-off |

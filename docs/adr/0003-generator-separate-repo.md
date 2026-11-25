@@ -1,7 +1,7 @@
 # ADR 0003 — Generator lives in its own repository (supersedes D12, records D13 correction)
 
 - **D-id alias:** D12 (2026-10-23, amended same day); corrects D13 (2026-10-23)
-- **Status:** Accepted. Old rows untouched until owner sign-off.
+- **Status:** Signed 2026-11-25.
 
 ## Context
 
@@ -25,3 +25,7 @@ Amendment stands: the "fork is likely" reasoning was wrong — per-task lists ar
 
 - Engine history: `git log --all -- tools/` holds no parser import.
 - Engine consumes TOML only: `crates/` has zero dat-reader imports.
+
+## Sign-off note (2026-11-25)
+
+Signed under reading (a): refined TOML output, same boundary. Readings (b) (own Rust reader) and (c) (GPL parser in-engine) parked; (c) refused while ADR 0004 stands.

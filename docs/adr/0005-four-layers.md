@@ -1,7 +1,7 @@
 # ADR 0005 — Four layers; only the content pack knows AoE2 (supersedes D17)
 
 - **D-id alias:** D17 (2026-10-25)
-- **Status:** Accepted. Old row untouched until owner sign-off.
+- **Status:** Signed 2026-11-25.
 
 ## Context
 
@@ -25,3 +25,7 @@ Paydown state, as recorded: `ResourceKind` deleted 2026-10-26 (resources are con
 
 - Paydown proof: `a_content_pack_with_our_own_resources_loads_and_spends` (own resources load and spend).
 - Open gap has no fixture yet — a step naming a building by role is the test to write.
+
+## Sign-off note (2026-11-25)
+
+Signed as-is. Parked follow-up (data/tooling branch): readable aliases for all remaining id references, loader refuses unknown names, dat ids stay canonical underneath.

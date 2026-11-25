@@ -1,7 +1,7 @@
 # ADR 0002 — Publish engine and tooling, keep spec internal (supersedes D4)
 
 - **D-id alias:** D4 (2026-10-23, amended 2026-10-25)
-- **Status:** Accepted. Old row untouched until owner sign-off.
+- **Status:** Signed 2026-11-25.
 
 ## Context
 
@@ -26,3 +26,7 @@ Anything under `crates/` must be defensible as original work, never transcriptio
 - `LICENSE-MIT`, `LICENSE-APACHE`, `README.md` at root.
 - Generator split commit history: engine history contains no `tools/` Python import (`git log --all -- tools/` empty of parser).
 - Publishability checklist: SPEC §6.2 (retained pointer only).
+
+## Sign-off note (2026-11-25)
+
+Signed as-is. Parked future, not an amendment: mechanics docs go public for modders later, gated on the quote-and-cite rewrite priced in `docs/licensing.md`.

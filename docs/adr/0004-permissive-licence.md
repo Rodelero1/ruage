@@ -1,7 +1,7 @@
 # ADR 0004 — Permissive engine licence, attribution for art (supersedes D21)
 
 - **D-id alias:** D21 (2026-10-25)
-- **Status:** Accepted. Old row untouched until owner sign-off.
+- **Status:** Signed 2026-11-25.
 
 ## Context
 

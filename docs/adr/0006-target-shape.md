@@ -1,7 +1,7 @@
 # ADR 0006 — Target shape: original content now, replaceable later (supersedes D18)
 
 - **D-id alias:** D18 (2026-10-25)
-- **Status:** Accepted. Old row untouched until owner sign-off.
+- **Status:** Signed 2026-11-25.
 
 ## Context
 

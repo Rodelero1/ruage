@@ -6,8 +6,8 @@ this tree is either source data or supporting documentation.
 
 | | |
 |---|---|
-| Spec version | 1.223 |
-| Last updated | 2026-11-24 |
+| Spec version | 1.224 |
+| Last updated | 2026-11-25 |
 | Decision status | **D1 = G1, D2 = file-based oracle, D17 = four layers with the resource enum deleted — see §6 and `docs/live/` (bank archived at `docs/archive/decisions-2026-11-24.md`)** |
 | Historical handoff | [`docs/archive/research/age2hd.md`](docs/archive/research/age2hd.md) — read it *through* the errata in §4 |
 | Ground truth | `Age2HD/` (the game install) — read-only, treat as immutable |
@@ -649,6 +649,7 @@ should say so rather than claim otherwise.
 
 | Date | Change |
 |---|---|
+| 2026-11-25 | v1.224 - **decision-record rebuild begins: ADRs 0001–0013 drafted, tranches 1–2 signed**. Q11 amended (ADRs start at 1, old bank deleted at the end, not renumbered past D358). 0001 (D8), 0002 (D4, +parked modding-docs future), 0003 (D12, reading (a)), 0004 (D21), 0005 (D17, +parked alias follow-up), 0006 (D18) signed; 0007–0013 (D9/D10/D16/D5/D6/D15/D198) drafted. Suite: 522 passed, 2 pre-existing stale-data failures (base-identical, needs gamedata regen — no install here). Review: `docs/reviews/2026-11-25-signoff-tranche1-2.md`. |
 | 2026-11-24 | v1.223 - **Phase B calibration: Vision & fog + Victory & defeat**. 8 rows read in full; 2 scaffolding refinements (D59 superseded-by-D59b per C6, D78 GAME via manual quote in D59), 0 drops/merges. Refinements land as tested generator tables; open question for Phase B: tables until a body change is needed, then hand-maintained live files. Review: `docs/reviews/2026-11-24-phase-b-calibration.md`. |
 | 2026-11-24 | v1.222 - **Phase A docs shaping: thin root, citations follow**. 45 root md → 7; 34 → `archive/research/`, 7 history → `archive/history/`, `.swp` deleted. One-shot rewrite of every moved path (reviews/ frozen by design, SPEC history untouched); audit patterns + `next_step` HISTORY repointed (RED-recorded tests). Caught: archived filename corrupting D188's derived date (fixed, 1 of 364). Counts identical, gates green. Review: `docs/reviews/2026-11-24-phase-a-docs-shaping.md`. |
 | 2026-11-24 | v1.221 - **index files by authored areas; C14 complete**. Deleted the keyword heuristic from `decision_index.py` (`assign_areas` + `group_entries`, table-ordered, `Unfiled` tail); contract test replaced, RED-recorded. Regen: 345 rows, counts identical, 10 buckets → 15 TOML areas, no Unfiled gap. Review: `docs/reviews/2026-11-24-index-files-by-table.md`. |
