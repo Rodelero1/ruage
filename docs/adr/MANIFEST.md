@@ -16,6 +16,8 @@ One row per old D-id. Old rows stay authoritative until the ADR is signed off; d
 | D16 | `docs/adr/0367-tick-rate.md` | Draft — needs owner sign-off |
 | D5 | `docs/adr/0368-dat-authoritative.md` | Draft — needs owner sign-off |
 | D6 | `docs/adr/0369-config-layer.md` | Draft — needs owner sign-off |
+| D15 | `docs/adr/0370-scenario-scope.md` | Draft — needs owner sign-off (A* clause parked to movement) |
+| D198 | `docs/adr/0371-script-harness-split.md` | Draft — needs owner sign-off |
 | D1, D2, D3, D5–D7, D9–D11, D13–D20, D23…D358 | — | Pending, in trunk order |
 
 Rulings made this slice:
