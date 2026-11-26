@@ -21,7 +21,7 @@ use std::collections::BinaryHeap;
 use ruage_data::Map;
 use ruage_fixed::Fixed;
 
-use crate::geometry::{WayRoute, solve};
+use crate::geometry::{WayRoute, solve, verify_path};
 use crate::integer_sqrt;
 
 /// **An obstacle the plan must keep clear of** (D282, D286): the object's **box**, and the mover's own reach.
@@ -744,9 +744,11 @@ impl Ground {
         // `standing_bodies` and the step's blockers stamp the mover's own reach into the rects they hand
         // over, so `max` is the identity there, and a bare rect with the reach carried separately is grown
         // exactly once.
-        // The verdict maps onto the existing tail: `Reached` ends on the exact goal point, `Closest` keeps
-        // the solver's stopping point beside the goal - the best-settled tile centre's role, without snapping
-        // to a centre that could sit inside a grown box. The first point stays: it is where the body stands
+        // The verdict maps onto the existing tail: `Reached` ends on the exact goal point, `Closest`
+        // settles on the tile centre - the flat search's best-settled rule. The snap is taken only when the
+        // centre and its leg stay `verify_path`-clean against the grown boxes: the functional gates (never
+        // stuck, never through a blocked area) outrank the tail shape, so a snap with no clean centre keeps
+        // the solver's certified endpoint instead. The first point stays: it is where the body stands
         // (or the ring exit it stepped out to), and the step spends the waypoint it stands on.
         if reach == 0 {
             match solve(scale, from, to, reach, avoid) {
@@ -756,7 +758,39 @@ impl Ground {
                     }
                     return Some(points);
                 }
-                WayRoute::Closest(points) => return Some(points),
+                WayRoute::Closest(mut points) => {
+                    // The grown boxes the snap is certified against: the same `max` the solver grew by.
+                    let grown: Vec<Clear> = avoid
+                        .iter()
+                        .map(|clear| Clear {
+                            at: clear.at,
+                            half: clear.half,
+                            reach: clear.reach.max(reach),
+                        })
+                        .collect();
+                    let settled = points.last().copied().and_then(|last| {
+                        let tile = self.tile_of(scale, last)?;
+                        let centre = (
+                            Fixed::from_raw(i64::from(tile.0) * scale + scale / 2),
+                            Fixed::from_raw(i64::from(tile.1) * scale + scale / 2),
+                        );
+                        // A settled tile is standable ground, and the whole polyline with the snap in place
+                        // must certify - the centre and every leg, including the snapped one.
+                        let mut candidate: Vec<(i64, i64)> = points
+                            .iter()
+                            .map(|point| (point.0.raw(), point.1.raw()))
+                            .collect();
+                        if let Some(end) = candidate.last_mut() {
+                            *end = (centre.0.raw(), centre.1.raw());
+                        }
+                        (self.walkable(tile.0, tile.1) && verify_path(&candidate, &grown).is_none())
+                            .then_some(centre)
+                    });
+                    if let (Some(centre), Some(end)) = (settled, points.last_mut()) {
+                        *end = centre;
+                    }
+                    return Some(points);
+                }
             }
         }
         // A straight walk needs no chain: the search's own answer would be pulled back to this one point anyway. The test is

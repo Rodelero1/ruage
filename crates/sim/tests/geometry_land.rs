@@ -4,7 +4,7 @@
 //! Tier + flat code stays but is bypassed for the reach values Task 3 exercised.
 
 use ruage_fixed::Fixed;
-use ruage_sim::Ground;
+use ruage_sim::{Clear, Ground, verify_path};
 
 const SCALE: i64 = 20_000;
 /// The only reach the solver has been exercised with (Task 3 pins `reach = 0`):
@@ -84,4 +84,95 @@ fn land_uses_geometry_not_tiles() {
     assert_eq!(*route.last().unwrap(), to_pt());
     // The solver's polyline starts where the body stands; the tile tail never does.
     assert_eq!(route, vec![from_pt(), to_pt()]);
+}
+
+fn raw(route: &[(Fixed, Fixed)]) -> Vec<(i64, i64)> {
+    route
+        .iter()
+        .map(|point| (point.0.raw(), point.1.raw()))
+        .collect()
+}
+
+fn is_tile_centre(point: (Fixed, Fixed)) -> bool {
+    point.0.raw() % SCALE == SCALE / 2 && point.1.raw() % SCALE == SCALE / 2
+}
+
+/// **Closest settles on the tile centre** (the brief's tail rule, same as the flat search's
+/// best-settled): a start walled inside a pocket of standers cannot reach the goal, so the route
+/// stops beside them - on the settled tile's centre, not on a grown face.
+#[test]
+fn closest_settles_on_the_tile_centre() {
+    let ground = open_ground_16();
+    // Off-centre inside the pocket, so the settled centre differs from where the body stands.
+    let from = (Fixed::from_raw(35_000), Fixed::from_raw(35_000));
+    let (fx, fy) = (35_000i64, 35_000i64);
+    let pocket = vec![
+        Clear {
+            at: (fx, fy + 30_000),
+            half: (40_000, 5_000),
+            reach: 0,
+        },
+        Clear {
+            at: (fx, fy - 30_000),
+            half: (40_000, 5_000),
+            reach: 0,
+        },
+        Clear {
+            at: (fx + 30_000, fy),
+            half: (5_000, 40_000),
+            reach: 0,
+        },
+        Clear {
+            at: (fx - 30_000, fy),
+            half: (5_000, 40_000),
+            reach: 0,
+        },
+    ];
+    let route = ground
+        .route_avoiding(SCALE, from, to_pt(), REACH, &pocket)
+        .expect("Closest still answers");
+    let last = *route.last().unwrap();
+    assert_ne!(last, to_pt(), "the goal is walled off, not reached");
+    assert_ne!(
+        last, from,
+        "the endpoint settles, it does not stay a grown-face point"
+    );
+    assert_eq!(last, at(1, 1), "the stop is the settled tile's centre");
+    assert!(is_tile_centre(last));
+    assert!(
+        verify_path(&raw(&route), &pocket).is_none(),
+        "the snapped point and its leg stay clear of the grown boxes: {route:?}"
+    );
+}
+
+/// **No clean snap keeps the solver endpoint**: the functional gates (never stuck, never through a
+/// blocked area) outrank the tail shape, so when the settled centre sits inside a grown box the
+/// certified endpoint stands instead of a dirty snap.
+#[test]
+fn closest_without_a_clean_centre_keeps_the_solver_endpoint() {
+    let ground = open_ground_16();
+    let (gx, gy) = (14 * SCALE + SCALE / 2, 14 * SCALE + SCALE / 2);
+    let boxed = vec![Clear {
+        at: (gx, gy),
+        half: (10_000, 10_000),
+        reach: 0,
+    }];
+    let route = ground
+        .route_avoiding(SCALE, from_pt(), to_pt(), REACH, &boxed)
+        .expect("Closest still answers");
+    let last = *route.last().unwrap();
+    assert_ne!(last, to_pt(), "the goal is walled off, not reached");
+    assert!(
+        !is_tile_centre(last),
+        "no centre here is clean, so the grown-face endpoint stands: {last:?}"
+    );
+    assert_eq!(
+        last,
+        (Fixed::from_raw(280_000), Fixed::from_raw(280_000)),
+        "the solver's certified ring exit, unsnapped"
+    );
+    assert!(
+        verify_path(&raw(&route), &boxed).is_none(),
+        "the kept endpoint and its leg stay clear of the grown box: {route:?}"
+    );
 }
