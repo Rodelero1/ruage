@@ -2,12 +2,11 @@
 //!
 //! Source: `samuelcaldas/age-of-empires-2-decomp`, `zone_spatial_pyramid_find_path.cpp` / `zone_spatial_pyramid_eval_cost.cpp`
 //! and the tree's own `docs/archive/research/movement-in-the-binary.md` (`FUN_008007f0`): a cardinal step accumulates **16**, a diagonal the
-//! octile table's **23** (`16 x sqrt2`, rounded), and the estimate is Euclidean tile distance scaled by **25** - which is the
-//! **expansion budget**, not the frontier's weight (D334; the binary's key is `g + octile`). These are the numbers a re-port can
+//! octile table's **23** (`16 x sqrt2`, rounded), and the estimate is Euclidean tile distance scaled by **25**. These are the numbers a re-port can
 //! get wrong silently, so each is asserted against the constant it claims rather than against whatever the engine happens to do
-//! today.
+//! today. The tile search that spent them is gone (New Way Task 5); the table stays as the costs the engine still charges.
 
-use ruage_conformance::{CARDINAL, DIAGONAL, SCALE, ground, octile};
+use ruage_conformance::{CARDINAL, DIAGONAL};
 
 /// RULE: a diagonal is the octile ratio of a cardinal step, not the same and not twice.
 #[test]
@@ -32,30 +31,4 @@ fn the_estimate_is_euclidean_distance_scaled_by_twenty_five() {
     assert_eq!(ruage_sim::Ground::estimate((5, 5), (8, 9)), 125);
     // Zero distance is zero.
     assert_eq!(ruage_sim::Ground::estimate((5, 5), (5, 5)), 0);
-}
-
-/// RULE: no route is cheaper than the octile lower bound - a walk that reaches its goal pays at least what king moves cost.
-///
-/// Measured over the **search's own tile chain**, not the pulled route: the pull exists to remove slack, and its waypoints are
-/// corners rather than steps, so charging it by the step table would measure the wrong thing.
-#[test]
-fn a_route_is_never_cheaper_than_the_octile_bound() {
-    // A wall with one gap, so the route must bend and the bound is a real one rather than a straight line.
-    let wall: Vec<(u16, u16)> = (0..=8).map(|y| (8, y)).collect();
-    let field = ground(20, 20, &wall);
-    let (from, to) = ((4u16, 4u16), (14u16, 4u16));
-    let chain = field
-        .search(from, to, SCALE, &[])
-        .expect("a way round exists");
-    let mut total = 0;
-    let mut here = from;
-    for next in &chain {
-        total += ruage_sim::Ground::step_cost(here, *next);
-        here = *next;
-    }
-    assert!(
-        total >= octile(from, to),
-        "the search paid {total}, below the octile bound {}",
-        octile(from, to)
-    );
 }
