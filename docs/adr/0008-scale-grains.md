@@ -1,7 +1,7 @@
 # ADR 0008 — Scale derived from two measured grains (supersedes D10, amends D9)
 
 - **D-id alias:** D10 (2026-10-23)
-- **Status:** Accepted. Old row untouched until owner sign-off.
+- **Status:** Signed 2026-11-26.
 
 ## Context
 
@@ -25,3 +25,7 @@ An invariant living only in prose is not an invariant — both grains are config
 
 - `crates/data/tests/corpus.rs` (whole-corpus sweep).
 - `scale_must_give_exact_per_tick_displacement`, `tick_rate_and_scale_must_agree` (RED-recorded in SPEC §11).
+
+## Sign-off note (2026-11-26)
+
+Signed as written. D10 bank row deleted on sign-off per the 2026-11-26 rule.

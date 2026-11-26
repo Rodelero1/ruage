@@ -1,7 +1,7 @@
 # ADR 0009 — Tick rate is a per-match setting, 20 Hz default (supersedes D16)
 
 - **D-id alias:** D16 (2026-10-25)
-- **Status:** Accepted. Old row untouched until owner sign-off.
+- **Status:** Signed 2026-11-26.
 
 ## Context
 
@@ -26,3 +26,7 @@ Tick rate is per-match (`tick_rate_hz` + `fixed_point_scale` in handshake and re
 - Dat reload table (all values multiples of 0.05 — corpus-swept).
 - `tick_rate_and_scale_must_agree` (60 Hz with 20 kHz scale refused).
 - `unproven`: the 20 Hz value itself remains corroborated-but-unproven (U12 open).
+
+## Sign-off note (2026-11-26)
+
+Signed as written. D16 bank row deleted on sign-off per the 2026-11-26 rule.

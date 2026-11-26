@@ -12,8 +12,8 @@ One row per old D-id. A bank row is deleted when its ADR is signed (owner rule 2
 | D17 | `docs/adr/0005-four-layers.md` | Signed 2026-11-25 |
 | D18 | `docs/adr/0006-target-shape.md` | Signed 2026-11-25 |
 | D9 | `docs/adr/0007-fixed-point-domain.md` | Signed 2026-11-26 |
-| D10 | `docs/adr/0008-scale-grains.md` | Draft — needs owner sign-off |
-| D16 | `docs/adr/0009-tick-rate.md` | Draft — needs owner sign-off |
+| D10 | `docs/adr/0008-scale-grains.md` | Signed 2026-11-26 |
+| D16 | `docs/adr/0009-tick-rate.md` | Signed 2026-11-26 |
 | D5 | `docs/adr/0010-dat-authoritative.md` | Draft — needs owner sign-off |
 | D6 | `docs/adr/0011-config-layer.md` | Draft — needs owner sign-off |
 | D15 | `docs/adr/0012-scenario-scope.md` | Draft — needs owner sign-off (A* clause parked to movement) |
