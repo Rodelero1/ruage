@@ -17,7 +17,7 @@ One row per old D-id. A bank row is deleted when its ADR is signed (owner rule 2
 | D5 | `docs/adr/0010-dat-authoritative.md` | Signed 2026-11-26 |
 | D6 | `docs/adr/0011-config-layer.md` | Signed 2026-11-26 |
 | D15 | `docs/adr/0012-scenario-scope.md` | Signed 2026-11-26 |
-| D198 | `docs/adr/0013-script-harness-split.md` | Draft — needs owner sign-off |
+| D198 | `docs/adr/0013-script-harness-split.md` | Signed 2026-11-26 |
 | D1–D3, D7, D11, D14, D19, D20, D23–D197, D199–D358 | — | Pending, in trunk order |
 
 Rulings made this slice:
