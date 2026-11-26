@@ -30,7 +30,7 @@ mod metrics;
 mod roles;
 pub mod tiles;
 mod world;
-pub use geometry::{WayRoute, verify_path};
+pub use geometry::{WayRoute, ray_hit, verify_path, walk_shape};
 pub use ground::{Clear, Ground, TierFunnel, TierShadow};
 pub use levels::{CoarseRoute, Levels};
 pub use metrics::Metrics;
