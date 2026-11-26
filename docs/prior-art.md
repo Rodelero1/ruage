@@ -31,6 +31,54 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-26 — a saved game hosted through the lobby: a 372-byte preset, and a slot found by name
+
+**`aesaganda/aoe2-on-browser`, four commits, two of them merges (`3d5eb6d3` -> `35361665`), 4 files, +121/−22** — both
+features belong to their harness, not to the game. PR #4 (`55c00872`) gives every browser a unique default player name
+(`Player-1234`, kept in `localStorage`, `web/page.js:1106-1115`): an empty field made every client "Player", and the game
+cannot tell two same-named players apart. PR #5 (`c7ce335b`) adds a `Host` button to each multiplayer save in the saves list
+(`web/page.js:606-611`), carries the save's bare name through the invite URL and the relay's room record
+(`tools/net/relay.py:135-140`, `:262-264`), and makes the DirectPlay stub answer the game's lobby preset request with a 372-byte
+`AgePresetData` where it used to answer "not supported" (`src/linux/dplay_stub.c:79-96`, reply at `:107-109`).
+
+**The facts about the original**, all AoC 1.0 (`age2_x1.exe`, addresses as cited in their comments):
+
+- The lobby handshake is a `DPLMSG_GETPROPERTY` message; a restore reply carries `hr == DP_OK` and **exactly 0x174 bytes** of
+  `AgePresetData`. The game copies it to `lobby+0x20` at `0x437AE6`, and `satisfyLobbyLaunchCriteria` (`0x437DE0`) calls
+  `0x5D1DF0` with 1, `COMM_LOBBY_RESTORE_GAME`, when `m_bGameType` is 7 or 8 — restore is a **game type**, not a flag.
+- The fields they fill, and their offsets: `m_bCivAvail[20]` at 0, `m_bGameType` at `0x15`, `m_sGameFilename[260]` at
+  `0x17`, `m_bMapTypeAvail[37]` at `0x11B`, map size `0x141`, difficulty `0x143`, population as a u32 at `0x148`, then single
+  bytes at `0x14D`, `0x167`, `0x169`, `0x16B`, `0x16D`, `0x16F`. The arithmetic agrees with the declared members
+  (`0x17 + 0x104 = 0x11B`, `0x11B + 37 = 0x140`), which is the check that the list is a layout and not a dump of guesses.
+- A filename without a backslash is resolved against the game's own save folder (`0x43D410`).
+- The restore path closes its window unless the lobby's session carries `dwUser1 == 1` (`0x4377A8`, `lobby+0x198`); their
+  relay sets it at `src/net/dplay_net.c:828-830`.
+- A joining player's slot comes from the **first character of its long name**, as the Zone set it (`0x42D0C6` — "Bob" reads
+  as slot 0 and is turned away). Because their relay has no Zone, it searches the save's header for the name instead:
+  players 1–8 at `0x5D4 + 0xA0*n`, name first, in the first `0xE48` bytes (`src/net/dplay_net.c:170-186`).
+
+**The last item looks portable and is not, which is why it is checked against our own files.** AoC's fixed `0xA0` slot is not
+HD's shape. In `Age2HD/SaveGame/brit1.aoe2spgame` (VER 9.4, save version 12.5, `tools/savegame.py` and a raw dump of the
+inflated bytes) the two name-carrying blocks sit **0x56 apart** — records at `0xa4` and `0xfa` — and each name is a
+`0x0A600000|len` framed string, with a second framed string beside it ("Alfred the Great" beside "Promisory", "Lord Talbot"
+beside the second "Promisory"; the AI personality, by position). So HD stores names as variable-length framed strings in
+records of no fixed stride, and `0x5D4 + 0xA0*n` must not be carried into `tools/savegame.py`. Whether HD keeps any player
+table at a fixed offset at all is **not known** and not claimed here.
+
+**No engine axis.** No tick model, no determinism, no asset pipeline (D18), no content/engine boundary (D17). M24
+(`docs/archive/research/dependency-tree.md:152`) is the network layer and is still marked "nothing" — no dependency, no cost. A preset struct
+and a restore handshake change nothing in this tree. The reading worth keeping: **M24 would be cheaper than its "later" row
+suggests**, because the original's lobby protocol on this path is one DirectPlay property message and 372 bytes of struct —
+and that is not evidence that it is wanted.
+
+**Licence: none at all, again** — stricter than GPL, since there is no right to copy, adapt or redistribute. The offsets above
+are read as facts about a 2000 binary and are cited as such; no line crosses into `crates/`. The second reason stands too: a
+shim derived from watching a proprietary executable is not a source of portable code even where a licence would permit it.
+
+**U-numbers: none touched.** U12 is unmoved (a restore runs the same replay machinery; no new timing). U23 is not answered by
+a lobby preset — `0x141` is the setup screen's map-size *choice*, while tile dimensions live in the exe's map generation, which
+is where that row already points.
+
 ## 2026-11-24 — docs cleanup: the two decomp/engines become rung-2 sources
 
 Owner note: `samuelcaldas/age-of-empires-2-decomp` + `Zaydme/openaok` can help decision-making. Recorded here so the live migration cites them correctly.

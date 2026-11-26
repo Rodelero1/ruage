@@ -2,9 +2,40 @@
 
 # Review notes
 
-**314 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
+**336 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
 
-The files are **not** moved: `docs/decisions.md` cites them by path, and an archive directory would dangle those citations.
+The files are **not** moved: `docs/archive/decisions-2026-11-24.md` cites them by path, and an archive directory would dangle those citations.
+
+## 2026-11-26 (8)
+
+- **Review: delete-on-sign-off + 0007 plain-wording (2026-11-26)** — `2026-11-26-delete-on-signoff.md` · Docs-only slice. Code frozen; no crates/, config/, tools/ touched.
+- **2026-11-26 - prior-art watch: aoe2-on-browser's lobby restore, and a save layout that does not transfer** — `2026-11-26-prior-art-aoe2-on-browser-lobby-restore.md` · Documentation only: 48 lines added to docs/prior-art.md. No crates/, config/, tools/, build/ or Age2HD/ file
+- **Review: 0007 sign-off + D9 deletion (2026-11-26)** — `2026-11-26-signoff-0007.md` · Zero engine diff. Suite unchanged (522 / 2 pre-existing stale-data / 6 ignored) — no re-run.
+- **Review: 0008/0009 sign-off + D10/D16 deletion (2026-11-26)** — `2026-11-26-signoff-0008-0009.md` · Zero engine diff. Suite unchanged (522 / 2 pre-existing stale-data / 6 ignored) — no re-run.
+- **Review: 0010 sign-off + D5 deletion (2026-11-26)** — `2026-11-26-signoff-0010.md` · Zero engine diff. Suite unchanged — no re-run.
+- **Review: 0011 sign-off + D6 deletion (tranche 4 closed, 2026-11-26)** — `2026-11-26-signoff-0011.md` · Zero engine diff. Suite unchanged — no re-run.
+- **Review: 0012 sign-off + D15 deletion (2026-11-26)** — `2026-11-26-signoff-0012.md` · Zero engine diff. Suite unchanged — no re-run.
+- **Review: 0013 sign-off + D198 deletion (tranche 5 closed, 2026-11-26)** — `2026-11-26-signoff-0013.md` · Zero engine diff. Suite unchanged — no re-run.
+
+## 2026-11-25 (7)
+
+- **Review: ADR renumber 0359–0371 → 0001–0013 (2026-11-25)** — `2026-11-25-adr-renumber.md` · Docs-only mechanical rename. Q11 amended by owner: ADRs start at 1 in migration order (old bank deleted at the end, so no permanent collision). Code frozen; no ...
+- **Review: config/data ADRs 0368–0369 (2026-11-25)** — `2026-11-25-config-data-adrs.md` · Docs-only slice. Code frozen; no crates/, config/, tools/ touched.
+- **Review: fixed-point and tick ADRs 0365–0367 (2026-11-25)** — `2026-11-25-fixed-point-tick-adrs.md` · Docs-only slice. Code frozen; no crates/, config/, tools/ touched.
+- **Review: layout ADRs 0363–0364 (2026-11-25)** — `2026-11-25-layout-adrs.md` · Docs-only slice. Code frozen; no crates/, config/, tools/ touched.
+- **Review: license ADRs 0359–0362 (2026-11-25)** — `2026-11-25-license-adrs.md` · Docs-only slice. Code frozen; no crates/, config/, tools/ touched.
+- **Review: scenario ADRs 0370–0371 (2026-11-25)** — `2026-11-25-scenario-adrs.md` · Docs-only slice. Code frozen; no crates/, config/, tools/ touched.
+- **Review: sign-off tranches 1–2 + compact (2026-11-25)** — `2026-11-25-signoff-tranche1-2.md` · Docs-only slice. Code frozen; no crates/, config/, tools/ touched.
+
+## 2026-11-24 (7)
+
+- **Review: bank archived + citation-scope and collision-heuristic fixes (2026-11-24)** — `2026-11-24-bank-archived-scope-fixes.md` · Tools + docs-layout change, so gate sections apply. No engine/config change.
+- **Review: C-rulings + collision IDs + OWNER normalization (2026-11-24)** — `2026-11-24-c-rulings-collision-ids.md` · Tools change (2nd slice of livemigrate.py), so gate sections apply.
+- **Review: docs live hub + conflict table (2026-11-24)** — `2026-11-24-docs-live-hub-and-conflict-table.md` · Docs-only slice. No engine, config, or tooling behavior changed.
+- **Review: decision index files by authored areas (2026-11-24)** — `2026-11-24-index-files-by-table.md` · Tools change, so gate sections apply. No engine/config change. Completes C14:
+- **Review: live migration tool + 15 area files (2026-11-24)** — `2026-11-24-live-migration-tool-and-areas.md` · Tools change (tools/livemigrate.py, tools/testlivemigrate.py), so this note
+- **Review: Phase A docs shaping — thin root, citations follow (2026-11-24)** — `2026-11-24-phase-a-docs-shaping.md` · Docs + tools change (comment-only in crates), so gate sections apply.
+- **Review: Phase B calibration — Vision & fog + Victory & defeat (2026-11-24)** — `2026-11-24-phase-b-calibration.md` · First Phase B slice (small areas first, as agreed). Two micro-refinements land
 
 ## 2026-11-23 (1)
 
