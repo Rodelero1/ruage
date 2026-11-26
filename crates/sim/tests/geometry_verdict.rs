@@ -2,7 +2,7 @@
 //! and `verify_path` certifies a polyline against the grown boxes.
 
 use ruage_fixed::Fixed;
-use ruage_sim::{verify_path, Clear, WayRoute};
+use ruage_sim::{Clear, WayRoute, verify_path};
 
 #[test]
 fn reached_vs_closest_is_explicit() {

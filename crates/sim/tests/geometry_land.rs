@@ -78,12 +78,12 @@ fn to_pt() -> (Fixed, Fixed) {
 fn land_uses_geometry_not_tiles() {
     let ground = open_ground_16();
     let route = ground
-        .route_avoiding(SCALE, from_pt(), to_pt(), REACH, &[])
+        .route_avoiding(SCALE, from_pt(), to_pt(), REACH, &[], true)
         .expect("geometry answers");
     assert!(route.len() <= 2);
     assert_eq!(*route.last().unwrap(), to_pt());
-    // The solver's polyline starts where the body stands; the tile tail never does.
-    assert_eq!(route, vec![from_pt(), to_pt()]);
+    // The standing point is dropped: the route holds only the waypoints ahead of the body.
+    assert_eq!(route, vec![to_pt()]);
 }
 
 fn raw(route: &[(Fixed, Fixed)]) -> Vec<(i64, i64)> {
@@ -129,7 +129,7 @@ fn closest_settles_on_the_tile_centre() {
         },
     ];
     let route = ground
-        .route_avoiding(SCALE, from, to_pt(), REACH, &pocket)
+        .route_avoiding(SCALE, from, to_pt(), REACH, &pocket, true)
         .expect("Closest still answers");
     let last = *route.last().unwrap();
     assert_ne!(last, to_pt(), "the goal is walled off, not reached");
@@ -137,7 +137,11 @@ fn closest_settles_on_the_tile_centre() {
         last, from,
         "the endpoint settles, it does not stay a grown-face point"
     );
-    assert_eq!(last, at(1, 1), "the stop is the settled tile's centre");
+    // The settled tile is the goal-nearest clean standable centre: the stall's own tile (1, 3) is
+    // standable, but its centre sits behind the pocket's north wall, so its leg is dirty and the
+    // settle falls through to the next tile over. Rebased from (1, 1) when the solver's hit-box
+    // corners joined the advance vertices and the stall moved onto the wall.
+    assert_eq!(last, at(2, 2), "the stop is the settled tile's centre");
     assert!(is_tile_centre(last));
     assert!(
         verify_path(&raw(&route), &pocket).is_none(),
@@ -158,7 +162,7 @@ fn closest_without_a_clean_centre_keeps_the_solver_endpoint() {
         reach: 0,
     }];
     let route = ground
-        .route_avoiding(SCALE, from_pt(), to_pt(), REACH, &boxed)
+        .route_avoiding(SCALE, from_pt(), to_pt(), REACH, &boxed, true)
         .expect("Closest still answers");
     let last = *route.last().unwrap();
     assert_ne!(last, to_pt(), "the goal is walled off, not reached");
@@ -166,9 +170,12 @@ fn closest_without_a_clean_centre_keeps_the_solver_endpoint() {
         !is_tile_centre(last),
         "no centre here is clean, so the grown-face endpoint stands: {last:?}"
     );
+    // The stall stops on the arrival face's middle, not the grown corner: face middles joined the
+    // advance vertices, and the west middle is goal-nearest. Still unsnapped - no settled centre is
+    // clean, so the certified endpoint stands.
     assert_eq!(
         last,
-        (Fixed::from_raw(280_000), Fixed::from_raw(280_000)),
+        (Fixed::from_raw(280_000), Fixed::from_raw(290_000)),
         "the solver's certified ring exit, unsnapped"
     );
     assert!(

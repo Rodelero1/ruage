@@ -127,20 +127,36 @@ fn turn_balance(ring: &[(i64, i64)]) -> i64 {
 
 #[test]
 fn open_ground_reaches() {
-    let route = solve(20_000, point(0, 0), point(5, 0), 0, &[]);
+    let route = solve(20_000, point(0, 0), point(5, 0), 0, &[], &[], true);
     assert!(matches!(route, WayRoute::Reached(_)));
 }
 
 #[test]
 fn walled_goal_answers_closest_never_through_wall() {
-    let route = solve(20_000, point(0, 0), point_inside_box(), 0, &walled_goal());
+    let route = solve(
+        20_000,
+        point(0, 0),
+        point_inside_box(),
+        0,
+        &walled_goal(),
+        &[],
+        true,
+    );
     assert!(matches!(route, WayRoute::Closest(_)));
     assert!(verify_path(&raw_points(&route), &walled_goal()).is_none());
 }
 
 #[test]
 fn surrounded_expands_once_then_closest() {
-    let route = solve(20_000, point(0, 0), point(9, 9), 0, &surrounded());
+    let route = solve(
+        20_000,
+        point(0, 0),
+        point(9, 9),
+        0,
+        &surrounded(),
+        &[],
+        true,
+    );
     assert!(matches!(route, WayRoute::Closest(_)));
 }
 

@@ -175,9 +175,10 @@ fn the_goal_tile_does_not_block_its_own_line() {
     );
 }
 
-/// **B**: a route that has to bend carries no slack. The search's own answer is a node per tile; the stored route jumps
-/// to the furthest tile a clear line reaches, so going round one blocking tile is **one corner and the goal**, not a
-/// staircase. The search itself is `Ground::route`'s business (`tests/ground.rs`); this is what the engine stores.
+/// **B**: a route that has to bend carries no slack. The solver's answer walks the grown faces it meets; the stored
+/// route holds the face corners it turns at, so going round one blocking tile is **at most two corners and the goal** -
+/// the near face and the far face - not a staircase. The solver itself is `Ground::route`'s business (`tests/ground.rs`);
+/// this is what the engine stores.
 #[test]
 fn a_route_round_a_tree_carries_no_slack() {
     let Some(mut world) = fresh() else { return };
@@ -210,7 +211,7 @@ fn a_route_round_a_tree_carries_no_slack() {
     world.step().expect("the order lands");
     let stored = world.path_length(villager);
     assert!(
-        stored <= 2,
-        "one blocked tile is one corner, not a staircase: the route holds {stored} points"
+        stored <= 3,
+        "one blocked tile is two corners at most, not a staircase: the route holds {stored} points"
     );
 }

@@ -138,7 +138,9 @@ fn tile_of(world: &World, id: EntityId) -> (i64, i64) {
 
 /// **A man walking at a node stands on the side he came from.** He is four tiles due east of the tree; the ring's north-west tile is
 /// the first in compass order and the east tile is the nearest, three tiles closer to him. Every ring tile is free, so nothing but the
-/// chooser decides it - and the chooser must send him to the east side.
+/// chooser decides it - and the chooser must send him to the east side, never round the node to the far side.
+/// The solver stops on the grown face it meets, and a stop on the east face's corner reads as the north-east tile:
+/// still the approach half, adjacent and working, but no longer exactly the east tile the tile search settled on.
 #[test]
 fn a_man_who_comes_from_the_east_works_the_tree_from_the_east() {
     let mut world = world_of(MAP);
@@ -165,9 +167,13 @@ fn a_man_who_comes_from_the_east_works_the_tree_from_the_east() {
 
     let standing = tile_of(&world, man);
     assert_eq!(
-        standing,
-        (tx + 1, ty),
-        "the man works the tree from ({tx}+1, {ty}) - the side he walked in from - not from another side of the ring"
+        standing.0,
+        tx + 1,
+        "the man works the tree from the east column ({tx}+1, _) - the side he walked in from - not from another side of the ring: stood at {standing:?}"
+    );
+    assert!(
+        (standing.1 - ty).abs() <= 1,
+        "the man works the tree from a tile beside it, on the approach half: stood at {standing:?}"
     );
     assert!(
         world

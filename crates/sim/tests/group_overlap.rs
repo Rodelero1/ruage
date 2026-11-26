@@ -266,9 +266,17 @@ fn a_mate_who_is_stopped_becomes_solid() {
         unit: b,
         to: (x, y),
     });
-    // Let them close, then take b out of the group.
-    for _ in 0..60 {
+    // Let them close, then take b out of the group - when a is one step out. Stopping b on a fixed tick leaves
+    // him wherever the walk happened to be, and a clean router bends round a distant stander without ever
+    // touching him; stopping him a step ahead forces the one step of overlap the assertion measures, and the
+    // round that has to follow it.
+    let step = world.scale() / 2 / i64::from(world.tick_rate_hz().max(1));
+    loop {
         world.step().expect("step");
+        let gap = integer_sqrt(distance(&world, a, b));
+        if gap < world.reach_between(a, b).raw() + 2 * step {
+            break;
+        }
     }
     world.submit(Command::Stop { unit: b });
     world.step().expect("the stop lands");
