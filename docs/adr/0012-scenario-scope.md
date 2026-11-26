@@ -1,7 +1,7 @@
 # ADR 0012 — Hand-authored map and scripted opponent; replay is a command list (supersedes D15 in part)
 
 - **D-id alias:** D15 (2026-10-23)
-- **Status:** Accepted in part. Old row untouched until owner sign-off.
+- **Status:** Signed 2026-11-26.
 
 ## Context
 
@@ -9,7 +9,7 @@ Owner's three blockers for step 5, priced: an RMS interpreter is a language impl
 
 ## Decision
 
-The map is hand-authored 64×64 in `config/` (forests, berries, gold, two town centres) — not `.rms`, not `.scx`. The opponent is a fixed command list on a tick schedule, which doubles as the replay format. `.rms` (122), `.scx` (49) and `.per` (74) stay future work; adding any is a new decision, not a refactor. Headless, one civ (D3), British vs British.
+The map is hand-authored 64×64 in `config/` (forests, berries, gold, two town centres) — not `.rms`, not `.scx`. The opponent is a fixed command list on a tick schedule, which doubles as the replay format. `.rms` (122), `.scx` (49) and `.per` (74) stay future work; adding any is a new decision, not a refactor. Headless, one civ, British vs British.
 
 ## Evidence
 
@@ -25,3 +25,7 @@ Parked to the movement branch: D15's third clause (A* on the static grid with `m
 
 - `config/map.toml` (authored map), `config/scenario.toml` (scripted opponent / replay).
 - Determinism proof for the format: same script twice is byte-identical (headless subprocess test).
+
+## Sign-off note (2026-11-26)
+
+Signed as written (D3 citation plain-worded, draft cleanup). Lifecycle note: hand-authored map + scripted opponent covers initial testing only; reading/importing original formats is the scheduled direction, one decision per format. The parked A* clause still migrates with pathfinding. D15 bank row deleted on sign-off per the 2026-11-26 rule.
