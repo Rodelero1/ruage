@@ -1,7 +1,7 @@
 # ADR 0007 — Fixed-point domain is simulation state only (supersedes D9)
 
 - **D-id alias:** D9 (2026-10-23; scale clause superseded by D10, see ADR 0008)
-- **Status:** Accepted. Old row untouched until owner sign-off.
+- **Status:** Signed 2026-11-26.
 
 ## Context
 
@@ -25,3 +25,7 @@ Enforced by tests in `crates/fixed` and `crates/data`, not by prose. A bit-for-b
 
 - `crates/fixed` suite (parse refusal of sub-precision).
 - `crates/data` loader tests (strict scale/boundary checks).
+
+## Sign-off note (2026-11-26)
+
+Signed as written, plain-worded (no codes). Standing interpretation: outside behavior may be checked against the original within tolerance; bit-exact arithmetic is out. D9 bank row deleted on sign-off per the 2026-11-26 rule.
