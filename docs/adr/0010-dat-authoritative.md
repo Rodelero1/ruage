@@ -1,7 +1,7 @@
 # ADR 0010 — Dat is authoritative over community documentation (supersedes D5)
 
 - **D-id alias:** D5 (2026-10-23)
-- **Status:** Accepted. Old row untouched until owner sign-off.
+- **Status:** Signed 2026-11-26.
 
 ## Context
 
@@ -25,3 +25,7 @@ The farm rate is one named constant loaded from the dat, never inlined — a re-
 
 - `FARM.task_info.work_rate` as the single source (named constant, not inlined).
 - U11 cheap-settler scenario (unrun — future measurement, not a missing gate).
+
+## Sign-off note (2026-11-26)
+
+Signed as-is. Lifecycle note: dat authority covers the dat-derived phase (initial data mining); the game ultimately ships its own data, which supersedes per ADR 0006(b) — at that point 0010 has nothing left to govern. D5 bank row deleted on sign-off per the 2026-11-26 rule.
