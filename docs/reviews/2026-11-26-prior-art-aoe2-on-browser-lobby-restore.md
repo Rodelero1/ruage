@@ -61,5 +61,7 @@ mistake in a different command.
 
 ## The AI review
 
-`make ai-review` selects **0 files** for a docs-only diff (default `OCR_EXCLUDE=docs/**`), so it is not run for this tick; the
-note rests on the five checks above rather than on a reviewer's findings, and says so instead of implying a review happened.
+`make ai-review` was run at this commit and answered **`skipped - 0 files, 0 comments, 0 tokens, 0s`**: the default
+`OCR_EXCLUDE` is `docs/**,build/**,target/**,config/gamedata/**,**/*.html`, so a docs-only diff selects nothing. The note
+therefore rests on the five checks above rather than on a reviewer's findings, and says so instead of implying a review
+happened.
