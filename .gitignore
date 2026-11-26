@@ -46,5 +46,5 @@ tools/.venv/
 # Rust build output
 target/
 
-# SPEC.md is local-only (owner decision 2026-11-26): untracked, never pushed.
-/SPEC.md
+# Local machine notes (paths, keys); never commit.
+/git.md
