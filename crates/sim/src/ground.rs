@@ -21,6 +21,7 @@ use std::collections::BinaryHeap;
 use ruage_data::Map;
 use ruage_fixed::Fixed;
 
+use crate::geometry::{WayRoute, solve};
 use crate::integer_sqrt;
 
 /// **An obstacle the plan must keep clear of** (D282, D286): the object's **box**, and the mover's own reach.
@@ -736,6 +737,28 @@ impl Ground {
     ) -> Option<Vec<(Fixed, Fixed)>> {
         let start = self.tile_of(scale, from)?;
         let goal = self.tile_of(scale, to)?;
+        // **The geometric solver answers land walks at exercised reaches first** (New Way Task 4).
+        // Task 3 exercised `reach = 0`, so only those walks bypass the tile system here; any other reach
+        // falls through to the straight + tier + flat arms below, which stay until Task 5 deletes them.
+        // `solve` grows each `avoid` rect by `max(clear.reach, reach)`, which is exact for every caller:
+        // `standing_bodies` and the step's blockers stamp the mover's own reach into the rects they hand
+        // over, so `max` is the identity there, and a bare rect with the reach carried separately is grown
+        // exactly once.
+        // The verdict maps onto the existing tail: `Reached` ends on the exact goal point, `Closest` keeps
+        // the solver's stopping point beside the goal - the best-settled tile centre's role, without snapping
+        // to a centre that could sit inside a grown box. The first point stays: it is where the body stands
+        // (or the ring exit it stepped out to), and the step spends the waypoint it stands on.
+        if reach == 0 {
+            match solve(scale, from, to, reach, avoid) {
+                WayRoute::Reached(mut points) => {
+                    if let Some(last) = points.last_mut() {
+                        *last = to;
+                    }
+                    return Some(points);
+                }
+                WayRoute::Closest(points) => return Some(points),
+            }
+        }
         // A straight walk needs no chain: the search's own answer would be pulled back to this one point anyway. The test is
         // of the **leg the body will actually walk**, not of the line between two tile centres (see `leg_is_clear`).
         if self.walkable(goal.0, goal.1)
