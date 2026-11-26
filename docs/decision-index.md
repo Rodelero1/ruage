@@ -2,11 +2,11 @@
 
 # Decision index
 
-**345 rows.** `docs/archive/decisions-2026-11-24.md` is ~852k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**344 rows.** `docs/archive/decisions-2026-11-24.md` is ~843k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
-- **337** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
+- **336** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
-- **249** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
+- **248** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
 - **11** rows say they are superseded.
 
 Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section names rows the table does not file.
@@ -364,9 +364,8 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D209** — the step's diff goes through the AI reviewer, and its findings are checked like anyone else's · —
 - **D45a** — The review of the override layer: one pass wrote half a file, and two refusals were missing · —
 
-## Licensing & publication (4)
+## Licensing & publication (3)
 
-- **D21** — Licence policy: permissive engine, attribution for art, nothing borrowed from GPL code · —
 - **D22** — Bring your own copy: the game requires a legally acquired original · —
 - **D201** — content: our own campaigns only, names by three lists, all prose rewritten · —
 - **D202** — the target shape is "A-prime": self-contained sources, the install as the only input · —

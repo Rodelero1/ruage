@@ -8,32 +8,19 @@ not revisited silently — if one is reversed, add a new row rather than editing
 | **D1** | 2026-10-23 | **Answered: G1 — "generally similar behaviour, sensibly attainable."** Own deterministic engine; numbers exact where the dat is exact, tolerance-banded where behaviour is only observable through play. **G2 rejected** (after asking the owner directly what it would cost): no oracle here can show a per-tick trajectory, the original runs on x87 with 80-bit intermediates, and bit-exactness would mean transliterating machine code rather than writing an engine. **G1+ was considered and not adopted** — no per-subsystem exactness budget is committed. | Owner's words: "I want generally similar behaviour, but sensibly attainable". The 13 saves validate constants and outcomes, not trajectories (`docs/archive/research/oracle.md`); the binary is 32-bit x86 with heavy x87 use (crude census: ~69k x87 escape bytes vs ~26k SSE `mov*` in `.text`), so exact-match work would not be *engine* work. Reaching for G2 also has a legal cost: a bit-exact clone is a derivative work, not interoperability. | Exactness where it is cheap and free (dat values, fixed-point per-tick displacement, our own replay hashes); tolerances for behaviour, written down in §6.1. A subsystem may still be matched more tightly later as an optional experiment, but that is not part of the goal. |
 | **D2** | 2026-10-23 | **Answered: file-based oracle.** No driven game, no Windows migration. | 13 `.aoe2spgame` files already present, all inflate (raw DEFLATE, `VER 9.4`). Saves are full state dumps. | Snapshot-based verification where cheap; save parser left partial (step 2b). |
 | **D3** | 2026-10-23 | **Answered: start with one civ — British — and add civs later.** British is whatever the dat lists at civ index 1 (index 0 is Gaia); the name is not a preference. Scope of step 5 is British vs British. | Owner's decision. Measured the same day (U13): the unit tables of all 31 non-Gaia civs differ in 5 rows out of ~36,000, so the cost of a second civ is a tech-disable-list join, not a data model change. Doing one civ first buys a running game sooner without assuming a one-civ design. | The data model stays per-civ (deltas are real, if tiny); the loader must not hardcode "British"; `gamedata/` keeps emitting civ 1 as canonical, and `tech_tree_effect_id` (type-102 disable lists) becomes the path to more civs. |
-| **D4** | 2026-10-23 | **Answered: B — publish the engine and tooling; keep the spec and the mechanics internal.** Condition set by the owner: "as long as the game can be compiled and ran" — a stranger with their own install must be able to clone, build and run it. Not published: `docs/mechanics/`, SPEC §3/§4 (hashes, string VAs, install paths), `docs/archive/research/oracle.md`, `config/gamedata/` (already excluded by D8). | Owner's decision after the four options were costed. Three regimes separate the material: our own work (no exposure), published community facts (facts are not copyrightable; only wiki prose is CC-BY-SA), substantial extraction from the dat (Database Directive 96/9/EC Art. 7), and binary-derived material (Art. 6). Nothing in `crates/` came from the last category, so the safe set is large. Publishing now, before any decompiler output exists, is also the clean-room record — after step 7 the history can no longer prove it. | A licence split (`crates/` MIT/Apache, `tools/` GPL-3.0 to match the parser it imports); engine code must not cite internal docs; one provenance line per module. **Blocking gap:** a public clone cannot currently produce `config/gamedata/` — see the publishability checklist in SPEC §6.2. |
 | **D5** | 2026-10-23 | **The dat is authoritative for all numeric values.** Where the dat and community documentation disagree, the dat wins. | Stated by the project owner. The dat is the artefact the game actually shipped; wiki numbers describe DE and are derived, not primary. | Every number in `docs/mechanics/` that conflicts with a wiki gets a dat-side value and a note (U11 is the first). |
 | **D6** | 2026-10-23 | **Game data lives in `config/` as generated TOML, and the engine reads TOML — not the `.dat` — at runtime.** Nothing numeric is hardcoded. Hand edits go in `config/overrides.toml`; loading is strict (unknown or missing key = startup failure). | Project owner's requirement, stated explicitly. The generated layer makes the data reproducible and diffable; the override layer keeps experiments alive across regeneration; strict loading stops typos from silently doing nothing. | `gen_config.py` must stay runnable and `MANIFEST.toml` must be checked at startup for staleness. If **D4** lands on "publishable", `config/gamedata/` is gitignored and generated at first run — it is derived game content. |
 | **D7** | 2026-10-23 | **TDD is mandatory.** No production code without a failing test first. The failing run must be recorded in the session before the implementation exists. Scope: engine crates + shipped tooling; throwaway analysis probes in `build/tools/` are exempt. Coverage is behaviour-based with **no percentage gate**. | Project owner's requirement. A recorded failure is the only thing that distinguishes TDD from tests-after, which pass immediately and therefore prove nothing. A coverage % can be raised without testing a behaviour. | Code found without a prior failing test is **deleted**, not retro-fitted. Every cycle report names the test and shows the command that saw it fail. Full rules: SPEC §11. |
-| **D8** | 2026-10-23 | **No game data, and nothing derived from it, is committed.** `Age2HD/`, `config/gamedata/`, `build/`, saves and assets are gitignored; a pre-commit hook refuses them. | Project owner is porting their own lawful copy and wants to comply with EU law. Decompilation for interoperability is permitted (Software Directive 2009/24/EC Art. 6) but redistribution of what it yields is not, and the dat is a substantial extraction under Database Directive 96/9/EC Art. 7. | A clone regenerates the data locally with `tools/genconfig`; docs quote only illustrative values. Full policy: `docs/licensing.md`. |
 | **D10** | 2026-10-23 | **The scale is derived from two measured grains, and config invariants are enforced rather than declared.** Rules: `scale % 10^dat_value_decimals == 0` (no dat value is ever rounded) and `scale % (tick_rate_hz × 10^per_tick_decimals) == 0` (no per-tick motion ever drifts). Measured: `dat_value_decimals = 4` (`work_rate = 0.0111` on units 110 and 1021), `per_tick_decimals = 3` (speed `0.737`). Supersedes D9's "must divide a power of ten" clause, which was arithmetically inverted — it accepted 1, 2, 4, 5 and 8 (none of which can represent a single dat value) and rejected 300. | Adversarial review, 2026-10-23: the old check let a config load with `schema = 99`, `floats_in_sim_state = true`, `max_entities = 0`, one RNG stream, or 60 Hz paired with a 20 kHz scale — under which 34 of 57 speeds lose per-tick exactness. An invariant that lives only in prose is not an invariant. | `config/sim.toml` carries both grains; `crates/data/tests/corpus.rs` sweeps the whole generated corpus and fails if a dat value ever needs more places. Change `tick_rate_hz` and the scale must move with it (60 Hz → 60000). |
 | **D9** | 2026-10-23 | **The fixed-point domain is simulation state only.** *(The "divide a power of ten" clause is superseded by D10.)* Values that enter state are `Fixed` (i64 at `sim.fixed_point_scale`); load-time constants that never enter state (pathing weights, heuristic costs) stay f64. The scale must divide a power of ten. | "No floats in sim state" is the determinism rule; it does not forbid f64 in a config file or a heuristic weight. Rounding such values into the fixed domain silently changes behaviour (1.41421356 has no exact representation at scale 20000), so the boundary has to be explicit rather than incidental. | `Fixed::parse` refuses sub-precision instead of rounding. *(Amended by D10: the scale rule is now two derived divisibility checks, not "divides a power of ten".)* Enforced by tests in `crates/fixed` and `crates/data`. |
 
 | **D11** | 2026-10-23 | **Gathering data shape (review finding): `genconfig` emits drop sites, and the task→variant mapping is a hand-written config table.** Per-unit drop sites come from `task_info.drop_site_unit_ids` (562 lumber camp, 584 mining camp); the seven villager variants stay addressable by unit id (VMLUM 123 = 0.39, VMGLD 579 = 0.38, VMMIN 124 = 0.36, VMSHE 592 = 0.33, VMFOR 120 = 0.31, VMHUN 122 = 0.41, VMFIS 56 = 0.43). The one fact the dat cannot supply for `VER 5.7.2` — which task selects which variant — lives in `economy.toml`, because D6 forbids it in code. | Adversarial review, 2026-10-23: `economy.toml` claimed `rate_from = "dat"` while the generated config carried neither the mapping nor any drop-site field, and `VMBAS` carries its *build* rate (1.0) in `work_rate`, so the naive wiring runs gathering 2.5x too fast. Owner chose this shape over deferring gathering. | `genconfig` grows a drop-site field (test-first, TDD applies); `economy.toml` grows a 7-row variant table; a test asserts every variant id resolves and that no gather rate is read from a base villager. |
-
-| **D12** | 2026-10-23 | **The generator lives in its own repository, and any parser fork lives with it.** *(Amended: no fork is currently needed — see below.)* `tools/genconfig` and a fork of `Divy1211/GenieDatParser` (GPL-3.0) move to a separate repo; the engine repo stays MIT/Apache, pure Rust, and never imports Python. A fork keeps the GPL (which is allowed and expected) and the licence boundary becomes a repository boundary rather than a directory convention. | Owner's suggestion, after the GPL framing was corrected: a fork will be needed, so keep it where it can be GPL without questions. Evidence that changes are needed: at `VER 5.7.2` the parser raises `VersionError` for `tasks` (the per-task list) and cannot read `unique_unit_effect_ids` or `name2` — the three gaps U13 and D11 ran into. | The engine consumes `config/` (TOML) only. A public clone gets the engine and instructions; the data comes from the generator repo, run against the user's own install. Splitting is not urgent: it is a publish-time step, not a code change today. |
-
-**D12 amendment (2026-10-23, same day).** The "fork is likely" reasoning was wrong on the evidence:
-the per-task lists *are* readable via `dat.unit_data.tasks` (412 populated; the `VersionError` came
-from a different, version-gated accessor), and `unique_unit_effect_ids` / `name2` are DE-5.9-only
-fields that do not exist in a 5.7.2 file, so no fork could supply them. The separate-repository
-decision stands on its own merits (licence boundary, and the generator is Python), but it is not
-currently motivated by a required patch.
 
 **D11 amendment (2026-10-23, same day).** The task → variant mapping was recorded as a fact "the
 dat cannot supply". It can: each variant's gathering task declares its `resource_in` (1 wood,
 2 stone, 3 gold, 0 food; 15/16/17 are pseudo-resources, U14). So the mapping is derivable, and the
 hand-written table in `economy.toml` becomes a cross-check. `genconfig` should emit the task lists
 before step 5 rather than after.
-
-| **D13** | 2026-10-23 | **Adopt `librematch/genie`'s format crates inside the tooling repository; do not relicense the engine, and do not port their engine core.** Concretely: `genie-dat` (read/write `.dat`), `genie-rec` (recorded games), `genie-save` (saves), `genie-scx`, `genie-drs` — all GPL-3.0 — are candidates for the generator/tooling repo that D12 already puts outside the engine. The engine keeps MIT/Apache and the TOML boundary (D6). Their `genie-core` is AGPL-3.0, is a port of **DE build 158041**, and keeps f32 arithmetic to match it — a reference for our step 6 module map, not a drop-in. | Surveyed 2026-10-23. `genie-dat` is already one of the two implementations that cross-validated our step 1, so the adoption risk is low. `genie-save` could revive the 13-save oracle that step 2b abandoned as unparseable. Taking format crates costs GPL-3.0 only in the tooling repo; taking `genie-core` would mean AGPL-3.0 *and* a DE target we are not building. | Tooling repo gains a real reader instead of a Python parser plus a fork question; engine unchanged. Revisit only if we decide to read the dat at runtime and drop D6 — that would force the engine to GPL-3.0. |
 
 | **D14** | 2026-10-23 | **Keep Ruage on HD 5.7 under G1; borrow narrowly; watch the field.** Concretely: (1) target HD, because it is frozen and a G1 engine's only asset is "the numbers are right today"; (2) adopt `librematch/genie`'s **format crates** only (D13) — never their engine core, because a nine-day-old repo with one author is a bus factor, and a narrow interface stays replaceable; (3) rebuild the step-6 backlog from the game's own subsystem split, as seen in their module list (§7.1); (4) offer HD-specific findings upstream (5.7 task lists, type-102 tech trees, the two decimal grains) so the relationship is two-way; (5) review prior art periodically and record what changed. | Owner accepted the recommendation. The user's intuition that DE would be "too ambitious" is right about *bit-exactness* and wrong about the version: under G1, DE is a data target, not a mountain — what makes it costly is that it patches, so the target and the oracle both move. HD is frozen, which is worth more than the extra civs. | No engine relicense; no dependency on their engine; a standing review of the field. A pivot to DE, or to linking a GPL reader at runtime (which would end D6), needs a new decision — not drift. |
 
@@ -120,70 +107,6 @@ one arithmetic step, and it needs no code.
 
 **Implementation rule until then:** the farm rate must be a *single named constant* loaded
 from the dat (`FARM.task_info.work_rate`), never inlined, so a re-measure changes one number.
-
----
-
-## D17 — Four layers, and only one of them is about Age of Empires
-
-**Decided 2026-10-25.** The engine must be able to ship a game that is not Age of Empires II,
-without being rewritten.
-
-| layer | owns | may know about AoE2? |
-|---|---|---|
-| **engine** (`crates/`) | fixed-point determinism, tick loop, commands and replays, pathing, entity model, damage arithmetic, effect verbs | **no** — it knows *kinds* of things, never particular ones |
-| **content pack** (`config/`, our schema) | resources, units, buildings, techs, effects, map, scenario — in our vocabulary | carries AoE2's *values* today; nothing about them is typed into the engine |
-| **importer** (tooling repo, D12) | dat → content pack, plus the dat's semantics (packed attack, class ids, effect kinds) | **all of the AoE2 knowledge lives here** |
-| **asset pack** | entity + state → sprite reference | today points at the install's graphics; later at ours |
-
-The rule that follows: **any number or id that means something only because of AoE2 stays outside
-`crates/`**. Pinning "kind 5 multiplies" and "attack is packed `class * 256 + amount`" is importer
-work; the engine receives "add 1 to attack class 4".
-
-Consequences already visible in the code:
-
-- ~~`ResourceKind` is a fixed enum and stockpiles are `[[u32; ResourceKind::COUNT]; 2]` — four
-  resources and two players in the *type*.~~ **Paid down 2026-10-26** (`docs/archive/research/plan-resource-deletion.md`):
-  resources are content (`config/resources.toml`), a node carries a column, costs name their
-  resource by reference id *or* by name, and the stockpile's width is the engine's `MAX_RESOURCES`
-  with the pack's count checked at load. Proven by `a_content_pack_with_our_own_resources_loads_and_spends`.
-  The player count was already data by D20.
-- `script.rs` names `109` and `12`; the scenario format should name roles from the content pack.
-  (**Still open**: the resource half of this is done - a step names a resource and the pack resolves
-  it - but building and training still quote dat ids.)
-- `Attribute::from_id` knowing 0/1/8/9 is fine *in the importer*, not in the engine.
-
-## D18 — Target shape: A now, B-capable; assets swappable from the start
-
-**Decided 2026-10-25.** The owner's words: keep the vibe and dynamics; start with the original
-graphics, tech trees and stats; be ready to replace the graphics; move towards our own content as far
-as the cost allows.
-
-- **(a) now.** Reference content is the dat's numbers and the install's art. That is what makes the
-  work verifiable: every mechanic has a known-good value to compare against.
-- **(b) scheduled, not blocked.** Own resources, own tech tree, own stats — the engine must not need
-  a change to accept them. That is what D17 buys.
-- **(c) not planned.** Divergent rules (new resource set, ages replaced) would still be content, and
-  the same schema should carry them; nothing is designed against that hope.
-
-**Graphics readiness is a data question before it is a rendering question.** The dat carries a sprite
-table — `slp_id`, `layer`, `force_player_color`, `color_table`, `num_deltas`, `bounding_box`,
-`sound_id` — with animation deltas and player-colour flags, so an entity → sprite binding can be
-**generated** by the importer rather than hand-authored. Two consequences:
-
-1. the engine addresses visuals by a *content id*, never by a file name, so a replacement pack is a
-   different table with the same shape;
-2. sprite geometry the simulation needs (radius, footprint) is already in the unit table, so
-   **swapping art cannot change gameplay** — which is the test to write when the first renderer
-   lands.
-
-**Not yet done, deliberately:** there is no renderer. The headless run is the harness, and a renderer
-is a large piece of work that buys nothing until the simulation is worth watching. "Ready for
-replacement" is therefore written as a schema and a boundary, not as a graphics engine.
-
-**Verified / not verified.** The sprite fields above are read from `GenieDatParser`'s model at
-`VER 5.7.2`. The unit → sprite *link* and how the install stores the numbered graphic resources
-(DRS, and whether `slp_id` indexes it directly) are **not** checked yet — that is the first task of
-the asset-pack work, not an assumption to build on.
 
 ---
 
@@ -295,34 +218,6 @@ The map is part of the content pack hash today. When map variety arrives - diffe
 same two players without republishing a pack - the map becomes a **per-match** field hashed
 separately, beside `tick_rate_hz` and `fixed_point_scale`. Not before: one identity fewer is one
 desync cause fewer, and nothing about the current single authored map needs variety.
-
----
-
-## D21 - Licence policy: permissive engine, attribution for art, nothing borrowed from GPL code
-
-**Decided 2026-10-25**, after surveying the field (see `docs/licensing.md`).
-
-Every comparable engine is GPL-3.0 (`openage`, `OpenRA`, `OpenRCT2`, `openblack`, `genie-rs`,
-`WololoKingdoms`) or AGPL-3.0 (`librematch/genie`). Our MIT/Apache dual is therefore an outlier, and
-it stays: permissive code can be taken into GPL projects, packaged by distributions and read by
-modding tools, while the reverse is not possible. The compatibility runs one way and this is the
-direction that costs nothing.
-
-Three artefacts, three answers:
-
-- **engine and content schema**: MIT OR Apache-2.0, as now. A modder must be able to copy a schema
-  format without a licence question.
-- **original art and audio**: CC-BY-SA 4.0 with per-asset attribution when they exist. Art needs
-  attribution, not source disclosure, and the engine already addresses visuals by content id (D18).
-- **game data**: never shipped (D8). It is not ours to license.
-
-**D13 is corrected**: `librematch/genie` is AGPL-3.0, so adopting its readers in the tooling repo is
-withdrawn - the network clause on the one component that reads the game's files is the strongest
-obligation available. `GenieDatParser` (GPL-3.0, local, separate repository) is the less restrictive
-choice and remains it.
-
-**`sld-extractor` declares no licence.** No licence is not permission: default copyright applies, so
-it may be read for what it does and never copied from.
 
 ---
 

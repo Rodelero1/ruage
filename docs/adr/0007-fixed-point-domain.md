@@ -14,12 +14,12 @@ Values entering simulation state are `Fixed` (i64 at `sim.fixed_point_scale`). L
 ## Evidence
 
 - **Game (rung 0):** Architectural. The dat gives decimal values (e.g. `1.41421356` has no exact representation at scale 20000), so rounding at the boundary silently changes behavior — the refusal rule follows from the data's shape, not from any trajectory.
-- **Rung 2 (bounded, read-only):** `librematch/genie` keeps f32 and instruction-level conversions to match DE bit-for-bit — recorded in the bank itself as contradicting this rule, which is exactly why fixed-point is valid only under G1. Cited as the boundary of this decision, not as authority over it.
+- **Rung 2 (bounded, read-only):** `librematch/genie` keeps f32 and instruction-level conversions to match DE bit-for-bit — recorded in the bank itself as contradicting this rule, which is exactly why fixed-point is valid only under the standing goal (behave like the original within stated tolerances, never bit-for-bit). Cited as the boundary of this decision, not as authority over it.
 - **Owner:** "No floats in sim state" requirement.
 
 ## Consequences
 
-Enforced by tests in `crates/fixed` and `crates/data`, not by prose. G2 would delete this ADR (keep f32); under G1 it stands.
+Enforced by tests in `crates/fixed` and `crates/data`, not by prose. A bit-for-bit goal would delete this ADR (keep f32); under the standing goal it stands.
 
 ## Fixtures
 
