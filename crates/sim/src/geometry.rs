@@ -200,8 +200,9 @@ pub fn ray_hit(from: (i64, i64), to: (i64, i64), avoid: &[Clear]) -> Option<usiz
 /// aligned overlaps. Overlapping rects' intersection points split the edges
 /// they cross, so every vertex of the merged boundary is walked. The core is
 /// only comparisons and index steps on the raw coordinates - no float, and
-/// no multiply or divide - while the ray setup above is where the one exact
-/// division lives. Every edge of the ring lies on a grown face, which is
+/// no multiply or divide on the coordinates themselves (the grid bookkeeping
+/// still multiplies cell indices) - while the ray setup above is where the
+/// one exact division lives. Every edge of the ring lies on a grown face, which is
 /// exactly what `verify_path` calls clear, so the ring it returns certifies
 /// clean.
 #[must_use]
@@ -398,6 +399,230 @@ pub fn walk_shape(hit: usize, avoid: &[Clear]) -> Vec<(i64, i64)> {
         }
     }
     ring
+}
+
+/// The exact squared distance between two raw points, in `i128` so a
+/// whole-map diagonal cannot overflow (`2 * span^2` is what D128 budgets the
+/// pack for). Only the progress comparison and the nearest-vertex pick read
+/// it; both are exact.
+fn dist_sq(from: (i64, i64), to: (i64, i64)) -> i128 {
+    let (dx, dy) = (
+        i128::from(from.0) - i128::from(to.0),
+        i128::from(from.1) - i128::from(to.1),
+    );
+    dx * dx + dy * dy
+}
+
+/// Right turns minus left turns around one edge-walk ring: the bound the
+/// solver watches while it walks. An outer boundary walked clockwise counts
+/// +4 (open ground, keep walking); a walk that ever counts 4 more lefts is
+/// tracing the inside of an enclosure, which is where the loop stops and
+/// answers `Closest` instead of circling the hole. Exact integer cross
+/// products, no float.
+fn ring_turns(ring: &[(i64, i64)]) -> (i64, i64) {
+    let mut distinct: Vec<(i64, i64)> = ring.to_vec();
+    if distinct.len() > 1 && distinct.first() == distinct.last() {
+        distinct.pop();
+    }
+    let mut rights = 0i64;
+    let mut lefts = 0i64;
+    if distinct.len() < 3 {
+        return (rights, lefts);
+    }
+    for i in 0..distinct.len() {
+        let (ax, ay) = distinct[i];
+        let (bx, by) = distinct[(i + 1) % distinct.len()];
+        let (cx, cy) = distinct[(i + 2) % distinct.len()];
+        let cross = (i128::from(bx) - i128::from(ax)) * (i128::from(cy) - i128::from(by))
+            - (i128::from(by) - i128::from(ay)) * (i128::from(cx) - i128::from(bx));
+        if cross > 0 {
+            lefts += 1;
+        } else if cross < 0 {
+            rights += 1;
+        }
+    }
+    (rights, lefts)
+}
+
+/// One geometric walk from `from` to `to`, and it always answers: `Reached`
+/// when the polyline arrives at the goal, `Closest` when the goal is walled
+/// in or the walk runs out of search area, stopping beside it instead of
+/// refusing. Never a failure, never a crossed wall.
+///
+/// The mover shrinks to a point and every `avoid` box grows by the mover's
+/// own radius - the existing `Clear` semantics, so a rect that already
+/// carries the mover's reach keeps it (`max`, never a doubled growth) and a
+/// bare rect is grown by `reach`. The loop shoots a ray at the goal, walks
+/// the hit shape's ring, and re-rays from each vertex: the first vertex in
+/// coordinate order that sees both the walk and the goal wins outright,
+/// otherwise the nearest certified vertex that is strictly closer to the
+/// goal. What survives is brute-force smoothed - every waypoint the
+/// grown-segment test certifies as skippable is skipped - so the answer holds
+/// no detour the test would have allowed cutting.
+///
+/// Three bounds keep the loop finite, in the order they bite: the
+/// search-area rect (the from/to box, then once more after one expansion),
+/// the turn count (4 more lefts than rights is the inside of a hole), and a
+/// fuel cap of `8 * (boxes + 1) + 8` re-rays. Vertex order is sorted raw
+/// coordinates and rect order is slice order, never hash order, so two runs
+/// agree on every waypoint.
+#[must_use]
+pub fn solve(
+    scale: i64,
+    from: (Fixed, Fixed),
+    to: (Fixed, Fixed),
+    reach: i64,
+    avoid: &[Clear],
+) -> WayRoute {
+    let start = (from.0.raw(), from.1.raw());
+    let goal = (to.0.raw(), to.1.raw());
+    // The mover's own radius on top of each rect's own reach; `max` because
+    // the callers that pass `reach` also stamp it into the rects they hand
+    // over, and growing twice would close gaps the game walks through.
+    let grown: Vec<Clear> = avoid
+        .iter()
+        .map(|clear| Clear {
+            at: clear.at,
+            half: clear.half,
+            reach: clear.reach.max(reach),
+        })
+        .collect();
+    let to_fixed = |point: (i64, i64)| (Fixed::from_raw(point.0), Fixed::from_raw(point.1));
+    if start == goal {
+        return WayRoute::Reached(vec![to_fixed(start)]);
+    }
+    // A start standing inside a grown box steps out before the walk begins:
+    // the ring lies on grown faces, which `verify_path` calls a touch, so
+    // the walk starts beside the wall instead of inside it. The inside point
+    // itself is dropped, keeping the answered polyline certified clean.
+    let mut current = start;
+    if let Some(hit) = grown.iter().position(|clear| point_inside(clear, current)) {
+        let ring = walk_shape(hit, &grown);
+        let mut exit = current;
+        let mut best: Option<(i128, i64, i64)> = None;
+        for vertex in ring {
+            let key = (dist_sq(vertex, current), vertex.0, vertex.1);
+            if best.is_none_or(|held| key < held) {
+                best = Some(key);
+                exit = vertex;
+            }
+        }
+        current = exit;
+        if grown.iter().any(|clear| point_inside(clear, current)) {
+            return WayRoute::Closest(vec![to_fixed(current)]);
+        }
+    }
+    let mut path = vec![current];
+    // The search-area rect: the from/to box, then once more after one
+    // expansion. A vertex outside it is not walked to.
+    let margin = |expanded: bool| {
+        let step = scale
+            .max(0)
+            .saturating_mul(i64::from(if expanded { 8 } else { 4 }));
+        (
+            start.0.min(goal.0).saturating_sub(step),
+            start.0.max(goal.0).saturating_add(step),
+            start.1.min(goal.1).saturating_sub(step),
+            start.1.max(goal.1).saturating_add(step),
+        )
+    };
+    let inside = |bounds: (i64, i64, i64, i64), point: (i64, i64)| {
+        bounds.0 <= point.0 && point.0 <= bounds.1 && bounds.2 <= point.1 && point.1 <= bounds.3
+    };
+    let mut expanded = false;
+    let mut rights = 0i64;
+    let mut lefts = 0i64;
+    let fuel = 8 * (grown.len() + 1) + 8;
+    for _ in 0..fuel {
+        if current == goal {
+            break;
+        }
+        let Some(hit) = ray_hit(current, goal, &grown) else {
+            current = goal;
+            path.push(current);
+            break;
+        };
+        let ring = walk_shape(hit, &grown);
+        let (round_rights, round_lefts) = ring_turns(&ring);
+        rights += round_rights;
+        lefts += round_lefts;
+        if lefts >= rights + 4 {
+            // The walk is tracing the inside of an enclosure: stop beside
+            // it instead of circling the hole.
+            break;
+        }
+        let bounds = margin(expanded);
+        let mut vertices: Vec<(i64, i64)> = ring;
+        vertices.sort_unstable();
+        vertices.dedup();
+        // The first vertex in coordinate order that sees both the walk and
+        // the goal wins outright; otherwise the nearest certified vertex
+        // that is strictly closer to the goal.
+        let mut direct: Option<(i64, i64)> = None;
+        let mut advance: Option<(i64, i64)> = None;
+        let mut advance_key: Option<(i128, i64, i64)> = None;
+        for vertex in vertices {
+            if vertex == current || !inside(bounds, vertex) {
+                continue;
+            }
+            if ray_hit(current, vertex, &grown).is_some() {
+                continue;
+            }
+            if ray_hit(vertex, goal, &grown).is_none() {
+                direct = Some(vertex);
+                break;
+            }
+            if dist_sq(vertex, goal) < dist_sq(current, goal) {
+                let key = (dist_sq(vertex, goal), vertex.0, vertex.1);
+                if advance_key.is_none_or(|held| key < held) {
+                    advance_key = Some(key);
+                    advance = Some(vertex);
+                }
+            }
+        }
+        if let Some(vertex) = direct {
+            current = vertex;
+            path.push(current);
+            if current != goal {
+                current = goal;
+                path.push(current);
+            }
+            break;
+        }
+        if let Some(vertex) = advance {
+            current = vertex;
+            path.push(current);
+            continue;
+        }
+        if !expanded {
+            // Once more over a wider search area before stopping beside the
+            // walk's nearest point.
+            expanded = true;
+            continue;
+        }
+        break;
+    }
+    // Brute-force smooth: from each anchor the furthest later waypoint the
+    // grown-segment test still certifies. Every skipped leg is one
+    // `verify_path` would have passed, so the smoothed answer certifies.
+    let mut smooth = vec![path[0]];
+    let mut anchor = 0;
+    while anchor + 1 < path.len() {
+        let mut jump = anchor + 1;
+        for next in anchor + 1..path.len() {
+            if ray_hit(path[anchor], path[next], &grown).is_none() {
+                jump = next;
+            }
+        }
+        smooth.push(path[jump]);
+        anchor = jump;
+    }
+    let points: Vec<(Fixed, Fixed)> = smooth.iter().map(|&point| to_fixed(point)).collect();
+    if current == goal {
+        WayRoute::Reached(points)
+    } else {
+        WayRoute::Closest(points)
+    }
 }
 
 fn describe(clear: &Clear) -> String {
