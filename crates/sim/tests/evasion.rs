@@ -47,11 +47,6 @@ fn tile_of(world: &World, id: EntityId) -> (i64, i64) {
 /// **The id is chosen by the caller**: `next_id` reads the entity list, and a `Spawn` lands on the next tick, so two
 /// spawns in one tick would otherwise both take the same id - the fixture bug that made the first version of these
 /// tests report both villagers on tile (0, 0).
-/// A villager at an arbitrary point, for fixtures that need a body **exactly** on a line - a tile is too coarse now that a
-/// walk aims at the middle of one (D114).
-/// Integer square root, for reporting a squared distance as raw units. Local on purpose: the sim has no float, so a test
-/// that reports one number does not need one either.
-
 fn spawn_enemy_at(world: &mut World, id: EntityId, point: (Fixed, Fixed)) {
     let unit = world.start_villager_unit().expect("a villager role");
     let scale = world.scale();
