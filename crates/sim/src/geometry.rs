@@ -41,6 +41,38 @@ fn point_inside(clear: &Clear, point: (i64, i64)) -> bool {
     (point.0 - clear.at.0).abs() < hx && (point.1 - clear.at.1).abs() < hy
 }
 
+/// Is this raw point a corner where two grown boxes meet at exactly that point - a diagonal touch,
+/// where two squares meet corner-to-corner? Such a point is no hold: stepping onto it threads the touch,
+/// and the next step leaves through the other box's corner. The original's boxes collide on touching, the
+/// passage rule forbids the diagonal gap, and a route through the point reads as entered to a tile query
+/// even when no leg is strictly inside a box. Boxes that overlap, or share a face, meet along more than
+/// the point - walking their seam or face is ordinary contact, so only the single-point meeting counts.
+/// A corridor mouth's corners belong to one box each, so an exact-fit seam keeps its mouths.
+fn shared_corner(rects: &[Clear], point: (i64, i64)) -> bool {
+    // The boxes holding the point as a corner.
+    let mut holders: Vec<(i64, i64, i64, i64)> = Vec::new();
+    for clear in rects {
+        let (hx, hy) = grown(clear);
+        let (min_x, max_x) = (clear.at.0 - hx, clear.at.0 + hx);
+        let (min_y, max_y) = (clear.at.1 - hy, clear.at.1 + hy);
+        if (point.0 == min_x || point.0 == max_x) && (point.1 == min_y || point.1 == max_y) {
+            holders.push((min_x, max_x, min_y, max_y));
+        }
+    }
+    // A diagonal touch is a pair whose whole intersection is the point itself: overlapping boxes share
+    // an area, and face-touching boxes a segment, and neither is a thread-through.
+    for (index, a) in holders.iter().enumerate() {
+        for b in &holders[index + 1..] {
+            let (lo_x, hi_x) = (a.0.max(b.0), a.1.min(b.1));
+            let (lo_y, hi_y) = (a.2.max(b.2), a.3.min(b.3));
+            if lo_x == point.0 && hi_x == point.0 && lo_y == point.1 && hi_y == point.1 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Does the straight segment between two raw points pass inside the grown box?
 /// A segment against an axis-aligned rectangle, by separating axis - the two
 /// axis normals and the segment's own normal - in integers. A segment that runs
@@ -206,6 +238,40 @@ pub fn ray_hit(from: (i64, i64), to: (i64, i64), avoid: &[Clear]) -> Option<usiz
 /// exactly what `verify_path` calls clear, so the ring it returns certifies
 /// clean.
 #[must_use]
+/// Which rects belong to the hit rect's merged shape: everything joined to it by
+/// overlap or a shared face, transitively, in slice order so the set is
+/// deterministic.
+fn shape_members(hit: usize, rects: &[(i64, i64, i64, i64)]) -> Vec<bool> {
+    let touches = |a: (i64, i64, i64, i64), b: (i64, i64, i64, i64)| {
+        !(a.1 < b.0 || b.1 < a.0 || a.3 < b.2 || b.3 < a.2)
+    };
+    let mut member = vec![false; rects.len()];
+    if hit < rects.len() {
+        member[hit] = true;
+    }
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for (index, rect) in rects.iter().enumerate() {
+            if member[index] {
+                continue;
+            }
+            let mut joins = false;
+            for (other, held) in rects.iter().zip(member.iter()) {
+                if *held && touches(*rect, *other) {
+                    joins = true;
+                    break;
+                }
+            }
+            if joins {
+                member[index] = true;
+                grew = true;
+            }
+        }
+    }
+    member
+}
+
 pub fn walk_shape(hit: usize, avoid: &[Clear]) -> Vec<(i64, i64)> {
     // Sides inflated so a degenerate grown rect (a line or a point: half and
     // reach both zero on an axis) still owns grid cells. The walk's ring is
@@ -229,32 +295,8 @@ pub fn walk_shape(hit: usize, avoid: &[Clear]) -> Vec<(i64, i64)> {
         return Vec::new();
     }
     // The merged shape: everything joined to the hit rect by overlap or a
-    // shared face, transitively, in slice order so the set is deterministic.
-    let touches = |a: (i64, i64, i64, i64), b: (i64, i64, i64, i64)| {
-        !(a.1 < b.0 || b.1 < a.0 || a.3 < b.2 || b.3 < a.2)
-    };
-    let mut member = vec![false; rects.len()];
-    member[hit] = true;
-    let mut grew = true;
-    while grew {
-        grew = false;
-        for (index, rect) in rects.iter().enumerate() {
-            if member[index] {
-                continue;
-            }
-            let mut joins = false;
-            for (other, held) in rects.iter().zip(member.iter()) {
-                if *held && touches(*rect, *other) {
-                    joins = true;
-                    break;
-                }
-            }
-            if joins {
-                member[index] = true;
-                grew = true;
-            }
-        }
-    }
+    // shared face, transitively.
+    let member = shape_members(hit, &rects);
     // Split coordinates: every member rect's sides, sorted, so intersection
     // points of overlapping rects become the vertices the walk turns on.
     let mut xs: Vec<i64> = Vec::new();
@@ -463,48 +505,102 @@ fn ring_turns(ring: &[(i64, i64)]) -> (i64, i64) {
 /// Three bounds keep the loop finite, in the order they bite: the
 /// search-area rect (the from/to box, then once more after one expansion),
 /// the turn count (4 more lefts than rights is the inside of a hole), and a
-/// fuel cap of `8 * (boxes + 1) + 8` re-rays. Vertex order is sorted raw
+/// fuel cap of `8 * (boxes + 1) + 8` re-rays. When the greedy walk stalls on a
+/// grown face, the loop spends its remaining fuel on one foray - certified box
+/// corners nearest the goal first, none repeated - because an exact-fit seam
+/// hides its mouth inside the merged shape, where no ring vertex stands. A
+/// foray that sees the goal reaches it; one that never does keeps the nearest
+/// approach when the goal sits inside a grown box (a worker's tree), and
+/// otherwise rewinds to the stall point, so a walk that cannot progress ends
+/// exactly where the greedy walk stopped. Vertex order is sorted raw
 /// coordinates and rect order is slice order, never hash order, so two runs
 /// agree on every waypoint.
 #[must_use]
+/// `foray_near` is the order-time search: an initial plan walks round a stander even when the
+/// stall is beside the goal, while a re-plan on the same stall presses straight through (the crowd
+/// would otherwise hold at arm's length on every tail tick, and every one of those ticks would buy
+/// a foray). Re-plans still foray at a goal inside a box, where the answer is kept, not rewound.
 pub fn solve(
     scale: i64,
     from: (Fixed, Fixed),
     to: (Fixed, Fixed),
     reach: i64,
-    avoid: &[Clear],
+    terrain: &[Clear],
+    bodies: &[Clear],
+    foray_near: bool,
 ) -> WayRoute {
     let start = (from.0.raw(), from.1.raw());
     let goal = (to.0.raw(), to.1.raw());
     // The mover's own radius on top of each rect's own reach; `max` because
     // the callers that pass `reach` also stamp it into the rects they hand
     // over, and growing twice would close gaps the game walks through.
-    let grown: Vec<Clear> = avoid
+    //
+    // Terrain first, bodies after: a stall on a terrain box forays even near the goal (a wall needs
+    // walking round), while a stall on a body that will have moved by next tick skips the search - the
+    // foray would wander the neighbourhood and rewind to where it stands.
+    let grown: Vec<Clear> = terrain
         .iter()
+        .chain(bodies.iter())
         .map(|clear| Clear {
             at: clear.at,
             half: clear.half,
             reach: clear.reach.max(reach),
         })
         .collect();
+    let terrain_len = terrain.len();
     let to_fixed = |point: (i64, i64)| (Fixed::from_raw(point.0), Fixed::from_raw(point.1));
     if start == goal {
         return WayRoute::Reached(vec![to_fixed(start)]);
     }
     // A start standing inside a grown box steps out before the walk begins:
-    // the ring lies on grown faces, which `verify_path` calls a touch, so
-    // the walk starts beside the wall instead of inside it. The inside point
-    // itself is dropped, keeping the answered polyline certified clean.
+    // the step is to the nearest corner of the box it stands in that is itself
+    // a hold - never strictly inside another box. A worker with a route still on
+    // his books stands on the blocked tile he is working, and his box merges
+    // with every touching neighbour into a mass whose ring can sit a dozen tiles
+    // away; stepping to that ring trades one inside for a walk that starts across
+    // the map. The box's own corners are beside the body, which is where a walk
+    // out begins. When every own corner sits inside some other box, the merged
+    // ring is the fallback, and when that is inside too there is nowhere to go.
     let mut current = start;
     if let Some(hit) = grown.iter().position(|clear| point_inside(clear, current)) {
-        let ring = walk_shape(hit, &grown);
+        let (min_x, max_x, min_y, max_y) = sides(&grown[hit]);
         let mut exit = current;
         let mut best: Option<(i128, i64, i64)> = None;
-        for vertex in ring {
-            let key = (dist_sq(vertex, current), vertex.0, vertex.1);
+        for corner in [
+            (min_x, min_y),
+            (max_x, min_y),
+            (min_x, max_y),
+            (max_x, max_y),
+        ] {
+            if grown.iter().any(|clear| point_inside(clear, corner)) {
+                continue;
+            }
+            let key = (dist_sq(corner, current), corner.0, corner.1);
             if best.is_none_or(|held| key < held) {
                 best = Some(key);
-                exit = vertex;
+                exit = corner;
+            }
+        }
+        if best.is_none() {
+            let ring = walk_shape(hit, &grown);
+            for vertex in &ring {
+                if grown.iter().any(|clear| point_inside(clear, *vertex)) {
+                    continue;
+                }
+                let key = (dist_sq(*vertex, current), vertex.0, vertex.1);
+                if best.is_none_or(|held| key < held) {
+                    best = Some(key);
+                    exit = *vertex;
+                }
+            }
+            if best.is_none() {
+                for vertex in &ring {
+                    let key = (dist_sq(*vertex, current), vertex.0, vertex.1);
+                    if best.is_none_or(|held| key < held) {
+                        best = Some(key);
+                        exit = *vertex;
+                    }
+                }
             }
         }
         current = exit;
@@ -532,8 +628,14 @@ pub fn solve(
     let mut expanded = false;
     let mut rights = 0i64;
     let mut lefts = 0i64;
-    let fuel = 8 * (grown.len() + 1) + 8;
-    for _ in 0..fuel {
+    // Three bounds keep the loop finite, in the order they bite: the
+    // search-area rect (the from/to box, then once more after one expansion),
+    // the turn count (4 more lefts than rights is the inside of a hole), and a
+    // fuel cap of `8 * (boxes + 1) + 8` re-rays. The foray below spends the same
+    // fuel, so a hopeless walk costs no more than the greedy walk already did.
+    let mut fuel = 8 * (grown.len() + 1) + 8;
+    while fuel > 0 {
+        fuel -= 1;
         if current == goal {
             break;
         }
@@ -553,6 +655,26 @@ pub fn solve(
         }
         let bounds = margin(expanded);
         let mut vertices: Vec<(i64, i64)> = ring;
+        // The hit box's face middles walk beside it too: a corner is the nearest a ring vertex gets to a goal
+        // past the face, but contact happens *on* the face - a gatherer works from touching distance, and the
+        // tile test measures from the tile, not its centre. A middle that sits inside another box is no hold;
+        // the certification below drops it the same way it drops a bad vertex.
+        {
+            let (min_x, max_x, min_y, max_y) = sides(&grown[hit]);
+            // The box's own corners as well as its face middles: the box merges with every neighbour into
+            // one mass, and the union ring keeps only the mass's outer boundary - measured, a villager's own
+            // box merged with the map-edge strips, the ring kept no vertex within two tiles, the walk advanced
+            // onto the one remaining hold (a shared face middle) and stalled there. A corner inside another
+            // box is no hold; the certification below drops it the same way it drops a bad middle.
+            vertices.push((min_x, min_y));
+            vertices.push((max_x, min_y));
+            vertices.push((min_x, max_y));
+            vertices.push((max_x, max_y));
+            vertices.push(((min_x + max_x) / 2, min_y));
+            vertices.push(((min_x + max_x) / 2, max_y));
+            vertices.push((min_x, (min_y + max_y) / 2));
+            vertices.push((max_x, (min_y + max_y) / 2));
+        }
         vertices.sort_unstable();
         vertices.dedup();
         // The first vertex in coordinate order that sees both the walk and
@@ -563,6 +685,18 @@ pub fn solve(
         let mut advance_key: Option<(i128, i64, i64)> = None;
         for vertex in vertices {
             if vertex == current || !inside(bounds, vertex) {
+                continue;
+            }
+            // A vertex another box stands inside is no hold: two bodies overlap, and the ring's corners and
+            // the hit box's own face middles can both sit strictly inside the neighbour's grown box - measured,
+            // a villager routed round his fellow stepped onto the shared face middle and stalled there, and the
+            // snap settled the stall back on his own tile centre three tiles off the tree. The leg there reads
+            // clean (it ends on the face), so only the point test catches it. A corner two boxes share is no
+            // hold either: stepping onto a diagonal touch threads it, and the next step leaves through the other
+            // box's corner while no leg is ever strictly inside one.
+            if grown.iter().any(|clear| point_inside(clear, vertex))
+                || shared_corner(&grown, vertex)
+            {
                 continue;
             }
             if ray_hit(current, vertex, &grown).is_some() {
@@ -599,6 +733,135 @@ pub fn solve(
             // walk's nearest point.
             expanded = true;
             continue;
+        }
+        // No direct vertex and no advance: the greedy walk stalls where it stands -
+        // on a grown face, with the way round past a corner it may not turn toward
+        // because every corner is farther from the goal than it is. Foray instead:
+        // step to the certified box corner nearest the goal, closer or not, each
+        // corner once, until a corner sees the goal or the fuel runs out. Corners,
+        // not ring vertices, because an exact-fit seam - a one-tile gap at zero
+        // clearance - hides its mouth inside the merged shape, where no ring vertex
+        // stands, while its mouths are still some box's corners.
+        //
+        // A foray that never sees the goal keeps the walk's nearest approach when
+        // the goal sits inside a grown box (a worker's tree: the stop beside it is
+        // the whole answer), and otherwise rewinds to the stall point, so a walk
+        // that cannot progress ends exactly where the greedy walk stopped - and a
+        // walled-in goal's certified endpoint never moves.
+        //
+        // No foray for a stall on a *body* within two tiles of the goal when the goal stands outside
+        // the boxes: the stop is already beside it, the snap settles it, and a foray here would wander the
+        // neighbourhood and rewind to where it stands. (Crowded standoffs stall constantly; without
+        // this every gather re-plan burns a foray.) A stall on *terrain* always forays: a wall needs
+        // walking round, and the foray is the walk that does it - measured, a villager sent through the
+        // corner two trees touch stalled a tile off his goal on a grown face, skipped the foray, and never
+        // arrived. A stall at a goal that sits *inside* a grown box always forays too: its answer is the
+        // nearest approach, kept without rewinding, so nothing is wasted - measured, a gatherer held two
+        // tiles off his bush by a friend in the lane never reached it, because the skip stopped the walk
+        // on the friend's face and the snap settled it three tiles back.
+        let goal_inside = grown.iter().any(|clear| point_inside(clear, goal));
+        let stalled_on_terrain = ray_hit(current, goal, &grown).is_none_or(|hit| hit < terrain_len);
+        if !foray_near
+            && !goal_inside
+            && !stalled_on_terrain
+            && dist_sq(current, goal) <= (2 * scale).saturating_mul(2 * scale) as i128
+        {
+            break;
+        }
+        let stall = current;
+        let rewind_to = path.len();
+        let mut visited = std::collections::BTreeSet::from([current]);
+        let mut best_at = path.len();
+        let mut best_key = dist_sq(current, goal);
+        let mut escaped = false;
+        // A foray at a goal that sits inside a grown box can never see it: every
+        // ray to the goal ends inside. Its answer is the nearest approach, so the
+        // foray stops when eight straight steps bring nothing nearer - the rest
+        // would be wandering. A foray at a goal outside the boxes keeps going: it
+        // is looking for a direct sighting, and only the fuel bounds it.
+        let mut since_best = 0u32;
+        // True sides, not the walk's inflated grid: a corner strictly inside
+        // another box is no hold. Corner sets are cached by hit shape: the foray
+        // usually crawls one shape for many steps, and rebuilding its flood fill
+        // and corner list every step dominates the cost.
+        let sides_list: Vec<(i64, i64, i64, i64)> = grown.iter().map(sides).collect();
+        let mut cached_hit: Option<usize> = None;
+        let mut cached_corners: Vec<(i64, i64)> = Vec::new();
+        while fuel > 0 {
+            fuel -= 1;
+            let Some(hit) = ray_hit(current, goal, &grown) else {
+                current = goal;
+                path.push(current);
+                escaped = true;
+                break;
+            };
+            let bounds = margin(true);
+            // The foray walks the hit shape's own corners: an exact-fit seam hides
+            // its mouth inside the merged shape, where no ring vertex stands, while
+            // the mouths are still some member box's corners.
+            if cached_hit != Some(hit) {
+                let member = shape_members(hit, &sides_list);
+                let mut corners: Vec<(i64, i64)> = Vec::new();
+                for (clear, held) in grown.iter().zip(member.iter()) {
+                    if !held {
+                        continue;
+                    }
+                    let (min_x, max_x, min_y, max_y) = sides(clear);
+                    corners.push((min_x, min_y));
+                    corners.push((max_x, min_y));
+                    corners.push((min_x, max_y));
+                    corners.push((max_x, max_y));
+                }
+                corners.sort_unstable();
+                corners.dedup();
+                cached_corners = corners;
+                cached_hit = Some(hit);
+            }
+            let mut candidates: Vec<(i128, i64, i64)> = Vec::new();
+            for corner in &cached_corners {
+                if *corner == current || visited.contains(corner) || !inside(bounds, *corner) {
+                    continue;
+                }
+                if grown.iter().any(|clear| point_inside(clear, *corner))
+                    || shared_corner(&grown, *corner)
+                {
+                    continue;
+                }
+                if ray_hit(current, *corner, &grown).is_some() {
+                    continue;
+                }
+                candidates.push((dist_sq(*corner, goal), corner.0, corner.1));
+            }
+            candidates.sort_unstable();
+            let Some((_, vx, vy)) = candidates.first().copied() else {
+                break;
+            };
+            let vertex = (vx, vy);
+            visited.insert(vertex);
+            current = vertex;
+            path.push(current);
+            let key = dist_sq(current, goal);
+            if key < best_key {
+                best_at = path.len();
+                best_key = key;
+                since_best = 0;
+            } else {
+                since_best += 1;
+                if goal_inside && since_best > 8 {
+                    break;
+                }
+            }
+        }
+        if escaped {
+            // `current` is the goal: the smoothing below answers `Reached`.
+        } else if goal_inside {
+            // Stop at the nearest approach, keeping the certified stepping-stones
+            // the foray walked to get there: the worker's tree is the whole answer.
+            path.truncate(best_at);
+            current = *path.last().unwrap_or(&stall);
+        } else {
+            current = stall;
+            path.truncate(rewind_to);
         }
         break;
     }

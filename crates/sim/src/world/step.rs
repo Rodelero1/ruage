@@ -26,8 +26,8 @@ impl World {
         // blow does nothing later in the tick, and a man whose turn came first has already done his work. Ours applies
         // each player's share of the tick's work as one turn, in that order.
         let mut queue = work.bucket(self);
-        for turn in 0..TURNS {
-            let work_for_this_turn = std::mem::take(&mut queue.turns[turn]);
+        for work_for_this_turn in queue.turns.iter_mut().take(TURNS) {
+            let work_for_this_turn = std::mem::take(work_for_this_turn);
             // **No "empty turn" shortcut** (tried and withdrawn, D230): a turn of empty lists is *not* nothing to do -
             // `shepherd` resumes a gather on a corpse from `self.slaughter`, which is world state and not one of the lists,
             // so skipping the empty turns stopped a villager gathering the sheep he had just killed. Two animal fixtures
@@ -1813,11 +1813,17 @@ impl World {
                                         .map(|task| (entity.id, task)),
                                 );
                             }
-                            if take == 0 && empty_node {
+                            if take == 0
+                                && empty_node
+                                && !work.switches.iter().any(|(id, _)| *id == entity.id)
+                            {
                                 // Nothing in hand and nothing left here: look for the next node of the same kind before
                                 // standing still. A tree holds 100 wood, so without this a lumberjack works one tree and
                                 // idles for the rest of the match - which is what stopped the acceptance match at 139
                                 // wood (the owner's rule: "move to next tree, next bush, next pile of gold").
+                                // No finish when the man is already going home: `resume_idle` runs after the switches,
+                                // so a finish here would stand down a carrier the load rule just sent home - measured,
+                                // an eleventh man holding two wood idled on a dried patch while the bank waited.
                                 let here = entity.position;
                                 match self.nearest_like(here, node, entity.id) {
                                     Some(next) => work.retasks.push((entity.id, next)),

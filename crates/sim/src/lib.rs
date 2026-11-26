@@ -25,14 +25,12 @@ use ruage_data::{
 
 mod geometry;
 mod ground;
-mod levels;
 mod metrics;
 mod roles;
 pub mod tiles;
 mod world;
 pub use geometry::{WayRoute, ray_hit, solve, verify_path, walk_shape};
-pub use ground::{Clear, Ground, TierFunnel, TierShadow};
-pub use levels::{CoarseRoute, Levels};
+pub use ground::{Clear, Ground};
 pub use metrics::Metrics;
 use ruage_fixed::Fixed;
 
@@ -1718,33 +1716,6 @@ impl World {
         self.plan_count.get()
     }
 
-    /// **How many of them the levelled tier answered** (D338). Instrumentation: the tier's gate used to switch it off for every
-    /// caller and no fixture noticed, so the count is what says whether it runs.
-    pub fn tier_answers(&self) -> u64 {
-        self.ground.as_ref().map_or(0, ground::Ground::tier_answers)
-    }
-
-    /// **Turn on the tier-vs-flat comparison for a probe** (D344). Off unless asked: it runs a second search per tier answer.
-    pub fn compare_tier_routes(&self, on: bool) {
-        if let Some(ground) = self.ground.as_ref() {
-            ground.compare_tier_routes(on);
-        }
-    }
-
-    /// The comparison's running totals, or an empty set when no ground exists yet.
-    pub fn tier_shadow(&self) -> TierShadow {
-        self.ground
-            .as_ref()
-            .map_or_else(TierShadow::default, ground::Ground::tier_shadow)
-    }
-
-    /// Why the tier did not answer, counted only while the comparison is on.
-    pub fn tier_funnel(&self) -> TierFunnel {
-        self.ground
-            .as_ref()
-            .map_or_else(TierFunnel::default, ground::Ground::tier_funnel)
-    }
-
     /// **What the movement pass decided for this body on the last tick it was asked** (D196): `None` if there is no such entity.
     pub fn last_step(&self, id: EntityId) -> Option<StepDecision> {
         self.find(id).map(|entity| entity.last_step)
@@ -1973,11 +1944,9 @@ impl World {
 
     /// **A route between two points**, as the waypoints a body walks, or `NoPath` when there is no ground to plan on.
     ///
-    /// One entry point, and the route is the game's shape: the straight leg when one is clear (tier 1, unverified - D309), the
-    /// levelled chain for a long walk with no standers near it (tier 2, D296-D302; gated, see P14), and the flat tile A\*
-    /// otherwise. **The body's radius goes in** (`reach_at`), and so does every stander it must plan round (`standing_bodies`);
-    /// the earlier note here claimed the opposite of both, which was true under D279 and stopped being true at D306/D282. A goal
-    /// that is walled in is not an error: the search settles on the nearest cell it can reach and the route ends there, which is
+    /// One entry point: the geometric solver over the blocked tiles near the walk plus every stander it must plan
+    /// round. **The body's radius goes in** (`reach_at`), and so does every stander (`standing_bodies`); a goal
+    /// that is walled in is not an error: the solver stops beside it and the route ends there, which is
     /// the original's "come as close as you can".
     pub(crate) fn plan_path(
         &self,
@@ -1987,7 +1956,7 @@ impl World {
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let reach = self.reach_at(from);
         let clear = self.standing_bodies(mover, from, to, reach);
-        self.plan_path_with(from, to, reach, &clear)
+        self.plan_path_with(from, to, reach, &clear, true)
     }
 
     /// **The mover's own reach into every grown box** (D286): the radius of the live unit planning from this point.
@@ -2090,10 +2059,11 @@ impl World {
         to: (Fixed, Fixed),
         reach: i64,
         clear: &[ground::Clear],
+        foray_near: bool,
     ) -> Result<Vec<(Fixed, Fixed)>, SimError> {
         let ground = self.ground.as_ref().ok_or(SimError::NoTables)?;
         let answer = ground
-            .route_avoiding(self.scale, from, to, reach, clear)
+            .route_avoiding(self.scale, from, to, reach, clear, foray_near)
             .ok_or(SimError::NoPath {
                 from: self.tile_of(from),
                 to: self.tile_of(to),
@@ -2118,7 +2088,77 @@ impl World {
                 clear.push(*one);
             }
         }
-        self.plan_path_with(from, to, reach, &clear)
+        // **A goal stood inside is answered on the arrival side.** A replan aims at the route's old goal, and a friend
+        // may have stopped on exactly that point since: the goal sits strictly inside his grown box, every face stands
+        // the same distance from it, and the solver's coordinate tiebreak seats the walk on the west face - measured,
+        // the second of two men walked at one target rested 16,000 raw off it, out of contact, while the north and
+        // south faces were exactly as near. The walk arrives from `from`, so the hold that continues the advance -
+        // the face middle most along the walk's direction - is the answer; a face inside another box, or on blocked
+        // ground, is no hold, and when every face is held the goal stands and the solver settles as before.
+        let inside = |point: (i64, i64)| {
+            clear.iter().any(|grown| {
+                let (gx, gy) = (grown.half.0 + grown.reach, grown.half.1 + grown.reach);
+                point.0 > grown.at.0 - gx
+                    && point.0 < grown.at.0 + gx
+                    && point.1 > grown.at.1 - gy
+                    && point.1 < grown.at.1 + gy
+            })
+        };
+        let to_raw = (to.0.raw(), to.1.raw());
+        let mut goal = to;
+        if inside(to_raw) {
+            let direction = (to_raw.0 - from.0.raw(), to_raw.1 - from.1.raw());
+            let mut best_point: Option<(Fixed, Fixed)> = None;
+            let mut best_key: Option<(i128, i64, i64)> = None;
+            for grown in clear
+                .iter()
+                .filter(|grown| {
+                    let (gx, gy) = (grown.half.0 + grown.reach, grown.half.1 + grown.reach);
+                    to_raw.0 > grown.at.0 - gx
+                        && to_raw.0 < grown.at.0 + gx
+                        && to_raw.1 > grown.at.1 - gy
+                        && to_raw.1 < grown.at.1 + gy
+                })
+                .take(1)
+            {
+                let (gx, gy) = (grown.half.0 + grown.reach, grown.half.1 + grown.reach);
+                let (min_x, max_x, min_y, max_y) = (
+                    grown.at.0 - gx,
+                    grown.at.0 + gx,
+                    grown.at.1 - gy,
+                    grown.at.1 + gy,
+                );
+                for middle in [
+                    ((min_x + max_x) / 2, min_y),
+                    ((min_x + max_x) / 2, max_y),
+                    (min_x, (min_y + max_y) / 2),
+                    (max_x, (min_y + max_y) / 2),
+                ] {
+                    if inside(middle) {
+                        continue;
+                    }
+                    let (tx, ty) =
+                        self.tile_of_raw((Fixed::from_raw(middle.0), Fixed::from_raw(middle.1)));
+                    if u16::try_from(tx).map_or(true, |x| {
+                        u16::try_from(ty).map_or(true, |y| !self.tile_walkable(x, y))
+                    }) {
+                        continue;
+                    }
+                    let forward = i128::from(middle.0 - from.0.raw()) * i128::from(direction.0)
+                        + i128::from(middle.1 - from.1.raw()) * i128::from(direction.1);
+                    let key = (forward, middle.0, middle.1);
+                    if best_key.is_none_or(|held| key > held) {
+                        best_key = Some(key);
+                        best_point = Some((Fixed::from_raw(middle.0), Fixed::from_raw(middle.1)));
+                    }
+                }
+            }
+            if let Some(point) = best_point {
+                goal = point;
+            }
+        }
+        // A re-plan presses: the foray skips a near stall on a body that will have moved by next tick.
+        self.plan_path_with(from, goal, reach, &clear, false)
     }
 
     /// The route a particular **body** would walk. The body is not a planner input any more (D279): a route is about
@@ -2134,7 +2174,7 @@ impl World {
             .find(id)
             .map_or(0, |entity| self.body_radius(entity.unit));
         let clear = self.standing_bodies(Some(id), from, to, reach);
-        self.plan_path_with(from, to, reach, &clear)
+        self.plan_path_with(from, to, reach, &clear, true)
     }
 
     /// The next waypoint of a unit's route, as a world position.
@@ -3297,7 +3337,7 @@ impl World {
         let own = self
             .find(mover)
             .map_or(0, |entity| self.body_radius(entity.unit));
-        let (friend, his, friend_working) = self.entities.iter().find_map(|other| {
+        let (friend, his) = self.entities.iter().find_map(|other| {
             if other.kind != EntityKind::Unit || other.hp <= 0 || other.id == mover {
                 return None;
             }
@@ -3306,17 +3346,17 @@ impl World {
                 (at.0.raw() - other.position.0.raw()).abs(),
                 (at.1.raw() - other.position.1.raw()).abs(),
             );
-            let working =
-                matches!(other.task, crate::Task::Gather { progress, .. } if progress.raw() > 0);
-            (dx < own + his && dy < own + his).then_some((other, his, working))
+            (dx < own + his && dy < own + his).then_some((other, his))
         })?;
         let mine_working = self.find(mover).is_some_and(
             |entity| matches!(entity.task, crate::Task::Gather { progress, .. } if progress.raw() > 0),
         );
-        if mine_working && !friend_working {
-            return None;
-        }
-        if mine_working && friend_working && mover.0 < friend.id.0 {
+        // **A man already taking from the node is never seated** (D246, the owner's rule 4: *"villager is never to be
+        // nudged to leave place he is working at"*). The seat below arranges men who have not started yet; moving one
+        // who has started steals his place mid-take - measured, a woodcutter still a second into his tree stepped
+        // aside for a latecomer. A working friend does not move me either: the overlap is the game's (D290), and the
+        // seat is for the man who has nothing to lose.
+        if mine_working {
             return None;
         }
 
@@ -3834,16 +3874,6 @@ impl World {
         )
     }
 
-    /// **What the levelled search charges to enter a tile** (the `FUN_007ed280` row this tree implements), at level 0 -
-    /// the level a short walk is answered on. `None` means the search never enters it.
-    ///
-    /// An instrument, like `clearance_at`: the row is a constant of the search and a fixture has to be able to read it
-    /// without walking a route and inferring the price from its shape.
-    #[must_use]
-    pub fn step_cost_at(&self, tile: (u16, u16)) -> Option<i32> {
-        self.ground.as_ref()?.pyramid().step_cost(0, tile.0, tile.1)
-    }
-
     /// **How much room a body has**, in raw units: the distance from `position` to the nearest **blocked tile**, minus `radius`.
     /// Zero is "touching the wall", negative is "inside it" - and the movement rule of D176 is that it never goes negative.
     ///
@@ -4123,8 +4153,6 @@ impl World {
                 let tile = self.tile_of(entity.position);
                 if let Some(walk) = self.ground.as_mut() {
                     walk.unblock(tile.0, tile.1);
-                    // The 300 row goes with the node that made it (D342).
-                    walk.unmark_snug(tile.0, tile.1);
                 }
             }
             self.entities.retain(|entity| entity.id != node);
@@ -4768,31 +4796,6 @@ impl World {
             .map(|entry| (entry.radius * scale as f64).round() as i64)
             .collect();
         self.resources = Some(resources.clone());
-        // **The 300 row's marks are applied here, not at seeding** (D342): the map is seeded before the resource table
-        // arrives (`world.seed_from` then `world.load_resources`, the order every fixture and `ruage-headless` use), so
-        // at insert time the pack cannot say which of its resources is a mine. Nothing has searched yet, so the level
-        // pyramids are still cold and no cache has to be dropped.
-        let snug_slots: Vec<usize> = (0..resources.count())
-            .filter(|slot| resources.slot_is_snug(*slot))
-            .collect();
-        if !snug_slots.is_empty() {
-            let tiles: Vec<(u16, u16)> = self
-                .entities
-                .iter()
-                .filter(|entity| entity.amount.raw() > 0)
-                .filter_map(|entity| match entity.kind {
-                    EntityKind::Resource(slot) if snug_slots.contains(&slot) => {
-                        Some(self.tile_of(entity.position))
-                    }
-                    _ => None,
-                })
-                .collect();
-            if let Some(walk) = self.ground.as_mut() {
-                for (x, y) in tiles {
-                    walk.mark_snug(x, y);
-                }
-            }
-        }
         // The pack is what turns a name in `[start] stock` into a column, so this is the earliest
         // point the opening stockpile can be applied when the pack is loaded after seeding.
         self.apply_start_stock()?;

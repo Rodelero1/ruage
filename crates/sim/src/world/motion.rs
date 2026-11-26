@@ -456,7 +456,26 @@ impl World {
         let Some(from) = self.position(id) else {
             return;
         };
-        if let Ok(points) = self.plan_path_avoiding(Some(id), from, goal, blockers) {
+        // **A body already stood inside is not walked around** - only out of. The step that recorded it was taken
+        // (the epilogue never writes a position), so the mover is *inside* the grown box: the solver's start-inside
+        // exit would step him to the nearest corner, which for a symmetric pass-through is the one he came from -
+        // measured, two villagers walking to one bush backed 8,000 raw out and never pressed closer than 0.36 tiles,
+        // where the levelled search pressed straight on to 0.23. A stopped body is never stood inside (touching is
+        // not inside), so it stays on the avoid list and D281's walk-round still runs; a walker that will have moved
+        // by next tick is pressed through, and the pause is what separates the pair.
+        let held: Vec<crate::ground::Clear> = blockers
+            .iter()
+            .copied()
+            .filter(|clear| {
+                let (fx, fy) = (from.0.raw(), from.1.raw());
+                let (gx, gy) = (clear.half.0 + clear.reach, clear.half.1 + clear.reach);
+                fx <= clear.at.0 - gx
+                    || fx >= clear.at.0 + gx
+                    || fy <= clear.at.1 - gy
+                    || fy >= clear.at.1 + gy
+            })
+            .collect();
+        if let Ok(points) = self.plan_path_avoiding(Some(id), from, goal, &held) {
             self.put_route(
                 id,
                 crate::Route {
@@ -485,11 +504,21 @@ impl World {
         {
             return Some(point);
         }
-        // Only the two tasks that walk on a point of their own need this: `Gather`, `Return` and `Build` have no `to`, and
+        // Only the tasks that walk on a point of their own need this: `Gather` and `Build` have no `to`, and
         // when their route is spent they do not walk either (`motion_of` answers `next_waypoint` alone, so a spent route is
-        // no delta and the body stands), which leaves nothing for a re-plan to steer.
+        // no delta and the body stands), which leaves nothing for a re-plan to steer. A carrier walks at his yard with no
+        // route at all, so a wall in his lane - a castle the test placed after the order, a farm the game grew around
+        // him - holds him for the rest of the match: measured, a loaded woodcutter pressed a castle footprint for
+        // 400,000 ticks with the bank stuck at 100 of 400. His goal is his drop site, and the arm walks the wall, not
+        // the anchor, so a route that leads beside it is a route he can finish.
         match self.find(id)?.task {
             Task::Move { to, .. } | Task::Hunt { to } => Some(to),
+            Task::Return { drop, .. } => {
+                let here = self.position(id)?;
+                self.approach_tile(self.tile_of(here), drop)
+                    .map(|tile| self.tile(tile))
+                    .or_else(|| self.position(drop))
+            }
             _ => None,
         }
     }
@@ -530,11 +559,102 @@ impl World {
         }
         let own = self.body_radius(entity.unit);
         let target = Self::order_target(entity);
+        // **Who else the landing touches.** Scanned once, before the refusals below, so the target rule and the
+        // goal rule read the same list the body loop would record: any live unit overlapping the landing, except the
+        // mover himself and his moving mates (the path-ignore list). A body that has not moved since the route was
+        // planned counts here even though the body loop walks past it: the route cannot account for a body standing
+        // on the contact point or the goal itself, and skipping it would walk the mover into his friend.
+        // Nothing is recorded here; a refusal records its own crowd for the replan below, so a mere touch
+        // does not buy a search.
+        let touches_target =
+            target.is_some_and(|thing| thing != id && self.body_touches(thing, landing, own));
+        // Only a walk that names another *unit* as its target reads the collision list this way. Gatherers,
+        // builders and crowds pile onto their node, site or tile by design - holding every one of them at arm's
+        // length the moment a friend touches the same spot would un-jam every crowd in the game - while a walk
+        // that names a fellow body must stop at contact instead of stacking onto him.
+        let unit_target = matches!(target, Some(thing) if thing != id && self.find(thing).is_some_and(|entity| entity.kind == EntityKind::Unit));
+        let on_goal = unit_target && self.replan_goal(id).is_some_and(|goal| goal == landing);
+        // A push has no route left, so nothing was planned around whoever stands ahead of it: every push
+        // landing is scanned, while a routed walk only pays for the scan when the landing touches its target
+        // or ends the walk. Mates are walked over, not scanned: a group ordered together jams instead of holding
+        // at arm's length, and only a non-mate on the contact point or the goal means re-path, not arrival.
+        let pushing = self
+            .paths
+            .get(&id)
+            .is_none_or(|route| route.points.is_empty());
+        let finishing = self
+            .paths
+            .get(&id)
+            .is_some_and(|route| route.points.len() == 1);
+        // Who else the landing touches, scanned once so the target rule and the goal rule below read the
+        // same list: any live unit overlapping the landing, except the mover himself and his moving mates
+        // (the path-ignore list). A body that has not moved since the route was planned counts here even
+        // though the body loop walks past it: the route cannot account for a body standing on the contact
+        // point or the goal itself, and skipping it would walk the mover into his friend. Nothing is recorded
+        // here; a refusal records its own crowd for the replan, so a mere touch does not buy a search.
+        let mut crowded: Vec<EntityId> = Vec::new();
+        if touches_target || pushing || finishing {
+            for other in self.entities.iter().filter(|other| {
+                other.kind == EntityKind::Unit && other.id != id && Some(other.id) != target
+            }) {
+                let reach = self.reach_raw(entity.unit, other.unit);
+                if (other.position.0.raw() - landing.0.raw()).abs() >= reach
+                    || (other.position.1.raw() - landing.1.raw()).abs() >= reach
+                {
+                    continue;
+                }
+                let moving = self
+                    .paths
+                    .get(&other.id)
+                    .is_some_and(|route| !route.points.is_empty())
+                    && other.pause_remaining == 0;
+                if moving && self.is_mate(id, other.id) {
+                    continue;
+                }
+                if !crowded.contains(&other.id) {
+                    crowded.push(other.id);
+                }
+                // **The approach is planned round, not just refused at - but only for a walk that names a
+                // body.** The scan runs on the walk's tail (touching, pushing, finishing), and every body it finds
+                // joins the avoid list, so the replan below steers round the stander instead of walking onto him -
+                // which is what puts the second man *beside* his friend rather than inside him. A crowd ordered onto
+                // a tile, or gatherers onto a node, press by design: recording their neighbours would replan every
+                // tail tick and hold the crowd at arm's length instead of letting it jam.
+                if unit_target {
+                    let half = match self.body_radius(other.unit) {
+                        0 => self.scale / 2,
+                        own_other => own_other,
+                    };
+                    if !blockers
+                        .iter()
+                        .any(|clear| clear.at == (other.position.0.raw(), other.position.1.raw()))
+                    {
+                        blockers.push(crate::ground::Clear {
+                            at: (other.position.0.raw(), other.position.1.raw()),
+                            half: (half, half),
+                            reach: own,
+                        });
+                    }
+                }
+            }
+        }
         // 1. **A collision with the order's own target ends the order** (`0x127d`, *"That collision is with our target, so
         //    we're done"*). The test is the game's own: the mover's box against the thing's box (`FUN_00840830`), grown by its
         //    radius. A walk that names a house therefore stops with its body against the wall, and one that names a man stops
         //    at his shoulder - the same distance for both of the owner's clicks.
-        if target.is_some_and(|thing| thing != id && self.body_touches(thing, landing, own)) {
+        //
+        // **...but only when the target is all it touches** (contact_needs_one_collision): the binary's arrival arm is gated
+        // on the whole collision list - a count beside the target, or an entry that is not the target, re-paths (`0x128b`)
+        // instead. A friend standing on the contact point, or on the walk's own goal, means re-path, not arrival: the step
+        // is refused (`WaitBlocked`, so the stalled count and the replan both run) and nothing ends the order. Only for
+        // walks that name another *unit*: gatherers, builders and crowds pile onto their node, site or tile by design,
+        // and holding every one of them at arm's length the moment a friend touches the same spot would un-jam every
+        // crowd in the game and stall every node.
+        if touches_target && !crowded.is_empty() && unit_target {
+            Self::record_crowd(self, &crowded, own, blockers);
+            return Some(StepDecision::WaitBlocked);
+        }
+        if touches_target {
             return Some(StepDecision::WaitTarget);
         }
         // 2. **The ground.** Impassable terrain is the game's **point test** (`FUN_008aa480` - a tile, no radius), which is
@@ -644,12 +764,73 @@ impl World {
                 pauses.push(other.id);
             }
         }
+        // A landing that *is* the walk's current goal and overlaps another live body is refused, even when the
+        // target rule above did not fire: the step would finish the walk on top of him. Ground and objects win
+        // ties (checked above); a crowd on the goal re-plans round it instead of stacking on it. Only for walks
+        // that name their target: a crowd ordered onto one tile with no target *should* press together (the
+        // overlap tests jam at half the standoff), and holding every one of them at arm's length never lets it.
+        if on_goal && !crowded.is_empty() && unit_target {
+            Self::record_crowd(self, &crowded, own, blockers);
+            return Some(StepDecision::WaitBlocked);
+        }
+        // A push that would step onto another body is refused for the same reason, when the walk names its
+        // target: with no route left the walk is heading straight at its order's goal, and pressing through a
+        // stander to get there stacks the mover onto him. A routed walk still presses through and re-plans -
+        // crowds would otherwise stop dead on first touch - and a target-less push keeps pressing too, which is
+        // how a crowd ordered onto one tile jams instead of holding at arm's length. Moving mates are still
+        // walked over (skipped in the scan above).
+        if !blockers.is_empty()
+            && matches!(
+                self.find(id).map(|entity| entity.task),
+                Some(Task::Move {
+                    target: Some(_),
+                    ..
+                })
+            )
+            && unit_target
+            && self
+                .paths
+                .get(&id)
+                .is_none_or(|route| route.points.is_empty())
+        {
+            Self::record_crowd(self, &crowded, own, blockers);
+            return Some(StepDecision::WaitBlocked);
+        }
         None
     }
 
     /// The entity an order is trying to reach, when the order has one. **A walk has one now** (D286): the object the click
     /// landed on, if it landed on anything - which is what lets the original's *"That collision is with our target, so we're
     /// done"* arm fire for a move at all.
+    /// Record a crowded landing's bodies for the replan, in the body loop's shape: the other's own
+    /// half-extent, grown by the mover. Called only on a refused step, so a mere touch never buys a search.
+    fn record_crowd(
+        &self,
+        crowded: &[EntityId],
+        own: i64,
+        blockers: &mut Vec<crate::ground::Clear>,
+    ) {
+        for other in crowded {
+            let Some(friend) = self.find(*other) else {
+                continue;
+            };
+            let half = match self.body_radius(friend.unit) {
+                0 => self.scale / 2,
+                own_other => own_other,
+            };
+            if !blockers
+                .iter()
+                .any(|clear| clear.at == (friend.position.0.raw(), friend.position.1.raw()))
+            {
+                blockers.push(crate::ground::Clear {
+                    at: (friend.position.0.raw(), friend.position.1.raw()),
+                    half: (half, half),
+                    reach: own,
+                });
+            }
+        }
+    }
+
     fn order_target(entity: &Entity) -> Option<EntityId> {
         match entity.task {
             Task::Attack { target, .. } => Some(target),
