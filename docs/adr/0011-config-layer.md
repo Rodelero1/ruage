@@ -1,7 +1,7 @@
 # ADR 0011 — Game data lives in config/ as generated TOML (supersedes D6)
 
 - **D-id alias:** D6 (2026-10-23)
-- **Status:** Accepted. Old row untouched until owner sign-off.
+- **Status:** Signed 2026-11-26.
 
 ## Context
 
@@ -26,3 +26,7 @@ If D4 lands publishable, `config/gamedata/` is gitignored and generated at first
 - Strict-loader tests: unknown key → startup error; missing key → error; `-1.0` sentinel refused where not allowed.
 - Override precedence test (`overrides.toml` beats `gamedata/`).
 - Manifest-staleness test (dat hash differs → startup refuses).
+
+## Sign-off note (2026-11-26)
+
+Signed as written. D6 bank row deleted on sign-off per the 2026-11-26 rule.

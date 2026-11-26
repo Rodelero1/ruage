@@ -1,11 +1,11 @@
 # ADR 0013 — Scenario language and runners are not the engine (supersedes D198)
 
 - **D-id alias:** D198
-- **Status:** Accepted. Old row untouched until owner sign-off.
+- **Status:** Signed 2026-11-26.
 
 ## Context
 
-D17/D18 asked in words for an engine that knows kinds, not particulars; 1,656 lines inside `sim` contradicted them.
+The layering rule asked in words for an engine that knows kinds, not particulars; 1,656 lines inside `sim` contradicted them.
 
 ## Decision
 
@@ -15,7 +15,7 @@ D17/D18 asked in words for an engine that knows kinds, not particulars; 1,656 li
 
 - **Game (rung 0):** Architectural. No game trajectory supports or refutes a crate split.
 - **Rung 2 (bounded, read-only):** None applicable.
-- **Owner:** Layering requirement inherited from D17/D18 (owner-accepted).
+- **Owner:** Layering requirement inherited from the four-layer rule (owner-accepted).
 
 ## Consequences
 
@@ -25,3 +25,7 @@ Behaviour unchanged by construction, measured: acceptance run prints the identic
 
 - Dependency rule: `ruage-sim` must not depend on `ruage-script`/`ruage-harness` (workspace structure).
 - Acceptance hash equality across the move (recorded in the row).
+
+## Sign-off note (2026-11-26)
+
+Signed as written (layering-rule citations plain-worded, draft cleanup). D198 bank row deleted on sign-off per the 2026-11-26 rule.

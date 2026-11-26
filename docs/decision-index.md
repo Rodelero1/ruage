@@ -2,11 +2,11 @@
 
 # Decision index
 
-**345 rows.** `docs/archive/decisions-2026-11-24.md` is ~852k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**343 rows.** `docs/archive/decisions-2026-11-24.md` is ~835k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
-- **337** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
+- **335** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
-- **249** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
+- **248** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
 - **11** rows say they are superseded.
 
 Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section names rows the table does not file.
@@ -345,7 +345,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D232** — T16 read: the turn is a per-player clock, not another update order (2026-11-16) · — · `schedule`, `unit`
 - **D315** — The skirmish was one-sided because its clock was stale · —
 
-## Data & tooling (16)
+## Data & tooling (15)
 
 - **D45** — `overrides.toml` is real: the per-unit configuration surface, and it refuses rather than ignores · — · `overrides`
 - **D68** — The pack is the union of the playable civ and Gaia · —
@@ -360,13 +360,11 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D167** — Units above buildings again, because both orders were reported · —
 - **D168** — The decision index is derived from the corpus, and it quotes its evidence · —
 - **D168** — Two frames, one conversion: `drawn_at` subtracts half a tile · —
-- **D198** — the scenario language and the runners are not the engine · — · `headless`, `roles`
 - **D209** — the step's diff goes through the AI reviewer, and its findings are checked like anyone else's · —
 - **D45a** — The review of the override layer: one pass wrote half a file, and two refusals were missing · —
 
-## Licensing & publication (4)
+## Licensing & publication (3)
 
-- **D21** — Licence policy: permissive engine, attribution for art, nothing borrowed from GPL code · —
 - **D22** — Bring your own copy: the game requires a legally acquired original · —
 - **D201** — content: our own campaigns only, names by three lists, all prose rewritten · —
 - **D202** — the target shape is "A-prime": self-contained sources, the install as the only input · —
