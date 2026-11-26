@@ -164,3 +164,160 @@ fn surrounded_expands_once_then_closest() {
 fn turn_count_names_hole_vs_open() {
     assert_ne!(turn_balance(&open_u_shape()), turn_balance(&closed_hole()));
 }
+
+/// The deck's named edges, re-derived as routing witnesses (never copied):
+/// a walk across the whole map stays clean, and a walk from inside a hole
+/// answers without crossing a wall.
+fn whole_map() -> Vec<Clear> {
+    // One wall across a 100-tile walk, short enough to walk round inside
+    // the search area: the mouths past its ends are the way through.
+    vec![Clear {
+        at: (1_000_000, 0),
+        half: (10_000, 100_000),
+        reach: 0,
+    }]
+}
+
+fn solve_whole_map() -> WayRoute {
+    solve(
+        SCALE,
+        point(0, 0),
+        point(100, 0),
+        0,
+        &whole_map(),
+        &[],
+        true,
+    )
+}
+
+fn hole() -> Vec<Clear> {
+    surrounded()
+}
+
+fn solve_hole() -> WayRoute {
+    solve(SCALE, point(0, 0), point(9, 9), 0, &hole(), &[], true)
+}
+
+#[test]
+fn deck_edges_hold() {
+    assert!(verify_path(&raw_points(&solve_whole_map()), &whole_map()).is_none());
+    assert!(verify_path(&raw_points(&solve_hole()), &hole()).is_none());
+}
+
+/// Two boxes sharing a face, walked at routing level: the seam is contact,
+/// not a wall, so the walk crosses to the far side and stays clean.
+fn aligned_overlap_pair() -> Vec<Clear> {
+    vec![
+        Clear {
+            at: (0, 0),
+            half: (10_000, 10_000),
+            reach: 0,
+        },
+        Clear {
+            at: (20_000, 0),
+            half: (10_000, 10_000),
+            reach: 0,
+        },
+    ]
+}
+
+#[test]
+fn aligned_overlap_solves_clean() {
+    let avoid = aligned_overlap_pair();
+    let route = solve(SCALE, point(-2, 0), point(4, 0), 0, &avoid, &[], true);
+    assert!(matches!(route, WayRoute::Reached(_)));
+    assert!(verify_path(&raw_points(&route), &avoid).is_none());
+}
+
+/// Open pocket vs closed hole at routing level: a goal inside the U's mouth
+/// is reachable from the side, while a goal inside the closed frame is
+/// answered beside it, never through a wall.
+#[test]
+fn open_pocket_reaches_but_hole_answers_closest() {
+    let mouth = u_boxes();
+    let into_pocket = solve(SCALE, point(5, 0), point(0, 0), 0, &mouth, &[], true);
+    assert!(matches!(into_pocket, WayRoute::Reached(_)));
+    assert!(verify_path(&raw_points(&into_pocket), &mouth).is_none());
+
+    let frame = hole();
+    let into_hole = solve(SCALE, point(9, 9), point(0, 0), 0, &frame, &[], true);
+    assert!(matches!(into_hole, WayRoute::Closest(_)));
+    assert!(verify_path(&raw_points(&into_hole), &frame).is_none());
+}
+
+/// The whole-map guard: every waypoint of the cross-map walk lies inside
+/// the twice-expanded search area (the from/to box grown by 8 tiles each
+/// way), so the walk cannot wander the map looking for a way round.
+#[test]
+fn whole_map_walk_stays_inside_the_search_area() {
+    let avoid = whole_map();
+    let route = solve_whole_map();
+    assert!(
+        matches!(route, WayRoute::Reached(_)),
+        "the wall is short enough to walk round inside the search area"
+    );
+    let points = raw_points(&route);
+    assert!(verify_path(&points, &avoid).is_none());
+    let step = 8 * SCALE;
+    let (lo_x, hi_x) = (-step, 100 * SCALE + step);
+    let (lo_y, hi_y) = (-step, step);
+    for (x, y) in &points {
+        assert!(
+            (lo_x..=hi_x).contains(x) && (lo_y..=hi_y).contains(y),
+            "waypoint ({x}, {y}) left the search area"
+        );
+    }
+}
+
+/// Surrounded means expand-once-then-closest: the answer stays beside the
+/// start (first waypoint is where the walk stands) instead of wandering.
+#[test]
+fn surrounded_stays_beside_itself() {
+    let avoid = hole();
+    let route = solve_hole();
+    assert!(matches!(route, WayRoute::Closest(_)));
+    let points = raw_points(&route);
+    assert!(verify_path(&points, &avoid).is_none());
+    assert_eq!(points.first(), Some(&(0, 0)));
+}
+
+/// Determinism is the anti-goal's guard: the same walk twice answers
+/// identically, fixed-point only, no float to creep between runs.
+#[test]
+fn same_walk_twice_answers_identically() {
+    for _ in 0..3 {
+        assert_eq!(solve_whole_map(), solve_whole_map());
+        assert_eq!(solve_hole(), solve_hole());
+    }
+}
+
+/// The no-failure contract at the deck edges: every named edge answers with
+/// a polyline, never an empty refusal — Reached or Closest, always points.
+#[test]
+fn deck_edges_answer_never_empty() {
+    assert!(!raw_points(&solve_whole_map()).is_empty());
+    assert!(!raw_points(&solve_hole()).is_empty());
+}
+
+/// The guard under pressure: a wall longer than the search area leaves no
+/// way round inside the bounds, so the walk stops beside the wall (Closest)
+/// instead of wandering past the bounds or crossing. Clean either way.
+#[test]
+fn wall_longer_than_the_search_area_answers_beside_it() {
+    let avoid = vec![Clear {
+        at: (1_000_000, 0),
+        half: (10_000, 500_000),
+        reach: 0,
+    }];
+    let route = solve(SCALE, point(0, 0), point(100, 0), 0, &avoid, &[], true);
+    assert!(matches!(route, WayRoute::Closest(_)));
+    let points = raw_points(&route);
+    assert!(verify_path(&points, &avoid).is_none());
+    let step = 8 * SCALE;
+    for (x, y) in &points {
+        assert!(
+            (-step..=100 * SCALE + step).contains(x) && (-step..=step).contains(y),
+            "waypoint ({x}, {y}) left the search area"
+        );
+    }
+}

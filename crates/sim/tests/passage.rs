@@ -224,28 +224,9 @@ fn two_trees_touching_at_a_corner_leave_no_gap() {
         "the route threads the corner: {raw:?}"
     );
 
-    if std::env::var("SCRATCH_P").is_ok() {
-        eprintln!(
-            "SCRATCH_P route={:?}",
-            world
-                .route_points(walker)
-                .iter()
-                .map(|p| (p.0.raw(), p.1.raw()))
-                .collect::<Vec<_>>()
-        );
-    }
     let mut on_a_tree = Vec::new();
     for tick in 0..600 {
         world.step().expect("step");
-        if std::env::var("SCRATCH_P").is_ok() && tick % 100 == 0 {
-            eprintln!(
-                "SCRATCH_P t={tick} pos=({},{}) pathlen={} last={:?}",
-                world.position(walker).unwrap().0.raw(),
-                world.position(walker).unwrap().1.raw(),
-                world.path_length(walker),
-                world.last_step(walker)
-            );
-        }
         let now = tile_of(&world, walker);
         if now == (4, 4) || now == (5, 5) {
             on_a_tree.push((tick, now));

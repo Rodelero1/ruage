@@ -340,3 +340,71 @@ fn the_elevation_multiply_per_hit() {
         scaled - bare
     );
 }
+
+/// A hundred units planning in one tick (New Way Task 6 measurement).
+/// Ignored by default like the other probes: prints, never asserts. A hundred
+/// villagers spread over the west half are each ordered east across the shipped
+/// map; the timed tick is the one that plans all hundred routes at once, and
+/// the nine ticks after it show the walking steady state.
+#[test]
+#[ignore = "prints timings; run explicitly with --ignored --nocapture"]
+fn hundred_units_plan_in_one_tick() {
+    let Some(fx) = fixture() else { return };
+    let (settings, map, economy, units, resources) = &fx;
+    let mut world = World::new(settings, 11).expect("world");
+    world.seed_from(map, economy, units).expect("seeding");
+    world
+        .load_resources(resources)
+        .expect("the pack fits the stockpile");
+    let scale = world.scale();
+    let villager = world.role_unit("villager").expect("a villager role");
+    let speed = Fixed::from_raw(8 * scale / 10);
+    for (next, i) in (10_000u32..).zip(0..100usize) {
+        let x = 2 + (i as i64 % 25);
+        let y = 2 + (i as i64 / 25);
+        world
+            .submit_checked(Command::Spawn {
+                id: EntityId(next),
+                player: 1,
+                kind: EntityKind::Unit,
+                unit: Some(villager),
+                position: (
+                    Fixed::from_raw(x * scale + scale / 2),
+                    Fixed::from_raw(y * scale + scale / 2),
+                ),
+                speed,
+                hp: 25,
+                amount: 0,
+            })
+            .expect("spawn");
+    }
+    world.step().expect("the spawns land");
+    for (next, i) in (10_000u32..).zip(0..100usize) {
+        let to = (50 + (i % 10) as u16, (20 + (i % 20)) as u16);
+        world
+            .submit_checked(Command::Move {
+                unit: EntityId(next),
+                to,
+                target: None,
+            })
+            .expect("order");
+    }
+    let start = Instant::now();
+    world.step().expect("the planning tick");
+    let planning = start.elapsed();
+    println!(
+        "100 units plan in one tick: {:.1} ms ({:.1} us/unit)",
+        planning.as_secs_f64() * 1e3,
+        planning.as_secs_f64() * 1e6 / 100.0,
+    );
+    let start = Instant::now();
+    for _ in 0..9 {
+        world.step().expect("step");
+    }
+    let walking = start.elapsed();
+    println!(
+        "next 9 walking ticks: {:.1} ms ({:.1} us/tick)",
+        walking.as_secs_f64() * 1e3,
+        walking.as_secs_f64() * 1e6 / 9.0,
+    );
+}
