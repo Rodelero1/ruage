@@ -23,13 +23,15 @@ use ruage_data::{
     Unit, Units,
 };
 
+mod geometry;
 mod ground;
 mod levels;
 mod metrics;
 mod roles;
 pub mod tiles;
 mod world;
-pub use ground::{Ground, TierFunnel, TierShadow};
+pub use geometry::{WayRoute, verify_path};
+pub use ground::{Clear, Ground, TierFunnel, TierShadow};
 pub use levels::{CoarseRoute, Levels};
 pub use metrics::Metrics;
 use ruage_fixed::Fixed;
