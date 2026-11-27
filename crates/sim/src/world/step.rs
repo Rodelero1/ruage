@@ -26,8 +26,8 @@ impl World {
         // blow does nothing later in the tick, and a man whose turn came first has already done his work. Ours applies
         // each player's share of the tick's work as one turn, in that order.
         let mut queue = work.bucket(self);
-        for turn in 0..TURNS {
-            let work_for_this_turn = std::mem::take(&mut queue.turns[turn]);
+        for work_for_this_turn in queue.turns.iter_mut().take(TURNS) {
+            let work_for_this_turn = std::mem::take(work_for_this_turn);
             // **No "empty turn" shortcut** (tried and withdrawn, D230): a turn of empty lists is *not* nothing to do -
             // `shepherd` resumes a gather on a corpse from `self.slaughter`, which is world state and not one of the lists,
             // so skipping the empty turns stopped a villager gathering the sheep he had just killed. Two animal fixtures
@@ -1543,9 +1543,7 @@ impl World {
                     progress,
                 } => {
                     let _ = progress;
-                    let Some((target, target_is_building, node_unit)) = self
-                        .find(node)
-                        .map(|n| (n.position, n.kind == EntityKind::Building, n.unit))
+                    let Some((target, node_unit)) = self.find(node).map(|n| (n.position, n.unit))
                     else {
                         // The node is gone (a later increment may delete emptied nodes).
                         work.finished.push(entity.id);
@@ -1563,54 +1561,10 @@ impl World {
                         }
                         continue;
                     }
-                    let here = self.tile_of(entity.position);
-                    let there = self.tile_of(target);
-                    // A node is stood on; a building is worked from the tile beside it, because its
-                    // own tile is blocked and a worker that insisted on it would walk forever.
-                    // **Standing beside a node you cannot stand on counts as working it.** A tree in the forest sits on
-                    // blocked terrain, so a villager that walks up to it stops on the adjacent tile with one waypoint
-                    // left and never arrives: `at_node` was false for ever, `take_amount` never ran, and - because the
-                    // villager was carrying a partial load - the "find the next node" branch did not fire either. Four
-                    // woodcutters did this for a thousand game-seconds beside two spent trees (2026-10-29), which is
-                    // why the wood column produced nothing while the food column produced 1,994.
-                    let beside = target_is_building || !self.tile_walkable(there.0, there.1);
-                    // **Distance, not the exact point** (C2). A body stopped by its friend's footprint stands inside the
-                    // node's own tile but never on its centre, so `position == target` was a deadlock: the second worker
-                    // on a carcass took nothing for the rest of the match (measured: 89 wood / 20 food at 1,600 s). Being
-                    // on the node's ground, or close enough for the two footprints to touch, is being at it.
-                    let (gap_x, gap_y) = (
-                        target.0.raw() - entity.position.0.raw(),
-                        target.1.raw() - entity.position.1.raw(),
-                    );
-                    let squared = gap_x * gap_x + gap_y * gap_y;
-                    let reach = self.reach_raw(entity.unit, node_unit);
                     let is_resource = matches!(
                         self.find(node).map(|n| n.kind),
                         Some(EntityKind::Resource(_))
                     );
-                    // **Touching, not a ring** (D192). A working man stands with his **circle against the node's tile** - his radius
-                    // from the border - which is 0.70 from a tile's centre for a villager of 0.2, not the 1.156 ring D186 measured.
-                    // That ring was the row *behind* the working one; using it is why the front row never worked. The test is one
-                    // number per tile: `distance_to_tile <= radius + a fiftieth of a tile`.
-                    let centre = self.tile_centre(there);
-                    let (ring_x, ring_y) = (
-                        centre.0.raw() - entity.position.0.raw(),
-                        centre.1.raw() - entity.position.1.raw(),
-                    );
-                    let ring_squared = ring_x * ring_x + ring_y * ring_y;
-                    let body = self.body_radius(entity.unit);
-                    let touch_tolerance = self.scale / 50;
-                    let touching = self.resource_tiles(node).iter().any(|tile| {
-                        crate::tiles::distance_to_tile(
-                            entity.position,
-                            (i64::from(tile.0), i64::from(tile.1)),
-                            self.scale,
-                        ) <= body + touch_tolerance
-                    });
-                    // **A ring, unless it is buried** (D192): a node whose every touching place is blocked ground - a tree deep in a
-                    // forest - is worked from the open tile beside it, which is the one case the border cannot describe.
-                    let ring_open = self.ring_open(centre);
-                    let arrived = here == there || squared <= reach * reach;
                     // **"At the node" is the game's box gap** (D285): the gap between the villager's box and the node's,
                     // against a range of zero - the boxes touch. This replaces four of our own rules (`touching` with its
                     // tolerance, `own_place` and its eighth of a tile, `ring_open`, `beside_adjacent`): the game has one
@@ -1623,7 +1577,6 @@ impl World {
                         ),
                         (target.0, target.1, self.node_radius(node)),
                     );
-                    let _ = (touching, ring_open, beside, reach, squared, arrived);
                     // **As close as the ground lets him be** (D286). The game's arrival is the box gap against the order's
                     // range, and for a job that is zero - the boxes touch; its movement is continuous, so the tick before
                     // contact is already at it. Ours moves in whole steps, and a step that would end inside the node's box is
@@ -1636,70 +1589,6 @@ impl World {
                         .div_exact(i64::from(self.tick_rate_hz).max(1))
                         .map_or(0, |delta| delta.raw());
                     let at_node = body <= i128::from(step) * i128::from(step);
-                    // **Stand where the bodies touch** (D169). `reach` is the sum of the two radii - the dat's 0.2 for a
-                    // villager and content's 0.5 for a tree - and it is what "at the node" used to mean. The *walk* ends at the
-                    // neighbouring tile's centre, a whole tile out, so a woodcutter swung at a tree from half a tile away: the
-                    // owner compared two screenshots of the original and said *"villagers are standing around 1/2 tile away"*.
-                    // D186 moved the place it walks to out to the measured ring; this is the step that takes it there.
-                    // **Walk the last half tile out to the ring** (D186). The step below only fires while the worker has
-                    // *arrived*, and the old standoff (0.70) was close enough to the neighbouring tile that one step kept the
-                    // worker inside that test. The ring is 1.156, so a worker that leaves the adjacent tile falls out of
-                    // "arrived" half way and stops short - measured: a villager beside a bush took nothing for 1,200 ticks.
-                    // The trigger is therefore "near the node and not on the ring, with no route left", which is stable for
-                    // the whole walk out and costs one decision per arrival rather than one per tick.
-                    let settle_reach = 4 * self.scale;
-                    let _near_node = ring_squared <= settle_reach * settle_reach;
-                    // **Two triggers, both bounded**: a worker standing *beside* the node (the walk's last waypoint is the
-                    // blocked tile, so it sits there with a waypoint it can never spend), and a worker near the node whose
-                    // route is spent. Both stop firing the moment it is on the ring.
-                    // **Keep walking until he is ON the ring, not merely inside the band.** Gating this on `!on_ring` stopped
-                    // every man the moment he crossed 1.056, so the walk ended wherever he happened to cross - measured, two
-                    // woodcutters working one bush **0.28** tiles apart, closer than their own bodies. The band says where a
-                    // man may work; the ring says where he stands.
-                    // **The walk goes to the ring itself, from whichever side it is approached** (D186). A man is `at_node`
-                    // the moment he is anywhere in the band, and the band's outer half reaches 1.256 - so the walk used to stop
-                    // where he entered it, which is how two men on the same side ended up **0.20** tiles apart, both working
-                    // and both technically on the ring. Settling is therefore "not yet within a fiftieth of a tile of the
-                    // radius", inside or outside, and the arm gives the settle the tick rather than standing him still.
-                    // **A place already owned is walked to, not re-chosen** (D186 addendum 5, D188): the settle must run until
-                    // the man is *on his place*, not merely on the ring's radius. Gating it on the radius alone let a man stop
-                    // wherever he crossed 1.156 - measured, ten men packed **0.144** apart at the same angle with their places
-                    // 0.408 apart and unclaimed.
-                    let owned_place: Option<(Fixed, Fixed)> = None; // D293: no man owns a place any more.
-                    let _off_place = owned_place.is_some_and(|place| {
-                        let (px, py) = (
-                            place.0.raw() - entity.position.0.raw(),
-                            place.1.raw() - entity.position.1.raw(),
-                        );
-                        px * px + py * py > 0
-                    });
-                    // **A man who is already taking from the node does not move** (D246, the owner's rule 4). With his place
-                    // frozen by the re-lay above, the settle has nothing left to arrange for him: the band correction was
-                    // what stepped him **0.011 tiles** at tick 11 in `invariants`, and what made a working man give up his
-                    // seat in D238. Arrangement (`off_place`) stays for men who have not started, which is what keeps the
-                    // ring.
-                    // **A man on his own place does not move; a man off it still walks to it** (D246, the owner: *"villager is
-                    // never to be nudged to leave place he is working at"*). "Working" is not the test - a villager's progress
-                    // starts as soon as he is within reach, so gating on it froze men **0.297 tiles** from their own place with a
-                    // neighbour where both were taking from the same bush. The test is **where he stands**: on the place he
-                    // holds, nothing moves him; off it, walking onto it is what separates him from the crowd.
-                    // **A man at work is not nudged** (D246, the owner: *"villager is never to be nudged to leave place he is
-                    // working at"*), and he is not nudged *at* either: while he is taking from the node the settle only walks
-                    // him to a place he is **more than a step away from** - a mis-seat, not the **0.011-tile** drift the
-                    // fixture caught at tick 11. A man who has not started is arranged as before, which is what keeps the ring.
-                    // A twentieth of a tile is a fifth of a villager's step: close enough to call "on his place", which is
-                    // what the 0.011-tile drift measured at tick 11 is.
-                    let near_enough = self.scale / 20;
-                    let _on_own_place = owned_place.is_some_and(|place| {
-                        (place.0.raw() - entity.position.0.raw()).abs() <= near_enough
-                            && (place.1.raw() - entity.position.1.raw()).abs() <= near_enough
-                    });
-                    // **Off his place is the whole trigger** (D279): the place is a property of the order, so a man who
-                    // is not standing on it walks to it, wherever he is. The band, the ring radius and the arrival test were
-                    // three ways to miss; a worker 1.9 tiles out with an empty route was the one that bit.
-                    // **Near the node, off his place** (D279): the walk-to-his-place has to fire from a few tiles out, or a
-                    // man who stops short never resumes - but it must not fire from across the map, because the place search
-                    // also decides whether the ring is re-laid, and re-laying moves every man's seat.
                     // **No seat is walked to any more** (D293, owner 2026-11-19: *"Drop it and let the crowds jam"*). The settle
                     // arm used to walk a gatherer the last half tile onto a private place round the node, one man per point, so no
                     // two men ever pressed. The original hands out no seats: a man goes to the resource he was given, the bodies are
@@ -1813,11 +1702,17 @@ impl World {
                                         .map(|task| (entity.id, task)),
                                 );
                             }
-                            if take == 0 && empty_node {
+                            if take == 0
+                                && empty_node
+                                && !work.switches.iter().any(|(id, _)| *id == entity.id)
+                            {
                                 // Nothing in hand and nothing left here: look for the next node of the same kind before
                                 // standing still. A tree holds 100 wood, so without this a lumberjack works one tree and
                                 // idles for the rest of the match - which is what stopped the acceptance match at 139
                                 // wood (the owner's rule: "move to next tree, next bush, next pile of gold").
+                                // No finish when the man is already going home: `resume_idle` runs after the switches,
+                                // so a finish here would stand down a carrier the load rule just sent home - measured,
+                                // an eleventh man holding two wood idled on a dried patch while the bank waited.
                                 let here = entity.position;
                                 match self.nearest_like(here, node, entity.id) {
                                     Some(next) => work.retasks.push((entity.id, next)),

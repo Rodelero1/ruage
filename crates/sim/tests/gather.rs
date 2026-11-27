@@ -527,7 +527,9 @@ fn a_nearer_wall_wins_over_a_nearer_anchor() {
     let mut drop = None;
     for _ in 0..4_000 {
         world.step().expect("step");
-        if let Some(ruage_sim::Task::Return { drop: target, .. }) = world.entity(villager).map(|e| e.task) {
+        if let Some(ruage_sim::Task::Return { drop: target, .. }) =
+            world.entity(villager).map(|e| e.task)
+        {
             drop = Some(target);
             break;
         }

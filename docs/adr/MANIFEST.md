@@ -17,8 +17,52 @@ One row per old D-id. A bank row is deleted when its ADR is signed (owner rule 2
 | D5 | `docs/adr/0010-dat-authoritative.md` | Signed 2026-11-26 |
 | D6 | `docs/adr/0011-config-layer.md` | Signed 2026-11-26 |
 | D15 | `docs/adr/0012-scenario-scope.md` | Signed 2026-11-26 |
+| D15 (third clause: search half) | `docs/adr/0014-flat-tile-search.md` | Signed 2026-11-27 |
 | D198 | `docs/adr/0013-script-harness-split.md` | Signed 2026-11-26 |
-| D1–D3, D7, D11, D14, D19, D20, D23–D197, D199–D358 | — | Pending, in trunk order |
+| D296 | `docs/adr/0015-three-tier-route.md` | Signed 2026-11-27 |
+| D297 | `docs/adr/0015-three-tier-route.md` | Signed 2026-11-27 |
+| D298 | `docs/adr/0015-three-tier-route.md` | Signed 2026-11-27 |
+| D299 | `docs/adr/0015-three-tier-route.md` | Signed 2026-11-27 |
+| D300 | — (premise and number withdrawn by D301, recorded in 0015) | Superseded 2026-11-27 |
+| D301 | `docs/adr/0015-three-tier-route.md` | Signed 2026-11-27 |
+| D302 | `docs/adr/0015-three-tier-route.md` | Signed 2026-11-27 |
+| D304 | `docs/adr/0014-flat-tile-search.md` (budget rule retired there) | Signed 2026-11-26 |
+| D305 | `docs/adr/0015-three-tier-route.md` (gate hole closed by geometry) | Signed 2026-11-27 |
+| D303 | `docs/adr/0016-radius-tangency-retired.md` | Signed 2026-11-28 |
+| D306 | `docs/adr/0016-radius-tangency-retired.md` | Signed 2026-11-28 |
+| D307 | `docs/adr/0016-radius-tangency-retired.md` (conclusion survives, `0x20` gloss corrected) | Signed 2026-11-28 |
+| D308 | `docs/adr/0016-radius-tangency-retired.md` | Signed 2026-11-28 |
+| D309 | `docs/adr/0016-radius-tangency-retired.md` (stays open, recorded as retirement) | Signed 2026-11-28 |
+| D310 | `docs/adr/0016-radius-tangency-retired.md` | Signed 2026-11-28 |
+| D169 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D170 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D171 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D172 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D173 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D180 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D181 | `docs/adr/0017-gather-standoff-retired.md` (superseded by D293, retired here) | Signed 2026-11-28 |
+| D182 | `docs/adr/0017-gather-standoff-retired.md` (cap half retired; re-target half shared with 0018) | Signed 2026-11-28 |
+| D186 | `docs/adr/0017-gather-standoff-retired.md` (superseded by D199, retired here) | Signed 2026-11-28 |
+| D188 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D191 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D192 | `docs/adr/0017-gather-standoff-retired.md` (gate retired; take-gate superseded by D285) | Signed 2026-11-28 |
+| D199 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D200a | `docs/adr/0018-crowd-collision-retired.md` (superseded by D200, retired here) | Signed 2026-11-28 |
+| D200 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D204 | `docs/adr/0018-crowd-collision-retired.md` (nudge half superseded by D239/D241, re-target stands here; partial closed by 0019) | Signed 2026-11-28 |
+| D239 | `docs/adr/0019-pathing-adoption-retired.md` | Signed 2026-11-28 |
+| D241 | `docs/adr/0019-pathing-adoption-retired.md` (D204 partial closed by this) | Signed 2026-11-28 |
+| D205 | `docs/adr/0018-crowd-collision-retired.md` (built, measured not landable as written — carried) | Signed 2026-11-28 |
+| D285 | `docs/adr/0020-take-gate-retired.md` | Signed 2026-11-28 |
+| D286 | `docs/adr/0020-take-gate-retired.md` | Signed 2026-11-28 |
+| D289 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D290 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D291 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D292 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D293 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D294 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D295 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D1–D3, D7, D11, D14, D19, D20, D23–D168, D174–D179, D183–D185, D187, D189–D190, D193–D197, D201–D203, D206–D238, D240, D242–D284, D287–D288, D311–D358 | — | Pending, in trunk order |
 
 Rulings made this slice:
 - ADRs numbered from 0001 in migration order (Q11 amended 2026-11-25: owner was wrong; old bank deleted at the end, so no permanent collision). Superseded 2026-11-26: bank rows are deleted on sign-off instead (owner rule), so no terminal bulk deletion.

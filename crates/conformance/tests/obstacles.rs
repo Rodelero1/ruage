@@ -6,7 +6,7 @@
 //! collision block (`zone_spatial_entity_step_collision_avoidance.cpp`). D279 adopted that split: the planner knows walls
 //! only, and the step pass knows bodies.
 
-use ruage_conformance::{SCALE, centre, ground, tiles_of};
+use ruage_conformance::{SCALE, centre, ground};
 
 /// RULE: a wall is walked round, never crossed, and the route still reaches the goal.
 #[test]
@@ -21,16 +21,25 @@ fn a_wall_is_walked_round_and_never_crossed() {
         Some(centre(12, 5)),
         "the route ends where it was sent"
     );
-    for point in &route {
-        let tile = (
-            u16::try_from(point.0.raw().div_euclid(SCALE)).unwrap_or(0),
-            u16::try_from(point.1.raw().div_euclid(SCALE)).unwrap_or(0),
-        );
-        assert!(
-            !wall.contains(&tile),
-            "a waypoint stands on the wall at {tile:?}"
-        );
-    }
+    // Waypoints sit on grown faces, which a tile query reads as the wall itself: the shape the route
+    // certifies against is the grown boxes, so no point sits inside one and no leg passes through one.
+    // A tile query misreads a face hold as standing *on* the wall, which is why this is a path check.
+    let grown: Vec<ruage_sim::Clear> = wall
+        .iter()
+        .map(|(x, y)| ruage_sim::Clear {
+            at: (i64::from(*x) * SCALE + SCALE / 2, i64::from(*y) * SCALE + SCALE / 2),
+            half: (SCALE / 2, SCALE / 2),
+            reach: 0,
+        })
+        .collect();
+    let raw: Vec<(i64, i64)> = route
+        .iter()
+        .map(|point| (point.0.raw(), point.1.raw()))
+        .collect();
+    assert!(
+        ruage_sim::verify_path(&raw, &grown).is_none(),
+        "the route crosses the wall: {route:?}"
+    );
 }
 
 /// RULE: a goal walled in is answered with the **closest reachable tile**, not with a refusal. This is the rule that makes
@@ -57,13 +66,29 @@ fn a_walled_in_goal_is_answered_with_the_closest_tile() {
         (x - 10).abs() <= 2 && (y - 10).abs() <= 2,
         "the route stops beside the walled goal, not at it: ended at ({x},{y})"
     );
-    let chain = tiles_of((4, 4), &route);
-    for tile in &chain {
-        assert!(
-            !ring.contains(tile),
-            "the route entered the wall at {tile:?}"
-        );
-    }
+    assert_ne!(
+        last,
+        centre(10, 10),
+        "a walled-in goal is answered beside it, not by threading the ring: {last:?}"
+    );
+    // The shape the route certifies against is the grown boxes: a tile query reads a grown-face hold
+    // as entered wall, so this is a path check, not a tile chain.
+    let grown: Vec<ruage_sim::Clear> = ring
+        .iter()
+        .map(|(x, y)| ruage_sim::Clear {
+            at: (i64::from(*x) * SCALE + SCALE / 2, i64::from(*y) * SCALE + SCALE / 2),
+            half: (SCALE / 2, SCALE / 2),
+            reach: 0,
+        })
+        .collect();
+    let raw: Vec<(i64, i64)> = route
+        .iter()
+        .map(|point| (point.0.raw(), point.1.raw()))
+        .collect();
+    assert!(
+        ruage_sim::verify_path(&raw, &grown).is_none(),
+        "the route crosses the ring: {route:?}"
+    );
 }
 
 /// RULE: **bodies are not an obstacle the `Ground` knows about.** The planner has no body *layer* - a `Ground` cannot hold

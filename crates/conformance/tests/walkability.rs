@@ -8,12 +8,16 @@
 use ruage_conformance::{SCALE, centre, ground, tiles_of};
 
 /// RULE: a diagonal may not pass between two blocked tiles.
+///
+/// A body has a radius, so the two grown boxes overlap at the shared corner and seal it: the route goes
+/// round, never through the corner point. (A point route threads the exact corner - there is nothing there
+/// for a point to touch - which is why this row walks with a villager's body, the way the game does.)
 #[test]
 fn a_diagonal_may_not_cut_between_two_blocked_tiles() {
     // (4,4) free, (5,5) free, and the two tiles the diagonal squeezes between blocked.
     let field = ground(12, 12, &[(5, 4), (4, 5)]);
     let route = field
-        .route(SCALE, centre(4, 4), centre(5, 5))
+        .route_avoiding(SCALE, centre(4, 4), centre(5, 5), ruage_conformance::RADIUS, &[], true)
         .expect("there is a way, even if not the diagonal");
     let chain = tiles_of((4, 4), &route);
     for pair in chain.windows(2) {
@@ -75,9 +79,10 @@ fn a_tile_held_by_two_things_stays_held_until_both_leave() {
     assert!(field.walkable(3, 3), "both are gone");
 }
 
-/// RULE: the route never doubles back, and every waypoint is a tile a body may stand on. The **pull** means a hop can be
-/// several tiles long - that is what a clear line buys - so the claim is about repeats and about free ground, not about one
-/// tile a step.
+/// RULE: the route never doubles back, and no leg of it passes through blocked ground. A hop can be
+/// several tiles long - that is what a clear line buys - so the claim is about repeats and about the grown boxes,
+/// not about one tile a step. Waypoints sit on grown faces (which a tile query reads as blocked ground), so the
+/// shape the route certifies against is the boxes, not the tiles.
 #[test]
 fn a_route_never_repeats_a_tile_and_every_waypoint_is_free() {
     let wall: Vec<(u16, u16)> = (0..=6).map(|y| (6, y)).collect();
@@ -94,15 +99,21 @@ fn a_route_never_repeats_a_tile_and_every_waypoint_is_free() {
         );
         seen.push(*tile);
     }
-    // The last waypoint is the goal itself; every one before it is a tile centre, so every one is free ground.
-    for point in &route[..route.len().saturating_sub(1)] {
-        let tile = (
-            u16::try_from(point.0.raw().div_euclid(SCALE)).unwrap_or(0),
-            u16::try_from(point.1.raw().div_euclid(SCALE)).unwrap_or(0),
-        );
-        assert!(
-            field.walkable(tile.0, tile.1),
-            "a waypoint sits on blocked ground {tile:?}"
-        );
-    }
+    // No point inside a grown box, no leg through one: the wall as the boxes the router certifies against.
+    let grown: Vec<ruage_sim::Clear> = wall
+        .iter()
+        .map(|(x, y)| ruage_sim::Clear {
+            at: (i64::from(*x) * SCALE + SCALE / 2, i64::from(*y) * SCALE + SCALE / 2),
+            half: (SCALE / 2, SCALE / 2),
+            reach: 0,
+        })
+        .collect();
+    let raw: Vec<(i64, i64)> = route
+        .iter()
+        .map(|point| (point.0.raw(), point.1.raw()))
+        .collect();
+    assert!(
+        ruage_sim::verify_path(&raw, &grown).is_none(),
+        "the route crosses the wall: {route:?}"
+    );
 }

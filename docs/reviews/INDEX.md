@@ -2,18 +2,40 @@
 
 # Review notes
 
-**337 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
+**356 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
 
 The files are **not** moved: `docs/archive/decisions-2026-11-24.md` cites them by path, and an archive directory would dangle those citations.
 
-## 2026-11-27 (1)
+## 2026-11-28 (11)
 
+- **0017 sign-off: gather standoff retired (13 rows)** — `2026-11-28-0017-signoff.md` · No engine diff: zero production lines touched, so no probe, no acceptance delta, no suite timing to report. Suite numbers cited in the ADR are last-measured ...
+- **0018 crosscheck: draft vs original game, DE dump, and online sources** — `2026-11-28-0018-crosscheck.md` · No engine diff: docs-only slice. No probe, no acceptance delta, no suite run (this box still cannot: system cargo 1.100, empty registry). Full-suite ...
+- **0018 sign-off: crowd/collision retired, conditional growth adopted (11 rows)** — `2026-11-28-0018-signoff.md` · No engine diff: zero production lines touched, so no probe, no acceptance delta, no suite timing to report. Suite numbers cited in the ADR are last-measured ...
+- **0019 crosscheck: draft vs original game, DE dump, and online sources** — `2026-11-28-0019-crosscheck.md` · No engine diff: docs-only slice. No probe, no acceptance delta, no suite run (this box still cannot: system cargo 1.100, empty registry). Full-suite ...
+- **0019 sign-off: pathing adoption retired, re-target kept (2 rows)** — `2026-11-28-0019-signoff.md` · No engine diff: zero production lines touched, so no probe, no acceptance delta, no suite timing to report. Suite numbers cited in the ADR are last-measured ...
+- **0020 crosscheck: draft vs original game, DE dump, and online sources** — `2026-11-28-0020-crosscheck.md` · No engine diff: docs-only slice. No probe, no acceptance delta, no suite run (this box still cannot: system cargo 1.100, empty registry — same as 0019). ...
+- **0020 sign-off: take-gate retired as built (2 rows)** — `2026-11-28-0020-signoff.md` · Attacked the cut on all three legs plus the suite. Deletion: cut ranges read verbatim before editing, edited in small unique-anchor steps, absence guard failed ...
+- **No-overlap survey: how OSS projects and published sources keep units out of buildings, trees and mines** — `2026-11-28-no-overlap-survey.md` · findings are HD-only, DE behaviour stays open until read from DE) and the HD finding
+- **Point-expansion crosscheck: does the game shrink the mover to a point and grow obstacles by its radius?** — `2026-11-28-point-expansion-crosscheck.md` · point and obstacles get an additional border added at half the moving circle's diameter
+- **Review: 0016 sign-off + six bank rows deleted (2026-11-28)** — `2026-11-28-signoff-0016.md` · Zero engine diff. Suite unchanged — no re-run.
+- **Review: decision-areas.toml hygiene — 29 retired ids removed (2026-11-28)** — `2026-11-28-toml-hygiene.md` · Zero engine diff. No suite re-run (no crates/, config/, tools/, Age2HD/, build/ touched).
+
+## 2026-11-27 (5)
+
+- **Review: ADR 0016 draft + tranche compact (2026-11-27)** — `2026-11-27-0016-draft.md` · Docs-only slice. No engine file touched (git status: only docs/next-step.md modified + 2 untracked docs files; crates/, config/, tools/ clean).
 - **2026-11-27 - prior-art watch: a roster move in the identity tables, nothing to act on** — `2026-11-27-prior-art-watch.md` · Documentation only: 20 lines added to docs/prior-art.md. No crates/, config/, tools/, build/ or Age2HD/
+- **Review: 0014 sign-off, no bank deletion (D15 row already gone, 2026-11-27)** — `2026-11-27-signoff-0014.md` · Zero engine diff. Suite unchanged — no re-run.
+- **Review: 0015 sign-off + nine bank rows deleted (2026-11-27)** — `2026-11-27-signoff-0015.md` · Zero engine diff. Suite unchanged — no re-run.
+- **Crosscheck: D303, D306–D310 against primary sources (2026-11-27)** — `2026-11-27-tranche-crosscheck.md` · Rule: bank rows verbatim from docs/archive/decisions-2026-11-24.md §§ cited; evidence order per D203
 
-## 2026-11-26 (8)
+## 2026-11-26 (12)
 
 - **Review: delete-on-sign-off + 0007 plain-wording (2026-11-26)** — `2026-11-26-delete-on-signoff.md` · Docs-only slice. Code frozen; no crates/, config/, tools/ touched.
+- **Review: orphaned doc comment in evasion test** — `2026-11-26-evasion-orphaned-comment.md` · crates/sim/tests/evasion.rs: deleted the four orphaned /// lines above
+- **Review: re-ray loop, smooth, bounds, no-failure (Task 3, 2026-11-26)** — `2026-11-26-geometry-solve.md` · Task 3 of the Full Way plan. Tasks 1-2 signatures untouched (WayRoute,
+- **Review: New Way suite, measurement, ADRs 0014/0015 superseded (Task 6, 2026-11-26)** — `2026-11-26-new-way.md` · Final task of the Full New Way plan. Tasks 1–5 landed the geometric solver
 - **2026-11-26 - prior-art watch: aoe2-on-browser's lobby restore, and a save layout that does not transfer** — `2026-11-26-prior-art-aoe2-on-browser-lobby-restore.md` · Documentation only: 48 lines added to docs/prior-art.md. No crates/, config/, tools/, build/ or Age2HD/ file
+- **Review: ray hit and edge-walk core (Task 2, 2026-11-26)** — `2026-11-26-ray-edge-walk.md` · Task 2 of the Full Way plan. Task 1's WayRoute/verifypath signatures untouched.
 - **Review: 0007 sign-off + D9 deletion (2026-11-26)** — `2026-11-26-signoff-0007.md` · Zero engine diff. Suite unchanged (522 / 2 pre-existing stale-data / 6 ignored) — no re-run.
 - **Review: 0008/0009 sign-off + D10/D16 deletion (2026-11-26)** — `2026-11-26-signoff-0008-0009.md` · Zero engine diff. Suite unchanged (522 / 2 pre-existing stale-data / 6 ignored) — no re-run.
 - **Review: 0010 sign-off + D5 deletion (2026-11-26)** — `2026-11-26-signoff-0010.md` · Zero engine diff. Suite unchanged — no re-run.

@@ -98,7 +98,7 @@ fn both_bodies_take_the_one_tile_gap() {
     let (from, to) = (at(6, 10), at(26, 10));
 
     let thin = ground
-        .route_avoiding(SCALE, from, to, SCALE / 5, &[])
+        .route_avoiding(SCALE, from, to, SCALE / 5, &[], true)
         .expect("a route for a body 0.20 wide");
     assert_eq!(
         thin.last(),
@@ -107,7 +107,7 @@ fn both_bodies_take_the_one_tile_gap() {
     );
 
     let wide = ground
-        .route_avoiding(SCALE, from, to, SCALE / 2, &[])
+        .route_avoiding(SCALE, from, to, SCALE / 2, &[], true)
         .expect("a route for a body 0.50 wide");
     assert_eq!(
         wide.last(),

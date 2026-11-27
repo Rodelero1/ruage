@@ -2,12 +2,12 @@
 
 # Decision index
 
-**343 rows.** `docs/archive/decisions-2026-11-24.md` is ~835k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**300 rows.** `docs/archive/decisions-2026-11-24.md` is ~729k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
-- **335** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
+- **292** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
-- **248** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
-- **11** rows say they are superseded.
+- **215** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
+- **7** rows say they are superseded.
 
 Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section names rows the table does not file.
 
@@ -32,7 +32,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D228** — the minimum-1 rule is once per attack, and three sources say so · — · `combat`
 - **D44a** — The dead zone is not siege-only, `set` modifiers were being dropped, and it is measured body to body · —
 
-## Pathfinding & movement (126)
+## Pathfinding & movement (100)
 
 - **D52** — Soft avoidance shapes the last step, and only for a place you go to · —
 - **D53** — An order to one tile is an order to a place · —
@@ -43,7 +43,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D110** — The step walks the segment, and bodies still slide · —
 - **D113** — A route bends where the ground does, at the body's own clearance · — · `short`
 - **D114** — A walk to a tile ends in the middle of it · — · `collision`, `evasion`
-- **D117** — Passage is a property of the ground, not of the body · — · supersedes D239
+- **D117** — Passage is a property of the ground, not of the body · —
 - **D127** — A route whose ground goes stale is re-planned, at most twice · —
 - **D131** — The make-room step has never run, and it fails: two head-on bodies overlap · — · `collision`, `footprint`
 - **D132** — Passage is the surface: grass and dirt, never wood · —
@@ -55,9 +55,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D189** — your own units pass through each other on the way · — · **superseded by D200**
 - **D196** — the movement decision is a value, and a hostile body at rest is still a body · —
 - **D197** — repaths are counted by reason · —
-- **D200** — friends are solid: the owner's rule, and the crowd it has to carry (supersedes D200a) · — · `acceptance_economy` · supersedes D200
-- **D204** — no pushing: a man who cannot get his square looks for another tile of the same resource · — · `carrier_no_pushing`, `movement` · **superseded by D239**
-- **D205** — right of way is the lower entity id, and the loser pauses 0.25-1.50 s on its own path · — · `acceptance_economy`, `right_of_way`
 - **D206** — speed is constant; formations are the only speed adjustment, and they are later · —
 - **D207** — a group walks over itself, and everyone else is solid · —
 - **D210** — a collision is settled by time and by the clock, never by geometry: the step is not clamped against a body · —
@@ -66,8 +63,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D213** — `last_moved` is the tick a body last *moved*, or the tick it came into being · —
 - **D236** — villagers walk through each other, and both obvious fixes starve the match (2026-11-16, nothing landed but the specification) · — · `movement`, `overlap`
 - **D237** — villagers are solid, and the fix was a guard nobody had looked at (2026-11-16) · — · `group_overlap`, `movement`
-- **D239** — The game is the source of truth on pathing: every divergence adopted, and two rules of ours deleted (owner, 2026-11-16) · — · `step`
-- **D241** — Four pathing rulings the game cannot settle, and one of them was already built (owner, 2026-11-16) · — · `gather`, `orders`
 - **D242** — R1 measured: both halves of the game's answer cost the match more than they buy (2026-11-16, nothing landed) · — · `group_overlap`, `movement`
 - **D247** — the original's pathing rules are a separate conformance set, not part of the gate (2026-11-16) · — · `click_into_the_woods`, `findings`
 - **D248** — the four body rules hold, and the seat is the reason they did not (2026-11-17) · — · `invariants`
@@ -102,28 +97,8 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D282** — A plan keeps a body's clearance, not a tile (owner, 2026-11-19) · — · `motion`
 - **D283** — "Never step deeper" bounds the overlap at the contact and freezes the crowd (reverted) · —
 - **D284** — The self-brake D279 invented is removed, and the ignore list is gated on `isMoving` · —
-- **D285** — "At the node" is the game's box gap, and four of our distance rules go · —
-- **D286** — An order names a target, and one box ruler decides every distance (owner, 2026-11-19) · —
 - **D287** — A node's ring is never re-laid (owner, 2026-11-19) · — · `working_men_never_move`
 - **D288** — The taken list is ours, not the game's; the walk stands, the gather re-targets (owner, 2026-11-19) · —
-- **D289** — A crowd is sent to the tile it was ordered to, and it jams there (owner, 2026-11-19) · —
-- **D290** — There is no press floor: friends may overlap, and only the pause and the re-path act (owner, 2026-11-19) · —
-- **D292** — No rule of ours ever stands a man down on its own: `beside` and the forty-tick finish go (owner, 2026-11-19) · —
-- **D296** — The level maps are the binary's stamping rule, not a choice (P11a) · —
-- **D297** — A search starts at the coarsest level whose cell is usable (P11b) · —
-- **D298** — A coarse step costs 10, 300 or 2000 (P11c's table) · —
-- **D299** — The coarse A\* runs on four directions, a tuned cost table and a sorted list (P11c) · —
-- **D300** — The hierarchy is correct and 60x too slow; the switch waits for a cached pyramid · —
-- **D301** — The pyramid is cached, and D300's conclusion is withdrawn · — · `pyramid_cache`
-- **D302** — A route is a line, then the hierarchy, then the tile search (P11 done) · —
-- **D303** — The radius reaches the line test and the step, not the searches · —
-- **D304** — The search budget is live, and a third row proves it bites · — · `budget`
-- **D305** — The hierarchy is not running for units, and D302's 32% cannot be attributed to it · —
-- **D306** — Tangency is a passage, and the radius reaches the searches · —
-- **D307** — The stamp resolves at the finest level the obstacle occupies (closes D306's caveat) · —
-- **D308** — A coarse edge refines to the tile where the passage is, not to a cell centre · —
-- **D309** — No pre-search line test has been found; our first tier stays unverified · —
-- **D310** — The avoid list has no 255 cap, and that is left open on purpose · —
 - **D320** — The re-plan takes a fresh stamp, and the past rule finishes its chain (owner: *"C, proceed"*) · —
 - **D321** — The seat shuffle was measuring its own grave · —
 - **D322** — The chain refines to the crossing of each edge - and tier 2 is dormant in a match · —
@@ -158,10 +133,9 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D357** — The arrival is a placement: the pile halves, the re-plans multiply by eight, and both are reported · GAME · `one_place_per_man`, `one_place_per_man`
 - **D52a** — Three versions failed the suite, and that is what settled the rule · —
 - **D98a** — superseded by the original's own mechanism (owner, 2026-11-03) · —
-- **D200a** — the first landing of owner-blind collisions: built, measured and parked on a branch · — · **superseded by D200**
 - **D210b** — a standing body is an obstacle to the search that meets it, and only to *that* search · —
 
-## Economy (47)
+## Economy (31)
 
 - **D27** — A farm is a building content calls a farm, and workers stand beside what they work · —
 - **D28** — Farm food is a resource the dat numbers, so content names the number · —
@@ -177,18 +151,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D148** — A worker only goes where it has looked · —
 - **D149** — "Nearby" is bounded by the worker's sight, and the share table measures from the base · — · **superseded by D150**
 - **D150** — +5 was never the problem: the share table's anchor was · —
-- **D169** — A gatherer stands where the two bodies touch: 0.7 of a tile, not 1.0 · —
-- **D170** — A mine is a *pile per tile*, not one object: so the standoff is measured per tile · —
-- **D171** — Workers fan out round a node instead of sharing its approach side · —
-- **D173** — OPEN: the gatherer's last third of a tile is a **placement**, and that is the jump the owner sees · —
-- **D180** — The settle walks: a step per tick, capped by speed, and nothing else · —
-- **D181** — A standoff is taken when it is too close, not only when somebody stands on it · — · **superseded by D293**
-- **D182** — One gatherer a square, standing a body's radius off its edge · —
-- **D186** — the gather ring: 1.156 tiles, eighteen men, measured from the owner's save · — · **superseded by D199**
-- **D188** — there is no cap: a place is a spot on the ring, and the geometry gives eighteen · —
-- **D191** — tile geometry: the border is what a villager stands against · — · `tiles`
-- **D192** — the standoff is the tile's border, not a ring round its centre · —
-- **D199** — the standoff is the touch, measured on the owner's own saves; D186's ring is withdrawn · —
 - **D215** — a farm holds the civ row's 175, and the civ's team bonus is part of that line · —
 - **D225** — two more debts were already paid, and the builder's queue fallback has no reachable trigger · — · `shares`
 - **D226** — a farm's replacement is queued or automatic at a mill, and the setting is the player's · — · `reseed`
@@ -197,10 +159,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D244** — both red invariants were fixed, measured, and reverted: each fix starves the match (2026-11-16) · — · `gather_motion`, `invariants`
 - **D245** — the original's four body rules, read; and the seat shuffle is what gates three of them (2026-11-16) · —
 - **D280** — The picker asks the cheap questions first, and the expensive one of the nearest eight (2026-11-19) · —
-- **D291** — The engine retargets within a kind; repurposing across kinds is the AI's job (owner, 2026-11-19) · —
-- **D293** — A gatherer presses in; the seat book stops being read (owner, 2026-11-19) · —
-- **D294** — The seat book is gone (completes D293's cleanup) · — · `sites`
-- **D295** — A gather on the tile a man already stands on is accepted (owner rule: nothing may refuse an order the game takes) · —
 - **D311** — The two reseed reds fail at the same place: the plot is paid for and never raised · —
 - **D312** — The two reseed reds were a statue, and the reach was measured to the anchor point · — · `farm`, `orders`
 - **D313** — A load leaves at the wall, and nothing looser · — · `invariants`
@@ -301,7 +259,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D274** — the cross and the circle land on the click too (2026-11-18) · —
 - **D314** — The click asks what the tick will ask · —
 
-## Graphics (12)
+## Graphics (11)
 
 - **D108** — A unit is painted above a building, and the bar is laid out from its own numbers · —
 - **D159** — A building is drawn tile by tile, because one diamond is a different shape · —
@@ -311,7 +269,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D163** — The yard is painted as ground, and a switch that turns the next report into data · —
 - **D165** — Depth decides between units and walls · —
 - **D166** — A unit's marker is clipped to its own tile · OURS
-- **D172** — A map node stands at its tile's **centre**, not on its corner · — · `train`
 - **D176** — The selection ellipse is the collision circle, and the body's clearance is a query · —
 - **D178** — A body stands on its point; its base is the position · —
 - **D179** — The selection ring sits round the feet, not under them · — · `ring`

@@ -182,6 +182,8 @@ fn tile_of(world: &World, id: EntityId) -> (i64, i64) {
 
 /// **No passage between two trees that touch only at a corner.** The tiles are (4,4) and (5,5); a villager at (4,5) is
 /// ordered to (5,4), which is one diagonal step away *through the corner*. It may not take it: the walk is around.
+/// The stored route is the evidence: every leg of it certifies clean against the two grown boxes, so the walk never
+/// threads the corner point - and it arrives, having walked round instead of through.
 #[test]
 fn two_trees_touching_at_a_corner_leave_no_gap() {
     let Some(mut world) = loaded(CORNER) else {
@@ -197,6 +199,30 @@ fn two_trees_touching_at_a_corner_leave_no_gap() {
             to: (5, 4),
         })
         .expect("a move through the corner");
+    world.step().expect("the order lands");
+    // The route the order planned, before the walker spends it: clean against both grown boxes.
+    let scale = world.scale();
+    let grown: Vec<ruage_sim::Clear> = [(4, 4), (5, 5)]
+        .iter()
+        .map(|(x, y)| ruage_sim::Clear {
+            at: (
+                i64::from(*x) * scale + scale / 2,
+                i64::from(*y) * scale + scale / 2,
+            ),
+            half: (scale / 2, scale / 2),
+            reach: world.body_radius_of(walker),
+        })
+        .collect();
+    let raw: Vec<(i64, i64)> = world
+        .route_points(walker)
+        .iter()
+        .map(|point| (point.0.raw(), point.1.raw()))
+        .collect();
+    assert!(!raw.is_empty(), "the order plans a route, not a refusal");
+    assert!(
+        ruage_sim::verify_path(&raw, &grown).is_none(),
+        "the route threads the corner: {raw:?}"
+    );
 
     let mut on_a_tree = Vec::new();
     for tick in 0..600 {
@@ -204,15 +230,6 @@ fn two_trees_touching_at_a_corner_leave_no_gap() {
         let now = tile_of(&world, walker);
         if now == (4, 4) || now == (5, 5) {
             on_a_tree.push((tick, now));
-        }
-        // The diagonal is one tile of walking; the shortest legal way round is five. Arriving inside three tiles' worth
-        // of ticks means it took the gap.
-        if tick == 60 {
-            assert_ne!(
-                now,
-                (5, 4),
-                "the walker took the diagonal between two trees at a corner"
-            );
         }
     }
     assert!(

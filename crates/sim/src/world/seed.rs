@@ -502,20 +502,8 @@ impl World {
         // half of the rule the owner named. `step_spent_nodes` frees the tile when the node is emptied and removed.
         if matches!(entity.kind, EntityKind::Resource(_)) && entity.amount.raw() > 0 {
             let tile = self.tile_of(entity.position);
-            // **A mine is also an expensive neighbour** (D342): the pack names which of its resources the search charges
-            // 300 to walk beside, so the engine learns neither the dat's class 8/32 nor the resource's id.
-            let snug = match entity.kind {
-                EntityKind::Resource(slot) => self
-                    .resources
-                    .as_ref()
-                    .is_some_and(|resources| resources.slot_is_snug(slot)),
-                _ => false,
-            };
             if let Some(walk) = self.ground.as_mut() {
                 walk.block(tile.0, tile.1);
-                if snug {
-                    walk.mark_snug(tile.0, tile.1);
-                }
             }
         }
         self.entities.insert(at, entity);

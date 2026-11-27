@@ -245,14 +245,43 @@ fn a_walker_never_ends_a_tick_inside_a_friend() {
         })
         .expect("move");
     world.step().expect("the order lands");
-    // **The friend arrives on the lane after the route exists** (restated 2026-11-15). A body that has not moved is an
-    // obstacle to the search that meets it (D210b), and with `last_moved` finally stamped only on a real step (D213) that
-    // includes a body seeded at tick 0 - so a stander in place *before* the order is simply planned around and the pair
-    // never meet: measured, "the walker never came within the reach". The encounter has to be forced for this fixture to
-    // measure anything, so the friend is placed once the walker is under way; the rule being tested is what happens when
-    // they *do* meet.
-    let stander = place(&mut world, 1, 9_710, spearman, (24, 20), Fixed::ZERO);
-    world.step().expect("the friend lands");
+    // **The encounter has to be forced for this fixture to measure anything**, so the friend steps into the
+    // walker's path once he is under way; the rule being tested is what happens when they *do* meet. The friend
+    // appears a single step ahead of the walker, on his line: a grown body is seen eight steps out, and a stander
+    // placed tiles ahead is planned round long before contact - a clean router then misses it by construction
+    // instead of meeting it. A step ahead there is no time to divert: the step is taken into contact, the meeting
+    // is measured, and the replan rounds him after it.
+    let here = world.position(walker).expect("the walker stands");
+    let goal = world
+        .route_points(walker)
+        .last()
+        .copied()
+        .expect("the order planned a route");
+    let scale = world.scale();
+    let (dx, dy) = (goal.0.raw() - here.0.raw(), goal.1.raw() - here.1.raw());
+    let length = dx.abs().max(dy.abs()).max(1);
+    // One step ahead, in raw units: inside the next tick's landing, so the step meets him.
+    let ahead = (
+        Fixed::from_raw(here.0.raw() + dx / length * (scale / 20)),
+        Fixed::from_raw(here.1.raw() + dy / length * (scale / 20)),
+    );
+    let stander = {
+        let id = EntityId(9_710);
+        world
+            .submit_checked(Command::Spawn {
+                id,
+                player: 1,
+                kind: EntityKind::Unit,
+                unit: Some(spearman),
+                position: ahead,
+                speed: Fixed::ZERO,
+                hp: 40,
+                amount: 0,
+            })
+            .expect("a friend steps into the lane");
+        world.step().expect("the friend lands");
+        id
+    };
 
     let reach = world.reach_between(walker, stander).raw();
     // **Restated 2026-11-14 to D210's outcome: one step of overlap at the meeting, nothing deeper after it.** The old
