@@ -1335,14 +1335,6 @@ pub(crate) fn applies_to(modifier: &ruage_data::Modifier, unit: &Unit) -> bool {
     true
 }
 
-pub(crate) const GATHER_RING_MILLI: i64 = 1156;
-
-/// **Places on the ring: one every two degrees** (D188). There is no cap and no table of places any more: the owner's rule is that
-/// a man works wherever **his circle fits**, so the ring is sampled finely and each sample is tested against every other man. 180
-/// samples sit **0.020** tiles apart on the 1.156 ring - twenty times finer than the 0.40 a body needs - so a man is never refused
-/// a place that exists, and how many fit falls out of the circumference instead of a constant.
-pub const GATHER_PLACES: u16 = 180;
-
 /// **How many men a node's tiles hold**: the touching places of every tile it occupies, for a body of `radius`, spaced
 /// [`GATHER_SPACING_MILLI`] apart. Derived from the geometry (D191/D192) - seven for a villager on one tile - so there is no
 /// cap in a table and none to keep in step.
@@ -1374,17 +1366,6 @@ pub(crate) const GATHER_SPACING_MILLI: i64 = 660;
 pub(crate) fn spacing(scale: i64) -> i64 {
     (scale * GATHER_SPACING_MILLI / 1000).max(1)
 }
-
-/// The **sine of 0, 2, 4 ... 90 degrees**, in millionths: the quarter table the ring is drawn from.
-///
-/// Integer tables rather than `f64`: the simulation is deterministic and hashed, and a platform's `sin` is not the same number
-/// twice. Every other angle on the ring is this table read backwards or negated.
-const SIN: [i64; 46] = [
-    0, 34899, 69756, 104528, 139173, 173648, 207912, 241922, 275637, 309017, 342020, 374607,
-    406737, 438371, 469472, 500000, 529919, 559193, 587785, 615661, 642788, 669131, 694658, 719340,
-    743145, 766044, 788011, 809017, 829038, 848048, 866025, 882948, 898794, 913545, 927184, 939693,
-    951057, 961262, 970296, 978148, 984808, 990268, 994522, 997564, 999391, 1000000,
-];
 
 impl World {
     pub fn new(settings: &Settings, seed: u64) -> Result<Self, SimError> {
@@ -3835,43 +3816,6 @@ impl World {
             // Free is not the same as reachable: a free tile inside a wall is no place to stand.
             self.plan_path(None, from, position).ok().map(|_| position)
         })
-    }
-
-    /// **Is there any ring at all?** True when at least one of the nine slots round a source square is walkable, free
-    /// ground (D186). It decides *where* a man works: on the ring when there is one, but from the tile beside the source when
-    /// the ring is buried - a tree deep in a forest has its whole ring on blocked tiles, and the men who cut it stand on the
-    /// open edge beside it, which is the one case the ring cannot describe. Nine walkability lookups, no path search.
-    pub(crate) fn ring_open(&self, centre: (Fixed, Fixed)) -> bool {
-        // Every tenth degree: enough to tell a buried ring from an open one, and 36 lookups rather than 180 on the path where a
-        // gatherer decides every tick.
-        (0..GATHER_PLACES).step_by(5).any(|place| {
-            let point = self.ring_point(centre, place);
-            let (Ok(x), Ok(y)) = (
-                u16::try_from(point.0.raw().div_euclid(self.scale)),
-                u16::try_from(point.1.raw().div_euclid(self.scale)),
-            ) else {
-                return false;
-            };
-            self.tile_walkable(x, y) && self.is_free_ground(x, y)
-        })
-    }
-
-    /// **A point on the ring**, two degrees per place: `place` 0 is due east and the index grows anticlockwise. The quarter table
-    /// `SIN` holds 0..90 degrees, so each quadrant reads it forwards or backwards with one or both signs flipped.
-    pub(crate) fn ring_point(&self, centre: (Fixed, Fixed), place: u16) -> (Fixed, Fixed) {
-        let ring = self.scale * GATHER_RING_MILLI / 1000;
-        let index = usize::from(place % GATHER_PLACES);
-        let within = index % 45;
-        let (sin, cos) = match index / 45 {
-            0 => (SIN[within], SIN[45 - within]),
-            1 => (SIN[45 - within], -SIN[within]),
-            2 => (-SIN[within], -SIN[45 - within]),
-            _ => (-SIN[45 - within], SIN[within]),
-        };
-        (
-            Fixed::from_raw(centre.0.raw() + ring * cos / 1_000_000),
-            Fixed::from_raw(centre.1.raw() + ring * sin / 1_000_000),
-        )
     }
 
     /// **How much room a body has**, in raw units: the distance from `position` to the nearest **blocked tile**, minus `radius`.
