@@ -1,6 +1,6 @@
 # ADR 0020: one box ruler decides every distance — take-gate retired as built
 
-**Status:** Draft 2026-11-28. Crosscheck done (three legs, no refutations). Code done and green (Tasks 1–3): `take_gate` 3/3, `gather_touching` 3/3, full suite 942/3/23 (2 known `modifiers` reds + 1 foreign scratch red), clippy `-D warnings` clean on lib + pin targets, fmt clean. Sign-off waits for owner verdict — bank rows D285, D286 NOT deleted (delete on sign-off only, owner rule 2026-11-26).
+**Status:** Signed 2026-11-28. Deleted 2 bank rows on sign-off: D285, D286.
 
 ## What this batch is
 
@@ -44,5 +44,5 @@ An order that names what it is about, and one box measure in the plan, the step,
 - [x] `take_gate` 3/3 green (2 pin + 1 absence guard)
 - [x] Task 2 deletion executed under the pin; `take_gate` + `gather_touching` (3/3) + `acceptance_economy` (2 passed, 1 ignored, 311.65 s on this box — slower than the 52.52 s D285-time baseline; different box/debug build, finding not veto) green
 - [x] Full suite triple 942 passed / 3 failed / 23 ignored (reds: 2 known pre-existing `modifiers` Town-Watch + `scratch_crowd3` in foreign untracked `scratch_debug.rs`, untouched) + clippy `-D warnings` clean (lib + pin targets; workspace-wide blocked by the foreign file) + fmt clean, recorded in review note on sign-off
-- [ ] Owner verdict: sign / amend / rework
-- [ ] On sign: delete bank rows D285 (~7258) + D286 (~7269), MANIFEST per-D-id rows → 0020, strip ids from `decision-areas.toml`, regen index + live files, signoff note with Performance + Stability, commit by name, push
+- [x] Owner verdict: sign (2026-11-28)
+- [x] On sign: bank rows D285 + D286 deleted, MANIFEST per-D-id rows → 0020, ids stripped from `decision-areas.toml`, index + live files regenned, signoff note with Performance + Stability written, committed by name, pushed

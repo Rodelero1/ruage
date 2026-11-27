@@ -2,11 +2,11 @@
 
 # Decision index
 
-**302 rows.** `docs/archive/decisions-2026-11-24.md` is ~735k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**300 rows.** `docs/archive/decisions-2026-11-24.md` is ~729k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
-- **294** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
+- **292** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
-- **217** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
+- **215** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
 - **7** rows say they are superseded.
 
 Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section names rows the table does not file.
@@ -32,7 +32,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D228** — the minimum-1 rule is once per attack, and three sources say so · — · `combat`
 - **D44a** — The dead zone is not siege-only, `set` modifiers were being dropped, and it is measured body to body · —
 
-## Pathfinding & movement (102)
+## Pathfinding & movement (100)
 
 - **D52** — Soft avoidance shapes the last step, and only for a place you go to · —
 - **D53** — An order to one tile is an order to a place · —
@@ -97,8 +97,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D282** — A plan keeps a body's clearance, not a tile (owner, 2026-11-19) · — · `motion`
 - **D283** — "Never step deeper" bounds the overlap at the contact and freezes the crowd (reverted) · —
 - **D284** — The self-brake D279 invented is removed, and the ignore list is gated on `isMoving` · —
-- **D285** — "At the node" is the game's box gap, and four of our distance rules go · —
-- **D286** — An order names a target, and one box ruler decides every distance (owner, 2026-11-19) · —
 - **D287** — A node's ring is never re-laid (owner, 2026-11-19) · — · `working_men_never_move`
 - **D288** — The taken list is ours, not the game's; the walk stands, the gather re-targets (owner, 2026-11-19) · —
 - **D320** — The re-plan takes a fresh stamp, and the past rule finishes its chain (owner: *"C, proceed"*) · —
