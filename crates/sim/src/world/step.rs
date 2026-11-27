@@ -1543,9 +1543,7 @@ impl World {
                     progress,
                 } => {
                     let _ = progress;
-                    let Some((target, node_unit)) = self
-                        .find(node)
-                        .map(|n| (n.position, n.unit))
+                    let Some((target, node_unit)) = self.find(node).map(|n| (n.position, n.unit))
                     else {
                         // The node is gone (a later increment may delete emptied nodes).
                         work.finished.push(entity.id);
