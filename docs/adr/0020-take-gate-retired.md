@@ -1,6 +1,6 @@
 # ADR 0020: one box ruler decides every distance — take-gate retired as built
 
-**Status:** Draft 2026-11-28. Crosscheck done (three legs, no refutations). Code pin written but UNRUN on this box — sign-off waits for a green suite elsewhere. Bank rows D285, D286 NOT deleted (delete on sign-off only, owner rule 2026-11-26).
+**Status:** Draft 2026-11-28. Crosscheck done (three legs, no refutations). Code done and green (Tasks 1–3): `take_gate` 3/3, `gather_touching` 3/3, full suite 942/3/23 (2 known `modifiers` reds + 1 foreign scratch red), clippy `-D warnings` clean on lib + pin targets, fmt clean. Sign-off waits for owner verdict — bank rows D285, D286 NOT deleted (delete on sign-off only, owner rule 2026-11-26).
 
 ## What this batch is
 
@@ -20,13 +20,13 @@ This ADR retires the pair as built, and records the six things the port needed b
 - **`node_radius`** (`lib.rs:3462`): unit → own body radius, else half tile.
 - **`solid_boxes`** (`lib.rs:3475`): blocked tiles of a footprint only — farm, fresh foundation, town-centre yard stay walkable.
 - **`target_contact`** (`lib.rs:3529`): step cut at the first face — *"Setting position to exact waypoint"* (HD `0x7f4687`), the owner's 0.70/0.935 saves.
-- **`at_node <= step`** (`step.rs:1638`): one step is the quantized form of the game's continuous contact, pinned by `crates/sim/tests/take_gate.rs` (within-one-step takes, two-steps-out walks — UNRUN, see Status).
+- **`at_node <= step`** (`step.rs:1638`): one step is the quantized form of the game's continuous contact, pinned by `crates/sim/tests/take_gate.rs` (within-one-step takes, two-steps-out walks, dead predecessors stay deleted — 3/3 green).
 - **Order names its target; grown boxes in search and query** (`FUN_007f9d80`, `FUN_00840830` +`0x268`, collide on `<=`); ours collides on overlap (`<`) so a body resting exactly at its radius can still walk a wall — named deliberate difference, contact point unchanged.
 
 ## What is gone (mechanism deleted, rows deleted with it on sign-off)
 
 - `touching`/`touch_tolerance`, `own_place`, `ring_open`-as-arrival, `beside_adjacent` (D285, already out).
-- Dead gather-arm scaffolding beside the gate (`step.rs:1566–1651` computations, `:1618–1626` block, `:1650–1696` settle scaffolding, the `let _` sink): deletion PLANNED as Task 2, held until the pin is green — not yet executed.
+- Dead gather-arm scaffolding beside the gate plus its orphan cascade (`ring_open`, `ring_point`, `GATHER_RING_MILLI`, `GATHER_PLACES`, lib `SIN` — tiles keeps its own copy): deleted under the pin; absence pinned by the `dead_arrival_predicates_stay_deleted` guard.
 
 ## Evidence (D203 order)
 
@@ -39,9 +39,10 @@ This ADR retires the pair as built, and records the six things the port needed b
 
 An order that names what it is about, and one box measure in the plan, the step, and the arrival test. No second distance.
 
-## Sign-off checklist (all owed)
+## Sign-off checklist (code half done, verdict owed)
 
-- [ ] `take_gate` 3/3 green on a registry box (currently UNRUN)
-- [ ] Task 2 deletion executed under the pin; `take_gate` + `gather_touching` + `acceptance_economy` green
-- [ ] Full suite triple + clippy `-D warnings` + fmt clean, recorded in review note
+- [x] `take_gate` 3/3 green (2 pin + 1 absence guard)
+- [x] Task 2 deletion executed under the pin; `take_gate` + `gather_touching` (3/3) + `acceptance_economy` (2 passed, 1 ignored, 311.65 s on this box — slower than the 52.52 s D285-time baseline; different box/debug build, finding not veto) green
+- [x] Full suite triple 942 passed / 3 failed / 23 ignored (reds: 2 known pre-existing `modifiers` Town-Watch + `scratch_crowd3` in foreign untracked `scratch_debug.rs`, untouched) + clippy `-D warnings` clean (lib + pin targets; workspace-wide blocked by the foreign file) + fmt clean, recorded in review note on sign-off
+- [ ] Owner verdict: sign / amend / rework
 - [ ] On sign: delete bank rows D285 (~7258) + D286 (~7269), MANIFEST per-D-id rows → 0020, strip ids from `decision-areas.toml`, regen index + live files, signoff note with Performance + Stability, commit by name, push
