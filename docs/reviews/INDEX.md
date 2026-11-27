@@ -2,7 +2,7 @@
 
 # Review notes
 
-**354 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
+**355 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
 
 The files are **not** moved: `docs/archive/decisions-2026-11-24.md` cites them by path, and an archive directory would dangle those citations.
 
@@ -20,9 +20,10 @@ The files are **not** moved: `docs/archive/decisions-2026-11-24.md` cites them b
 - **Review: 0016 sign-off + six bank rows deleted (2026-11-28)** — `2026-11-28-signoff-0016.md` · Zero engine diff. Suite unchanged — no re-run.
 - **Review: decision-areas.toml hygiene — 29 retired ids removed (2026-11-28)** — `2026-11-28-toml-hygiene.md` · Zero engine diff. No suite re-run (no crates/, config/, tools/, Age2HD/, build/ touched).
 
-## 2026-11-27 (4)
+## 2026-11-27 (5)
 
 - **Review: ADR 0016 draft + tranche compact (2026-11-27)** — `2026-11-27-0016-draft.md` · Docs-only slice. No engine file touched (git status: only docs/next-step.md modified + 2 untracked docs files; crates/, config/, tools/ clean).
+- **0021 sign-off: area leftovers retired as built (15 rows)** — `2026-11-27-0021-signoff.md` · Attacked the deletion, not the code (there is none). Ranges asserted by header regex before cutting (15/15 matched ##/### + id); tail-line assertion (blank or ...
 - **Review: 0014 sign-off, no bank deletion (D15 row already gone, 2026-11-27)** — `2026-11-27-signoff-0014.md` · Zero engine diff. Suite unchanged — no re-run.
 - **Review: 0015 sign-off + nine bank rows deleted (2026-11-27)** — `2026-11-27-signoff-0015.md` · Zero engine diff. Suite unchanged — no re-run.
 - **Crosscheck: D303, D306–D310 against primary sources (2026-11-27)** — `2026-11-27-tranche-crosscheck.md` · Rule: bank rows verbatim from docs/archive/decisions-2026-11-24.md §§ cited; evidence order per D203

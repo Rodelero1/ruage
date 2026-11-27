@@ -1,20 +1,19 @@
-# OPEN — next tranche after ADR 0020 (owner picks)
+# OPEN — next tranche after ADR 0021 (owner picks)
 
-**Where this stands:** ADRs 0001–0020 signed; index at 300 rows; `origin/adr-migration` at `4088a78` (0020 draft; sign-off commit lands this step). This compact is the agent's handoff.
+**Where this stands:** ADRs 0001–0021 signed; index at 285 rows; `adr-migration` ahead of `main` by the 0021 sign-off (commit lands this step). Working repo `/app/ruage` on `adr-migration`, with `config/gamedata/` and `Age2HD` present. Post-reboot rule: `cargo clean` before trusting any suite number after a move (stale `target/` baked `/app` paths → 151 phantom reds); suite numbers only count from a tree with gamedata present (19 missing-file reds without it).
 
-**Prior implementation (ADR 0020, signed, this step):**
-- Take-gate: `at_node = box_gap_sq <= step^2` in the gather arm; dead arrival predecessors deleted (`touching`/`touch_tolerance`, `own_place`, `ring_open`-as-arrival, `beside_adjacent`, settle scaffolding, `let _` sink) plus orphan cascade (`ring_open`, `ring_point`, `GATHER_RING_MILLI`, `GATHER_PLACES`, lib `SIN` — tiles keeps its own copy).
-- Pin: `crates/sim/tests/take_gate.rs` 3/3 (within-one-step takes, two-steps-out walks, absence guard watched failing first).
-- Live rules: `box_gap_sq`, `node_radius`, `solid_boxes`, `target_contact`, target-named orders, grown boxes in search + query, overlap (`<`) collision kept as named deliberate difference.
-- Measures today: full suite 942 passed / 3 failed / 23 ignored (reds: 2 known `modifiers` Town-Watch + 1 foreign scratch); `take_gate` 3/3, `gather_touching` 3/3, acceptance 2 passed + 1 ignored; clippy `-D warnings` clean (lib + pin targets), fmt clean.
-- Setup correction: this box CAN run the suite — `CARGO_HOME=/tmp/home/.cargo` (env default `/usr/local/cargo` is empty). Prior "impossible on this box" notes withdrawn as wrong-path, numbers stand.
+**Prior implementation (ADR 0021, signed 2026-11-27, docs-only):**
+- Retired as built: D175 (dat `search_radius`), D176/D177 (`clearance_at`/`body_clearance`), D178/D179 (base-point drawing), D183/D185 (foundation lifecycle), D184 (eviction guard, UNVERIFIED), D187 (body-first click), D193–D196 (process rules), D189 (dead since D200), D197 (removed by D279's re-port; orphan comments at `lib.rs:985-993` flagged for D279's ADR).
+- Pins 22/22 in 27 s; full clean suite 942/2/23 (reds: 2 known `modifiers` Town-Watch); fmt clean; clippy not run (no Rust touched).
+- Deletion: 302 bank lines, 15/15 header-asserted; MANIFEST → 0021; areas stripped (15); index 300 → 285; 7 live files regenned; site refused by shrink ratchet by design (as 0017–0020); tools tests 228/230 (shrink-clears-on-commit + pre-existing plan_check path).
+- No ai-review: OCR provider config lost in reboot (same as 0020, recorded in signoff note).
 
-**Adopted and binding:** adopt-from-game (0019) + conditional grow+test+reset (0018) + one box ruler (0020) — box-vs-grown-box, flag+margin, terrain point-tested; past stands for every body; forty-tick same-kind re-target, displacement gone; working margins 0.95 gather / 1.0 walk; no second distance anywhere.
+**Adopted and binding:** adopt-from-game (0019) + conditional grow+test+reset (0018) + one box ruler (0020); margins 0.95 gather / 1.0 walk. Evidence order unchanged: original game, open-source/published, disagreements parked not smoothed.
 
 **Candidates for the next tranche (owner picks one):**
-1. D183–D185 — foundations; D175–D179, D187, D193–D197 — area leftovers.
-2. D242–D245 — R1/invariants follow-ups to 0019 (R1a/R1b split, four-body invariants).
-3. D287/D288 — relay cut + gather re-target rule (sibling thread of the take-gate batch).
+1. D242–D245 — R1/invariants follow-ups to 0019.
+2. D287/D288 — relay cut + gather re-target rule.
+3. Foundations-adjacent remainder: D174, D201–D203, D206–D238 (large; suggest splitting).
 
 **To do, in order:**
 1. Owner names the tranche.

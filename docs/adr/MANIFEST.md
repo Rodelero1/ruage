@@ -62,7 +62,22 @@ One row per old D-id. A bank row is deleted when its ADR is signed (owner rule 2
 | D293 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
 | D294 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
 | D295 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
-| D1–D3, D7, D11, D14, D19, D20, D23–D168, D174–D179, D183–D185, D187, D189–D190, D193–D197, D201–D203, D206–D238, D240, D242–D284, D287–D288, D311–D358 | — | Pending, in trunk order |
+| D175 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D176 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D177 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D178 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D179 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D183 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D184 | `docs/adr/0021-area-leftovers-retired.md` (guard; conformance UNVERIFIED) | Signed 2026-11-27 |
+| D185 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D187 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D189 | `docs/adr/0021-area-leftovers-retired.md` (superseded by D200, retired here) | Signed 2026-11-27 |
+| D193 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D194 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D195 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D196 | `docs/adr/0021-area-leftovers-retired.md` | Signed 2026-11-27 |
+| D197 | `docs/adr/0021-area-leftovers-retired.md` (removed by D279's re-port, recorded here) | Signed 2026-11-27 |
+| D1–D3, D7, D11, D14, D19, D20, D23–D168, D174, D190, D201–D203, D206–D238, D240, D242–D284, D287–D288, D311–D358 | — | Pending, in trunk order |
 
 Rulings made this slice:
 - ADRs numbered from 0001 in migration order (Q11 amended 2026-11-25: owner was wrong; old bank deleted at the end, so no permanent collision). Superseded 2026-11-26: bank rows are deleted on sign-off instead (owner rule), so no terminal bulk deletion.
