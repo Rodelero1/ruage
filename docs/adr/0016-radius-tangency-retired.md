@@ -1,7 +1,7 @@
 # ADR 0016 — Radius, tangency, stamp, refine, line test and avoid-cap rules are retired; geometry answers instead (draft)
 
 - **D-id alias:** D303 + D306 + D307 + D308 + D309 + D310 (2026-11-19/20). D322 (refine port) and D329 (cap measurement) folded in as follow-ups. D323's dormancy finding recorded, not re-litigated.
-- **Status:** Draft — needs owner sign-off. Signed 0014/0015 are the pattern: this is a retirement record, not a live behavior claim.
+- **Status:** Signed 2026-11-28. Signed as the retirement record: the tile engine the six rows described is gone from the tree (`aafb740`, New Way slice), and this ADR is the trace of what each row got right, what one row got wrong (`0x20`), and what stays open (D309). It is not a live behavior claim.
 
 ## Context
 

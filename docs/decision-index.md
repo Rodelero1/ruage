@@ -2,11 +2,11 @@
 
 # Decision index
 
-**334 rows.** `docs/archive/decisions-2026-11-24.md` is ~820k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**328 rows.** `docs/archive/decisions-2026-11-24.md` is ~810k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
-- **326** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
+- **320** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
-- **241** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
+- **235** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
 - **11** rows say they are superseded.
 
 Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section names rows the table does not file.
@@ -32,7 +32,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D228** — the minimum-1 rule is once per attack, and three sources say so · — · `combat`
 - **D44a** — The dead zone is not siege-only, `set` modifiers were being dropped, and it is measured body to body · —
 
-## Pathfinding & movement (117)
+## Pathfinding & movement (111)
 
 - **D52** — Soft avoidance shapes the last step, and only for a place you go to · —
 - **D53** — An order to one tile is an order to a place · —
@@ -109,12 +109,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D289** — A crowd is sent to the tile it was ordered to, and it jams there (owner, 2026-11-19) · —
 - **D290** — There is no press floor: friends may overlap, and only the pause and the re-path act (owner, 2026-11-19) · —
 - **D292** — No rule of ours ever stands a man down on its own: `beside` and the forty-tick finish go (owner, 2026-11-19) · —
-- **D303** — The radius reaches the line test and the step, not the searches · —
-- **D306** — Tangency is a passage, and the radius reaches the searches · —
-- **D307** — The stamp resolves at the finest level the obstacle occupies (closes D306's caveat) · —
-- **D308** — A coarse edge refines to the tile where the passage is, not to a cell centre · —
-- **D309** — No pre-search line test has been found; our first tier stays unverified · —
-- **D310** — The avoid list has no 255 cap, and that is left open on purpose · —
 - **D320** — The re-plan takes a fresh stamp, and the past rule finishes its chain (owner: *"C, proceed"*) · —
 - **D321** — The seat shuffle was measuring its own grave · —
 - **D322** — The chain refines to the crossing of each edge - and tier 2 is dormant in a match · —
