@@ -2,9 +2,9 @@
 
 # Decision index
 
-**304 rows.** `docs/archive/decisions-2026-11-24.md` is ~744k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**302 rows.** `docs/archive/decisions-2026-11-24.md` is ~735k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
-- **296** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
+- **294** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
 - **217** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
 - **7** rows say they are superseded.
@@ -32,7 +32,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D228** — the minimum-1 rule is once per attack, and three sources say so · — · `combat`
 - **D44a** — The dead zone is not siege-only, `set` modifiers were being dropped, and it is measured body to body · —
 
-## Pathfinding & movement (104)
+## Pathfinding & movement (102)
 
 - **D52** — Soft avoidance shapes the last step, and only for a place you go to · —
 - **D53** — An order to one tile is an order to a place · —
@@ -43,7 +43,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D110** — The step walks the segment, and bodies still slide · —
 - **D113** — A route bends where the ground does, at the body's own clearance · — · `short`
 - **D114** — A walk to a tile ends in the middle of it · — · `collision`, `evasion`
-- **D117** — Passage is a property of the ground, not of the body · — · supersedes D239
+- **D117** — Passage is a property of the ground, not of the body · —
 - **D127** — A route whose ground goes stale is re-planned, at most twice · —
 - **D131** — The make-room step has never run, and it fails: two head-on bodies overlap · — · `collision`, `footprint`
 - **D132** — Passage is the surface: grass and dirt, never wood · —
@@ -63,8 +63,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D213** — `last_moved` is the tick a body last *moved*, or the tick it came into being · —
 - **D236** — villagers walk through each other, and both obvious fixes starve the match (2026-11-16, nothing landed but the specification) · — · `movement`, `overlap`
 - **D237** — villagers are solid, and the fix was a guard nobody had looked at (2026-11-16) · — · `group_overlap`, `movement`
-- **D239** — The game is the source of truth on pathing: every divergence adopted, and two rules of ours deleted (owner, 2026-11-16) · — · `step`
-- **D241** — Four pathing rulings the game cannot settle, and one of them was already built (owner, 2026-11-16) · — · `gather`, `orders`
 - **D242** — R1 measured: both halves of the game's answer cost the match more than they buy (2026-11-16, nothing landed) · — · `group_overlap`, `movement`
 - **D247** — the original's pathing rules are a separate conformance set, not part of the gate (2026-11-16) · — · `click_into_the_woods`, `findings`
 - **D248** — the four body rules hold, and the seat is the reason they did not (2026-11-17) · — · `invariants`

@@ -1,20 +1,21 @@
-# OPEN — next tranche after ADR 0018 (owner picks)
+# OPEN — next tranche after ADR 0019 (owner picks)
 
-**Where this stands:** ADRs 0001–0018 signed; index at 304 rows; `origin/adr-migration` in sync (push pending for 0018 at time of writing — see below). This compact is the agent's handoff; the next tranche is the owner's call.
+**Where this stands:** ADRs 0001–0019 signed; index at 302 rows; `origin/adr-migration` in sync (push pending for 0019 at time of writing — see below). This compact is the agent's handoff; the next tranche is the owner's call.
 
 **Prior implementation (code frozen, docs-only so far):**
 - Take-gate live: `crates/sim/src/world/step.rs:1638` (`at_node = box gap <= one step`, D285/D286 — stands, later tranche); touching test + ring fallback beside it (`:1605-1624`, D192 remnants, `let _ =` inert).
 - Cap from geometry: `lib.rs:1350 touching_place_count`; `gather.rs:338-371` spreads past cap via `nearest_like_free` (`gather.rs:41`, D182/D204/D291 line).
+- Forty-tick re-target live: `count_refused_squares` (`step.rs:88,335`), `STALLED_TICKS = 40` (`step.rs:922,1727`); `TakeAtRest` deliberately absent (`motion.rs:17`) — ADR 0019's standing half.
 - Movement grown-query comments (`motion.rs` ~:642-673); search-grown rects (`geometry.rs:33-38`).
 - Tests pinning it: `gather_press_in`, `tile_geometry`, `gather_room`, `acceptance_economy` (guard).
 - Measures today: not re-run (docs-only); last full-suite at 0016 sign-off: green except 2 pre-existing `modifiers` Town-Watch failures. Verification runs at sign-off.
 
-**Adopted and binding:** conditional grow+test+reset (ADR 0018) — box-vs-grown-box, flag+margin, terrain point-tested; working margins 0.95 gather / 1.0 walk; `+0x78` identity, 0.95 rationale, `+0x84` meaning all open.
+**Adopted and binding:** adopt-from-game (0019) + conditional grow+test+reset (0018) — box-vs-grown-box, flag+margin, terrain point-tested; past stands for every body; forty-tick same-kind re-target, displacement gone; working margins 0.95 gather / 1.0 walk; `+0x78` identity, 0.95 rationale, `+0x84` meaning all open; DE cost ×75 / bitmask / no-substitution / no-reseed / no-parent-path recorded.
 
 **Candidates for the next tranche (owner picks one):**
-1. D239/D241 — the idle-body-nudge withdrawal that partly superseded D204; natural follow-up, closes the D204 partial.
-2. D285/D286 — the box-gap take-gate (live at `step.rs:1638`); the other half of the gather end-state.
-3. D183–D185 — foundations; D175–D179, D187, D193–D197 — area leftovers.
+1. D285/D286 — the box-gap take-gate (live at `step.rs:1638`); the other half of the gather end-state.
+2. D183–D185 — foundations; D175–D179, D187, D193–D197 — area leftovers.
+3. D242–D245 — R1/invariants follow-ups to 0019 (R1a/R1b split, four-body invariants).
 
 **To do, in order:**
 1. Owner names the tranche.

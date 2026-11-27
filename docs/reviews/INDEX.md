@@ -2,15 +2,17 @@
 
 # Review notes
 
-**350 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
+**352 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
 
 The files are **not** moved: `docs/archive/decisions-2026-11-24.md` cites them by path, and an archive directory would dangle those citations.
 
-## 2026-11-28 (7)
+## 2026-11-28 (9)
 
 - **0017 sign-off: gather standoff retired (13 rows)** — `2026-11-28-0017-signoff.md` · No engine diff: zero production lines touched, so no probe, no acceptance delta, no suite timing to report. Suite numbers cited in the ADR are last-measured ...
 - **0018 crosscheck: draft vs original game, DE dump, and online sources** — `2026-11-28-0018-crosscheck.md` · No engine diff: docs-only slice. No probe, no acceptance delta, no suite run (this box still cannot: system cargo 1.100, empty registry). Full-suite ...
 - **0018 sign-off: crowd/collision retired, conditional growth adopted (11 rows)** — `2026-11-28-0018-signoff.md` · No engine diff: zero production lines touched, so no probe, no acceptance delta, no suite timing to report. Suite numbers cited in the ADR are last-measured ...
+- **0019 crosscheck: draft vs original game, DE dump, and online sources** — `2026-11-28-0019-crosscheck.md` · No engine diff: docs-only slice. No probe, no acceptance delta, no suite run (this box still cannot: system cargo 1.100, empty registry). Full-suite ...
+- **0019 sign-off: pathing adoption retired, re-target kept (2 rows)** — `2026-11-28-0019-signoff.md` · No engine diff: zero production lines touched, so no probe, no acceptance delta, no suite timing to report. Suite numbers cited in the ADR are last-measured ...
 - **No-overlap survey: how OSS projects and published sources keep units out of buildings, trees and mines** — `2026-11-28-no-overlap-survey.md` · findings are HD-only, DE behaviour stays open until read from DE) and the HD finding
 - **Point-expansion crosscheck: does the game shrink the mover to a point and grow obstacles by its radius?** — `2026-11-28-point-expansion-crosscheck.md` · point and obstacles get an additional border added at half the moving circle's diameter
 - **Review: 0016 sign-off + six bank rows deleted (2026-11-28)** — `2026-11-28-signoff-0016.md` · Zero engine diff. Suite unchanged — no re-run.

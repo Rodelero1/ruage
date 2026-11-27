@@ -5785,65 +5785,6 @@ fixture comes off ignore. The gate is the acceptance match at 48,000 ticks - ent
 staleness filter, `standoff_point`'s `taken`); `crates/sim/src/world/movement.rs` (the "past" clause and the inside rule);
 `docs/archive/research/movement-in-the-binary.md`. Review: `docs/reviews/2026-11-16-d238-seat-shuffle.md`.
 
-### D239 - The game is the source of truth on pathing: every divergence adopted, and two rules of ours deleted (owner, 2026-11-16)
-
-The owner, over the movement rows of the register (`docs/archive/research/behaviour-diff.md`): *"Resolve the questions by adopting from the game.
-That is the source of truth."* Every divergent row therefore becomes a slice, and **where the game's side is unread the read comes
-first** - the tree does not get a guess in the game's name.
-
-**Adopted as read - the binary, the talk or his own saves answer:**
-
-1. **A body at rest is not walked through** (row 29). `collide` rule 6 (`TakeAtRest`) takes a step through an idle body after
-   asking for a repath, so the route round him is installed *after* he has been stepped through. The original's epilogue has four
-   arms - target / non-past re-path / pause / *"Don't know what to do about my collision(s)"* - and this is not one: an idle
-   friend who is not past is a non-past collision. Rule 6 goes.
-2. **A re-plan does not plan round what it met, and does not accumulate** (row 30). We fold `route.avoiding` into the search as
-   **obstacle tiles** (`step.rs:1325`) and keep every body ever met for the life of the route; the game writes its ignore list
-   *after* the search and reads it **only in the classifier**. The search loses the set; the classifier keeps it.
-3. **The pause is re-drawn on a fresh collision** (row 18, corrected from `same`). `setPause` (`0x8aa6d0`) writes the path's timer
-   with no "already paused" guard; ours stands the first draw.
-4. **A paused mate stops being a mate** (row 20, corrected). The exemption is re-tested every tick on `isMoving`
-   (`[vtbl+0x2a0]`); ours ends it when the route is dropped, and a paused man keeps his route.
-5. **A man with no seat** (rows 24, 25), **as the owner ruled it on 2026-11-16 and corrected the same day**: the node's ring
-   is not re-laid (D238 measured that shuffle at 0.52 tiles, `SEATMOVE`), and a man who cannot get a square looks for **another
-   bush nearby** - within `gather_reach`, the worker's line of sight plus five tiles (D149) - and **waits** when there is none.
-   That is D204 as built, and the owner's own words are its statement: *"if there is no other bush nearby, then worker waits for
-   free spot, if there is another bush nearby, he will go work there."* **What retires is only the idle-body nudge.** *This
-   paragraph first said the newcomer "keeps circling this node", which was my reading of his earlier sentence and was wrong*; the
-   correction is his, made in the same conversation, and the row now says `same` for the re-target and `different` for the nudge.
-   **D238's "a seated body must not be past" stands withdrawn**: under the game's own past test a stopped man *is* past and is
-   walked through, and the original keeps bodies apart with the **seats**, not with the collision.
-6. **An unreachable waypoint is substituted, not waited on** (row 26): `mConsecutiveSubstituteCount` - *"we have a count of %d,
-   faking it"*. `finish_blocked_orders` (the order dies where the man stands after forty refused ticks) retires in its favour.
-7. **Passage is the body's** (row 21): **supersedes D117**. The ground a body may cross is the ground grown by its radius; the tile
-   graph grows too, and a 0.5-radius unit has no passage in a one-tile gap. The step layer already did this (D176/D192), so the
-   change is one layer and the test that inverts is `a_big_unit_walks_through_a_one_tile_gap`.
-
-**Adopted, with a read in front of it - neither may be ported on a guess:**
-
-8. **The cost model and the frontier** (row 13): 16 per cardinal step and a load-time octile table rather than 10/14 with a
-   product; and the per-tile best-cost array with a generation stamp rather than a heap, because equal-cost ordering is what a
-   route's shape depends on. **Blocked on the number that does not fit**: the estimate reads 2500/100 per unit against a
-   16-per-step cost, which is not admissible in tile units, so either those arguments are not tiles or 16 is not the step cost.
-9. **Two levels with a parent** (row 27): a high-level path built when the low-level one fails, and *"we don't have a parent path,
-   so we're stopping"*. Blocked on reading `AddFuturePath`'s derivation.
-
-**Added the same day by the sibling thread, and adopted on the same rule:** **33** the start is re-seeded when the mover
-stands inside a body (`FUN_007fb220`) - missing, with the pencil's outward-only edge as its stand-in; and **36** the order's
-path vocabulary (forced waypoint, teleport-to-waypoint, per-path hit) is narrower here. Rows 31, 34 and 35 read as `same`
-(D134's closest-standing-point, the pause enforced twice, the straight line before the search) and take no slice; row 32 - a
-*thing* whose route fails - stays `unknown-static` because the talk settles the search and not the task layer.
-
-**Nothing is ruled out of adoption.** Row 22's two caps (`MAX_GROUND_REPLANS = 2`, `MAX_REPATHS_PER_TICK = 4`) go with the rest,
-and the **3.5-against-0.3 ms/tick** price that justified them was taken before the sub-tile pencil existed, so the slice
-**re-measures** and puts the number in its review. A regression found there is a finding for the owner; it is not a licence to
-reinstate a rule the game does not have.
-
-**What adoption cannot settle:** row 23, the exclusive goal - no read decides it and no decision should stand in for the recording
-of **forty units ordered to one tile**, which is the cheapest artefact in the register.
-
-**Order and gates**: `docs/next-step.md`. Review: `docs/reviews/2026-11-16-d239-adopt-the-game.md`.
-
 ### D240 - A decision is retired, never deleted - and a supersede link is read from one side only (owner, 2026-11-16)
 
 The owner: *"Can you clean superseded/obsolete decisions?"* The corpus is 245 decisions and 544 KB, and a session reading it
@@ -5876,42 +5817,6 @@ probe per decision (does the symbol it names still exist), which is a tool of it
 
 **Basis.** `tools/decisions.py` (`check_shrink`, `SUPERSEDES`), `tools/test_decisions.py`, `docs/decision-areas.toml`,
 `docs/archive/decisions-2026-11-24.md` (D200a, D204, D238, D127, D135). Review: `docs/reviews/2026-11-16-d240-retirement.md`.
-
-### D241 - Four pathing rulings the game cannot settle, and one of them was already built (owner, 2026-11-16)
-
-The owner, answering the forks that the original's behaviour leaves open:
-
-1. **A stopped man is walked through** - *"follow game"*. So D210's **past** rule stands for every body, D238's step 1 stays
-   withdrawn, and an idle friend is not a wall to a route planned after he stopped. The consequence is deliberate and named:
-   two bodies can be seen overlapping where one is routed through a man who has stopped, and what the game does about it is the
-   **pause**, not a shove.
-2. **Formations are deferred; villagers are solid.** *"unit formation is to be implemented later"* - so the mate exemption keeps
-   its same-tick stand-in for **soldiers**, and is documented as a stand-in rather than as the rule; a formation kind is a later
-   slice behind `stamp_group`. For **villagers** the game's rule is already ours: villagers join no formation, so they are solid
-   to each other (D237).
-3. **A thing that cannot be reached.** Two cases, in the owner's words: a tree behind a **wall** - the man tries to find a path,
-   and failing that *"will approach the tree as much as he can and idle"*; a tree behind **other trees** - he approaches as close
-   to the tree he was sent to as he can *"and start working on the nearest tree"*. Today the order is **refused at order time**
-   (`orders.rs:52`), so this is a slice: accept it, plan to the nearest reachable point, and when the target is a resource node
-   prefer a reachable node of the same kind within `gather_reach` - the same helper the no-seat rule already uses, at a different
-   trigger.
-4. **A crowd at a bush** - *"if there is no other bush nearby, then worker waits for free spot, if there is another bush nearby,
-   he will go work there."* **Already built**: after forty refused ticks `count_refused_squares` asks `nearest_like_free` and
-   re-targets, or stands the man down to wait (`step.rs:2178-2212`). What remains is the **incumbent** half only - no re-lay
-   (`maybe_respread`) and no nudge.
-
-**What this corrects, and it is my error:** D239 and the D204 withdrawal marker said the next-node re-target was retired. It is
-not - the re-target **is** the owner's rule and **is** what the code does; only the displacement goes. Register rows 24 and 32
-are amended to say so, and row 24 now reads `same` for the re-target and `different` for the nudge.
-
-**A consequence worth stating before it is measured:** with the past rule standing (ruling 1), the **0.204-tile pile** D238 caught
-is no longer a defect - it is what the game does when a route is planned through a man who has stopped. The fixture that pins this
-must therefore assert what the owner actually objects to (**nobody is shoved off his square**), not that no two bodies ever
-overlap; the old assertion would now be the old rule speaking.
-
-**Basis.** `docs/archive/research/behaviour-diff.md` rows 24, 25, 32; `crates/sim/src/world/step.rs` (the refusal count, the retarget, the nudge),
-`crates/sim/src/world/gather.rs` (`nearest_like_free`, `gather_reach`), `crates/sim/src/world/orders.rs:52`. Review:
-`docs/reviews/2026-11-16-d241-rulings.md`.
 
 ### D242 - R1 measured: both halves of the game's answer cost the match more than they buy (2026-11-16, nothing landed)
 
