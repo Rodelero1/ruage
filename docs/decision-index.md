@@ -2,12 +2,12 @@
 
 # Decision index
 
-**300 rows.** `docs/archive/decisions-2026-11-24.md` is ~729k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**285 rows.** `docs/archive/decisions-2026-11-24.md` is ~702k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
-- **292** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
-- **5** rows read as a claim about the game with **no source pointer**.
-- **215** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
-- **7** rows say they are superseded.
+- **278** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
+- **4** rows read as a claim about the game with **no source pointer**.
+- **204** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
+- **6** rows say they are superseded.
 
 Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section names rows the table does not file.
 
@@ -32,7 +32,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D228** — the minimum-1 rule is once per attack, and three sources say so · — · `combat`
 - **D44a** — The dead zone is not siege-only, `set` modifiers were being dropped, and it is measured body to body · —
 
-## Pathfinding & movement (100)
+## Pathfinding & movement (96)
 
 - **D52** — Soft avoidance shapes the last step, and only for a place you go to · —
 - **D53** — An order to one tile is an order to a place · —
@@ -51,10 +51,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D135** — A re-plan that fails spends one of the route's two attempts · — · `repath_budget`
 - **D143** — The path search keeps two flat arrays, not two trees · — · `path_cost`
 - **D158** — Passing through a house: five hypotheses tested, none held · —
-- **D177** — The ground test is the body's, not the centre's · — · `short`
-- **D189** — your own units pass through each other on the way · — · **superseded by D200**
-- **D196** — the movement decision is a value, and a hostile body at rest is still a body · —
-- **D197** — repaths are counted by reason · —
 - **D206** — speed is constant; formations are the only speed adjustment, and they are later · —
 - **D207** — a group walks over itself, and everyone else is solid · —
 - **D210** — a collision is settled by time and by the clock, never by geometry: the step is not clamped against a body · —
@@ -169,7 +165,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D354** — the rule he remembers is in the engine; the picker that breaks it is the one handing out work · — · `spent_pile`
 - **D358** — The reach has three numbers in this bank, and the assignment is not the engine's guess · GAME
 
-## Buildings & construction (22)
+## Buildings & construction (19)
 
 - **D31** — Housing, and the exemption that has to come from the tree · —
 - **D54** — Walls: content names what blocks, the grid grows a writable layer · —
@@ -185,9 +181,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D153** — Gates are a global state, not per-player passability (research only) · —
 - **D154** — Gates: open for anyone, closed for everyone · —
 - **D155** — Walls by drag: one bend, and a queue that finally works · — · `lines`
-- **D183** — A foundation is walkable, invisible and free of cost until a villager touches it · —
-- **D184** — The reproducer does not reproduce here, and the tree model is why · UNVERIFIED · `eviction`
-- **D185** — D183, built: the ghost is a drawing, the first stroke is the wall · — · `foundation_model`
 - **D218** — the construction rate is a civ effect's resource-195 row, and a tree debt whose evidence was a word · — · `research`
 - **D222** — hands are not linear: n builders add (n + 2)/3 of one man's work · — · `build`
 - **D223** — a step-aside that stops making progress is asked again, and a building spot is still not a claimed place · — · `build`
@@ -237,7 +230,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D59a** — A building counts only if it produces or takes in (owner's amendment) · —
 - **D59b** — Defeat uses the dat's building classes (supersedes D59a's property) · —
 
-## UI (19)
+## UI (18)
 
 - **D55** — The presentation boundary: a snapshot, a camera, and no window · —
 - **D56** — Frames and ticks: an accumulator, a cap, and a dropped backlog · —
@@ -254,12 +247,11 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D121** — A working villager is named by his job, and the words are content · —
 - **D125** — A selected unit wears a ring the size of its own body · —
 - **D156** — The drag on screen: two clicks, and a ghost that is the order · —
-- **D187** — a click selects the body that is drawn, not the tile under it · —
 - **D273** — the click was half a tile out, and the half was the view's (2026-11-18) · — · `window`
 - **D274** — the cross and the circle land on the click too (2026-11-18) · —
 - **D314** — The click asks what the tick will ask · —
 
-## Graphics (11)
+## Graphics (8)
 
 - **D108** — A unit is painted above a building, and the bar is laid out from its own numbers · —
 - **D159** — A building is drawn tile by tile, because one diamond is a different shape · —
@@ -269,11 +261,8 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D163** — The yard is painted as ground, and a switch that turns the next report into data · —
 - **D165** — Depth decides between units and walls · —
 - **D166** — A unit's marker is clipped to its own tile · OURS
-- **D176** — The selection ellipse is the collision circle, and the body's clearance is a query · —
-- **D178** — A body stands on its point; its base is the position · —
-- **D179** — The selection ring sits round the feet, not under them · — · `ring`
 
-## AI (11)
+## AI (10)
 
 - **D75** — Rules and shares: the two things the game's own AI does, now done here · —
 - **D92** — The AI knows only what it has seen (2026-11-01) · —
@@ -284,10 +273,9 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D99** — An army, and the ground a farm leaves behind (this slice) · —
 - **D100** — What an order may change, and what a rule may see (this slice) · —
 - **D151** — The AI leaves the binary: nine choices enumerated, placement first · OURS
-- **D175** — The search radius is the dat's own number, per unit · —
 - **D94a** — the shares moved, and the type stayed (2026-11-03, applied) · —
 
-## Simulation core (12)
+## Simulation core (11)
 
 - **D19** — A match's content is identified by a hash, and a mismatch refuses the match · —
 - **D20** — Eight sides, so four-versus-four · —
@@ -296,7 +284,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D88** — Fights are ordered: the tick applies object by object, as the original does (2026-11-01) · — · `after_step`, `step`
 - **D88** — Blows land in order: two units cannot trade killing blows (2026-11-01) · —
 - **D146** — Stage 2: `step` becomes a list of named phases · —
-- **D194** — an error says which kind of failure it is · —
 - **D229** — the tick's order is the original's: players in index order, objects in slot order (2026-11-15) · — · `removing`, `researchers`
 - **D230** — the players take turns: each player's work is a turn, and a dead man's turn does nothing (2026-11-15) · — · `re`, `step`
 - **D232** — T16 read: the turn is a per-player clock, not another update order (2026-11-16) · — · `schedule`, `unit`
@@ -326,7 +313,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D201** — content: our own campaigns only, names by three lists, all prose rewritten · —
 - **D202** — the target shape is "A-prime": self-contained sources, the install as the only input · —
 
-## Project process (27)
+## Project process (25)
 
 - **D86** — REA runs on this container; the Windows box is a target, not an analyst (2026-10-31) · —
 - **D87** — How ruage is compared to the original: a register ruled by reading, closed by recorded AI-vs-AI games (2026-11-01) · —
@@ -337,10 +324,8 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D139** — The second review's sim block: seven fixes, and what the block actually was · — · `batch`, `headless`
 - **D144** — Four more subjects out of `lib.rs`: seeding, training, construction, research · — · `build`, `research`
 - **D145** — `lib.rs` becomes what the crate *is*; sixteen files say what it *does* · — · `battle`, `error`
-- **D152** — Priority order: functionality, UI, graphics, AI, music - and what "functionality" is missing · — · `short` · supersedes D183
+- **D152** — Priority order: functionality, UI, graphics, AI, music - and what "functionality" is missing · — · `short`
 - **D164** — `cargo run` starts the window · —
-- **D193** — a test asserts the rule and quotes the measurement · —
-- **D195** — the next step is one step · —
 - **D203** — a rule asked for twice goes into the tree, and a question the owner must answer arrives after the evidence · —
 - **D208** — the order of work is a checked tree, and the mechanics we defer are deferred by seam · — · `civs`, `research` · **superseded by D192**
 - **D219** — civ and team bonuses are a seam with a written design, not v1 work · —
@@ -360,6 +345,5 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 
 - **D151** — The AI leaves the binary: nine choices enumerated, placement first
 - **D166** — A unit's marker is clipped to its own tile
-- **D184** — The reproducer does not reproduce here, and the tree model is why
 - **D226** — a farm's replacement is queued or automatic at a mill, and the setting is the player's
 - **D228** — the minimum-1 rule is once per attack, and three sources say so
