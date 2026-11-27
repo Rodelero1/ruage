@@ -1,7 +1,7 @@
 # ADR 0014 — The flat tile search is retired; geometry answers instead (superseded by New Way)
 
 - **D-id alias:** D15 third clause (2026-10-23) — the half parked in ADR 0012's Consequences. Scoping half lives in 0012; this was the search half.
-- **Status:** Superseded — owner decision 2026-11-26 (New Way design, full replacement, Option B). This draft was never signed; it is kept as the record of what was decided against.
+- **Status:** Signed 2026-11-27. Signed as the retirement record: the flat search is gone from the engine (deleted in the New Way slice, `aafb740`), and this ADR is the trace of what it was and why it went. It is not a live behavior claim.
 
 ## Context
 
