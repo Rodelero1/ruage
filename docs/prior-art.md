@@ -31,6 +31,26 @@ comes back to life is caught on the day it moves, rather than up to a fortnight 
 - `/opt/data/scripts/prior_art_watch.py` is a **shim** that runs the repo copy. It exists because the
   scheduler requires its scripts in its own directory; it must stay a shim or the two copies drift.
 
+## 2026-11-27 — a roster move between two teams, and the identity table's shared id 753
+
+**`SiegeEngineers/aoc-reference-data`, one commit (`e39f3dec` -> `73717b3d`, titled "update", 2026-11-27 02:39 UTC),
+`data/players.yaml` and `data/teams.json`, +8/-3.** Three roster edits: player **280 "Gabi"** moves from team
+**41 "Gaberianss"** (left with two members, 594 and 647) to team **53 "DarkSidE"** (15); team **15 "Rulers of Rome"**
+gains **679 "ThunderboltX"** and **772 "zankoku"** (19), and both rows gain a matching `team: 15`; and player
+**592 "Nixishin"** gains one more `platforms.rl` id (`'19624025'`) — a Rocket League identity, not an AoE2 value.
+
+Re-measured on the new head rather than carried over from 2026-11-17: **672 players**, 666 of them with an id;
+**84 teams, ids 1-84 contiguous**; **287 rows carry `team:`**, two more than the last tick and exactly the two additions
+above; **no row whose `team:` names a team that does not list it**, and **no id in a team list without a player entry**;
+the duplicate-id set is still the same six — 681, 753, 756, 771, 774, 775. One of those six is now worth naming because
+the roster makes it visible: **753 is "Thofou" (team 15) and "Gali" (team 53)**, so both team lists carry `753` and it
+resolves to two people. Pre-existing, not introduced here, and the standing reason this repo is an identity source for
+nothing.
+
+**No engine axis and no game value.** The range is two roster files; nothing holding a unit, tech, civ, cost or HP is in
+it, which is the only reason the repo is watched at all. Asset pipeline (D18), engine/content boundary (D17), tick model,
+platform targets and licence are untouched: **no U-number answered, no recorded decision changed.**
+
 ## 2026-11-26 — a saved game hosted through the lobby: a 372-byte preset, and a slot found by name
 
 **`aesaganda/aoe2-on-browser`, four commits, two of them merges (`3d5eb6d3` -> `35361665`), 4 files, +121/−22** — both

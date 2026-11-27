@@ -2,9 +2,13 @@
 
 # Review notes
 
-**336 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
+**337 notes.** Newest first. Each decision row names the note that measured it; this is the other direction - what each note found, so a session can search the notes instead of listing the directory.
 
 The files are **not** moved: `docs/archive/decisions-2026-11-24.md` cites them by path, and an archive directory would dangle those citations.
+
+## 2026-11-27 (1)
+
+- **2026-11-27 - prior-art watch: a roster move in the identity tables, nothing to act on** — `2026-11-27-prior-art-watch.md` · Documentation only: 20 lines added to docs/prior-art.md. No crates/, config/, tools/, build/ or Age2HD/
 
 ## 2026-11-26 (8)
 
