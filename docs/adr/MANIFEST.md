@@ -34,7 +34,20 @@ One row per old D-id. A bank row is deleted when its ADR is signed (owner rule 2
 | D308 | `docs/adr/0016-radius-tangency-retired.md` | Signed 2026-11-28 |
 | D309 | `docs/adr/0016-radius-tangency-retired.md` (stays open, recorded as retirement) | Signed 2026-11-28 |
 | D310 | `docs/adr/0016-radius-tangency-retired.md` | Signed 2026-11-28 |
-| D1–D3, D7, D11, D14, D19, D20, D23–D197, D199–D295, D311–D358 | — | Pending, in trunk order |
+| D169 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D170 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D171 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D172 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D173 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D180 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D181 | `docs/adr/0017-gather-standoff-retired.md` (superseded by D293, retired here) | Signed 2026-11-28 |
+| D182 | `docs/adr/0017-gather-standoff-retired.md` (cap half retired; re-target half shared with 0018) | Signed 2026-11-28 |
+| D186 | `docs/adr/0017-gather-standoff-retired.md` (superseded by D199, retired here) | Signed 2026-11-28 |
+| D188 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D191 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D192 | `docs/adr/0017-gather-standoff-retired.md` (gate retired; take-gate superseded by D285) | Signed 2026-11-28 |
+| D199 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
+| D1–D3, D7, D11, D14, D19, D20, D23–D168, D174–D179, D183–D185, D187, D189–D190, D193–D197, D200–D295, D311–D358 | — | Pending, in trunk order |
 
 Rulings made this slice:
 - ADRs numbered from 0001 in migration order (Q11 amended 2026-11-25: owner was wrong; old bank deleted at the end, so no permanent collision). Superseded 2026-11-26: bank rows are deleted on sign-off instead (owner rule), so no terminal bulk deletion.

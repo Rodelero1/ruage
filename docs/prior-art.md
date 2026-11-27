@@ -2233,3 +2233,38 @@ tier runs *and* ignores them (the corpus agrees independently - `FUN_007ee980`'s
 also makes the mate exemption a **formation's**, which villagers never have - our same-tick rule is broader than the game on
 both counts. It does **not** give a constant: no radius, no speed, no cost, no mip-map padding, and no statement about HD 5.7's
 own build (openage describes the classic engine). Those still come from the install - `docs/archive/research/movement-in-the-binary.md`.
+
+## 2026-11-28 — no-overlap survey: what three OSS projects do against unit↔building/tree/mine overlap
+
+Read 2026-11-28 (raw-file fetch, SHAs unpinned — re-pin before quoting as fixture), for
+`docs/reviews/2026-11-28-no-overlap-survey.md`. Facts only, nothing crosses.
+
+- **`Zaydme/openaok` (MIT).** Per-tick per-tile `Traffic` survey of bodies (radius from
+  the dat's `size_x`, `src/ecs/Navigation.cpp` `Survey`/`RadiusOf`); search bends round
+  *standing* boxes built from each body's own radius, skipping self/target/moving/marching
+  (`Route`), mover radius passed separately as clearance (`FindRoute`,
+  `src/pathfinding/Pathfinder.h`); movement bends only the walker's own step
+  (`KeptApart`, `src/ecs/systems/MovementSystem.cpp`: `need = (b.radius+r)*3/4`, capped at
+  the step, never backwards, no cross-entity writes), stops/moves-on/replans (≤4) at a
+  taken goal (`OnTheGoal`/`PlaceRound`/`Taken`), arrival by box grown by mover radius
+  (`GapAt`). Overlap tolerated to 3/4 radii by comment ("a crowd overlaps a little").
+- **`librematch/genie` (AGPL-3.0, read-only).** Search is tile BFS + `standable` mask +
+  per-candidate reach test, no radius growth (`gathering/gather_search.rs`
+  `closest_resource_at`); movement holds one mesh rect per standing object (box + half
+  tile: `shape_rect`/`refreshed_rect`, `pathing/mod.rs` `moved`/`refresh`), removed the
+  instant it moves; a kept hit pauses the met unit (ally 0.1 s, else 0.5 s,
+  `movement/walk.rs` `go_round`) or drops the walked level for a replan; spawn takes the
+  first free point on the square at building + unit radius + gap
+  (`production/spawn/closest_spot.rs`). Radii are the master's dat radii (`+0x5d8/+0x5dc`).
+- **`SFTtech/openage` (GPL-3.0, docs for facts).** No unit↔unit mechanism (`path.h:17-26`
+  request has no occupancy; `position.cpp:53-55` writes only the own curve). Its
+  `doc/reverse_engineering/game_mechanics/pathfinding.md` states the game's 3 pathfinders
+  + 2 obstruction systems (after Pottinger GDC-2000, Shelly 1999).
+- **Published.** Klinger deck: shrink-to-point/expand-obstructions, "radius expansion
+  approach" (pp. 23/65/83 — one line, see crosscheck review §2). Pottinger Jan-1999
+  gamedeveloper pair: movement≠pathfinding, two-unit collision-resolution rules,
+  "decide how much collision overlap is acceptable"; kindatechnical configuration-space:
+  grow-by-radius + plan-for-centre "is the whole method for a round robot", w > 2c gap
+  rule (theory, no game weight). Geldreich 2018 (ex-Ensemble): DE ported AoE2's
+  obstruction manager — circular unit obstructions, square building obstructions.
+  Dyson Godot tutorial: tertiary retelling of Klinger (one line).

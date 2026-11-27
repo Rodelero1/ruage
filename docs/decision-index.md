@@ -2,12 +2,12 @@
 
 # Decision index
 
-**328 rows.** `docs/archive/decisions-2026-11-24.md` is ~810k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**315 rows.** `docs/archive/decisions-2026-11-24.md` is ~776k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
-- **320** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
+- **307** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
-- **235** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
-- **11** rows say they are superseded.
+- **224** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
+- **9** rows say they are superseded.
 
 Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section names rows the table does not file.
 
@@ -146,7 +146,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D200a** — the first landing of owner-blind collisions: built, measured and parked on a branch · — · **superseded by D200**
 - **D210b** — a standing body is an obstacle to the search that meets it, and only to *that* search · —
 
-## Economy (47)
+## Economy (35)
 
 - **D27** — A farm is a building content calls a farm, and workers stand beside what they work · —
 - **D28** — Farm food is a resource the dat numbers, so content names the number · —
@@ -162,18 +162,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D148** — A worker only goes where it has looked · —
 - **D149** — "Nearby" is bounded by the worker's sight, and the share table measures from the base · — · **superseded by D150**
 - **D150** — +5 was never the problem: the share table's anchor was · —
-- **D169** — A gatherer stands where the two bodies touch: 0.7 of a tile, not 1.0 · —
-- **D170** — A mine is a *pile per tile*, not one object: so the standoff is measured per tile · —
-- **D171** — Workers fan out round a node instead of sharing its approach side · —
-- **D173** — OPEN: the gatherer's last third of a tile is a **placement**, and that is the jump the owner sees · —
-- **D180** — The settle walks: a step per tick, capped by speed, and nothing else · —
-- **D181** — A standoff is taken when it is too close, not only when somebody stands on it · — · **superseded by D293**
-- **D182** — One gatherer a square, standing a body's radius off its edge · —
-- **D186** — the gather ring: 1.156 tiles, eighteen men, measured from the owner's save · — · **superseded by D199**
-- **D188** — there is no cap: a place is a spot on the ring, and the geometry gives eighteen · —
-- **D191** — tile geometry: the border is what a villager stands against · — · `tiles`
-- **D192** — the standoff is the tile's border, not a ring round its centre · —
-- **D199** — the standoff is the touch, measured on the owner's own saves; D186's ring is withdrawn · —
 - **D215** — a farm holds the civ row's 175, and the civ's team bonus is part of that line · —
 - **D225** — two more debts were already paid, and the builder's queue fallback has no reachable trigger · — · `shares`
 - **D226** — a farm's replacement is queued or automatic at a mill, and the setting is the player's · — · `reseed`
@@ -286,7 +274,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D274** — the cross and the circle land on the click too (2026-11-18) · —
 - **D314** — The click asks what the tick will ask · —
 
-## Graphics (12)
+## Graphics (11)
 
 - **D108** — A unit is painted above a building, and the bar is laid out from its own numbers · —
 - **D159** — A building is drawn tile by tile, because one diamond is a different shape · —
@@ -296,7 +284,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D163** — The yard is painted as ground, and a switch that turns the next report into data · —
 - **D165** — Depth decides between units and walls · —
 - **D166** — A unit's marker is clipped to its own tile · OURS
-- **D172** — A map node stands at its tile's **centre**, not on its corner · — · `train`
 - **D176** — The selection ellipse is the collision circle, and the body's clearance is a query · —
 - **D178** — A body stands on its point; its base is the position · —
 - **D179** — The selection ring sits round the feet, not under them · — · `ring`
