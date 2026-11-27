@@ -1,7 +1,7 @@
 # ADR 0015 — The three-tier route is retired; geometry answers instead (superseded by New Way)
 
 - **D-id alias:** D296 + D297 + D298 + D299 + D301 + D302 (2026-11-19/20). D300 superseded by D301 (premise and number both withdrawn there). D298's 100/600-row correction (D327) folded in. D304's budget lives in 0014. D305's gate hole is closed by geometry — see 0014.
-- **Status:** Superseded — owner decision 2026-11-26 (New Way design, full replacement, Option B). This draft was never signed; it is kept as the record of what was decided against.
+- **Status:** Signed 2026-11-27. Signed as the retirement record: the hierarchy is gone from the engine (`aafb740`, New Way slice), and this ADR is the trace of what it was and why it went. It is not a live behavior claim.
 
 ## Context
 

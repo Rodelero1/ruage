@@ -2,11 +2,11 @@
 
 # Decision index
 
-**343 rows.** `docs/archive/decisions-2026-11-24.md` is ~835k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**334 rows.** `docs/archive/decisions-2026-11-24.md` is ~820k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
-- **335** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
+- **326** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
-- **248** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
+- **241** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
 - **11** rows say they are superseded.
 
 Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section names rows the table does not file.
@@ -32,7 +32,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D228** — the minimum-1 rule is once per attack, and three sources say so · — · `combat`
 - **D44a** — The dead zone is not siege-only, `set` modifiers were being dropped, and it is measured body to body · —
 
-## Pathfinding & movement (126)
+## Pathfinding & movement (117)
 
 - **D52** — Soft avoidance shapes the last step, and only for a place you go to · —
 - **D53** — An order to one tile is an order to a place · —
@@ -109,16 +109,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D289** — A crowd is sent to the tile it was ordered to, and it jams there (owner, 2026-11-19) · —
 - **D290** — There is no press floor: friends may overlap, and only the pause and the re-path act (owner, 2026-11-19) · —
 - **D292** — No rule of ours ever stands a man down on its own: `beside` and the forty-tick finish go (owner, 2026-11-19) · —
-- **D296** — The level maps are the binary's stamping rule, not a choice (P11a) · —
-- **D297** — A search starts at the coarsest level whose cell is usable (P11b) · —
-- **D298** — A coarse step costs 10, 300 or 2000 (P11c's table) · —
-- **D299** — The coarse A\* runs on four directions, a tuned cost table and a sorted list (P11c) · —
-- **D300** — The hierarchy is correct and 60x too slow; the switch waits for a cached pyramid · —
-- **D301** — The pyramid is cached, and D300's conclusion is withdrawn · — · `pyramid_cache`
-- **D302** — A route is a line, then the hierarchy, then the tile search (P11 done) · —
 - **D303** — The radius reaches the line test and the step, not the searches · —
-- **D304** — The search budget is live, and a third row proves it bites · — · `budget`
-- **D305** — The hierarchy is not running for units, and D302's 32% cannot be attributed to it · —
 - **D306** — Tangency is a passage, and the radius reaches the searches · —
 - **D307** — The stamp resolves at the finest level the obstacle occupies (closes D306's caveat) · —
 - **D308** — A coarse edge refines to the tile where the passage is, not to a cell centre · —
