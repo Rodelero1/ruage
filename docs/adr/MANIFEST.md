@@ -47,7 +47,18 @@ One row per old D-id. A bank row is deleted when its ADR is signed (owner rule 2
 | D191 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
 | D192 | `docs/adr/0017-gather-standoff-retired.md` (gate retired; take-gate superseded by D285) | Signed 2026-11-28 |
 | D199 | `docs/adr/0017-gather-standoff-retired.md` | Signed 2026-11-28 |
-| D1–D3, D7, D11, D14, D19, D20, D23–D168, D174–D179, D183–D185, D187, D189–D190, D193–D197, D200–D295, D311–D358 | — | Pending, in trunk order |
+| D200a | `docs/adr/0018-crowd-collision-retired.md` (superseded by D200, retired here) | Signed 2026-11-28 |
+| D200 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D204 | `docs/adr/0018-crowd-collision-retired.md` (nudge half superseded by D239/D241, re-target stands here) | Signed 2026-11-28 |
+| D205 | `docs/adr/0018-crowd-collision-retired.md` (built, measured not landable as written — carried) | Signed 2026-11-28 |
+| D289 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D290 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D291 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D292 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D293 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D294 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D295 | `docs/adr/0018-crowd-collision-retired.md` | Signed 2026-11-28 |
+| D1–D3, D7, D11, D14, D19, D20, D23–D168, D174–D179, D183–D185, D187, D189–D190, D193–D197, D201–D203, D206–D288, D311–D358 | — | Pending, in trunk order |
 
 Rulings made this slice:
 - ADRs numbered from 0001 in migration order (Q11 amended 2026-11-25: owner was wrong; old bank deleted at the end, so no permanent collision). Superseded 2026-11-26: bank rows are deleted on sign-off instead (owner rule), so no terminal bulk deletion.

@@ -2,12 +2,12 @@
 
 # Decision index
 
-**315 rows.** `docs/archive/decisions-2026-11-24.md` is ~776k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
+**304 rows.** `docs/archive/decisions-2026-11-24.md` is ~744k characters and cannot be loaded whole; this page is what a session reads instead, then greps the bank for the ids it needs.
 
-- **307** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
+- **296** rows carry no `Conformance` verdict (they neither claim the game nor say the choice is ours).
 - **5** rows read as a claim about the game with **no source pointer**.
-- **224** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
-- **9** rows say they are superseded.
+- **217** rows name no fixture - the "believed implemented" list, where D150's pile rule lived.
+- **7** rows say they are superseded.
 
 Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section names rows the table does not file.
 
@@ -32,7 +32,7 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D228** — the minimum-1 rule is once per attack, and three sources say so · — · `combat`
 - **D44a** — The dead zone is not siege-only, `set` modifiers were being dropped, and it is measured body to body · —
 
-## Pathfinding & movement (111)
+## Pathfinding & movement (104)
 
 - **D52** — Soft avoidance shapes the last step, and only for a place you go to · —
 - **D53** — An order to one tile is an order to a place · —
@@ -55,9 +55,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D189** — your own units pass through each other on the way · — · **superseded by D200**
 - **D196** — the movement decision is a value, and a hostile body at rest is still a body · —
 - **D197** — repaths are counted by reason · —
-- **D200** — friends are solid: the owner's rule, and the crowd it has to carry (supersedes D200a) · — · `acceptance_economy` · supersedes D200
-- **D204** — no pushing: a man who cannot get his square looks for another tile of the same resource · — · `carrier_no_pushing`, `movement` · **superseded by D239**
-- **D205** — right of way is the lower entity id, and the loser pauses 0.25-1.50 s on its own path · — · `acceptance_economy`, `right_of_way`
 - **D206** — speed is constant; formations are the only speed adjustment, and they are later · —
 - **D207** — a group walks over itself, and everyone else is solid · —
 - **D210** — a collision is settled by time and by the clock, never by geometry: the step is not clamped against a body · —
@@ -106,9 +103,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D286** — An order names a target, and one box ruler decides every distance (owner, 2026-11-19) · —
 - **D287** — A node's ring is never re-laid (owner, 2026-11-19) · — · `working_men_never_move`
 - **D288** — The taken list is ours, not the game's; the walk stands, the gather re-targets (owner, 2026-11-19) · —
-- **D289** — A crowd is sent to the tile it was ordered to, and it jams there (owner, 2026-11-19) · —
-- **D290** — There is no press floor: friends may overlap, and only the pause and the re-path act (owner, 2026-11-19) · —
-- **D292** — No rule of ours ever stands a man down on its own: `beside` and the forty-tick finish go (owner, 2026-11-19) · —
 - **D320** — The re-plan takes a fresh stamp, and the past rule finishes its chain (owner: *"C, proceed"*) · —
 - **D321** — The seat shuffle was measuring its own grave · —
 - **D322** — The chain refines to the crossing of each edge - and tier 2 is dormant in a match · —
@@ -143,10 +137,9 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D357** — The arrival is a placement: the pile halves, the re-plans multiply by eight, and both are reported · GAME · `one_place_per_man`, `one_place_per_man`
 - **D52a** — Three versions failed the suite, and that is what settled the rule · —
 - **D98a** — superseded by the original's own mechanism (owner, 2026-11-03) · —
-- **D200a** — the first landing of owner-blind collisions: built, measured and parked on a branch · — · **superseded by D200**
 - **D210b** — a standing body is an obstacle to the search that meets it, and only to *that* search · —
 
-## Economy (35)
+## Economy (31)
 
 - **D27** — A farm is a building content calls a farm, and workers stand beside what they work · —
 - **D28** — Farm food is a resource the dat numbers, so content names the number · —
@@ -170,10 +163,6 @@ Areas are the authored `docs/decision-areas.toml` (C14); an `Unfiled` section na
 - **D244** — both red invariants were fixed, measured, and reverted: each fix starves the match (2026-11-16) · — · `gather_motion`, `invariants`
 - **D245** — the original's four body rules, read; and the seat shuffle is what gates three of them (2026-11-16) · —
 - **D280** — The picker asks the cheap questions first, and the expensive one of the nearest eight (2026-11-19) · —
-- **D291** — The engine retargets within a kind; repurposing across kinds is the AI's job (owner, 2026-11-19) · —
-- **D293** — A gatherer presses in; the seat book stops being read (owner, 2026-11-19) · —
-- **D294** — The seat book is gone (completes D293's cleanup) · — · `sites`
-- **D295** — A gather on the tile a man already stands on is accepted (owner rule: nothing may refuse an order the game takes) · —
 - **D311** — The two reseed reds fail at the same place: the plot is paid for and never raised · —
 - **D312** — The two reseed reds were a statue, and the reach was measured to the anchor point · — · `farm`, `orders`
 - **D313** — A load leaves at the wall, and nothing looser · — · `invariants`
